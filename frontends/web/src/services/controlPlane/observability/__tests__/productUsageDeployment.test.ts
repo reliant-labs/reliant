@@ -18,8 +18,9 @@ vi.mock("../obsClient", () => ({ obsClient: () => client }));
 const raw = readFileSync("../../deploy/observability/spec/project_gen.json");
 const spec = JSON.parse(raw.toString()) as { dashboards: { id: string; panels: unknown[] }[] };
 // forge #2075's built-in analytics dashboards replaced the generated "usage"
-// dashboard: "product" is its successor, beside "users" and "acquisition".
-const ANALYTICS = { product: 15, users: 16, acquisition: 16 } as const;
+// dashboard: "product" is its successor, beside "users" and "acquisition";
+// forge #2289 leads them with the hub's Overview.
+const ANALYTICS = { "product-overview": 11, product: 15, users: 16, acquisition: 16 } as const;
 const dashboard = (id: string) => {
   const found = spec.dashboards.find(d => d.id === id);
   if (!found) throw new Error(`the generated spec has no "${id}" dashboard`);
@@ -30,7 +31,7 @@ const window = { startMs: Date.UTC(2026, 2, 16, 0), endMs: Date.UTC(2026, 2, 16,
 beforeEach(() => client.queryPanel.mockReset());
 
 it("loads the actual generated analytics dashboards and sends every unchanged panel through the hosted adapter", async () => {
-  expect(createHash("sha256").update(raw).digest("hex")).toBe("331a6a6648749eabd72eaa5ba4ae5d61ff5dc078271d7ada71c3137587510bdd");
+  expect(createHash("sha256").update(raw).digest("hex")).toBe("8c983f65a335bb38fa80272b78b916df220eb75bd10d90dc64ad139e2bcc7369");
   expect(spec.dashboards.some(d => d.id === "usage")).toBe(false);
   client.queryPanel.mockResolvedValue(create(QueryPanelResponseSchema, { kind: "sql", columns: ["events"], rows: [{ group: { event: "synthetic" }, values: [2] }] }));
   const panels = Object.entries(ANALYTICS).flatMap(([id, count]) => {
@@ -38,7 +39,8 @@ it("loads the actual generated analytics dashboards and sends every unchanged pa
     expect(panels, id).toHaveLength(count);
     return panels;
   });
-  for (const panel of panels) {
+  // A Needs-attention panel runs no statement of its own; every other panel is a sql panel.
+  for (const panel of panels.filter((p) => p.kind !== "attention")) {
     const result = await queryPanel({ orgId: "org-a", projectId: "shop", envIds: ["env-a-prod"], filters: [], window, services: ["api"], panel, stepSeconds: 86400 });
     expect(client.queryPanel.mock.lastCall![0]).toMatchObject({ scope: { orgId: "org-a", projectId: "shop", envIds: ["env-a-prod"], services: ["api"] }, panel: { id: panel.id, kind: "sql", sql: panel.sql } });
     expect(result.rows).toEqual([{ group: { event: "synthetic" }, values: [2] }]);

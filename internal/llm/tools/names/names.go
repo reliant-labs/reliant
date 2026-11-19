@@ -90,6 +90,9 @@ const (
 	// Defect reporting: an agent files a Reliant or forge bug with engineering
 	ToolReportBug = "report_bug"
 
+	// Media tools
+	ToolGenerateImage = "generate_image"
+
 	// Component tools
 	ToolComponentLibrary = "component_library"
 
@@ -115,6 +118,7 @@ const (
 	ToolUpdateTriggerActivation = "update_trigger_activation"
 	ToolEnableTrigger           = "enable_trigger"
 	ToolPauseTrigger            = "pause_trigger"
+	ToolDeleteTrigger           = "delete_trigger"
 	ToolListTriggerEvents       = "list_trigger_events"
 
 	// Integration discovery tools
@@ -131,16 +135,22 @@ const (
 
 	// Machine tools
 	ToolWaitForMachine = "wait_for_machine"
-	// The user's own machines: list them; start, stop or resize one.
-	ToolListMachines  = "list_machines"
-	ToolManageMachine = "manage_machine"
+	// The user's own machines: list them; start, stop, resize or label one;
+	// define or delete a machine pool.
+	ToolListMachines      = "list_machines"
+	ToolManageMachine     = "manage_machine"
+	ToolManageMachinePool = "manage_machine_pool"
+
+	// Ask a person to connect an integration, on an approval card.
+	ToolProposeConnection = "propose_connection"
 )
 
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
-	ToolWaitForMachine, ToolListMachines, ToolManageMachine,
+	ToolWaitForMachine, ToolListMachines, ToolManageMachine, ToolManageMachinePool,
+	ToolProposeConnection,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
@@ -167,7 +177,7 @@ var AllToolNames = []string{
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef, ToolCELEval,
 	// Trigger tools
 	ToolListTriggers, ToolFireTrigger, ToolListTriggerEvents,
-	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger,
+	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolDeleteTrigger,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests: every exposed action in internal/integrations/catalog.
@@ -209,6 +219,23 @@ var AllToolTags = []string{
 	"readonly", "file", "search", "execution", "shell", "web",
 	"planning", "analysis", "workflow", "mcp", "media", "runs", "integration",
 	"coding:default", "coding:plan",
+}
+
+// NodeExposedToolNames are the tools an invoke_tool node may name, for the
+// workflow validator. It is a MIRROR of tools.NodeExposedTools
+// (node_exposure.go), which owns the opt-in and each tool's output type but
+// cannot be imported here. TestNodeExposedToolNamesMatchTable in the tools
+// package holds the two equal; if it fails, node_exposure.go is authoritative.
+var NodeExposedToolNames = []string{ToolGenerateImage, ToolGetRun, ToolReportBug, ToolSendToRun}
+
+// IsNodeExposedToolName reports whether an invoke_tool node may name tool.
+func IsNodeExposedToolName(tool string) bool {
+	for _, name := range NodeExposedToolNames {
+		if name == tool {
+			return true
+		}
+	}
+	return false
 }
 
 // toolNameSet for O(1) lookup

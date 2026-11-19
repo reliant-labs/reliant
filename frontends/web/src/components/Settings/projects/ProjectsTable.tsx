@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowUpRight, Pencil, Trash2 } from "lucide-react";
+import { ArrowUpRight, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
@@ -38,6 +38,10 @@ export interface ProjectsTableProps {
   onRename?: (project: Project, name: string) => void;
   /** Disables Open on every row while a switch is in flight. */
   openingProjectId?: string | null;
+  /** Projects hidden from the sidebar: marked, with Unhide. */
+  hiddenProjectIds?: ReadonlySet<string>;
+  /** Hide a project from the sidebar, or bring it back. Omit to hide the action. */
+  onSetHidden?: (projectId: string, hidden: boolean) => void;
 }
 
 type ProjectRow = { id: string; project: Project };
@@ -52,6 +56,8 @@ export function ProjectsTable({
   onRemove,
   onRename,
   openingProjectId,
+  hiddenProjectIds,
+  onSetHidden,
 }: ProjectsTableProps) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -88,6 +94,11 @@ export function ProjectsTable({
               {project.name}
             </span>
             {project.id === currentProjectId && <Badge label="Current" variant="info" size="sm" />}
+            {hiddenProjectIds?.has(project.id) && (
+              <span data-testid={`settings-project-hidden-${project.id}`}>
+                <Badge label="Hidden from sidebar" variant="neutral" size="sm" />
+              </span>
+            )}
           </span>
         ),
     },
@@ -139,7 +150,7 @@ export function ProjectsTable({
       key: "actions",
       header: "Actions",
       srHeader: true,
-      width: "7rem",
+      width: "9rem",
       interactive: true,
       render: (_, { project }) => (
         <span className="flex items-center justify-end gap-0.5">
@@ -171,6 +182,28 @@ export function ProjectsTable({
               </button>
             </Tooltip>
           )}
+          {onSetHidden &&
+            (() => {
+              const hidden = !!hiddenProjectIds?.has(project.id);
+              const label = hidden ? "Show in sidebar" : "Hide from sidebar";
+              return (
+                <Tooltip content={label} delay={300}>
+                  <button
+                    type="button"
+                    onClick={() => onSetHidden(project.id, !hidden)}
+                    aria-label={hidden ? `Unhide ${project.name}` : `Hide ${project.name} from the sidebar`}
+                    data-testid={`settings-project-${hidden ? "unhide" : "hide"}-${project.id}`}
+                    className={cn(ICON_BUTTON, "hover:bg-muted hover:text-foreground")}
+                  >
+                    {hidden ? (
+                      <Eye className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <EyeOff className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </button>
+                </Tooltip>
+              );
+            })()}
           <Tooltip content={REMOVE_PROJECT_HINT} side="left" delay={300}>
             <button
               type="button"

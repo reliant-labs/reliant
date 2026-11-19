@@ -32,7 +32,6 @@ import { useTriggers } from "@/hooks/trigger-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { formatInputDefault } from "@/lib/inputDefaultDisplay";
 import { getInputDefault, getInputDescription, type InputDef } from "@/lib/inputHelpers";
-import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { useScopePreferences } from "@/hooks/settings-queries";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
@@ -59,6 +58,7 @@ import { triggerRunsWorkflow } from "@/lib/triggerRail";
 import { useWorkflowsScope } from "../useWorkflowsScope";
 import { TriggersCard } from "./TriggersCard";
 import { workflowsUsing } from "./workflowUsedBy";
+import { runsPath, workflowBuilderPath, workflowDetailPath, workflowLibraryPath } from "@/lib/paths";
 
 /** How many runs (and trigger events that started none) Recent runs shows; "View all" opens the Runs tab. */
 export const RECENT_RUNS_LIMIT = 10;
@@ -117,7 +117,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
         ? `${DRAFT_NOT_RUNNABLE} Open it in the editor to publish it.`
         : null;
   const openBuilder = () =>
-    void navigate({ to: "/workflow/$workflowName", params: { workflowName: workflowRef } });
+    void navigate({ to: workflowBuilderPath(workflowRef) });
   const declared = definition.workflowDef ? declaredTriggers(definition.workflowDef) : [];
   const setupBlockedReason = invalid
     ? "This workflow failed to load, so it cannot be turned on."
@@ -143,7 +143,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
       <div className="forge-ui">
         <PageHeader
           className=""
-          breadcrumbs={[{ label: "Workflows", href: WORKFLOWS_LIBRARY_PATH }, { label: displayName }]}
+          breadcrumbs={[{ label: "Workflows", href: workflowLibraryPath() }, { label: displayName }]}
           title={displayName}
           titleAccessory={
             <>
@@ -265,8 +265,7 @@ function UsedByCard({ workflowRef, workflows }: { workflowRef: string; workflows
             {usedBy.map((workflow) => (
               <li key={workflow.name} className="flex min-w-0 items-center justify-between gap-2">
                 <Link
-                  to="/workflows/library/$workflowRef"
-                  params={{ workflowRef: workflow.name }}
+                  to={workflowDetailPath(workflow.name)}
                   className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {workflowDisplayName(workflow)}
@@ -319,7 +318,7 @@ function RecentRunsCard({
         <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
           <h2 className="text-sm font-semibold text-foreground">Recent runs</h2>
           <Link
-            to="/workflows/runs"
+            to={runsPath()}
             search={{ workflow: [workflowRef], range: "all", allProjects: projectId ? undefined : true }}
             className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -475,7 +474,7 @@ function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflow
           <>
             {" "}Its past runs are still in{" "}
             <Link
-              to="/workflows/runs"
+              to={runsPath()}
               search={{ workflow: [workflowRef], range: "all" }}
               className="font-medium text-primary-ink hover:underline"
             >
@@ -486,7 +485,7 @@ function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflow
         )}
       </p>
       <Link
-        to="/workflows/library"
+        to={workflowLibraryPath()}
         className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         Back to workflows

@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { decodeGitHubState, parseLoopbackRedirect } from '@/lib/githubOAuthState'
 import { isSafeReturnTo } from '@/lib/returnTo'
+import { forgeShellReturnUrl } from '@/lib/crossShellReturn'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
+import { homePath } from '@/lib/paths'
 
 /**
  * GitHubOAuthCallback owns the app-side `/auth/github/callback` route — the
@@ -184,7 +186,8 @@ export function GitHubOAuthCallback() {
           hadStatelessCode: !!code,
         })
         const remembered = takeInstallReturn()
-        if (!(await hasSession())) {
+        // A flow the forge site started goes back there, where its session is.
+        if (!forgeShellReturnUrl(remembered) && !(await hasSession())) {
           setTerminal('installed')
           return
         }
@@ -216,7 +219,7 @@ export function GitHubOAuthCallback() {
           window.location.assign(res.installUrl)
           return
         }
-        if (!(await hasSession())) {
+        if (!forgeShellReturnUrl(res.returnTo) && !(await hasSession())) {
           setTerminal('connected')
           return
         }
@@ -256,8 +259,10 @@ export function GitHubOAuthCallback() {
       msg?: string,
       returnTo?: string,
     ) => {
+      // A flow started on the forge site (lib/crossShellReturn) lands there.
+      const forgeUrl = forgeShellReturnUrl(returnTo)
       const safeReturnTo = isSafeReturnTo(returnTo) ? returnTo : '/'
-      const url = new URL(safeReturnTo, window.location.origin)
+      const url = forgeUrl ?? new URL(safeReturnTo, window.location.origin)
       if (kind === 'github_connected') {
         url.searchParams.set('github_connected', 'true')
       } else if (kind === 'github_installed') {
@@ -273,7 +278,7 @@ export function GitHubOAuthCallback() {
       // Full reload to the in-app path: the destination route re-reads search
       // and the credential sync/toast listeners run on mount. Avoids cross-route
       // tanstack navigate() schema friction for arbitrary returnTo paths.
-      window.location.assign(url.pathname + url.search + url.hash)
+      window.location.assign(forgeUrl ? url.toString() : url.pathname + url.search + url.hash)
     }
 
     void run()
@@ -296,7 +301,7 @@ export function GitHubOAuthCallback() {
               <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
             </div>
             <button
-              onClick={() => navigate({ to: '/', search: {} })}
+              onClick={() => navigate({ to: homePath(), search: {} })}
               className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
             >
               Back to App

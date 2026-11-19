@@ -60,7 +60,10 @@ message DaemonInstanceConfig {
 message DaemonConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    command: ["daemon", "start"]
+    command: [
+      "daemon",
+      "start"
+    ]
   };
 
   DaemonInstanceConfig instance = 1;
@@ -90,7 +93,12 @@ message DaemonConfig {
   string tls_mode = 4 [(forge.v1.config) = {
     env_var: "DAEMON_TLS_MODE"
     flag: "tls-mode"
-    allowed_values: ["tls", "insecure_tls_skip_verify", "h2c", "disabled"]
+    allowed_values: [
+      "tls",
+      "insecure_tls_skip_verify",
+      "h2c",
+      "disabled"
+    ]
     description: "TLS mode for the gateway connection: tls, insecure_tls_skip_verify, h2c or disabled"
   }];
   string tls_cert_file = 5 [(forge.v1.config) = {
@@ -136,7 +144,10 @@ message DaemonConfig {
   // daemonruntime.resolveDaemonType).
   string daemon_type = 10 [(forge.v1.config) = {
     env_var: "RELIANT_DAEMON_TYPE"
-    allowed_values: ["managed", "self_hosted"]
+    allowed_values: [
+      "managed",
+      "self_hosted"
+    ]
     description: "Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted"
   }];
 
@@ -177,7 +188,10 @@ message DaemonConfig {
   string child_priority = 15 [(forge.v1.config) = {
     env_var: "RELIANT_CHILD_PRIORITY"
     default_value: "low"
-    allowed_values: ["low", "normal"]
+    allowed_values: [
+      "low",
+      "normal"
+    ]
     description: "Priority of agent-started commands: low or normal"
   }];
 
@@ -314,13 +328,29 @@ message DaemonConfig {
     },
     (buf.validate.field).int32 = {gte: 0}
   ];
+
+  // Durable labels this machine declares, each "key=value" (a short slug on
+  // each side). The daemon sends them on every registration and the server
+  // merges them into the machine's labels: each key is set to its value,
+  // labels not named here are left alone. Labels decide machine-pool
+  // membership, so a box started with pool=pipeline joins the pipeline pool
+  // when it first connects. `reliant daemon start --label k=v` (repeatable,
+  // or comma-separated) replaces this list; the flag is registered by hand
+  // because a generated flag for a repeated field takes only its last use.
+  repeated string labels = 31 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_LABELS"
+    description: "Comma-separated key=value durable labels this machine declares (merged into its labels on every connect)"
+  }];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.
 message DaemonStatusConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    command: ["daemon", "status"]
+    command: [
+      "daemon",
+      "status"
+    ]
   };
 
   DaemonInstanceConfig instance = 1;
@@ -330,7 +360,10 @@ message DaemonStatusConfig {
 message DaemonStopConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    command: ["daemon", "stop"]
+    command: [
+      "daemon",
+      "stop"
+    ]
   };
 
   DaemonInstanceConfig instance = 1;
@@ -340,7 +373,10 @@ message DaemonStopConfig {
 message DaemonLogsConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    command: ["daemon", "logs"]
+    command: [
+      "daemon",
+      "logs"
+    ]
   };
 
   DaemonInstanceConfig instance = 1;
@@ -350,7 +386,10 @@ message DaemonLogsConfig {
 message DaemonRegisterConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    command: ["daemon", "register"]
+    command: [
+      "daemon",
+      "register"
+    ]
   };
 
   // Unset: the default instance.

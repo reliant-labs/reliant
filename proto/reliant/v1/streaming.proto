@@ -3,9 +3,9 @@ syntax = "proto3";
 
 package reliant.v1;
 
-option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
-
 import "reliant/v1/chat.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // ChatUpdateType categorizes real-time chat update events
 enum ChatUpdateType {
@@ -225,11 +225,11 @@ message StreamChatUpdatesRequest {
 // ChatStreamEvent is one frame of a chat's detail stream.
 message ChatStreamEvent {
   oneof event {
-    ChatSyncSnapshot snapshot = 1;     // Initial sync with assembled messages
-    ChatUpdateBatch updates = 2;       // Replayed or live chat updates
-    ChatCaughtUp caught_up = 3;        // Initial sync complete (once per stream)
-    Heartbeat heartbeat = 4;           // Keepalive heartbeat
-    ChatUserUpdates user_updates = 5;  // This chat's user-level updates the user stream filters out
+    ChatSyncSnapshot snapshot = 1; // Initial sync with assembled messages
+    ChatUpdateBatch updates = 2; // Replayed or live chat updates
+    ChatCaughtUp caught_up = 3; // Initial sync complete (once per stream)
+    Heartbeat heartbeat = 4; // Keepalive heartbeat
+    ChatUserUpdates user_updates = 5; // This chat's user-level updates the user stream filters out
   }
 }
 
@@ -247,17 +247,17 @@ message ChatUserUpdates {
 
 // ChatSyncSnapshot provides the initial sync with pre-assembled messages.
 message ChatSyncSnapshot {
-  repeated Message messages = 1;                // Assembled messages with content blocks
-  repeated ChatUpdateData other_updates = 2;   // Non-message updates (approvals, threads, etc.)
-  int64 latest_sequence = 3;                   // Latest sequence number for tracking
-  int32 total = 4;                             // Total message count
-  bool has_more = 5;                           // Whether there are more messages to load
-  int64 oldest_seq = 6;                        // Seq of oldest message (for pagination)
+  repeated Message messages = 1; // Assembled messages with content blocks
+  repeated ChatUpdateData other_updates = 2; // Non-message updates (approvals, threads, etc.)
+  int64 latest_sequence = 3; // Latest sequence number for tracking
+  int32 total = 4; // Total message count
+  bool has_more = 5; // Whether there are more messages to load
+  int64 oldest_seq = 6; // Seq of oldest message (for pagination)
   // Context usage for compaction indicator
-  int64 thread_token_count = 7;                // Sum of output_tokens in current context
-  int64 compaction_threshold = 8;              // Threshold at which compaction triggers (default 20000)
+  int64 thread_token_count = 7; // Sum of output_tokens in current context
+  int64 compaction_threshold = 8; // Threshold at which compaction triggers (default 20000)
   // Workflow execution state - included in initial sync if workflow is active
-  repeated WorkflowExecutionState active_workflows = 9;  // Currently running workflows with full state
+  repeated WorkflowExecutionState active_workflows = 9; // Currently running workflows with full state
 }
 
 // ChatUpdateBatch contains a batch of incremental chat updates
@@ -272,7 +272,7 @@ message ChatUpdateData {
   int64 sequence_number = 2;
   string entity_id = 3;
   string chat_id = 4;
-  string data_json = 5;                        // JSON-encoded update data
+  string data_json = 5; // JSON-encoded update data
   string created_at = 6;
 }
 
@@ -282,19 +282,19 @@ message ChatUpdateData {
 
 // StreamUserUpdatesRequest initiates the user-wide update stream
 message StreamUserUpdatesRequest {
-  int64 since_seq = 1;                         // User-level sequence number to start from
+  int64 since_seq = 1; // User-level sequence number to start from
   // The chat subscription moved to StreamChatUpdates.
   reserved 2, 3;
   reserved "subscribe_chat_id", "chat_since_seq";
-  optional string project_id = 4;              // Scope updates to this project (omit for all projects)
+  optional string project_id = 4; // Scope updates to this project (omit for all projects)
 }
 
 // UserStreamEvent represents a single event in the user-wide update stream.
 message UserStreamEvent {
   oneof event {
-    UserSyncInfo sync = 1;                     // Initial sync info
-    UserUpdateBatch updates = 2;               // Batch of user updates
-    Heartbeat heartbeat = 3;                   // Keepalive heartbeat
+    UserSyncInfo sync = 1; // Initial sync info
+    UserUpdateBatch updates = 2; // Batch of user updates
+    Heartbeat heartbeat = 3; // Keepalive heartbeat
   }
   // Per-chat frames moved to ChatStreamEvent (StreamChatUpdates).
   reserved 4 to 9;
@@ -343,7 +343,7 @@ message UserUpdateData {
   UserUpdateType update_type = 7;
   EntityType entity_type = 8;
   string entity_id = 9;
-  string data_json = 10;                       // JSON-encoded update data
+  string data_json = 10; // JSON-encoded update data
   string created_at = 11;
   // The org the update is about: the one it was stored with, else the org of
   // the chat, project or saved workflow it names, as the stream decided when
@@ -371,12 +371,12 @@ message Heartbeat {
 // NodeExecutionStatus represents the lifecycle state of a workflow node
 enum NodeExecutionStatus {
   NODE_EXECUTION_STATUS_UNSPECIFIED = 0;
-  NODE_EXECUTION_STATUS_PENDING = 1;     // Queued but not started
-  NODE_EXECUTION_STATUS_RUNNING = 2;     // Currently executing
-  NODE_EXECUTION_STATUS_COMPLETED = 3;   // Finished successfully
-  NODE_EXECUTION_STATUS_FAILED = 4;      // Finished with error
-  NODE_EXECUTION_STATUS_CANCELLED = 5;   // Cancelled by user or system
-  NODE_EXECUTION_STATUS_SKIPPED = 6;     // Skipped due to condition
+  NODE_EXECUTION_STATUS_PENDING = 1; // Queued but not started
+  NODE_EXECUTION_STATUS_RUNNING = 2; // Currently executing
+  NODE_EXECUTION_STATUS_COMPLETED = 3; // Finished successfully
+  NODE_EXECUTION_STATUS_FAILED = 4; // Finished with error
+  NODE_EXECUTION_STATUS_CANCELLED = 5; // Cancelled by user or system
+  NODE_EXECUTION_STATUS_SKIPPED = 6; // Skipped due to condition
 }
 
 // WorkflowExecutionStatus represents the overall workflow state
@@ -390,37 +390,37 @@ enum WorkflowExecutionStatus {
 
 // NodeExecutionState represents the current state of a single workflow node
 message NodeExecutionState {
-  string node_id = 1;                        // Step/node identifier from workflow definition
-  string node_type = 2;                      // "agent", "run", "action", "approval", "loop", "join", "workflow"
-  NodeExecutionStatus status = 3;            // Current execution status
-  string workflow_id = 4;                    // Parent workflow UUID
-  optional string parent_node_id = 5;        // Parent node for nested workflows/loops
-  optional string activity_id = 6;           // Temporal activity ID for correlation
-  optional int64 started_at = 7;             // Unix timestamp when execution started
-  optional int64 completed_at = 8;           // Unix timestamp when execution completed
-  optional int64 duration_ms = 9;            // Execution duration in milliseconds
-  optional int32 exit_code = 10;             // Exit code for run steps
-  optional string error_message = 11;        // Error message if failed
-  optional int32 iteration = 12;             // Current iteration for loop nodes
-  optional int32 max_iterations = 13;        // Max iterations for loop nodes
-  map<string, string> metadata = 14;         // Additional node-specific metadata
+  string node_id = 1; // Step/node identifier from workflow definition
+  string node_type = 2; // "agent", "run", "action", "approval", "loop", "join", "workflow"
+  NodeExecutionStatus status = 3; // Current execution status
+  string workflow_id = 4; // Parent workflow UUID
+  optional string parent_node_id = 5; // Parent node for nested workflows/loops
+  optional string activity_id = 6; // Temporal activity ID for correlation
+  optional int64 started_at = 7; // Unix timestamp when execution started
+  optional int64 completed_at = 8; // Unix timestamp when execution completed
+  optional int64 duration_ms = 9; // Execution duration in milliseconds
+  optional int32 exit_code = 10; // Exit code for run steps
+  optional string error_message = 11; // Error message if failed
+  optional int32 iteration = 12; // Current iteration for loop nodes
+  optional int32 max_iterations = 13; // Max iterations for loop nodes
+  map<string, string> metadata = 14; // Additional node-specific metadata
 }
 
 // WorkflowExecutionState represents the complete execution state of a workflow
 message WorkflowExecutionState {
-  string workflow_id = 1;                    // Workflow UUID
-  string workflow_name = 2;                  // Workflow definition name (e.g., "builtin://agent")
-  string chat_id = 3;                        // Associated chat ID
-  WorkflowExecutionStatus status = 4;        // Overall workflow status
-  optional string parent_workflow_id = 5;    // Parent workflow for child workflows
-  string thread = 6;                    // Thread path for message isolation
-  repeated string active_nodes = 7;          // Currently executing node IDs
-  repeated NodeExecutionState nodes = 8;     // All node states in this workflow
+  string workflow_id = 1; // Workflow UUID
+  string workflow_name = 2; // Workflow definition name (e.g., "builtin://agent")
+  string chat_id = 3; // Associated chat ID
+  WorkflowExecutionStatus status = 4; // Overall workflow status
+  optional string parent_workflow_id = 5; // Parent workflow for child workflows
+  string thread = 6; // Thread path for message isolation
+  repeated string active_nodes = 7; // Currently executing node IDs
+  repeated NodeExecutionState nodes = 8; // All node states in this workflow
   repeated WorkflowExecutionState children = 9; // Child workflow states
-  optional int64 started_at = 10;            // Unix timestamp when workflow started
-  optional int64 completed_at = 11;          // Unix timestamp when workflow completed
-  map<string, string> params = 12;           // Workflow input parameters
-  map<string, string> outputs = 13;          // Workflow outputs (populated on completion)
+  optional int64 started_at = 10; // Unix timestamp when workflow started
+  optional int64 completed_at = 11; // Unix timestamp when workflow completed
+  map<string, string> params = 12; // Workflow input parameters
+  map<string, string> outputs = 13; // Workflow outputs (populated on completion)
 }
 
 // ExecutionLogLevel represents the severity of a log entry

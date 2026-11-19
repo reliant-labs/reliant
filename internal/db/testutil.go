@@ -58,7 +58,7 @@ import (
 // testSeedSQL seeds the shared "test-project" that many tests reference by ID
 // to satisfy the projects FK on chats. Its path is a unique sentinel (not the
 // common "/tmp/test") so it never collides with tests that create their own
-// project at that path via the projects_user_id_path_key unique index.
+// project at that path via the projects_org_user_path_key unique index.
 const testSeedSQL = `INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active)
 	VALUES ('test-project', 'test-user', 'Test Project', '/tmp/reliant-test-seed-project', NOW(), NOW(), NOW())
 	ON CONFLICT (id) DO NOTHING`
@@ -77,6 +77,41 @@ func NewTestRepo(t *testing.T) *Repo {
 // the cleanup, so a database can outlive the test that made it (a stack shared
 // by a whole test binary).
 //
+// RelaxProjectKeysForTest drops the per-user project keys (UNIQUE (user_id,
+// path) and (user_id, remote_url)) from the test's own database, leaving the
+// per-org ones (projects_org_user_path_key, projects_org_user_remote_url_key):
+// the schema of the later release that relaxes them. It is how this
+// release's readers are tested against that schema — the release that drops
+// the keys ships only once this one is its rollback target — and how a test
+// puts the same path in two orgs.
+func RelaxProjectKeysForTest(t *testing.T, repo *Repo) {
+	t.Helper()
+	for _, stmt := range []string{
+		`ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_user_id_path_key`,
+		`DROP INDEX IF EXISTS projects_user_remote_url_uniq`,
+	} {
+		if _, err := repo.ORM().Bun().ExecContext(context.Background(), stmt); err != nil {
+			t.Fatalf("relax project keys: %s: %v", stmt, err)
+		}
+	}
+}
+
+// HoldProjectOnMachineForTest records that the machine holds a checkout of
+// the project, as the connect reconcile would on finding it, unless it has a
+// record of it already or the user detached it: a machine's config snapshot
+// of a project is stored only while it does (SyncProjectConfigSnapshot). It
+// never overwrites a record a test wrote.
+func HoldProjectOnMachineForTest(tb testing.TB, repo *Repo, projectID, daemonID string) {
+	tb.Helper()
+	if _, err := repo.ORM().Bun().ExecContext(context.Background(), `
+INSERT INTO project_daemons (project_id, daemon_id, path, install_state)
+SELECT ?0, ?1, '/work/' || ?1, 'installed'
+WHERE NOT EXISTS (SELECT 1 FROM project_daemon_detachments WHERE project_id = ?0 AND daemon_id = ?1)
+ON CONFLICT (project_id, daemon_id) DO NOTHING`, projectID, daemonID); err != nil {
+		tb.Fatalf("hold project %s on machine %s: %v", projectID, daemonID, err)
+	}
+}
+
 // Exported for use by other packages that need to test against a real database.
 func SetupTestDB(t *testing.T) (*Repo, func()) {
 	t.Helper()

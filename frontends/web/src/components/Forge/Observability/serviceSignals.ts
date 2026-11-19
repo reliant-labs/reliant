@@ -33,7 +33,7 @@ import { useMemo } from "react";
 
 import { useServiceSignals } from "@/hooks/observability-queries";
 import type { ObsScope, ServiceSignal, ServiceSignals, ServiceSignalsResult } from "@/services/controlPlane/observability/types";
-import type { RangePreset } from "@/services/controlPlane/observability/window";
+import { rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 
 /** The scope's signals index for a view over `range`; null while unknown (every view stays offered). */
 export function useSignalsIndex(scope: ObsScope | null, range: RangePreset): SignalsIndex | null {
@@ -64,9 +64,9 @@ export type SignalState = { kind: "available" } | { kind: "idle"; badge: string;
 
 const AVAILABLE: SignalState = { kind: "available" };
 
-/** The window a view's signals are judged over: its own when it is a week, else a day. */
+/** The window a view's signals are judged over: a week when it shows a week or more (the most signals keep), else a day. */
 export function signalsRange(range: RangePreset): RangePreset {
-  return range === "7d" ? "7d" : "24h";
+  return rangeMs(range) >= rangeMs("7d") ? "7d" : "24h";
 }
 
 const RANGE_WORDS: Record<"24h" | "7d", { badge: string; phrase: string }> = {

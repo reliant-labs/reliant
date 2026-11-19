@@ -26,10 +26,11 @@ import {
 import { useObsQuotaState } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { formatClock, quotaOf } from "@/services/controlPlane/observability/quota";
 import type { Provenance } from "@/services/controlPlane/observability/types";
-import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, rangeMs, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import { DeployWithAgentButton } from "./AskReliant/AskReliant";
 import type { ObsView } from "./obsSearch";
+import { settingsPath } from "@/lib/paths";
 
 /** The frame for Observability, Data and Storage states: an icon, title, words and actions. */
 export function StateFrame({
@@ -316,7 +317,7 @@ export function ObsNoData({
               Clear filters
             </Button>
           )}
-          {onWiden && range !== "7d" && (
+          {onWiden && rangeMs(range) < rangeMs("7d") && (
             <Button variant="ghost" size="sm" onClick={onWiden} data-testid="obs-widen">
               Look at the last 7 days
             </Button>
@@ -365,7 +366,7 @@ export function ObsNoCustomerMetadata({
               Clear filters
             </Button>
           )}
-          {onWiden && range !== "7d" && (
+          {onWiden && rangeMs(range) < rangeMs("7d") && (
             <Button variant="ghost" size="sm" onClick={onWiden} data-testid="obs-widen">
               Look at the last 7 days
             </Button>
@@ -545,7 +546,7 @@ export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; classNam
 }
 
 const BILLING_USAGE_TAB = "usage" satisfies BillingTab;
-const BILLING_USAGE_HREF = `/settings/billing?${new URLSearchParams({ tab: BILLING_USAGE_TAB })}#billing-observability-usage`;
+const BILLING_USAGE_HREF = `${settingsPath("billing")}?${new URLSearchParams({ tab: BILLING_USAGE_TAB })}#billing-observability-usage`;
 
 /**
  * The one banner per page, said once instead of once per panel. Renders nothing

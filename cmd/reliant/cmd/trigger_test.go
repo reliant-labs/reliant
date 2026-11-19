@@ -206,6 +206,33 @@ func TestTriggerDefinitionNameFallsBackToTheWorkflow(t *testing.T) {
 	assert.ErrorContains(t, err, "--name is required")
 }
 
+// An update without --name keeps the trigger's name: falling back to the
+// workflow (create's default) renamed "PR pipeline · pr-review · by hand" to
+// "pr-review", and the runbook's next `trigger fire <name>` found nothing.
+func TestTriggerUpdateKeepsTheNameAndProjectUnlessGiven(t *testing.T) {
+	existing := &reliantv1.Trigger{Name: "PR pipeline · pr-review · by hand", ProjectId: "proj-1"}
+	newFlags := func() *triggerDefinitionFlags {
+		return &triggerDefinitionFlags{
+			daemon: "d", daemonLister: fakeDaemonLister{{DaemonId: "d"}}, message: "go", cron: []string{"0 9 * * *"}, workflow: "pr-review",
+		}
+	}
+
+	flags := newFlags()
+	flags.keepIdentityOf(existing)
+	def, err := flags.definition(context.Background(), newTriggerUpdateCmd(), nil, true)
+	require.NoError(t, err)
+	assert.Equal(t, "PR pipeline · pr-review · by hand", def.GetName())
+	assert.Equal(t, "proj-1", def.GetProjectId())
+
+	flags = newFlags()
+	flags.name, flags.projectID = "renamed", "proj-2"
+	flags.keepIdentityOf(existing)
+	def, err = flags.definition(context.Background(), newTriggerUpdateCmd(), nil, true)
+	require.NoError(t, err)
+	assert.Equal(t, "renamed", def.GetName(), "--name still renames")
+	assert.Equal(t, "proj-2", def.GetProjectId(), "--project-id still moves it")
+}
+
 func TestTriggerCommandTreeIsRegistered(t *testing.T) {
 	cmd := newTriggerCmd()
 	var names []string

@@ -14,7 +14,7 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service CatalogService {
   // ListModels returns all available models filtered by user's configured API keys
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse) {}
-  
+
   // ListModelsByProvider returns all models for a specific provider
   rpc ListModelsByProvider(ListModelsByProviderRequest) returns (ListModelsByProviderResponse) {}
 
@@ -25,7 +25,7 @@ service CatalogService {
 
   // ListTools returns all available tools
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse) {}
-  
+
   // ListNodes returns all workflow nodes available for the workflow builder
   rpc ListNodes(ListNodesRequest) returns (ListNodesResponse) {}
 

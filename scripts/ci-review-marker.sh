@@ -16,6 +16,11 @@
 # which could otherwise post one. A pull request whose head is in a fork (or whose fork was deleted)
 # never passes, whatever marker it carries: the repository is public, and the
 # pipeline merges only its own branches (control-plane security finding CPI-1).
+# A pull request labelled `hold` or `needs:human` never passes either, whatever its
+# verdict: a person owns it until both come off (control-plane docs/pr-pipeline.md).
+# The labels are read live, at the merge group too, so a hold added after the pass, or
+# while the PR waits in the merge queue, stops the merge (forge #2166 merged two minutes
+# after `hold`, 2026-11-12, because nothing read the label again once it was queued).
 #
 #   ci-review-marker.sh pr <number>                 one pull request
 #   ci-review-marker.sh group <head_ref> <head_sha> every pull request in a merge group
@@ -55,9 +60,20 @@ esac
 
 bad=0
 for n in $prs; do
-  read -r head hrepo < <(gh api "repos/$repo/pulls/$n" --jq '[.head.sha, (.head.repo.full_name // "-")] | join(" ")')
+  # Read live, and a read that fails passes nothing: the labels are what holds it.
+  if ! info=$(gh api "repos/$repo/pulls/$n" --jq '[.head.sha, (.head.repo.full_name // "-"),
+    ([.labels[]?.name | select(. == "hold" or . == "needs:human")] | join(",") | if . == "" then "-" else . end)] | join(" ")') \
+    || [ -z "$info" ]; then
+    echo "::error::#$n: cannot read the pull request (its head, repository and labels), so it is not passed"
+    bad=1; continue
+  fi
+  read -r head hrepo held <<<"$info"
   if [ "$hrepo" != "$repo" ]; then
     echo "::error::#$n: its head is not a branch of $repo (head repository: $hrepo); a fork's pull request never merges here: push its commits to a branch of $repo and open a pull request from there"
+    bad=1; continue
+  fi
+  if [ "${held:--}" != - ]; then
+    echo "::error::#$n is held ($held): a person owns it until hold and needs:human are both off; nothing merges it meanwhile"
     bad=1; continue
   fi
   v=$(verdict "$n" "$head")

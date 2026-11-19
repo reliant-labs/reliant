@@ -53,7 +53,8 @@ import type {
   TraceSummary,
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
-import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
+import { rangeMs, readRange, resolveWindow, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
+import { keepPreviousInOrgSegment } from "@/lib/orgScope";
 
 // Presentation never changes QueryPanel's computation: two dashboard tiles
 // with different ids/titles/layout but the same query share one in-flight read.
@@ -181,7 +182,7 @@ export function useServiceOverview(scope: ObsScope | null, range: RangePreset, s
   const queryKey = obsKeys.overview(scope, range, services, groupBy);
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(range), services, groupBy }, { signal }),
+    queryFn: ({ signal }) => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), services, groupBy }, { signal }),
     enabled: !!scope,
     staleTime: 30_000,
     placeholderData: (previous, previousQuery) => sameScopePlaceholder(scope, previous, previousQuery?.queryKey),
@@ -212,7 +213,7 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
   const query = useInfiniteQuery({
     queryKey,
     queryFn: async ({ pageParam, signal }): Promise<SearchLogsResult & { window: TimeWindow }> => {
-      const window = pageParam?.window ?? resolveWindow(filters.range);
+      const window = pageParam?.window ?? resolveWindow(readRange(filters.range, "logs"));
       const result = await api.searchLogs({
         ...(scope as ObsScope),
         window,
@@ -296,7 +297,7 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
   return useInfiniteQuery({
     queryKey: obsKeys.traces(scope, filters),
     queryFn: async ({ pageParam, signal }): Promise<ListTracesResult & { window: TimeWindow }> => {
-      const window = pageParam?.window ?? resolveWindow(filters.range);
+      const window = pageParam?.window ?? resolveWindow(readRange(filters.range, "traces"));
       const result = await api.listTraces({
         ...(scope as ObsScope),
         window,
@@ -335,7 +336,7 @@ export function useTrace(scope: ObsScope | null, traceId: string | null, range: 
   const api = useObsReadApi();
   return useQuery({
     queryKey: obsKeys.trace(scope, traceId ?? "", range),
-    queryFn: ({ signal }) => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow(range) }, { signal }),
+    queryFn: ({ signal }) => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow(readRange(range, "traces")) }, { signal }),
     enabled: !!scope && !!traceId,
     staleTime: 15_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
@@ -393,7 +394,7 @@ export function usePanelQuery(
     queryKey,
     queryFn: ({ signal }) => {
       const offset = options.offsetMs?.() ?? 0;
-      const window = resolveWindow(range, Date.now() - offset);
+      const window = resolveWindow(readRange(range, panelRead(panel)), Date.now() - offset);
       if (panel.kind === "postgres") return queryPostgresPanel(databaseApi, scope as ObsScope, window, panel, signal);
       return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy, dashboardId: options.dashboardId }, { signal });
     },
@@ -479,7 +480,7 @@ export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
   const unfiltered = scope && scope.filters.length ? { ...scope, filters: [] } : scope;
   return useQuery({
     queryKey: obsKeys.serviceSignals(unfiltered, range),
-    queryFn: ({ signal }) => api.getServiceSignals({ ...(unfiltered as ObsScope), window: resolveWindow(range) }, { signal }),
+    queryFn: ({ signal }) => api.getServiceSignals({ ...(unfiltered as ObsScope), window: resolveWindow(readRange(range, "overview")) }, { signal }),
     enabled: !!unfiltered,
     staleTime: 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
@@ -523,11 +524,12 @@ export function useAttributeValues(
   return useQuery({
     queryKey: obsKeys.attributeValues(scope, range, key, prefix, signal ?? ""),
     queryFn: ({ signal: abortSignal }) =>
-      // Value lookups are capped at 7 days server-side, which is the widest preset.
-      api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(range), key, prefix, signal }, { signal: abortSignal }),
+      // Value lookups are capped at 7 days server-side.
+      api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), key, prefix, signal }, { signal: abortSignal }),
     enabled: !!scope && !!key,
     staleTime: 60_000,
-    placeholderData: (previous) => previous,
+    // The previous prefix's values, but never another org's (lib/orgScope).
+    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
@@ -549,11 +551,29 @@ export const metricKeys = {
     [...metricKeys.all(scope), "exemplars", range, request] as const,
 };
 
+/**
+ * What a panel reads, for its longest window (forge obsquery Panel.MaxRange):
+ * a sql panel and the browser kinds by kind, the others by signal.
+ */
+export function panelRead(panel: Pick<Panel, "kind" | "signal">): RangeRead {
+  switch (panel.kind) {
+    case "sql":
+    case "funnel":
+    case "postgres":
+      return "sql";
+    case "issues":
+      return "issues";
+    case "sessions":
+      return "sessions";
+  }
+  return panel.signal === "logs" ? "logs" : panel.signal === "metrics" ? "metrics" : "traces";
+}
+
 /** The catalog's window: the server caps it at 24 hours, so a longer preset would only be clamped there. */
 const CATALOG_MAX_RANGE: RangePreset = "24h";
 
 function catalogRange(range: RangePreset): RangePreset {
-  return range === "7d" ? CATALOG_MAX_RANGE : range;
+  return rangeMs(range) > rangeMs(CATALOG_MAX_RANGE) ? CATALOG_MAX_RANGE : range;
 }
 
 /**
@@ -570,7 +590,7 @@ export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, nam
     queryFn: ({ signal }) => api.listMetricCatalog({ ...(scope as ObsScope), window: resolveWindow(window), name, limit }, { signal }),
     enabled: !!scope,
     staleTime: 60_000,
-    placeholderData: (previous) => previous,
+    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
@@ -598,7 +618,7 @@ export function useMetricExemplars(scope: ObsScope | null, range: RangePreset, r
   const api = useObsReadApi();
   return useQuery({
     queryKey: metricKeys.exemplars(scope, range, request ?? ({ name: "" } as ExemplarsQuery)),
-    queryFn: ({ signal }) => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(range), ...(request as ExemplarsQuery) }, { signal }),
+    queryFn: ({ signal }) => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), ...(request as ExemplarsQuery) }, { signal }),
     enabled: !!scope && !!request?.name && (options.enabled ?? true),
     staleTime: 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
@@ -612,7 +632,7 @@ export function useWorkloads(scope: ObsScope | null, range: RangePreset, service
   const queryKey = obsKeys.workloads(scope, range, services);
   const query = useQuery({
     queryKey,
-    queryFn: ({ signal }) => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(range), services }, { signal }),
+    queryFn: ({ signal }) => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), services }, { signal }),
     enabled: !!scope,
     staleTime: 30_000,
     placeholderData: (previous, previousQuery) => sameScopePlaceholder(scope, previous, previousQuery?.queryKey),
@@ -627,7 +647,7 @@ export function useWorkload(scope: ObsScope | null, range: RangePreset, workload
   return useQuery({
     queryKey: obsKeys.workload(scope, range, workload ?? "", container ?? ""),
     queryFn: ({ signal }) =>
-      api.getWorkload({ ...(scope as ObsScope), window: resolveWindow(range), workload: workload as string, container }, { signal }),
+      api.getWorkload({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), workload: workload as string, container }, { signal }),
     enabled: !!scope && !!workload,
     staleTime: 30_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
@@ -965,7 +985,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
   return useInfiniteQuery({
     queryKey: issueKeys.list(scope, filters),
     queryFn: async ({ pageParam, signal }): Promise<IssueList & { window: TimeWindow }> => {
-      const window = pageParam?.window ?? resolveWindow(filters.range);
+      const window = pageParam?.window ?? resolveWindow(readRange(filters.range, "issues"));
       const request = {
         ...(scope as IssueScope),
         services: filters.service ? [filters.service] : [],

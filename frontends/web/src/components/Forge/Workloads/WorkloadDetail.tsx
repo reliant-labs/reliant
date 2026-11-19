@@ -46,6 +46,7 @@ import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope, ServiceSignal, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadPod, WorkloadSeries } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RangeCapNote } from "../Observability/RangeCapNote";
 import { cloudErrorDetail, type RestartedWorkload, type RunStateRequest } from "@/services/forge/cloudEnvs";
 import { useDefaultBranch } from "@/services/forge/RepoMetaContext";
 import { workloadLastError, workloadOpenUrl, type ForgeHostedWorkload } from "@/services/forge/topology";
@@ -207,13 +208,16 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
 
   const crumbs = [{ label: "Overview", href: hrefs.overview }, { label: name }];
   const rangeControl = (
-    <VariableSelect
-      id="workload-range"
-      label="time"
-      value={range}
-      options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
-      onChange={(value) => onSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) }, { replace: true })}
-    />
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <VariableSelect
+        id="workload-range"
+        label="time"
+        value={range}
+        options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
+        onChange={(value) => onSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) }, { replace: true })}
+      />
+      <RangeCapNote range={range} read="overview" subject="Requests and errors are" testId="workload-range-cap" />
+    </span>
   );
 
   const loading = org.isLoading || detail.isLoading || (listed.isLoading && !detail.data?.workloads.length);

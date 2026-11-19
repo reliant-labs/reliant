@@ -23,10 +23,11 @@ func (r *Repo) WorkflowSourceDiagnostic(ctx context.Context, projectID, daemonID
 	if projectID == "" {
 		return "", nil
 	}
-	catalogs, err := r.projectMachineCatalogs(ctx, projectID)
+	files, err := r.projectMachineWorkflowFiles(ctx, projectID)
 	if err != nil {
 		return "", err
 	}
+	catalogs := files.catalogs
 	if len(catalogs) == 0 {
 		return "no machine has synced this project's workflows yet; connect a machine that has the project checked out", nil
 	}
@@ -47,11 +48,7 @@ func (r *Repo) WorkflowSourceDiagnostic(ctx context.Context, projectID, daemonID
 	}
 	sort.Strings(providers)
 
-	removals, err := r.projectMachineRemovals(ctx, projectID)
-	if err != nil {
-		return "", err
-	}
-	removedFrom := lastRemoval(removals, names, slug)
+	removedFrom := lastRemoval(files.removals, names, slug)
 
 	var b strings.Builder
 	if daemonID != "" {

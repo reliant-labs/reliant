@@ -104,6 +104,36 @@ describe("the OAuth flow — ?code&state", () => {
   });
 });
 
+describe("a flow the forge site started (lib/crossShellReturn)", () => {
+  // The wizard runs on the forge host too; GitHub's callback is this host's,
+  // and the control plane keeps only a relative returnTo.
+  it("lands back on the forge site, not on this host", async () => {
+    mocks.search = { code: "abc123", state: "signed-state" };
+    mocks.exchangeGithubOAuthCode.mockResolvedValue({
+      ok: true,
+      returnTo: "/__forge/onboarding?returnTo=%2Fapps",
+    });
+
+    render(<GitHubOAuthCallback />);
+
+    await waitFor(() => expect(mocks.assign).toHaveBeenCalled());
+    expect(landedAt()).toBe("https://forge.reliantlabs.io/onboarding?returnTo=%2Fapps&github_connected=true");
+  });
+
+  it("never lets the prefix name another host", async () => {
+    mocks.search = { code: "abc123", state: "signed-state" };
+    mocks.exchangeGithubOAuthCode.mockResolvedValue({ ok: true, returnTo: "/__forge//evil.com/x" });
+
+    render(<GitHubOAuthCallback />);
+
+    await waitFor(() => expect(mocks.assign).toHaveBeenCalled());
+    // Not the forge site and not another host: a path on this one.
+    const landed = landedAt();
+    expect(landed.startsWith("/")).toBe(true);
+    expect(landed.startsWith("//")).toBe(false);
+  });
+});
+
 describe("the App install flow — ?installation_id&setup_action, no state", () => {
   // THE REPORTED URL. Reduced to its parameters; this exact shape produced
   // "Invalid GitHub callback" in production.

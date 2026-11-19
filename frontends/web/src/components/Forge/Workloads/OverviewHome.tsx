@@ -60,6 +60,7 @@ import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { frontendsInScope } from "@/services/forge/frontends";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 import { RANGE_LABELS, RANGE_PRESETS, resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RangeCapNote } from "../Observability/RangeCapNote";
 import { cn } from "@/lib/utils";
 
 import { DeployStatusUnread, type DeployStatusUnreadState } from "../Console/DeployStatusUnread";
@@ -274,13 +275,16 @@ export function OverviewHome({
   // The led console's one sentence: what "Needs attention" holds, once it is known.
   const ledSummary = extras.led && !empty && !unrecorded ? overviewSummary(loading || workloadsFailed ? null : attention, all ? null : env) : null;
   const rangeControl = (
-    <VariableSelect
-      id="overview-range"
-      label="time"
-      value={range}
-      options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
-      onChange={(value) => onSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) })}
-    />
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <VariableSelect
+        id="overview-range"
+        label="time"
+        value={range}
+        options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
+        onChange={(value) => onSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) })}
+      />
+      <RangeCapNote range={range} read="overview" subject="Requests and errors are" testId="overview-range-cap" />
+    </span>
   );
   // One compact row: the title, its counts inline, the window on the right.
   const header = (

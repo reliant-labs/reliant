@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/orgs"
 )
@@ -138,7 +139,7 @@ func (s *Service) validKey(ctx context.Context, provider, apiKey string) error {
 		return svcerr.Wrap(svcerr.InvalidArgument("api_key is required"))
 	}
 	if ok, msg := s.deps.ValidateKey(ctx, models.Family(provider), apiKey); !ok {
-		return svcerr.Wrap(svcerr.InvalidArgument(msg))
+		return svcerr.Wrap(svcerr.WithReason(svcerr.InvalidArgument(msg), keyvalidate.Reason(msg)))
 	}
 	return nil
 }

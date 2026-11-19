@@ -29,12 +29,29 @@ type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
+	// GetProjectByPathAndUserInScope and GetProjectByRemoteURLAndUserInScope
+	// find the user's project in one org (nil scope: any org). Projects are
+	// unique per (org, user, path) and (org, user, remote_url).
+	GetProjectByPathAndUserInScope(ctx context.Context, path, userID string, scope *core.OrgScope) (*db.Project, error)
+	GetProjectByRemoteURLAndUserInScope(ctx context.Context, remoteURL, userID string, scope *core.OrgScope) (*db.Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	UpdateProject(ctx context.Context, project *db.Project, userID string) error
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
+	// A deletion with a restore window (project_delete.go): schedule it
+	// (hiding the project and pausing its triggers), cancel it, purge at
+	// once, and list what the caller may restore.
+	// Each takes the project as the caller's authority was decided on, and
+	// refuses (store.ErrOrgChanged) a project that moved org since.
+	ScheduleProjectDeletion(ctx context.Context, id, by string, deleteAfter time.Time, decided core.ProjectDecision) (core.ProjectDeletion, error)
+	RestoreProject(ctx context.Context, id string, decided core.ProjectDecision) ([]string, error)
+	// An immediate purge is claimed in the request and its batches run after
+	// it returns (rpc_purge_project_now.go).
+	ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error
+	PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error)
+	ListDeletedProjects(ctx context.Context, userID string, org *core.OrgScope, includePurging bool) ([]*core.Project, error)
 	// ProjectOrgMoveBlockers and ProjectOrgMoveEffects are a move's preview:
 	// the running work that refuses it now, and what it would change.
 	ProjectOrgMoveBlockers(ctx context.Context, projectID string) (*core.ProjectOrgMoveBlockers, error)
@@ -47,7 +64,10 @@ type Repository interface {
 	ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
 
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
-	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
+	// RecordObservedProjectDaemonInScope records a checkout the platform
+	// made or found, only while the project is in the machine's scope
+	// (re-read under its row lock) and not detached from it.
+	RecordObservedProjectDaemonInScope(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, scope *core.OrgScope) (bool, error)
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
@@ -67,6 +87,9 @@ type Repository interface {
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
+	// SetRepoForgeApps records the forge apps a daemon found in a repo
+	// (projectfacts.RecordForgeApps).
+	SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error
 
 	CreateWorktree(ctx context.Context, worktree *db.Worktree) error
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
@@ -113,6 +136,12 @@ type Router interface {
 type MachineConfigSync interface {
 	SendLoadProjectConfigsToDaemon(ctx context.Context, userID, daemonID, projectPath, requestID string) error
 	SendWatchProjectConfigsToDaemon(ctx context.Context, userID, daemonID, projectPath string, includeInitial bool) error
+}
+
+// TriggerSchedules converges a trigger's Temporal Schedule onto its row (a
+// missing row removes it). *triggers.Syncer is one.
+type TriggerSchedules interface {
+	Sync(ctx context.Context, triggerID string) error
 }
 
 // CloneDispatcher asks the control plane to clone a repository onto one of

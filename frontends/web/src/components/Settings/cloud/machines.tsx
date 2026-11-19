@@ -94,7 +94,8 @@ import {
 import { PairMachinePanel } from "@/components/Machines/PairMachinePanel";
 import { AddMachineSheet } from "@/components/Machines/AddMachineSheet";
 import { clearWaking, markWaking, presentMachineStatus, useWakingMachines } from "@/lib/machineWake";
-import { getComputeEligibility } from "@/services/controlPlane/billing";
+import { computeEligibilityQuery } from "@/hooks/computeEligibilityKey";
+import { useOrgScope } from "@/lib/orgScope";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useComputeUsage, usePlans } from "@/hooks/useCloudBillingQueries";
 import {
@@ -120,6 +121,7 @@ import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 import { useMachineOrgs } from "@/hooks/useMachineOrgs";
+import { machineSettingsPath, settingsPath } from "@/lib/paths";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 
@@ -137,7 +139,6 @@ const QK = {
   // "Make public" there invalidates this panel's rules query and vice-versa.
   ports: portAccessRulesQueryKey,
   computeSub: ["cp", "environments", "computeSubscription"] as const,
-  computeEligibility: ["cp", "environments", "computeEligibility"] as const,
 };
 
 // ── Status presentation ─────────────────────────────────────────────────────
@@ -426,8 +427,8 @@ export function MachinesSection() {
   const navigate = useNavigate();
   const selectedId = params.machineId ?? search.daemon ?? null;
   const openMachine = (machineId: string) =>
-    navigate({ to: "/settings/machines/$machineId", params: { machineId } });
-  const backToList = () => navigate({ to: "/settings/$section", params: { section: "machines" } });
+    navigate({ to: machineSettingsPath(machineId) });
+  const backToList = () => navigate({ to: settingsPath("machines") });
   // Without a control plane there are no managed machines to create or
   // drive, but registered machines — and the app access granted to them —
   // still exist, so the list and detail render in a registry-only mode rather
@@ -497,12 +498,8 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   // plan runs and takes payment in place for the rest. Eligibility here only
   // picks the empty state's words (the server's own prediction of
   // internal/svcdaemon.checkDaemonSizeAllowed — never a reimplementation).
-  const eligibilityQ = useQuery({
-    queryKey: QK.computeEligibility,
-    queryFn: () => getComputeEligibility(),
-    staleTime: 30_000,
-    enabled: cloud,
-  });
+  const org = useOrgScope();
+  const eligibilityQ = useQuery(computeEligibilityQuery(org, cloud));
 
   const invalidate = () => invalidateDaemonList(qc);
 
@@ -1552,12 +1549,8 @@ function EnvironmentDetail({
   // once Resize opens: its disk-growth limit decides whether "Grow disk" is
   // offered at all, and a plan with no limit offers no growth.
   const managedMachine = daemon ? !isExternalDaemon(daemon) : false;
-  const eligibilityQ = useQuery({
-    queryKey: QK.computeEligibility,
-    queryFn: () => getComputeEligibility(),
-    staleTime: 30_000,
-    enabled: cloud && (resizeOpen || managedMachine),
-  });
+  const eligibilityOrg = useOrgScope();
+  const eligibilityQ = useQuery(computeEligibilityQuery(eligibilityOrg, cloud && (resizeOpen || managedMachine)));
   const resizeAllowed = useMemo(
     () => sizeTiersFromWire(eligibilityQ.data?.allowedDaemonSizes ?? []),
     [eligibilityQ.data?.allowedDaemonSizes],

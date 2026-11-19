@@ -48,6 +48,33 @@ func TestContentBlockPayloads_SpawnCarriesChildWorkflowID(t *testing.T) {
 	require.NotEmpty(t, got[0]["started_at"])
 }
 
+// A redacted_thinking block's sealed ciphertext is for the provider alone: the
+// live update carries the block with its type and position and an empty
+// content, and the stored block keeps the ciphertext.
+func TestContentBlockPayloads_RedactedThinkingIsBlank(t *testing.T) {
+	t.Parallel()
+
+	sealed := &MessageContentBlock{
+		ID: "block-1", MessageID: "msg-1", Position: 0,
+		BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING,
+		Content:   ptr.Of("EmwKAhgBEgy3va3pzix=="),
+	}
+	thinking := &MessageContentBlock{
+		ID: "block-2", MessageID: "msg-1", Position: 1,
+		BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING,
+		Content:   ptr.Of("readable thought"),
+	}
+
+	got := ContentBlockPayloadsWithToolCalls([]*MessageContentBlock{sealed, thinking}, nil)
+	require.Len(t, got, 2)
+	require.Equal(t, "block-1", got[0]["id"])
+	require.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING, got[0]["type"])
+	require.Equal(t, 0, got[0]["index"])
+	require.Equal(t, "", got[0]["content"])
+	require.Equal(t, "readable thought", got[1]["content"])
+	require.Equal(t, "EmwKAhgBEgy3va3pzix==", *sealed.Content, "the stored block is not touched")
+}
+
 // A call that started no child must not claim one. An empty-string default
 // would make "owns a thread" indistinguishable from "does not" at the
 // consumer, which is the ambiguity that produces a wrong render rather than

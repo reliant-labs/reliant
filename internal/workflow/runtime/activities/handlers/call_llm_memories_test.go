@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/require"
 )
@@ -170,5 +171,25 @@ func TestSystemPrompt_TellsAgentsToKeepScratchOutsideTheWorkspaceRoot(t *testing
 	none := activity.getSystemPrompts(nil, "", "", nil, nil, nil, true)[0]
 	if strings.Contains(none, "Keep scratch files") {
 		t.Fatal("with no working directory there is no root to keep scratch out of")
+	}
+}
+
+// Scratch an agent still needs goes in a per-chat directory under the home,
+// never /tmp, which a cloud machine empties on every restart
+// (control-plane#2845).
+func TestSystemPrompt_PointsScratchAtAPersistentPerChatDirectory(t *testing.T) {
+	t.Parallel()
+
+	activity := &CallLLMActivity{}
+	chat := &db.Chat{ID: "chat-123"}
+	prompt := activity.getSystemPrompts(chat, "/srv/checkout/acme", "", nil, nil, nil, true)[0]
+	if !strings.Contains(prompt, "~/.reliant/scratch/chat-123/") {
+		t.Fatalf("the prompt must name the chat's scratch directory:\n%s", prompt)
+	}
+	if !strings.Contains(prompt, "/tmp does not") {
+		t.Fatalf("the prompt must say /tmp is wiped on restart:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "e.g. under /tmp") {
+		t.Fatalf("the prompt must not steer scratch to /tmp:\n%s", prompt)
 	}
 }

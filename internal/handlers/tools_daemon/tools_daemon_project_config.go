@@ -12,8 +12,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/authz"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
@@ -112,10 +114,18 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 		return nil
 	}
 
-	// Scoped by user: `projects` is UNIQUE on (user_id, path), so a path-only
+	// Scoped by user: `projects` is UNIQUE on (org, user_id, path), so a path-only
 	// lookup can return another user's row for the same directory and this
 	// would emit a refetch naming a project the connected user cannot see.
-	project, err := s.deps.Repo.GetProjectByPathAndUser(ctx, projectPath, conn.userID)
+	// And by the machine's org: the same path may be a project in each of
+	// the user's orgs, and this machine holds only its own org's.
+	scope, _, err := s.machineProjectScope(ctx, conn)
+	if err != nil {
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" could not tell which organization's projects the machine holds; ignoring a filesystem change",
+			"error", err, "daemonID", conn.daemonID, "path", projectPath)
+		return nil
+	}
+	project, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, projectPath, conn.userID, scope)
 	if err != nil {
 		return nil // project might not exist yet, that's fine
 	}
@@ -129,11 +139,15 @@ func (s *Service) handleFileSystemChanged(ctx context.Context, conn *daemonConne
 	//
 	// Matched by (project, daemon) rather than by request id: unlike the
 	// failure path, FileSystemChanged carries no request id — only the path
-	// — and the path is exactly what the queued row recorded.
-	if err := s.deps.Repo.MarkProjectDaemonInstalled(ctx, project.ID, conn.daemonID); err != nil {
+	// — and the path is exactly what the queued row recorded. The project
+	// was found in the machine's scope above, but that read is not the
+	// write: the org is re-read under the project's row lock, so a move out
+	// of the machine's org that landed since settles nothing here.
+	installed, err := s.deps.Repo.MarkProjectDaemonInstalledInScope(ctx, project.ID, conn.daemonID, scope)
+	if err != nil {
 		logging.WarnContext(ctx, "could not settle queued clone after filesystem change",
 			"error", err, "project_id", project.ID, "daemon_id", conn.daemonID)
-	} else {
+	} else if installed {
 		// The clone just SUCCEEDED on this daemon, which means forge.yaml is
 		// on its disk right now. Read the project's forge name here rather
 		// than waiting for someone to open the Forge tab with a daemon
@@ -177,8 +191,12 @@ func (s *Service) learnForgeNameForProject(ctx context.Context, conn *daemonConn
 			case <-readCtx.Done():
 			}
 		}()
-		projectfacts.LearnForgeName(readCtx, connCommandSender{svc: s, conn: conn},
+		sender := connCommandSender{svc: s, conn: conn}
+		projectfacts.LearnForgeName(readCtx, sender,
 			s.deps.Repo, conn.userID, conn.daemonID, project.ID, path)
+		// And every forge app in the clone's repos, off the same disk.
+		projectfacts.RefreshForgeApps(readCtx, sender,
+			s.deps.Repo, conn.userID, conn.daemonID, project.ID, path, 0)
 	}()
 }
 
@@ -377,8 +395,19 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 	// record carries their union over every machine (SyncProjectConfigSnapshot),
 	// so a machine without a checkout cannot erase another machine's. Unless
 	// forced, a snapshot no newer than this machine's last push is dropped
-	// there, under the same lock that writes it.
-	_, err = s.deps.Repo.SyncProjectConfigSnapshot(ctx, record, force)
+	// there, under the same lock that writes it. So is one of a project that
+	// left the machine's scope, or lost its checkout record on the machine
+	// (a detach, the machine-org cleanup), since it was resolved above: the
+	// store re-decides both under the project's locks.
+	scope, _, err := s.machineProjectScope(ctx, conn)
+	if err != nil {
+		return err
+	}
+	stored, err := s.deps.Repo.SyncProjectConfigSnapshot(ctx, record, force, scope)
+	if err == nil && !stored {
+		logging.DebugContext(ctx, "[ToolsDaemon] Config snapshot not stored: stale, or the project is no longer held on this machine",
+			"projectID", project.ID, "daemonID", conn.daemonID)
+	}
 	return err
 }
 
@@ -386,7 +415,7 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 // path, creating it when the daemon has discovered a directory this user has no
 // project for yet.
 //
-// The lookup MUST be scoped by user. `projects` is UNIQUE on (user_id, path),
+// The lookup MUST be scoped by user. `projects` is UNIQUE on (org, user_id, path),
 // NOT on path — the same directory legitimately carries one row per user, and a
 // path-only `SELECT ... WHERE path = $1` then returns an arbitrary one of them.
 // Signing in under a second identity (e.g. dev session -> GitHub OAuth) is
@@ -436,12 +465,12 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	// project: the detached folder came back as a duplicate, under an ID the
 	// per-project detachment checks downstream cannot recognize.
 	var (
-		project *db.Project
-		created bool
+		project    *db.Project
+		unrecorded bool
 	)
 	resolve := func(ctx context.Context) error {
 		var err error
-		project, created, err = s.resolveProjectForPath(ctx, conn, path, discovered)
+		project, unrecorded, err = s.resolveProjectForPath(ctx, conn, path, discovered)
 		return err
 	}
 	var err error
@@ -452,28 +481,51 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	}
 	var lost *lostProjectCreateError
 	if errors.As(err, &lost) {
-		// The lost race with a concurrent create (UNIQUE (user_id, path)):
+		// The lost race with a concurrent create (UNIQUE (org, user_id, path)):
 		// the failed insert rolled the locked transaction back, and re-reading
 		// our own row is what makes it idempotent rather than fatal. Read back
 		// scoped for the same reason the first lookup is: an unscoped read can
 		// hand us a DIFFERENT user's row for this path.
-		project, err = s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
+		scope, _, scopeErr := s.machineProjectScope(ctx, conn)
+		if scopeErr != nil {
+			return nil, fmt.Errorf("failed to create discovered project %s: %w", path, lost.err)
+		}
+		project, err = s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create discovered project %s: %w", path, lost.err)
 		}
+		// The winner is usually another machine's discovery of the same
+		// folder, which recorded only its own checkout: this machine holds
+		// the project too, and is recorded below like any it found, so its
+		// config snapshots are stored without waiting for a reconnect.
+		held, err := s.machineHoldsProject(ctx, conn, project.ID)
+		if err != nil {
+			return nil, err
+		}
+		unrecorded = !held
 	} else if err != nil {
 		return nil, err
 	}
 
 	// The machine that reported it holds it, at this path: its own
 	// project_daemons row, which every chat in the project resolves its
-	// directory from. Without it the project would have no checkout on
-	// record until the machine next connected. Recorded after the locked
-	// resolution committed: it takes the new project's catalog lock, which
-	// is never taken under the machine's, and no detach can name a project
-	// that had no checkout until now.
-	if created && strings.TrimSpace(conn.daemonID) != "" {
-		if _, err := s.deps.Repo.RecordObservedProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
+	// directory from, and without which its config snapshots are not stored
+	// (SyncProjectConfigSnapshot). That is a project the resolution just
+	// created, or an existing one of the machine's org found by its creation
+	// path that the machine has no record of — the folder appeared after the
+	// connect reconcile ran. Without it the project would have no checkout,
+	// and no synced config, on record until the machine next connected.
+	// Recorded after the locked resolution committed: it takes the project's
+	// catalog lock, which is never taken under the machine's. Through
+	// RecordObservedProjectDaemonInScope, so it keeps that write's guards: a
+	// detach that committed since (the resolution refused one it saw), a
+	// move out of the machine's org or a deletion schedule records nothing.
+	if unrecorded && strings.TrimSpace(conn.daemonID) != "" {
+		scope, _, scopeErr := s.machineProjectScope(ctx, conn)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+		if _, err := s.deps.Repo.RecordObservedProjectDaemonInScope(ctx, project.ID, conn.daemonID, path, nil, scope); err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record the discovering machine's checkout; reconcile will heal it",
 				"error", err, "projectID", project.ID, "daemonID", conn.daemonID)
 		}
@@ -492,7 +544,7 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 
 // lostProjectCreateError is resolveProjectForPath's answer when its insert
 // of a discovered project failed, most likely a concurrent create of the
-// same (user_id, path): returned from the locked transaction, it rolls it
+// same (org, user_id, path): returned from the locked transaction, it rolls it
 // back, so the caller can re-read the row on a fresh connection.
 type lostProjectCreateError struct{ err error }
 
@@ -502,8 +554,22 @@ func (e *lostProjectCreateError) Unwrap() error { return e.err }
 // resolveProjectForPath is ensureOwnedProjectForPath's resolution, with ctx
 // carrying the machine's checkout lock when the connection names a machine:
 // the machine's detachments, then its own checkout at path, then the user's
-// project created at path, then a new project for it (created reports so).
+// project created at path, then a new project for it. unrecorded reports a
+// project the machine has no checkout record of: the one created, or the
+// user's project found by its creation path that the machine has none of.
+//
+// Every match, and the project created, is in the machine's org (scope; its
+// owner's default org's when the machine's org is not known): the same path
+// may be a project in each of the user's orgs, and a machine holds only its
+// own org's. The scope, and with it the owner's live membership of the
+// machine's org, is decided here, inside the locked transaction the create
+// runs in: an owner who left the org resolves and creates nothing
+// (authz.ErrMachineOwnerNotMember).
 func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnection, path string, discovered *reliantv1.DiscoveredProject) (*db.Project, bool, error) {
+	scope, _, err := s.machineProjectScope(ctx, conn)
+	if err != nil {
+		return nil, false, err
+	}
 	detached, err := s.detachedProjects(ctx, conn.daemonID)
 	if err != nil {
 		return nil, false, err
@@ -513,7 +579,7 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 	// project B to it, and A's detachment must not drop B's reports. A pair
 	// never has both a checkout and a detachment (recording one clears the
 	// other), so a checkout here is never one the user detached.
-	if own, err := s.machineCheckoutAt(ctx, conn, path); err != nil {
+	if own, err := s.machineCheckoutAt(ctx, conn, path, scope); err != nil {
 		return nil, false, err
 	} else if own != nil {
 		return own, false, nil
@@ -522,14 +588,18 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 		return nil, false, errProjectDetached
 	}
 
-	project, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
+	project, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
 	if err == nil && project != nil && detached.project(project.ID) {
 		// Found by its creation path, but the user detached it from this
 		// machine (at another path, or this one).
 		return nil, false, errProjectDetached
 	}
 	if err == nil {
-		return project, false, nil
+		held, err := s.machineHoldsProject(ctx, conn, project.ID)
+		if err != nil {
+			return nil, false, err
+		}
+		return project, !held, nil
 	}
 	if !isNotFoundErr(err) {
 		return nil, false, err
@@ -549,11 +619,15 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 
 	now := time.Now().UTC()
 	if err := s.deps.Repo.CreateProject(ctx, &db.Project{
-		ID:         uuid.New().String(),
-		UserID:     conn.userID,
-		Name:       name,
-		Path:       path,
-		IsGitRepo:  isGitRepo,
+		ID:        uuid.New().String(),
+		UserID:    conn.userID,
+		Name:      name,
+		Path:      path,
+		IsGitRepo: isGitRepo,
+		// The machine's org, when known: the project the machine reported
+		// is one of its org's. Unknown, no org, as before (the backfill
+		// stamps the owner's default later).
+		OrgID:      daemonStringPtrOrNil(conn.orgID),
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		LastActive: now,
@@ -562,7 +636,7 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 	}
 	// Read back scoped for the same reason the first lookup is: an unscoped
 	// read-back can hand us a DIFFERENT user's row for this path.
-	project, err = s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
+	project, err = s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, conn.userID, scope)
 	if err != nil {
 		return nil, false, err
 	}
@@ -603,9 +677,54 @@ func (s *Service) detachedProjects(ctx context.Context, daemonID string) (machin
 	return out, nil
 }
 
-// machineCheckoutAt is the user's project whose checkout on the connected
-// machine is recorded at path, nil when none is.
-func (s *Service) machineCheckoutAt(ctx context.Context, conn *daemonConnection, path string) (*db.Project, error) {
+// errMachineOrgUnresolved refuses org-sensitive work on a connection whose
+// machine's org could not be read at connect (daemonConnection.orgUnresolved):
+// matched as "no org", it would reach every org's projects. The next connect
+// tries again.
+var errMachineOrgUnresolved = errors.New("the machine's organization could not be read at connect; nothing org-sensitive runs on this connection")
+
+// machineProjectScope is the scope of the projects the connected machine
+// holds (authz.MachineScopeFor): its org's, or its owner's default org's when
+// its org is not known; known reports which. A connection whose machine's
+// org could not be read is errMachineOrgUnresolved.
+//
+// A machine of a known org holds that org's projects only while its owner is
+// a live member of it, asked now (authz.MachineScopeFor), never kept from the
+// connect: a machine stays connected after its owner leaves the org, and then
+// it is authz.ErrMachineOwnerNotMember here — no scope at all, so nothing it
+// reports creates, finds or records a project. Every caller asks it where it
+// is about to act; resolveProjectForPath asks it inside the transaction its
+// create runs in.
+func (s *Service) machineProjectScope(ctx context.Context, conn *daemonConnection) (*core.OrgScope, bool, error) {
+	if conn.orgUnresolved {
+		return nil, false, errMachineOrgUnresolved
+	}
+	return authz.MachineScopeFor(ctx, conn.userID, conn.orgID)
+}
+
+// machineHoldsProject reports whether the connected machine has a checkout
+// record of the project, at any path and in any install state.
+func (s *Service) machineHoldsProject(ctx context.Context, conn *daemonConnection, projectID string) (bool, error) {
+	if strings.TrimSpace(conn.daemonID) == "" {
+		return false, nil
+	}
+	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, conn.daemonID)
+	if err != nil {
+		return false, err
+	}
+	for _, row := range rows {
+		if row != nil && row.ProjectID == projectID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// machineCheckoutAt is the user's project in scope whose checkout on the
+// connected machine is recorded at path, nil when none is. Another org's
+// project recorded there (before machines kept to their org; the reconcile
+// detaches it) is not the machine's.
+func (s *Service) machineCheckoutAt(ctx context.Context, conn *daemonConnection, path string, scope *core.OrgScope) (*db.Project, error) {
 	if strings.TrimSpace(conn.daemonID) == "" {
 		return nil, nil
 	}
@@ -619,7 +738,7 @@ func (s *Service) machineCheckoutAt(ctx context.Context, conn *daemonConnection,
 			continue
 		}
 		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
-		if err == nil && project != nil {
+		if err == nil && project != nil && scope.Includes(project.OrgID) {
 			return project, nil
 		}
 	}

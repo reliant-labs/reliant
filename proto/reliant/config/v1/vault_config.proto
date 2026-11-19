@@ -14,7 +14,14 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 message VaultMaintenanceConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    subtrees: [{path: ["db", "vault"]}]
+    subtrees: [
+      {
+        path: [
+          "db",
+          "vault"
+        ]
+      }
+    ]
   };
 
   // The KEK keyring, "id:<base64>[,id:<base64>...]", first entry primary.

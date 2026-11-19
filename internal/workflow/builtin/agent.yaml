@@ -35,6 +35,23 @@ inputs:
       - researcher
       - code_reviewer
     description: Presets available for spawn tool (empty = spawn disabled)
+  # Sub-agent concurrency caps. Read from the run's root workflow only, and
+  # enforced across the whole tree of sub-agents (runtime/spawn_limits.go);
+  # the defaults are types.DefaultMaxConcurrentSubAgents(Total).
+  max_concurrent_sub_agents:
+    type: integer
+    default: 8
+    min: 1
+    max: 64
+    ui: hidden
+    description: Most sub-agents one agent may have running at once; a spawn past it is refused until one finishes
+  max_concurrent_sub_agents_total:
+    type: integer
+    default: 16
+    min: 1
+    max: 256
+    ui: hidden
+    description: Most sub-agents the whole run may have running at once, at every depth
 
   skills:
     type: array

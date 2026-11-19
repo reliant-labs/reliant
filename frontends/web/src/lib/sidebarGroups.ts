@@ -163,3 +163,81 @@ export function groupByProject<T extends GroupableChat>(
     );
   });
 }
+
+/**
+ * How long a project with no chats stays listed after it was last used
+ * (projects.last_active). Older than this, it folds under "More projects".
+ */
+export const ACTIVE_PROJECT_WINDOW_DAYS = 14;
+const ACTIVE_PROJECT_WINDOW_MS = ACTIVE_PROJECT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+/** What decides which project sections the sidebar lists (lib/sidebarProjectPrefs). */
+export interface ProjectListing {
+  pinned: ReadonlySet<string>;
+  hidden: ReadonlySet<string>;
+  /** List every project, hidden ones included, and fold none. */
+  showAll: boolean;
+  /** The project the main pane works in: always listed, never hidden. */
+  currentProjectId?: string;
+  /** Now, in epoch ms. */
+  now: number;
+}
+
+export interface ListedProjectGroups<T extends GroupableChat> {
+  /** The sections listed: pinned ones first, then the rest in groupByProject order. */
+  listed: ProjectGroup<T>[];
+  /** Under "More projects": no chats, not used recently, not pinned. Empty under show-all. */
+  folded: ProjectGroup<T>[];
+  /** Hidden projects left out of both. Zero under show-all, which lists them. */
+  hiddenCount: number;
+}
+
+/** Whether a project last used at `lastActive` (an ISO time) was used within the window. */
+export function isRecentlyActive(lastActive: string | undefined, now: number): boolean {
+  if (!lastActive) return false;
+  const at = Date.parse(lastActive);
+  return Number.isFinite(at) && now - at <= ACTIVE_PROJECT_WINDOW_MS;
+}
+
+/**
+ * Whether the sidebar leaves `projectId` out, chats and all. The current
+ * project never is, and show-all lists every project.
+ */
+export function isProjectHiddenFromSidebar(projectId: string, listing: Omit<ProjectListing, "now">): boolean {
+  return !listing.showAll && listing.hidden.has(projectId) && projectId !== listing.currentProjectId;
+}
+
+/**
+ * Split groupByProject's sections into what the sidebar lists and what folds
+ * under "More projects". Listed: a project with chats, one used within
+ * ACTIVE_PROJECT_WINDOW_DAYS, a pinned one, and the current one. Hidden
+ * projects are left out (their chats too), except the current one. Show-all
+ * lists every section and folds none.
+ */
+export function listProjectGroups<T extends GroupableChat>(
+  groups: readonly ProjectGroup<T>[],
+  projects: readonly GroupableProject[],
+  listing: ProjectListing,
+): ListedProjectGroups<T> {
+  const lastActive = new Map(projects.map((p) => [p.id, p.last_active]));
+  const listed: ProjectGroup<T>[] = [];
+  const folded: ProjectGroup<T>[] = [];
+  let hiddenCount = 0;
+  for (const group of groups) {
+    const id = group.projectId;
+    if (isProjectHiddenFromSidebar(id, listing)) {
+      hiddenCount++;
+      continue;
+    }
+    const active =
+      listing.showAll ||
+      group.chats.length > 0 ||
+      listing.pinned.has(id) ||
+      id === listing.currentProjectId ||
+      isRecentlyActive(lastActive.get(id), listing.now);
+    (active ? listed : folded).push(group);
+  }
+  // Pinned first; Array.prototype.sort is stable, so each part keeps its order.
+  listed.sort((a, b) => Number(listing.pinned.has(b.projectId)) - Number(listing.pinned.has(a.projectId)));
+  return { listed, folded, hiddenCount };
+}

@@ -36,7 +36,7 @@
  */
 
 import type { ComponentType, ReactNode } from 'react'
-import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useRouterState, type AnyRoute } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Navigate, Outlet, redirect, useRouterState, type AnyRoute } from '@tanstack/react-router'
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 // The workflows journey's content: its step ids still resolve here (the demo bundle leaves it out).
@@ -48,6 +48,7 @@ import { bootForgeTour } from './components/ForgeShell/forgeTourBoot'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { AuthGuard } from './components/AuthGuard'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
+import { AskAgentModeProvider } from './components/Forge/Observability/AskReliant/askAgentMode'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { ModalLayer } from './components/Modals/ModalLayer'
@@ -60,6 +61,7 @@ import { lazyRoute } from './lib/lazyRoute'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { Toaster } from './lib/toast'
 import { authSearchSchema, oauthCallbackSearchSchema, upgradeSearchSchema } from './routeSchemas'
+import { appsPath } from '@/lib/paths'
 
 // Taken before the router exists: the guard's sign-in redirect replaces the
 // URL the landing handoff arrived on (forgeEntry.ts).
@@ -86,18 +88,23 @@ function ForgeRootShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   return (
     <SurfaceProvider surface="desktop">
-      <div data-shell="forge" data-pathname={pathname} className="contents">
-        <ActiveOrgBinding />
-        <PageVisitTracker firstVisitProps={entry} />
-        <Outlet />
-        <ModalLayer />
-        <Toaster />
-        <NewBuildPrompt />
-        {/* The journeys (Onboarding/JOURNEYS.md): at the root, so a step
-            follows the visitor between the public demo and signed-in pages. */}
-        <JourneyTour />
-        <ForgeLandingJourney />
-      </div>
+      {/* No daemon, no Reliant projects here: every "Ask Reliant" is the
+          handoff sheet (askAgentMode.tsx), never a chat this shell cannot
+          start. The public demo nests its own provider, with demo set. */}
+      <AskAgentModeProvider mode="handoff" cli="forge">
+        <div data-shell="forge" data-pathname={pathname} className="contents">
+          <ActiveOrgBinding />
+          <PageVisitTracker firstVisitProps={entry} />
+          <Outlet />
+          <ModalLayer />
+          <Toaster />
+          <NewBuildPrompt />
+          {/* The journeys (Onboarding/JOURNEYS.md): at the root, so a step
+              follows the visitor between the public demo and signed-in pages. */}
+          <JourneyTour />
+          <ForgeLandingJourney />
+        </div>
+      </AskAgentModeProvider>
     </SurfaceProvider>
   )
 }
@@ -116,7 +123,7 @@ export function buildForgeShellTree({
 }) {
   const rootRoute = createRootRoute({
     component: ForgeRootShell,
-    notFoundComponent: () => <Navigate to="/apps" search={{}} />,
+    notFoundComponent: () => <Navigate to={appsPath()} search={{}} />,
     errorComponent: RouteErrorFallback,
   })
 
@@ -208,7 +215,11 @@ export function buildForgeShellTree({
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: '/',
-    component: () => <Navigate to="/apps" search={{}} replace />,
+    // A redirect, not a <Navigate> component: a second visit to `/` (sign-in
+    // lands here from two places at once) must redirect again, not sit blank.
+    beforeLoad: () => {
+      throw redirect({ to: appsPath(), search: {}, replace: true })
+    },
   })
 
   const authenticatedLayoutRoute = createRoute({
@@ -292,7 +303,7 @@ export const forgeRouteTree = buildForgeShellTree({
     createRoute({
       getParentRoute: () => root,
       path: '/forge-shell-preview',
-      component: () => (getIsDev() ? <ForgeShellPreview /> : <Navigate to="/apps" search={{}} />),
+      component: () => (getIsDev() ? <ForgeShellPreview /> : <Navigate to={appsPath()} search={{}} />),
     }),
   ],
 })

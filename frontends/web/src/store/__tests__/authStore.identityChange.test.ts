@@ -160,10 +160,9 @@ describe('identity changes observed by the auth listener', () => {
     expect(useAuthStore.getState().user).toBeNull()
     expect(useAuthStore.getState().session).toBeNull()
     expect(useAuthStore.getState().authError).toBeTruthy()
-    expect(queryClient.getQueryData(['onboarding', 'currentUser'])).toEqual({
-      id: 'user-a',
-      onboardingCompleted: true,
-    })
+    // User A's cached answers went the moment the change began, before the
+    // store cleanup that failed (authStore beginAccountTransition).
+    expect(queryClient.getQueryData(['onboarding', 'currentUser'])).toBeUndefined()
 
     // The store is now signed out, but the cleanup is still owed: the next
     // event for user B retries it before installing user B's session.
@@ -202,7 +201,8 @@ describe('identity changes installed by a store action', () => {
     expect(useAuthStore.getState().user).toBeNull()
     expect(useAuthStore.getState().session).toBeNull()
     expect(useAuthStore.getState().authError).toBeTruthy()
-    expect(userAAnswer()).toEqual({ id: 'user-a', onboardingCompleted: true })
+    // Emptied as the change began, before the store cleanup that failed.
+    expect(userAAnswer()).toBeUndefined()
 
     resetMock.mockReset()
     await useAuthStore.getState().refreshSession()
@@ -223,7 +223,8 @@ describe('identity changes installed by a store action', () => {
 
     expect(useAuthStore.getState().user).toBeNull()
     expect(useAuthStore.getState().session).toBeNull()
-    expect(userAAnswer()).toEqual({ id: 'user-a', onboardingCompleted: true })
+    // Emptied as the change began, before the store cleanup that failed.
+    expect(userAAnswer()).toBeUndefined()
 
     resetMock.mockReset()
     await useAuthStore.getState().signIn('b@example.com', 'pw')

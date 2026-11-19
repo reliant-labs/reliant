@@ -17,6 +17,9 @@ const (
 	UserRoleContextKey  contextKey = "user_role"
 	UserEmailContextKey contextKey = "user_email"
 	DaemonIDContextKey  contextKey = "daemon_id"
+	// DaemonOrgIDContextKey is the org of the machine a daemon-bound
+	// credential is bound to, as the token authority named it.
+	DaemonOrgIDContextKey contextKey = "daemon_org_id"
 	// CredentialOrgContextKey is the org a daemon's connecting credential
 	// acts in, set by the daemon auth interceptor.
 	CredentialOrgContextKey contextKey = "credential_org" //nolint:gosec // G101: a context key name, not a credential
@@ -116,8 +119,21 @@ func GetDaemonIDFromContext(ctx context.Context) string {
 	return daemonID
 }
 
+// GetDaemonOrgIDFromContext is the organization of the machine the daemon
+// credential on ctx is bound to (control-plane's daemons.org_id, named at
+// introspection), or "" when it names none: an unbound credential, a machine
+// with no recorded org, a self-hosted authority, or a control plane that
+// predates the field.
+func GetDaemonOrgIDFromContext(ctx context.Context) string {
+	orgID, _ := ctx.Value(DaemonOrgIDContextKey).(string)
+	return orgID
+}
+
 // GetCredentialOrgFromContext is the org the daemon's connecting credential
-// acts in, or "" when the context carries none.
+// acts in, or "" when the context carries none. Unlike
+// GetDaemonOrgIDFromContext it is set for an unbound credential too: a
+// self-paired machine's credential acts in the org chosen at pairing before
+// any machine row records an org.
 func GetCredentialOrgFromContext(ctx context.Context) string {
 	orgID, _ := ctx.Value(CredentialOrgContextKey).(string)
 	return orgID

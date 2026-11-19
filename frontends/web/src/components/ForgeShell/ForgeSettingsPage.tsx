@@ -8,7 +8,7 @@
  *   profile        the account: email, linked sign-ins, sign-out, deletion
  *   organization   which org you act in
  *   members        who is in the org, invitations, and who holds which permission
- *   tokens         API tokens for the forge CLI and CI
+ *   tokens         API tokens for the forge CLI and CI, and your CLI logins
  *   billing        plans, wallet, usage consent and caps (Reliant's section)
  *
  * The paths match Reliant's where both have a section (`/settings/billing`),
@@ -26,7 +26,9 @@ import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { cn } from "@/lib/utils";
 
+import { CliLoginsSection } from "./CliLoginsSection";
 import { ForgeTokensSection } from "./ForgeTokensSection";
+import { forgeSettingsPath } from "@/lib/paths";
 
 const BillingSection = lazy(() =>
   import("@/components/Settings/cloud/billing").then((m) => ({ default: m.BillingSection }))
@@ -66,7 +68,7 @@ export function ForgeSettingsPage() {
         {FORGE_SETTINGS_SECTIONS.map((entry) => (
           <a
             key={entry.id}
-            href={`/settings/${entry.id}`}
+            href={forgeSettingsPath(entry.id)}
             aria-current={entry.id === section ? "page" : undefined}
             className={cn(
               "no-color whitespace-nowrap rounded-md px-3 py-1.5 text-sm transition-colors",
@@ -117,7 +119,12 @@ function renderSection(section: ForgeSettingsSection): ReactNode {
     case "members":
       return <MembersPage />;
     case "tokens":
-      return <ForgeTokensSection />;
+      return (
+        <div className="space-y-6">
+          <ForgeTokensSection />
+          <CliLoginsSection />
+        </div>
+      );
     case "billing":
       return (
         <Suspense fallback={<div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground">Loading…</div>}>

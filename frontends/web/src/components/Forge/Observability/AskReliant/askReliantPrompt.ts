@@ -107,7 +107,7 @@ export interface AskContext {
 const ENV_PLACEHOLDER = "<env>";
 
 /** A Go duration for `--since`: the CLI parses "168h", not "7d". */
-const SINCE: Record<RangePreset, string> = { "15m": "15m", "1h": "1h", "6h": "6h", "24h": "24h", "7d": "168h" };
+const SINCE: Record<RangePreset, string> = { "15m": "15m", "1h": "1h", "6h": "6h", "24h": "24h", "7d": "168h", "30d": "720h" };
 
 const SAFE_ARG = /^[A-Za-z0-9_@%+=:,./-]+$/;
 

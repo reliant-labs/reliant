@@ -41,7 +41,7 @@ import { SELECT_CLASS, sourceLabel, takeoverErrorMessage } from "./takeover";
 
 export function OrphanedAutomations({ org, members }: { org: MyOrg; members: OrgMember[] }) {
   const qc = useQueryClient();
-  const orphans = useListOrphanedAutomations({ orgId: org.id }, { meta: { silenceErrorToast: true } });
+  const orphans = useListOrphanedAutomations({ orgId: org.id }, { enabled: !!org.id, meta: { silenceErrorToast: true } });
   const refresh = () => qc.invalidateQueries({ queryKey: automationTakeoverServiceKeys.all });
   const revoke = useRevokeTriggerOffer({ meta: { silenceErrorToast: true } });
   const [adopting, setAdopting] = useState<AdoptTarget | null>(null);

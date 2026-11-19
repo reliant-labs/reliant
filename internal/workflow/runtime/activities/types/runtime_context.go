@@ -87,6 +87,10 @@ type RuntimeContext struct {
 	// Approved preview hashes and refusals are runtime-authored, never model inputs.
 	ActivationApprovals map[string]string `json:"activation_approvals,omitempty"`
 	ActivationRefusals  map[string]string `json:"activation_refusals,omitempty"`
+	// ApprovedConnections maps a propose_connection call approved on its card
+	// to the connection id the person made in the connection dialog. Only an
+	// id: the credential never enters the run.
+	ApprovedConnections map[string]string `json:"approved_connections,omitempty"`
 
 	// ProviderPreference is the run's runtime.ProviderPreference: the
 	// provider(s) the user chose for the run. call_llm hands it to a model
@@ -156,6 +160,17 @@ type RuntimeContext struct {
 	// yielding the cut-off turn as the agent's last word. Set on call_llm
 	// nodes only, for one turn.
 	ResumeTurn bool `json:"resume_turn,omitempty"`
+
+	// CutOffMessageID is set on a call_llm step re-dispatched after a pause
+	// cancelled its previous dispatch mid-stream: the pre-allocated id that
+	// dispatch streamed under, and so the id its partial assistant message
+	// was persisted under (persistInterruptedTurn). When history ends with
+	// that message and nothing new arrived, the partial is this turn's own
+	// cut-off output, not an answer: call_llm continues it, as on a
+	// ResumeTurn, instead of yielding it as the agent's last word. Matched
+	// by id, so an assistant tail that is a finished answer still yields.
+	// Set on call_llm nodes only, for one dispatch (reliant #2759).
+	CutOffMessageID string `json:"cut_off_message_id,omitempty"`
 
 	// CatalogPin is the workflow catalog the run started with
 	// (db.Repo.PinProjectCatalog). call_llm reads the presets its spawn tool
@@ -232,4 +247,8 @@ type DaemonSelector struct {
 type SpawnConfig struct {
 	Workflow string   `json:"workflow"`
 	Presets  []string `json:"presets,omitempty"`
+	// SpawnerDepth is the spawn depth of the agent offered this spawn tool:
+	// 0 for a root agent, 1 for a sub-agent. The tool's description tells
+	// the agent whether the sub-agents it starts may spawn their own.
+	SpawnerDepth int `json:"spawner_depth,omitempty"`
 }

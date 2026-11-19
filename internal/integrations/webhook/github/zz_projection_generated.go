@@ -31,8 +31,10 @@ const (
 // (or the bare event for push).
 var mappings = map[string]mapping{
 	"check_run.completed":                 {attrs: checkRunCompletedAttrs, data: checkRunCompletedData},
+	"check_run.rerequested":               {attrs: checkRunRerequestedAttrs, data: checkRunRerequestedData},
 	"check_suite.completed":               {attrs: checkSuiteCompletedAttrs, data: checkSuiteCompletedData},
 	"check_suite.requested":               {attrs: checkSuiteRequestedAttrs, data: checkSuiteRequestedData},
+	"check_suite.rerequested":             {attrs: checkSuiteRerequestedAttrs, data: checkSuiteRerequestedData},
 	"issue_comment.created":               {attrs: issueCommentCreatedAttrs, data: issueCommentCreatedData},
 	"issues.assigned":                     {attrs: issuesAssignedAttrs, data: issuesAssignedData},
 	"issues.closed":                       {data: issuesClosedData},
@@ -110,6 +112,42 @@ func checkRunCompletedDataCheckRunOutput(v any) map[string]any {
 	return out
 }
 
+func checkRunRerequestedAttrs(raw any, attrs map[string]string) {
+	attrs["branch"] = text(dig(raw, "check_run", "check_suite", "head_branch"))
+	attrs["name"] = text(dig(raw, "check_run", "name"))
+	attrs["app"] = text(dig(raw, "check_run", "app", "slug"))
+}
+
+func checkRunRerequestedData(v any) map[string]any {
+	out := map[string]any{
+		"action":     text(dig(v, "action")),
+		"check_run":  checkRunRerequestedDataCheckRun(dig(v, "check_run")),
+		"repository": repositoryObject(dig(v, "repository")),
+		"sender":     userObject(dig(v, "sender")),
+	}
+	return out
+}
+
+func checkRunRerequestedDataCheckRun(v any) map[string]any {
+	out := map[string]any{
+		"id":             num(dig(v, "id")),
+		"name":           text(dig(v, "name")),
+		"status":         text(dig(v, "status")),
+		"conclusion":     text(dig(v, "conclusion")),
+		"head_sha":       text(dig(v, "head_sha")),
+		"head_branch":    text(dig(v, "check_suite", "head_branch")),
+		"check_suite_id": num(dig(v, "check_suite", "id")),
+		"external_id":    text(dig(v, "external_id")),
+		"html_url":       text(dig(v, "html_url")),
+		"details_url":    text(dig(v, "details_url")),
+		"started_at":     text(dig(v, "started_at")),
+		"completed_at":   text(dig(v, "completed_at")),
+		"app":            appObject(dig(v, "app")),
+		"pull_requests":  integers(dig(v, "pull_requests"), "number"),
+	}
+	return out
+}
+
 func checkSuiteCompletedAttrs(raw any, attrs map[string]string) {
 	attrs["conclusion"] = text(dig(raw, "check_suite", "conclusion"))
 	attrs["branch"] = text(dig(raw, "check_suite", "head_branch"))
@@ -166,6 +204,38 @@ func checkSuiteRequestedDataCheckSuite(v any) map[string]any {
 		"after":         text(dig(v, "after")),
 		"app":           appObject(dig(v, "app")),
 		"created_at":    text(dig(v, "created_at")),
+		"pull_requests": integers(dig(v, "pull_requests"), "number"),
+	}
+	return out
+}
+
+func checkSuiteRerequestedAttrs(raw any, attrs map[string]string) {
+	attrs["branch"] = text(dig(raw, "check_suite", "head_branch"))
+	attrs["app"] = text(dig(raw, "check_suite", "app", "slug"))
+}
+
+func checkSuiteRerequestedData(v any) map[string]any {
+	out := map[string]any{
+		"action":      text(dig(v, "action")),
+		"check_suite": checkSuiteRerequestedDataCheckSuite(dig(v, "check_suite")),
+		"repository":  repositoryObject(dig(v, "repository")),
+		"sender":      userObject(dig(v, "sender")),
+	}
+	return out
+}
+
+func checkSuiteRerequestedDataCheckSuite(v any) map[string]any {
+	out := map[string]any{
+		"id":            num(dig(v, "id")),
+		"status":        text(dig(v, "status")),
+		"conclusion":    text(dig(v, "conclusion")),
+		"head_sha":      text(dig(v, "head_sha")),
+		"head_branch":   text(dig(v, "head_branch")),
+		"before":        text(dig(v, "before")),
+		"after":         text(dig(v, "after")),
+		"app":           appObject(dig(v, "app")),
+		"created_at":    text(dig(v, "created_at")),
+		"updated_at":    text(dig(v, "updated_at")),
 		"pull_requests": integers(dig(v, "pull_requests"), "number"),
 	}
 	return out
@@ -369,6 +439,7 @@ func prObject(v any) map[string]any {
 		"merged":              dig(v, "merged") == true,
 		"html_url":            text(dig(v, "html_url")),
 		"user":                userObject(dig(v, "user")),
+		"author_association":  text(dig(v, "author_association")),
 		"head":                refObject(dig(v, "head")),
 		"base":                refObject(dig(v, "base")),
 		"labels":              names(dig(v, "labels"), "name"),
@@ -699,6 +770,17 @@ func refObject(v any) map[string]any {
 		"ref":   text(dig(v, "ref")),
 		"sha":   text(dig(v, "sha")),
 		"label": text(dig(v, "label")),
+	}
+	if isObject(dig(v, "repo")) {
+		out["repo"] = refObjectRepo(dig(v, "repo"))
+	}
+	return out
+}
+
+func refObjectRepo(v any) map[string]any {
+	out := map[string]any{
+		"full_name": text(dig(v, "full_name")),
+		"fork":      dig(v, "fork") == true,
 	}
 	return out
 }

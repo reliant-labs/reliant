@@ -323,13 +323,16 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ProjectService
-  // forge:hash=2e7e6a27ed635879a8218dd5f63ff80c1430148217aca32641f98b57eecf9a06
+  // forge:hash=8e5c3673bcc4f3e3563380acebacd0c2b578f92102f4783e104e361bf851117b
   & {
     "reliant.v1.ProjectService/CreateProject"?: (req: import("@/gen/reliant/v1/project_pb").CreateProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").CreateProjectResponseSchema>>;
     "reliant.v1.ProjectService/ListProjects"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsResponseSchema>>;
     "reliant.v1.ProjectService/GetProject"?: (req: import("@/gen/reliant/v1/project_pb").GetProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").GetProjectResponseSchema>>;
     "reliant.v1.ProjectService/UpdateProject"?: (req: import("@/gen/reliant/v1/project_pb").UpdateProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").UpdateProjectResponseSchema>>;
     "reliant.v1.ProjectService/DeleteProject"?: (req: import("@/gen/reliant/v1/project_pb").DeleteProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").DeleteProjectResponseSchema>>;
+    "reliant.v1.ProjectService/RestoreProject"?: (req: import("@/gen/reliant/v1/project_pb").RestoreProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").RestoreProjectResponseSchema>>;
+    "reliant.v1.ProjectService/PurgeProjectNow"?: (req: import("@/gen/reliant/v1/project_pb").PurgeProjectNowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").PurgeProjectNowResponseSchema>>;
+    "reliant.v1.ProjectService/ListDeletedProjects"?: (req: import("@/gen/reliant/v1/project_pb").ListDeletedProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListDeletedProjectsResponseSchema>>;
     "reliant.v1.ProjectService/TouchProject"?: (req: import("@/gen/reliant/v1/project_pb").TouchProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").TouchProjectResponseSchema>>;
     "reliant.v1.ProjectService/GetProjectMetadata"?: (req: import("@/gen/reliant/v1/project_pb").GetProjectMetadataRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").GetProjectMetadataResponseSchema>>;
     "reliant.v1.ProjectService/UpdateProjectMetadata"?: (req: import("@/gen/reliant/v1/project_pb").UpdateProjectMetadataRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").UpdateProjectMetadataResponseSchema>>;

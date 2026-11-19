@@ -140,7 +140,7 @@ func workflowWritableCheckouts(tc *rctx.ToolContext, params ShellParams) ([]stri
 const shellKeepAliveParamDoc = "With run_in_background: keep this process running after this chat finishes. Without it, a background process is stopped once it has been idle for 4 hours by default (no output, and no agent read it with shell_output/shell_wait, listed it with shell_list or killed it) and the chat that started it has no run in progress. Set it only for an intentional long-lived server the user will keep using."
 
 // shellHeavyParamDoc is the schema description for ShellParams.Heavy.
-const shellHeavyParamDoc = "Set true when the command saturates CPU or memory for a while — a whole-project build, a test suite, codegen — but the daemon would not recognize it (a project script, a Makefile target). Heavy commands queue for one of the machine's heavy slots, shared by every agent, before they run; go build/test/vet, vitest, npm test/build, forge generate/lint, make test* and task test* are recognized without it. A queued command's timeout includes the wait, so run long ones with run_in_background."
+const shellHeavyParamDoc = "Set true when the command saturates CPU or memory for a while — a whole-project build, a test suite, codegen — but the daemon would not recognize it (a project script, a Makefile target). Heavy commands queue for one of the machine's heavy slots, shared by every agent, before they run; go build/test/vet, vitest, npm test/build, forge generate/lint, make test* and task test* are recognized without it. A scoped one that names its packages or files (go test -short ./internal/foo/, golangci-lint run ./pkg/x, forge lint --scope internal/x) waits in a faster express lane than whole-module work (./..., npm ci, forge generate). A queued command's timeout includes the wait, so run long ones with run_in_background."
 
 // ShellPermissionsParams is used for permission checking
 type ShellPermissionsParams struct {
@@ -594,7 +594,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	req := &daemon.RunCommandRequest{
 		Command:     params.Command,
 		WorkingDir:  workingDir,
-		Env:         withChatEnv(params.Env, rctx.ChatID),
+		Env:         withChatEnv(params.Env, rctx.ChatID, chatProjectID(rctx)),
 		TimeoutMs:   int(time.Duration(params.Timeout) * ShellTimeoutUnit / time.Millisecond),
 		Credentials: credentials,
 		Heavy:       params.Heavy,
@@ -883,20 +883,43 @@ func shouldRunInBackground(command string) bool {
 // hand their news to that chat before starting anyone else.
 const ChatIDEnv = "RELIANT_CHAT_ID"
 
-// withChatEnv is the request env with ChatIDEnv set to chatID, unless the
-// caller set it. own is never modified.
-func withChatEnv(own map[string]string, chatID string) map[string]string {
-	if chatID == "" {
+// ProjectIDEnv names the Reliant project a chat's shell command runs in: the
+// chat's project id, beside RELIANT_FORGE_ORG, the org forge acts in. forge
+// records it as the source of a release cut, deploy attempt or release record
+// made from the chat, so the app links back to the code it came from
+// (control-plane docs/design/unified-shell-and-projects.md §8.1). Nothing
+// requires it: a command run anywhere else has none.
+const ProjectIDEnv = "RELIANT_PROJECT_ID"
+
+// chatProjectID is the id of the project tc's chat runs in, or "".
+func chatProjectID(tc *rctx.ToolContext) string {
+	if tc == nil || tc.Project == nil {
+		return ""
+	}
+	return tc.Project.ID
+}
+
+// withChatEnv is the request env with ChatIDEnv set to chatID and
+// ProjectIDEnv to projectID, each unless empty or set by the caller. own is
+// never modified.
+func withChatEnv(own map[string]string, chatID, projectID string) map[string]string {
+	add := map[string]string{}
+	if _, set := own[ChatIDEnv]; chatID != "" && !set {
+		add[ChatIDEnv] = chatID
+	}
+	if _, set := own[ProjectIDEnv]; projectID != "" && !set {
+		add[ProjectIDEnv] = projectID
+	}
+	if len(add) == 0 {
 		return own
 	}
-	if _, set := own[ChatIDEnv]; set {
-		return own
-	}
-	env := make(map[string]string, len(own)+1)
+	env := make(map[string]string, len(own)+len(add))
 	for k, v := range own {
 		env[k] = v
 	}
-	env[ChatIDEnv] = chatID
+	for k, v := range add {
+		env[k] = v
+	}
 	return env
 }
 

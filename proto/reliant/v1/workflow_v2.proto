@@ -283,6 +283,18 @@ message Node {
     enum_values: "success|failure"
   }];
 
+  // TolerateFailure marks the node optional: when it fails, the run goes on
+  // instead of failing (or pausing on a step that exhausted its retries).
+  // Its outputs are then exactly {failed: true, error: "<why>"}, so the edges
+  // and nodes after it branch on nodes.<id>.failed and read nodes.<id>.error;
+  // a node that succeeded has no `failed` key, so read it as
+  // nodes.<id>.?failed.orValue(false). A cancel, a pause, and a run that is
+  // already ending are not failures and are never tolerated. Unset (the
+  // default) keeps today's behaviour: the node's failure is the run's.
+  bool tolerate_failure = 9 [(reliant) = {
+    description: "Make the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.error"
+  }];
+
   // Type-specific arguments. Exactly one must be set, matching the type field.
   // SecretRefs are the declared secrets this node's activity resolves, written by
   // the parser from the workflow's `secrets:` block and never authored. An action
@@ -2275,6 +2287,57 @@ message Workflow {
   // Attention correlates human action independently of lifecycle and outcome.
   // Only root unattended launch runs apply it. Absent preserves legacy behavior.
   WorkflowAttention attention = 25;
+  // Check makes the engine own one GitHub check run per run a trigger fires:
+  // created queued when the firing is recorded, in_progress when the first
+  // node starts, and concluded on every ending (see WorkflowCheck). Absent,
+  // the default, posts nothing.
+  WorkflowCheck check = 26;
+}
+
+// WorkflowCheck is a GitHub check run whose lifecycle the engine owns, posted
+// as the activation's GitHub identity (the Reliant App: GitHub lets only an
+// App write a check run).
+//
+// The engine creates the check `queued` when a trigger's firing resolves the
+// workflow (so a firing that waits for capacity or a machine shows), moves it
+// to `in_progress` when the run's first node starts, and concludes it on every
+// ending: success when the run completes and passes; failure when it fails,
+// routes to an `outcome: failure` node, cannot start, or its result cannot be
+// confirmed; cancelled when it is cancelled, superseded or skipped; timed_out
+// when it is still going at `timeout`. It never concludes neutral or skipped,
+// which a required check counts as passing. details_url is the run's page.
+//
+// One check per firing: a retried or resumed fire, a retried activity and a
+// resumed run all update the same check, and a re-run is a new firing and so
+// a new check. Only runs a trigger fires post one; a chat or builder start of
+// the same workflow does not.
+//
+// This message is the check's whole declaration, so a node-level `check:`
+// (one check per node or group, on the same lifecycle) can reuse it.
+message WorkflowCheck {
+  // Name is the check's name on GitHub, as a pull request's Checks tab shows
+  // it and a branch ruleset requires it ("reliant/ci"). A literal: a ruleset
+  // names a fixed check. 1 to 255 characters.
+  string name = 1;
+  // Repository is the repository the check is posted on, "owner/name": a
+  // template over `trigger`. Empty means the event's repository
+  // (trigger.payload.attributes.repository).
+  string repository = 2;
+  // HeadSha is the commit the check is posted on: a template over `trigger`
+  // rendering 40 hex characters. Empty means the event's head commit: the
+  // pull request's head, the check suite's or check run's head_sha, the
+  // workflow run's head_sha, or the commit a push moved the branch to.
+  string head_sha = 3;
+  // Output is the check's details: a template over the run's final scope
+  // (nodes, inputs, trigger, workflow, and run.status) evaluating to an
+  // object {title, summary, text?, annotations?}. annotations is a list of
+  // {path, start_line, end_line?, annotation_level, message, title?}; the
+  // engine sends them in batches of 50, GitHub's limit per request. Empty, or
+  // an evaluation that fails, reports a summary the engine writes itself.
+  string output = 4;
+  // Timeout bounds the check, from its firing: a check still not concluded
+  // then concludes timed_out. A Go duration from 1m to 72h; empty is 6h.
+  string timeout = 5;
 }
 
 // WorkflowAttention declares explicit transitions for one owner/project incident.
@@ -2341,16 +2404,28 @@ message WorkflowConcurrency {
   // per key, and each older one it replaces is recorded skipped with the
   // detail "superseded", never failed. Running runs are never touched.
   WorkflowConcurrencyWaiting waiting = 2;
-  // Key groups waiting firings for waiting: latest, a template over `trigger`
-  // like a webhook dedupe_key, e.g. '{{ trigger.payload.attributes.repository }}'.
-  // Unset: every firing of the workflow shares one key. It only decides which
-  // waiting firings replace each other; the cap still bounds the whole
-  // workflow. A firing whose key cannot be rendered waits and is never
-  // superseded.
+  // Key groups firings, a template over `trigger` like a webhook dedupe_key,
+  // e.g. '{{ trigger.payload.attributes.repository }}'. Under waiting: latest
+  // it decides which waiting firings replace each other (unset: every firing
+  // of the workflow shares one key); with max_running_per_key it is the group
+  // whose running runs are capped. The workflow-wide cap still bounds the
+  // whole workflow. A firing whose key cannot be rendered waits, is never
+  // superseded, and counts only against the workflow-wide cap.
   string key = 3;
   // PerMember scales the cap with the trigger's machine pool: this many runs
   // per member that can take work (dev-docs/design/machine-pools.md).
   uint32 per_member = 4;
+  // Priority is a CEL expression over `trigger` (no {{ }}), evaluated once per
+  // firing when it starts waiting, that yields an integer. Waiting firings
+  // are admitted highest priority first, then in arrival order. Unset, or a
+  // firing whose expression fails to evaluate: priority 0. A low-priority
+  // firing can wait behind higher ones until it expires (a day).
+  string priority = 5;
+  // MaxRunningPerKey caps the running runs of one key (requires key), e.g. 1
+  // for one run per pull request. A waiting firing whose key is at its cap
+  // does not hold back firings of other keys behind it. Alone (no max_running
+  // or per_member), only the per-key cap applies.
+  uint32 max_running_per_key = 6;
 }
 
 // WorkflowConcurrencyWaiting is how a capacity-bound workflow treats waiting

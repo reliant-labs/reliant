@@ -53,6 +53,7 @@ import {
   type DeploymentStatus,
   type GetDeploymentStatusResponse,
 } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
@@ -320,6 +321,10 @@ export function toCloudEnvStatus(msg: GetDeploymentStatusResponse): CloudEnvStat
 }
 
 // ── RPCs ────────────────────────────────────────────────────────────────────
+//
+// The reads take the org they are read in (`orgId`, null for none) and name it
+// in the request, so a cached answer is always the org its key says
+// (lib/orgScope). The writes act in the active org (api/orgInterceptor).
 
 function client() {
   return getControlPlaneClient(DeployService);
@@ -336,8 +341,8 @@ function client() {
  * Filtering on the response field makes that impossible: an old server's rows
  * carry no project, so they match nothing.
  */
-export async function listProjectEnvironments(project: string): Promise<CloudEnv[]> {
-  const res = await client().listEnvironments({ project });
+export async function listProjectEnvironments(project: string, orgId: string | null): Promise<CloudEnv[]> {
+  const res = await client().listEnvironments(orgRequest({ project }, orgId));
   return (res.environments ?? [])
     .map(toCloudEnv)
     .filter((env) => env.id !== "" && env.name !== "" && env.project === project)
@@ -349,24 +354,25 @@ export async function listProjectEnvironments(project: string): Promise<CloudEnv
  * list's one read. An environment with no project predates the project
  * dimension and names no app, so it is dropped here.
  */
-export async function listOrgEnvironments(): Promise<CloudEnv[]> {
-  const res = await client().listEnvironments({});
+export async function listOrgEnvironments(orgId: string | null): Promise<CloudEnv[]> {
+  const res = await client().listEnvironments(orgRequest({}, orgId));
   return (res.environments ?? [])
     .map(toCloudEnv)
     .filter((env) => env.id !== "" && env.name !== "" && env.project !== "");
 }
 
 /** The control plane's observation of one environment — a database read, no cluster hop. */
-export async function getEnvironmentStatus(environmentId: string): Promise<CloudEnvStatus> {
-  return toCloudEnvStatus(await client().getStatus({ environmentId }));
+export async function getEnvironmentStatus(environmentId: string, orgId: string | null): Promise<CloudEnvStatus> {
+  return toCloudEnvStatus(await client().getStatus(orgRequest({ environmentId }, orgId)));
 }
 
 /** The environment's promotion ledger, newest first. */
 export async function listEnvironmentPromotions(
   environmentId: string,
+  orgId: string | null,
   limit = 25
 ): Promise<CloudPromotion[]> {
-  const res = await client().listPromotions({ environmentId, limit });
+  const res = await client().listPromotions(orgRequest({ environmentId, limit }, orgId));
   return (res.promotions ?? []).map(toCloudPromotion);
 }
 
@@ -421,13 +427,110 @@ export async function restartWorkload(environmentId: string, workload: string): 
   };
 }
 
+export interface DeleteEnvironmentOptions {
+  /**
+   * Retain the managed databases instead of deleting them. They keep running
+   * and billing as storage, and are listed by listRetainedDatabases until
+   * purged. A later deploy creates a NEW environment and does not reattach
+   * them.
+   */
+  keepData?: boolean;
+}
+
 /**
  * Tear the environment down. `force` removes its deployments with it, and
- * (keep_data unset, the control plane's default) its managed databases' data
+ * (keepData unset, the control plane's default) its managed databases' data
  * too, irreversibly: the caller's confirm must say so.
+ *
+ * Refused (FailedPrecondition) while a custom domain is bound to it, force or
+ * not: see isDomainBoundRefusal.
  */
-export async function deleteEnvironment(environmentId: string): Promise<void> {
-  await client().deleteEnvironment({ environmentId, force: true });
+export async function deleteEnvironment(environmentId: string, options: DeleteEnvironmentOptions = {}): Promise<void> {
+  // keep_data is sent only to ASK for it. Unset and false are the same
+  // request (delete the data), which is also what a server that does not know
+  // the field does with it. A server that drops a keep=true is caught after
+  // the fact: the caller confirms the databases were kept through
+  // listRetainedDatabases (Overview/keptDataChecks.ts), never trusts it.
+  await client().deleteEnvironment({ environmentId, force: true, ...(options.keepData ? { keepData: true } : {}) });
+}
+
+/** True when the control plane does not serve the rpc at all (an older release, or a deployment without it). */
+export function isUnimplemented(err: unknown): boolean {
+  return err instanceof ConnectError && err.code === Code.Unimplemented;
+}
+
+/**
+ * Why the kept-databases list could not be read, as a class the UI words:
+ *
+ *   unsupported  the control plane does not serve the rpc (Unimplemented)
+ *   no-access    the caller may not read it (PermissionDenied, Unauthenticated)
+ *   unavailable  anything else: transient, or unknown; worth asking again
+ *
+ * ANY of them means the UI cannot list (so cannot confirm or purge) a kept
+ * database, so none of them may offer Keep data or let a check stay pending.
+ */
+export type RetainedReadFailure = "unsupported" | "no-access" | "unavailable";
+
+export function retainedReadFailureOf(err: unknown): RetainedReadFailure {
+  if (err instanceof ConnectError) {
+    if (err.code === Code.Unimplemented) return "unsupported";
+    if (err.code === Code.PermissionDenied || err.code === Code.Unauthenticated) return "no-access";
+  }
+  return "unavailable";
+}
+
+/**
+ * True when DeleteEnvironment refused because a custom domain still points at
+ * the environment. The control plane says so in its message (deploy
+ * handlers' errors.go, ErrEnvironmentDomainBound) and carries no reason code
+ * for it, so the message is what is matched; the remedy is to unbind first.
+ */
+export function isDomainBoundRefusal(err: unknown): boolean {
+  if (!(err instanceof ConnectError) || err.code !== Code.FailedPrecondition) return false;
+  return /still the target of (a )?custom domain/i.test(err.rawMessage || err.message);
+}
+
+// ── Retained databases ──────────────────────────────────────────────────────
+
+/**
+ * A managed database whose environment was deleted with keep data. Its data
+ * still exists and still bills as storage until it is purged.
+ */
+export interface RetainedDatabase {
+  id: string;
+  environmentId: string;
+  environmentName: string;
+  /** The forge project (app) it belonged to. */
+  project: string;
+  databaseName: string;
+  /** Provisioned storage across all instances, in GiB. */
+  storageGib: number;
+  retainedAt?: string;
+}
+
+/** Every retained database of the org (`orgId`, null for none), across its apps. */
+export async function listRetainedDatabases(orgId: string | null): Promise<RetainedDatabase[]> {
+  const res = await client().listRetainedDatabases(orgRequest({}, orgId));
+  return (res.retainedDatabases ?? [])
+    .filter((row) => row.id !== "")
+    .map((row) => ({
+      id: row.id,
+      environmentId: row.environmentId,
+      environmentName: row.environmentName,
+      project: row.project,
+      databaseName: row.databaseName,
+      storageGib: Number(row.storageGib),
+      retainedAt: toISO(row.retainedAt),
+    }));
+}
+
+/**
+ * Destroy one retained database's cluster and volumes. IRREVERSIBLE. The
+ * control plane records the request and its converger performs it; the row
+ * stays listed until the volumes are actually gone.
+ */
+export async function purgeRetainedDatabase(id: string): Promise<void> {
+  await client().deleteRetainedDatabase({ id });
 }
 
 /** True when the control plane refused for a reason the user can act on (billing, permission). */

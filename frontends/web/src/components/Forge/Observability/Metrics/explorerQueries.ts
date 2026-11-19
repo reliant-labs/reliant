@@ -8,7 +8,8 @@
  */
 
 import { useMemo } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { keepPreviousInOrgSegment } from "@/lib/orgScope";
 
 import { metricKeys, obsKeys, useObsReadApi } from "@/hooks/observability-queries";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -58,7 +59,8 @@ export function useExplorerPanelQuery(scope: ObsScope | null, range: RangePreset
     enabled: options.enabled && !!scope && !!panel,
     // Every range is relative ("the last hour"), so an answer is stale once time has moved on.
     staleTime: 30_000,
-    placeholderData: keepPreviousData,
+    // The previous answer, but never another org's (lib/orgScope).
+    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }

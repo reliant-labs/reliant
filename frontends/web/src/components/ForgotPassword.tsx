@@ -4,6 +4,7 @@ import { ArrowLeft, Mail, KeyRound, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '../lib/utils'
 import { CheckSpamNote } from './CheckSpamNote'
+import { resetPasswordPath } from '@/lib/paths'
 
 interface ForgotPasswordProps {
   onBackToSignIn: () => void
@@ -95,7 +96,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
     try {
       await verifyPasswordResetOTP(email, code)
       // User is now authenticated, navigate to reset password page
-      navigate({ to: '/reset-password' })
+      navigate({ to: resetPasswordPath() })
     } catch (err) {
       console.error('Verify OTP error:', err)
       

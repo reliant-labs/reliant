@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,12 +26,29 @@ func init() {
 type repoDiscoverRequest struct {
 	Path     string `json:"path"`
 	MaxDepth int    `json:"max_depth"`
+	// ForgeApps asks for every forge app in each repo found
+	// (repo.FindForgeApps): repoDiscoverFound.ForgeApps, with
+	// ForgeAppsScanned set on the answer. A server older than the field never
+	// sets it, and the walk is skipped.
+	ForgeApps bool `json:"forge_apps,omitempty"`
 }
 
 type repoDiscoverFound struct {
 	RelativePath string `json:"relative_path"`
 	Name         string `json:"name"`
 	RemoteURL    string `json:"remote_url,omitempty"`
+	// ForgeApps are the forge apps in this repo, when the request asked
+	// (repoDiscoverRequest.ForgeApps). ForgeAppsTruncated says the walk
+	// stopped early: the list is then partial, never the whole answer.
+	ForgeApps          []repoDiscoverForgeApp `json:"forge_apps,omitempty"`
+	ForgeAppsTruncated bool                   `json:"forge_apps_truncated,omitempty"`
+}
+
+// repoDiscoverForgeApp is one forge.yaml in a repo: its `name`, and its
+// directory relative to the repo root ("/"-separated, "" for the root).
+type repoDiscoverForgeApp struct {
+	Subpath string `json:"subpath"`
+	Name    string `json:"name"`
 }
 
 type repoDiscoverResponse struct {
@@ -50,6 +68,11 @@ type repoDiscoverResponse struct {
 	// projects.forge_project_name. Empty when there is no forge.yaml or it
 	// names nothing; reading it never fails discovery.
 	ForgeProjectName string `json:"forge_project_name,omitempty"`
+	// ForgeAppsScanned is true when each repo in Discovered carries the
+	// result of a forge-app walk (repoDiscoverRequest.ForgeApps). Absent (a
+	// daemon older than the field, or a request that did not ask) means the
+	// forge apps are unknown, not that there are none.
+	ForgeAppsScanned bool `json:"forge_apps_scanned,omitempty"`
 }
 
 // handleRepoDiscover scans a project directory for nested git repositories.
@@ -82,7 +105,43 @@ func handleRepoDiscover(ctx context.Context, payload []byte) ([]byte, error) {
 		resp.HasForge = true
 		resp.ForgeProjectName = readForgeProjectName(req.Path)
 	}
+	if req.ForgeApps {
+		resp.Discovered = findForgeApps(ctx, req.Path, resp.Discovered)
+		resp.ForgeAppsScanned = true
+	}
 	return json.Marshal(resp)
+}
+
+// forgeAppTree is the tree findForgeApps walks for the repo at root: nil, the
+// OS filesystem there. A test replaces it to inject read failures.
+var forgeAppTree = func(root string) fs.FS { return nil }
+
+// findForgeApps returns discovered with each repo's forge apps filled in
+// (repo.FindForgeApps). Every walk answers by the same deadline as the repo
+// scan, so a project of many repos still answers in time, its later repos
+// marked truncated. A repo that cannot be walked is reported truncated with no
+// apps: unknown, not none.
+func findForgeApps(ctx context.Context, projectPath string, discovered []repoDiscoverFound) []repoDiscoverFound {
+	deadline := answerBy(ctx)
+	out := make([]repoDiscoverFound, 0, len(discovered))
+	for _, found := range discovered {
+		root := projectPath
+		if rel := found.RelativePath; rel != "" && rel != "." {
+			root = filepath.Join(projectPath, rel)
+		}
+		scan, err := repo.FindForgeApps(ctx, root, repo.ForgeAppOptions{Deadline: deadline, FS: forgeAppTree(root)})
+		if err != nil {
+			found.ForgeAppsTruncated = true
+			out = append(out, found)
+			continue
+		}
+		found.ForgeAppsTruncated = scan.Truncated
+		for _, app := range scan.Apps {
+			found.ForgeApps = append(found.ForgeApps, repoDiscoverForgeApp{Subpath: app.Subpath, Name: app.Name})
+		}
+		out = append(out, found)
+	}
+	return out
 }
 
 // answerBy is when a scan answering under ctx's deadline stops walking, so its

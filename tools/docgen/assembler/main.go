@@ -381,12 +381,15 @@ Use create_trigger_activation, update_trigger_activation, enable_trigger or paus
 activation. The owner's automation-approvals setting (Settings > Automations) decides which changes raise an approval
 card: by default a new activation, or a change that widens its power (a new connection or scope, a different acting
 identity, a new machine, new secrets, a production deploy step); other edits and resumes apply and are recorded.
-Pausing never needs a card. An unattended run reaches these tools only when its step names them, and a change that
+Pausing never needs a card; delete_trigger always does, because deleting cannot be undone. An unattended run reaches these tools only when its step names them, and a change that
 needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. To change several
 activations, call the tools together in ONE turn: every card the turn needs is raised at once as one batch, which the
 owner approves in one click (or one by one), instead of one card per turn. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
+When the connection it needs does not exist yet, call propose_connection (provider, scope, reason): the owner connects
+it in Reliant's connection dialog from an approval card, and you get back only its status and connection id, never
+the credential.
 
 ` + "```yaml" + `
 name: triage-new-issues
@@ -503,7 +506,8 @@ prompt against it. Lists of names are strings, not objects: GitHub's ` + bt + `i
 
 GitHub is the fullest integration for automations. Besides ` + bt + `issues.opened` + bt + ` and the like it delivers ` + bt + `issues.labeled` + bt + `/` + bt + `unlabeled` + bt + `/` + bt + `reopened` + bt + `,
 ` + bt + `pull_request.labeled` + bt + `/` + bt + `unlabeled` + bt + `/` + bt + `reopened` + bt + ` (` + bt + `match: {label: ...}` + bt + `), ` + bt + `pull_request_review_comment.created` + bt + ` (inline diff comments; ` + bt + `match` + bt + ` ` + bt + `is_reply` + bt + `
-and ` + bt + `mentions_reliant` + bt + `), and ` + bt + `check_run.completed` + bt + ` / ` + bt + `check_suite.completed` + bt + ` / ` + bt + `workflow_run.completed` + bt + ` (` + bt + `conclusion` + bt + `, ` + bt + `branch` + bt + `, ` + bt + `app` + bt + `).
+and ` + bt + `mentions_reliant` + bt + `), and ` + bt + `check_run.completed` + bt + ` / ` + bt + `check_suite.completed` + bt + ` / ` + bt + `workflow_run.completed` + bt + ` (` + bt + `conclusion` + bt + `, ` + bt + `branch` + bt + `, ` + bt + `app` + bt + `),
+and ` + bt + `check_run.rerequested` + bt + ` / ` + bt + `check_suite.rerequested` + bt + ` (GitHub's Re-run button on the App's own checks; GitHub re-runs nothing itself).
 Its ` + bt + `type: action` + bt + ` nodes cover comments (` + bt + `issue.comment` + bt + `, ` + bt + `.update` + bt + `, ` + bt + `.list` + bt + `), atomic ` + bt + `issue.labels.add` + bt + `/` + bt + `remove` + bt + ` (prefer them to ` + bt + `issue.update` + bt + `,
 which replaces the whole label list and races), ` + bt + `issue.search` + bt + `, ` + bt + `labels.create` + bt + ` (idempotent, for pack setup) / ` + bt + `labels.list` + bt + `, ` + bt + `pr.create` + bt + `/` + bt + `update` + bt + `, ` + bt + `pr.reviews.list` + bt + `, ` + bt + `pr.review_comments.list` + bt + ` and
 ` + bt + `pr.review_comment.reply` + bt + `. There is no merge action, on purpose. Actions that change GitHub are withheld from an unattended run unless the
@@ -545,8 +549,8 @@ test its filter and inputs with ` + bt + `cel_eval` + bt + ` and its graph with 
 **When the workflow is ready**, say it is saved and validated. If asked to activate it in an interactive chat,
 use create_trigger_activation with its declared trigger name, typed params, project_id, explicit machine_id (or
 no_machine) and connection_id. The approval card shows the resolved workflow, identity, machine and privileges.
-Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, and pause_trigger
-to pause. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
+Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, pause_trigger
+to pause, and delete_trigger to remove one for good. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
 The app remains an alternative: **Workflows → Library → open the workflow → Enable** turns on all declared triggers.
 Unattended runs are refused: they cannot grant themselves standing privileges.
 
@@ -570,6 +574,31 @@ so a workflow that must keep going should handle the action's error output. When
 its GitHub writes default to the bot, and that the user can choose to write as themselves instead. A deployment
 without a control plane refuses the bot identity on save; the user must configure the App or explicitly choose owner. Comments written by Reliant's own bot never fire
 ` + bt + `issue_comment.created` + bt + ` or ` + bt + `pull_request_review_comment.created` + bt + `, so a run that comments cannot trigger itself; other bots' comments do.
+
+### An optional node: ` + bt + `tolerate_failure: true` + bt + `
+
+A node whose failure must not fail the run (an auxiliary reader agent, a best-effort notification) declares ` + bt + `tolerate_failure: true` + bt + ` at node level, beside ` + bt + `id` + bt + ` and ` + bt + `type` + bt + `. When it fails, the run goes on instead of failing, and instead of pausing on a step that used up its retries:
+
+` + bt + bt + bt + `yaml
+- id: cp_reader
+  type: workflow
+  ref: builtin://autopilot-agent
+  tolerate_failure: true
+  args: { ... }
+- id: review
+  ...
+edges:
+  - from: cp_reader
+    cases:
+      - condition: "nodes.cp_reader.?failed.orValue(false)"
+        to: [note_reader_failed]
+    default: [review]
+` + bt + bt + bt + `
+
+- **Its outputs when it failed are exactly** ` + bt + `{failed: true, error: "<why, one line>"}` + bt + `: route on them with an edge case or a condition. When it succeeded they are its ordinary outputs, with no ` + bt + `failed` + bt + ` key, so read ` + bt + `nodes.<id>.?failed.orValue(false)` + bt + ` and guard its other fields.
+- **It works on every node type** (an activity, a loop, a sub-workflow or agent, a router), in the main graph, a loop body or a sub-workflow. Its ` + bt + `save_message` + bt + ` is not written when it failed.
+- **Never tolerated:** a cancel, a pause, a panic, and a run that is already ending (a continue-as-new handoff, an unattended run that gave up). Those are not the node failing.
+- **It is not a success.** The failure is logged, and an activity's failed attempt stays in the run's node diagnostics (` + bt + `get_run` + bt + `). Use it for work the run can do without, not to hide a step it needs: a required step that fails should fail the run (and reach ` + bt + `on_failure` + bt + `).
 
 ### When a run fails: ` + bt + `on_failure:` + bt + `
 
@@ -624,7 +653,52 @@ finally:
 - **On a cancel**, the run's in-flight steps are cancelled first, and a ` + bt + `run` + bt + ` node's command is stopped on its machine. Then finally runs, on its own budget, so its own commands are not cancelled. A run that does not stop within a few seconds of the cancel is hard-terminated without it.
 - **The same rules as on_failure:** guard ` + bt + `nodes.<main node>` + bt + ` reads (a cancel can stop the graph anywhere), no node id shared with the main graph, ` + bt + `finally` + bt + ` is a reserved id, no ` + bt + `outputs` + bt + `, ` + bt + `inputs` + bt + ` or nested handlers, no ` + bt + `approval` + bt + ` or ` + bt + `ask_question` + bt + `, a 5-minute budget, and an error in it is logged and never changes how the run ended. Make its steps idempotent: releasing a lease that is not held must succeed.
 - **A child's finally.** A workflow started by a ` + bt + `workflow:` + bt + ` node with ` + bt + `ref:` + bt + ` runs its own finally when it ends, in its own scope, before the parent's (` + bt + `release.finally.<id>` + bt + `).
-- **Test it.** Name its nodes ` + bt + `finally.<node>` + bt + ` in a scenario and assert ` + bt + `expect.finally: {ran, status, handler_failed}` + bt + `.`
+- **Test it.** Name its nodes ` + bt + `finally.<node>` + bt + ` in a scenario and assert ` + bt + `expect.finally: {ran, status, handler_failed}` + bt + `.
+
+### A GitHub check the engine owns: ` + bt + `check:` + bt + `
+
+A workflow-level ` + bt + `check:` + bt + ` makes every run a trigger fires post ONE GitHub check run, as the Reliant App, whose lifecycle the
+engine owns: do NOT write ` + bt + `github/check_run.create` + bt + `/` + bt + `update` + bt + ` nodes, an ` + bt + `on_failure` + bt + ` that concludes it, or a sweep for stuck
+checks. A branch ruleset can then require it by name. One workflow can be an agentic check (a code review) or a
+deterministic one (lint, tests); each is its own workflow with its own ` + bt + `check:` + bt + `, so each can be required and re-run alone.
+
+` + "```yaml" + `
+check:
+  name: reliant/ci                       # the check's name on GitHub; a ruleset requires it by this name
+  output: "{{ nodes.report.check }}"     # optional: {title, summary, text?, annotations?}
+  # repository: "{{ trigger.payload.attributes.repository }}"   # the default
+  # head_sha: "{{ trigger.payload.data.check_suite.head_sha }}" # default: the event's head commit
+  # timeout: 2h                          # default 6h, 1m..72h
+triggers:
+  - name: pr
+    integration: {integration: github, events: [pull_request.opened, pull_request.synchronize, pull_request.reopened]}
+` + "```" + `
+
+` + bt + `check: reliant/ci` + bt + ` (the name alone) is the short form.
+
+- **Lifecycle.** ` + bt + `queued` + bt + ` as soon as the firing is recorded (so a firing waiting for capacity or a waking machine
+  shows), ` + bt + `in_progress` + bt + ` when the run's first node starts, and concluded on EVERY ending: ` + bt + `success` + bt + ` when the run completes;
+  ` + bt + `failure` + bt + ` when it fails, routes to a node with ` + bt + `outcome: failure` + bt + `, cannot start, or pauses for more than 15 minutes (titled
+  "Reliant could not run this check" for an engine fault); ` + bt + `cancelled` + bt + ` when it is cancelled, skipped or superseded
+  (` + bt + `concurrency: {waiting: latest}` + bt + `); ` + bt + `timed_out` + bt + ` when it is still going at ` + bt + `timeout` + bt + `. Never ` + bt + `neutral` + bt + ` or ` + bt + `skipped` + bt + `, which a required
+  check counts as passing.
+- **The verdict is the run's.** The conclusion comes from how the run ended, not from ` + bt + `output` + bt + `. To fail the check when the
+  gate fails, route that path to a terminal node with ` + bt + `outcome: failure` + bt + `.
+- **Output.** ` + bt + `output` + bt + ` is evaluated when the run ends, in a finally handler's scope (` + bt + `nodes` + bt + `, ` + bt + `inputs` + bt + `, ` + bt + `trigger` + bt + `, ` + bt + `workflow` + bt + `,
+  and ` + bt + `run.status` + bt + `), and must be an object with ` + bt + `title` + bt + ` and ` + bt + `summary` + bt + ` (markdown), optionally ` + bt + `text` + bt + ` and ` + bt + `annotations` + bt + `: a list of
+  ` + bt + `{path, start_line, end_line?, annotation_level: notice|warning|failure, message, title?}` + bt + `, sent 50 per request. A
+  ` + bt + `run` + bt + ` node and an agent node work the same way: build the object in a ` + bt + `compute` + bt + ` node from either's outputs, or have
+  an agent return it as its structured response. Guard reads of nodes that may not have run (` + bt + `nodes.?gate.exit_code.orValue(-1)` + bt + `); an output that fails
+  to evaluate falls back to the engine's own summary. ` + bt + `details_url` + bt + ` is always the run's page.
+- **Where.** ` + bt + `repository` + bt + ` and ` + bt + `head_sha` + bt + ` are templates over ` + bt + `trigger` + bt + `, rendered when the firing is recorded. By default the
+  head is the pull request's head, the check suite's or check run's head_sha, the workflow run's head_sha, or the
+  commit a push moved its branch to. A firing that names no repository or commit posts no check, and the run still runs.
+- **Who.** The activation's GitHub identity: it must act as the Reliant bot (the default), since GitHub lets only an App
+  write a check run.
+- **One check per firing.** A retried or resumed fire and a resumed run update the same check; a re-run is a new firing
+  and a new check. Only runs an event trigger fires post one (GitHub events, webhooks): a chat, a schedule or a builder
+  test does not.
+- **Test it.** A scenario runs the graph; what the check concludes follows from how the run ends.`
 }
 
 func generateGotchas() string {

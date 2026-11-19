@@ -52,6 +52,15 @@
 #
 # The work happens in a throwaway worktree; the caller's checkout is untouched.
 #
+# GO.MOD AND GO.SUM (cp#2770). A pin PR (forge or reliant bumped in go.mod) conflicts with
+# main whenever main bumps a module on an ADJACENT require line: git merges by line, not by
+# module. Such a conflict is resolved here as text, with no Go toolchain and no `go mod
+# tidy` (gomod_resolve, below): each module takes the version of the side that changed it,
+# and go.sum is the union of both sides. A conflict it cannot resolve (both sides changed
+# one module, or a line outside the require entries) stays a hand-written conflict.
+# pr-regen's stage recomputes the same bytes with its own copy of gomod_resolve and
+# accepts nothing else.
+#
 # OVERRIDES (tests, other repos)
 #   MERGE_REGEN_GENERATE        the regenerate command, run at the merged tree's root
 #   MERGE_REGEN_DRIVER_INSTALL  the command that installs forge's merge driver
@@ -103,7 +112,12 @@ else
 fi
 generate=${MERGE_REGEN_GENERATE:-$default_generate}
 driver_install=${MERGE_REGEN_DRIVER_INSTALL:-"$forge_cmd merge-driver install"}
-gen_re=${MERGE_REGEN_GEN_RE:-'^gen/|^generated/|^frontends/[^/]+/src/gen/|^\.forge/(scaffolded|hashes|disowned)\.json$|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|_gen(_test)?\.[a-z]+$|\.pb\.go$|_pb\.ts$|_connect\.ts$|\.generated\.ts$|^internal/workflow/runtime/schema/field_descriptions\.go$|^internal/skills/catalog/builtin/workflow-builder/SKILL\.md$'}
+# forge keeps its scaffold and hash records one JSON file per output under
+# .forge/scaffolded/ and .forge/hashes/ (the single .json maps are the older
+# layout): the attribute that marks them lives only in the clone's
+# info/attributes, written by the best-effort driver install, so they are
+# matched here too (control-plane #2789 was refused over a scaffold record).
+gen_re=${MERGE_REGEN_GEN_RE:-'^gen/|^generated/|^frontends/[^/]+/src/gen/|^\.forge/(scaffolded|hashes|disowned)\.json$|^\.forge/(scaffolded|hashes)/.+\.json$|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|_gen(_test)?\.[a-z]+$|\.pb\.go$|_pb\.ts$|_connect\.ts$|\.generated\.ts$|^internal/workflow/runtime/schema/field_descriptions\.go$|^internal/skills/catalog/builtin/workflow-builder/SKILL\.md$'}
 
 # ── fetch, and a throwaway worktree on the PR head ───────────────────────────
 # Fetch into refs of this invocation alone: a concurrent run's fetch can never
@@ -155,6 +169,78 @@ is_generated() {
   done
 }
 
+# BEGIN gomod_resolve — held byte-equal to its copy in scripts/pr-regen/pr-regen.sh (stage
+# recomputes what regen resolved, cp#2770) by scripts/pr-regen/test-pr-regen.sh.
+# gomod_resolve go.mod|go.sum BASE OURS THEIRS OUT: a go.mod or go.sum conflict resolved as
+# text, per module, with no Go toolchain (no `go mod tidy`): the same inputs give the same
+# bytes, so the credentialed stage can recompute it. go.mod: each require entry's version
+# (and its `// indirect`) is masked, the masked files merge with git's 3-way merge (a
+# conflict there, outside the require entries, is not resolved), and each module takes the
+# version of the side that changed it (both sides the same change: that one; both changed
+# it differently, a duplicate entry, or a module one side dropped while the other changed
+# it: not resolved). go.sum: the union of both sides' lines, sorted by module then version;
+# a module version with two different hashes is not resolved. Fails (non-zero) when it does
+# not resolve; OUT is written only on success.
+gomod_resolve() {
+  local kind="$1" b="$2" o="$3" t="$4" out="$5" d rc=1 x
+  d="$(mktemp -d)" || return 1
+  if [ "$kind" = go.sum ]; then
+    if LC_ALL=C sort -u -- "$o" "$t" | LC_ALL=C sort -s -k1,1 -k2,2V >"$d/sum" \
+      && awk 'NF != 3 { bad = 1 } { k = $1 " " $2; if ((k in h) && h[k] != $3) bad = 1; h[k] = $3 } END { exit bad }' "$d/sum"; then
+      cp -- "$d/sum" "$out" && rc=0
+    fi
+    rm -rf "$d"; return "$rc"
+  fi
+  [ "$kind" = go.mod ] || { rm -rf "$d"; return 1; }
+  for x in b o t; do
+    # Mask: a require entry becomes <indent><module><sep>\001; its value goes to $x.vals.
+    awk -v vals="$d/$x.vals" '
+      function entry(prefix, rest,   i, j, mod, sep, val) {
+        i = index(rest, " "); j = index(rest, "\t"); if (i == 0 || (j > 0 && j < i)) i = j
+        if (i <= 1) { bad = 1; print prefix rest; return }
+        mod = substr(rest, 1, i - 1); val = substr(rest, i)
+        match(val, /^[ \t]+/); sep = substr(val, 1, RLENGTH); val = substr(val, RLENGTH + 1)
+        if ((mod in seen) || val == "" || index(val, "\001")) bad = 1
+        seen[mod] = 1; printf "%s\t%s\n", mod, val > vals
+        print prefix mod sep "\001"
+      }
+      index($0, "\001") { bad = 1 }
+      inreq && /^[ \t]*\)[ \t]*$/ { inreq = 0; print; next }
+      inreq && /^[ \t]*(\/\/.*)?$/ { print; next }
+      inreq { match($0, /^[ \t]*/); entry(substr($0, 1, RLENGTH), substr($0, RLENGTH + 1)); next }
+      /^require[ \t]*\([ \t]*$/ { inreq = 1; print; next }
+      /^require[ \t]+[^ \t(]/ { match($0, /^require[ \t]+/); entry(substr($0, 1, RLENGTH), substr($0, RLENGTH + 1)); next }
+      { print }
+      END { close(vals); exit (bad || inreq) }' "${!x}" >"$d/$x.skel" || { rm -rf "$d"; return 1; }
+    [ -e "$d/$x.vals" ] || : >"$d/$x.vals"
+  done
+  if git merge-file -p --quiet "$d/o.skel" "$d/b.skel" "$d/t.skel" >"$d/m.skel" 2>/dev/null \
+    && awk -v bf="$d/b.vals" -v of="$d/o.vals" -v tf="$d/t.vals" '
+      FILENAME == bf { k = index($0, "\t"); B[substr($0, 1, k - 1)] = substr($0, k + 1); next }
+      FILENAME == of { k = index($0, "\t"); O[substr($0, 1, k - 1)] = substr($0, k + 1); next }
+      FILENAME == tf { k = index($0, "\t"); T[substr($0, 1, k - 1)] = substr($0, k + 1); next }
+      /\001$/ {
+        line = $0; match(line, /^(require[ \t]+|[ \t]*)/); prefix = substr(line, 1, RLENGTH); rest = substr(line, RLENGTH + 1)
+        i = index(rest, " "); j = index(rest, "\t"); if (i == 0 || (j > 0 && j < i)) i = j
+        if (i <= 1) { bad = 1; next }
+        mod = substr(rest, 1, i - 1); sep = substr(rest, i, length(rest) - i)
+        vb = (mod in B) ? B[mod] : "\002"; vo = (mod in O) ? O[mod] : "\002"; vt = (mod in T) ? T[mod] : "\002"
+        if (vo == vt) v = vo; else if (vo == vb) v = vt; else if (vt == vb) v = vo; else { bad = 1; next }
+        if (v == "\002" || (mod in used)) { bad = 1; next }
+        used[mod] = 1; print prefix mod sep v; next
+      }
+      { print }
+      END {
+        for (m in O) if (!(m in used) && (!(m in B) || O[m] != B[m])) bad = 1
+        for (m in T) if (!(m in used) && (!(m in B) || T[m] != B[m])) bad = 1
+        exit bad
+      }' "$d/b.vals" "$d/o.vals" "$d/t.vals" "$d/m.skel" >"$d/mod"; then
+    cp -- "$d/mod" "$out" && rc=0
+  fi
+  rm -rf "$d"; return "$rc"
+}
+# END gomod_resolve
+
 # ── merge, with forge's driver ───────────────────────────────────────────────
 # Best effort: without it the merge is git's plain one, and every generated
 # conflict below is still settled by regenerating. The driver only makes the
@@ -176,6 +262,21 @@ fi
 conflicts=$(git diff --name-only --diff-filter=U)
 if [ "$merged_clean" = 0 ] && [ -z "$conflicts" ] && ! git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   die "git merge of $base into $branch failed: $(git merge --no-commit "$base_sha" 2>&1 | tail -1)"
+fi
+# go.mod and go.sum conflicts (GO.MOD AND GO.SUM, above): resolved per module as text.
+# Anything gomod_resolve does not resolve is a hand-written conflict as before.
+gomod_done=()
+gm=$(mktemp -d)
+for f in $conflicts; do
+  case "${f##*/}" in go.mod | go.sum) ;; *) continue ;; esac
+  if git show ":1:$f" >"$gm/b" 2>/dev/null && git show ":2:$f" >"$gm/o" 2>/dev/null && git show ":3:$f" >"$gm/t" 2>/dev/null \
+    && gomod_resolve "${f##*/}" "$gm/b" "$gm/o" "$gm/t" "$gm/r"; then
+    cp -- "$gm/r" "$f" && git add -- "$f" && gomod_done+=("$f")
+  fi
+done
+rm -rf "$gm"
+if [ ${#gomod_done[@]} -gt 0 ]; then
+  conflicts=$(printf '%s\n' "$conflicts" | grep -vxF -f <(printf '%s\n' "${gomod_done[@]}") || true)
 fi
 hand=()
 for f in $conflicts; do
@@ -228,7 +329,7 @@ if [ "$server_clean" = 1 ] && [ "$merged_clean" = 1 ] && [ "$before" = "$after" 
 fi
 if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   git commit -q --no-verify -m "chore: regenerate on merge with $base ($(git rev-parse --short "$base_sha"))" \
-    -m "merge-regen: merged $base into $branch and regenerated with the pinned forge;${conflicts:+ generated conflicts resolved: ${conflicts//$'\n'/ }}"
+    -m "merge-regen: merged $base into $branch and regenerated with the pinned forge;${conflicts:+ generated conflicts resolved: ${conflicts//$'\n'/ };}${gomod_done[*]:+ go.mod/go.sum conflicts resolved per module: ${gomod_done[*]};}"
 else
   # base was already merged: only the regenerate is new.
   git commit -q --no-verify -m "chore: regenerate on merge with $base ($(git rev-parse --short "$base_sha"))"

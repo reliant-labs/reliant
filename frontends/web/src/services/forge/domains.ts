@@ -40,6 +40,7 @@ import {
   type DeployDnsRecord,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
+import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
@@ -470,9 +471,12 @@ function client() {
   return getControlPlaneClient(DomainService);
 }
 
-/** Every domain the org holds, by hostname. The list is deliberately unpaginated server-side. */
-export async function listDomains(): Promise<ForgeDomain[]> {
-  const res = await client().listDomains({});
+/**
+ * Every domain `orgId` holds (null: none named, the active org on the wire),
+ * by hostname. The list is deliberately unpaginated server-side.
+ */
+export async function listDomains(orgId: string | null): Promise<ForgeDomain[]> {
+  const res = await client().listDomains(orgRequest({}, orgId));
   return (res.domains ?? []).map(toForgeDomain);
 }
 

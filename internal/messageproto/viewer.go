@@ -115,11 +115,22 @@ func elideBlockForViewer(b *reliantv1.ContentBlock, names map[string]string) {
 // ViewerMessageUpdate is ElideForViewer for a message update's JSON payload
 // (a CHAT_UPDATE_TYPE_MESSAGE row, possibly wrapped in {"message": ...}): the
 // form replays and live stream frames carry. A tool result's content is
-// removed and body_elided/body_size set. It fails closed: a payload that
-// carries content blocks but cannot be decoded is replaced by an empty
-// object, never sent as it is.
+// removed and body_elided/body_size set, and a redacted-thinking block's
+// ciphertext is blanked.
+//
+// What to withhold is decided by decoding the payload, never by searching its
+// bytes. JSON spells one block many ways ("type":3, "type": 3, 3.0, 3e0,
+// escaped keys), and the client reads more than one field spelling
+// (blockLists), so a spelling a byte search missed would reach the viewer
+// whole. Each decision errs toward withholding: a block that may name a
+// withheld type to any client is treated as one (mayNameBlockType), every
+// block list either level holds is walked, and a result is known by every
+// name it and its calls carry, in either field spelling.
+//
+// It fails closed: a payload that may carry content blocks but cannot be
+// decoded is replaced by an empty object, never sent as it is.
 func ViewerMessageUpdate(raw []byte) []byte {
-	if !bytes.Contains(raw, []byte(`"content_blocks"`)) {
+	if !mayHoldBlocks(raw) {
 		return raw
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -128,51 +139,32 @@ func ViewerMessageUpdate(raw []byte) []byte {
 	if err := dec.Decode(&payload); err != nil {
 		return []byte(`{}`)
 	}
-	msg := payload
-	if wrapped, ok := payload["message"].(map[string]any); ok {
-		msg = wrapped
-	}
-	blocks, _ := msg["content_blocks"].([]any)
-	names := map[string]string{}
-	for _, b := range blocks {
-		block, ok := b.(map[string]any)
-		if !ok || !isBlockType(block["type"], reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL) {
-			continue
-		}
-		id, _ := block["tool_call_id"].(string)
-		name, _ := block["tool_name"].(string)
-		if id != "" {
-			names[id] = name
-		}
-	}
+	lists := blockLists(payload)
+	calls := viewerCallNames(lists)
 	changed := false
-	for _, b := range blocks {
-		block, ok := b.(map[string]any)
-		if !ok || !isToolResultBlockType(block["type"]) {
-			continue
-		}
-		content, ok := block["content"].(string)
-		if !ok {
-			continue
-		}
-		resultName, _ := block["tool_name"].(string)
-		id, _ := block["tool_call_id"].(string)
-		callName, known := names[id]
-		if viewerKeepsResultOf(resultName, callName, known) {
-			continue
-		}
-		size := len(content)
-		if n, ok := block["original_size"].(json.Number); ok {
-			if v, err := n.Int64(); err == nil {
-				size = int(v)
+	for _, blocks := range lists {
+		for _, b := range blocks {
+			block, ok := b.(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, present := block["content"]; !present {
+				continue
+			}
+			switch {
+			case isSealedBlockType(block["type"]):
+				if block["content"] != "" {
+					block["content"] = ""
+					changed = true
+				}
+			case mayNameBlockType(block["type"], reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT):
+				if viewerKeepsResultBlock(block, calls) {
+					continue
+				}
+				elideResultBlockForViewer(block)
+				changed = true
 			}
 		}
-		delete(block, "content")
-		delete(block, "truncated")
-		delete(block, "original_size")
-		block["body_elided"] = true
-		block["body_size"] = size
-		changed = true
 	}
 	if !changed {
 		return raw
@@ -182,6 +174,117 @@ func ViewerMessageUpdate(raw []byte) []byte {
 		return []byte(`{}`)
 	}
 	return out
+}
+
+// The two spellings a client reads each of a block's fields by (protobuf-es
+// fromJson: the proto name and the JSON name).
+var (
+	toolNameKeys   = []string{"tool_name", "toolName"}
+	toolCallIDKeys = []string{"tool_call_id", "toolCallId"}
+)
+
+// viewerCallNames is every name each tool call id in lists is known by: the
+// names of every block that may be a tool call (mayNameBlockType) and carries
+// that id, in either field spelling. A call that names no tool, or names it
+// with something that is not a string, is known by "", which no built-in is.
+func viewerCallNames(lists [][]any) map[string][]string {
+	calls := map[string][]string{}
+	for _, blocks := range lists {
+		for _, b := range blocks {
+			block, ok := b.(map[string]any)
+			if !ok || !mayNameBlockType(block["type"], reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL) {
+				continue
+			}
+			ids, _ := stringFields(block, toolCallIDKeys)
+			names, ok := stringFields(block, toolNameKeys)
+			if !ok || len(names) == 0 {
+				names = append(names, "")
+			}
+			for _, id := range ids {
+				if id != "" {
+					calls[id] = append(calls[id], names...)
+				}
+			}
+		}
+	}
+	return calls
+}
+
+// viewerKeepsResultBlock is viewerKeepsResultOf for a decoded result block:
+// every name it is known by (its own tool_name in either spelling, and every
+// call's sharing either spelling of its id) must be a kept built-in, and it
+// must be known by one. A name or id that is not a string is elided.
+func viewerKeepsResultBlock(block map[string]any, calls map[string][]string) bool {
+	own, ok := stringFields(block, toolNameKeys)
+	if !ok {
+		return false
+	}
+	ids, ok := stringFields(block, toolCallIDKeys)
+	if !ok {
+		return false
+	}
+	var names []string
+	for _, n := range own {
+		if n != "" {
+			names = append(names, n)
+		}
+	}
+	for _, id := range ids {
+		if id != "" {
+			names = append(names, calls[id]...)
+		}
+	}
+	if len(names) == 0 {
+		return false
+	}
+	for _, n := range names {
+		if !viewerKeepsResult(n) {
+			return false
+		}
+	}
+	return true
+}
+
+// stringFields is the values block holds under keys, absent and null ones
+// skipped. ok is false when one is present and not a string.
+func stringFields(block map[string]any, keys []string) (values []string, ok bool) {
+	ok = true
+	for _, k := range keys {
+		v, present := block[k]
+		if !present || v == nil {
+			continue
+		}
+		s, isString := v.(string)
+		if !isString {
+			ok = false
+			continue
+		}
+		values = append(values, s)
+	}
+	return values, ok
+}
+
+// elideResultBlockForViewer leaves a decoded result block's content out, in
+// place, as elideBlockForViewer does a protobuf one: body_elided set and
+// body_size the stored length. Every spelling of the fields it replaces goes,
+// so no leftover can override them for a client.
+func elideResultBlockForViewer(block map[string]any) {
+	size := 0
+	if s, ok := block["content"].(string); ok {
+		size = len(s)
+	}
+	for _, k := range []string{"original_size", "originalSize"} {
+		if n, ok := block[k].(json.Number); ok {
+			if v, err := n.Int64(); err == nil {
+				size = int(v)
+			}
+		}
+	}
+	for _, k := range []string{"content", "truncated", "original_size", "originalSize", "bodyElided", "bodySize"} {
+		delete(block, k)
+	}
+	block["body_elided"] = true
+	block["body_size"] = size
 }
 
 // ViewerChatUpdate is what a viewer is sent of one chat update's data (a

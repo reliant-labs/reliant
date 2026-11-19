@@ -64,6 +64,40 @@ describe("MemberPermissions", () => {
     );
   });
 
+  it("shows and copies the current organization ID, including after an org switch", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    try {
+      render(<MemberPermissions />);
+      expect(screen.getByText("org-a")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Copy organization ID" }));
+      await screen.findByText("Copied");
+      expect(writeText).toHaveBeenLastCalledWith("org-a");
+      act(() => useActiveOrgStore.setState({ effectiveId: "org-b" }));
+      expect(screen.queryByText("org-a")).toBeNull();
+      expect(screen.getByText("org-b")).toBeInTheDocument();
+      expect(screen.queryByText("Copied")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Copy organization ID" }));
+      await screen.findByText("Copied");
+      expect(writeText).toHaveBeenLastCalledWith("org-b");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps the ID available when clipboard access fails", async () => {
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) } });
+    try {
+      render(<MemberPermissions />);
+      fireEvent.click(screen.getByRole("button", { name: "Copy organization ID" }));
+      expect(await screen.findByRole("status")).toHaveTextContent("Select the ID above to copy it manually");
+      expect(screen.getByText("org-a")).toBeInTheDocument();
+      expect(screen.queryByText("Copied")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("ignores an old org roster even after switching back to the same org", async () => {
     let finish!: (value: ReturnType<typeof roster>) => void;
     listMemberPermissions.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));

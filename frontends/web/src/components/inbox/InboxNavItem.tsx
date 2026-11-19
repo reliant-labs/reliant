@@ -24,8 +24,9 @@ import { Inbox } from "lucide-react";
 
 import { ChatActivity } from "@/gen/reliant/v1/chat_pb";
 import { useInboxCounts, useInboxProjectId } from "@/hooks/inbox-queries";
-import { cn } from "@/lib/utils";
 import { useActivityStore } from "@/store/activityStore";
+
+import { SidebarRow } from "../Layout/sidebar/primitives";
 
 interface InboxNavItemProps {
   onOpen?: () => void;
@@ -72,48 +73,43 @@ export function useInboxBadge(): InboxBadgeState {
 export function InboxNavItem({ onOpen }: InboxNavItemProps) {
   const { count, informational, degraded, announcement } = useInboxBadge();
 
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      disabled={!onOpen}
-      className={cn(
-        "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
-        "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
-        "focus:outline-none focus:ring-2 focus:ring-ring",
-        "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent",
-      )}
-      data-testid="sidebar-inbox-button"
-    >
-      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
-        <Inbox className="h-4 w-4" />
-      </span>
-      <span className="min-w-0 flex-1 truncate">Inbox</span>
-      <span className="flex shrink-0 items-center gap-1">
+  // The badge is the row's trail (restyle §11.3): the count in meta, a dot
+  // for failures, a warning dot when the count may be incomplete.
+  const trail =
+    count > 0 || informational || degraded ? (
+      <>
         {count > 0 && (
-          <span
-            data-testid="inbox-badge-count"
-            aria-hidden="true"
-            className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-2xs font-semibold tabular-nums text-primary-foreground"
-          >
+          <span data-testid="inbox-badge-count" aria-hidden="true" className="tabular-nums">
             {count}
           </span>
         )}
         {informational && (
-          <span data-testid="inbox-badge-dot" aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-destructive" />
+          <span data-testid="inbox-badge-dot" aria-hidden="true" className="size-2 rounded-full bg-destructive" />
         )}
         {degraded && (
           <span
             data-testid="inbox-badge-warning"
             title="The inbox could not be loaded; this count may be incomplete."
-            className="h-1.5 w-1.5 rounded-full bg-warning"
+            className="size-2 rounded-full bg-warning"
           />
         )}
-      </span>
+      </>
+    ) : undefined;
+
+  return (
+    <SidebarRow
+      icon={<Inbox className="size-4" />}
+      label="Inbox"
+      onClick={onOpen}
+      trail={trail}
+      // Named by its content: "Inbox" and the live count below.
+      ariaLabel={null}
+      testId="sidebar-inbox-button"
+    >
       <span className="sr-only" aria-live="polite" data-testid="inbox-badge-live">
         {announcement}
         {degraded ? " (may be incomplete)" : ""}
       </span>
-    </button>
+    </SidebarRow>
   );
 }

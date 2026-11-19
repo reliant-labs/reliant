@@ -49,6 +49,15 @@ func isSessionScopedServer(name string, cfg config.MCPServer) bool {
 	return name == chromeDevtoolsServerName && cfg.Type == config.MCPStdio
 }
 
+// KeepsCallerState reports whether the named server holds state a caller built
+// up across calls — the browser's pages, tabs and storage — that restarting it
+// would destroy. Callers that restart servers as a recovery step (a credential
+// reload) must not restart these: they have no credentials, and the restart
+// costs every session using them its state.
+func KeepsCallerState(serverName string) bool {
+	return strings.TrimSpace(serverName) == chromeDevtoolsServerName
+}
+
 // sessionKeySeparator joins a logical server name to a session key.
 //
 // "::" is chosen because validateMCPLogicalServerName rejects it outright, so a

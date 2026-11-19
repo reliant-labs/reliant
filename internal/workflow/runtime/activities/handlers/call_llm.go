@@ -645,17 +645,42 @@ func historyStartsTurn(history []message.Message) bool {
 	return tail >= 0 && (history[tail].Role == message.User || history[tail].Role == message.Agent)
 }
 
-// endsWithCutOffAssistantTurn reports whether history, past any trailing
-// system framing, ends with an assistant message that requested no tools:
-// on a resumed loop's first turn, the turn that was cut off (reasoning only,
-// or a partial reply). One with tool calls is not: the orphan repair already
-// gave its calls results, and the provider can be called as it is.
-func endsWithCutOffAssistantTurn(history []message.Message) bool {
+// cutOffAssistantTail returns the assistant message history ends with, past
+// any trailing system framing, when it requested no tools: on a turn that
+// knows its tail was cut off (continuesCutOffTurn), the cut-off turn itself
+// (reasoning only, or a partial reply). One with tool calls is not: the
+// orphan repair already gave its calls results, and the provider can be
+// called as it is.
+func cutOffAssistantTail(history []message.Message) (message.Message, bool) {
 	tail := len(history) - 1
 	for tail >= 0 && history[tail].Role == message.System {
 		tail--
 	}
-	return tail >= 0 && history[tail].Role == message.Assistant && len(history[tail].ToolCalls()) == 0
+	if tail >= 0 && history[tail].Role == message.Assistant && len(history[tail].ToolCalls()) == 0 {
+		return history[tail], true
+	}
+	return message.Message{}, false
+}
+
+// continuesCutOffTurn reports whether this turn continues the cut-off
+// assistant turn history ends with, rather than yielding it.
+//
+// Two turns know their tail was cut off. A resumed loop's first turn
+// (ResumeTurn) knows it from the loop having stopped mid-work. A call_llm
+// re-dispatched after a pause knows it by id: the pause cancelled its previous
+// dispatch mid-stream, which persisted its partial under CutOffMessageID.
+// Without the second, a pause whose resume brought no new input re-entered on
+// that partial and yielded it as the agent's answer: a sub-agent streaming
+// when its root's provider failed for good (which pauses the run) finished
+// with half a reply when the user resumed (reliant #2759, chat e1041795). The
+// id match keeps it exact: a tail that is any other assistant message, such as
+// a finished answer the dispatch never got past, still yields.
+func continuesCutOffTurn(rtx RuntimeContext, history []message.Message) bool {
+	tail, ok := cutOffAssistantTail(history)
+	if !ok {
+		return false
+	}
+	return rtx.ResumeTurn || (rtx.CutOffMessageID != "" && tail.ID == rtx.CutOffMessageID)
 }
 
 // resumeCutOffTurn saves the hidden "continue" user message for a resumed
@@ -684,6 +709,11 @@ func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeConte
 		key = info.WorkflowExecution.ID + "-" + info.ActivityID
 	}
 	key += "|resume-continue"
+	// Each pause can cut the same position's turn off again, and each cut-off
+	// partial needs its own continue message after it, not the first one's.
+	if rtx.CutOffMessageID != "" {
+		key += "|" + rtx.CutOffMessageID
+	}
 	var workflowID *string
 	if rtx.WorkflowID != "" {
 		workflowID = &rtx.WorkflowID
@@ -707,7 +737,7 @@ func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeConte
 		continued.ID = saved.MessageID
 	}
 	logging.InfoContext(ctx, "[CallLLM] Resumed loop's history ends with its cut-off turn; continuing it with a hidden message",
-		"chatID", chatID, "thread", thread)
+		"chatID", chatID, "thread", thread, "resumeTurn", rtx.ResumeTurn, "cutOffMessageID", rtx.CutOffMessageID)
 	return continued
 }
 
@@ -1205,7 +1235,7 @@ func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRu
 func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
 	// Extract options from runtime context
 	// Check if this workflow has reached the maximum spawn depth (prevents unbounded recursive spawn)
-	spawnDisabled := rtx.SpawnDepth >= tools.MaxSpawnDepth
+	spawnDisabled := !tools.SpawnAllowedAtDepth(rtx.SpawnDepth)
 
 	// Resolve tools configuration. There is no separate "are tools enabled"
 	// switch: the expanded list IS the answer, and a node that declares nothing
@@ -1457,8 +1487,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// every request.
 		//
 		// spawn_stop is narrower still: it only acts on a sub-agent the caller
-		// spawned, so it rides canSpawnChildren alone. A depth-1 sub-agent that
-		// cannot spawn has children to report to but none to stop.
+		// spawned, so it rides canSpawnChildren alone. A sub-agent at
+		// tools.MaxSpawnDepth cannot spawn: it has a parent to report to but
+		// no children to stop.
 		canSpawnChildren := !spawnDisabled && len(model.CelStringListValue(tc.GetSpawn())) > 0
 		mailboxReachable := rtx.SpawnDepth > 0 || canSpawnChildren
 		// loadable_tools bounds what load_tool may reach, and declaring nothing
@@ -1513,7 +1544,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 
 		for _, spawnConfig := range spawnConfigs {
-			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, spawnPresetSource{projectID: chat.ProjectID, daemonID: launchRunMachine(chat), pin: rtx.CatalogPin}, spawnConfig); spawnTool != nil {
+			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, spawnPresetSource{projectID: chat.ProjectID, daemonID: launchRunMachine(chat), pin: rtx.CatalogPin}, spawnConfig, rtx.SpawnDepth); spawnTool != nil {
 				availableTools = append(availableTools, spawnTool)
 				activity.GetLogger(ctx).Debug("[CallLLM] Added spawn tool from tools_config",
 					"workflow", spawnConfig.Workflow,
@@ -1772,9 +1803,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"count", len(args.GetMessages()))
 	}
 
-	// A loop resumed mid-work with nothing new to read: continue its cut-off
-	// turn rather than yield it as the agent's last word (resumeCutOffTurn).
-	if rtx.ResumeTurn && !model.CelBoolValue(args.GetContinueTurn()) && endsWithCutOffAssistantTurn(history) {
+	// A loop resumed mid-work, or a turn re-dispatched after a pause cut it
+	// off, with nothing new to read: continue the cut-off turn rather than
+	// yield it as the agent's last word (resumeCutOffTurn).
+	if !model.CelBoolValue(args.GetContinueTurn()) && continuesCutOffTurn(rtx, history) {
 		history = append(history, a.resumeCutOffTurn(ctx, rtx, chat.ID, thread))
 	}
 
@@ -2748,18 +2780,36 @@ type spawnPresetSource struct {
 
 // getSpawnToolFromFilterConfig creates a spawn tool from a SpawnFilterConfig.
 // Used when spawn configurations come from tool_filter syntax.
-func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, source spawnPresetSource, config tools.SpawnFilterConfig) tools.Tool {
+func (a *CallLLMActivity) getSpawnToolFromFilterConfig(ctx context.Context, source spawnPresetSource, config tools.SpawnFilterConfig, spawnerDepth int) tools.Tool {
 	if len(config.Presets) == 0 {
 		return nil
 	}
 
 	// Convert SpawnFilterConfig to SpawnConfig
 	spawnConfig := &SpawnConfig{
-		Workflow: config.Workflow,
-		Presets:  config.Presets,
+		Workflow:     config.Workflow,
+		Presets:      config.Presets,
+		SpawnerDepth: spawnerDepth,
 	}
 
 	return a.getSpawnTool(ctx, source, spawnConfig)
+}
+
+// spawnNestingNote is the spawn tool's paragraph on nesting and concurrency
+// limits, for an agent at spawnerDepth. Spawning nests tools.MaxSpawnDepth
+// levels deep: a root agent's sub-agents may fan out once more, and theirs may
+// not, so the advice differs by depth (reliant#2757).
+func spawnNestingNote(spawnerDepth int) string {
+	limits := fmt.Sprintf("HARD LIMITS: by default at most %d of your sub-agents run at once, and at most %d across the whole run (the run's max_concurrent_sub_agents and max_concurrent_sub_agents_total inputs). A spawn past either limit is refused with nothing started: wait for one to finish (you are notified, or spawn_status(wait: true)), then spawn it again.",
+		activitytypes.DefaultMaxConcurrentSubAgents, activitytypes.DefaultMaxConcurrentSubAgentsTotal)
+	if spawnerDepth+1 >= tools.MaxSpawnDepth {
+		return fmt.Sprintf(`A sub-agent you spawn CANNOT spawn sub-agents of its own (spawning nests %d levels deep, and you are already a sub-agent). Do the fanning out yourself: give each sub-agent one unit of work, and never tell one to "use sub-agents" or "fan out" — it will have no spawn tool and will do the work serially.
+
+%s`, tools.MaxSpawnDepth, limits)
+	}
+	return fmt.Sprintf(`A sub-agent you spawn may spawn sub-agents of its own, if its preset declares spawn presets, but THEIRS cannot (spawning nests %d levels deep). So a sub-agent you hand a large slice may fan it out once more; tell it so when it should, and give the leaf work to its sub-agents, not yours.
+
+%s`, tools.MaxSpawnDepth, limits)
 }
 
 // getSpawnTool returns a spawn tool for orchestration workflows.
@@ -2823,7 +2873,7 @@ While a spawned agent runs you can steer, observe and stop it: spawn_status(agen
 
 If an agent fails for good (its provider keeps erroring, say), only that agent stops — you keep running — and you are notified with status="failed", the error and its agent_id. Deciding what happens next is yours: resume it where it stopped with spawn(agent_id, prompt), retry the work with a fresh agent, or continue without it.
 
-A sub-agent you spawn CANNOT spawn sub-agents of its own (spawning nests one level deep). Do the fanning out yourself: give each sub-agent one unit of work, and never tell one to "use sub-agents" or "fan out" — it will have no spawn tool and will do the work serially.
+%s
 
 Available presets:
 %s
@@ -2834,7 +2884,7 @@ Parameters:
 - title: Optional - Human-readable title for the spawned thread (defaults to preset name)
 - agent_id: Optional - Agent ID to resume existing conversation
 - worktree: Optional - name of a worktree created with the worktree tool; the sub-agent works in that workspace (its own branch) instead of yours
-- providers: Optional - which providers the sub-agent runs on and what it does when they are rate-limited: {"prefer": ["codex", "claude:work@acme.com"], "on_limit": "wait" | "fallback", "fallback": "<model>@<driver>"}. Omit it and the sub-agent follows the chat's own provider policy (a chat pinned to one provider keeps its sub-agents on it, and waits out a limit unless the user chose to fall back). Use it only when this one task should run elsewhere`, presetList)
+- providers: Optional - which providers the sub-agent runs on and what it does when they are rate-limited: {"prefer": ["codex", "claude:work@acme.com"], "on_limit": "wait" | "fallback", "fallback": "<model>@<driver>"}. Omit it and the sub-agent follows the chat's own provider policy (a chat pinned to one provider keeps its sub-agents on it, and waits out a limit unless the user chose to fall back). Use it only when this one task should run elsewhere`, spawnNestingNote(config.SpawnerDepth), presetList)
 
 	return tools.NewSchemaOnlyTool(
 		"spawn",
@@ -2944,7 +2994,8 @@ func (a *CallLLMActivity) getSystemPrompts(
 		// its root, outside every git checkout, are saved only up to a size
 		// cap and otherwise keep the directory on disk, so scratch belongs
 		// elsewhere (and a worktree's checkout is the place for anything to keep).
-		bb.WriteString("\nKeep scratch files (notes, plans, logs, temporary output) outside this directory, e.g. under /tmp or a scratchpad directory you were given, so they never sit loose at the workspace root where git cannot see them; put anything meant to last inside a repository checkout.")
+		bb.WriteString("\nKeep scratch files (notes, plans, logs, temporary output) outside this directory, so they never sit loose at the workspace root where git cannot see them; put anything meant to last inside a repository checkout. ")
+		bb.WriteString(scratchDirGuidance(chat))
 	}
 
 	// Multi-repo hint. When the project has more than one repo, every fs/process

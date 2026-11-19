@@ -5,3 +5,4 @@ properties:
   ref: { type: string }
   sha: { type: string }
   label: { type: string }
+  repo: { type: object, properties: { full_name: { type: string }, fork: { type: boolean } } }

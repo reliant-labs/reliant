@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
+	"github.com/reliant-labs/reliant/internal/projectfacts"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/version"
 )
@@ -338,6 +339,31 @@ func (s *Service) rememberForgeProjectName(ctx context.Context, project *db.Proj
 	}
 }
 
+// forgeAppsRefreshEvery is how often a topology read re-reads the forge apps
+// of the project's repos: the Forge tab reads topology on every focus, and
+// forge.yaml files come and go far more rarely.
+const forgeAppsRefreshEvery = 10 * time.Minute
+
+// forgeAppsRefreshTimeout bounds one background refresh.
+const forgeAppsRefreshTimeout = 45 * time.Second
+
+// refreshForgeApps re-reads every forge app in the repos of the checkout that
+// just answered a topology read (projectfacts.RefreshForgeApps), at most every
+// forgeAppsRefreshEvery. It runs in the background, detached from the RPC:
+// the read is a walk of the checkout on the daemon, and the topology answer
+// must not wait on it. Best effort; nothing here reaches the caller.
+func (s *Service) refreshForgeApps(ctx context.Context, userID string, answered projectcheckout.Target) {
+	if answered.Project == nil || answered.DaemonID == "" || answered.Path == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), forgeAppsRefreshTimeout)
+	go func() {
+		defer cancel()
+		projectfacts.RefreshForgeApps(ctx, s.deps.Router, s.deps.Repo,
+			userID, answered.DaemonID, answered.Project.ID, answered.Path, forgeAppsRefreshEvery)
+	}()
+}
+
 // forgeEnvArg validates an environment name.
 func forgeEnvArg(env string) (string, error) {
 	trimmed := strings.TrimSpace(env)
@@ -598,7 +624,8 @@ func (s *Service) GetTopology(
 			Verify      bool     `json:"verify,omitempty"`
 			Envs        []string `json:"envs,omitempty"`
 			OrgID       string   `json:"org_id,omitempty"`
-		}{ProjectPath: projectPath, Verify: verify, Envs: req.Msg.Envs, OrgID: req.Msg.GetOrgId()}
+			ProjectID   string   `json:"project_id,omitempty"`
+		}{ProjectPath: projectPath, Verify: verify, Envs: req.Msg.Envs, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
 	}
 
 	reply, unreachable, answered, err := s.forgeReadDispatch(ctx, userID, target, "forge.topology", payload, timeout, verify)
@@ -606,6 +633,7 @@ func (s *Service) GetTopology(
 		return nil, err
 	}
 	s.rememberForgeProjectName(ctx, answered.Project, userID, reply)
+	s.refreshForgeApps(ctx, userID, answered)
 
 	return connect.NewResponse(&reliantv1.GetForgeTopologyResponse{
 		Meta:       forgeMeta(reply, verify, unreachable),
@@ -635,7 +663,8 @@ func (s *Service) VerifyEnv(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId()}
+		ProjectID   string `json:"project_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
 	if err != nil {
@@ -684,7 +713,8 @@ func (s *Service) ListSecrets(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId()}
+		ProjectID   string `json:"project_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
 
 	// readsCluster=false: secret presence is resolved from the declaration and
 	// the provider's metadata, not by reading cluster workloads, so a timeout
@@ -722,7 +752,8 @@ func (s *Service) GetEnvStatus(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId()}
+		ProjectID   string `json:"project_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
@@ -769,7 +800,8 @@ func (s *Service) GetEnvShape(
 		ProjectPath string `json:"project_path"`
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId()}
+		ProjectID   string `json:"project_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_shape", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
@@ -870,7 +902,8 @@ func (s *Service) PlanPromote(
 		Env         string `json:"env"`
 		Release     string `json:"release"`
 		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, Release: release, OrgID: req.Msg.GetOrgId()}
+		ProjectID   string `json:"project_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, Release: release, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(
 		ctx, userID, target, "forge.promote_plan", payload, forgePromotePlanTimeoutMs, false)
@@ -946,6 +979,7 @@ func (s *Service) ApplyPromote(
 		ExpectedCurrentRelease string `json:"expected_current_release,omitempty"`
 		ExpectUnbound          bool   `json:"expect_unbound,omitempty"`
 		OrgID                  string `json:"org_id,omitempty"`
+		ProjectID              string `json:"project_id,omitempty"`
 	}{
 		ProjectPath:            target.Path,
 		Env:                    env,
@@ -953,6 +987,7 @@ func (s *Service) ApplyPromote(
 		ExpectedCurrentRelease: expected,
 		ExpectUnbound:          req.Msg.ExpectUnbound,
 		OrgID:                  req.Msg.GetOrgId(),
+		ProjectID:              target.Project.ID,
 	}
 
 	// The apply reply has a field the shared forgeDispatch envelope does not
@@ -1237,7 +1272,8 @@ func (s *Service) PlanDeploy(
 		Env          string `json:"env"`
 		CheckoutPath string `json:"checkout_path,omitempty"`
 		OrgID        string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId()}
+		ProjectID    string `json:"project_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(
 		ctx, userID, target, "forge.deploy_plan", payload, forgeDeployPlanTimeoutMs, true)
@@ -1288,7 +1324,8 @@ func (s *Service) StartDeployPlan(
 		Env          string `json:"env"`
 		CheckoutPath string `json:"checkout_path,omitempty"`
 		OrgID        string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId()}
+		ProjectID    string `json:"project_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
 
 	// Dispatched directly, and WITHOUT the reachability escape hatch, for the
 	// same reason StartDeploy is: a start that timed out may or may not have
@@ -1423,6 +1460,7 @@ func (s *Service) StartDeploy(
 		ReleaseVersion          string   `json:"release_version"`
 		CheckoutPath            string   `json:"checkout_path,omitempty"`
 		OrgID                   string   `json:"org_id,omitempty"`
+		ProjectID               string   `json:"project_id,omitempty"`
 	}{
 		ProjectPath:             target.Path,
 		Env:                     env,
@@ -1434,6 +1472,7 @@ func (s *Service) StartDeploy(
 		ReleaseVersion:          releaseVersion,
 		CheckoutPath:            strings.TrimSpace(req.Msg.CheckoutPath),
 		OrgID:                   req.Msg.GetOrgId(),
+		ProjectID:               target.Project.ID,
 	}
 
 	// Dispatched directly rather than through forgeDispatch: the reply carries

@@ -21,13 +21,14 @@ import { reliantAppOrigin } from "@/lib/shell";
 import { useAuthStore } from "@/store/authStore";
 
 import { ForgeBrand, ForgeMark } from "./ForgeBrand";
+import { appsPath, authPath, settingsPath, sitesPath, usagePath } from "@/lib/paths";
 
 /** The shell's own pages, in nav order. */
 export const FORGE_SHELL_NAV = [
-  { label: "Apps", href: "/apps", icon: LayoutGrid },
-  { label: "Sites", href: "/sites", icon: Globe },
-  { label: "Usage & spend", href: "/usage", icon: Gauge },
-  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Apps", href: appsPath(), icon: LayoutGrid },
+  { label: "Sites", href: sitesPath(), icon: Globe },
+  { label: "Usage & spend", href: usagePath(), icon: Gauge },
+  { label: "Settings", href: settingsPath(), icon: Settings },
 ] as const;
 
 /** The nav entry a path belongs to. */
@@ -81,7 +82,7 @@ export function ForgeShellLayout({ children }: { children?: ReactNode }) {
     try {
       await signOut();
     } finally {
-      void navigate({ href: "/auth", replace: true });
+      void navigate({ href: authPath(), replace: true });
     }
   };
 
@@ -90,7 +91,7 @@ export function ForgeShellLayout({ children }: { children?: ReactNode }) {
       <SidebarLayout
         navLabel="Forge"
         brand={
-          <a href="/apps" className="no-color flex min-w-0 items-center rounded-md px-1 py-0.5" aria-label="Forge by Reliant: all apps">
+          <a href={appsPath()} className="no-color flex min-w-0 items-center rounded-md px-1 py-0.5" aria-label="Forge by Reliant: all apps">
             <ForgeBrand />
           </a>
         }

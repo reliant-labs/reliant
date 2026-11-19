@@ -23,6 +23,7 @@ import type {
   WalletOverview,
   ReliantOverview,
 } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "./client";
 import { hasControlPlane } from "./config";
 
@@ -37,19 +38,19 @@ export { RedeemedCouponKind };
  */
 export const reliantAIAvailable = hasControlPlane;
 
-/** GetCurrentUserReliantOverview — entitlement + period spend/remaining/cap. */
-export async function getReliantOverview(): Promise<ReliantOverview | undefined> {
+/** GetCurrentUserReliantOverview in `orgId` (null: none named) — entitlement + period spend/remaining/cap. */
+export async function getReliantOverview(orgId: string | null): Promise<ReliantOverview | undefined> {
   const res = await getControlPlaneClient(
     BillingService,
-  ).getCurrentUserReliantOverview({});
+  ).getCurrentUserReliantOverview(orgRequest({}, orgId));
   return res.overview;
 }
 
-/** GetCurrentUserWalletOverview — wallet balance + recent ledger entries. */
-export async function getWalletOverview(): Promise<WalletOverview | undefined> {
+/** GetCurrentUserWalletOverview in `orgId` (null: none named) — wallet balance + recent ledger entries. */
+export async function getWalletOverview(orgId: string | null): Promise<WalletOverview | undefined> {
   const res = await getControlPlaneClient(
     BillingService,
-  ).getCurrentUserWalletOverview({ ledgerPage: 1, ledgerPageSize: 10 });
+  ).getCurrentUserWalletOverview(orgRequest({ ledgerPage: 1, ledgerPageSize: 10 }, orgId));
   return res.overview;
 }
 

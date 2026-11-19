@@ -134,7 +134,11 @@ function useChatDecisions(chatId: string | undefined) {
 /** Approve one approval in a chat: `mutate({ requestId, actionTaken? })`. */
 export function useApproveToolRequest(chatId?: string) {
   const { approve, busy } = useChatDecisions(chatId);
-  const run = useCallback((req: { requestId?: string; actionTaken?: string }) => approve(req.requestId ?? "", { actionTaken: req.actionTaken }), [approve]);
+  const run = useCallback(
+    (req: { requestId?: string; actionTaken?: string; connectionId?: string }) =>
+      approve(req.requestId ?? "", { actionTaken: req.actionTaken, connectionId: req.connectionId }),
+    [approve],
+  );
   return decision(run, busy);
 }
 
@@ -174,6 +178,16 @@ export function useBatchDenyInChat(chatId?: string) {
  */
 export function useInboxApprovalActions(): ApprovalActions & { busy: boolean } {
   return useApprovalActions(undefined);
+}
+
+/**
+ * Approve an agent's connection proposal with the connection the person just
+ * made for it, outside a component: the OAuth callback page, where a web
+ * sign-in comes back with the new connection's id. The server checks the
+ * connection against the proposal before the run sees its id.
+ */
+export function approveConnectionProposal(requestId: string, connectionId: string): Promise<void> {
+  return createApprovalActions({ client: reliantClient, queryClient }).approve(requestId, { connectionId });
 }
 
 /**

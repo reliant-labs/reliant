@@ -23,9 +23,10 @@ import (
 // below: whether thinking is elided, and which tools are always sent whole.
 
 // stubThinking is whether a STUB read elides THINKING and REDACTED_THINKING
-// content. Nothing in the web app or the TS SDK renders either (the redacted
-// kind is provider ciphertext), so eliding them costs no display. Owner
-// decision 3, 2026-11-08: elide.
+// content. Nothing in the web app or the TS SDK renders either, so eliding
+// them costs no display. Owner decision 3, 2026-11-08: elide. (The redacted
+// kind is provider ciphertext, sent blank in every mode, so it is never
+// elided: there is nothing to fetch.)
 const stubThinking = true
 
 // alwaysFullBodyTools are the tools whose input and result a STUB read sends
@@ -119,7 +120,8 @@ func isTerminalToolCallStatus(s *reliantv1.ToolCallStatus) bool {
 //   - TOOL_RESULT: content over StubBodyThreshold of a tool that is not
 //     always-full becomes a StubResultPreviewBytes preview, marked truncated
 //     as any preview is, so copy and export fetch the whole of it.
-//   - THINKING, REDACTED_THINKING: content is left out (stubThinking).
+//   - THINKING: content is left out (stubThinking). REDACTED_THINKING
+//     content is already blank in FULL, so nothing is elided.
 //
 // Each elided block carries body_elided and body_size.
 func applyStub(b *db.MessageContentBlock, p *reliantv1.ContentBlock, opts *Options) {
@@ -156,12 +158,14 @@ func applyStub(b *db.MessageContentBlock, p *reliantv1.ContentBlock, opts *Optio
 
 	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING,
 		reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING:
-		if !stubThinking || b.Content == nil || *b.Content == "" {
+		// p, not b: a REDACTED_THINKING block's content is already blank
+		// (db.ProviderOnlyContent), so it has no body to elide or fetch.
+		if !stubThinking || p.Content == nil || *p.Content == "" {
 			return
 		}
+		p.BodySize = ptr.Of(int64(len(*p.Content)))
 		p.Content = nil
 		p.BodyElided = ptr.Of(true)
-		p.BodySize = ptr.Of(int64(len(*b.Content)))
 	}
 }
 

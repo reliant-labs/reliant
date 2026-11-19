@@ -94,7 +94,10 @@ service ForgeService {
           id: "release"
         }
         env: "env"
-        detail: ["project_id", "expected_current_release"]
+        detail: [
+          "project_id",
+          "expected_current_release"
+        ]
       }
     };
   }
@@ -160,7 +163,10 @@ service ForgeService {
           id: "release_version"
         }
         env: "env"
-        detail: ["project_id", "response.handle"]
+        detail: [
+          "project_id",
+          "response.handle"
+        ]
       }
     };
   }

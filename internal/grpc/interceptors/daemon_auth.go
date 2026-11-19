@@ -84,6 +84,12 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 	}
 	if p.Resource != nil {
 		ctx = context.WithValue(ctx, auth.DaemonIDContextKey, p.Resource.ID)
+		// The org of the machine the token is bound to, when the authority
+		// names it: the gateway records it as the machine's org, which keeps
+		// the machine's project checkouts inside that org.
+		if account.MachineOrgID != "" {
+			ctx = context.WithValue(ctx, auth.DaemonOrgIDContextKey, account.MachineOrgID)
+		}
 	}
 	if p.OrgID != "" {
 		ctx = context.WithValue(ctx, auth.CredentialOrgContextKey, p.OrgID)

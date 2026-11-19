@@ -126,7 +126,7 @@ func TestNotifyLinkReady_NamesTheCredentialOrg(t *testing.T) {
 	rec := &linkArgsRecorder{}
 	svc.AddConnectionListener(rec)
 	conn := newTestConn("u-1", "laptop", nil)
-	conn.orgID, conn.name = "org-b", "My laptop"
+	conn.credentialOrgID, conn.name = "org-b", "My laptop"
 
 	svc.notifyLinkReady(conn)
 
@@ -170,7 +170,7 @@ func linkTestService(t *testing.T) (svc *Service, conn *daemonConnection, link *
 		ListProjectDaemonDetachmentsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemonDetachment, error) {
 			return nil, nil
 		},
-		RecordObservedProjectDaemonFunc: func(_ context.Context, _, _, path string, _ *string) (bool, error) {
+		RecordObservedProjectDaemonInScopeFunc: func(_ context.Context, _, _, path string, _ *string, _ *core.OrgScope) (bool, error) {
 			mu.Lock()
 			upserted = append(upserted, path)
 			mu.Unlock()

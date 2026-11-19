@@ -395,6 +395,13 @@ func MoveProjectOrg(ctx context.Context, db orm.Context, c core.ProjectOrgMoveCo
 		Visibility *string `bun:"visibility"`
 	}
 	if err := db.Bun().NewRaw(moveProjectOrgProjectSQL, move.ProjectID, move.ToOrgID).Scan(ctx, &old); err != nil {
+		switch orm.ConstraintName(err) {
+		case ProjectConstraintOrgUserPathKey, ProjectConstraintOrgUserRemoteURLKey:
+			// Projects are unique per (org, user, path) and (org, user,
+			// remote_url): the owner already has a project at this path,
+			// or of this repository, in the target org.
+			return nil, ErrOrgMoveTargetHasProject
+		}
 		return nil, fmt.Errorf("move the project: %w", err)
 	}
 	if len(old) == 1 && old[0].Visibility != nil && old[0].OrgID != nil {
@@ -749,6 +756,9 @@ func ListProjectTriggersPausedBy(ctx context.Context, db orm.Context, projectID,
 func ResumeTriggerPausedBy(ctx context.Context, db orm.Context, id, reason string, seen time.Time) (bool, error) {
 	res, err := db.Bun().NewRaw(`UPDATE triggers SET enabled = true, paused_reason = NULL, updated_at = NOW()
 WHERE id = ? AND NOT enabled AND paused_reason = ? AND updated_at = ?`, id, reason, seen).Exec(ctx)
+	if err := projectDeletedError(err); errors.Is(err, core.ErrProjectScheduledForDeletion) {
+		return false, err
+	}
 	if err != nil {
 		return false, fmt.Errorf("resume trigger %s: %w", id, err)
 	}

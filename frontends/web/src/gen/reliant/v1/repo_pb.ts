@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/repo.proto.
  */
 export const file_reliant_v1_repo: GenFile = /*@__PURE__*/
-  fileDesc("ChVyZWxpYW50L3YxL3JlcG8ucHJvdG8SCnJlbGlhbnQudjEihwEKBFJlcG8SCgoCaWQYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhUKDXJlbGF0aXZlX3BhdGgYBCABKAkSEgoKcmVtb3RlX3VybBgFIAEoCRISCgpjcmVhdGVkX2F0GAYgASgJEhIKCnVwZGF0ZWRfYXQYByABKAkiPQoURGlzY292ZXJSZXBvc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIRCgltYXhfZGVwdGgYAiABKAUiagoVRGlzY292ZXJSZXBvc1Jlc3BvbnNlEiQKCmRpc2NvdmVyZWQYASADKAsyEC5yZWxpYW50LnYxLlJlcG8SEQoJdHJ1bmNhdGVkGAIgASgIEhgKEHRydW5jYXRlZF9yZWFzb24YAyABKAkiLgoQTGlzdFJlcG9zUmVxdWVzdBIaCgpwcm9qZWN0X2lkGAEgASgJQga6SAPIAQEiNAoRTGlzdFJlcG9zUmVzcG9uc2USHwoFcmVwb3MYASADKAsyEC5yZWxpYW50LnYxLlJlcG8iVwoOQWRkUmVwb1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIVCg1yZWxhdGl2ZV9wYXRoGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBAUIHCgVfbmFtZSIxCg9BZGRSZXBvUmVzcG9uc2USHgoEcmVwbxgBIAEoCzIQLnJlbGlhbnQudjEuUmVwbyIkChFSZW1vdmVSZXBvUmVxdWVzdBIPCgdyZXBvX2lkGAEgASgJIiUKElJlbW92ZVJlcG9SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIigKFUdldFJlcG9HaXRJbmZvUmVxdWVzdBIPCgdyZXBvX2lkGAEgASgJIuABChZHZXRSZXBvR2l0SW5mb1Jlc3BvbnNlEg8KB3JlcG9faWQYASABKAkSFgoOY3VycmVudF9icmFuY2gYAiABKAkSEwoLaGFzX2NoYW5nZXMYAyABKAgSDgoGc3RhdHVzGAQgASgJEhQKDHN0YWdlZF9maWxlcxgFIAMoCRIWCg51bnN0YWdlZF9maWxlcxgGIAMoCRIXCg91bnRyYWNrZWRfZmlsZXMYByADKAkSDQoFYWhlYWQYCCABKAUSDgoGYmVoaW5kGAkgASgFEhIKCnJlbW90ZV91cmwYCiABKAkyiQQKC1JlcG9TZXJ2aWNlElkKDURpc2NvdmVyUmVwb3MSIC5yZWxpYW50LnYxLkRpc2NvdmVyUmVwb3NSZXF1ZXN0GiEucmVsaWFudC52MS5EaXNjb3ZlclJlcG9zUmVzcG9uc2UiA5ACARJKCglMaXN0UmVwb3MSHC5yZWxpYW50LnYxLkxpc3RSZXBvc1JlcXVlc3QaHS5yZWxpYW50LnYxLkxpc3RSZXBvc1Jlc3BvbnNlIgASiQEKB0FkZFJlcG8SGi5yZWxpYW50LnYxLkFkZFJlcG9SZXF1ZXN0GhsucmVsaWFudC52MS5BZGRSZXBvUmVzcG9uc2UiRaK7GEE6PwoDYWRkEiwKBHJlcG8SEHJlc3BvbnNlLnJlcG8uaWQaEnJlc3BvbnNlLnJlcG8ubmFtZSoKcHJvamVjdF9pZBJsCgpSZW1vdmVSZXBvEh0ucmVsaWFudC52MS5SZW1vdmVSZXBvUmVxdWVzdBoeLnJlbGlhbnQudjEuUmVtb3ZlUmVwb1Jlc3BvbnNlIh+iuxgbOhkKBnJlbW92ZRIPCgRyZXBvEgdyZXBvX2lkElkKDkdldFJlcG9HaXRJbmZvEiEucmVsaWFudC52MS5HZXRSZXBvR2l0SW5mb1JlcXVlc3QaIi5yZWxpYW50LnYxLkdldFJlcG9HaXRJbmZvUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("ChVyZWxpYW50L3YxL3JlcG8ucHJvdG8SCnJlbGlhbnQudjEi8wEKBFJlcG8SCgoCaWQYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhUKDXJlbGF0aXZlX3BhdGgYBCABKAkSEgoKcmVtb3RlX3VybBgFIAEoCRISCgpjcmVhdGVkX2F0GAYgASgJEhIKCnVwZGF0ZWRfYXQYByABKAkSLAoKZm9yZ2VfYXBwcxgIIAMoCzIYLnJlbGlhbnQudjEuUmVwb0ZvcmdlQXBwEiIKFWZvcmdlX2FwcHNfc2Nhbm5lZF9hdBgJIAEoCUgAiAEBQhgKFl9mb3JnZV9hcHBzX3NjYW5uZWRfYXQiLQoMUmVwb0ZvcmdlQXBwEgwKBG5hbWUYASABKAkSDwoHc3VicGF0aBgCIAEoCSI9ChREaXNjb3ZlclJlcG9zUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhEKCW1heF9kZXB0aBgCIAEoBSJqChVEaXNjb3ZlclJlcG9zUmVzcG9uc2USJAoKZGlzY292ZXJlZBgBIAMoCzIQLnJlbGlhbnQudjEuUmVwbxIRCgl0cnVuY2F0ZWQYAiABKAgSGAoQdHJ1bmNhdGVkX3JlYXNvbhgDIAEoCSIuChBMaXN0UmVwb3NSZXF1ZXN0EhoKCnByb2plY3RfaWQYASABKAlCBrpIA8gBASI0ChFMaXN0UmVwb3NSZXNwb25zZRIfCgVyZXBvcxgBIAMoCzIQLnJlbGlhbnQudjEuUmVwbyJXCg5BZGRSZXBvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhUKDXJlbGF0aXZlX3BhdGgYAiABKAkSEQoEbmFtZRgDIAEoCUgAiAEBQgcKBV9uYW1lIjEKD0FkZFJlcG9SZXNwb25zZRIeCgRyZXBvGAEgASgLMhAucmVsaWFudC52MS5SZXBvIiQKEVJlbW92ZVJlcG9SZXF1ZXN0Eg8KB3JlcG9faWQYASABKAkiJQoSUmVtb3ZlUmVwb1Jlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiKAoVR2V0UmVwb0dpdEluZm9SZXF1ZXN0Eg8KB3JlcG9faWQYASABKAki4AEKFkdldFJlcG9HaXRJbmZvUmVzcG9uc2USDwoHcmVwb19pZBgBIAEoCRIWCg5jdXJyZW50X2JyYW5jaBgCIAEoCRITCgtoYXNfY2hhbmdlcxgDIAEoCBIOCgZzdGF0dXMYBCABKAkSFAoMc3RhZ2VkX2ZpbGVzGAUgAygJEhYKDnVuc3RhZ2VkX2ZpbGVzGAYgAygJEhcKD3VudHJhY2tlZF9maWxlcxgHIAMoCRINCgVhaGVhZBgIIAEoBRIOCgZiZWhpbmQYCSABKAUSEgoKcmVtb3RlX3VybBgKIAEoCTKJBAoLUmVwb1NlcnZpY2USWQoNRGlzY292ZXJSZXBvcxIgLnJlbGlhbnQudjEuRGlzY292ZXJSZXBvc1JlcXVlc3QaIS5yZWxpYW50LnYxLkRpc2NvdmVyUmVwb3NSZXNwb25zZSIDkAIBEkoKCUxpc3RSZXBvcxIcLnJlbGlhbnQudjEuTGlzdFJlcG9zUmVxdWVzdBodLnJlbGlhbnQudjEuTGlzdFJlcG9zUmVzcG9uc2UiABKJAQoHQWRkUmVwbxIaLnJlbGlhbnQudjEuQWRkUmVwb1JlcXVlc3QaGy5yZWxpYW50LnYxLkFkZFJlcG9SZXNwb25zZSJForsYQTo/CgNhZGQSLAoEcmVwbxIQcmVzcG9uc2UucmVwby5pZBoScmVzcG9uc2UucmVwby5uYW1lKgpwcm9qZWN0X2lkEmwKClJlbW92ZVJlcG8SHS5yZWxpYW50LnYxLlJlbW92ZVJlcG9SZXF1ZXN0Gh4ucmVsaWFudC52MS5SZW1vdmVSZXBvUmVzcG9uc2UiH6K7GBs6GQoGcmVtb3ZlEg8KBHJlcG8SB3JlcG9faWQSWQoOR2V0UmVwb0dpdEluZm8SIS5yZWxpYW50LnYxLkdldFJlcG9HaXRJbmZvUmVxdWVzdBoiLnJlbGlhbnQudjEuR2V0UmVwb0dpdEluZm9SZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * Repo is a git repository nested inside a project.
@@ -63,6 +63,25 @@ export type Repo = Message<"reliant.v1.Repo"> & {
    * @generated from field: string updated_at = 7;
    */
   updatedAt: string;
+
+  /**
+   * forge_apps are the forge apps in this repo: one per forge.yaml a daemon
+   * found in it (depth <= 4 below the repo root), ordered by subpath. Read it
+   * with forge_apps_scanned_at. ListRepos fills it; DiscoverRepos does not.
+   *
+   * @generated from field: repeated reliant.v1.RepoForgeApp forge_apps = 8;
+   */
+  forgeApps: RepoForgeApp[];
+
+  /**
+   * forge_apps_scanned_at (RFC 3339) is when a daemon last finished scanning
+   * this repo for forge apps. Unset means unknown: no daemon has scanned it
+   * yet (one older than the scan never does), and forge_apps, if any, may be
+   * partial. Set with no forge_apps: the repo has no forge app.
+   *
+   * @generated from field: optional string forge_apps_scanned_at = 9;
+   */
+  forgeAppsScannedAt?: string | undefined;
 };
 
 /**
@@ -71,6 +90,36 @@ export type Repo = Message<"reliant.v1.Repo"> & {
  */
 export const RepoSchema: GenMessage<Repo> = /*@__PURE__*/
   messageDesc(file_reliant_v1_repo, 0);
+
+/**
+ * RepoForgeApp is one forge app found in a repo: a forge.yaml and the `name`
+ * it declares, which is the app's name in the project's org.
+ *
+ * @generated from message reliant.v1.RepoForgeApp
+ */
+export type RepoForgeApp = Message<"reliant.v1.RepoForgeApp"> & {
+  /**
+   * name is forge.yaml's `name`.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * subpath is the forge.yaml's directory relative to the repo root,
+   * "/"-separated; "" is the repo root itself.
+   *
+   * @generated from field: string subpath = 2;
+   */
+  subpath: string;
+};
+
+/**
+ * Describes the message reliant.v1.RepoForgeApp.
+ * Use `create(RepoForgeAppSchema)` to create a new message.
+ */
+export const RepoForgeAppSchema: GenMessage<RepoForgeApp> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_repo, 1);
 
 /**
  * @generated from message reliant.v1.DiscoverReposRequest
@@ -94,7 +143,7 @@ export type DiscoverReposRequest = Message<"reliant.v1.DiscoverReposRequest"> & 
  * Use `create(DiscoverReposRequestSchema)` to create a new message.
  */
 export const DiscoverReposRequestSchema: GenMessage<DiscoverReposRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 1);
+  messageDesc(file_reliant_v1_repo, 2);
 
 /**
  * @generated from message reliant.v1.DiscoverReposResponse
@@ -128,7 +177,7 @@ export type DiscoverReposResponse = Message<"reliant.v1.DiscoverReposResponse"> 
  * Use `create(DiscoverReposResponseSchema)` to create a new message.
  */
 export const DiscoverReposResponseSchema: GenMessage<DiscoverReposResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 2);
+  messageDesc(file_reliant_v1_repo, 3);
 
 /**
  * @generated from message reliant.v1.ListReposRequest
@@ -145,7 +194,7 @@ export type ListReposRequest = Message<"reliant.v1.ListReposRequest"> & {
  * Use `create(ListReposRequestSchema)` to create a new message.
  */
 export const ListReposRequestSchema: GenMessage<ListReposRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 3);
+  messageDesc(file_reliant_v1_repo, 4);
 
 /**
  * @generated from message reliant.v1.ListReposResponse
@@ -162,7 +211,7 @@ export type ListReposResponse = Message<"reliant.v1.ListReposResponse"> & {
  * Use `create(ListReposResponseSchema)` to create a new message.
  */
 export const ListReposResponseSchema: GenMessage<ListReposResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 4);
+  messageDesc(file_reliant_v1_repo, 5);
 
 /**
  * @generated from message reliant.v1.AddRepoRequest
@@ -193,7 +242,7 @@ export type AddRepoRequest = Message<"reliant.v1.AddRepoRequest"> & {
  * Use `create(AddRepoRequestSchema)` to create a new message.
  */
 export const AddRepoRequestSchema: GenMessage<AddRepoRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 5);
+  messageDesc(file_reliant_v1_repo, 6);
 
 /**
  * @generated from message reliant.v1.AddRepoResponse
@@ -210,7 +259,7 @@ export type AddRepoResponse = Message<"reliant.v1.AddRepoResponse"> & {
  * Use `create(AddRepoResponseSchema)` to create a new message.
  */
 export const AddRepoResponseSchema: GenMessage<AddRepoResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 6);
+  messageDesc(file_reliant_v1_repo, 7);
 
 /**
  * @generated from message reliant.v1.RemoveRepoRequest
@@ -227,7 +276,7 @@ export type RemoveRepoRequest = Message<"reliant.v1.RemoveRepoRequest"> & {
  * Use `create(RemoveRepoRequestSchema)` to create a new message.
  */
 export const RemoveRepoRequestSchema: GenMessage<RemoveRepoRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 7);
+  messageDesc(file_reliant_v1_repo, 8);
 
 /**
  * @generated from message reliant.v1.RemoveRepoResponse
@@ -244,7 +293,7 @@ export type RemoveRepoResponse = Message<"reliant.v1.RemoveRepoResponse"> & {
  * Use `create(RemoveRepoResponseSchema)` to create a new message.
  */
 export const RemoveRepoResponseSchema: GenMessage<RemoveRepoResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 8);
+  messageDesc(file_reliant_v1_repo, 9);
 
 /**
  * @generated from message reliant.v1.GetRepoGitInfoRequest
@@ -261,7 +310,7 @@ export type GetRepoGitInfoRequest = Message<"reliant.v1.GetRepoGitInfoRequest"> 
  * Use `create(GetRepoGitInfoRequestSchema)` to create a new message.
  */
 export const GetRepoGitInfoRequestSchema: GenMessage<GetRepoGitInfoRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 9);
+  messageDesc(file_reliant_v1_repo, 10);
 
 /**
  * @generated from message reliant.v1.GetRepoGitInfoResponse
@@ -325,7 +374,7 @@ export type GetRepoGitInfoResponse = Message<"reliant.v1.GetRepoGitInfoResponse"
  * Use `create(GetRepoGitInfoResponseSchema)` to create a new message.
  */
 export const GetRepoGitInfoResponseSchema: GenMessage<GetRepoGitInfoResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_repo, 10);
+  messageDesc(file_reliant_v1_repo, 11);
 
 /**
  * RepoService manages git repositories nested inside a project.

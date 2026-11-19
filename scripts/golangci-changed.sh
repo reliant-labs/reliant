@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# golangci-changed.sh [--base <rev>] [--plan]   (task ci:golangci -- ...)
+# golangci-changed.sh [--base <rev>] [--plan] [--in-slot]   (task ci:golangci -- ...)
 #
-# golangci-lint over the Go packages the diff <rev>..HEAD changed, reporting
+# golangci-lint over the Go packages the diff from <rev> changed, reporting
 # only findings in the files that diff changed (--new-from-rev --whole-files),
 # with the root .golangci.yml. Whole files, not only changed lines: a linter
 # that reports a block on its first line (forge #1930's nestif grew a block by
@@ -29,16 +29,40 @@
 # in main's Go build cache (ci.yml's go-cache job), so a dependency the diff did
 # not reach is a cache hit rather than a compile.
 #
+# The merge gate (scripts/merge-gate.sh) runs it too, as its golangci phase,
+# with the gate's diff base (owner, 2026-11-18): a finding then fails `task
+# ci:merge` before the queue's job ejects the PR. One script, so the two
+# cannot disagree on the selection, the config or the release.
+#
+# The diff is the working tree against <rev>, untracked .go files included,
+# which is what golangci-lint's --new-from-rev itself reads; on a clean
+# checkout (CI, the queue) that is exactly <rev>..HEAD.
+#
+# Which golangci-lint: the pinned forge's templates.GolangciLintVersion, read
+# from the forge module's source the way the setup action reads it, or
+# GOLANGCI_LINT_VERSION when set. A golangci-lint on PATH that reports another
+# release fails the script (exit 2) and names the install command: a
+# different release reports different findings (v2.14.0 turned months-old
+# lines red), so a local pass would not predict the queue's.
+#
+# golangci-lint's machine-wide lock: without a flag, a second golangci-lint
+# anywhere on the machine (another agent's forge lint, an editor) makes it
+# exit 3 after five seconds, "parallel golangci-lint is running". So it waits
+# for the lock (--allow-serial-runners), or, with --in-slot (a caller holding a
+# heavy slot of its own, which already bounds memory, the lock's reason), drops
+# it (--allow-parallel-runners), as forge lint does. Neither changes a finding.
+#
 # --base defaults to the merge base with origin/main. --plan prints the
 # packages and exits; nothing is loaded.
 set -euo pipefail
 
-base="" plan=0
+base="" plan=0 lock=--allow-serial-runners
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) base="${2:?--base needs a revision}"; shift 2 ;;
     --base=*) base="${1#--base=}"; shift ;;
     --plan) plan=1; shift ;;
+    --in-slot) lock=--allow-parallel-runners; shift ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     *) echo "golangci-changed: unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -54,8 +78,8 @@ git cat-file -e "${base}^{commit}" 2>/dev/null || { echo "golangci-changed: base
 # Every discovery step's output is captured and its exit status checked before
 # it is read: a step that fails (a process substitution's status is lost) would
 # otherwise read as an empty scope and pass with "nothing to lint".
-changed="$(git diff --name-only --diff-filter=ACMR "$base" HEAD -- '*.go')" ||
-  { echo "golangci-changed: git diff ${base} HEAD failed" >&2; exit 2; }
+changed="$(git diff --name-only --diff-filter=ACMR "$base" -- '*.go' && git ls-files --others --exclude-standard -- '*.go')" ||
+  { echo "golangci-changed: git diff ${base} failed" >&2; exit 2; }
 scope=""
 if [ -n "$changed" ]; then
   scope="$(printf '%s\n' "$changed" | scripts/lint-scope.sh)" ||
@@ -87,6 +111,21 @@ echo "golangci-changed: ${#pkgs[@]} changed package(s) since ${base}:"
 printf '  %s\n' "${pkgs[@]}"
 [ "$plan" -eq 0 ] || exit 0
 
-command -v golangci-lint >/dev/null || { echo "golangci-changed: golangci-lint is not on PATH (CI: the setup action's golangci input)" >&2; exit 2; }
-golangci-lint version
-GOFLAGS="${GOFLAGS:+${GOFLAGS} }-trimpath" exec golangci-lint run --new-from-rev="$base" --whole-files "${pkgs[@]}"
+pin="${GOLANGCI_LINT_VERSION:-}"
+if [ -z "$pin" ]; then
+  # As the setup action's "Read the golangci-lint pin" step reads it.
+  fdir="$(go mod download -json github.com/reliant-labs/forge | jq -r .Dir)" ||
+    { echo "golangci-changed: cannot locate the pinned forge module to read its golangci-lint pin" >&2; exit 2; }
+  pin="$(sed -n 's/^const GolangciLintVersion = "v\([0-9][0-9.]*\)"$/\1/p' "${fdir}/internal/templates/toolversions.go" 2>/dev/null)"
+  [ -n "$pin" ] || { echo "golangci-changed: no GolangciLintVersion in ${fdir}/internal/templates/toolversions.go (the pinned forge moved it?)" >&2; exit 2; }
+fi
+pin="${pin#v}"
+install="go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v${pin}"
+command -v golangci-lint >/dev/null || { echo "golangci-changed: golangci-lint is not on PATH; install the pinned v${pin}: ${install} (CI: the setup action's golangci input)" >&2; exit 2; }
+ver="$(golangci-lint version 2>&1)" || true
+echo "$ver"
+case "$ver" in
+  *"has version ${pin} "*|*"has version v${pin} "*|*"has version ${pin}") ;;
+  *) echo "golangci-changed: $(command -v golangci-lint) is not golangci-lint ${pin}, the pinned forge's release that the merge queue lints with; install it: ${install}" >&2; exit 2 ;;
+esac
+GOFLAGS="${GOFLAGS:+${GOFLAGS} }-trimpath" exec golangci-lint run "$lock" --new-from-rev="$base" --whole-files "${pkgs[@]}"

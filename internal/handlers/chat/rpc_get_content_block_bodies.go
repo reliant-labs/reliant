@@ -130,9 +130,14 @@ func (s *Service) GetContentBlockBodies(
 
 // contentBlockBody is block's body as a FULL transcript read sends it: input
 // whole, a tool result as its display preview (messageproto.PreviewToolResult)
-// unless full asks for it as stored, everything else as stored.
+// unless full asks for it as stored, provider-only content
+// (db.ProviderOnlyContent) blank even with full, everything else as stored.
 func contentBlockBody(block *db.MessageContentBlock, toolName string, full bool) *pb.ContentBlockBody {
 	body := &pb.ContentBlockBody{BlockId: block.ID, Input: block.ToolInput, Content: block.Content}
+	if block.Content != nil && db.ProviderOnlyContent(block.BlockType) {
+		body.Content = ptr.Of("")
+		return body
+	}
 	if block.Content == nil || full || block.BlockType != pb.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT {
 		return body
 	}

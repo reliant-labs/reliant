@@ -367,6 +367,11 @@ type mcpManageServerResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// manageServerRemovalReason is what a removal through mcp.manage_server logs:
+// the server asked, on behalf of a user's MCP settings change (uninstall,
+// disable, move scope, edit config).
+const manageServerRemovalReason = "manage_server remove (MCP settings change)"
+
 func handleMCPManageServer(ctx context.Context, payload []byte) ([]byte, error) {
 	mgr := mcpMgr()
 	if mgr == nil {
@@ -391,9 +396,9 @@ func handleMCPManageServer(ctx context.Context, payload []byte) ([]byte, error) 
 		}
 	case "remove":
 		if req.ProjectPath != "" {
-			err = mgr.RemoveProjectServer(req.ProjectPath, req.ServerName)
+			err = mgr.RemoveProjectServer(req.ProjectPath, req.ServerName, manageServerRemovalReason)
 		} else {
-			err = mgr.RemoveServer(req.ServerName)
+			err = mgr.RemoveServer(req.ServerName, manageServerRemovalReason)
 		}
 	case "restart":
 		if req.Config == nil {
@@ -403,7 +408,7 @@ func handleMCPManageServer(ctx context.Context, payload []byte) ([]byte, error) 
 			err = mgr.RestartProjectServer(ctx, req.ProjectPath, req.ServerName, *req.Config)
 		} else {
 			// restart = remove + add
-			_ = mgr.RemoveServer(req.ServerName)
+			_ = mgr.RemoveServer(req.ServerName, "manage_server restart")
 			err = mgr.AddServer(ctx, req.ServerName, *req.Config)
 		}
 	default:

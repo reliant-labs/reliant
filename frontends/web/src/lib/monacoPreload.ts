@@ -1,10 +1,11 @@
 /**
  * Should Monaco be warmed at startup for this URL?
  *
- * `main.tsx` preloads Monaco before React mounts, so the editor is warm by the
- * time someone opens a file or the workflow builder. The preload pulls the
- * editor from a CDN (see `monacoManager`), which is multiple megabytes — worth
- * it on a route that will render an editor, pure waste on one that never will.
+ * `main.tsx` prefetches Monaco once the page is idle, so the editor is warm by
+ * the time someone opens a file or the workflow builder. The prefetch loads
+ * the editor's own chunk of this build (see `monacoManager`), which is
+ * multiple megabytes — worth it on a route that will render an editor, pure
+ * waste on one that never will.
  *
  * Two kinds of route are excluded:
  *

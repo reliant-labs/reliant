@@ -25,8 +25,37 @@ and a key that does not render leaves the event FIFO (never superseded). The key
 only groups replacements; `max_running` still bounds the whole pool. "Newest"
 is the newest to enroll.
 
+Priority admission and a per-key running cap (pipeline v2, R3):
+
+```yaml
+concurrency:
+  max_running: 6
+  max_running_per_key: 1
+  key: '{{ trigger.payload.attributes.repository }}#{{ trigger.payload.pull_request.number }}'
+  priority: "'main-red' in trigger.payload.labels ? 10 : 0"
+```
+
+Both are fixed on the event when it enrolls, beside `capacity_key`:
+`capacity_priority` (the evaluated CEL integer; NULL is 0) and
+`capacity_running_key` (the rendered key under `max_running_per_key`; kept apart
+from `capacity_key`, the `waiting: latest` supersede group, so a FIFO workflow
+can cap per key without superseding). The caps themselves are not stored on
+waiting events: each launch passes the policy it resolved now
+(`store.TriggerCapacityLimits`).
+
+The scope admits next the first waiting event in admission order, highest
+priority then oldest `capacity_order`, that its key's cap does not hold, while
+the scope has a free slot (`store.NextAdmissibleTriggerCapacityEvent`); the
+launch guard admits an event only if it is that one, under the scope's lock. An
+event whose key is at its cap is passed over, not blocking the queue behind it.
+A run parked on a provider frees its workflow-wide slot but keeps its key's.
+Without priority or a per-key cap this is exactly the old FIFO head. The
+redriver's per-scope head follows priority, but it cannot know the per-key cap,
+so a capped fire that declines hands the turn to the event the scope admits
+next (`capacityWake.wakeNext`), as a launch already did.
+
 A pool is scoped to user, project and workflow reference. Trigger events queue
-FIFO in the existing `trigger_events` table. Schedule overlap skipping is
+in the existing `trigger_events` table, FIFO unless a priority orders them. Schedule overlap skipping is
 replaced by queueing when a cap is configured. Manual trigger fires also obey
 the cap. This does not yet cap arbitrary interactive chat starts or bounded
 parallel loop iterations.

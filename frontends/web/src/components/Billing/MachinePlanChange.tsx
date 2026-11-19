@@ -11,6 +11,7 @@ import { useActiveOrg } from "@/hooks/useOrgs";
 import { cloudBillingKeys } from "@/hooks/useCloudBillingQueries";
 import { errorReason } from "@/lib/errorReasons";
 import Button from "@/components/forge-ui/button";
+import { settingsPath } from "@/lib/paths";
 
 /**
  * Changing an existing machine subscription's plan (control-plane
@@ -126,6 +127,7 @@ function OrgMachinePlanChange({
   const quote = useQuery({
     queryKey: ["machine-plan-change", orgId, planId],
     queryFn: () => getControlPlaneClient(BillingService).previewMachinePlanChange({ orgId, planId }),
+    enabled: !!orgId,
     retry: false,
     staleTime: 0,
     // A quote binds for ten minutes; refresh it well inside that.
@@ -344,7 +346,7 @@ function Blocked({ q }: { q: PreviewMachinePlanChangeResponse }) {
         </ul>
       )}
       {q.blockingMachines.length > 0 && (
-        <a className="text-sm font-medium text-primary-ink underline-offset-4 hover:underline" href="/settings/machines">
+        <a className="text-sm font-medium text-primary-ink underline-offset-4 hover:underline" href={settingsPath("machines")}>
           Resize machines
         </a>
       )}

@@ -581,3 +581,61 @@ func TestPlaywrightSystemPackagesComeFromTheCache(t *testing.T) {
 		t.Error("web:e2e:run does not install the suite's system packages through scripts/playwright-os-deps.sh")
 	}
 }
+
+// A main run that misses the system-package cache seeds it before the suite
+// runs, so a failing or timed-out suite cannot leave the entry unsaved. On
+// 2026-11-18 the responsive leg timed out inside the mirror install on a
+// runner image with no entry, and since the save came after the suite, every
+// later run on that image missed again (control-plane main-red #2909).
+func TestPlaywrightSystemPackagesAreSavedBeforeTheSuite(t *testing.T) {
+	wf := loadCIWorkflow(t)
+	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
+	pw := wf.job(t, "playwright")
+
+	suiteIdx, installIdx, saveIdx := -1, -1, -1
+	var install ciStep
+	for i, s := range pw.Steps {
+		switch {
+		case strings.Contains(s.Run, "task test:web:e2e"):
+			suiteIdx = i
+		case strings.HasPrefix(strings.TrimSpace(s.Run), "scripts/playwright-os-deps.sh "):
+			installIdx, install = i, s
+		case strings.HasPrefix(s.Uses, "actions/cache/save@") && fmt.Sprint(s.With["path"]) == "~/.cache/playwright-os-deps":
+			saveIdx = i
+		}
+	}
+	if suiteIdx < 0 || installIdx < 0 || saveIdx < 0 {
+		t.Fatalf("playwright job needs an install step, a system-package save and the suite step (install=%d save=%d suite=%d)", installIdx, saveIdx, suiteIdx)
+	}
+	if installIdx >= saveIdx || saveIdx >= suiteIdx {
+		t.Errorf("system packages must be installed, then saved, then the suite run (install=%d save=%d suite=%d)", installIdx, saveIdx, suiteIdx)
+	}
+	if !strings.Contains(install.If, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") {
+		t.Errorf("the install step runs under the PLAYWRIGHT_OS_DEPS_CACHE=off rollback (if %q)", install.If)
+	}
+
+	// The install step's browser list per suite is the suite task's BROWSERS.
+	m := regexp.MustCompile(`matrix\.suite == 'responsive' && '([^']+)' \|\| '([^']+)'`).FindStringSubmatch(install.Run)
+	if m == nil {
+		t.Fatalf("install step must pick browsers with `matrix.suite == 'responsive' && '<list>' || '<list>'`, runs %q", install.Run)
+	}
+	for suite, got := range map[string]string{"responsive": m[1], "desktop": m[2]} {
+		want := readE2ETask(t, tf, "test:web:e2e:"+suite).browsers
+		if !slices.Equal(strings.Fields(got), want) {
+			t.Errorf("install step's %s browsers = %q, want the Taskfile's %v", suite, got, want)
+		}
+	}
+
+	// The responsive leg's budget leaves room for a mirror install on a miss.
+	var timeouts struct {
+		Jobs map[string]struct {
+			TimeoutMinutes string `yaml:"timeout-minutes"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(readRepo(t, ".github/workflows/ci.yml"), &timeouts); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := timeouts.Jobs["playwright"].TimeoutMinutes, "${{ matrix.suite == 'responsive' && 30 || 15 }}"; got != want {
+		t.Errorf("playwright timeout-minutes = %q, want %q", got, want)
+	}
+}

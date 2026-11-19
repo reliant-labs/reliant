@@ -17,6 +17,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
@@ -26,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/hosteduse"
@@ -34,6 +36,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -46,6 +49,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
@@ -64,6 +68,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
+	"github.com/reliant-labs/reliant/internal/workflowcheck"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
@@ -476,6 +481,13 @@ type WorkerToolsFactoryDeps struct {
 	WriteLedger   writeledger.Service
 	CatalogSearch *WorkerCatalogSearch
 	Router        *WorkerDaemonRouter
+	// Membership names a person's org role for propose_connection, which
+	// offers an org-wide connection only to an org owner or admin.
+	Membership *orgs.Resolver
+	// Logger and Config build the daemon registry service the machine label
+	// and pool tools write through (machinePoolAdmin).
+	Logger *slog.Logger
+	Config *config.Config
 }
 
 // NewWorkerToolsFactory builds the factory.
@@ -484,6 +496,17 @@ type WorkerToolsFactoryDeps struct {
 func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	runMachine := toolexec.NewRunMachine(d.Router)
+	// The registry service is a library here, not a mount: the label and
+	// pool tools call its rpcs in-process, as the run's owner. Its
+	// IdleTimeouts is the worker's control plane (nil when self-hosted).
+	registryDeps := daemon_registry.Deps{Logger: d.Logger, Config: d.Config, Repo: repo}
+	if d.Router != nil && d.Router.ControlPlane != nil {
+		registryDeps.IdleTimeouts = d.Router.ControlPlane
+	}
+	registry, err := daemon_registry.New(registryDeps)
+	if err != nil {
+		return nil, err
+	}
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
@@ -518,7 +541,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		ActivationManager:  d.Triggers.Service,
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
-		MachineController: newMachineController(repo, d.Router),
+		MachineController: newMachineController(repo, d.Router, registry),
+		// propose_connection raises its card and reads back the connection
+		// the person made (metadata only, never the credential).
+		ConnectionProposer: newConnectionProposer(repo, d.Membership),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -825,6 +851,50 @@ func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, erro
 	return workflowevent.NewRelay(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue), nil
 }
 
+// WorkflowCheckSyncerDeps is where workflows' checks are recorded, the
+// credential source whose GitHub broker writes them as the App, and the org
+// policies a write is judged by.
+type WorkflowCheckSyncerDeps struct {
+	DB          *db.Repo
+	Credentials *WorkerIntegrationCredentials
+	Policies    *orgpolicy.Resolver
+	// Membership answers whether a check's owner is still a member of its
+	// trigger's org, asked before every write (workflowcheck.ownerMayWrite);
+	// nil is a deployment with no orgs.
+	Membership *orgs.Resolver
+}
+
+// NewWorkflowCheckSyncer writes the GitHub check runs workflows' `check:`
+// blocks declare (workflowcheck): every worker runs one; checks are leased
+// with SKIP LOCKED, so they share the queue. Without the GitHub broker (a
+// deployment with no control plane) every write fails with that reason and
+// is retried, so nothing is written as anyone but the App.
+//
+//forge:root-only worker
+func NewWorkflowCheckSyncer(d WorkflowCheckSyncerDeps) (*workflowcheck.Syncer, error) {
+	var broker workflowcheck.AppBroker
+	if d.Credentials != nil {
+		if cs, ok := d.Credentials.Source.(connauth.Service); ok {
+			if b, ok := cs.Broker(ghdelegated.BrokerID); ok {
+				broker, _ = b.(workflowcheck.AppBroker)
+			}
+		}
+	}
+	svc := workflowcheck.NewInstrumented(workflowcheck.Deps{
+		Store:  d.DB,
+		GitHub: workflowcheck.NewGitHub(workflowcheck.GitHubDeps{Runner: httpaction.NewRunner(netguard.New()), Broker: broker}),
+		RunURL: workflowcheck.HostedRunURL,
+	})
+	policies := d.Policies
+	var membership authz.Membership = authz.NoOrgs{}
+	if d.Membership != nil {
+		membership = d.Membership
+	}
+	return workflowcheck.NewSyncer(svc, func(ctx context.Context) context.Context {
+		return orgpolicy.WithResolver(authz.WithMembership(ctx, membership), policies)
+	}), nil
+}
+
 // AccountUsagePollerDeps is where the polled accounts are kept, and the
 // Temporal client that wakes a user's blocked chats when a poll finds an
 // account serves again.
@@ -1006,6 +1076,70 @@ func (l *LedgerRetention) pass(ctx context.Context, now time.Time) {
 			logging.WarnContext(ctx, "ledger retention: pruning step executions failed", append(attrs, "error", err)...)
 		case res.Runs > 0:
 			logging.InfoContext(ctx, "ledger retention: pruned step executions", attrs...)
+		}
+	}
+}
+
+// The project purge (internal/db/project_schedule.go): a deleted project is
+// hidden at once and purged once its restore window (core.ProjectDeleteWindow)
+// has passed. Every replica runs it: each project is claimed for
+// projectPurgeLease before its batches run, so replicas do not purge the same
+// one at once, and a claim a crashed replica left is taken again after it.
+const (
+	// projectPurgeInterval is how often a pass runs: a project is purged at
+	// most this long after its window ends.
+	projectPurgeInterval = 15 * time.Minute
+	// projectPurgeLease is how long a claim holds a project: the one
+	// db.ProjectPurgeLease names, which an immediate purge's detached batches
+	// stay inside (internal/handlers/project).
+	projectPurgeLease = db.ProjectPurgeLease
+	// projectPurgeBatch bounds the projects a pass purges, and the orphaned
+	// rows per table it sweeps.
+	projectPurgeBatch = 50
+)
+
+// ProjectPurge purges the projects whose scheduled deletion is due, every
+// projectPurgeInterval, until its context ends.
+type ProjectPurge struct {
+	repo *db.Repo
+}
+
+// ProjectPurgeDeps is the repository.
+type ProjectPurgeDeps struct {
+	DB *db.Repo
+}
+
+// NewProjectPurge builds the purge loop.
+//
+//forge:root-only worker
+func NewProjectPurge(d ProjectPurgeDeps) (*ProjectPurge, error) {
+	return &ProjectPurge{repo: d.DB}, nil
+}
+
+// Run runs a pass, then one every projectPurgeInterval, until ctx ends. A
+// purged project's trigger rows go with it; their schedules (paused when the
+// delete paused the triggers) are dropped by the API's startup sync, which
+// removes every schedule whose row is gone.
+func (p *ProjectPurge) Run(ctx context.Context) error {
+	// The line dev-docs/project-delete-rollout.md checks for after a deploy.
+	logging.InfoContext(ctx, "project purge: running", "interval", projectPurgeInterval, "lease", projectPurgeLease)
+	ticker := time.NewTicker(projectPurgeInterval)
+	defer ticker.Stop()
+	for {
+		err := observe.RunRoot(ctx, "worker.project_purge", func(ctx context.Context) error {
+			res, err := p.repo.PurgeDueProjects(ctx, time.Now(), projectPurgeLease, projectPurgeBatch)
+			if res.Purged > 0 || res.Failed > 0 || res.OrphansSwept > 0 {
+				logging.InfoContext(ctx, "project purge: pass done", "purged", res.Purged, "failed", res.Failed, "orphans_swept", res.OrphansSwept)
+			}
+			return err
+		})
+		if err != nil && ctx.Err() == nil {
+			logging.WarnContext(ctx, "project purge: the pass could not list the projects due; the next pass retries", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
 		}
 	}
 }

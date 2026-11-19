@@ -40,6 +40,7 @@
     "labels": [],
     "requested_reviewers": [],
     "requested_teams": [],
+    "author_association": "MEMBER",
     "head": {
       "label": "octocat:fix-save",
       "ref": "fix-save",

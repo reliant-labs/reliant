@@ -257,13 +257,13 @@ func readPlan(ctx context.Context, root, base, file string) (*Plan, error) {
 	if err := json.Unmarshal(b, &fields); err != nil {
 		return nil, err
 	}
-	for _, key := range []string{"schema", "input_digest", "base", "head", "files", "go", "web", "electron", "forge_generate", "docs_generate", "migration_order", "web_demo"} {
+	for _, key := range []string{"schema", "input_digest", "base", "head", "files", "go", "web", "electron", "forge_generate", "docs_generate", "migration_order", "web_demo", "web_build"} {
 		value, ok := fields[key]
 		if !ok || (key != "files" && bytes.Equal(value, []byte("null"))) {
 			return nil, fmt.Errorf("%s: missing plan field %s", file, key)
 		}
 	}
-	for _, key := range []string{"go", "web", "electron", "forge_generate", "docs_generate", "migration_order", "web_demo"} {
+	for _, key := range []string{"go", "web", "electron", "forge_generate", "docs_generate", "migration_order", "web_demo", "web_build"} {
 		var laneFields map[string]json.RawMessage
 		if err := json.Unmarshal(fields[key], &laneFields); err != nil {
 			return nil, err
@@ -326,7 +326,7 @@ func hookCommands(root string, names []string) (map[string][]string, error) {
 
 func failSafe(base, head, why string) *Plan {
 	lf := LaneFull{Full: true, Reasons: []string{why}}
-	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}, MigOrder: MigOrderPlan{LaneFull: lf}, WebDemo: WebDemoPlan{LaneFull: lf}}
+	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}, MigOrder: MigOrderPlan{LaneFull: lf}, WebDemo: WebDemoPlan{LaneFull: lf}, WebBuild: WebBuildPlan{LaneFull: lf}}
 }
 
 func firstLine(s string) string {
@@ -541,6 +541,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 		{laneDocGen, pl.DocGen.LaneFull, "docs generators", nil, nil},
 		{laneMigOrder, pl.MigOrder.LaneFull, "migration order", nil, nil},
 		{laneWebDemo, pl.WebDemo.LaneFull, "forge demo bundle build", nil, nil},
+		{laneWebBuild, pl.WebBuild.LaneFull, "renderer release build", nil, nil},
 	}
 	for _, lp := range lanePlans {
 		if !enabled[lp.l] {
@@ -556,7 +557,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 				}
 				p.f("  - %s\n", r)
 			}
-		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen || lp.l == laneMigOrder || lp.l == laneWebDemo):
+		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen || lp.l == laneMigOrder || lp.l == laneWebDemo || lp.l == laneWebBuild):
 			p.f("\n[%s] skip: nothing it reads changed\n", lp.l)
 		case len(lp.list) == 0:
 			p.f("\n[%s] skip: no test reaches a changed file\n", lp.l)
@@ -706,6 +707,12 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	// `npm run build:demo` writes it; tsc -b is the web type-check's, not this.
 	if enabled[laneWebDemo] && pl.WebDemo.Full {
 		out = append(out, step{name: "forge demo bundle builds", dir: filepath.Join(r.root, "frontends", "web"), env: []string{"WEB_BUILD_TARGET=demo"}, argv: r.heavy(demoBuildArgv())})
+	}
+	// The renderer's release build (WebBuildPlan), as the release gate's
+	// webbuild step builds and verifies it (task build:web:verify, minus its
+	// eslint and the tsc -b the web type-check already runs).
+	if enabled[laneWebBuild] && pl.WebBuild.Full {
+		out = append(out, step{name: "renderer release build", dir: r.root, argv: r.heavy([]string{"scripts/web-release-build.sh"})})
 	}
 	return out
 }

@@ -166,6 +166,7 @@ func ListSharedChats(ctx context.Context, db orm.Context, f core.SharedChatFilte
 		orm.WhereEq(ChatsWithActivityFieldVisibility, string(core.VisibilityOrg)),
 		orm.WhereNotEq(ChatsWithActivityFieldUserID, f.ViewerUserID),
 		orm.WhereNotEq(ChatsWithActivityFieldState, core.ChatStateArchived),
+		whereProjectLive(ChatsWithActivityFieldProjectID),
 	}
 	if f.ProjectID != nil {
 		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldProjectID, *f.ProjectID))
@@ -200,6 +201,7 @@ func ListSharedProjects(ctx context.Context, db orm.Context, f core.SharedProjec
 		orm.WhereEq(ProjectFieldOrgID, f.OrgID),
 		orm.WhereEq(ProjectFieldVisibility, string(core.VisibilityOrg)),
 		orm.WhereNotEq(ProjectFieldUserID, f.ViewerUserID),
+		orm.WhereIsNull(ProjectFieldDeleteAfter),
 		orm.WithOrderBy(ProjectFieldLastActive, orm.Desc),
 		orm.WithOrderBy(ProjectFieldID, orm.Asc),
 		orm.WithLimit(limit),

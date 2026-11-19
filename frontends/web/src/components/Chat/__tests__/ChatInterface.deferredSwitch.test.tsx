@@ -13,7 +13,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoreApi } from "zustand";
 
-const h = vi.hoisted(() => ({ log: [] as string[] }));
+const h = vi.hoisted(() => ({
+  log: [] as string[],
+  /** Resolvers waiting for a view to commit, by its tabId (or "new-chat"). */
+  waiters: new Map<string, () => void>(),
+}));
 
 const store = vi.hoisted(() => ({ current: null as unknown }));
 
@@ -31,22 +35,47 @@ vi.mock("../../../store/chatStoreHooks", async () => {
   };
 });
 
-vi.mock("../ChatContainer", () => ({
-  ChatContainer: ({ tabId }: { tabId: string }) => {
-    h.log.push(`render ${tabId}`);
-    return <div data-chat={tabId} />;
-  },
-}));
+vi.mock("../ChatContainer", async () => {
+  const { useEffect } = await import("react");
+  return {
+    ChatContainer: ({ tabId }: { tabId: string }) => {
+      h.log.push(`render ${tabId}`);
+      useEffect(() => h.waiters.get(tabId)?.(), [tabId]);
+      return <div data-chat={tabId} />;
+    },
+  };
+});
 
-vi.mock("../NewChatView", () => ({ NewChatView: () => <div data-new-chat /> }));
+vi.mock("../NewChatView", async () => {
+  const { useEffect } = await import("react");
+  return {
+    NewChatView: () => {
+      useEffect(() => h.waiters.get("new-chat")?.(), []);
+      return <div data-new-chat />;
+    },
+  };
+});
 
 import { ChatInterface } from "../ChatInterface";
 
 type ActiveStore = StoreApi<{ activeChatId: string | null }>;
 const activeStore = () => store.current as ActiveStore;
 
-/** Lets microtasks and the scheduler's macrotasks run. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+/**
+ * Resolves once the view for `key` has committed. Call it before the switch.
+ *
+ * The deferred chat renders in a transition, on a scheduler macrotask, and a
+ * fixed sleep raced it: under load a stalled event loop ran a 20ms timer
+ * before the scheduler's task, and the test asserted before chat-b rendered.
+ * Awaiting the commit itself has no such window.
+ */
+const committed = (key: string) =>
+  new Promise<void>((resolve) =>
+    h.waiters.set(key, () => {
+      h.waiters.delete(key);
+      resolve();
+    }),
+  );
 
 describe("ChatInterface on a chat switch", () => {
   let root: Root;
@@ -55,6 +84,7 @@ describe("ChatInterface on a chat switch", () => {
 
   beforeEach(async () => {
     h.log.length = 0;
+    h.waiters.clear();
     activeStore().setState({ activeChatId: "chat-a" });
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -73,6 +103,7 @@ describe("ChatInterface on a chat switch", () => {
 
   it("lets a request the click started a few promise hops deep leave before the new chat renders", async () => {
     h.log.length = 0;
+    const shown = committed("chat-b");
 
     // The click: selectChat sets the active chat, then starts the stream,
     // whose fetch is reached only after several awaits.
@@ -82,28 +113,32 @@ describe("ChatInterface on a chat switch", () => {
       h.log.push("fetch");
     })();
 
-    await settle();
+    await shown;
 
-    expect(h.log).toContain("render chat-b");
-    expect(h.log.indexOf("fetch")).toBeLessThan(h.log.indexOf("render chat-b"));
+    // Exact order, asserted at the commit: a fetch that has not left by the
+    // time chat-b renders is missing here, not merely late.
+    expect(h.log).toEqual(["fetch", "render chat-b"]);
     expect(container.querySelector("[data-chat]")?.getAttribute("data-chat")).toBe("chat-b");
   });
 
   it("does not re-render the chat being left while the new one is pending", async () => {
     h.log.length = 0;
+    const shown = committed("chat-b");
     activeStore().setState({ activeChatId: "chat-b" });
-    await settle();
+    await shown;
     expect(h.log).toEqual(["render chat-b"]);
   });
 
   it("shows the active chat at once when there was no chat to keep on screen", async () => {
+    const newChat = committed("new-chat");
     activeStore().setState({ activeChatId: null });
-    await settle();
+    await newChat;
     expect(container.querySelector("[data-new-chat]")).not.toBeNull();
     h.log.length = 0;
 
+    const shown = committed("chat-c");
     activeStore().setState({ activeChatId: "chat-c" });
-    await settle();
+    await shown;
     expect(container.querySelector("[data-chat]")?.getAttribute("data-chat")).toBe("chat-c");
   });
 });

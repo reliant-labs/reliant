@@ -9,6 +9,7 @@ import { openAddProject } from "@/store/addProjectDialogStore";
 import { logger } from "@/lib/logger";
 import { toast } from "@/lib/toast-manager";
 import { useProjects } from "@/hooks/project-queries";
+import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
@@ -20,6 +21,7 @@ import { MoveProjectOrgDialog } from "./projects/MoveProjectOrgDialog";
 import { ProjectMachines } from "./projects/ProjectMachines";
 import { ProjectsTable } from "./projects/ProjectsTable";
 import { projectMatchesQuery, sortProjectsForSettings } from "./projects/projectSource";
+import { projectPath, settingsPath } from "@/lib/paths";
 
 /** Below this many projects a filter box is clutter; above it, scanning is slow. */
 const FILTER_THRESHOLD = 8;
@@ -49,6 +51,12 @@ export function ProjectsSection() {
   const [movingProject, setMovingProject] = useState<Project | null>(null);
   // Moving a project needs a second org to move it to.
   const { canSwitch: canSwitchOrg } = useActiveOrg();
+  // Hiding a project only takes it out of the sidebar: it stays listed here,
+  // marked, with the way back.
+  // Hide/Unhide is offered once the choices have been read: a change saved
+  // before then would write over them.
+  const { prefs: sidebarProjectPrefs, setHidden: setSidebarHidden, writable } = useSidebarProjectPrefs();
+  const sidebarPrefs = { hidden: sidebarProjectPrefs.hidden, setHidden: writable ? setSidebarHidden : undefined };
 
   const sortedProjects = useMemo(
     () => sortProjectsForSettings(projects, currentProject?.id),
@@ -61,7 +69,7 @@ export function ProjectsSection() {
 
   const goToProject = useCallback(
     (projectId: string) => {
-      void navigate({ to: "/project/$projectId", params: { projectId }, search: {} });
+      void navigate({ to: projectPath(projectId), search: {} });
     },
     [navigate],
   );
@@ -204,6 +212,8 @@ export function ProjectsSection() {
                 onRemove={setPendingRemoval}
                 onRename={(project, name) => void renameProject(project, name)}
                 openingProjectId={openingProjectId}
+                hiddenProjectIds={sidebarPrefs.hidden}
+                onSetHidden={sidebarPrefs.setHidden}
               />
             )}
             {visibleProjects.map((project) => <ProjectMachines key={project.id} project={project} />)}
@@ -215,7 +225,7 @@ export function ProjectsSection() {
             project={currentProject}
             onChatOpened={() => goToProject(currentProject.id)}
             onManageWorkspaces={() =>
-              void navigate({ to: "/settings/$section", params: { section: "branches" } })
+              void navigate({ to: settingsPath("branches") })
             }
           />
         )}

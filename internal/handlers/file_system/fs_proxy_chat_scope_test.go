@@ -79,6 +79,15 @@ func (r *shiftingDefaultRouter) ResolveDaemonID(context.Context, string) (string
 	return r.resolves, nil
 }
 
+// PlacementDaemonID places default resolution on the machine it resolves
+// (daemonplacement.Machines), and any machine named on itself.
+func (r *shiftingDefaultRouter) PlacementDaemonID(_ context.Context, _, daemonID string) (string, error) {
+	if daemonID == "" {
+		return r.resolves, nil
+	}
+	return daemonID, nil
+}
+
 // A request left to default resolution is resolved on one machine and must
 // run on THAT machine: its path is that machine's. Sent unpinned, a second
 // resolution could land it — a delete included — on a machine that connected

@@ -102,8 +102,9 @@ function daemon(id: string, status: number, extra: Record<string, unknown> = {})
     daemonId: id,
     status,
     // The control plane's name for the machine; a managed machine's hostname
-    // is its pod's and is never what the UI calls it.
-    name: id,
+    // is its pod's and is never what the UI calls it. Distinct from the id: a
+    // name equal to the id is a placeholder the UI does not show.
+    name: `cloud-${id}`,
     hostname: `ws-ws-${id}`,
     // Cloud rows only: the picker filters the one list by daemon type, and a
     // self-hosted machine is not a clone target.
@@ -210,12 +211,12 @@ describe("first run — suspended-only daemons", () => {
     const clone = await findSettledCloneButton();
     expect(clone).toBeEnabled();
     expect(clone).toHaveTextContent(/queue/i);
-    expect(clone).toHaveTextContent(/machine-b/);
+    expect(clone).toHaveTextContent(/cloud-machine-b/);
   });
 
   it("still offers Resume for the suspended machine", async () => {
     renderFirstRun();
-    expect(await screen.findByRole("button", { name: /Resume machine-b/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Resume cloud-machine-b/ })).toBeInTheDocument();
   });
 });
 
@@ -252,7 +253,7 @@ describe("first run — clone target", () => {
     markMachineGone("ghost");
     renderFirstRun();
     const clone = await findSettledCloneButton();
-    expect(clone).toHaveTextContent(/live/);
+    expect(clone).toHaveTextContent(/cloud-live/);
     expect(clone).not.toHaveTextContent(/ghost/);
   });
 });

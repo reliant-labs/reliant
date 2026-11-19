@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -58,6 +59,18 @@ type Deps struct {
 	// identity) previews those facts as unknown.
 	// forge:optional-dep
 	MoveFacts MoveFacts
+	// Schedules pauses and resumes the Temporal Schedules of the triggers a
+	// project delete pauses and a restore resumes, and removes those of a
+	// purged project's triggers; a sync that fails is retried in the
+	// background (trigger_schedule_retry.go). Nil converges only the rows: a
+	// paused trigger's fires skip on its row until the startup sync
+	// converges it.
+	// forge:optional-dep
+	Schedules TriggerSchedules
+	// Now is the clock a delete's restore window starts from; nil is
+	// time.Now.
+	// forge:optional-dep
+	Now func() time.Time
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -83,6 +96,12 @@ type Service struct {
 	// failed-create cleanup is running (failed_create_cleanup.go), so a
 	// machine that reconnects in a loop runs one at a time.
 	failedCreateCleanups sync.Map
+	// purges tracks the immediate purges whose batches run after their
+	// request returned (rpc_purge_project_now.go startPurge).
+	purges sync.WaitGroup
+	// scheduleRetries retries the trigger schedules a delete, restore or
+	// purge could not converge (trigger_schedule_retry.go).
+	scheduleRetries scheduleRetries
 }
 
 // New creates a new project service instance with the supplied Deps.
@@ -92,6 +111,14 @@ func New(deps Deps) (*Service, error) {
 		return nil, err
 	}
 	return &Service{deps: deps}, nil
+}
+
+// now is Deps.Now, or time.Now when it is nil.
+func (s *Service) now() time.Time {
+	if s.deps.Now != nil {
+		return s.deps.Now()
+	}
+	return time.Now()
 }
 
 // Name returns the service name for logging and registry.

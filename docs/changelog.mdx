@@ -13,6 +13,67 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.24.0" description="November 19, 2026">
+### 2 new features
+
+Every pull request merged since v1.23.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: restyle foundations — type roles, layout and surface tokens, web-styling contract** [#2959](https://github.com/reliant-labs/reliant/pull/2959)
+- **web: calmer side nav — org switcher, one menu, state dots (N1)** [#2961](https://github.com/reliant-labs/reliant/pull/2961)
+
+</Update>
+
+<Update label="v1.23.0" description="November 19, 2026">
+### 2 new features, 4 fixes and 1 other change
+
+Every pull request merged since v1.22.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **machines: bind trigger activations to a machine pool from the agent tools; label machines and manage pools with an approval card** [#2963](https://github.com/reliant-labs/reliant/pull/2963)
+- **machines: reliant daemon start --label declares durable machine labels; reliant machine label and machine pool** [#2964](https://github.com/reliant-labs/reliant/pull/2964)
+
+#### Changed
+
+- **web: reset the global query client between tests; make ForgeEnvPage.liveNoDaemon hermetic** [#2939](https://github.com/reliant-labs/reliant/pull/2939)
+
+#### Fixed
+
+- **chat: never send redacted thinking ciphertext to clients** [#2956](https://github.com/reliant-labs/reliant/pull/2956)
+- **files: browse a chat-less project on a machine that has it, and never name a machine by its id** [#2905](https://github.com/reliant-labs/reliant/pull/2905)
+- **web: a Monaco CDN load failure raises no unhandled rejection** [#2967](https://github.com/reliant-labs/reliant/pull/2967)
+- **projects: retry trigger sync after project delete/restore without a restart** [#2957](https://github.com/reliant-labs/reliant/pull/2957)
+
+</Update>
+
+<Update label="v1.22.0" description="November 18, 2026">
+### 3 new features, 5 fixes and 2 other changes
+
+Every pull request merged since v1.21.3, grouped by its conventional-commit type.
+
+#### Added
+
+- **cli: reliant project delete deletes a project by id, name or path** [#2874](https://github.com/reliant-labs/reliant/pull/2874)
+- **web: walk a first-time user on the forge site through the existing welcome wizard, then back** [#2866](https://github.com/reliant-labs/reliant/pull/2866)
+- **web: Settings › API tokens lists your CLI logins and revokes one** [#2883](https://github.com/reliant-labs/reliant/pull/2883)
+
+#### Changed
+
+- **worktree: a copied node_modules is the source checkout's install; reinstall when the lockfile differs** [#2858](https://github.com/reliant-labs/reliant/pull/2858)
+- **forge: compare forge's guide and start-here by their rendered text, not a byte count or exact heading** [#2876](https://github.com/reliant-labs/reliant/pull/2876)
+
+#### Fixed
+
+- **prompt: point agent scratch at a persistent per-chat directory, not /tmp** [#2872](https://github.com/reliant-labs/reliant/pull/2872)
+- **workflows: record a tolerated node's workflow-side failure as its failed attempt** [#2877](https://github.com/reliant-labs/reliant/pull/2877)
+- **lint: drop task lint:electron and fmt:electron, which never ran a linter** [#2878](https://github.com/reliant-labs/reliant/pull/2878)
+- **ci: seed the Playwright system-package cache before the suite; responsive leg gets 30 minutes** [#2879](https://github.com/reliant-labs/reliant/pull/2879)
+- **llm: key validation returns fixed, key-free messages with reason codes and logs provider errors only redacted** [#2857](https://github.com/reliant-labs/reliant/pull/2857)
+
+</Update>
+
 <Update label="v1.21.3" description="November 17, 2026">
 ### 5 fixes and 1 other change
 

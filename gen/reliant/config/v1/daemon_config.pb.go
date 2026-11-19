@@ -208,8 +208,17 @@ type DaemonConfig struct {
 	EgressUserBurst         int32 `protobuf:"varint,25,opt,name=egress_user_burst,json=egressUserBurst,proto3" json:"egress_user_burst,omitempty"`
 	EgressUserMaxConcurrent int32 `protobuf:"varint,26,opt,name=egress_user_max_concurrent,json=egressUserMaxConcurrent,proto3" json:"egress_user_max_concurrent,omitempty"`
 	EgressHostMaxConcurrent int32 `protobuf:"varint,27,opt,name=egress_host_max_concurrent,json=egressHostMaxConcurrent,proto3" json:"egress_host_max_concurrent,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Durable labels this machine declares, each "key=value" (a short slug on
+	// each side). The daemon sends them on every registration and the server
+	// merges them into the machine's labels: each key is set to its value,
+	// labels not named here are left alone. Labels decide machine-pool
+	// membership, so a box started with pool=pipeline joins the pipeline pool
+	// when it first connects. `reliant daemon start --label k=v` (repeatable,
+	// or comma-separated) replaces this list; the flag is registered by hand
+	// because a generated flag for a repeated field takes only its last use.
+	Labels        []string `protobuf:"bytes,31,rep,name=labels,proto3" json:"labels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonConfig) Reset() {
@@ -438,6 +447,13 @@ func (x *DaemonConfig) GetEgressHostMaxConcurrent() int32 {
 	return 0
 }
 
+func (x *DaemonConfig) GetLabels() []string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
 // DaemonStatusConfig is `reliant daemon status`'s config.
 type DaemonStatusConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -630,7 +646,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xf6$\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\x98&\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -694,7 +710,9 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x1aegress_user_max_concurrent\x18\x1a \x01(\x05B\x8f\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x83\x01\n" +
 	")RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT*VEgress calls this daemon may have in flight (0: default 32; managed daemons: 6, fixed)R\x17egressUserMaxConcurrent\x12\xe6\x01\n" +
 	"\x1aegress_host_max_concurrent\x18\x1b \x01(\x05B\xa8\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x9c\x01\n" +
-	")RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT*oEgress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)R\x17egressHostMaxConcurrent:\x1c\xca\xc1\x18\x18\n" +
+	")RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT*oEgress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)R\x17egressHostMaxConcurrent\x12\x9f\x01\n" +
+	"\x06labels\x18\x1f \x03(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
+	"\x15RELIANT_DAEMON_LABELS*hComma-separated key=value durable labels this machine declares (merged into its labels on every connect)R\x06labels:\x1c\xca\xc1\x18\x18\n" +
 	"\areliant\x12\x06daemon\x12\x05start\"x\n" +
 	"\x12DaemonStatusConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +

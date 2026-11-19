@@ -29,6 +29,16 @@ import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 
+// The org-markers test runs with a control plane, so the org scope follows the
+// active org store (lib/orgScope); every other test runs without one.
+const cp = vi.hoisted(() => ({ on: false }));
+vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/config")>()),
+  get hasControlPlane() {
+    return cp.on;
+  },
+}));
+
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
 const listCatalogIntegrations = vi.fn();
@@ -507,7 +517,8 @@ describe("StepPalette: searching", () => {
       });
     });
     listCatalogIntegrations.mockResolvedValue(integrationsPage([listing("github"), listing("slack")]));
-    useActiveOrgStore.setState({ userId: "u1", chosenId: "org-a", effectiveId: "org-a" });
+    cp.on = true;
+    useActiveOrgStore.setState({ userId: "u1", chosenId: "org-a", effectiveId: "org-a", resolved: true });
     try {
       renderPalette();
       await waitFor(() => expect(within(optionNamed("GitHub")).queryByTestId("palette-not-allowed")).not.toBeNull());
@@ -518,7 +529,8 @@ describe("StepPalette: searching", () => {
       expect(within(optionNamed("GitHub")).queryByTestId("palette-not-allowed")).toBeNull();
       expect(listIntegrations).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-b" }));
     } finally {
-      useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null });
+      cp.on = false;
+      useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false });
     }
   });
 

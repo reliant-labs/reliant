@@ -64,12 +64,13 @@ import {
   useDashboardVersions,
   useStarDashboard,
 } from "@/hooks/dashboard-queries";
-import { useAlertHistory, useObservabilityOrg, usePanelQuery, useReleases, useServiceOverview } from "@/hooks/observability-queries";
+import { panelRead, useAlertHistory, useObservabilityOrg, usePanelQuery, useReleases, useServiceOverview } from "@/hooks/observability-queries";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard, DashboardSection, ObsScope, Panel } from "@/services/controlPlane/observability/types";
 import { bucketLabel, dashboardDefaultRange, RANGE_LABELS, RANGE_PRESETS, rangeForBucket, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RangeCapNote } from "../RangeCapNote";
 import { cn } from "@/lib/utils";
 
 import { ENV_ALL, PLATFORM_SCOPE_LABEL } from "../../Console/envScope";
@@ -81,13 +82,13 @@ import { ObsAsOf, ObsError } from "../ObsStates";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
 import { ViewerFilters, ViewOptions } from "./ViewerControls";
-import { displayTitle, isTabOf, type DashboardHub, type HubTab } from "./dashboardHubs";
+import { displayTitle, drillTarget, isTabOf, type DashboardHub, type HubTab } from "./dashboardHubs";
 import { OrganizationCostsView } from "./OrganizationCostsView";
 import { OrganizationUsageView } from "./OrganizationUsageView";
 import { OrganizationBillingView } from "./OrganizationBillingView";
 import { LLMUsageView } from "./LLMUsageView";
 import { useNearViewport } from "./useNearViewport";
-import { drawsSqlFigures, panelGroups, sqlTrendPanel, toggledHidden, visiblePanel, viewerQuery } from "./viewerModel";
+import { drawsSqlFigures, panelGroups, sqlSubtitlePanel, sqlTrendPanel, subtitleOf, toggledHidden, visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
   COMPARE_LABELS,
@@ -127,6 +128,18 @@ import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
 import { DataPanelBody, type PanelDataContext } from "./DataPanel";
+import { AttentionPanel, type WatchedFigure } from "./AttentionPanel";
+import { cardRead } from "./cardRead";
+
+/** A panel card's element id: the anchor a drill link (panel.drill.panel) scrolls to. */
+export const panelAnchor = (panelId: string) => `panel-${panelId}`;
+
+/** The figures an attention panel watches — its list, else every figure that declares display.good. */
+function watchedBy(spec: Dashboard, panel: Panel): Panel[] {
+  const ids = panel.attention?.watch;
+  const cards = ids?.length ? ids.flatMap((id) => spec.panels.filter((p) => p.id === id)) : spec.panels.filter((p) => p.kind !== "attention" && !!p.display?.good);
+  return [...cards, ...(panel.attention?.figures ?? [])];
+}
 import { isDeliveryKind, type DeliveryPanelContext } from "./DeliveryPanels";
 import { browseParams } from "./dataPanelModel";
 import type { DataSearch } from "../../Data/dataUrl-model";
@@ -368,6 +381,12 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
     },
   };
 
+  // panel.drill: where a panel's detail lives, a dashboard of the same project,
+  // opened on the range and comparison this one shows (its defaults included,
+  // so a 30-day figure drills to 30 days, not to the target's own default)
+  // and at the named panel.
+  const drillHrefOf = (panel: Panel): string | null =>
+    panel.drill ? hrefs.dashboard(drillTarget(dashRef, panel.drill.dashboard, hub), { range, compare, refresh: search.refresh }) + (panel.drill.panel ? `#${panelAnchor(panel.drill.panel)}` : "") : null;
   const card = (panel: Panel, index: number) => (
           // One panel's bad definition stops at its own cell (PanelErrorBoundary).
           <PanelErrorBoundary
@@ -380,6 +399,16 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
             panel={panel}
             dashboardId={spec.id}
             queryPanel={viewerQuery(spec, panel, search).panel}
+            drillHrefOf={drillHrefOf}
+            watched={
+              panel.kind === "attention"
+                ? watchedBy(spec, panel).map((p) => {
+                    // Read as its card reads it: the same panel and services, so the same data and cache entry.
+                    const q = viewerQuery(spec, p, search);
+                    return { panel: q.panel, services: q.services };
+                  })
+                : undefined
+            }
             layout={
               layout
                 ? {
@@ -1207,11 +1236,17 @@ function DashboardPanelCard({
   links,
   menu,
   layout,
+  drillHrefOf,
+  watched,
 }: {
   panel: Panel;
   /** Names the panel's reads in control-plane's query_log (Forge-Panel). */
   dashboardId: string;
   queryPanel: Panel;
+  /** Where a panel's detail lives (panel.drill). */
+  drillHrefOf?: (panel: Panel) => string | null;
+  /** An attention panel's watched figures, as their cards query them. */
+  watched?: WatchedFigure[];
   scope: ObsScope | null;
   dataContext?: PanelDataContext;
   /** What a delivery-kind panel (release_health, promotions, delivery) reads. */
@@ -1230,8 +1265,10 @@ function DashboardPanelCard({
   // window shorter than that span: it would return one bucket. Widen it to the
   // smallest range holding two, and say so under the title; the other panels
   // stay on the dashboard's range.
-  const widening = queryPanel.minStep ? rangeForBucket(rangeOfCard, queryPanel.minStep) : null;
-  const range = widening?.range ?? rangeOfCard;
+  // Needs attention reads its watched figures through cardRead too, so a
+  // figure there and its own card ask the same thing.
+  const read = cardRead(rangeOfCard, queryPanel, target);
+  const range = read.range;
   // A panel reads only once it is near the viewport: twenty panels do not all queue at mount.
   const [bodyRef, near] = useNearViewport();
   const rawQuery = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery, enabled: near, dashboardId });
@@ -1243,11 +1280,9 @@ function DashboardPanelCard({
   const comparable =
     (panel.kind === "line" || panel.kind === "number" || (panel.kind === "sql" && drawsSqlFigures(queryPanel, rawQuery.data))) &&
     (target.mode === "period" || target.mode === "release");
-  const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
   const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
-    offsetKey,
-    offsetMs:
-      target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
+    offsetKey: read.compare?.offsetKey ?? "",
+    offsetMs: read.compare?.offsetMs,
     refetchInterval: refreshEvery,
     enabled: comparable && near,
     dashboardId,
@@ -1256,12 +1291,31 @@ function DashboardPanelCard({
   const trendPanel = useMemo(() => sqlTrendPanel(queryPanel), [queryPanel]);
   const trendQuery = usePanelQuery(scope, range, trendPanel ?? queryPanel, services, [], {
     refetchInterval: refreshEvery,
-    enabled: !!trendPanel && near && drawsSqlFigures(queryPanel, rawQuery.data),
+    // A bar list's trend is a sparkline per row.
+    enabled: !!trendPanel && near && (drawsSqlFigures(queryPanel, rawQuery.data) || queryPanel.display?.style === "barlist"),
     // Labelled like the figure's own read (Forge-Panel: <dashboard>/<panel>.trend), so query_log names the sparkline's statement too.
     dashboardId,
   });
+  // A sql panel's subtitle ("since 14 Nov"): its subtitleSql's first cell, over the same window.
+  const subtitlePanel = useMemo(() => sqlSubtitlePanel(queryPanel), [queryPanel]);
+  const subtitleQuery = usePanelQuery(scope, range, subtitlePanel ?? queryPanel, services, [], {
+    refetchInterval: refreshEvery,
+    enabled: !!subtitlePanel && near,
+    // Forge-Panel: <dashboard>/<panel>.subtitle in query_log.
+    dashboardId,
+  });
+  const subtitle = subtitlePanel ? subtitleOf(subtitleQuery.data) : null;
   const span = spanOf(panel);
-  const offsetSec = target.mode === "release" || target.mode === "period" ? Math.round(target.offsetMs / 1000) : 0;
+  // The chart shifts the comparison by what the read went back by (cardRead), not the dashboard's range.
+  const offsetSec = read.compare ? Math.round(read.compare.shiftMs / 1000) : 0;
+  const drillHref = drillHrefOf?.(panel) ?? null;
+  // Opened from another dashboard's drill link to this panel: bring it into
+  // view once it is laid out (the router's own hash scroll runs before the
+  // dashboard has loaded).
+  useEffect(() => {
+    const anchor = panelAnchor(panel.id);
+    if (window.location.hash === `#${anchor}`) document.getElementById(anchor)?.scrollIntoView({ block: "start" });
+  }, [panel.id]);
   return (
     <Card
       padding="none"
@@ -1271,6 +1325,7 @@ function DashboardPanelCard({
         layout?.dragging && "opacity-50"
       )}
       style={{ ["--span" as string]: String(span), ["--span-md" as string]: String(Math.min(span, 2)) }}
+      id={panelAnchor(panel.id)}
       data-testid={`dashboard-panel-${panel.id}`}
       data-kind={panel.kind}
       draggable={!!layout}
@@ -1295,15 +1350,33 @@ function DashboardPanelCard({
           )}
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium text-ink">{panel.title || panel.id}</h2>
+            {subtitle && (
+              <p className="truncate text-xs text-ink-muted" data-testid={`dashboard-panel-subtitle-${panel.id}`}>
+                {subtitle}
+              </p>
+            )}
             {query.data && <ObsAsOf updatedAt={query.dataUpdatedAt} className="mt-0.5" />}
             {panel.description && <p className="truncate text-xs text-ink-muted" title={panel.description}>{panel.description}</p>}
-            {widening?.widened && (
+            {panelRunsQuery(queryPanel.kind) && (
+              <RangeCapNote range={range} read={panelRead(queryPanel)} subject={queryPanel.signal === "logs" ? "Logs are" : "Traces are"} testId={`dashboard-panel-capped-${panel.id}`} />
+            )}
+            {read.widened && (
               <p className="truncate text-xs text-warning-ink" data-testid={`dashboard-panel-widened-${panel.id}`} title={`This panel groups by a ${bucketLabel(queryPanel.minStep)} bucket, so it shows ${RANGE_LABELS[range].toLowerCase()} instead of ${RANGE_LABELS[rangeOfCard].toLowerCase()}.`}>
                 Window smaller than this panel&apos;s {bucketLabel(queryPanel.minStep)} bucket: showing {RANGE_LABELS[range].toLowerCase()}
               </p>
             )}
           </div>
         </div>
+        {drillHref && !layout && (
+          <Link
+            href={drillHref}
+            className="no-color ml-auto mt-0.5 inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-xs text-ink-muted hover:text-ink"
+            data-testid={`dashboard-panel-drill-${panel.id}`}
+          >
+            {panel.drill?.label ?? "Details"}
+            <ArrowRight className="h-3 w-3" aria-hidden="true" />
+          </Link>
+        )}
         {layout ? (
           <div className="flex shrink-0 items-center gap-0.5" data-testid={`dashboard-panel-layout-${panel.id}`}>
             <button type="button" className={ICON_BUTTON} aria-label={`Move ${panel.title} earlier`} disabled={layout.index === 0} onClick={() => layout.onMove(layout.index - 1)}>
@@ -1337,6 +1410,25 @@ function DashboardPanelCard({
         )}
       </div>
       <div ref={bodyRef} className="px-4 pb-4 pt-2">
+        {panel.kind === "attention" ? (
+          <AttentionPanel
+            panel={panel}
+            watched={watched ?? []}
+            scope={scope}
+            dashboardId={dashboardId}
+            enabled={near}
+            drillHref={(p) => drillHrefOf?.(p) ?? null}
+            compare={
+              target.mode === "release" || target.mode === "period"
+                ? {
+                    label: target.mode === "release" ? target.label : "previous period",
+                    // Each figure as its own card reads it: its widened range and its comparison.
+                    readOf: (p) => cardRead(rangeOfCard, p, target),
+                  }
+                : null
+            }
+          />
+        ) : (
         <DataPanelBody
           context={near ? dataContext : undefined}
           delivery={near ? delivery : undefined}
@@ -1347,6 +1439,7 @@ function DashboardPanelCard({
           bands={panel.kind === "line" ? bands : undefined}
           links={links}
         />
+        )}
       </div>
     </Card>
   );

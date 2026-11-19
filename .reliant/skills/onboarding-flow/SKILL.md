@@ -39,4 +39,9 @@ ModernApp (`/`, `/project/$projectId`), MobileShell (`/m/*`), and
 
 The forge shell (forge.reliantlabs.io, `forgeShellRoutes.tsx`) has NO
 onboarding at all, by design: `forge login`, claim links and every console link
-forge prints land there. "Why wasn't a forge user onboarded?" starts there.
+forge prints land there, and its guard (`ForgeAuthGuard`) asks for sign-in only.
+Chat/agent onboarding runs when a user first opens the agent side
+(app.reliantlabs.io, "Open in Reliant"); the per-user flag is untouched on the
+forge host. Do not mount `OnboardingGate` or `/onboarding` there (#2866 did and
+was reverted: new forge accounts were sent through "Choose your machine" before
+/apps). "Why wasn't a forge user onboarded?" starts there.

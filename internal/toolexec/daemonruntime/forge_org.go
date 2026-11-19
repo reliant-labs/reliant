@@ -50,7 +50,7 @@ func validateForgeOrg(orgID string) error {
 	return nil
 }
 
-// bindForgeOrg is the one step every forge handler takes with its payload's
+// bindForgeOrg is the step every forge handler takes with its payload's
 // org_id: check it and put it on the context the forge child runs under.
 func bindForgeOrg(ctx context.Context, orgID string) (context.Context, error) {
 	orgID = strings.TrimSpace(orgID)
@@ -58,4 +58,58 @@ func bindForgeOrg(ctx context.Context, orgID string) (context.Context, error) {
 		return ctx, err
 	}
 	return withForgeOrg(ctx, orgID), nil
+}
+
+// ForgeProjectEnv names the Reliant project a forge invocation runs for, set
+// beside ForgeOrgEnv. forge records it as the source of a release cut, deploy
+// attempt or release record (control-plane
+// docs/design/unified-shell-and-projects.md §8.1), so an app links back to the
+// project its code is in. A chat's shell commands carry the same variable
+// (tools.ProjectIDEnv). Nothing requires it.
+const ForgeProjectEnv = "RELIANT_PROJECT_ID"
+
+type forgeProjectKey struct{}
+
+// withForgeProject records the project a forge invocation runs for. ""
+// records nothing.
+func withForgeProject(ctx context.Context, projectID string) context.Context {
+	if projectID = strings.TrimSpace(projectID); projectID == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, forgeProjectKey{}, projectID)
+}
+
+// forgeProjectOf is the project recorded on ctx, or "".
+func forgeProjectOf(ctx context.Context) string {
+	projectID, _ := ctx.Value(forgeProjectKey{}).(string)
+	return projectID
+}
+
+// bindForgeScope is the one step every forge handler takes with its payload's
+// org_id and project_id: check both and put them on the context the forge
+// child runs under. A project id has the shape check an org id has, for the
+// same reason: it lands in a child's environment. "" binds nothing.
+func bindForgeScope(ctx context.Context, orgID, projectID string) (context.Context, error) {
+	ctx, err := bindForgeOrg(ctx, orgID)
+	if err != nil {
+		return ctx, err
+	}
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return ctx, nil
+	}
+	if len(projectID) > 128 || strings.ContainsFunc(projectID, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }) {
+		return ctx, fmt.Errorf("project_id is not a project id")
+	}
+	return withForgeProject(ctx, projectID), nil
+}
+
+// forgeScopeEnv is the environment entries for ctx's org and project, or
+// none.
+func forgeScopeEnv(ctx context.Context) []string {
+	env := forgeOrgEnv(ctx)
+	if projectID := forgeProjectOf(ctx); projectID != "" {
+		env = append(env, ForgeProjectEnv+"="+projectID)
+	}
+	return env
 }

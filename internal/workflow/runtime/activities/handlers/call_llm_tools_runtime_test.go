@@ -444,15 +444,23 @@ func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
 			wantSpawnStop: true,
 		},
 		{
-			// maxSpawnDepth is 1, so a sub-agent cannot spawn at all: its
-			// spawn entries are dropped before reachability is decided. It
-			// therefore has a parent to report to and, by construction, no
-			// children of its own to stop. The entries are declared here
-			// anyway, so this row pins the DEPTH cap rather than an absent
-			// config — if the cap ever rises, spawn_stop follows
-			// canSpawnChildren and this expectation flips with it.
-			name:          "sub-agent cannot spawn at max depth, so has no children to stop",
+			// Spawning nests two levels deep (tools.MaxSpawnDepth), so a
+			// sub-agent the root spawned keeps its spawn entries: it can
+			// message its parent and stop children of its own.
+			name:          "sub-agent at depth 1 can spawn, so can stop its children",
 			spawnDepth:    1,
+			spawnEntries:  []string{"spawn:builtin://agent(general)"},
+			wantSpawnSend: true,
+			wantSpawnStop: true,
+		},
+		{
+			// At max depth a sub-agent cannot spawn at all: its spawn entries
+			// are dropped before reachability is decided. It therefore has a
+			// parent to report to and, by construction, no children of its
+			// own to stop. The entries are declared here anyway, so this row
+			// pins the DEPTH cap rather than an absent config.
+			name:          "sub-agent at max depth cannot spawn, so has no children to stop",
+			spawnDepth:    2,
 			spawnEntries:  []string{"spawn:builtin://agent(general)"},
 			wantSpawnSend: true,
 			wantSpawnStop: false,
@@ -522,8 +530,10 @@ func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
 			}
 			if tc.wantSpawnStop {
 				assert.Contains(t, mockDriver.capturedTools, tools.ToolSpawnStop)
+				assert.Contains(t, mockDriver.capturedTools, tools.ToolSpawn, "an agent that can stop children is offered spawn")
 			} else {
 				assert.NotContains(t, mockDriver.capturedTools, tools.ToolSpawnStop)
+				assert.NotContains(t, mockDriver.capturedTools, tools.ToolSpawn)
 			}
 		})
 	}

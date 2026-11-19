@@ -13,7 +13,7 @@ function OrgMachineReadiness({ orgId, planId, canManage, currentPriceLabel }: { 
   const state = useQuery({
     queryKey: ["machine-pricing-readiness", orgId, planId],
     queryFn: () => getControlPlaneClient(BillingService).getMachinePricingReadiness({ orgId, planId, pricingVersion: "" }),
-    retry: false, staleTime: 30_000,
+    enabled: !!orgId, retry: false, staleTime: 30_000,
   });
   const accept = useMutation({
     mutationFn: (terms: { pricingVersion: string; termsSha256: string }) => getControlPlaneClient(BillingService).acceptNextMachinePricing({ orgId, planId, ...terms }),

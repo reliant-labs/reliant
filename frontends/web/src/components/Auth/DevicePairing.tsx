@@ -13,6 +13,7 @@ import {
   type PendingKind,
   type PendingMachine,
 } from "@/services/controlPlane/pairing";
+import { authPath, oauthDevicePath } from "@/lib/paths";
 
 /**
  * The page a device-code CLI command links to (RFC 8628's verification URI,
@@ -103,8 +104,8 @@ export function DevicePairing() {
       } = await supabase.auth.getSession();
       if (cancelled) return;
       if (!session) {
-        const back = `/oauth/device${window.location.search}`;
-        window.location.href = `/auth?redirect=${encodeURIComponent(back)}`;
+        const back = `${oauthDevicePath()}${window.location.search}`;
+        window.location.href = `${authPath()}?redirect=${encodeURIComponent(back)}`;
         return;
       }
       if (normalizePairingCode(initial).length === 8) void lookUp(initial);

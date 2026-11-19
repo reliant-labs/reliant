@@ -265,7 +265,8 @@ describe("the pivot rules", () => {
     expect(rangeReaching(now - 30 * 60_000, now)).toBe("1h");
     expect(rangeReaching(now - 90 * 60_000, now)).toBe("6h");
     expect(rangeReaching(now - 20 * 3600_000, now)).toBe("24h");
-    expect(rangeReaching(now - 90 * 24 * 3600_000, now)).toBe("7d");
+    expect(rangeReaching(now - 3 * 24 * 3600_000, now)).toBe("7d");
+    expect(rangeReaching(now - 90 * 24 * 3600_000, now)).toBe("30d");
     // No firing time: the hour before now.
     expect(alertRange(null, now)).toBe("1h");
   });

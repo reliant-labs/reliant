@@ -267,6 +267,21 @@ message DaemonRegister {
   int64 commit_time_unix = 15;
   // forge_version is the forge module version linked into the binary.
   string forge_version = 16;
+  // machine_labels are the durable labels the daemon declares for its machine
+  // (`reliant daemon start --label k=v`, or the daemon config's labels). The
+  // server merges them into the machine's labels (daemons.labels, which decide
+  // machine-pool membership) on every registration: each declared key is set
+  // to its value, keys not declared are left alone, and none declared writes
+  // nothing. Unlike labels (9), which describe this connection and vanish
+  // with it, these hold while the machine sleeps. Keys and values are short
+  // slugs; a server refuses an invalid set by not persisting it, never by
+  // refusing the connection. A server that predates the field ignores it.
+  map<string, string> machine_labels = 17;
+  // drains_on_restart_request says the daemon acts on RestartRequested: it
+  // reports DaemonUpgradeStatus on its heartbeat and, where it may restart,
+  // drains before it does. A gateway sends RestartRequested only to a daemon
+  // that set it; false from a daemon that predates the drain protocol.
+  bool drains_on_restart_request = 18;
 }
 
 // ToolResponse contains the result of tool execution. The daemon keeps it until
@@ -336,6 +351,53 @@ message DaemonHeartbeat {
   // watchdog (internal/forkwatch). Unset for a daemon that predates it, or
   // that has not probed yet, which the gateway reads as healthy.
   MachineHealth health = 10;
+  // Where the daemon is in a restart the platform asked for
+  // (RestartRequested). Unset means CURRENT: no restart in progress, or a
+  // daemon that predates the drain protocol.
+  DaemonUpgradeStatus upgrade = 11;
+}
+
+// DaemonUpgradeStatus is the daemon's side of the drain protocol: what it is
+// doing about the newest RestartRequested it received. Sent on every heartbeat
+// while a restart is in progress, and on a heartbeat sent at once whenever it
+// changes.
+message DaemonUpgradeStatus {
+  DaemonUpgradeState state = 1;
+  // When the drain ends, unix milliseconds: the request's deadline, capped
+  // by the daemon's own drain limit (10 minutes). 0 when there is none.
+  int64 deadline_unix_ms = 2;
+  // The request this status answers (RestartRequested.rollout_id and
+  // target_version), echoed so a reader can tell which roll it belongs to.
+  string rollout_id = 3;
+  string target_version = 4;
+  // Tool calls still executing when the status was sent.
+  uint32 tool_calls_running = 5;
+  // Why, in words an operator can read: what the daemon is waiting for, why
+  // it is not restarting itself, or what failed.
+  string detail = 6;
+}
+
+// DaemonUpgradeState is a daemon's state in the drain protocol.
+enum DaemonUpgradeState {
+  // Not reported: read as CURRENT.
+  DAEMON_UPGRADE_STATE_UNSPECIFIED = 0;
+  // No restart in progress.
+  DAEMON_UPGRADE_STATE_CURRENT = 1;
+  // Draining: the daemon refuses new tool requests and lets running ones
+  // finish, until none is left or the deadline passes. A gateway stops
+  // routing new tool requests to it.
+  DAEMON_UPGRADE_STATE_UPDATING = 2;
+  // Drained: nothing of the drained work is running, or the deadline
+  // passed. New tool requests are still refused; the daemon waits to be
+  // restarted (a managed machine's pod is rolled) or restarts itself.
+  DAEMON_UPGRADE_STATE_DRAINED = 3;
+  // The daemon will not restart itself: the machine belongs to a person,
+  // whose app or package manager updates it. It keeps serving. Never blocks
+  // the machine.
+  DAEMON_UPGRADE_STATE_AWAITING_OWNER = 4;
+  // The restart did not happen as asked; detail says why. What the daemon
+  // does next is in detail too.
+  DAEMON_UPGRADE_STATE_FAILED = 5;
 }
 
 // DiskReport is a machine's view of the filesystems that matter to the work
@@ -642,7 +704,57 @@ message ServerMessage {
 
     // The gateway has routed a ToolResponse to its caller. See ToolResultAck.
     ToolResultAck tool_result_ack = 21;
+
+    // The platform asks the daemon to restart, onto a newer build. Sent
+    // only to a daemon whose registration set drains_on_restart_request.
+    // See RestartRequested.
+    RestartRequested restart_requested = 22;
   }
+}
+
+// RestartRequested asks a daemon to restart, normally because a newer build
+// is due (a version floor, a fleet roll). It mirrors GatewayDrain, for the
+// daemon process instead of a gateway replica.
+//
+// A daemon that may restart (a managed machine) drains: it reports UPDATING
+// on its heartbeat (DaemonUpgradeStatus), refuses new tool requests so their
+// senders re-send them after the restart, lets running calls finish until
+// deadline_unix_ms (capped at 10 minutes), reports DRAINED and waits to be
+// restarted. A daemon on a person's machine never blocks it: it reports
+// AWAITING_OWNER and keeps serving, and its owner's updater acts.
+//
+// Repeats are harmless: one for a restart already in progress can only bring
+// its deadline forward.
+message RestartRequested {
+  // The build the daemon should come back on. Informational for a managed
+  // machine, whose image is the version; the target an updater verifies
+  // elsewhere.
+  string target_version = 1;
+  string target_commit = 2;
+  // The target's committer time, unix seconds: the key that orders builds
+  // (DaemonRegister.commit_time_unix).
+  int64 commit_time_unix = 3;
+  RestartUrgency urgency = 4;
+  // When the daemon should restart by, unix milliseconds. 0 means no
+  // deadline of the platform's own: the daemon's drain limit applies.
+  int64 deadline_unix_ms = 5;
+  // The roll this request belongs to, echoed in DaemonUpgradeStatus.
+  string rollout_id = 6;
+  // Why, in words an operator can read.
+  string reason = 7;
+}
+
+// RestartUrgency is how urgent a requested restart is.
+enum RestartUrgency {
+  RESTART_URGENCY_UNSPECIFIED = 0;
+  // Restart at a convenient moment; nothing is forced.
+  RESTART_URGENCY_ROUTINE = 1;
+  // Restart at a quiet point, before the deadline.
+  RESTART_URGENCY_NORMAL = 2;
+  // A security fix: restart at a quiet point, before a short deadline.
+  RESTART_URGENCY_SECURITY = 3;
+  // Restart now, still draining gracefully.
+  RESTART_URGENCY_EMERGENCY = 4;
 }
 
 // GatewayHello is an intentionally-empty marker. See ServerMessage.hello.
@@ -708,7 +820,7 @@ message RegistrationAck {
   bool accepted = 1;
   repeated string requested_project_paths = 2; // "send me config for these"
   string daemon_id = 3; // Gateway-assigned daemon identity (from PAT binding or newly generated)
-  string user_id = 4;   // Gateway-derived user identity (from PAT). Daemon uses for tool execution context.
+  string user_id = 4; // Gateway-derived user identity (from PAT). Daemon uses for tool execution context.
   // account_email is user_id's account email, from the token authority at
   // connect (WhoAmIResponse.account_email). The daemon names it in its
   // connected banner, so a machine signed in as the wrong person is obvious.
@@ -752,7 +864,7 @@ message ProjectConfigSnapshot {
   repeated IndexedScenario scenarios = 10;
 
   // Memory files that must be available to cloud workers.
-  bytes global_memory_md = 11;  // ~/.reliant/reliant.md
+  bytes global_memory_md = 11; // ~/.reliant/reliant.md
   // The project root's memory: the forge framework guide (forge projects
   // only), then {project_path}/reliant.md, then {project_path}/reliant.local.md.
   bytes project_memory_md = 12;
@@ -808,8 +920,8 @@ message ChangedFile {
 // Sent by the daemon when it detects filesystem changes via polling.
 // This is a nudge signal — the frontend re-fetches the full file tree.
 message FileSystemChanged {
-  string project_path = 1;        // Which project directory had changes
-  int64 timestamp_unix_ms = 2;    // When the change was detected
+  string project_path = 1; // Which project directory had changes
+  int64 timestamp_unix_ms = 2; // When the change was detected
 }
 
 // Sent by the daemon when a command dispatched WITHOUT a live RPC waiter
@@ -821,7 +933,7 @@ message FileSystemChanged {
 // the same path FileSystemChanged uses for the success case.
 message DaemonCommandFailed {
   string request_id = 1;
-  string command_type = 2;        // e.g. "git.clone"
+  string command_type = 2; // e.g. "git.clone"
   string error_message = 3;
   int64 timestamp_unix_ms = 4;
 }
@@ -856,14 +968,14 @@ message IndexedScenario {
 // config sync. The frontmatter is parsed into structured fields; the full body
 // is shipped so the skill tool can render it without another round trip.
 message IndexedSkill {
-  string skill_path = 1;       // hierarchical path, e.g. "go/error-handling"
-  string name = 2;             // normalized skill name
-  string description = 3;      // from frontmatter
-  string relative_path = 4;    // SKILL.md path relative to project (or empty for global/builtin)
+  string skill_path = 1; // hierarchical path, e.g. "go/error-handling"
+  string name = 2; // normalized skill name
+  string description = 3; // from frontmatter
+  string relative_path = 4; // SKILL.md path relative to project (or empty for global/builtin)
   string content_hash = 5;
   int64 mtime_unix_ms = 6;
-  string scope = 7;            // project-local | project | claude | codex | agents | global | claude-global | codex-global | builtin
-  string body = 8;             // full markdown body after frontmatter
+  string scope = 7; // project-local | project | claude | codex | agents | global | claude-global | codex-global | builtin
+  string body = 8; // full markdown body after frontmatter
   repeated string allowed_tools = 9;
   map<string, string> metadata = 10;
   bool has_children = 11;
@@ -1030,7 +1142,7 @@ message DaemonCommandResponse {
 // TerminalInputMessage sends raw PTY input bytes (server -> daemon)
 message TerminalInputMessage {
   string session_id = 1;
-  bytes data = 2;           // Raw PTY input bytes
+  bytes data = 2; // Raw PTY input bytes
 }
 
 // TerminalResizeMessage requests a terminal resize (server -> daemon)
@@ -1043,7 +1155,7 @@ message TerminalResizeMessage {
 // TerminalOutputMessage sends raw PTY output bytes (daemon -> server)
 message TerminalOutputMessage {
   string session_id = 1;
-  bytes data = 2;            // Raw PTY output bytes
+  bytes data = 2; // Raw PTY output bytes
 }
 
 // TerminalSessionEvent reports terminal session lifecycle events (daemon -> server)
@@ -1056,8 +1168,8 @@ message TerminalSessionEvent {
     EVENT_TYPE_ERROR = 3;
   }
   EventType event_type = 2;
-  string message = 3;        // Error message or additional info
-  int32 pid = 4;              // PID of the shell process (on created)
+  string message = 3; // Error message or additional info
+  int32 pid = 4; // PID of the shell process (on created)
 }
 
 // TerminalOutputSubscribeMessage subscribes to a terminal session's output
@@ -1075,7 +1187,7 @@ message TerminalOutputSubscribeMessage {
 // ProcessOutputSubscribeMessage subscribes to a process's output (server -> daemon)
 message ProcessOutputSubscribeMessage {
   string process_id = 1;
-  bool new_only = 2;          // If true, skip existing output
+  bool new_only = 2; // If true, skip existing output
 }
 
 // ProcessOutputUnsubscribeMessage unsubscribes from a process's output (server -> daemon)
@@ -1086,9 +1198,9 @@ message ProcessOutputUnsubscribeMessage {
 // ProcessOutputChunkMessage sends a chunk of process output (daemon -> server)
 message ProcessOutputChunkMessage {
   string process_id = 1;
-  string data = 2;            // Output text
-  string stream = 3;          // "stdout" or "stderr"
-  uint64 sequence = 4;        // Sequence number for ordering
-  bool is_complete = 5;       // True when process has exited
-  int32 exit_code = 6;        // Only meaningful when is_complete=true
+  string data = 2; // Output text
+  string stream = 3; // "stdout" or "stderr"
+  uint64 sequence = 4; // Sequence number for ordering
+  bool is_complete = 5; // True when process has exited
+  int32 exit_code = 6; // Only meaningful when is_complete=true
 }

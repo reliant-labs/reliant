@@ -218,8 +218,7 @@ describe("DaemonConnectingGate", () => {
       screen.getByRole("button", { name: /View machine/i }).click();
     });
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/settings/machines/$machineId",
-      params: { machineId: "daemon-abc-123" },
+      to: "/settings/machines/daemon-abc-123",
     });
 
     // Skip and continue is the escape hatch — exits without retrying.

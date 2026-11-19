@@ -100,11 +100,13 @@ func TestPublisher_NamePrecedence(t *testing.T) {
 			wantResolved: "my-laptop.local",
 		},
 		{
-			name:         "falls back to daemon id when both empty",
+			// The id is not a name: the control plane names a machine
+			// that reported none (hostname.GenerateMachineName).
+			name:         "no name when both empty, never the daemon id",
 			daemonName:   "",
 			hostname:     "",
 			daemonID:     "daemon-1",
-			wantResolved: "daemon-1",
+			wantResolved: "",
 		},
 		{
 			name:         "whitespace-only name treated as empty",
@@ -145,9 +147,9 @@ func TestPublisher_OnDaemonConnected_PublishesNothingUntilLinkReady(t *testing.T
 	var evt Event
 	require.NoError(t, json.Unmarshal(js.published[0].data, &evt))
 	require.Equal(t, string(EventTypeConnected), string(evt.Type))
-	// No name/hostname given, so the resolved name falls all the way back
-	// to the daemon id.
-	require.Equal(t, "daemon-1", evt.Name)
+	// No name/hostname given: no name, never the daemon id (the control
+	// plane generates one).
+	require.Empty(t, evt.Name)
 	require.Empty(t, evt.Hostname)
 	// No credential org (a daemon the gateway dialed): the key is omitted,
 	// so the control plane records the person's default org, as before.

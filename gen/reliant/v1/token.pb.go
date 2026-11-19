@@ -885,8 +885,9 @@ type GetGitHubBotTokenRequest struct {
 	// owner and repo name the one repository the token is scoped to.
 	Owner string `protobuf:"bytes,1,opt,name=owner,proto3" json:"owner,omitempty"`
 	Repo  string `protobuf:"bytes,2,opt,name=repo,proto3" json:"repo,omitempty"`
-	// permissions narrows the token: issues, pull_requests, contents -> read or
-	// write. Empty means all three at write.
+	// permissions narrows the token: issues, pull_requests, contents, actions ->
+	// read or write. Empty means issues, pull_requests and contents at write;
+	// actions (cancel and re-run workflow runs) is never in the default.
 	Permissions   map[string]string `protobuf:"bytes,3,rep,name=permissions,proto3" json:"permissions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

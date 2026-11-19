@@ -304,9 +304,9 @@ message GetDaemonResponse {
 }
 
 message ResolveDaemonRequest {
-  string daemon_id = 1;       // Exact daemon ID (highest priority)
-  string daemon_name = 2;     // Match by name
-  string daemon_type = 3;     // "local", "cloud", or "any"
+  string daemon_id = 1; // Exact daemon ID (highest priority)
+  string daemon_name = 2; // Match by name
+  string daemon_type = 3; // "local", "cloud", or "any"
   map<string, string> labels = 4; // Match by labels
 }
 

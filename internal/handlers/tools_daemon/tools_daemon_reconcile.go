@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
 
 // reconcileTotalTimeout bounds the entire per-connect reconcile pass so a
@@ -33,6 +34,11 @@ type projectPathState struct {
 	// RemoteURL is the git remote the project root resolves to, or "" when the
 	// root is not a git repo, has no remote, or could not be resolved.
 	RemoteURL string
+	// ForgeApps are the forge apps the daemon found in each repo it found
+	// (projectfacts.ParseForgeApps), when ForgeAppsKnown: a daemon older
+	// than the forge-app walk reports none, which is unknown, not "none".
+	ForgeApps      projectfacts.ForgeAppsScan
+	ForgeAppsKnown bool
 }
 
 // daemonPathChecker asks a daemon whether a project path exists on its disk and,
@@ -61,7 +67,9 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 	defer cancel()
 
 	check := func(ctx context.Context, path string) (projectPathState, error) {
-		payload, err := json.Marshal(map[string]any{"path": path, "max_depth": 1})
+		// forge_apps: the probe already walks the checkout, so it also
+		// refreshes the forge apps of the repos it finds (projectfacts).
+		payload, err := json.Marshal(map[string]any{"path": path, "max_depth": 1, "forge_apps": true})
 		if err != nil {
 			return projectPathState{}, err
 		}
@@ -79,9 +87,12 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 			// clean "not on this daemon" signal, not a transport failure.
 			return projectPathState{Exists: false}, nil
 		}
+		forgeApps, forgeAppsKnown := projectfacts.ParseForgeApps(resp.GetPayload())
 		return projectPathState{
-			Exists:    true,
-			RemoteURL: rootRemoteFromDiscover(resp.GetPayload()),
+			Exists:         true,
+			RemoteURL:      rootRemoteFromDiscover(resp.GetPayload()),
+			ForgeApps:      forgeApps,
+			ForgeAppsKnown: forgeAppsKnown,
 		}, nil
 	}
 
@@ -103,7 +114,29 @@ func (s *Service) reconcileProjectDaemonsOnConnect(ctx context.Context, conn *da
 // after recording it. It returns the projects absent from the disk and the
 // pass's error (errReconcileInterrupted).
 func (s *Service) reconcileAndWatch(ctx context.Context, conn *daemonConnection, check daemonPathChecker) ([]*db.Project, error) {
-	missing, added, err := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, check)
+	// The machine holds its own org's projects only (its owner's default
+	// org's when its org is not known).
+	scope, known, err := s.machineProjectScope(ctx, conn)
+	if err != nil {
+		// Which projects are the machine's cannot be told: record and
+		// detach nothing rather than act as a machine of no org. The next
+		// connect tries again.
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: skipped; could not tell which organization's projects the machine holds",
+			"error", err, "userID", conn.userID, "daemonID", conn.daemonID, "orgID", conn.orgID)
+		return nil, nil
+	}
+	// Only a known org is authoritative enough to detach anything, and only
+	// while the kill switch allows it (RELIANT_MACHINE_ORG_CLEANUP).
+	detachFor := ""
+	if known {
+		if s.crossOrgCleanupOn() {
+			detachFor = conn.orgID
+		} else {
+			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: other organizations' checkout records are left on the machine (RELIANT_MACHINE_ORG_CLEANUP=off)",
+				"userID", conn.userID, "daemonID", conn.daemonID, "orgID", conn.orgID)
+		}
+	}
+	missing, added, err := reconcileProjectDaemons(ctx, s.deps.Repo, conn.daemonID, conn.userID, scope, detachFor, check)
 	for _, path := range added {
 		if err := s.sendLoadAndWatchProjectConfig(ctx, conn, path, true); err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to start the project config watcher for a recorded checkout",
@@ -124,6 +157,17 @@ func (s *Service) reconcileAndWatch(ctx context.Context, conn *daemonConnection,
 // path the daemon reported absent, and the paths of the checkouts it recorded
 // that the machine had no row for or whose lost clone it settled installed.
 //
+// A machine holds only its org's projects: scope (authz.MachineScopeFor: the
+// machine's org, or its owner's default org when it is not known; nil only in
+// a deployment with no orgs). A project outside it is neither recorded nor
+// missing here. When detachFor names the machine's KNOWN org (and the kill
+// switch allows it), a checkout of a project outside it that the machine
+// already has on record — written before machines kept to their org — is
+// detached: the record only, kept whole in project_daemon_org_cleanups so it
+// can be restored, never the project or the folder (detachOtherOrgCheckouts).
+// Running it on every connect is the one-off cleanup of those rows, and
+// idempotent.
+//
 // It never overwrites what the machine's own row already says without
 // evidence: a directory at the creation path is evidence of a checkout there
 // only when the row has no other path and no clone is landing or failed. A
@@ -135,6 +179,8 @@ func reconcileProjectDaemons(
 	ctx context.Context,
 	database ProjectReconcileStore,
 	daemonID, userID string,
+	scope *core.OrgScope,
+	detachFor string,
 	check daemonPathChecker,
 ) (missing []*db.Project, added []string, _ error) {
 	projects, err := database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1000, Offset: 0})
@@ -164,6 +210,9 @@ func reconcileProjectDaemons(
 			recorded[row.ProjectID] = row
 		}
 	}
+	for _, projectID := range detachOtherOrgCheckouts(ctx, database, daemonID, userID, scope, detachFor, projects, rows) {
+		delete(recorded, projectID)
+	}
 	// What the user detached from this machine stays off it, folder or no
 	// folder. Unreadable, nothing is recorded: a row written here would undo
 	// the user's detach.
@@ -186,9 +235,10 @@ func reconcileProjectDaemons(
 		if project == nil || strings.TrimSpace(project.ID) == "" || strings.TrimSpace(project.Path) == "" {
 			continue
 		}
-		if detached[project.ID] {
+		if detached[project.ID] || !scope.Includes(project.OrgID) {
 			// Neither recorded nor missing: a missing project is restored
-			// onto a pool member (restoreCheckoutsOnConnect).
+			// onto a pool member (restoreCheckoutsOnConnect). Another org's
+			// project is not this machine's to hold, folder or no folder.
 			skipped++
 			continue
 		}
@@ -199,8 +249,10 @@ func reconcileProjectDaemons(
 			// arrived (the machine suspended mid-clone, the notification
 			// was lost) would hold the row in "installing" for good, and
 			// every machine call refused with "still being cloned". Settle
-			// it from the row's OWN path.
-			settled, err := settleStaleInstall(ctx, database, check, prior)
+			// it from the row's OWN path, and only while the project is in
+			// the machine's scope: the probe can take seconds, and an org
+			// move out of it may land meanwhile.
+			settled, err := settleStaleInstall(ctx, database, check, prior, scope)
 			if err != nil {
 				logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: interrupted; a path check met a transport failure, so the pass stops here and is retried once the link is ready",
 					"error", err, "userID", userID, "daemonID", daemonID,
@@ -241,9 +293,11 @@ func reconcileProjectDaemons(
 		}
 
 		// Recorded only if no detach committed since the detachments were
-		// read above: the probe can take seconds, and the write must not undo
-		// a detach that landed meanwhile.
-		recorded, err := database.RecordObservedProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch)
+		// read above, and only if the project is still in the machine's
+		// scope: the probe can take seconds, and the write must not undo a
+		// detach, or follow an org move out of the machine's org, that
+		// landed meanwhile. The org is re-read under the project's row lock.
+		recorded, err := database.RecordObservedProjectDaemonInScope(ctx, project.ID, daemonID, project.Path, project.DefaultBranch, scope)
 		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to upsert project_daemon",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
@@ -257,6 +311,12 @@ func reconcileProjectDaemons(
 		reconciled++
 		if prior == nil {
 			added = append(added, project.Path)
+		}
+
+		// The machine's checkout, freshly walked: its repos' forge apps are
+		// what it just reported (best effort; RecordForgeApps logs).
+		if state.ForgeAppsKnown {
+			projectfacts.RecordForgeApps(ctx, database, project.ID, state.ForgeApps)
 		}
 
 		// Backfill projects.remote_url when it's unset and discover resolved a
@@ -280,6 +340,80 @@ func reconcileProjectDaemons(
 		"userID", userID, "daemonID", daemonID,
 		"reconciled", reconciled, "backfilled", backfilled, "skipped", skipped)
 	return missing, added, nil
+}
+
+// detachOtherOrgCheckouts removes the machine's checkout records of projects
+// outside scope — another org's, recorded on it before machines kept to their
+// org — and returns the projects whose record it removed. detachFor is the
+// machine's known org; "" (not known, or the kill switch is off) removes
+// nothing. Each removed row is recorded whole first, in the same statement
+// (DetachProjectDaemonOfOtherOrg), and logged, so it can be restored
+// (dev-docs/machine-org-rollout.md). Only the record goes: the
+// project, its other machines and the folder on this machine are untouched. A
+// row whose project is not among projects (the owner's listed projects) is
+// left alone: nothing here can tell its org. The list only nominates a row:
+// the delete re-decides under the project's row lock, and keeps a project
+// moved into the machine's org since, or one with no org yet. Idempotent: a
+// removed row is not listed again.
+func detachOtherOrgCheckouts(
+	ctx context.Context,
+	database ProjectReconcileStore,
+	daemonID, userID string,
+	scope *core.OrgScope,
+	detachFor string,
+	projects []*db.Project,
+	rows []*core.ProjectDaemon,
+) []string {
+	if detachFor == "" || scope == nil || len(rows) == 0 {
+		return nil
+	}
+	byID := make(map[string]*db.Project, len(projects))
+	for _, p := range projects {
+		if p != nil {
+			byID[p.ID] = p
+		}
+	}
+	var removed []string
+	for _, row := range rows {
+		if row == nil {
+			continue
+		}
+		project, ok := byID[row.ProjectID]
+		if !ok || scope.Includes(project.OrgID) {
+			continue
+		}
+		// The list read above only nominates the row: the statement
+		// re-reads the project's org under its lock, so a move into the
+		// machine's org since then keeps the checkout.
+		gone, err := database.DetachProjectDaemonOfOtherOrg(ctx, row.ProjectID, daemonID, userID, detachFor)
+		if err != nil {
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to detach another organization's project from the machine; the next connect retries",
+				"error", err, "userID", userID, "daemonID", daemonID, "projectID", row.ProjectID)
+			continue
+		}
+		if !gone {
+			continue
+		}
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: machine-org cleanup detached another organization's project from the machine (the record only, kept in project_daemon_org_cleanups; the folder is untouched)",
+			"userID", userID, "daemonID", daemonID, "projectID", row.ProjectID,
+			"projectOrgID", deref(project.OrgID), "machineOrgID", detachFor, "path", row.Path,
+			"installState", row.InstallState)
+		removed = append(removed, row.ProjectID)
+	}
+	return removed
+}
+
+// crossOrgCleanupOn is the machine-org cleanup's kill switch
+// (RELIANT_MACHINE_ORG_CLEANUP): only "off" stops it.
+func (s *Service) crossOrgCleanupOn() bool {
+	return s.deps.Config.GetMachineOrg().GetCrossOrgCleanup() != "off"
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // staleInstallAfter is how long a clone may stay installing before the
@@ -317,10 +451,11 @@ const staleInstallReason = "the clone did not report back; it may not have finis
 
 // settleStaleInstall settles row, a clone installing since before
 // staleInstallAfter, from the machine's disk at the row's own path: installed
-// when the checkout is there, failed when it is not. It reports whether the
-// row is now installed. A check failure (transport) is returned and settles
-// nothing.
-func settleStaleInstall(ctx context.Context, database ProjectReconcileStore, check daemonPathChecker, row *core.ProjectDaemon) (bool, error) {
+// when the checkout is there, failed when it is not — each only while the
+// project, re-read under its row lock, is still in scope. It reports whether
+// the row is now installed. A check failure (transport) is returned and
+// settles nothing.
+func settleStaleInstall(ctx context.Context, database ProjectReconcileStore, check daemonPathChecker, row *core.ProjectDaemon, scope *core.OrgScope) (bool, error) {
 	if strings.TrimSpace(row.Path) == "" {
 		return false, nil
 	}
@@ -329,31 +464,46 @@ func settleStaleInstall(ctx context.Context, database ProjectReconcileStore, che
 		return false, err
 	}
 	if state.Exists {
-		if err := database.MarkProjectDaemonInstalled(ctx, row.ProjectID, row.DaemonID); err != nil {
+		installed, err := database.MarkProjectDaemonInstalledInScope(ctx, row.ProjectID, row.DaemonID, scope)
+		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to settle a lost clone that landed",
 				"error", err, "daemonID", row.DaemonID, "projectID", row.ProjectID)
+			return false, nil
+		}
+		if !installed {
+			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: a lost clone landed, but the project moved out of the machine's organization or its record is gone; not settled",
+				"daemonID", row.DaemonID, "projectID", row.ProjectID, "path", row.Path)
 			return false, nil
 		}
 		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: settled a clone whose outcome was lost; its checkout is there",
 			"daemonID", row.DaemonID, "projectID", row.ProjectID, "path", row.Path)
 		return true, nil
 	}
-	if err := database.FailProjectDaemonInstall(ctx, row.ProjectID, row.DaemonID, staleInstallReason); err != nil {
+	failed, err := database.FailProjectDaemonInstallInScope(ctx, row.ProjectID, row.DaemonID, staleInstallReason, scope)
+	if err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to settle a lost clone that never landed",
 			"error", err, "daemonID", row.DaemonID, "projectID", row.ProjectID)
 		return false, nil
 	}
-	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: settled a clone whose outcome was lost as failed; nothing is at its path",
-		"daemonID", row.DaemonID, "projectID", row.ProjectID, "path", row.Path)
+	if failed {
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: settled a clone whose outcome was lost as failed; nothing is at its path",
+			"daemonID", row.DaemonID, "projectID", row.ProjectID, "path", row.Path)
+	}
 	return false, nil
 }
 
 // backfillProjectRemoteURL sets project.remote_url to remoteURL, respecting the
-// partial unique index projects_user_remote_url_uniq (user_id, remote_url): if
-// another of the user's projects already holds that remote, it skips and logs
-// rather than colliding. Returns true when the row was updated.
+// partial unique index projects_org_user_remote_url_key (user_id, remote_url,
+// org): if another of the user's projects in the project's org already holds
+// that remote, it skips and logs rather than colliding. A project with no org
+// yet is checked against every org's: the backfill stamps it with one later.
+// Returns true when the row was updated.
 func backfillProjectRemoteURL(ctx context.Context, database ProjectReconcileStore, project *db.Project, remoteURL string) bool {
-	existing, err := database.GetProjectByRemoteURLAndUser(ctx, remoteURL, project.UserID)
+	var sameKey *core.OrgScope
+	if project.OrgID != nil && *project.OrgID != "" {
+		sameKey = &core.OrgScope{OrgID: *project.OrgID}
+	}
+	existing, err := database.GetProjectByRemoteURLAndUserInScope(ctx, remoteURL, project.UserID, sameKey)
 	switch {
 	case err == nil && existing != nil && existing.ID != project.ID:
 		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: skipping remote backfill, remote already claimed by another project",

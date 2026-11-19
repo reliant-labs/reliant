@@ -69,12 +69,15 @@ type DaemonExtra struct {
 // reserved for bound credentials). So a registration naming another user's
 // daemon, or an unbound credential naming a reserved one, writes nothing — in
 // one statement, with no read-then-write window. A reservation is only ever
-// added, never cleared.
+// added, never cleared. The machine's org (d.OrgID) is written when the
+// registration names one and otherwise kept: an unbound login token, or an
+// older control plane, names none and must not forget what a bound
+// credential's connect recorded.
 func UpsertDaemonRegistration(ctx context.Context, db orm.Context, d *core.Daemon, createdAt, now time.Time) (bool, error) {
 	res, err := db.Bun().NewRaw(`
 		INSERT INTO daemons (
-			id, user_id, hostname, platform, capabilities, project_paths, daemon_type, requires_bound_token, created_at, updated_at
-		) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+			id, user_id, hostname, platform, capabilities, project_paths, daemon_type, requires_bound_token, org_id, created_at, updated_at
+		) VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
 		ON CONFLICT(id) DO UPDATE SET
 			hostname = COALESCE(excluded.hostname, daemons.hostname),
 			platform = COALESCE(excluded.platform, daemons.platform),
@@ -82,10 +85,11 @@ func UpsertDaemonRegistration(ctx context.Context, db orm.Context, d *core.Daemo
 			project_paths = COALESCE(excluded.project_paths, daemons.project_paths),
 			daemon_type = COALESCE(excluded.daemon_type, daemons.daemon_type),
 			requires_bound_token = daemons.requires_bound_token OR excluded.requires_bound_token,
+			org_id = COALESCE(excluded.org_id, daemons.org_id),
 			updated_at = excluded.updated_at
 		WHERE daemons.user_id = excluded.user_id
 		  AND (excluded.requires_bound_token OR NOT daemons.requires_bound_token)`,
-		d.ID, d.UserID, d.Hostname, d.Platform, d.Capabilities, d.ProjectPaths, d.DaemonType, d.RequiresBoundToken, createdAt, now,
+		d.ID, d.UserID, d.Hostname, d.Platform, d.Capabilities, d.ProjectPaths, d.DaemonType, d.RequiresBoundToken, nonBlank(d.OrgID), createdAt, now,
 	).Exec(ctx)
 	return rowsWritten(res, err)
 }
@@ -324,6 +328,15 @@ func LockDaemonsAbsentFromSnapshot(ctx context.Context, db orm.Context, userID s
 	return ids, nil
 }
 
+// nonBlank is s, or nil when s names nothing: daemons.org_id is NULL or an
+// org, never ”.
+func nonBlank(s *string) *string {
+	if s == nil || *s == "" {
+		return nil
+	}
+	return s
+}
+
 func daemonToCore(row *Daemon) *core.Daemon {
 	return &core.Daemon{
 		ID:                  row.ID,
@@ -345,6 +358,7 @@ func daemonToCore(row *Daemon) *core.Daemon {
 		Labels:              daemonLabels(row.Labels),
 		IsDefault:           row.IsDefault,
 		RequiresBoundToken:  row.RequiresBoundToken,
+		OrgID:               row.OrgID,
 	}
 }
 

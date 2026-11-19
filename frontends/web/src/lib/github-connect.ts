@@ -26,6 +26,7 @@ import { queryClient } from '@/lib/query-client'
 import { logger } from '@/lib/logger'
 import { connectsThroughSystemBrowser } from '@/lib/connection-oauth'
 import { GITHUB_CREDENTIAL_QUERY_KEY } from '@/hooks/useGitHubCredential'
+import { crossShellReturnTo } from '@/lib/crossShellReturn'
 
 const GITHUB_REPOS_QUERY_KEY = ['onboarding', 'gitRepos'] as const
 
@@ -89,8 +90,10 @@ function relayedErrorMessage(raw: string): string {
   return raw || 'GitHub sign-in did not complete.'
 }
 
+// On the forge site the callback (Reliant's) must bring the user back there:
+// crossShellReturnTo marks the path so it does.
 function currentLocation(): string {
-  return `${window.location.pathname}${window.location.search}`
+  return crossShellReturnTo(`${window.location.pathname}${window.location.search}`)
 }
 
 async function connectOnDesktop(

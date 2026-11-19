@@ -621,6 +621,23 @@ tasks:
           PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
           PLAYWRIGHT_DEPS_CACHE: '{{.PLAYWRIGHT_DEPS_CACHE}}'
 
+  test:web:visual:
+    # The visual-regression baseline (frontends/web/e2e/visual/README.md):
+    # the key surfaces of the production build, against fixture data with a
+    # frozen clock, in dark and light at 1440x900 and dark at 390x844,
+    # compared with the committed e2e/visual/__screenshots__. It runs in the
+    # pinned Playwright Linux image (scripts/visual-docker.sh; needs docker),
+    # so the baselines match on every host. Opt-in: no gate runs it (a
+    # browser and a production build, ~5 minutes on a loaded host). A UI PR
+    # runs it and commits re-captured baselines, so the PR diff is the before
+    # and after. VISUAL_SKIP_BUILD=1 reuses dist/; `-- --update-snapshots`
+    # re-captures; `-- --grep chat` narrows it.
+    desc: "Visual baseline in the pinned Playwright image: key surfaces (dark, light, mobile) vs committed screenshots; -- --update-snapshots re-captures"
+    dir: frontends/web
+    cmds:
+      - '{{if not .VISUAL_SKIP_BUILD}}npm run build:alpha{{end}}'
+      - ./scripts/visual-docker.sh {{.CLI_ARGS}}
+
   web:e2e:run:
     # Playwright against the built renderer, no Go backend, one worker (the
     # tests share one preview server). The runtime config document is the
@@ -727,12 +744,6 @@ tasks:
     cmds:
       - npm run lint
 
-  lint:electron:
-    desc: Lint the electron app
-    dir: electron
-    cmds:
-      - npx eslint src/
-
   proto:lint:
     desc: buf lint the protos, at go.mod's buf pin (forge lint's buf-lint lane runs the same)
     cmds:
@@ -750,12 +761,6 @@ tasks:
     dir: frontends/web
     cmds:
       - npm run lint -- --fix
-
-  fmt:electron:
-    desc: Format the electron app (eslint --fix)
-    dir: electron
-    cmds:
-      - npx eslint src/ --fix
 
   proto:fmt:
     desc: buf format -w the protos, at go.mod's buf pin

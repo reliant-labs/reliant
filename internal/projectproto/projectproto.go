@@ -47,6 +47,15 @@ func Project(p *core.Project) *reliantv1.Project {
 		shared := p.SharedAt.UTC().Format(time.RFC3339)
 		proto.SharedAt = &shared
 	}
+	if p.DeleteAfter != nil {
+		at := p.DeleteAfter.UTC().Format(time.RFC3339)
+		proto.DeleteAfter = &at
+		proto.DeletedByUserId = p.DeletedBy
+		if p.PurgeStartedAt != nil {
+			started := p.PurgeStartedAt.UTC().Format(time.RFC3339)
+			proto.PurgeStartedAt = &started
+		}
+	}
 	return proto
 }
 

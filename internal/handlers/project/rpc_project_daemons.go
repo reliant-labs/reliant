@@ -176,6 +176,35 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 	// A project of an org the user has left is not theirs to put on a
 	// machine any more.
 	projects = authz.Visible(ctx, userID, projects, authz.CanWriteProject)
+	// Nor is a project of another org than the machine's: a machine holds
+	// only its organization's projects. Unknown, nothing is healed —
+	// creating a directory is the irreversible direction.
+	machine, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	if err != nil && !svcerr.IsNotFound(err) {
+		logging.Warn("project-dir-heal: failed to read the machine", "error", err, "userID", userID, "daemonID", daemonID)
+		return nil
+	}
+	if err != nil {
+		// No registry row: a machine of no known org, healed as before
+		// machines had orgs (machineScope of nil is every org's).
+		machine = nil
+	}
+	scope, err := s.machineScope(ctx, userID, machine)
+	if err != nil {
+		logging.Warn("project-dir-heal: could not tell which organization's projects the machine holds", "error", err, "userID", userID, "daemonID", daemonID)
+		return nil
+	}
+	if scope != nil {
+		// A machine of no known org heals only its owner's default org's
+		// projects (machineScope).
+		inScope := projects[:0]
+		for _, project := range projects {
+			if project != nil && scope.Includes(project.OrgID) {
+				inScope = append(inScope, project)
+			}
+		}
+		projects = inScope
+	}
 	if len(projects) == 0 {
 		return nil
 	}
@@ -248,8 +277,9 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		// probed before the mkdir landed — the outcome no longer depends on
 		// which finishes first. Neither ever removes a row, and both write the
 		// same (project, machine, path).
-		// Never over a detach that committed while the mkdir ran.
-		if _, err := s.deps.Repo.RecordObservedProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
+		// Never over a detach that committed while the mkdir ran, nor for a
+		// project moved out of the machine's org meanwhile.
+		if _, err := s.deps.Repo.RecordObservedProjectDaemonInScope(ctx, project.ID, daemonID, project.Path, project.DefaultBranch, scope); err != nil {
 			logging.Warn("project-dir-heal: made the folder but could not record it; the next connect's reconcile records it",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
 		}
@@ -472,6 +502,8 @@ func (s *Service) MarkProjectInstalled(
 	// and a failed read is never the RPC's failure: the install is recorded.
 	projectfacts.LearnForgeName(ctx, s.deps.Router, s.deps.Repo,
 		userID, req.Msg.DaemonId, req.Msg.ProjectId, req.Msg.Path)
+	projectfacts.RefreshForgeApps(ctx, s.deps.Router, s.deps.Repo,
+		userID, req.Msg.DaemonId, req.Msg.ProjectId, req.Msg.Path, 0)
 
 	// Return the resolved row so the client can populate UI state without
 	// a follow-up list call.
@@ -618,16 +650,27 @@ func (s *Service) RemoveProjectFromDaemon(
 		}
 		return nil, err
 	}
-	machine := s.machineName(ctx, req.Msg.DaemonId)
+	if err := s.removeCheckout(ctx, userID, project, pd); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+}
+
+// removeCheckout removes project's checkout pd from its machine and, once
+// the machine has, its project_daemons row: RemoveProjectFromDaemon's work,
+// which a project delete's machine fan-out repeats per machine
+// (project_delete.go). The caller has decided userID may.
+func (s *Service) removeCheckout(ctx context.Context, userID string, project *db.Project, pd *core.ProjectDaemon) error {
+	machine := s.machineName(ctx, pd.DaemonID)
 	// Recorded before it is sent, and holding back workspace creation on the
 	// checkout until the machine says how it ended (checkout_teardown.go).
-	op, done, err := s.beginTeardown(ctx, userID, project, pd, req.Msg.DaemonId, db.CheckoutTeardownRemove, machine)
+	op, done, err := s.beginTeardown(ctx, userID, project, pd, pd.DaemonID, db.CheckoutTeardownRemove, machine)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if done {
 		// A retry of a remove the machine has since finished.
-		return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+		return nil
 	}
 	// The row goes only once the machine has removed the checkout, in the
 	// same step that records the op done (db.Repo.SettleCheckoutTeardown). It
@@ -639,11 +682,8 @@ func (s *Service) RemoveProjectFromDaemon(
 	// its rows when it is removed (db.Repo.RemoveDaemon).
 	var reply teardownReply
 	payload := map[string]string{"path": pd.Path, "op_id": op.ID}
-	sendErr := teardownMachine{s: s, userID: userID, daemonID: req.Msg.DaemonId}.Send(ctx, "git.remove", payload, &reply, teardownTimeoutMs)
-	if err := s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr); err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+	sendErr := teardownMachine{s: s, userID: userID, daemonID: pd.DaemonID}.Send(ctx, "git.remove", payload, &reply, teardownTimeoutMs)
+	return s.settleTeardown(ctx, userID, op, project, machine, reply, sendErr)
 }
 
 // removeFromOfflineMachine is RemoveProjectFromDaemon's refusal for a machine

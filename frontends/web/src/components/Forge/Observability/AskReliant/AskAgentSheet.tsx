@@ -113,10 +113,12 @@ export interface AskAgentSheetProps {
   intent?: AskIntent;
   forgeProject?: string;
   envChoices?: readonly string[];
+  /** Offer "Open in Reliant" (default). Off when the sheet is already open in Reliant. */
+  openInReliant?: boolean;
   onClose: () => void;
 }
 
-export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, envChoices, onClose }: AskAgentSheetProps) {
+export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, envChoices, openInReliant = true, onClose }: AskAgentSheetProps) {
   const { cli, demo } = useAskAgentMode();
   const [intent, setIntent] = useState<AskIntent>(initialIntent ?? "investigate");
   const ctx = { forgeProject, envChoices, intent, cli, host: "external" as const };
@@ -144,6 +146,8 @@ export function AskAgentSheet({ subject, intent: initialIntent, forgeProject, en
               <p className="text-xs text-ink-muted" data-testid="ask-agent-demo-note">
                 These ids are sample data. On your app, the same button fills in yours.
               </p>
+            ) : !openInReliant ? (
+              <span />
             ) : (
               <a
                 href={openInReliantHref(subject, forgeProject)}

@@ -25,7 +25,7 @@ export const SPEC_VERSION = "forge.dashboards/v1";
 /** Where a promoted dashboard lives in the user's repo. */
 export const DASHBOARDS_DIR = "deploy/observability/dashboards";
 
-export const PANEL_KINDS = ["line", "number", "table", "bar", "heatmap", "search", "sql", "postgres", "text", "funnel", "issues", "sessions", "release_health", "promotions", "delivery"] as const;
+export const PANEL_KINDS = ["line", "number", "table", "bar", "heatmap", "search", "sql", "postgres", "text", "funnel", "issues", "sessions", "release_health", "promotions", "delivery", "attention"] as const;
 /** The kinds drawn from the release ledger and release health (dashspec delivery.go): no query, no signal; promotions alone takes a limit. */
 export const DELIVERY_PANEL_KINDS = ["release_health", "promotions", "delivery"] as const;
 export { DRAWN_KINDS, panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
@@ -62,11 +62,20 @@ export const DISPLAY_STYLES: Readonly<Partial<Record<string, readonly string[]>>
   sql: ["line", "area", "bars", "funnel"],
 };
 
-/** The styles forge accepts (dashspec displayStyles): the builder's, and a sql heatmap the console draws. */
+/**
+ * The styles forge accepts (dashspec displayStyles): the builder's, and the
+ * ones the console draws for forge's own dashboards (a sql heatmap, a bar
+ * list, a KPI card).
+ */
 const ACCEPTED_STYLES: Readonly<Partial<Record<string, readonly string[]>>> = {
   ...DISPLAY_STYLES,
-  sql: [...(DISPLAY_STYLES.sql ?? []), "heatmap"],
+  bar: [...(DISPLAY_STYLES.bar ?? []), "barlist"],
+  number: [...(DISPLAY_STYLES.number ?? []), "kpi"],
+  sql: [...(DISPLAY_STYLES.sql ?? []), "heatmap", "barlist", "kpi"],
 };
+
+/** The styles that draw rows or one card, not series: nothing to stack or fold into "Other". */
+const UNFOLDED_STYLES = ["barlist", "kpi"];
 
 /** The styles that draw no figure: no sparkline, no series to colour apart (dashspec). */
 const ONE_COLOUR_STYLES = ["funnel", "heatmap"];
@@ -89,7 +98,7 @@ export function displayOptions(kind: string, style: string): { stack: boolean; h
     stack: (timeSeries && (style === "area" || style === "bars")) || (kind === "bar" && style === "bar"),
     horizontal: kind === "bar" && style === "bar",
     gauge: kind === "number" && style === "gauge",
-    topN: kind === "line" || (kind === "sql" && !ONE_COLOUR_STYLES.includes(style)) || (kind === "bar" && (style === "pie" || style === "donut")),
+    topN: kind === "line" || (kind === "sql" && !ONE_COLOUR_STYLES.includes(style) && !UNFOLDED_STYLES.includes(style)) || (kind === "bar" && (style === "pie" || style === "donut")),
   };
 }
 
@@ -240,6 +249,12 @@ export function panelProblems(panel: Panel): string[] {
     }
     return problems;
   }
+  if (panel.kind === "attention") {
+    attentionProblems(panel, problems);
+    return problems;
+  }
+  if (present(panel.attention)) problems.push("Only an attention panel watches figures.");
+  if (panel.drill && (!panel.drill.dashboard?.trim() || !ID_PATTERN.test(panel.drill.dashboard))) problems.push("A drill link names the id of a dashboard of this project.");
   displayProblems(panel, problems);
   if (has(SELF_CONTAINED_KINDS, panel.kind)) {
     selfContainedProblems(panel, problems);
@@ -329,6 +344,7 @@ const OWN_FIELDS: readonly [keyof Panel, string, string][] = [
   ["sql", "sql", "a ClickHouse statement"],
   ["minStep", "sql", "a minimum step"],
   ["trendSql", "sql", "a sparkline statement"],
+  ["subtitleSql", "sql", "a subtitle statement"],
   ["postgres", "postgres", "a Postgres query"],
 ];
 
@@ -384,6 +400,10 @@ function selfContainedProblems(panel: Panel, problems: string[]) {
       if (present(panel.signal) && !has(SIGNALS, panel.signal)) problems.push(`"${panel.signal}" is not a signal.`);
       statementProblems(panel.sql, problems);
       if (present(panel.minStep) && !SPAN.test(panel.minStep ?? "")) problems.push('The minimum step is a number and s, m, h or d ("1d").');
+      if (present(panel.subtitleSql)) {
+        if (!panel.subtitleSql?.trim()) problems.push("Write the subtitle's statement, or remove it.");
+        else if (bytes(panel.subtitleSql) > MAX_SQL_BYTES) problems.push(`The subtitle's statement is ${bytes(panel.subtitleSql)} bytes, over the ${MAX_SQL_BYTES} a panel may run.`);
+      }
       if (present(panel.trendSql)) {
         if (!panel.trendSql?.trim()) problems.push("Write the sparkline's statement, or remove it.");
         else if (bytes(panel.trendSql) > MAX_SQL_BYTES) problems.push(`The sparkline's statement is ${bytes(panel.trendSql)} bytes, over the ${MAX_SQL_BYTES} a panel may run.`);
@@ -420,10 +440,39 @@ function statementProblems(sql: string | undefined, problems: string[]) {
   else if (bytes(sql) > MAX_SQL_BYTES) problems.push(`The statement is ${bytes(sql)} bytes, over the ${MAX_SQL_BYTES} a panel may run.`);
 }
 
+/** dashspec MaxAttentionFigures. */
+const MAX_ATTENTION_FIGURES = 8;
+
+/** An attention panel's rules (dashspec attentionPanel): no query of its own; its own figures are sql figures that say which way is good. */
+function attentionProblems(panel: Panel, problems: string[]) {
+  if (panel.signal || (panel.series ?? []).length || (panel.where ?? []).length || (panel.groupBy ?? []).length || panel.unit || present(panel.display) || present(panel.sql)) {
+    problems.push("An attention panel reads the figures it watches: it takes no signal, series, filters, group-by, unit, display or statement.");
+  }
+  const attention = panel.attention;
+  if (!attention) return;
+  if (attention.threshold !== undefined && attention.threshold !== 0 && !(attention.threshold > 0 && attention.threshold <= 1)) {
+    problems.push("The threshold is a relative change, a fraction above 0 and at most 1 (0.05 is 5%).");
+  }
+  const figures = attention.figures ?? [];
+  if (figures.length > MAX_ATTENTION_FIGURES) problems.push(`An attention panel reads at most ${MAX_ATTENTION_FIGURES} figures of its own.`);
+  for (const figure of figures) {
+    if (figure.kind !== "sql") problems.push(`"${figure.title || figure.id}": an attention panel's own figure is a sql panel.`);
+    else if (!figure.display?.good) problems.push(`"${figure.title || figure.id}": say which way is good (up or down).`);
+    else for (const problem of panelProblems(figure)) problems.push(`"${figure.title || figure.id}": ${problem}`);
+  }
+}
+
 /** The display rules (dashspec validator.display): a style the kind takes, and only the options that style uses. */
 function displayProblems(panel: Panel, problems: string[]) {
   const display = panel.display;
   if (!display || !present(display)) return;
+  if (panel.kind === "funnel") {
+    // The funnel kind is drawn one way; only its layout is chosen.
+    const { layout, ...rest } = display;
+    if (present(rest)) problems.push("A funnel panel's display takes only its layout.");
+    if (present(layout) && layout !== "steps") problems.push(`"${layout}" is not a funnel layout (steps).`);
+    return;
+  }
   const styles = ACCEPTED_STYLES[panel.kind];
   if (!styles) {
     problems.push(`A ${panel.kind} panel is drawn one way: only line, bar, number and sql panels take a display style.`);
@@ -453,6 +502,19 @@ function displayProblems(panel: Panel, problems: string[]) {
     else if (panel.kind !== "number" && panel.kind !== "sql") problems.push("Only a number or sql panel draws figures to keep exact.");
   }
   if ((style === "pie" || style === "donut") && (panel.series ?? []).length !== 1) problems.push(`A ${style} draws one value per group: it takes exactly one series.`);
+  if (present(display.good)) {
+    if (display.good !== "up" && display.good !== "down") problems.push(`"${display.good}" is not a direction (up or down).`);
+    else if ((panel.kind !== "number" && panel.kind !== "sql") || ONE_COLOUR_STYLES.includes(style) || style === "barlist") problems.push("Only a figure says which way is good: a number panel, or a sql panel drawn as figures.");
+  }
+  if (style !== "barlist") {
+    if (present(display.bar)) problems.push("Only a bar list names the column its bars draw.");
+    if (present(display.share)) problems.push("Only a bar list shows each row's share.");
+  }
+  if (present(display.units) && !UNFOLDED_STYLES.includes(style)) problems.push("Only a bar list or a KPI card gives its columns their own units.");
+  if (present(display.units)) {
+    for (const [column, unit] of Object.entries(display.units ?? {})) if (!has(UNITS, unit) || !unit) problems.push(`${column}: "${unit}" is not a unit.`);
+  }
+  if (present(display.layout) && (display.layout !== "steps" || style !== "funnel")) problems.push("Only a funnel lays its steps out (layout: steps).");
   colourProblems(display, style, problems);
 }
 
@@ -500,6 +562,21 @@ export function dashboardProblems(dashboard: Dashboard): string[] {
     if (ids.has(panel.id)) problems.push(`Two panels share the id "${panel.id}".`);
     ids.add(panel.id);
     for (const problem of panelProblems(panel)) problems.push(`${panel.title || panel.id}: ${problem}`);
+  }
+  // An attention panel watches figures of this dashboard that say which way is good (dashspec attentionTargets).
+  for (const panel of panels.filter((p) => p.kind === "attention")) {
+    const watch = panel.attention?.watch ?? [];
+    if (!watch.length && !(panel.attention?.figures ?? []).length && !panels.some((p) => !!p.display?.good)) {
+      problems.push(`${panel.title || panel.id}: it watches nothing: no figure here says which way is good, and it has none of its own.`);
+    }
+    for (const id of watch) {
+      const target = panels.find((p) => p.id === id);
+      if (!target) problems.push(`${panel.title || panel.id}: there is no panel "${id}" to watch.`);
+      else if (!target.display?.good) problems.push(`${panel.title || panel.id}: "${target.title || id}" does not say which way is good, so its change cannot be judged.`);
+    }
+    for (const figure of panel.attention?.figures ?? []) {
+      if (ids.has(figure.id)) problems.push(`${panel.title || panel.id}: its figure "${figure.id}" repeats a panel's id.`);
+    }
   }
   return problems;
 }
