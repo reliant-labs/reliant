@@ -113,6 +113,10 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 		return refuse("repo must be owner/name, got %q", repoName)
 	}
 	repo := gitpublish.Repo{Owner: owner, Name: name}
+	lease := strings.TrimSpace(model.CelStringValue(args.GetForceWithLease()))
+	if lease != "" && !gitpublish.ValidLeaseSHA(lease) {
+		return refuse("force_with_lease must be the full sha of the commit the branch must still be at, got %q", lease)
+	}
 
 	chat, err := a.repo.GetChat(ctx, rtx.ChatID)
 	if err != nil {
@@ -193,7 +197,7 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 	// 4. The push. The token lives in this payload and nowhere else.
 	push, err := a.push(ctx, machine, gitpublish.PushRequest{
 		Worktree: worktree, RemoteURL: gitpublish.RemoteURL(repo), Branch: decision.Branch,
-		ExpectSHA: prep.HeadSHA, Token: token,
+		ExpectSHA: prep.HeadSHA, ForceWithLease: lease, Token: token,
 	})
 	if err != nil {
 		// The machine may have pushed before it went away: ambiguous.
@@ -201,8 +205,15 @@ func (a *GitPublishActivity) Execute(ctx context.Context, input ActivityInput) (
 		return nil, fmt.Errorf("git_publish: pushing: %w", err)
 	}
 	intent.Settle(ctx, writeledger.PushOutcome{Pushed: push.Pushed, Error: push.Refusal})
+	if lease != "" && !push.LeaseChecked {
+		// A daemon older than force_with_lease made its plain push: never
+		// forced, so no commit was lost, but the lease was not enforced either.
+		logging.WarnContext(ctx, "[GitPublish] The machine's daemon does not know force_with_lease; it pushed without a lease",
+			"stepID", rtx.StepID, "repo", repo.String(), "branch", decision.Branch, "pushed", push.Pushed)
+	}
 	if push.Refusal != "" {
 		out.Refused, out.Refusal = true, push.Refusal
+		out.LeaseRefused, out.RemoteSha = push.LeaseRefused, push.RemoteSHA
 		return out, nil
 	}
 	out.Pushed = push.Pushed

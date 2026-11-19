@@ -353,12 +353,31 @@ and its head must be in the same repository, never a fork. It **never force-push
 commits your checkout lacks, the push is refused, not overwritten. No changes to commit is not an error:
 `pushed` is false and nothing is sent.
 
+The one way to replace a branch is a lease. Set `force_with_lease` to the full sha the remote branch must
+still be at, usually the pull request head your worktree was made from, when your fix merged or rebased it.
+The push is then `git push --force-with-lease=refs/heads/<branch>:<sha>`, one compare-and-swap on the remote:
+it may be a non-fast-forward, but only while the branch is exactly where you left it. If anyone pushed in
+between, or the branch is gone, nothing is pushed and the node is refused with `lease_refused: true`, the
+branch's actual head in `remote_sha`, and both commits named in `refusal`. It is not retried; route on it. Only
+a sha is accepted (never `true`), and every refusal above still applies.
+
+```yaml
+- id: publish
+  type: git_publish
+  args:
+    worktree: "{{ nodes.wt.path }}"
+    repo: "{{ inputs.repo }}"
+    pr_head_of: "{{ inputs.pr }}"
+    force_with_lease: "{{ nodes.pr.head_sha }}"         # the head the worktree was made from
+    message: "{{ nodes.edit.commit_message }}"
+```
+
 The credential is fetched for the one push, travels to your machine in that command and is handed to a single
-git process over a private pipe. It is never in an environment variable, a command line or a file, and never
+git process over a private pipe (after a refused lease, one more reads the branch's head back the same way). It is never in an environment variable, a command line or a file, and never
 reaches a shell. The commit carries `Reliant-Run` and `Reliant-Workflow` trailers, and the push is recorded in
 the write ledger with its sha before it is made, so the `push` and `pull_request.synchronize` events it causes
 are recognized as this run's own (`trigger.origin`). Outputs: `pushed`, `sha`, `branch`, `base_sha`,
-`files_changed`, `insertions`, `deletions`, `refused`, `refusal`.
+`files_changed`, `insertions`, `deletions`, `refused`, `refusal`, `lease_refused`, `remote_sha`.
 
 The push is made as whoever the run writes as. By default that is you, through your own GitHub connection, the same one an `action` node uses. An [automation that writes as the Reliant bot](/automations/overview#who-an-automation-acts-as) pushes with the bot's token for that one repository instead; if that token cannot be had, the push is refused and nothing is pushed, never made as you.
 

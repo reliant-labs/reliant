@@ -229,10 +229,22 @@ credential. Pair it with ` + "`credentials: none`" + ` on the editing shell.
 
 Refused (the node completes with ` + "`refused: true`" + ` and a ` + "`refusal`" + `, it does not fail): the default branch, protected
 branches, ` + "`main`, `master`, `release/*`" + `, names that are not plain branches, branches outside ` + "`allow`" + `, a pull
-request head in a fork. Never forces: a diverged remote is refused. No changes means ` + "`pushed: false`" + ` and no error.
-Outputs: ` + "`pushed`, `sha`, `branch`, `base_sha`, `files_changed`, `insertions`, `deletions`, `refused`, `refusal`" + `. Route on
-them: ` + "`condition: nodes.publish.pushed == true`" + `. The push is recorded in the write ledger with its sha, so its events
+request head in a fork. Never forces unless ` + "`force_with_lease`" + ` (below) names a sha: a diverged remote is refused. No changes
+means ` + "`pushed: false`" + ` and no error. Outputs: ` + "`pushed`, `sha`, `branch`, `base_sha`, `files_changed`, `insertions`, `deletions`, `refused`, `refusal`, `lease_refused`, `remote_sha`" + `.
+Route on them: ` + "`condition: nodes.publish.pushed == true`" + `. The push is recorded in the write ledger with its sha, so its events
 carry ` + "`trigger.origin`" + `. In a scenario, mock the node's outputs like any activity.
+
+To replace a branch you checked out (a fix that merged or rebased a pull request head), name the commit you built on
+in ` + "`force_with_lease`" + `: the full sha the remote branch must still be at. The push may then be a non-fast-forward, as
+` + "`git push --force-with-lease=refs/heads/<branch>:<sha>`" + `: one compare-and-swap on the remote. If someone pushed
+meanwhile (or the branch is gone) nothing is pushed and the node is refused with ` + "`lease_refused: true`" + `, ` + "`remote_sha`" + `
+holding the branch's actual head and both commits named in ` + "`refusal`" + `; it is not retried. Only a sha is accepted, never
+` + "`true`" + `; every other refusal above still applies.
+
+` + "```yaml" + `
+    pr_head_of: "{{ inputs.pr }}"
+    force_with_lease: "{{ nodes.pr.head_sha }}"   # the head the worktree was made from
+` + "```" + `
 
 ### Shells without credentials
 

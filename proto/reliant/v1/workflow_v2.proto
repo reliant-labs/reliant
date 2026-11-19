@@ -815,9 +815,16 @@ message ActionCredential {
 // branch, main, master or release/*, and must match `allow` when one is given.
 // A pull request head (`pr_head_of`) must live in this repository, not a fork.
 // The push is never forced: a remote that has moved on is refused, not
-// overwritten. The credential is fetched for this one push, handed to the
-// machine over its command channel, used by one git process and never written
-// to disk, the environment or a command line.
+// overwritten. The one exception is force_with_lease, which names the exact
+// commit the branch must still be at on the remote: the push then replaces the
+// branch (a rewritten or rebased history is allowed) only if it is still there,
+// as one compare-and-swap on the remote, and is refused naming the commit the
+// branch is at instead when it is not.
+//
+// The credential is fetched for this one push, handed to the machine over its
+// command channel, used by the push's git process (and, after a refused lease,
+// one read of the branch's head) and never written to disk, the environment or
+// a command line.
 //
 // Nothing to commit is not an error: nothing is pushed, pushed is false.
 //
@@ -826,12 +833,13 @@ message ActionCredential {
 // the commit carries Reliant-Run and Reliant-Workflow trailers.
 //
 // Output fields accessible via nodes.<id>.*:
-//   pushed, sha, branch, refused, refusal, files_changed, insertions, deletions, base_sha
+//   pushed, sha, branch, refused, refusal, files_changed, insertions, deletions, base_sha,
+//   lease_refused, remote_sha
 message GitPublishArgs {
   option (node_meta) = {
     node_type: "git_publish"
     display_name: "Publish Branch"
-    description: "Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none"
+    description: "Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes, unless force_with_lease names the exact commit the remote branch must still be at. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none"
     is_structural: false
     category: "git"
     icon: "GitBranch"
@@ -891,6 +899,19 @@ message GitPublishArgs {
     description: "Commit author email when the machine has no git identity. Default: noreply@reliantlabs.io"
     label: "Author email"
     hidden: true
+  }];
+  // ForceWithLease is the full sha of the commit the remote branch must still
+  // be at. Set, the push may replace the branch (a non-fast-forward is allowed)
+  // as git push --force-with-lease=refs/heads/<branch>:<sha> does: one
+  // compare-and-swap on the remote. If the branch has moved, or does not exist,
+  // nothing is pushed and the node is refused with lease_refused and the
+  // branch's actual head in remote_sha. Unset (the default): the push is never
+  // forced. Only an explicit sha is accepted, never `true`: the run must name
+  // the commit it built on, typically the pull request head it checked out.
+  CelString force_with_lease = 9 [(reliant) = {
+    description: "Full sha the remote branch must still be at. Set, the push may replace the branch (non-fast-forward) only if it is still there; otherwise it is refused naming the branch's actual head. Unset: never forced"
+    example: "{{ nodes.pr.head_sha }}"
+    label: "Force with lease"
   }];
 }
 
@@ -2059,6 +2080,13 @@ message GitPublishOutput {
   int32 deletions = 8;
   // BaseSha is the branch head the commit was made on top of.
   string base_sha = 9;
+  // LeaseRefused is true when force_with_lease was set and the remote branch
+  // was not at that commit: nothing was pushed. Refused is true too.
+  bool lease_refused = 10;
+  // RemoteSha is the remote branch's head when a lease was refused, read back
+  // after the refusal; empty when the branch does not exist or could not be
+  // read.
+  string remote_sha = 11;
 }
 
 // CreateWorktreeOutput is the output from the create_worktree activity.
