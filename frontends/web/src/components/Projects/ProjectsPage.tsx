@@ -19,7 +19,7 @@ import { useApps } from "@/hooks/apps-queries";
 import { useProjects } from "@/hooks/project-queries";
 import { isForgeUIEnabled } from "@/lib/forgeFeature";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import { projectPath, projectsPath } from "@/lib/paths";
+import { projectChatsPath, projectsPath } from "@/lib/paths";
 import { isLive } from "@/services/forge/apps";
 
 import { AppsBody } from "../Apps/AppsPage";
@@ -93,7 +93,7 @@ function CodeProjects() {
       </h2>
       <ul className="divide-y divide-border-subtle rounded-xl border border-border">
         {sorted.map((project) => {
-          const href = projectPath(project.id);
+          const href = projectChatsPath(project.id);
           return (
             <li key={project.id}>
               <a
