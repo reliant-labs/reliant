@@ -710,7 +710,9 @@
     font-size: 1rem;
     line-height: 1.6;               /* Better readability */
     font-weight: 400;
-    letter-spacing: -0.011em;
+    /* Normal tracking (restyle v1): a negative step at 13–14px read as
+       cramped and technical. Headings set their own. */
+    letter-spacing: normal;
   }
 
   /* Font family presets override the default --font-sans token. */
