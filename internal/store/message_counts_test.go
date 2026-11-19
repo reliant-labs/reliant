@@ -19,7 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
-// chat_thread_message_counts (migration 20261118210350) is what a chat's
+// chat_thread_message_counts (migration 20261119173231) is what a chat's
 // message totals read: ListMessages' count outside the main thread and the
 // snapshot's chat total. The triggers on messages keep it, so every test here
 // writes through a different writer and then holds the counts to the
@@ -294,7 +294,7 @@ func TestMessageCounts_ReadFromTheCounts(t *testing.T) {
 func installCountsOverExistingMessages(t *testing.T, env *storetest.Env) {
 	t.Helper()
 	ctx := context.Background()
-	migration, err := os.ReadFile("../../db/migrations/20261118210350_chat_thread_message_counts.up.sql")
+	migration, err := os.ReadFile("../../db/migrations/20261119173231_chat_thread_message_counts.up.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

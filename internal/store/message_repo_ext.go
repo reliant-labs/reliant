@@ -330,7 +330,7 @@ func ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, d
 const CountMessagesOutsideThreadSQL = `SELECT count(*) FROM messages WHERE chat_id = ? AND thread_id <> ?`
 
 // chatMessageCountsSQL reads a chat's message counts from
-// chat_thread_message_counts (migration 20261118210350), which triggers on
+// chat_thread_message_counts (migration 20261119173231), which triggers on
 // messages move in the transaction of every message write: whether the chat
 // is still pending (its rows are then only the change since the triggers were
 // installed, not counts), the chat's total, and the count on thread $2. It is
