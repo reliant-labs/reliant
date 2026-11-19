@@ -20,7 +20,7 @@ import (
 // current binary's Migrate over it.
 
 const (
-	beforeLegacyCredentialDrop = 20261119162635 // the newest migration before drop_legacy_credentials
+	beforeLegacyCredentialDrop = 20261119174725 // the newest migration before drop_legacy_credentials
 	beforePlaintextAPIKeyDrop  = 20261119201126 // drop_legacy_credentials
 )
 
@@ -85,7 +85,7 @@ func TestDropLegacyCredentialsAfterTheCopy(t *testing.T) {
 			('k-llm', 'u1', 'openai', '', '\x00'::bytea),
 			('k-marker', 'u1', 'claude', '', '\x00'::bytea),
 			('k-auto', 'u1', 'reliant-automation:d1', '', '\x01'::bytea)`,
-		`INSERT INTO legacy_credential_copy (id, completed_at, created) VALUES (1, now(), 2)`,
+		`INSERT INTO legacy_credential_copy (id, completed_at, created, failed) VALUES (1, '2026-10-20T00:00:00Z', 2, 0)`,
 	} {
 		_, err := raw.Exec(stmt)
 		require.NoError(t, err)
@@ -110,6 +110,28 @@ func TestDropLegacyCredentialsAfterTheCopy(t *testing.T) {
 	}
 	require.NoError(t, rows.Err())
 	require.Equal(t, []string{"k-auto"}, ids, "only the automation token survives")
+}
+
+// The copy writes its marker even when rows failed to copy (counted in failed); those rows
+// exist only in the legacy tables, so the drop refuses until an operator reconciles them.
+func TestDropLegacyCredentialsRefusesWhenTheCopyFailedRows(t *testing.T) {
+	testkit.Slow(t, "builds a database through every migration, then migrates it")
+	t.Parallel()
+	dsn, raw := schemaAt(t, beforeLegacyCredentialDrop)
+	for _, stmt := range []string{
+		`INSERT INTO codex_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, id_token_sealed)
+			VALUES ('x1', 'u1', '\x00'::bytea, '\x00'::bytea, '\x00'::bytea)`,
+		`INSERT INTO legacy_credential_copy (id, completed_at, created, failed) VALUES (1, '2026-10-20T00:00:00Z', 3, 2)`,
+	} {
+		_, err := raw.Exec(stmt)
+		require.NoError(t, err)
+	}
+
+	_, err := migrate(dsn)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "recorded 2 row(s) it failed to copy")
+	require.True(t, tableExists(t, raw, "codex_auth_tokens"), "the refused migration dropped nothing")
+	require.True(t, columnExists(t, raw, "provider_accounts", "legacy_source"))
 }
 
 func TestDropLegacyCredentialsOnAnEmptyDatabaseNeedsNoMarker(t *testing.T) {
