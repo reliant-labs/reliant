@@ -352,9 +352,9 @@ describe.each([false, true])("homeTarget (forge brand %s)", (forgeBrand) => {
     }
   });
 
-  it("keeps the phone's rule: the forge brand's chat list sends a person who has not onboarded to their apps", () => {
+  it("keeps the phone's rule: the forge brand's chat list sends a person who has not onboarded to their projects", () => {
     for (const path of ["/m", "/m/chats"]) {
-      expect(homeTarget(path, "onboard", { forgeBrand })).toBe(forgeBrand ? "/apps" : null);
+      expect(homeTarget(path, "onboard", { forgeBrand })).toBe(forgeBrand ? "/projects" : null);
       expect(homeTarget(path, "connect-machine", { forgeBrand })).toBeNull();
     }
   });
@@ -362,7 +362,7 @@ describe.each([false, true])("homeTarget (forge brand %s)", (forgeBrand) => {
   it("is what the gate's target is, on the homes", () => {
     expect(onboardingGateTarget("/m/chats?x=1", forgeBrand)).toEqual(
       forgeBrand
-        ? { to: "/apps", search: {}, replace: true }
+        ? { to: "/projects", search: {}, replace: true }
         : { to: "/onboarding", search: { returnTo: "/m/chats?x=1" }, replace: true },
     );
     expect(onboardingGateTarget("/m/chats/c-1", forgeBrand).to).toBe("/onboarding");

@@ -117,18 +117,6 @@ export function inboxPath(ctx?: PathContext): string {
 
 // ── Apps (forge) ────────────────────────────────────────────────────────────
 
-/**
- * The retired Apps page, `/apps`: a redirect to Projects' apps now
- * (lib/paths/legacy.ts). Link `projectsHref("apps")` instead.
- *
- * @deprecated Kept for the forge brand's not-onboarded home
- * (OnboardingFlow/onboardingGate.ts, forgeBrandHomeTarget), which the
- * daemonless home replaces (U6 PR3).
- */
-export function appsPath(ctx?: PathContext): string {
-  return withOrg("/apps", ctx);
-}
-
 /** The org's usage and spend on what forge provisions (ForgeShell/ForgeUsagePage.tsx). */
 export function usagePath(ctx?: PathContext): string {
   return withOrg("/usage", ctx);
