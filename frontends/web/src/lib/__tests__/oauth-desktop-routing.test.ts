@@ -172,4 +172,16 @@ describe.each([
         : vi.mocked(completeCodexOAuth)
     expect(exchange.mock.calls[0][0].redirectUri).toBe('http://localhost:51000/callback')
   })
+
+  it('asks for a desktop update, without crashing, when the preload predates the receiver', async () => {
+    // The desktop app loads this bundle from the server, so its preload can be
+    // older than the bundle: a build with other bridges but no receiver.
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = { openExternal: vi.fn() }
+
+    const result = await runFlow()
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toMatch(/Update the Reliant desktop app/)
+    expect(startOAuthViaLocalServer).not.toHaveBeenCalled()
+  })
 })

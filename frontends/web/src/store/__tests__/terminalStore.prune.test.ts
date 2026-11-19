@@ -55,4 +55,41 @@ describe("persistence", () => {
     expect(stored).toContain(id);
     expect(stored).not.toContain("83328599");
   });
+
+  it("drops connection-scoped fields from a saved session when it rehydrates", async () => {
+    // Written by a build that persisted them: the connection they name is gone,
+    // so restoring them would close (or address) a PTY on the wrong machine.
+    localStorage.setItem(
+      "terminal-store",
+      JSON.stringify({
+        version: 2,
+        state: {
+          sessions: [
+            {
+              id: "terminal-1",
+              title: "Terminal 1",
+              cwd: "/p",
+              projectId: "p1",
+              createdAt: "2026-11-01T00:00:00.000Z",
+              daemonSessionId: "83328599-641e-4a39-aec5-9a5822ff72fa",
+              daemonId: "daemon-old",
+              machineName: "old-machine",
+            },
+          ],
+          activeSessionId: "terminal-1",
+          activeSessionPerWorktree: {},
+        },
+      }),
+    );
+
+    await useTerminalStore.persist.rehydrate();
+
+    const [session] = useTerminalStore.getState().sessions;
+    expect(session?.id).toBe("terminal-1");
+    expect(session).not.toHaveProperty("daemonSessionId");
+    expect(session).not.toHaveProperty("daemonId");
+    expect(session).not.toHaveProperty("machineName");
+    expect(session?.createdAt).toBeInstanceOf(Date);
+    expect(useTerminalStore.getState().activeSessionId).toBe("terminal-1");
+  });
 });

@@ -25,16 +25,18 @@
  * deadline on it. Starting BEFORE waiting also closes the race the old design
  * could not: the port is bound before the browser is ever opened.
  */
+import { DesktopUpdateRequiredError } from '@/lib/desktopUpdate'
 import type { OAuthStartResult } from '@/lib/oauth-local'
 
+// Optional: a desktop build whose preload predates the receiver lacks them.
 type ProviderOAuthBridge = {
-  startProviderOAuth: (
+  startProviderOAuth?: (
     authorizeUrlTemplate: string,
   ) => Promise<{ flowId: string; redirectUri: string }>
-  waitForProviderOAuth: (
+  waitForProviderOAuth?: (
     flowId: string,
   ) => Promise<{ code: string; state: string; redirectUri: string }>
-  cancelProviderOAuth: (flowId: string) => Promise<unknown>
+  cancelProviderOAuth?: (flowId: string) => Promise<unknown>
 }
 
 const bridge = (): ProviderOAuthBridge | undefined =>
@@ -58,6 +60,11 @@ export async function startOAuthViaDesktop(
   if (!api) {
     throw new Error('Provider sign-in through the desktop app needs the desktop app')
   }
+  // Both halves ship together; a build with only one would strand the user
+  // halfway through, so either missing means the build is too old.
+  if (!api.startProviderOAuth || !api.waitForProviderOAuth) {
+    throw new DesktopUpdateRequiredError('Signing in to this provider')
+  }
 
   const { flowId } = await api.startProviderOAuth(authorizeUrlTemplate)
 
@@ -65,7 +72,7 @@ export async function startOAuthViaDesktop(
   // timeout — which matters for Codex, whose port 1455 is fixed by OpenAI and
   // would block every later attempt while it leaked.
   const onAbort = () => {
-    void api.cancelProviderOAuth(flowId)
+    void api.cancelProviderOAuth?.(flowId)
   }
   signal?.addEventListener('abort', onAbort, { once: true })
 

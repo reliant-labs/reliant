@@ -28,6 +28,7 @@
 import { CheckoutUiMode } from "@/gen/controlplane/services/billing/v1/billing_pb";
 
 import { getAppURL } from "./constants";
+import { DesktopUpdateRequiredError } from "./desktopUpdate";
 
 export type CheckoutOutcome = "success" | "cancelled" | "dismissed";
 
@@ -159,6 +160,7 @@ export async function openEmbeddedCheckoutWindow(
 ): Promise<CheckoutOutcome | null> {
   const desktop = window.electronAPI;
   if (!desktop) return null;
+  if (!desktop.openStripeCheckout) throw new DesktopUpdateRequiredError("Checkout");
 
   const embedUrl = buildCheckoutEmbedUrl(request);
   // The return URL shares the embed URL's origin, which is what
@@ -191,6 +193,9 @@ export async function openCheckout(
 
   const desktop = window.electronAPI;
   if (desktop) {
+    // A desktop build whose preload predates the checkout window cannot host
+    // the trip, and the system browser is off the checkout path on purpose.
+    if (!desktop.openStripeCheckout) throw new DesktopUpdateRequiredError("Checkout");
     const { outcome } = await desktop.openStripeCheckout({ checkoutUrl: url, returnUrl });
     return outcome;
   }

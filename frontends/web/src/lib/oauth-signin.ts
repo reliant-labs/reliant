@@ -44,6 +44,7 @@
  */
 import { supabase } from "./supabase";
 import { getAppURL } from "./constants";
+import { DesktopUpdateRequiredError } from "./desktopUpdate";
 import { logger } from "./logger";
 
 export type OAuthProvider = "google" | "github" | "apple";
@@ -54,9 +55,12 @@ export type OAuthRedirectState = {
   returnTo?: string;
 };
 
-/** Where the desktop app exposes its loopback callback listener. */
+/**
+ * Where the desktop app exposes its loopback callback listener. Optional: a
+ * desktop build whose preload predates it lacks it; sign-in then asks for an update.
+ */
 type DesktopOAuthBridge = {
-  startOAuthRedirect: () => Promise<{ redirectUri: string }>;
+  startOAuthRedirect?: () => Promise<{ redirectUri: string }>;
 };
 
 const desktopBridge = (): DesktopOAuthBridge | undefined =>
@@ -76,6 +80,7 @@ const desktopBridge = (): DesktopOAuthBridge | undefined =>
 const resolveRedirectTarget = async (): Promise<string> => {
   const bridge = desktopBridge();
   if (bridge) {
+    if (!bridge.startOAuthRedirect) throw new DesktopUpdateRequiredError("Signing in");
     try {
       const { redirectUri } = await bridge.startOAuthRedirect();
       if (redirectUri) return redirectUri;

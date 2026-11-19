@@ -136,11 +136,16 @@ export interface ElectronAPI {
   // Rejects (never resolves falsy) when the listener cannot start; the
   // renderer then falls back to the hosted /auth/callback, on one code path.
   //
+  // Optional, like every bridge the web bundle needs from the preload: the
+  // desktop app loads this bundle from the server, so it can be newer than the
+  // preload. A missing bridge means the desktop build is too old, and callers
+  // throw DesktopUpdateRequiredError (lib/desktopUpdate.ts) instead of crashing.
+  //
   // The code comes back by NAVIGATING this window to /auth/callback, so there
   // is no callback-event bridge to declare. The previous `onOAuthCallback`
   // here was never implemented in preload.js — `undefined` in every shipped
   // build — so the renderer listener that depended on it could never fire.
-  startOAuthRedirect: () => Promise<{ redirectUri: string }>;
+  startOAuthRedirect?: () => Promise<{ redirectUri: string }>;
 
   // Provider sign-in (Claude Code / Codex) through the desktop app's OWN
   // loopback receiver.
@@ -152,13 +157,13 @@ export interface ElectronAPI {
   // listener, so the browser's redirect hit a closed port. `start` binds the
   // port and returns at once; `wait` spans human time over IPC, which nothing
   // in between can time out.
-  startProviderOAuth: (
+  startProviderOAuth?: (
     authorizeUrlTemplate: string,
   ) => Promise<{ flowId: string; redirectUri: string }>;
-  waitForProviderOAuth: (
+  waitForProviderOAuth?: (
     flowId: string,
   ) => Promise<{ code: string; state: string; redirectUri: string }>;
-  cancelProviderOAuth: (flowId: string) => Promise<unknown>;
+  cancelProviderOAuth?: (flowId: string) => Promise<unknown>;
 
   // Integration connection (Slack, Gmail, …): a loopback receiver the API
   // relays the provider's code to, because consent runs in the system browser.
@@ -167,8 +172,9 @@ export interface ElectronAPI {
   startConnectionOAuthReceiver?: () => Promise<{ flowId: string; redirectUri: string }>;
 
   // Stripe checkout in a controlled window, so the desktop app can observe the
-  // return instead of losing the purchase to the system browser.
-  openStripeCheckout: (args: {
+  // return instead of losing the purchase to the system browser. Optional (see
+  // startOAuthRedirect): lib/stripeCheckout feature-detects it.
+  openStripeCheckout?: (args: {
     checkoutUrl: string;
     returnUrl: string;
   }) => Promise<{ outcome: "success" | "cancelled" | "dismissed" }>;

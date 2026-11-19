@@ -5,12 +5,15 @@ import { useActiveOrg } from "@/hooks/useOrgs";
 import { useUsageBillingCheckout } from "@/hooks/useCloudBillingQueries";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { openCheckout } from "@/lib/stripeCheckout";
+import { isDesktopUpdateRequired } from "@/lib/desktopUpdate";
 import { UsageBillingCard } from "./UsageBillingCard";
 import { usageBillingReturnUrls } from "./usageBillingCheckout";
 import { hostedRateLines, hostingMinimumLine, type HostedRateLike } from "@/components/Billing/priceFormat";
 
 /** The hosting terms this panel discloses, as GetCurrentUserUsageBilling carries them. */
 type HostedTerms = { rates: HostedRateLike[]; minimumMonthlyCents?: bigint };
+
+const CHECKOUT_FAILED = "Checkout could not be completed. Check billing status and review the policy before retrying.";
 
 export function UsageBillingPanel() {
   const org = useActiveOrg();
@@ -28,7 +31,7 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     refetchOnWindowFocus: true,
   });
   const checkout = useUsageBillingCheckout();
-  const [handoffError, setHandoffError] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const refetch = state.refetch;
@@ -55,9 +58,9 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     minimumLine={hostingMinimumLine((state.data as HostedTerms | undefined)?.minimumMonthlyCents)}
     canManage={canManage}
     isLoading={state.isLoading}
-    error={state.error ? "Could not verify app hosting billing. Try again before authorizing usage." : checkout.error || handoffError ? "Checkout could not be completed. Check billing status and review the policy before retrying." : undefined}
+    error={state.error ? "Could not verify app hosting billing. Try again before authorizing usage." : handoffError ?? (checkout.error ? CHECKOUT_FAILED : undefined)}
     isSubmitting={checkout.isPending}
-    onRetry={() => { checkout.reset(); setHandoffError(false); void refetch(); }}
+    onRetry={() => { checkout.reset(); setHandoffError(null); void refetch(); }}
     onCheckout={async consent => {
       // Capture the org the user authorized; never resolve a different one after await.
       const urls = usageBillingReturnUrls();
@@ -67,7 +70,10 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
         if (!response.checkoutUrl) throw new Error("Checkout URL unavailable");
         await openCheckout(response.checkoutUrl, urls.successUrl);
         if (mounted.current) void refetch(); // An outcome is never proof of funding.
-      } catch { if (mounted.current) setHandoffError(true); }
+      } catch (err) {
+        // An outdated desktop app cannot host checkout; say so instead of the generic failure.
+        if (mounted.current) setHandoffError(isDesktopUpdateRequired(err) ? err.message : CHECKOUT_FAILED);
+      }
     }}
   /></div>;
 }

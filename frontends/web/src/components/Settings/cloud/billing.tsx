@@ -842,7 +842,9 @@ function OverviewTab({
     const returnUrl = buildCheckoutReturnUrls(settingsPath("billing")).successUrl;
     portalMutation.mutate(returnUrl, {
       onSuccess: (res) => {
-        void openCheckout(res.portalUrl, returnUrl);
+        openCheckout(res.portalUrl, returnUrl).catch((err) => {
+          setError(formatBillingError(err, "Failed to open billing portal"));
+        });
       },
       onError: (err) => {
         if (!isBackendModalError(err)) {
