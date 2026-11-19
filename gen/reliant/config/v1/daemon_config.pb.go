@@ -124,11 +124,6 @@ type DaemonConfig struct {
 	// login page owns sign-in. A managed daemon is non-interactive whatever
 	// this says (there is nobody to be interactive with).
 	NonInteractive bool `protobuf:"varint,9,opt,name=non_interactive,json=nonInteractive,proto3" json:"non_interactive,omitempty"`
-	// What the platform says this daemon is. The workspace operator sets
-	// "managed" on the pods it creates; nothing sets it on a user's machine.
-	// Unset: the transport decides what the daemon reports (see
-	// daemonruntime.resolveDaemonType).
-	DaemonType string `protobuf:"bytes,10,opt,name=daemon_type,json=daemonType,proto3" json:"daemon_type,omitempty"`
 	// Unset: the process's working directory.
 	WorkingDir string `protobuf:"bytes,11,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
 	// The pod's container runtime class ("kata", "gvisor"), reported at
@@ -312,13 +307,6 @@ func (x *DaemonConfig) GetNonInteractive() bool {
 		return x.NonInteractive
 	}
 	return false
-}
-
-func (x *DaemonConfig) GetDaemonType() string {
-	if x != nil {
-		return x.DaemonType
-	}
-	return ""
 }
 
 func (x *DaemonConfig) GetWorkingDir() string {
@@ -646,7 +634,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\x98&\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xf7$\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -668,11 +656,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x12DAEMON_LISTEN_PORT\x12\vlisten-port\x1a\x049190* Port to listen on in server modeR\n" +
 	"listenPort\x12\xc8\x01\n" +
 	"\x0fnon_interactive\x18\t \x01(\bB\x9e\x01\x82\xce\x18\x99\x01\n" +
-	"\x1eRELIANT_DAEMON_NON_INTERACTIVE\x12\x0fnon-interactive*fNever open a browser or run interactive login; idle and wait for credentials to appear on disk insteadR\x0enonInteractive\x12\xb1\x01\n" +
-	"\vdaemon_type\x18\n" +
-	" \x01(\tB\x8f\x01\x82\xce\x18\x8a\x01\n" +
-	"\x13RELIANT_DAEMON_TYPE*]Daemon type the platform declares: managed (an operator-created workspace pod) or self_hostedJ\amanagedJ\vself_hostedR\n" +
-	"daemonType\x12\x89\x01\n" +
+	"\x1eRELIANT_DAEMON_NON_INTERACTIVE\x12\x0fnon-interactive*fNever open a browser or run interactive login; idle and wait for credentials to appear on disk insteadR\x0enonInteractive\x12\x89\x01\n" +
 	"\vworking_dir\x18\v \x01(\tBh\x82\xce\x18d\n" +
 	"\x12DAEMON_WORKING_DIR*NWorking directory the daemon serves (default: the process's working directory)R\n" +
 	"workingDir\x12~\n" +
@@ -713,7 +697,8 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	")RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT*oEgress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)R\x17egressHostMaxConcurrent\x12\x9f\x01\n" +
 	"\x06labels\x18\x1f \x03(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
 	"\x15RELIANT_DAEMON_LABELS*hComma-separated key=value durable labels this machine declares (merged into its labels on every connect)R\x06labels:\x1c\xca\xc1\x18\x18\n" +
-	"\areliant\x12\x06daemon\x12\x05start\"x\n" +
+	"\areliant\x12\x06daemon\x12\x05startJ\x04\b\n" +
+	"\x10\vR\vdaemon_type\"x\n" +
 	"\x12DaemonStatusConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +
 	"\areliant\x12\x06daemon\x12\x06status\"t\n" +

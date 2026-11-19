@@ -864,6 +864,10 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 			if err != nil {
 				return err
 			}
+			cliCfg, err := config.LoadCLIConfig(cmd)
+			if err != nil {
+				return err
+			}
 			machineLabels, err := daemonMachineLabels(cmd, dcfg, labelFlag)
 			if err != nil {
 				return err
@@ -881,7 +885,7 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 				tlsKey     = dcfg.GetTlsKeyFile()
 				serverMode = dcfg.GetServerMode()
 				listenPort = int(dcfg.GetListenPort())
-				host       = daemonHost(dcfg)
+				host       = daemonHost(dcfg, cliCfg.GetMachine().GetDaemonType())
 				// Electron spawns the daemon with --non-interactive so it
 				// never opens a browser — Electron's own login page owns
 				// interactive sign-in. See registerDaemon /

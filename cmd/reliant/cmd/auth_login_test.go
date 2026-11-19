@@ -278,6 +278,7 @@ func TestChooseLoginFlow(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
 		env                map[string]string
+		managed            bool
 		goos               string
 		device, browser    bool
 		wantDevice, remote bool
@@ -287,17 +288,16 @@ func TestChooseLoginFlow(t *testing.T) {
 		{name: "wayland desktop", env: map[string]string{"WAYLAND_DISPLAY": "wayland-0"}, goos: "linux"},
 		{name: "mac", goos: "darwin"},
 		{name: "windows", goos: "windows"},
-		{name: "cloud machine", env: map[string]string{"RELIANT_DAEMON_TYPE": "managed", "DISPLAY": ":0"}, goos: "linux", wantDevice: true, remote: true},
-		{name: "self-hosted daemon type is not remote", env: map[string]string{"RELIANT_DAEMON_TYPE": "self_hosted"}, goos: "darwin"},
+		{name: "cloud machine", env: desktop, managed: true, goos: "linux", wantDevice: true, remote: true},
 		{name: "agent shell", env: map[string]string{"RELIANT_AGENT_SHELL": "1"}, goos: "darwin", wantDevice: true, remote: true},
 		{name: "ssh into a mac", env: map[string]string{"SSH_CONNECTION": "10.0.0.2 51000 10.0.0.1 22"}, goos: "darwin", wantDevice: true, remote: true},
 		{name: "ssh tty", env: map[string]string{"SSH_TTY": "/dev/pts/0", "DISPLAY": ":0"}, goos: "linux", wantDevice: true, remote: true},
 		{name: "headless linux", goos: "linux", wantDevice: true, remote: true},
-		{name: "--browser on a cloud machine", env: map[string]string{"RELIANT_DAEMON_TYPE": "managed"}, goos: "linux", browser: true, remote: true, wantForced: true},
+		{name: "--browser on a cloud machine", managed: true, goos: "linux", browser: true, remote: true, wantForced: true},
 		{name: "--device on a desktop", env: desktop, goos: "linux", device: true, wantDevice: true, wantForced: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := chooseLoginFlow(tc.device, tc.browser, func(k string) string { return tc.env[k] }, tc.goos)
+			got := chooseLoginFlow(tc.device, tc.browser, tc.managed, func(k string) string { return tc.env[k] }, tc.goos)
 			if got.Device != tc.wantDevice || (got.Remote != "") != tc.remote || got.Forced != tc.wantForced {
 				t.Fatalf("chooseLoginFlow = %+v; want device=%v remote=%v forced=%v", got, tc.wantDevice, tc.remote, tc.wantForced)
 			}

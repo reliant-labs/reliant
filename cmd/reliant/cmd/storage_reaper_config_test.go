@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/runenv"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // storageReaperFor loads the root config the way `daemon start` does and
@@ -30,7 +31,9 @@ func storageReaperFor(t *testing.T, env map[string]string, args ...string) diskw
 	require.NoError(t, err)
 	dcfg, err := loadDaemonConfig(cmd)
 	require.NoError(t, err)
-	return storageReaperConfig(cfg, daemonHost(dcfg).Managed())
+	cliCfg, err := config.LoadCLIConfig(cmd)
+	require.NoError(t, err)
+	return storageReaperConfig(cfg, daemonHost(dcfg, cliCfg.GetMachine().GetDaemonType()).Managed())
 }
 
 func TestStorageReaperConfig_DefaultsFollowTheDaemonType(t *testing.T) {

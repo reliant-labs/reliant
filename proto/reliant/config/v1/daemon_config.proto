@@ -138,18 +138,11 @@ message DaemonConfig {
     description: "Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead"
   }];
 
-  // What the platform says this daemon is. The workspace operator sets
-  // "managed" on the pods it creates; nothing sets it on a user's machine.
-  // Unset: the transport decides what the daemon reports (see
-  // daemonruntime.resolveDaemonType).
-  string daemon_type = 10 [(forge.v1.config) = {
-    env_var: "RELIANT_DAEMON_TYPE"
-    allowed_values: [
-      "managed",
-      "self_hosted"
-    ]
-    description: "Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted"
-  }];
+  // 10 was daemon_type (RELIANT_DAEMON_TYPE). It describes the machine, and
+  // the end-user commands (`auth login`, `auth logout`) act on it too, so it
+  // is CLIConfig's machine.daemon_type, which every `daemon` command loads.
+  reserved 10;
+  reserved "daemon_type";
 
   // Pod-only settings the workspace operator stamps; a daemon on a user's
   // machine leaves them unset.

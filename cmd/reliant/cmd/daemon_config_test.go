@@ -46,13 +46,13 @@ func TestDaemonFetchAllowPrivateNetworkIsAnOptIn(t *testing.T) {
 	cfg, err := loadDaemonConfig(daemonCommandWithArgs(t, "start"))
 	require.NoError(t, err)
 	assert.False(t, cfg.GetFetchAllowPrivateNetwork())
-	assert.False(t, daemonHost(cfg).AllowPrivateFetch)
+	assert.False(t, daemonHost(cfg, "").AllowPrivateFetch)
 
 	t.Setenv("RELIANT_FETCH_ALLOW_PRIVATE_NETWORK", "true")
 	cfg, err = loadDaemonConfig(daemonCommandWithArgs(t, "start"))
 	require.NoError(t, err)
 	assert.True(t, cfg.GetFetchAllowPrivateNetwork())
-	assert.True(t, daemonHost(cfg).AllowPrivateFetch)
+	assert.True(t, daemonHost(cfg, "").AllowPrivateFetch)
 }
 
 // The daemon's egress ceiling is configurable and unset means the daemon's
@@ -70,15 +70,15 @@ func TestDaemonEgressLimitsAreConfigurable(t *testing.T) {
 	}
 	cfg, err := loadDaemonConfig(daemonCommandWithArgs(t, "start"))
 	require.NoError(t, err)
-	assert.Zero(t, daemonHost(cfg).Egress.UserPerMinute)
-	assert.Zero(t, daemonHost(cfg).Egress.HostMaxConcurrent)
+	assert.Zero(t, daemonHost(cfg, "").Egress.UserPerMinute)
+	assert.Zero(t, daemonHost(cfg, "").Egress.HostMaxConcurrent)
 
 	for name, v := range envs {
 		t.Setenv(name, v)
 	}
 	cfg, err = loadDaemonConfig(daemonCommandWithArgs(t, "start"))
 	require.NoError(t, err)
-	got := daemonHost(cfg).Egress
+	got := daemonHost(cfg, "").Egress
 	assert.Equal(t, 300, got.UserPerMinute)
 	assert.Equal(t, 40, got.UserBurst)
 	assert.Equal(t, 12, got.UserMaxConcurrent)

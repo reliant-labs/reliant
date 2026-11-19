@@ -75,9 +75,9 @@ type loginFlow struct {
 // listener on 127.0.0.1 of THIS machine, so it needs a browser running here;
 // where none can be — a Reliant cloud machine, an ssh session, a Linux host
 // with no display, an agent's shell — the device flow is the one that can
-// finish. getenv is os.Getenv outside tests.
-func chooseLoginFlow(forceDevice, forceBrowser bool, getenv func(string) string, goos string) loginFlow {
-	remote := loopbackUnreachable(getenv, goos)
+// finish. managed is isManagedMachine; getenv is os.Getenv outside tests.
+func chooseLoginFlow(forceDevice, forceBrowser, managed bool, getenv func(string) string, goos string) loginFlow {
+	remote := loopbackUnreachable(managed, getenv, goos)
 	switch {
 	case forceBrowser:
 		return loginFlow{Forced: true, Remote: remote}
@@ -88,10 +88,12 @@ func chooseLoginFlow(forceDevice, forceBrowser bool, getenv func(string) string,
 }
 
 // loopbackUnreachable says why a browser cannot reach a loopback listener on
-// this machine, or "" when nothing in the environment says so.
-func loopbackUnreachable(getenv func(string) string, goos string) string {
+// this machine, or "" when nothing says so: the platform (a managed machine),
+// or the host's own environment (the agent-shell marker, an ssh session, no
+// display).
+func loopbackUnreachable(managed bool, getenv func(string) string, goos string) string {
 	switch {
-	case getenv("RELIANT_DAEMON_TYPE") == "managed":
+	case managed:
 		return "this is a Reliant cloud machine"
 	case getenv(daemonpolicy.AgentShellEnv) != "":
 		return "this is a Reliant agent's shell"
@@ -153,8 +155,12 @@ For CI, skip login and set RELIANT_TOKEN.`,
 			if err != nil {
 				return err
 			}
-			flow := chooseLoginFlow(forceDevice, forceBrowser,
-				os.Getenv, //nolint:forbidigo // SSH_*, DISPLAY, RELIANT_DAEMON_TYPE and the agent-shell marker describe the host this process runs on, not configuration of it
+			managed, err := isManagedMachine(cmd)
+			if err != nil {
+				return err
+			}
+			flow := chooseLoginFlow(forceDevice, forceBrowser, managed,
+				os.Getenv, //nolint:forbidigo // SSH_*, DISPLAY/WAYLAND_DISPLAY and the agent-shell marker describe the host's session, not configuration of this process
 				runtime.GOOS)
 			// ONE LOGIN: the forge scopes ride along as a CEILING the control
 			// plane clips to your grants, so forge can later exchange this
@@ -243,7 +249,11 @@ func finishLogin(cmd *cobra.Command, target *connection, cred credentials.Creden
 		return fmt.Errorf("saving credentials: %w", err)
 	}
 	account := cliauth.AccountOf(cred)
-	retired, retireErr := retireOtherAccountsDaemonSignIns(cmd.Context(), target, account)
+	managed, err := isManagedMachine(cmd)
+	if err != nil {
+		return err
+	}
+	retired, retireErr := retireOtherAccountsDaemonSignIns(cmd.Context(), target, account, managed)
 	// A fresh login means fresh exchanges: drop tokens cached from the
 	// previous one, and the copies older releases deposited into forge's file.
 	if err := newForgeCredentialService(cmd, forgecred.Pin{}).ForgetServer(target.ServerURL); err != nil {
@@ -411,7 +421,11 @@ Settings → Access Tokens in the app.`,
 			// operator mounts read-only: it is the platform's, not this
 			// login's, and removing it would leave the machine unable to
 			// reconnect after its next restart.
-			if isManagedMachine() {
+			managed, err := isManagedMachine(cmd)
+			if err != nil {
+				return err
+			}
+			if managed {
 				writeLogoutReport(out, target.ServerURL, loggedIn, 0, nil)
 				fmt.Fprintln(out, "  This is a Reliant cloud machine: its daemon keeps the sign-in Reliant manages for it.")
 				return nil
