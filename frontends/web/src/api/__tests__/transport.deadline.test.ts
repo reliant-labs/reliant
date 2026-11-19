@@ -246,7 +246,7 @@ describe("a fast read whose answer was lost (ELECTRON-B0, BA)", () => {
 
   it("is hedged at most once, then times out on its full budget", async () => {
     const { calls, call } = await loadChain();
-    const result = call("reliant.v1.ChatService", "ListChats");
+    const result = call("reliant.v1.ChatService", "GetChat");
     let error: unknown;
     result.catch((e) => (error = e));
     await flush();
@@ -278,6 +278,21 @@ describe("a fast read whose answer was lost (ELECTRON-B0, BA)", () => {
   it("does not hedge ListMessages", async () => {
     const { calls, call } = await loadChain();
     void call("reliant.v1.ChatService", "ListMessages").catch(() => {});
+    await flush();
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(calls).toHaveLength(1);
+  });
+
+  // 2026-11-17/18: ListInbox p95 2.9s (3.6s under load), ListChats 2.25s in
+  // one trace; the sidebar lists are slow on the server, so a hedge is a
+  // second copy of the same slow read on the database.
+  it.each([
+    ["reliant.v1.InboxService", "ListInbox"],
+    ["reliant.v1.ChatService", "ListChats"],
+    ["reliant.v1.ChatService", "ListArchivedChats"],
+  ])("does not hedge %s/%s", async (service, method) => {
+    const { calls, call } = await loadChain();
+    void call(service, method).catch(() => {});
     await flush();
     await vi.advanceTimersByTimeAsync(9_000);
     expect(calls).toHaveLength(1);

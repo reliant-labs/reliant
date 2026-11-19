@@ -70,11 +70,18 @@ export const MAX_ATTEMPTS = 2;
  * obs 16122d5e, chat 2ee014da at 12:00Z, two ListMessages each hedged at 4s
  * put four 4-10s counts on the database during a load spike, and the call
  * still timed out.
+ *
+ * ListInbox, ListChats and ListArchivedChats left it the same day for the
+ * same reason. Under one heavy account's load (2026-11-17 20:00–23:00Z) the
+ * server took ListInbox p50 1.6s / p95 3.6s (24h p95 2.9s), ListChats up to
+ * 2.25s in a single trace (its chats_with_activity scan alone 1.4s), and
+ * ListArchivedChats p50 0.46-0.56s (105-280ms when quiet). A hedge at 4s is a second
+ * copy of that work on the database exactly when it is slowest, and
+ * browser-only ListInbox spans of 6.00s (the hedge, aborted at the 10s
+ * budget) showed the hedges were firing.
  */
 const FAST_READS: ReadonlySet<string> = new Set([
   "reliant.v1.DaemonRegistryService/ListDaemons",
-  "reliant.v1.ChatService/ListChats",
-  "reliant.v1.ChatService/ListArchivedChats",
   "reliant.v1.ChatService/GetChat",
   "reliant.v1.ChatService/GetContentBlockBodies",
   "reliant.v1.ChatService/GetWorkflowExecutions",
@@ -85,7 +92,6 @@ const FAST_READS: ReadonlySet<string> = new Set([
   "reliant.v1.PlanService/GetPlanByChatId",
   "reliant.v1.TaskService/ListTasks",
   "reliant.v1.RunService/ListRuns",
-  "reliant.v1.InboxService/ListInbox",
   "reliant.v1.WorkflowService/GetWorkflow",
   "reliant.v1.ProjectService/ListProjects",
   "reliant.v1.SettingsService/GetProviderStatuses",
