@@ -26,7 +26,20 @@
  */
 
 /** Below this width the desktop shell's sidebars and panels stop fitting. */
-import { orgFreePath } from "./paths/org";
+import {
+  encodedSegment,
+  mobileAutomationPath,
+  mobileChatPath,
+  mobileChatsPath,
+  mobileInboxPath,
+  mobileMachinesPath,
+  mobileRunsPath,
+  mobileSettingsPath,
+  mobileWorkflowPath,
+  mobileWorkflowsPath,
+} from "./paths";
+import { orgFreePath, orgOfPath } from "./paths/org";
+import { orgSegment, type RouteOrgScope } from "./routeOrg";
 import { isSafeReturnTo } from "./returnTo";
 
 export const MOBILE_MAX_WIDTH = 768;
@@ -122,24 +135,29 @@ export const MOBILE_SETTINGS_SECTION_FOR: Readonly<Record<string, string>> = {
  * settings" prompt all became the chat list. Each desktop path with a mobile
  * twin maps to it; everything else still lands on the chat list, the mobile
  * home. A run IS a chat, so a run link opens that chat.
+ *
+ * The desktop paths are MATCHED here as literals (the inbound side); every
+ * destination is built by lib/paths (the outbound side), an id captured from
+ * the desktop path carried over byte for byte (encodedSegment), and a
+ * settings section's query in URLSearchParams' bytes, as before.
  */
 export function mobilePathFor(pathname: string, search = ""): string {
   // The mobile tree is not under the org yet (U15): an org page maps as its org-less twin.
   const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
-  if (path === "/inbox" || path.startsWith("/inbox/")) return "/m/inbox";
+  if (path === "/inbox" || path.startsWith("/inbox/")) return mobileInboxPath();
 
   const run = /^\/workflows\/runs\/([^/]+)/.exec(path);
-  if (run) return `/m/chats/${run[1]}`;
-  if (path === "/workflows/runs") return "/m/runs";
+  if (run) return mobileChatPath(encodedSegment(run[1]));
+  if (path === "/workflows/runs") return mobileRunsPath();
   // A workflow's page (where its triggers are — what an automation link
   // opens) is its read-only viewer; an automation id is resolved first.
   const workflow = /^\/workflows\/library\/([^/]+)/.exec(path);
-  if (workflow) return `/m/workflows/${workflow[1]}`;
+  if (workflow) return mobileWorkflowPath(encodedSegment(workflow[1]));
   const automation = /^\/(?:workflows\/)?automations\/([^/]+)/.exec(path);
-  if (automation) return `/m/automations/${automation[1]}`;
-  if (path === "/workflows" || path.startsWith("/workflows/")) return "/m/workflows";
+  if (automation) return mobileAutomationPath(encodedSegment(automation[1]));
+  if (path === "/workflows" || path.startsWith("/workflows/")) return mobileWorkflowsPath();
 
-  if (path.startsWith("/settings/machines") || path.startsWith("/settings/environments")) return "/m/daemons";
+  if (path.startsWith("/settings/machines") || path.startsWith("/settings/environments")) return mobileMachinesPath();
   // Billing on a phone is a screen inside /m/settings. A visit that has a way
   // back (the claim page sends people here to subscribe) keeps it: the mobile
   // twin opens on billing and offers the same return.
@@ -147,15 +165,42 @@ export function mobilePathFor(pathname: string, search = ""): string {
     const q = new URLSearchParams(search);
     const returnTo = q.get("returnTo");
     if (isSafeReturnTo(returnTo)) {
-      return `/m/settings?${new URLSearchParams({ section: "billing", returnTo })}`;
+      return `${mobileSettingsPath()}?${new URLSearchParams({ section: "billing", returnTo })}`;
     }
   }
   const section = /^\/settings\/([^/]+)$/.exec(path)?.[1];
   const mobileSection = section ? MOBILE_SETTINGS_SECTION_FOR[section] : undefined;
-  if (mobileSection) return `/m/settings?${new URLSearchParams({ section: mobileSection })}`;
-  if (path === "/settings" || path.startsWith("/settings/")) return "/m/settings";
+  if (mobileSection) return `${mobileSettingsPath()}?${new URLSearchParams({ section: mobileSection })}`;
+  if (path === "/settings" || path.startsWith("/settings/")) return mobileSettingsPath();
 
-  return "/m/chats";
+  return mobileChatsPath();
+}
+
+/**
+ * Whether the phone hand-off may run for `pathname` now. Off the org tree,
+ * always. On an org page (`/o/<org>/…`) only once that org's page has
+ * committed for a member (`routeOrgScope`, lib/routeOrg.ts): the commit makes
+ * it the tab's org, which the mobile tree reads until it moves under the org
+ * (U15), so the phone opens in the same org. Never from the "no access" page
+ * or while the org is pending: the hand-off would open the previous org.
+ */
+export function mobileHandoffAllowed({
+  pathname,
+  committedPathname,
+  routeOrgScope,
+}: {
+  pathname: string;
+  committedPathname: string | null;
+  routeOrgScope: RouteOrgScope;
+}): boolean {
+  const org = orgOfPath(pathname);
+  if (org === null) return true;
+  return (
+    routeOrgScope.kind === "member" &&
+    orgSegment(routeOrgScope.org) === org &&
+    committedPathname !== null &&
+    orgOfPath(committedPathname) === org
+  );
 }
 
 /** Reads the opt-out from the URL, persisting it so it survives navigation. */

@@ -5,23 +5,31 @@
  * definition: its path, its beforeLoad, its pages for every answer.
  *
  *   /o/$org                 beforeLoad: resolveOrgRoute (lib/orgRouting.ts) —
- *                           the org, before any child renders; an org id →
- *                           the slug form; anyone else's or no such org → the
- *                           one "no access" page
- *     …                     the org's pages (routes.tsx mounts them; the
- *                           forge shell mounts createOrgEntryRoutes instead)
+ *                           the org, before any child loads; an org id → the
+ *                           slug form; anyone else's or no such org → the one
+ *                           "no access" page. Nothing takes effect until the
+ *                           navigation commits (lib/routeOrg.ts).
+ *     …                     the org's pages: each tree mounts the pages its
+ *                           host serves, and createOrgHandoffRoute hands the
+ *                           rest to the host that serves them
  *
  * Always mounted, whatever the flag `web.org_routes` says (D12): an org URL
  * never 404s, and turning the flag off is the rollback.
+ *
+ * No access, signed out, or a membership list that failed: the layout renders
+ * its own page and no child, and every child `beforeLoad` under it is
+ * memberOnly (lib/routeOrg.ts), so nothing below can redirect the URL away.
  */
 
 import { type ComponentType, type ReactNode } from 'react'
-import { createRoute, redirect, type AnyRoute } from '@tanstack/react-router'
+import { createRoute, Navigate, useRouterState, type AnyRoute } from '@tanstack/react-router'
 
 import { LoadingSpinner } from './components/Layout/LoadingSpinner'
+import { OrgHandoff, type OrgHandoffHost } from './components/Orgs/OrgHandoff'
 import { OrgLayout } from './components/Orgs/OrgLayout'
 import { defaultOrgRoutingDeps, resolveOrgRoute, type OrgRoutingDeps } from './lib/orgRouting'
-import { orgFreePath } from './lib/paths/org'
+import { homePath } from './lib/paths'
+import { inOrgOfPath } from './lib/paths/org'
 import { ORG_ROUTE_ID, type OrgRouteState } from './lib/routeOrg'
 
 export interface OrgLayoutRouteOptions {
@@ -41,23 +49,28 @@ export function createOrgLayoutRoute<TParent extends AnyRoute>(getParentRoute: (
       const { orgRoute } = route.useRouteContext() as { orgRoute: OrgRouteState }
       return <OrgLayout state={orgRoute} Guard={Guard} />
     },
+    // A path under the org that this host does not mount: the org's home in a
+    // member org; the layout's own page (no access, sign in) otherwise, never
+    // a redirect out of it.
+    notFoundComponent: function OrgNotFound() {
+      const { orgRoute } = route.useRouteContext() as { orgRoute: OrgRouteState }
+      const pathname = useRouterState({ select: (s) => s.location.pathname })
+      if (orgRoute.kind === 'member') return <Navigate to={inOrgOfPath(pathname, homePath())} replace />
+      return <OrgLayout state={orgRoute} Guard={Guard} />
+    },
   })
   return route
 }
 
 /**
- * The forge shell's org routes until the one shell (U6) mounts its pages under
- * the org: an org URL resolves the org like anywhere else (a member's org
- * becomes the tab's), then opens the org-less page it names. Not a member, or
- * signed out: the layout's own pages, as in Reliant.
+ * An org page this host does not serve, handed to the host that does (OrgHandoff):
+ * the forge host's Sites and Usage on Reliant, Reliant's pages on the forge
+ * host. Its component renders only inside a member org.
  */
-export function createOrgEntryRoutes<TParent extends AnyRoute>(getParentRoute: () => TParent, options: OrgLayoutRouteOptions) {
-  const layoutRoute = createOrgLayoutRoute(getParentRoute, options)
-  const toOrgFreePage = ({ context, location }: { context: unknown; location: { pathname: string; searchStr: string; hash: string } }) => {
-    if ((context as { orgRoute?: OrgRouteState }).orgRoute?.kind !== 'member') return
-    throw redirect({ href: `${orgFreePath(location.pathname)}${location.searchStr}${location.hash ? `#${location.hash}` : ''}`, replace: true })
-  }
-  const indexRoute = createRoute({ getParentRoute: () => layoutRoute, path: '/', beforeLoad: toOrgFreePage })
-  const restRoute = createRoute({ getParentRoute: () => layoutRoute, path: '$', beforeLoad: toOrgFreePage })
-  return layoutRoute.addChildren([indexRoute, restRoute])
+export function createOrgHandoffRoute<TParent extends AnyRoute>(getParentRoute: () => TParent, path: string, to: OrgHandoffHost) {
+  return createRoute({
+    getParentRoute,
+    path,
+    component: () => <OrgHandoff to={to} />,
+  })
 }

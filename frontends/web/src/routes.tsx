@@ -15,7 +15,9 @@ import { createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
-import { createOrgLayoutRoute } from './orgRoutes'
+import { createOrgHandoffRoute, createOrgLayoutRoute } from './orgRoutes'
+import { routeOrgScopeHooks, useRouteOrgScope } from './lib/routeOrg'
+import { mobileHandoffAllowed } from './lib/mobileRedirect'
 import { forwardIntoOrg } from './lib/orgRouting'
 import {
   appsSearchSchema,
@@ -271,6 +273,10 @@ const App = lazyRoute(() => import('./App'), 'default')
 // harmless (same value) and keeps it self-contained for tests and embeds.
 function RootShell() {
   const { pathname, search } = useRouterState({ select: (s) => s.location });
+  // The path of the page on screen (the committed matches) and its org scope,
+  // which move together (lib/routeOrg.ts): the phone hand-off below reads them.
+  const committedPathname = useRouterState({ select: (s) => s.matches[s.matches.length - 1]?.pathname ?? null });
+  const routeOrgScope = useRouteOrgScope((s) => s.scope);
   const navigate = useNavigate();
 
   // Phones get the mobile surface. Without this the `/m/*` routes are
@@ -291,12 +297,16 @@ function RootShell() {
         : new URLSearchParams(
             search as Record<string, string>,
           ).toString();
+    // An org page hands off only once a member org's page has committed (its
+    // org is then the tab's, which the mobile tree reads until U15): never
+    // from a "no access" page, and never before the org is known.
+    if (!mobileHandoffAllowed({ pathname, committedPathname, routeOrgScope })) return;
     if (shouldRedirectToMobileNow({ pathname, search: searchString })) {
       // To the mobile twin of what was asked for (the Inbox, a run's chat,
       // settings), not always the chat list — see mobilePathFor.
       navigate({ href: mobilePathFor(pathname, searchString), replace: true });
     }
-  }, [pathname, search, navigate]);
+  }, [pathname, search, navigate, committedPathname, routeOrgScope]);
 
   // Keyboard shortcuts are app-global too, for the same reason: the host here
   // owns the one dispatcher, the desktop menu bridge and the command palette
@@ -335,6 +345,8 @@ function RootShell() {
 
 const rootRoute = createRootRoute({
   component: RootShell,
+  // The org scope moves when a navigation commits (lib/routeOrg.ts).
+  ...routeOrgScopeHooks,
   // With the flag web.org_routes on, an org-scoped page's org-less path (`/`,
   // `/inbox`, an old bookmark) redirects into the tab's org (lib/orgRouting.ts,
   // the table in lib/paths/legacy.ts). Off: a no-op.
@@ -913,6 +925,12 @@ const orgAppLayoutRoute = createRoute({
 
 const orgOrgScopedRoutes = createOrgScopedRoutes(() => orgAppLayoutRoute, () => orgAuthenticatedLayoutRoute, 'org')
 
+// The forge host's org pages, which this tree does not serve: handed to the
+// forge host (OrgHandoff), so `/o/<org>/sites` and `/o/<org>/usage` resolve
+// here too. Rendered only in a member org.
+const orgSitesHandoffRoute = createOrgHandoffRoute(() => orgLayoutRoute, '/sites', 'forge')
+const orgUsageHandoffRoute = createOrgHandoffRoute(() => orgLayoutRoute, '/usage', 'forge')
+
 // Onboarding lives at its own URL now. Previously the OnboardingPage was a
 // branch inside ModernApp's render based on currentUser.onboardingCompleted —
 // no URL, no deep-link, no way to navigate between onboarding and the app
@@ -1096,7 +1114,8 @@ const mobileIndexRoute = createRoute({
   component: () => <Navigate to={mobileChatsPath()} />,
 })
 
-const routeTree = rootRoute.addChildren([
+/** The production route tree; tests mount it with a router of their own (test/orgRouteHarness.ts). */
+export const routeTree = rootRoute.addChildren([
   authRoute,
   oauthCallbackRoute,
   githubOAuthCallbackRoute,
@@ -1156,6 +1175,8 @@ const routeTree = rootRoute.addChildren([
   orgLayoutRoute.addChildren([
     orgAuthenticatedLayoutRoute.addChildren([...orgOrgScopedRoutes.authenticated]),
     orgAppLayoutRoute.addChildren([...orgOrgScopedRoutes.app]),
+    orgSitesHandoffRoute,
+    orgUsageHandoffRoute,
   ]),
 ])
 

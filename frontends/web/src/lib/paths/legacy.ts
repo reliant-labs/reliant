@@ -10,14 +10,22 @@
  * query (lib/orgRouting.ts, forwardIntoOrg). With the flag off nothing here
  * runs.
  *
+ * Only pages the Reliant host itself serves forward (the table is that host's
+ * inventory, routes.tsx): Sites and Usage are the forge host's pages, and
+ * the forge host does not forward until the one shell (U6).
+ *
  * What does NOT forward, and stays where it is, each for a reason:
  *
  *   - links that name a resource by id or by app name: `/project/<id>`,
  *     `/workflows/runs/<id>`, `/workflows/automations/<id>`, `/forge/p/<app>`,
  *     `/forge?project=`, `/forge/env/<env>?forgeProject=`, and the org
- *     Observability with an app in its query. The resource's org decides
- *     where they go, not the tab's (§3.4, D8): the resolver (U4) answers that.
- *     Until it ships they open as they always have.
+ *     Observability with an app in its query. So do saved workflows, by name:
+ *     `/workflows/library/<name>` and the builder's `/workflow/<name>` (a
+ *     built-in opens there by its bare name too, so the builder's path cannot
+ *     tell them apart). The resource's org decides where they go, not the
+ *     tab's (§3.4, D8): the resolver (U4) answers that. Until it ships they
+ *     open as they always have. A built-in's page (`builtin://…`) and the
+ *     library and New workflow belong to no org, and forward.
  *   - pages that are not org-scoped yet: Settings and machines (U8), the
  *     mobile tree (U15), onboarding (R11); and the never-scoped ones (sign-in,
  *     OAuth, claims, invitations).
@@ -30,8 +38,6 @@ const FORWARDED = new Set([
   "/",
   "/inbox",
   "/apps",
-  "/sites",
-  "/usage",
   "/workflows",
   "/workflows/library",
   "/workflows/runs",
@@ -50,12 +56,21 @@ const APP_KEYS = ["project", "forgeProject"];
 export function legacyOrgForward(pathname: string, search: Record<string, unknown> = {}): string | null {
   const path = pathname.replace(/\/+$/, "") || "/";
   if (FORWARDED.has(path)) return path;
-  // One workflow's page (a built-in's ref, or a saved workflow's name) and the builder.
-  if (/^\/workflows\/library\/[^/]+$/.test(path)) return path;
-  if (/^\/workflow\/[^/]+$/.test(path)) return path;
+  // A built-in workflow's page: org-neutral. A saved workflow's is not (see above).
+  const ref = /^\/workflows\/library\/([^/]+)$/.exec(path)?.[1];
+  if (ref !== undefined && isBuiltinRef(ref)) return path;
   // The org's Observability, unless the link names an app.
   if (path === "/forge/observability" || /^\/forge\/observability\/[^/]+$/.test(path)) {
     return APP_KEYS.some((key) => search[key] !== undefined && search[key] !== "") ? null : path;
   }
   return null;
+}
+
+/** Whether a URL segment (percent-encoded) names a built-in workflow (`builtin://…`). */
+function isBuiltinRef(segment: string): boolean {
+  try {
+    return decodeURIComponent(segment).startsWith("builtin://");
+  } catch {
+    return false;
+  }
 }

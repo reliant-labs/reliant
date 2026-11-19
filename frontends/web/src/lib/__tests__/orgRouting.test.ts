@@ -55,18 +55,18 @@ beforeEach(() => {
 afterEach(() => resetShellForTests());
 
 describe("resolveOrgRoute", () => {
-  it("resolves a member's slug, and makes it the tab's org", async () => {
+  it("resolves a member's slug, and writes nothing the page reads (the commit does)", async () => {
     const { orgRoute } = await resolveOrgRoute("side", at("/o/side/inbox"), { deps: deps() });
     expect(orgRoute).toEqual({ kind: "member", org: { id: "org-b", slug: "side" } });
-    expect(useActiveOrgStore.getState().chosenId).toBe("org-b");
-    expect(sessionStorage.getItem("reliant.activeOrg.alice")).toBe("org-b");
+    // A load can be superseded and never commit: the tab's org is not moved here (lib/routeOrg.ts).
+    expect(useActiveOrgStore.getState().chosenId).toBeNull();
+    expect(sessionStorage.getItem("reliant.activeOrg.alice")).toBeNull();
     expect(useActiveOrgStore.getState().segments).toEqual({ "org-a": "acme", "org-b": "side" });
   });
 
-  it("does not move the tab for a preload", async () => {
-    const { orgRoute } = await resolveOrgRoute("side", at("/o/side"), { preload: true, deps: deps() });
-    expect(orgRoute.kind).toBe("member");
-    expect(useActiveOrgStore.getState().chosenId).toBeNull();
+  it("reads an org id before a slug, as the control plane does (#2938)", async () => {
+    const twisted = { orgs: [org("org-a", "org-b"), org("org-b", "side")], defaultOrgId: "org-a" };
+    expect(await redirectOf(() => resolveOrgRoute("org-b", at("/o/org-b"), { deps: deps({ listOrgs: async () => twisted }) }))).toBe("/o/side");
   });
 
   it("redirects an org id to the slug form, keeping the rest of the URL", async () => {
