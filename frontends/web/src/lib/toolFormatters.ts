@@ -111,13 +111,6 @@ export function getToolCategory(toolName: string): ToolCategory {
 }
 
 /**
- * Check if a tool is read-only (should be grouped/collapsed)
- */
-export function isReadOnlyTool(toolName: string): boolean {
-  return getToolCategory(toolName) === ToolCategory.READ_ONLY;
-}
-
-/**
  * Extract file path from various parameter formats
  */
 function extractFilePath(input: ToolInput): string | undefined {
@@ -904,59 +897,6 @@ export function formatToolParams(
   if (formatter) return formatter(input, context);
   // Generic fallthrough — try to show something useful
   return formatGenericParams(toolName, input);
-}
-
-/**
- * Generate a human-readable summary for grouped read-only tools
- * Example: "Explored 2 files 1 search"
- */
-export function generateReadOnlyToolsSummary(tools: Array<{ name: string; input: ToolInput }>): string {
-  const counts: Record<string, number> = {};
-  
-  tools.forEach(({ name }) => {
-    const nameLower = name.toLowerCase();
-    
-    if (nameLower === 'view' || nameLower === 'read' || nameLower === 'read_files') {
-      counts.files = (counts.files || 0) + 1;
-    } else if (nameLower === 'grep') {
-      counts.searches = (counts.searches || 0) + 1;
-    } else if (nameLower === 'websearch') {
-      counts.websearches = (counts.websearches || 0) + 1;
-    } else if (nameLower === 'diagnostics') {
-      counts.diagnostics = (counts.diagnostics || 0) + 1;
-    } else if (nameLower === 'glob' || nameLower === 'ls' || nameLower === 'find_files') {
-      counts.listings = (counts.listings || 0) + 1;
-    } else if (nameLower === 'fetch') {
-      counts.fetches = (counts.fetches || 0) + 1;
-    }
-  });
-  
-  const parts: string[] = [];
-  
-  if (counts.files) {
-    parts.push(`${counts.files} file${counts.files > 1 ? 's' : ''}`);
-  }
-  if (counts.searches) {
-    parts.push(`${counts.searches} search${counts.searches > 1 ? 'es' : ''}`);
-  }
-  if (counts.websearches) {
-    parts.push(`${counts.websearches} web search${counts.websearches > 1 ? 'es' : ''}`);
-  }
-  if (counts.diagnostics) {
-    parts.push(`${counts.diagnostics} diagnostic${counts.diagnostics > 1 ? 's' : ''}`);
-  }
-  if (counts.listings) {
-    parts.push(`${counts.listings} listing${counts.listings > 1 ? 's' : ''}`);
-  }
-  if (counts.fetches) {
-    parts.push(`${counts.fetches} fetch${counts.fetches > 1 ? 'es' : ''}`);
-  }
-  
-  if (parts.length === 0) {
-    return 'Explored';
-  }
-  
-  return `Explored ${parts.join(' ')}`;
 }
 
 // ============================================================================

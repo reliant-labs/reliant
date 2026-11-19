@@ -1,10 +1,11 @@
 /**
- * ChatHeader - Chat header with title and stats
- * 
- * Shows:
- * - Chat title (editable)
- * - Menu button
- * - Stats row: file changes, processes, tasks, context usage, time ago
+ * ChatHeader - the one bar above the transcript.
+ *
+ * Shows, in one row at the shell's bar height:
+ * - the chat title (editable), and its shared / no-machine state
+ * - the prompt scrolled out of view (rendered into the bar by the timeline)
+ * - a thread switcher, a runs count and context usage, when they apply
+ * - every other action in the ⋯ menu
  *
  * The menu's actions live in `useChatActions`, shared with the mobile Chat
  * sheet; this component owns only the dropdown and the inline title editor.
@@ -26,6 +27,7 @@ import {
   ListCollapse,
   FolderInput,
   Users,
+  Bot,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChat } from "../../hooks/chat-queries";
@@ -35,7 +37,11 @@ import { useMessages } from "../../hooks/message-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import Tooltip from "../forge-ui/tooltip";
 import { useThreads, ThreadTabs } from "./thread-views";
-import { ChildRunsStrip } from "../runs/ChildRunsStrip";
+import { Link } from "@tanstack/react-router";
+import { useChildRuns } from "../../hooks/run-queries";
+import { useCapability } from "../../lib/surfaceContext";
+import { runsPath } from "../../lib/paths";
+import { cn } from "../../lib/utils";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { useChatActions } from "./useChatActions";
 import { MoveChatToProjectDialog } from "./MoveChatToProjectDialog";
@@ -70,6 +76,11 @@ interface ChatHeaderProps {
    * menu, context usage and thread tabs stay; the title and time-ago go.
    */
   hideTitle?: boolean;
+  /**
+   * Receives the element in the bar where the timeline renders the prompt
+   * you scrolled away from (InterleavedTimeline's `pinnedPromptSlot`).
+   */
+  pinnedPromptSlotRef?: (el: HTMLElement | null) => void;
 }
 
 export function ChatHeader({
@@ -82,6 +93,7 @@ export function ChatHeader({
   onToggleWorkflowViewer,
   isWorkflowViewerOpen,
   hideTitle = false,
+  pinnedPromptSlotRef,
 }: ChatHeaderProps) {
   const chatQuery = useChat(chatId || undefined);
   const chat = chatQuery.data;
@@ -191,245 +203,269 @@ export function ChatHeader({
     }
   }, [isEditingTitle]);
 
+  const menuItemClass =
+    "flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-ui text-foreground transition-colors hover:bg-foreground/5 focus-visible:bg-foreground/5 focus-visible:outline-none";
+  const iconButtonClass =
+    "touch-target inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+  // One bar above the transcript: the title, a couple of quiet indicators,
+  // and everything else in the ⋯ menu. Threads are one switcher, not a row
+  // of tabs; the prompt you scrolled away from is a line inside the bar.
   return (
-    <div className="flex items-center bg-card/30 flex-shrink-0">
-      <div className="px-4 sm:px-6 lg:px-8 py-1 w-full">
-        <div className="max-w-[1200px] mx-auto">
-          <div className="flex flex-col gap-0.5">
-            {/* Row 1: Title, Menu, and Time */}
-            <div className="flex items-center gap-1">
-              {/* Back to parent thread - only when viewing a spawned/child thread */}
-              {showBackButton && (
-                <Tooltip
-                  content={backTargetThread ? `Back to ${backTargetThread.name}` : "Back to main thread"}
-                  side="bottom"
+    <header
+      className="flex h-[var(--shell-bar-h)] flex-shrink-0 items-center gap-1 border-b border-border-subtle px-3 sm:px-5"
+      data-testid="chat-top-bar"
+    >
+      {/* Back to parent thread - only when viewing a spawned/child thread */}
+      {showBackButton && (
+        <Tooltip
+          content={backTargetThread ? `Back to ${backTargetThread.name}` : "Back to main thread"}
+          side="bottom"
+        >
+          <button
+            onClick={() => onSelectThread?.(backTargetId)}
+            className={iconButtonClass}
+            aria-label="Back to parent thread"
+          >
+            <ArrowLeft className="size-4" />
+          </button>
+        </Tooltip>
+      )}
+
+      {/* Title - click to edit inline */}
+      {hideTitle && !isEditingTitle ? null : isEditingTitle ? (
+        <input
+          ref={titleInputRef}
+          type="text"
+          value={editedTitle}
+          onChange={(e) => setEditedTitle(e.target.value)}
+          onKeyDown={handleTitleKeyDown}
+          onBlur={handleTitleBlur}
+          aria-label="Chat title"
+          className="h-8 min-w-0 flex-1 rounded-lg border border-ring bg-transparent px-2 text-ui font-medium text-foreground focus:outline-none"
+        />
+      ) : (
+        <h1
+          onClick={handleTitleClick}
+          title={title}
+          className={cn(
+            "min-w-0 truncate rounded-md px-1 text-ui font-medium text-foreground transition-colors",
+            !(isNewChat || isViewer) && "cursor-text hover:text-foreground/80",
+          )}
+        >
+          {title}
+        </h1>
+      )}
+
+      {/* A chat with no machine says so where the user looks first, and
+          the pill is the way to connect one (NO_MACHINE_CHATS.md §2.4). */}
+      {!isNewChat && chatId && chat?.noMachine && !isViewer && <NoMachinePill chatId={chatId} />}
+
+      {/* Shared with the org: the owner's reminder, the viewer's "read only". */}
+      {!isNewChat && (isShared || isViewer) && (
+        <span
+          className="inline-flex flex-shrink-0 items-center gap-1 px-1 text-meta text-muted-foreground"
+          data-testid="chat-shared-chip"
+        >
+          <Users className="size-3.5" aria-hidden />
+          {isViewer ? "Read only" : "Shared"}
+        </span>
+      )}
+
+      <div className="min-w-2 flex-1" />
+
+      {/* The prompt scrolled out of view: the timeline renders it here. */}
+      {pinnedPromptSlotRef && (
+        <div ref={pinnedPromptSlotRef} className="flex min-w-0 max-w-[40%] shrink justify-end" data-testid="chat-pinned-prompt-slot" />
+      )}
+
+      {/* Threads: one switcher, only when there is more than one. */}
+      {!isNewChat && hasMultipleThreads && onSelectThread && (
+        <ThreadTabs
+          threads={threads}
+          selectedThreadId={selectedThreadId ?? null}
+          onSelectThread={onSelectThread}
+          showAllOption={true}
+          contextUsageByThread={contextUsageByThread}
+          chatId={chatId || undefined}
+        />
+      )}
+
+      {/* Runs an agent started from this chat (decision 4): a count that
+          opens them. Renders nothing for a chat that started none. */}
+      {!isNewChat && chatId && <ChildRunsLink chatId={chatId} />}
+
+      {/* Context usage - the one stat that changes what you do next */}
+      {!isNewChat && (
+        <ContextUsageIndicator
+          threadTokenCount={contextUsage?.threadTokenCount ?? 0}
+          compactionThreshold={contextUsage?.compactionThreshold ?? 200000}
+          compact={true}
+        />
+      )}
+
+      {/* Secondary actions */}
+      {!isNewChat && chatId && (
+        <div className="relative flex-shrink-0" ref={menuRef}>
+          <Tooltip content="Chat options" side="bottom" delay={300} triggerClassName="inline-flex">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className={iconButtonClass}
+              aria-label="More options"
+              aria-expanded={isMenuOpen}
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+          </Tooltip>
+
+          {isMenuOpen && (
+            <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-popover p-1 shadow-lg">
+              {!isViewer && (
+                <button
+                  onClick={() => {
+                    handleTitleClick();
+                    setIsMenuOpen(false);
+                  }}
+                  className={menuItemClass}
                 >
+                  <Edit2 className="size-4 text-muted-foreground" />
+                  Edit title
+                </button>
+              )}
+
+              {canShare && (
+                <button
+                  onClick={() => {
+                    setIsShareOpen(true);
+                    setIsMenuOpen(false);
+                  }}
+                  className={menuItemClass}
+                  data-testid="chat-menu-share"
+                >
+                  <Users className="size-4 text-muted-foreground" />
+                  {isShared ? "Stop sharing…" : "Share with organization…"}
+                </button>
+              )}
+
+              {workflowExecution && onToggleWorkflowViewer && (
+                <button
+                  onClick={() => {
+                    onToggleWorkflowViewer();
+                    setIsMenuOpen(false);
+                  }}
+                  className={menuItemClass}
+                >
+                  <Workflow className="size-4 text-muted-foreground" />
+                  {isWorkflowViewerOpen ? "Hide" : "Show"} workflow
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  setChatThreadMode(isSimplified ? "detailed" : "simplified");
+                  setIsMenuOpen(false);
+                }}
+                aria-pressed={isSimplified}
+                className={menuItemClass}
+              >
+                <ListCollapse className="size-4 text-muted-foreground" />
+                <span className="flex-1">Simplified view</span>
+                {isSimplified && <Check className="size-4 text-primary-ink" aria-hidden />}
+              </button>
+
+              {!isViewer && actions.openTerminal && (
+                <button onClick={runAndClose(actions.openTerminal)} className={menuItemClass}>
+                  <Terminal className="size-4 text-muted-foreground" />
+                  Open terminal
+                </button>
+              )}
+
+              {!isViewer && actions.worktree && (
+                <WorkspaceRecoveryMenuItems
+                  chatId={chatId}
+                  worktree={actions.worktree}
+                  mainWorktree={actions.mainWorktree}
+                  onSelect={() => setIsMenuOpen(false)}
+                />
+              )}
+
+              {!isViewer && (
+                <>
                   <button
-                    onClick={() => onSelectThread?.(backTargetId)}
-                    className="p-1 hover:bg-accent rounded transition-colors flex-shrink-0"
-                    aria-label="Back to parent thread"
+                    onClick={() => {
+                      setIsMoveOpen(true);
+                      setIsMenuOpen(false);
+                    }}
+                    className={menuItemClass}
                   >
-                    <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+                    <FolderInput className="size-4 text-muted-foreground" />
+                    Move to project…
                   </button>
-                </Tooltip>
-              )}
 
-              {/* Title - click to edit inline */}
-              {hideTitle && !isEditingTitle ? null : isEditingTitle ? (
-                <input
-                  ref={titleInputRef}
-                  type="text"
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  onKeyDown={handleTitleKeyDown}
-                  onBlur={handleTitleBlur}
-                  className="text-base font-semibold text-foreground leading-tight bg-transparent border-b border-primary focus:outline-none focus:border-primary flex-1 min-w-0"
-                />
-              ) : (
-                <h1 
-                  onClick={handleTitleClick}
-                  className={`text-base font-semibold text-foreground leading-tight truncate ${
-                    isNewChat || isViewer ? '' : 'cursor-text hover:text-foreground/80'
-                  } transition-colors`}
-                >
-                  {title}
-                </h1>
-              )}
-              
-              {/* Menu button - right after title */}
-              {!isNewChat && chatId && (
-                <div className="relative flex-shrink-0" ref={menuRef}>
-<Tooltip content="Chat options" side="bottom" delay={300} triggerClassName="inline-flex">
-                  <button 
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="touch-target inline-flex items-center justify-center p-1 hover:bg-accent rounded transition-colors"
-                    aria-label="More options"
-                  >
-                    <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                  <button onClick={runAndClose(actions.exportChat)} className={menuItemClass}>
+                    <Download className="size-4 text-muted-foreground" />
+                    Export chat
                   </button>
-</Tooltip>
-                  
-                  {/* Dropdown menu */}
-                  {isMenuOpen && (
-                    <div className="absolute left-0 top-full mt-1 w-64 bg-popover border border-border rounded-md shadow-lg py-1 z-50">
-                      {!isViewer && (
-                        <button
-                          onClick={() => {
-                            handleTitleClick();
-                            setIsMenuOpen(false);
-                          }}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                          Edit Title
-                        </button>
-                      )}
-
-                      {canShare && (
-                        <button
-                          onClick={() => {
-                            setIsShareOpen(true);
-                            setIsMenuOpen(false);
-                          }}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                          data-testid="chat-menu-share"
-                        >
-                          <Users className="h-4 w-4" />
-                          {isShared ? "Stop sharing…" : "Share with organization…"}
-                        </button>
-                      )}
-                      
-                      {workflowExecution && onToggleWorkflowViewer && (
-                        <button
-                          onClick={() => {
-                            onToggleWorkflowViewer();
-                            setIsMenuOpen(false);
-                          }}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                        >
-                          <Workflow className="h-4 w-4" />
-                          {isWorkflowViewerOpen ? "Hide" : "Show"} Workflow
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => {
-                          setChatThreadMode(isSimplified ? "detailed" : "simplified");
-                          setIsMenuOpen(false);
-                        }}
-                        aria-pressed={isSimplified}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                      >
-                        <ListCollapse className="h-4 w-4" />
-                        <span className="flex-1">Simplified view</span>
-                        {isSimplified && <Check className="h-4 w-4 text-primary-ink" aria-hidden />}
-                      </button>
-
-                      {!isViewer && actions.openTerminal && (
-                        <button
-                          onClick={runAndClose(actions.openTerminal)}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                        >
-                          <Terminal className="h-4 w-4" />
-                          Open Terminal
-                        </button>
-                      )}
-
-                      {!isViewer && actions.worktree && (
-                        <WorkspaceRecoveryMenuItems
-                          chatId={chatId}
-                          worktree={actions.worktree}
-                          mainWorktree={actions.mainWorktree}
-                          onSelect={() => setIsMenuOpen(false)}
-                        />
-                      )}
-                      
-                      {!isViewer && (
-                        <>
-                          <button
-                            onClick={() => {
-                              setIsMoveOpen(true);
-                              setIsMenuOpen(false);
-                            }}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                          >
-                            <FolderInput className="h-4 w-4" />
-                            Move to project…
-                          </button>
-
-                          <button
-                            onClick={runAndClose(actions.exportChat)}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                          >
-                            <Download className="h-4 w-4" />
-                            Export Chat
-                          </button>
-                        </>
-                      )}
-                      
-                      <button
-                        onClick={runAndClose(actions.copyChatId)}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                      >
-                        <Copy className="h-4 w-4" />
-                        Copy Chat ID
-                      </button>
-                      
-                      {!isViewer && (
-                        <>
-                          <div className="border-t border-border my-1" />
-
-                          <button
-                            onClick={runAndClose(actions.archive)}
-                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
-                          >
-                            <Archive className="h-4 w-4" />
-                            Archive chat
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* A chat with no machine says so where the user looks first, and
-                  the pill is the way to connect one (NO_MACHINE_CHATS.md §2.4). */}
-              {!isNewChat && chatId && chat?.noMachine && !isViewer && <NoMachinePill chatId={chatId} />}
-
-              {/* Shared with the org: the owner's reminder, the viewer's "read only". */}
-              {!isNewChat && (isShared || isViewer) && (
-                <span
-                  className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-border px-2 py-0.5 text-2xs font-medium text-muted-foreground"
-                  data-testid="chat-shared-chip"
-                >
-                  <Users className="h-3 w-3" aria-hidden />
-                  {isViewer ? "Read only" : "Shared"}
-                </span>
+                </>
               )}
 
-              {/* Spacer to push time to the right */}
-              <div className="flex-1" />
+              <button onClick={runAndClose(actions.copyChatId)} className={menuItemClass}>
+                <Copy className="size-4 text-muted-foreground" />
+                Copy chat ID
+              </button>
 
-              {/* Context usage - the one stat that changes what you do next */}
-              {!isNewChat && (
-                <ContextUsageIndicator
-                  threadTokenCount={contextUsage?.threadTokenCount ?? 0}
-                  compactionThreshold={contextUsage?.compactionThreshold ?? 200000}
-                  compact={true}
-                />
+              {!isViewer && (
+                <>
+                  <div className="my-1 border-t border-border-subtle" />
+                  <button onClick={runAndClose(actions.archive)} className={menuItemClass}>
+                    <Archive className="size-4 text-muted-foreground" />
+                    Archive chat
+                  </button>
+                </>
               )}
 
-              {/* Time ago - top right */}
+              {/* When the chat started: an aside, not a header stat. */}
               {timeAgo && !hideTitle && (
-                <span className="text-xs text-muted-foreground flex-shrink-0">{timeAgo}</span>
+                <div className="px-2.5 pb-1 pt-2 text-meta text-muted-foreground">Started {timeAgo} ago</div>
               )}
             </div>
-            
-            {/* Row 2: Thread tabs (only show if multiple threads) */}
-            {!isNewChat && hasMultipleThreads && onSelectThread && (
-              <ThreadTabs
-                threads={threads}
-                selectedThreadId={selectedThreadId ?? null}
-                onSelectThread={onSelectThread}
-                showAllOption={true}
-                contextUsageByThread={contextUsageByThread}
-                chatId={chatId || undefined}
-              />
-            )}
-
-            {/* Row 3: runs an agent started from this chat (decision 4).
-                Renders nothing for a chat that started none. */}
-            {!isNewChat && chatId && <ChildRunsStrip chatId={chatId} />}
-          </div>
+          )}
         </div>
-      </div>
+      )}
+
       {!isNewChat && chatId && !isViewer && (
         <MoveChatToProjectDialog chatId={chatId} open={isMoveOpen} onClose={() => setIsMoveOpen(false)} />
       )}
       {canShare && chatId && (
         <ShareChatDialog chatId={chatId} open={isShareOpen} onClose={() => setIsShareOpen(false)} />
       )}
-    </div>
+    </header>
+  );
+}
+
+/**
+ * The runs an agent started from this chat, as one quiet link in the top bar
+ * ("2 runs") to the Runs list filtered to them. Nothing for a chat that
+ * started none, and nothing where there is no Runs area.
+ */
+function ChildRunsLink({ chatId }: { chatId: string }) {
+  const runsArea = useCapability("runsArea");
+  const children = useChildRuns(chatId, runsArea);
+  const runs = children.data?.runs ?? [];
+  if (!runsArea || runs.length === 0) return null;
+  const more = children.data?.hasMore ?? false;
+  const count = more ? `${runs.length}+` : String(runs.length);
+  const label = `${count} ${runs.length === 1 && !more ? "run" : "runs"}`;
+  return (
+    <Link
+      to={runsPath()}
+      search={{ parent: chatId }}
+      data-testid="child-runs-link"
+      title={`${label} started here`}
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Bot className="size-4" aria-hidden="true" />
+      {label}
+    </Link>
   );
 }
