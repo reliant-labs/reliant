@@ -21,6 +21,7 @@ import { useSurface } from "../../../lib/surfaceContext";
 import { transcriptDateLabels } from "./transcriptPresentation";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
 import Tooltip from "../../forge-ui/tooltip";
+import { createPortal } from "react-dom";
 import { ChatMessage } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
 import { AgentMessageCard, isAgentMessage } from "../AgentMessageCard";
@@ -92,6 +93,12 @@ interface InterleavedTimelineProps {
   isLoadingOlderMessages?: boolean;
   /** Whether older messages remain to be loaded. Gates the startReached trigger. */
   hasOlderMessages?: boolean;
+  /**
+   * An element in the chat's top bar to render the pinned prompt into (one
+   * quiet line inside the bar), instead of a bar of its own over the
+   * transcript. Absent (a host with no top bar): the overlay, as before.
+   */
+  pinnedPromptSlot?: HTMLElement | null;
 }
 
 /** Minimal info needed for rendering - derived from WorkflowExecution */
@@ -743,6 +750,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   onLoadOlderMessages,
   isLoadingOlderMessages = false,
   hasOlderMessages = false,
+  pinnedPromptSlot = null,
 }: InterleavedTimelineProps) {
   const activeThreads = useActiveThreads(chatId);
   const { mode: threadMode } = useChatThreadMode();
@@ -1095,7 +1103,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // the header left, and a shorter header (an attachment-only message) would
   // otherwise move the line and flip the very swap that showed it.
   const [measuredPinnedHeaderPx, setMeasuredPinnedHeaderPx] = useState<number | null>(null);
-  const pinnedHeaderLine = measuredPinnedHeaderPx ?? PINNED_HEADER_ESTIMATED_PX;
+  // In the top bar, the pin covers none of the transcript: a message is
+  // scrolled away once it passes the transcript's own top edge.
+  const pinnedHeaderLine = pinnedPromptSlot ? 0 : measuredPinnedHeaderPx ?? PINNED_HEADER_ESTIMATED_PX;
 
   // --- Per-thread scroll position memory ---
   // Derive a stable key for the current thread filter
@@ -1407,7 +1417,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // from the bar and carries the edge itself, so the bar's own hairline stays
   // off — one edge under both, not one between them. Read on every scroll
   // (the frame writes attributes only on a change, never React state).
-  const pinnedHeaderShown = !!pinnedUserMsg && pinnedPromptForm !== "hidden";
+  const pinnedHeaderShown = !!pinnedUserMsg && pinnedPromptForm !== "hidden" && !pinnedPromptSlot;
   const reportScrollEdges = floatingChrome?.reportScrollEdges;
   useEffect(() => {
     if (!reportScrollEdges || !scrollerEl) return;
@@ -1632,7 +1642,25 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           view. With hit-testing passing through, a drag over it extends the
           selection to the text underneath instead. The Jump-to button opts
           back in, so it stays clickable. */}
-      {pinnedUserMsg && pinnedPromptForm === "overlay" && (
+      {pinnedUserMsg && pinnedPromptSlot && pinnedPromptForm !== "hidden" &&
+        createPortal(
+          <button
+            type="button"
+            onClick={handleJumpToPinned}
+            data-testid="pinned-user-message-header"
+            data-form="bar"
+            aria-label="Jump to your last message"
+            title={pinnedPromptFirstLine(messageText(pinnedUserMsg)) || undefined}
+            className="inline-flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowUp aria-hidden="true" className="size-3.5 shrink-0" />
+            <span className="min-w-0 truncate">
+              {pinnedPromptFirstLine(messageText(pinnedUserMsg)) || "Your last message"}
+            </span>
+          </button>,
+          pinnedPromptSlot,
+        )}
+      {pinnedUserMsg && !pinnedPromptSlot && pinnedPromptForm === "overlay" && (
         <div
           ref={pinnedHeaderRef}
           data-testid="pinned-user-message-header"
@@ -1696,7 +1724,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           the strip: a hit area the element itself reports (a pseudo-element
           extension tapped fine but measured 36px), and never upward into the
           top bar. */}
-      {pinnedUserMsg && pinnedPromptForm === "strip" && (
+      {pinnedUserMsg && !pinnedPromptSlot && pinnedPromptForm === "strip" && (
         <div
           ref={pinnedHeaderRef}
           data-testid="pinned-user-message-header"

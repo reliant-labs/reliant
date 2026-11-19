@@ -10,7 +10,7 @@ import {
   useImperativeHandle,
   type ReactElement,
 } from "react";
-import { Settings2, ChevronDown, Plus, GitBranch, Layers } from "lucide-react";
+import { ChevronDown, Plus, GitBranch, Layers } from "lucide-react";
 import { useCapability, useSurface } from "../../lib/surfaceContext";
 import { ComposerOptions, type AttachKind, type ComposerOptionsPage } from "./ComposerOptions";
 import { usePriorityFold } from "./composerPriority";
@@ -48,7 +48,6 @@ import { type WorkflowInputs } from "../workflow/WorkflowParamsPanel";
 import { ChatSettingsPopover } from "./settings";
 import type { PopoverTriggerProps } from "../forge-ui/popover";
 import { findModelParamKey, type PageId as SettingsPageId } from "./settings/ChatSettingsPopover";
-import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
 import { fetchWorkflow, useWorkflowDefinitionQuery } from "../../hooks/workflow-queries";
@@ -71,8 +70,7 @@ import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
-import { getInputDefault, getInputEnumValues, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
-import { isSelectorHidden } from "../../lib/executionMode";
+import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
 import { isRequiredInput } from "../workflow/run/runWorkflowValues";
 import {
   adoptServerParams,
@@ -754,18 +752,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           schema.type !== "message" &&
           schema.type !== "attachments"
       );
-    }, [workflowInputs]);
-
-    // Get params explicitly marked for toolbar display
-    const toolbarParams = useMemo(() => {
-      if (!workflowInputs) return [];
-      const result: [string, InputDef][] = [];
-      for (const [name, schema] of Object.entries(workflowInputs)) {
-        if (getInputUI(schema) === "toolbar" && !isSelectorHidden(getInputEnumValues(schema))) {
-          result.push([name, schema]);
-        }
-      }
-      return result;
     }, [workflowInputs]);
 
     // Group presets by their tag, filtering out hidden presets
@@ -1555,14 +1541,19 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     // the sheet says so. The model pill shows only with a fine pointer: on a
     // touch layout, at any width, the model lives in ⊕ alone (D1).
     const modelInlineAllowed = !coarsePointer && canConfigure && hasConfigurableParams;
-    const settingsInlineAllowed = canConfigure && (hasConfigurableParams || isViewingThreadParams);
+    //
+    // At rest the row holds at most three: the workflow, the mode (the first
+    // preset) and the model. Every other control — further presets, toolbar
+    // params, the account, all settings — lives in ⊕, so the composer reads as
+    // four controls and Send, not a toolbar.
+    const modeTarget = canConfigure ? presetTargets[0] : undefined;
     const toolKeys = [
       ...(isPendingChat ? ["workflow"] : []),
-      ...(canConfigure ? presetTargets.map((t) => `preset:${t.name}`) : []),
+      ...(modeTarget ? [`preset:${modeTarget.name}`] : []),
       ...(modelInlineAllowed ? ["model"] : []),
-      ...(canConfigure ? toolbarParams.map(([name]) => `param:${name}`) : []),
+      // Situational, not a control: renders only when someone other than
+      // you pays, or the account is near a limit.
       "account",
-      ...(settingsInlineAllowed ? ["settings"] : []),
     ];
     const fold = usePriorityFold(toolsRef, toolKeys.join("|"));
     const isFolded = (key: string) => {
@@ -1937,8 +1928,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         }`}
         style={{ minHeight: 0, position: "relative", zIndex: 20 }}
       >
-        <div className="px-4 sm:px-6 lg:px-8">
-          <div className="max-w-[1200px] mx-auto">
+        {/* The conversation column: the composer is as wide as the
+            transcript it writes into, with the same gutter. */}
+        <div className="px-4 sm:px-6">
+          <div className="mx-auto max-w-[var(--chat-column)]">
             {/* px, not rem, for the card's inset and the band around it: the
                 one-line card is 44px controls + 1px border + 3px padding = 52
                 (design §5.3), and the band adds 7px + its hairline, at every
@@ -1946,8 +1939,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             <div ref={containerRef} className="composer-root mb-[4px] mt-[3px]">
               <div
                 className={cn(
-                  "relative rounded-3xl border bg-card p-[3px] chat-input-container cursor-text transition-colors duration-200",
-                  hasPendingQuestion ? "border-warning/70" : "border-border",
+                  // The page surface, one firm edge that turns blue while
+                  // you write, and room inside.
+                  "relative rounded-2xl border bg-background p-2 chat-input-container cursor-text transition-[border-color,box-shadow] duration-200",
+                  hasPendingQuestion
+                    ? "border-warning/70"
+                    : "border-border focus-within:border-ring focus-within:ring-1 focus-within:ring-ring/40",
                   isDragging && "bg-[var(--chat-drag-bg,var(--transparent-button-hover))]",
                 )}
                 data-onboarding="chat-input"
@@ -2102,7 +2099,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                       )}
 
                       {/* Note: Presets and params are ALWAYS editable, even while streaming */}
-                      {canConfigure && presetTargets.map((target) => (
+                      {modeTarget && [modeTarget].map((target) => (
                         <div key={`preset-${target.name || "workflow"}`} {...toolProps(`preset:${target.name}`)}>
                           <InlinePresetPicker
                             presets={presetsByTag.get(target.tag) || []}
@@ -2131,18 +2128,18 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                                     {...triggerProps}
                                     type="button"
                                     className={cn(
-                                      "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium px-2.5",
+                                      "flex items-center gap-1.5 rounded-lg px-2.5 text-ui transition-colors",
                                       COMPOSER_CONTROL,
                                       settingsPage === 'model'
-                                        ? "bg-primary/20 text-primary-ink hover:bg-primary/30"
-                                        : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
+                                        ? "bg-foreground/5 text-foreground"
+                                        : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
                                     )}
                                     disabled={disabled || !isMessagingAllowed}
                                     aria-label="Model settings"
                                   >
                                     <span className={cn("w-1.5 h-1.5 rounded-full", providerDotColor(composerModel.provider))} />
                                     <ComposerModelName name={composerModel.name} pinnedId={composerModel.pinnedId} />
-                                    <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+                                    <ChevronDown className="size-3.5 opacity-60" />
                                   </button>
                                 </Tooltip>
                               ),
@@ -2150,70 +2147,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           })}
                         </div>
                       )}
-
-                      {/* Toolbar Params - explicitly marked with ui: "toolbar" */}
-                      {canConfigure && toolbarParams.map(([paramName, schema]) => (
-                        <div key={paramName} {...toolProps(`param:${paramName}`)}>
-                          <InlineParamInput
-                            name={paramName}
-                            schema={schema}
-                            value={workflowParams[paramName] ?? getInputDefault(schema)}
-                            onChange={(value) => {
-                              // `undefined` resets the param: drop the key so its default applies.
-                              const { [paramName]: _previous, ...rest } = workflowParams;
-                              handleWorkflowParamsChange(value === undefined ? rest : { ...rest, [paramName]: value });
-                            }}
-                            disabled={disabled || !isMessagingAllowed}
-                            isStreaming={false}
-                          />
-                        </div>
-                      ))}
 
                       <div {...toolProps("account")} className="flex items-center gap-1.5">
                         <FundingBadge chatId={chatId} />
                         <AccountUsageChip chatId={chatId} />
                       </div>
-
-                      {/* Settings Button - opens settings popover */}
-                      {settingsInlineAllowed && (
-                        <div {...toolProps("settings")}>
-                          {renderSettingsPopover(settingsPage && settingsPage !== 'model' ? settingsPage : 'main', {
-                            anchored: {
-                              open: settingsPage !== null && settingsPage !== 'model',
-                              onOpen: () => setSettingsPage('main'),
-                              trigger: (triggerProps) => (
-                                <Tooltip
-                                  content={settingsPage !== null ? "Hide settings" : "Show all settings"}
-                                  side="top"
-                                >
-                                  <button
-                                    {...triggerProps}
-                                    type="button"
-                                    data-contextual-tip="params-toggle"
-                                    aria-label={settingsPage !== null ? "Hide settings" : "Show all settings"}
-                                    disabled={disabled || !isMessagingAllowed}
-                                    className={cn(
-                                      "relative flex items-center justify-center rounded-full transition-colors w-[32px] touch:w-[44px]",
-                                      COMPOSER_CONTROL,
-                                      !disabled
-                                        ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
-                                        : "cursor-default opacity-60",
-                                      settingsPage !== null
-                                        ? "bg-primary/20 text-primary-ink"
-                                        : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
-                                    )}
-                                  >
-                                    <Settings2 className="w-3.5 h-3.5" />
-                                    {hasUnsetParams && (
-                                      <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive" />
-                                    )}
-                                  </button>
-                                </Tooltip>
-                              ),
-                            },
-                          })}
-                        </div>
-                      )}
                     </div>
 
                     <div className="composer-action">
