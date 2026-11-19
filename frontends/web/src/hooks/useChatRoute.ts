@@ -141,6 +141,7 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
           project: typeof search.project === "string" ? search.project : undefined,
           machine: typeof search.machine === "string" ? search.machine : undefined,
           ws: typeof search.ws === "string" ? search.ws : undefined,
+          app: typeof search.app === "string" ? search.app : undefined,
         }
       : null;
   const appliedFor = useRef<string | null>(null);
@@ -148,7 +149,7 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
     if (!ready || !newSearch || appliedFor.current === locationKey) return;
     appliedFor.current = locationKey;
     if (isNewChatApplied(newSearch)) return;
-    applyNewChat({ projectId: newSearch.project, daemonId: newSearch.machine, worktreeId: newSearch.ws }).catch((error) => {
+    applyNewChat({ projectId: newSearch.project, daemonId: newSearch.machine, worktreeId: newSearch.ws, appName: newSearch.app }).catch((error) => {
       void toast.error(error);
     });
     // newSearch is derived from locationKey.
