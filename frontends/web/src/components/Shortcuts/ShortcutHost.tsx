@@ -57,7 +57,7 @@ import { lazyRoute } from "../../lib/lazyRoute";
 import { logger } from "../../lib/logger";
 import { SequenceHint } from "../Layout/SequenceHint";
 import { revealShellNav, toggleShellNav } from "../Layout/shell/shellFrame";
-import { homePath, projectPath, settingsPath, workflowsPath } from "@/lib/paths";
+import { homePath, projectChatsPath, settingsPath, workflowsPath } from "@/lib/paths";
 import { orgFreeRouteId } from "@/lib/paths/org";
 import { chatShellRouteOf } from "@/lib/chatRoute";
 
@@ -218,7 +218,7 @@ function createHostCore(
     // The chat workspace's URL carries the sidebar's project filter.
     const projectId = useWorkspaceStateStore.getState().projectFilterId;
     if (projectId) {
-      void navigate({ to: projectPath(projectId), search: {} });
+      void navigate({ to: projectChatsPath(projectId), search: {} });
     } else {
       void navigate({ to: homePath(), search: {} });
     }
