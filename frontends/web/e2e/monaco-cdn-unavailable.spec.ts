@@ -28,6 +28,8 @@ type MonacoDebugWindow = {
 };
 
 test('the editor mounts from our own build with the Monaco CDN blocked', async ({ page }) => {
+  // A budget, not a wait: a cold dev server compiles the app and serves
+  // Monaco's ESM modules unbundled before the editor can mount.
   test.setTimeout(60_000);
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -83,10 +85,21 @@ test('the editor mounts from our own build with the Monaco CDN blocked', async (
     })
     .toBeGreaterThan(0);
   const origin = new URL(page.url()).origin;
-  expect(workers.some((url) => url.startsWith(`${origin}/`) && /json\.worker/.test(url)), `the JSON worker came from ${origin}: ${workers}`).toBe(true);
+  await expect
+    .poll(() => workers.filter((url) => /json\.worker/.test(url)).length, { message: `a JSON worker started: ${workers}` })
+    .toBeGreaterThan(0);
+  test.info().annotations.push({ type: 'workers', description: workers.join(' ') });
 
+  // Every worker is a file of this build on our origin: `/assets/<name>.worker-<hash>.js`
+  // from a production build (`?worker_file` modules from the dev server). None
+  // is a `blob:` URL, which is how Monaco's CDN build started its workers.
+  for (const url of workers) {
+    expect(url, 'no worker starts from a blob: URL').not.toMatch(/^blob:/);
+    const { origin: workerOrigin, pathname, search } = new URL(url);
+    expect(workerOrigin, `worker ${url} is served from ${origin}`).toBe(origin);
+    expect(/^\/assets\/[\w-]+\.worker-[\w-]+\.js$/.test(pathname) || search.includes('worker_file'), `worker ${url} is a file of this build`).toBe(true);
+  }
   expect(cdnRequests, 'nothing is requested from jsdelivr').toEqual([]);
-  for (const url of workers) expect(url.startsWith(origin) || url.startsWith('blob:'), `worker ${url} is ours`).toBe(true);
   expect(cspViolations, 'no Content-Security-Policy violations').toEqual([]);
   expect(errors, 'no uncaught JavaScript errors').toEqual([]);
 });

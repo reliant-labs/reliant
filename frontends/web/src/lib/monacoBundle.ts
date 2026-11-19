@@ -48,8 +48,11 @@ export function workerFor(label: string): Worker {
   }
 }
 
-globalThis.MonacoEnvironment = {
-  getWorker: (_workerId: string, label: string) => workerFor(label),
+// `self`, as Monaco's docs spell it. This module only runs on the page's main
+// thread, where `self`, `window` and `globalThis` are one object, and Monaco's
+// worker factory reads `globalThis.MonacoEnvironment`.
+self.MonacoEnvironment = {
+  getWorker: (_workerId: string, label: string): Worker => workerFor(label),
 };
 
 export { monaco };

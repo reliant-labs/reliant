@@ -11,6 +11,7 @@
  * picture).
  */
 
+import { setImmediate } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../monacoBundle', () => {
@@ -33,8 +34,9 @@ describe('the Monaco chunk fails to load', () => {
 
   it('rejects getMonaco with an Error naming the chunk, and leaves no unhandled rejection', async () => {
     await expect(monacoManager.getMonaco()).rejects.toThrow(/^The Monaco editor chunk did not load: ./);
-    // Unhandled rejections are reported after the microtask queue drains.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Node's rejection tracking reports an unhandled rejection once the
+    // microtask queue has drained, before the next macrotask runs.
+    await setImmediate();
     expect(unhandled).toEqual([]);
   });
 
