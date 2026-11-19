@@ -92,7 +92,7 @@ export function CreditBand({
       // us to. Pinning the class instead would pin styling, break on every
       // visual tweak, and still not catch the two bands being made identical.
       data-band-shape="reservoir"
-      className="rounded-2xl bg-card px-5 py-5 sm:px-6"
+      className="rounded-2xl border border-border bg-card px-5 py-5 sm:px-6"
     >
       <div className="flex items-center gap-2">
         <Wallet className="h-4 w-4 text-muted-foreground" />
@@ -131,7 +131,7 @@ export function CreditBand({
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(meterFraction * 100)}
-              className="h-2 w-full overflow-hidden rounded-full bg-background"
+              className="h-2 w-full overflow-hidden rounded-full bg-foreground/10"
             >
               <div
                 className={cn(
