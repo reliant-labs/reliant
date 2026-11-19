@@ -7,7 +7,7 @@
  *   ledger      prod only, degraded (its api is crash-looping)
  */
 import type { Fixtures } from '../rpc'
-import { DAY, HOUR, MIN, USER, iso } from './base'
+import { DAY, FIXED_NOW, HOUR, MIN, USER, iso } from './base'
 
 const ENVIRONMENTS = [
   { id: 'env-shop-prod', name: 'prod', project: 'shopfront', kind: 'DEPLOY_ENVIRONMENT_KIND_PERSISTENT', createdAt: iso(30 * DAY) },
@@ -83,7 +83,7 @@ const SERVICE_OVERVIEW = SERVICES.map((s, i) => {
   const requests = Math.round(s.rps * 86400)
   return {
     service: s.service, requestCount: String(requests), ratePerSecond: s.rps,
-    errorCount: String(Math.round(requests * s.errors)), errorRate: s.errors, errorLogCount: String(Math.round(requests * s.errors * 0.6)),
+    errorCount: String(Math.round(requests * s.errors)), errorRate: s.errors, p50Ms: 38 + i * 12, p95Ms: 180 + i * 140, p99Ms: 640 + i * 380, errorLogCount: String(Math.round(requests * s.errors * 0.6)),
     requestTrend: trend(s.rps, i * 5), errorTrend: trend(s.rps * s.errors, i * 5 + 2), source: 'otel', operatorData: false, group: {},
   }
 })
@@ -106,7 +106,48 @@ const ISSUES = [
     status: 'ISSUE_STATUS_UNRESOLVED', events: 12, affected: 11, first: 3 * DAY, last: 3 * HOUR, platform: 'ISSUE_PLATFORM_BROWSER' }),
 ]
 
+// The Overview headline and the Observability home read the same RED panel:
+// requests, errors and p95 as numbers, and as 24 hourly points. The previous
+// period is the same panel asked for a window that ends earlier, and reads a
+// little lower.
+const RED_NOW = {
+  requests: 3_950_000, errors: 20_100, p95: 180,
+}
+const RED_BEFORE = { requests: 3_610_000, errors: 17_300, p95: 196 }
+function queryPanel(req: Record<string, unknown>) {
+  const panel = (req.panel ?? {}) as { id?: string; kind?: string }
+  if (!String(panel.id ?? '').startsWith('observability-home-')) return {}
+  const range = ((req.scope ?? {}) as { timeRange?: { start?: string; end?: string } }).timeRange
+  const end = range?.end ? Date.parse(range.end) : FIXED_NOW
+  const totals = end < FIXED_NOW - 5 * MIN ? RED_BEFORE : RED_NOW
+  const at = (ago: number) => new Date(FIXED_NOW - ago).toISOString()
+  const wave = (i: number, phase: number) => 1 + 0.3 * Math.sin((i + phase) / 3.2)
+  const line = (label: string, per: number, phase: number) => ({
+    label, group: {}, value: 0,
+    points: Array.from({ length: 24 }, (_, i) => ({ time: at((23 - i) * HOUR), value: Math.round(per * wave(i, phase) * 1000) / 1000, partial: i === 23 })),
+  })
+  if (panel.kind === 'number') {
+    return {
+      panelId: panel.id, kind: 'number', unit: '', stepSeconds: 0,
+      series: [
+        { label: 'requests', group: {}, points: [], value: totals.requests },
+        { label: 'errors', group: {}, points: [], value: totals.errors },
+        { label: 'p95', group: {}, points: [], value: totals.p95 },
+      ],
+    }
+  }
+  return {
+    panelId: panel.id, kind: 'line', unit: '', stepSeconds: 3600,
+    series: [
+      line('requests', totals.requests / 24, 0),
+      line('errors', totals.errors / 24, 2),
+      line('p95', totals.p95, 4),
+    ],
+  }
+}
+
 export const consoleFixtures: Fixtures = {
+  'controlplane.v1.ObservabilityService/QueryPanel': queryPanel,
   'controlplane.v1.IssuesService/ListIssues': (req) => {
     const statuses = (req.statuses as string[] | undefined) ?? []
     return { issues: statuses.length ? ISSUES.filter((i) => statuses.includes(i.status)) : ISSUES, nextPageToken: '' }
