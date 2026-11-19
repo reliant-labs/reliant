@@ -98,7 +98,7 @@ export function MobileGitHubCloneSheet({
         aria-label="Dismiss"
         onClick={closable ? onClose : undefined}
         disabled={!closable}
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-scrim"
       />
       <div
         className="relative flex max-h-[85vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-lg"

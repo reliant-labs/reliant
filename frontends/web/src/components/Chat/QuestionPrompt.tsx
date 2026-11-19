@@ -256,7 +256,7 @@ export function QuestionPrompt({ questions, onSubmit, inline = false }: Question
               "w-full rounded-lg border bg-background px-3 py-2.5 text-ui",
               "touch:min-h-[44px]",
               "placeholder:text-muted-foreground/50",
-              "focus:outline-none focus:border-ring",
+              "focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring",
               "resize-none transition-colors",
               isOtherActive
                 ? "border-ring"

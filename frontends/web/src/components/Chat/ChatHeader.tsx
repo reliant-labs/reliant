@@ -28,6 +28,7 @@ import {
   FolderInput,
   Users,
   Bot,
+  ChevronDown,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChat } from "../../hooks/chat-queries";
@@ -37,10 +38,12 @@ import { useMessages } from "../../hooks/message-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import Tooltip from "../forge-ui/tooltip";
 import { useThreads, ThreadTabs } from "./thread-views";
-import { Link } from "@tanstack/react-router";
+import DropdownMenu, { type MenuItem } from "../forge-ui/dropdown_menu";
 import { useChildRuns } from "../../hooks/run-queries";
+import { runStatusFromDisplayState } from "../../lib/runStatus";
+import { RunStatusDot } from "../runs/RunStatusIndicator";
 import { useCapability } from "../../lib/surfaceContext";
-import { runsPath } from "../../lib/paths";
+import { runPath, runsPath, withSearch } from "../../lib/paths";
 import { cn } from "../../lib/utils";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { useChatActions } from "./useChatActions";
@@ -444,8 +447,9 @@ export function ChatHeader({
 }
 
 /**
- * The runs an agent started from this chat, as one quiet link in the top bar
- * ("2 runs") to the Runs list filtered to them. Nothing for a chat that
+ * The runs an agent started from this chat, as one quiet control in the top
+ * bar ("2 runs") opening a menu: each run, with its state, straight to its
+ * page, and the Runs list filtered to all of them. Nothing for a chat that
  * started none, and nothing where there is no Runs area.
  */
 function ChildRunsLink({ chatId }: { chatId: string }) {
@@ -456,16 +460,39 @@ function ChildRunsLink({ chatId }: { chatId: string }) {
   const more = children.data?.hasMore ?? false;
   const count = more ? `${runs.length}+` : String(runs.length);
   const label = `${count} ${runs.length === 1 && !more ? "run" : "runs"}`;
+  const items: MenuItem[] = runs.map((run) => {
+    const status = runStatusFromDisplayState(run.displayState, run.outcome);
+    return {
+      label: run.title || "Untitled run",
+      href: runPath(run.chatId),
+      icon: <RunStatusDot status={status} size="sm" />,
+      hint: status.label,
+      testId: `child-run-${run.chatId}`,
+    };
+  });
   return (
-    <Link
-      to={runsPath()}
-      search={{ parent: chatId }}
-      data-testid="child-runs-link"
-      title={`${label} started here`}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <Bot className="size-4" aria-hidden="true" />
-      {label}
-    </Link>
+    <DropdownMenu
+      align="right"
+      label="Runs started here"
+      menuClassName="min-w-[240px]"
+      groups={[
+        { items },
+        { items: [{ label: "All runs started here", href: withSearch(runsPath(), { parent: chatId }) }] },
+      ]}
+      trigger={(props) => (
+        <button
+          {...props}
+          ref={props.ref as React.Ref<HTMLButtonElement>}
+          type="button"
+          data-testid="child-runs-link"
+          aria-label={`${label} started here`}
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Bot className="size-4" aria-hidden="true" />
+          {label}
+          <ChevronDown className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
+        </button>
+      )}
+    />
   );
 }

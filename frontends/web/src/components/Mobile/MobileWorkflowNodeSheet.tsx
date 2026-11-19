@@ -103,7 +103,7 @@ export function MobileWorkflowNodeSheet({
         type="button"
         aria-label="Dismiss"
         onClick={onClose}
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-scrim"
       />
 
       <div
