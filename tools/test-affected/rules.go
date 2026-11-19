@@ -273,6 +273,9 @@ var rules = []rule{
 			"frontends/web/package.json", "frontends/web/pnpm-lock.yaml", "frontends/web/pnpm-workspace.yaml", "frontends/web/.nvmrc",
 			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
 			"frontends/web/src/test/setup.ts",
+			// pnpm-workspace.yaml's patchedDependencies: a patch rewrites an
+			// installed dependency that any vitest file may load.
+			"frontends/web/patches/**",
 			// frontends/web installs sdk/ts as a workspace member: its manifest is
 			// part of web's lockfile and dependency graph.
 			"sdk/ts/package.json",
