@@ -480,6 +480,9 @@ type WorkerToolsFactoryDeps struct {
 	WriteLedger   writeledger.Service
 	CatalogSearch *WorkerCatalogSearch
 	Router        *WorkerDaemonRouter
+	// Membership names a person's org role for propose_connection, which
+	// offers an org-wide connection only to an org owner or admin.
+	Membership *orgs.Resolver
 }
 
 // NewWorkerToolsFactory builds the factory.
@@ -523,6 +526,9 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
 		MachineController: newMachineController(repo, d.Router),
+		// propose_connection raises its card and reads back the connection
+		// the person made (metadata only, never the credential).
+		ConnectionProposer: newConnectionProposer(repo, d.Membership),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens

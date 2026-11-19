@@ -551,6 +551,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		CatalogSearch: g.WorkerCatalogSearch(),
 		Router:        g.WorkerDaemonRouter(),
 		DB:            g.Database(),
+		Membership:    g.OrgResolver(),
 	})
 }
 
@@ -979,10 +980,11 @@ func (g *Graph) newAccount() (*account.Service, error) {
 // newApproval constructs the approval handler (internal/handlers/approval).
 func (g *Graph) newApproval() (*approval.Service, error) {
 	return approval.New(approval.Deps{
-		Logger:  g.Log,
-		Config:  g.Cfg,
-		Repo:    g.Database(),
-		Signals: g.PauseService(),
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Signals:     g.PauseService(),
+		Connections: g.APIConnections().Service,
 	})
 }
 

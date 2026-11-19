@@ -6,6 +6,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -41,6 +42,11 @@ type approvalExecution struct {
 	// BatchID groups the approvals one step raises together; empty for one
 	// raised on its own.
 	BatchID string
+	// ConnectionProposal is set when the approval is a propose_connection
+	// card: what it asks the person to connect. It is recorded on the
+	// approval, and a person approves it by making the connection, whose id
+	// comes back as the output's connection_id.
+	ConnectionProposal *core.ConnectionProposal
 	// Unattended is true when the run has no human to act on an approval.
 	Unattended bool
 	Logger     log.Logger
@@ -189,12 +195,16 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 	if input.BatchID != "" {
 		createInput["batch_id"] = input.BatchID
 	}
+	if input.ConnectionProposal != nil {
+		createInput["connection_proposal"] = input.ConnectionProposal
+	}
 
 	var createOutput struct {
 		ApprovalID      string `json:"approval_id"`
 		AlreadyResolved bool   `json:"already_resolved"`
 		Status          string `json:"status"`
 		ActionTaken     string `json:"action_taken"`
+		ConnectionID    string `json:"connection_id,omitempty"`
 	}
 	if err := workflow.ExecuteActivity(createCtx, "ApprovalCreate", createInput).Get(ctx, &createOutput); err != nil {
 		return nil, fmt.Errorf("ApprovalCreate activity failed: %w", err)
@@ -202,11 +212,15 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 
 	// Already resolved (idempotency on replay): return without waiting.
 	if createOutput.AlreadyResolved {
-		return map[string]interface{}{
+		output := map[string]interface{}{
 			"approval_id":  createOutput.ApprovalID,
 			"status":       createOutput.Status,
 			"action_taken": createOutput.ActionTaken,
-		}, nil
+		}
+		if createOutput.ConnectionID != "" {
+			output["connection_id"] = createOutput.ConnectionID
+		}
+		return output, nil
 	}
 
 	signalName := "signal.approval." + createOutput.ApprovalID
@@ -217,7 +231,7 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 
 	selector := workflow.NewSelector(ctx)
 
-	var status, actionTaken, denialReason string
+	var status, actionTaken, denialReason, connectionID string
 
 	selector.AddReceive(signalCh, func(ch workflow.ReceiveChannel, more bool) {
 		var signalData map[string]interface{}
@@ -232,6 +246,9 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 		}
 		if dr, ok := signalData["denial_reason"].(string); ok {
 			denialReason = dr
+		}
+		if id, ok := signalData["connection_id"].(string); ok {
+			connectionID = id
 		}
 		cancelTimer()
 	})
@@ -270,6 +287,9 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 	}
 	if denialReason != "" {
 		output["denial_reason"] = denialReason
+	}
+	if connectionID != "" {
+		output["connection_id"] = connectionID
 	}
 
 	return output, nil

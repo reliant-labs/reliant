@@ -138,6 +138,9 @@ const (
 	// The user's own machines: list them; start, stop or resize one.
 	ToolListMachines  = "list_machines"
 	ToolManageMachine = "manage_machine"
+
+	// Ask a person to connect an integration, on an approval card.
+	ToolProposeConnection = "propose_connection"
 )
 
 // AllToolNames returns all known tool names for validation.
@@ -145,6 +148,7 @@ var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
 	ToolWaitForMachine, ToolListMachines, ToolManageMachine,
+	ToolProposeConnection,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,

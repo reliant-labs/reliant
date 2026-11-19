@@ -29,6 +29,9 @@ func Refusal() string {
 type Execution struct {
 	Unattended bool
 	Approvals  map[string]string // tool call id -> approved preview hash
+	// Connections maps an approved propose_connection call to the id of the
+	// connection the person made on its card (tool call id -> connection id).
+	Connections map[string]string
 }
 type executionKey struct{}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -58,6 +59,12 @@ type ActivationPreview struct {
 	CardRequired bool `json:"card_required,omitempty"`
 	// Reason says why, in one display-safe line.
 	Reason string `json:"reason,omitempty"`
+	// Kind is PreviewKindConnectionProposal for a propose_connection card,
+	// "" for any other. The runtime settles a card by its kind.
+	Kind string `json:"kind,omitempty"`
+	// Connection is set for a propose_connection card: what it asks the
+	// person to connect. Its approval is decided by making the connection.
+	Connection *core.ConnectionProposal `json:"connection,omitempty"`
 }
 
 // ApprovalRequiredMessage is the refusal when a change needs a card and none

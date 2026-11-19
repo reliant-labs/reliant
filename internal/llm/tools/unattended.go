@@ -54,6 +54,12 @@ var unattendedWithheld = []struct {
 		reason:    "unattended runs can't start, stop or resize machines",
 	},
 	{
+		// A connection proposal is a card a person completes in the
+		// connection dialog; with nobody attending it could only wait.
+		withholds: toolNamed(ToolProposeConnection),
+		reason:    "unattended runs can't ask a person to connect an integration",
+	},
+	{
 		// An integration action that changes something outside Reliant —
 		// posts to Slack, sends an email or a text, opens or comments on an
 		// issue, makes an HTTP request — puts unvetted text in front of other

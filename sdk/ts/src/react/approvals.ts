@@ -178,7 +178,12 @@ export interface ApprovalActionsOptions {
 }
 
 export interface ApprovalActions {
-  approve(requestId: string, options?: { actionTaken?: string }): Promise<void>;
+  /**
+   * `connectionId` approves a connection proposal (`approval.connectionProposal`):
+   * the connection the person made from its card. The server requires it for
+   * one, and checks it against the proposal.
+   */
+  approve(requestId: string, options?: { actionTaken?: string; connectionId?: string }): Promise<void>;
   deny(requestId: string, options?: { denialReason?: string; actionTaken?: string }): Promise<void>;
   approveMany(requestIds: readonly string[], options?: { actionTaken?: string }): Promise<void>;
   denyMany(requestIds: readonly string[], options?: { denialReason?: string; actionTaken?: string }): Promise<void>;
@@ -245,7 +250,7 @@ export function createApprovalActions(options: ApprovalActionsOptions): Approval
   return {
     approve: (requestId, o) =>
       run([requestId], ApprovalStatus.APPROVED, { actionTaken: o?.actionTaken }, () =>
-        service().approve({ requestId, actionTaken: o?.actionTaken }),
+        service().approve({ requestId, actionTaken: o?.actionTaken, connectionId: o?.connectionId }),
       ),
     deny: (requestId, o) =>
       run([requestId], ApprovalStatus.DENIED, { denialReason: o?.denialReason, actionTaken: o?.actionTaken }, () =>

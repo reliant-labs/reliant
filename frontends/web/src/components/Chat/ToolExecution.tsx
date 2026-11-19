@@ -48,6 +48,8 @@ import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
 import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
+import { ConnectionProposalCard } from "./ConnectionProposalCard";
+import { asConnectionProposal, proposalDenial } from "../../lib/connectionProposal";
 import {
   ContentBlockType,
   ToolCallStatus,
@@ -1108,7 +1110,16 @@ function ToolExecutionComponent({
         {/* Approval UI — this is the decision screen mobile approvals exist
             for, so Approve/Deny get real touch targets there instead of the
             desktop's compact row. */}
-        {shouldShowApprovalUI && (
+        {shouldShowApprovalUI && approval && chatId && asConnectionProposal(approval) && (
+          <div className="px-2 py-2 border-t border-border">
+            <ConnectionProposalCard
+              approval={asConnectionProposal(approval)!}
+              onConnected={(connectionId) => approveMutation.mutate({ requestId: approval.id, connectionId })}
+              onDecline={(notCompleted) => denyMutation.mutate(proposalDenial(approval.id, notCompleted))}
+            />
+          </div>
+        )}
+        {shouldShowApprovalUI && !(approval && chatId && asConnectionProposal(approval)) && (
           <div className="px-2 py-2 border-t border-warning/20 bg-warning/5">
             {showRichContent && toolCall.input && renderToolContent(<ToolContentArea ctx={renderContext} />)}
             <p className="text-xs font-medium text-warning-ink mb-1.5">Approval required</p>
