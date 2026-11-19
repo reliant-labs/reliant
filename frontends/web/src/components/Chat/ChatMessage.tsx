@@ -164,7 +164,8 @@ interface ChatMessageProps {
   slice?: MessageSlice;
   /**
    * False when a later row of the same turn follows: only the row that ends
-   * the turn carries the actions row. Absent: it does.
+   * the turn carries the actions row. For an answer, a later row of its own
+   * thread; for a person's message, any answer at all. Absent: it does.
    */
   turnEnd?: boolean;
 }
@@ -955,7 +956,8 @@ function ChatMessageComponent({
   const actionsAtRest = isLatestMessage && !isStreaming;
   const hiddenUntilHover = !actionsAtRest && "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100";
   // One actions row per exchange, under its answer: a row that a later row of
-  // the same turn follows carries none.
+  // the same turn follows carries none. A prompt keeps its own only until an
+  // answer to it appears.
   const showAssistantActions = showActions && turnEnd && !(isLatestMessage && isStreaming);
 
   // §2.5: under the answer, copy and branch, then the time.
@@ -1038,7 +1040,7 @@ function ChatMessageComponent({
       {failedClientMessageId && chatId ? (
         <FailedSendStatus chatId={chatId} clientMessageId={failedClientMessageId} />
       ) : (
-        showActions && userActions
+        showActions && turnEnd && userActions
       )}
     </div>
   );
