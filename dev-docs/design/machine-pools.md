@@ -236,10 +236,23 @@ Two limits apply, and they do different jobs:
   state and live runs, plus warnings for a pool with no members or fewer than
   `min_members`), `PutMachinePool`, `DeleteMachinePool` (refused while a
   trigger uses the pool).
+- **The three writes need a person** (owning the machine or pool is not
+  enough: every credential of the owner owns them, a machine's own daemon
+  credential included, and a compromised box must not pull pool work toward
+  itself or strip others out of their pools). The handlers admit only what
+  `auth.RequirePersonOrApprovedCard` does: an app session, a self-host shared
+  key, or the worker's write for an agent call a person approved on its card
+  (`auth.WithApprovedCard`, set by the tool after the approved hash matched).
+  The CLI login, API tokens, daemon credentials, OAuth clients and an
+  unclassified context are refused with reason `person_required`. A daemon's
+  connect-time labels (below) do not go through them: the registration
+  merges them into the machine that connected, and only that one.
 - CLI: `reliant machine label <machine> k=v… [--replace] [--remove k…]`
   (merges by default), `reliant machine pool put|ls|rm` (`put` overlays only
-  the flags passed onto the stored pool). An agent's shell is refused the
-  writes.
+  the flags passed onto the stored pool). The writes work only where the CLI
+  holds a person's credential (a self-host shared key); with a sign-in the
+  server refuses the CLI login, and an agent's shell is refused them in the
+  CLI too.
 - `DaemonInfo.labels`, `Trigger.machine_pool_id`/`machine_pool_name`
   (`machine_state` is `pool`). A pooled run's member is its chat's
   `active_daemon_id`; exposing `chats.machine_pool_id` on `Chat` needs the

@@ -37,7 +37,10 @@ type machineRegistry interface {
 // and defines pools with (*daemon_registry.Service): the label and pool tools
 // write through them, as the user, so an agent's change follows exactly the
 // rules, side effects (pool members' idle timeouts) and refusals the web's
-// does. The caller's id is on the ctx, as the auth middleware puts it.
+// does. The caller's id is on the ctx, as the auth middleware puts it. The
+// writes carry no request credential here, so the registry refuses them
+// unless the tool marked the ctx with the card a person approved for exactly
+// that write (auth.WithApprovedCard, which asUser keeps).
 type machinePoolAdmin interface {
 	SetMachineLabels(context.Context, *connect.Request[pb.SetMachineLabelsRequest]) (*connect.Response[pb.SetMachineLabelsResponse], error)
 	ListMachinePools(context.Context, *connect.Request[pb.ListMachinePoolsRequest]) (*connect.Response[pb.ListMachinePoolsResponse], error)
