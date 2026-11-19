@@ -213,7 +213,10 @@ export default function DataTable<T extends Record<string, unknown>>({
   ariaLabel,
 }: DataTableProps<T>) {
   // 41px rows (--table-row-h): calm, readable, Vercel-like. Compact stays 32px.
+  // The cells pad vertically too, so a two-line row (a name over its
+  // description) breathes instead of filling the 41px exactly.
   const rowHeight = compact ? "h-8" : "h-[41px]";
+  const cellPad = compact ? "py-1" : "py-2.5";
   const titleIndex = Math.max(
     0,
     columns.findIndex((col) => col.stackTitle),
@@ -354,7 +357,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                     >
                       {selectable && (
                         <td
-                          className={`${rowHeight} relative z-10 px-4 ${stacked ? STACK.cell : ""}`}
+                          className={`${rowHeight} ${cellPad} relative z-10 px-4 ${stacked ? STACK.cell : ""}`}
                         >
                           <input
                             type="checkbox"
@@ -374,7 +377,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                           <td
                             key={col.key}
                             data-label={stacked && !isTitle ? col.header : undefined}
-                            className={`${rowHeight} whitespace-nowrap px-4 text-ui text-ink ${
+                            className={`${rowHeight} ${cellPad} whitespace-nowrap px-4 text-ui text-ink ${
                               col.numeric ? "text-right tabular-nums" : ""
                             } ${col.interactive ? "relative z-10" : ""} ${col.className ?? ""} ${
                               stacked
