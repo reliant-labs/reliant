@@ -29,6 +29,7 @@ import { TriggerCard } from "./TriggerCard";
 import { useRerun } from "./useRerun";
 import { useRunLaunch } from "./useRunLaunch";
 import { RunMachineBanner } from "./MachineStatus";
+import { projectPath, runsPath } from "@/lib/paths";
 
 export function RunDetailPage() {
   const { runId } = useParams({ strict: false }) as { runId?: string };
@@ -75,7 +76,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
     );
 
   const openInProject = () =>
-    void navigate({ to: "/project/$projectId", params: { projectId: chat.projectId }, search: {} });
+    void navigate({ to: projectPath(chat.projectId), search: {} });
 
   const onOpenAsChat = () => {
     const isChat = !chat.launchKind || chat.launchKind === "chat.start" || chat.adoptedAt;
@@ -149,7 +150,7 @@ function RunNotFound() {
         <p className="text-sm font-medium text-foreground">This run doesn't exist or isn't yours.</p>
         <p className="mt-1 text-sm text-muted-foreground">It may have been deleted.</p>
         <Link
-          to="/workflows/runs"
+          to={runsPath()}
           className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           All runs

@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { ChevronDown, ChevronRight, AlertTriangle, RotateCw, Copy, Check, ArrowUpRight } from 'lucide-react';
 import type { ErrorUpdate } from '../../types/streaming';
 import { cleanTemporalErrorMessage, hasTemporalScaffolding } from '../../lib/temporalErrors';
+import { settingsPath } from "@/lib/paths";
 
 interface WorkflowErrorMessageProps {
   error: ErrorUpdate;
@@ -39,7 +40,7 @@ function OpenProviderSettingsButton() {
       type="button"
       onClick={() =>
         // The AI section opens on its Providers tab.
-        navigate({ to: '/settings/$section', params: { section: 'ai' } })
+        navigate({ to: settingsPath('ai') })
       }
       className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-background/60 px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-destructive/10"
     >

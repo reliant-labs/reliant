@@ -1,17 +1,16 @@
 import type { ChatListIndicators } from "../../lib/runStatus";
 
 /**
- * The status word a chat row shows, as text — "Running", "Needs you",
- * "Failed" — rather than a row tint and a dot whose meaning lived in a hover
- * tooltip. Green is not one of them: green means a success, and a row is never
+ * A chat row's state, in words and a tone. The row draws it as one mark in
+ * its 16px slot (sidebar/primitives ChatStateSlot), never as a chip or a
+ * tinted row; the words are the mark's accessible name and its tooltip.
+ * Green is not one of them: green means a success, and a row is never
  * painted for one.
  *
- *   running    work in progress: a small spinner, no chip and no word (the
- *              label is its accessible name and hover title)
- *   attention  the user is needed (a question, an approval): a warning chip,
- *              and the only state that tints the row
- *   failed     the run stopped on an error: a destructive chip
- *   neutral    anything else in flight (paused, waiting for a machine)
+ *   running    work in progress: a small spinner
+ *   attention  the user is needed (a question, an approval): a warning dot
+ *   failed     the run stopped on an error: a destructive dot
+ *   neutral    anything else in flight (paused, waiting for a machine): a muted dot
  */
 export type ChatRowTone = "running" | "attention" | "failed" | "neutral";
 
@@ -37,9 +36,9 @@ export function chatRowChip({ needsInput, status }: Pick<ChatListIndicators, "ne
   }
 }
 
-/** Chip colours. Running has none: it renders as a small spinner, not a chip. */
-export const CHAT_ROW_CHIP_CLASS: Record<Exclude<ChatRowTone, "running">, string> = {
-  attention: "border-warning/40 bg-warning/10 text-warning-ink",
-  failed: "border-destructive/40 bg-destructive/10 text-destructive-ink",
-  neutral: "border-border text-muted-foreground",
+/** Dot colours. Running has none: it renders as a small spinner. */
+export const CHAT_ROW_DOT_CLASS: Record<Exclude<ChatRowTone, "running">, string> = {
+  attention: "bg-warning",
+  failed: "bg-destructive",
+  neutral: "bg-muted-foreground",
 };

@@ -2404,16 +2404,28 @@ message WorkflowConcurrency {
   // per key, and each older one it replaces is recorded skipped with the
   // detail "superseded", never failed. Running runs are never touched.
   WorkflowConcurrencyWaiting waiting = 2;
-  // Key groups waiting firings for waiting: latest, a template over `trigger`
-  // like a webhook dedupe_key, e.g. '{{ trigger.payload.attributes.repository }}'.
-  // Unset: every firing of the workflow shares one key. It only decides which
-  // waiting firings replace each other; the cap still bounds the whole
-  // workflow. A firing whose key cannot be rendered waits and is never
-  // superseded.
+  // Key groups firings, a template over `trigger` like a webhook dedupe_key,
+  // e.g. '{{ trigger.payload.attributes.repository }}'. Under waiting: latest
+  // it decides which waiting firings replace each other (unset: every firing
+  // of the workflow shares one key); with max_running_per_key it is the group
+  // whose running runs are capped. The workflow-wide cap still bounds the
+  // whole workflow. A firing whose key cannot be rendered waits, is never
+  // superseded, and counts only against the workflow-wide cap.
   string key = 3;
   // PerMember scales the cap with the trigger's machine pool: this many runs
   // per member that can take work (dev-docs/design/machine-pools.md).
   uint32 per_member = 4;
+  // Priority is a CEL expression over `trigger` (no {{ }}), evaluated once per
+  // firing when it starts waiting, that yields an integer. Waiting firings
+  // are admitted highest priority first, then in arrival order. Unset, or a
+  // firing whose expression fails to evaluate: priority 0. A low-priority
+  // firing can wait behind higher ones until it expires (a day).
+  string priority = 5;
+  // MaxRunningPerKey caps the running runs of one key (requires key), e.g. 1
+  // for one run per pull request. A waiting firing whose key is at its cap
+  // does not hold back firings of other keys behind it. Alone (no max_running
+  // or per_member), only the per-key cap applies.
+  uint32 max_running_per_key = 6;
 }
 
 // WorkflowConcurrencyWaiting is how a capacity-bound workflow treats waiting

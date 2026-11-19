@@ -124,17 +124,30 @@ dependency to hold that (`task test:sdk:full`).
 
 ### Changing the SDK, and the app that uses it
 
-Reliant's own CLI is a consumer like any other, so an SDK change reaches it in
-two steps, each its own PR:
+Reliant's own app builds against this repository's `sdk/go`: the root
+`go.mod` carries `replace github.com/reliant-labs/reliant/sdk/go => ./sdk/go`.
+So an SDK change and the app code that uses it are **one PR**: change `sdk/go`
+(and `proto/`, `proto/public-api.txt`, the generated `sdk/go/gen`), change the
+app, and the merge gate builds and tests them together. There is no pin bump
+after it merges and no re-pin after the squash (reliant#2824).
 
-1. **The SDK PR** changes `sdk/go` (and `proto/`, `proto/public-api.txt`, the
-   generated `sdk/go/gen`) and lands on `main`.
-2. **The pin bump** runs `go get github.com/reliant-labs/reliant/sdk/go@<the
-   main commit where step 1 landed>` in the repository root and commits the
-   `go.mod`/`go.sum` change, with any app code that uses the new API.
+The replace binds only the root module, so nothing outside the repository sees
+it:
 
-Never point the root module at `./sdk/go` with a `replace`. To work on both
-halves at once in a checkout, use a local `go.work` that you do not commit.
+- A program that requires the SDK resolves it from the module proxy, as above.
+- A module that requires `github.com/reliant-labs/reliant` (control-plane)
+  resolves the SDK by the root `go.mod`'s require line, which may name an
+  older commit than the tree's. control-plane's `scripts/pin-sibling.sh`
+  therefore pins the SDK at the same reliant commit it pins the app at.
+- `go install github.com/reliant-labs/reliant/cmd/reliant@<version>` refuses a
+  module whose `go.mod` has a replace, so a **release commit carries none**:
+  the RC train's reliant pin commit runs `scripts/sdk-release-pin.sh <base>`,
+  which drops the replace and requires the SDK at the commit the release was
+  cut from (its `sdk/go` is checked to be byte-identical).
+
+`internal/buildmode`'s `TestSDKModuleIsSelfContained` keeps the replace and a
+real require line in the root `go.mod`, and `TestSDKReleasePinDropsTheReplace`
+holds the release script. The SDK's own `go.mod` still carries no replace.
 
 ### Hosted check before adopting: resolved-approval replay
 
@@ -149,8 +162,8 @@ server a resolved approval's rows are skipped, not misattributed.
 
 The in-memory tests (`TestFollowRunReplaysAnAlreadyResolvedApproval`) prove the
 wire shape, not that the hosted server writes it. So after the server change
-deploys, and **before the pin bump (step 2 above) lands**, check it on the
-hosted server:
+deploys, and **before a release that carries the SDK change is promoted**,
+check it on the hosted server:
 
 1. With an `rlat_` token for a test user, start a run whose workflow raises an
    approval gate, and note its run id. In a second run of the same session (or
@@ -168,8 +181,8 @@ the other run; then the run's terminal event and `Wait()` returning its
 verdict. Following the second run shows only its own approval.
 
 If the check fails (no `approval`/`approval_resolved` pair, or one attributed to
-the other run), do not land the pin bump, or revert it if it landed: no hosted
-consumer runs this SDK until that bump, and reverting it returns the CLI to the
-code it ran before, with nothing else to undo. A server that does not attribute
+the other run), revert the SDK change on main before a release carries it:
+the CLI builds against the tree's SDK (see "Changing the SDK" above), so the
+revert returns it to the code it ran before, with nothing else to undo. A server that does not attribute
 approvals degrades the SDK to the pending-list fallback, so reverting the
 server change is safe on its own; fix the attribution and repeat the check.

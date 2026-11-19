@@ -337,7 +337,7 @@ func TestRemoveServer_ClosesDirScopedClients(t *testing.T) {
 		t.Fatalf("project did not get a client: ok=%v err=%v", ok, err)
 	}
 
-	if err := m.RemoveServer("lsp"); err != nil {
+	if err := m.RemoveServer("lsp", "test"); err != nil {
 		t.Fatalf("RemoveServer: %v", err)
 	}
 	if m.dirClientCount() != 0 {

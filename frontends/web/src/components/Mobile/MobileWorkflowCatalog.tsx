@@ -71,6 +71,7 @@ import {
   MobileScreenBody,
   MobileScreenHeader,
 } from "./MobileChrome";
+import { mobileWorkflowPath } from "@/lib/paths";
 
 type OriginId = "user" | "project" | "builtin";
 
@@ -158,8 +159,7 @@ export function MobileWorkflowCatalog() {
                 {rows.map((workflow) => (
                   <Link
                     key={workflow.name}
-                    to="/m/workflows/$workflowName"
-                    params={{ workflowName: workflow.name }}
+                    to={mobileWorkflowPath(workflow.name)}
                     className={MOBILE_ROW}
                   >
                     <MobileRowIcon icon={iconForWorkflow(workflow, icon)} />

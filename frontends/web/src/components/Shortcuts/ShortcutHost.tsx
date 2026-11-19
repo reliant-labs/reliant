@@ -56,6 +56,7 @@ import { surfaceForPath } from "../../lib/surface";
 import { lazyRoute } from "../../lib/lazyRoute";
 import { logger } from "../../lib/logger";
 import { SequenceHint } from "../Layout/SequenceHint";
+import { homePath, projectPath, settingsPath, workflowsPath } from "@/lib/paths";
 
 // Loaded on first open (and warmed once the host is live): they would
 // otherwise ride in the entry chunk to every unauthenticated page.
@@ -208,9 +209,9 @@ function createHostCore(
     // The chat workspace's URL carries the sidebar's project filter.
     const projectId = useWorkspaceStateStore.getState().projectFilterId;
     if (projectId) {
-      void navigate({ to: "/project/$projectId", params: { projectId }, search: {} });
+      void navigate({ to: projectPath(projectId), search: {} });
     } else {
-      void navigate({ to: "/", search: {} });
+      void navigate({ to: homePath(), search: {} });
     }
   };
 
@@ -304,9 +305,9 @@ function createHostCore(
     onSwitchChat: () => openOverlay({ kind: "chat-search", mode: "history" }),
     onToggleSettings: () => {
       if (live.current.pathname.startsWith("/settings")) navigateToWorkspace();
-      else void live.current.navigate({ to: "/settings" });
+      else void live.current.navigate({ to: settingsPath() });
     },
-    onOpenWorkflows: () => void live.current.navigate({ to: "/workflows" }),
+    onOpenWorkflows: () => void live.current.navigate({ to: workflowsPath() }),
     onOpenProject: addProject,
     onSwitchProject: switchProject,
     // The file viewer whose editor has a selection claims the event and adds

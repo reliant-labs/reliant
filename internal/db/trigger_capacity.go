@@ -10,11 +10,11 @@ import (
 func (r *Repo) EnqueueTriggerCapacity(ctx context.Context, ev *core.TriggerEvent, scope store.TriggerCapacityScope) error {
 	return store.EnqueueTriggerCapacity(ctx, r.ORM(), ev, scope)
 }
-func (r *Repo) NextWaitingTriggerCapacityEvent(ctx context.Context, scope store.TriggerCapacityScope) (*core.TriggerEvent, error) {
-	return store.NextWaitingTriggerCapacityEvent(ctx, r.ORM(), scope)
+func (r *Repo) NextAdmissibleTriggerCapacityEvent(ctx context.Context, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (*core.TriggerEvent, error) {
+	return store.NextAdmissibleTriggerCapacityEvent(ctx, r.ORM(), scope, limits)
 }
-func (r *Repo) CanLaunchTriggerCapacity(ctx context.Context, id string, scope store.TriggerCapacityScope, n uint32) (bool, error) {
-	return store.CanLaunchTriggerCapacity(ctx, r.ORM(), id, scope, n)
+func (r *Repo) CanLaunchTriggerCapacity(ctx context.Context, id string, scope store.TriggerCapacityScope, limits store.TriggerCapacityLimits) (bool, error) {
+	return store.CanLaunchTriggerCapacity(ctx, r.ORM(), id, scope, limits)
 }
 func (r *Repo) PrepareTriggerCapacityExecution(ctx context.Context, id, wid string) error {
 	return store.PrepareTriggerCapacityExecution(ctx, r.ORM(), id, wid)

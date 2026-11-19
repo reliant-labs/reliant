@@ -96,7 +96,7 @@ describe("settings navigation chrome", () => {
     const account = screen.getByRole("button", { name: "Account" });
     account.focus();
     fireEvent.keyDown(account, { key: "ArrowDown" });
-    expect(state.navigate).toHaveBeenCalledWith({ to: "/settings/$section", params: { section: "billing" } });
+    expect(state.navigate).toHaveBeenCalledWith({ to: "/settings/billing" });
     expect(screen.getByRole("button", { name: "Billing & usage" })).toHaveFocus();
     state.navigate.mockClear();
     for (const target of [screen.getByRole("combobox"), screen.getByRole("textbox"), screen.getByRole("button", { name: "Content action" }), screen.getByRole("button", { name: "Back to app" })]) {

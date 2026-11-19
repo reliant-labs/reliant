@@ -92,6 +92,16 @@ func (b *broker) mintBot(ctx context.Context, ownerUserID, orgID, connID string,
 	case errors.Is(err, gitcredentialclient.ErrNeedsReconnect):
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeNeedsReauth,
 			Message: "GitHub needs to be reconnected: reconnect GitHub in Settings", Err: err}
+	case errors.Is(err, gitcredentialclient.ErrRateLimited):
+		// Transient with a known end. The cause keeps the class (a user
+		// error), so no log layer reports it as our outage, and the message
+		// is control-plane's: whose limit, and until when.
+		msg := "GitHub's API rate limit is exhausted; try again later"
+		var limited *gitcredentialclient.RateLimitedError
+		if errors.As(err, &limited) && limited.Message != "" {
+			msg = limited.Message
+		}
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeUnavailable, Message: msg, Err: err}
 	default:
 		b.logger.WarnContext(ctx, "minting a GitHub App installation token failed", "err", err)
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeUnavailable,

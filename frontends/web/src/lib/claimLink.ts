@@ -1,3 +1,4 @@
+import { claimPath } from "@/lib/paths";
 // Copyright (c) 2025 Reliant Labs
 
 /**
@@ -28,7 +29,7 @@
  */
 
 /** Where the claim page lives, and where the upgrade flow returns to. */
-export const CLAIM_PATH = "/claim";
+export const CLAIM_PATH = claimPath();
 export const CLAIM_RETURN_TO = CLAIM_PATH;
 
 const STORAGE_KEY = "reliant:claim";

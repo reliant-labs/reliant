@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { settingsPath } from "@/lib/paths";
 
 /**
  * Where a trip to billing started. Required at every call site: billing
@@ -63,9 +64,7 @@ export function useGoToBilling(from: BillingOrigin): () => void {
     const returnTo = `${window.location.pathname}${window.location.search}`;
 
     void navigate({
-      to: "/settings/$section",
-      params: { section: "billing" },
-      // Hosted-app holds require independent usage consent, not a machine plan.
+      to: settingsPath("billing"),
       search: { tab: from === "forge" ? "usage" : "plans", from, returnTo },
     });
   };

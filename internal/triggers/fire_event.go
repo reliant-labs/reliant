@@ -82,6 +82,8 @@ type EventFirer struct {
 	pools     Placer
 	pause     *AutoPause
 	checks    CheckOpener
+	// now is the clock capacity expiry is judged by.
+	now func() time.Time
 }
 
 // WithChecks lets the firer open the GitHub check a workflow's `check:`
@@ -114,7 +116,7 @@ func (f *EventFirer) WithPlacer(p Placer) *EventFirer {
 
 // NewEventFirer builds the inbound fire activity's receiver.
 func NewEventFirer(repo EventRepo, launcher Launcher) *EventFirer {
-	return &EventFirer{repo: repo, launcher: launcher}
+	return &EventFirer{repo: repo, launcher: launcher, now: time.Now}
 }
 
 // WithWorkflows lets the firer read an activation's declaration, whose inputs
@@ -240,20 +242,24 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if err != nil {
 		return nil, err
 	}
-	maxRunning, capped, err := capacityLimit(ctx, f.pools, trigger, policy)
+	limits, capped, err := capacityLimits(ctx, f.pools, trigger, policy)
 	if err != nil {
 		return nil, err
 	}
 	if ev.Outcome == core.TriggerEventPending && ev.CapacityOrder != nil && !capped {
 		return f.settle(ctx, ev, def, core.TriggerEventSkipped, "queued workflow capacity policy was removed", nil)
 	}
+	limits.ExpiredBefore = capacityExpiredBefore(f.now())
 	if capped {
-		ev.CapacityKey = capacityKey(ctx, policy, ev, func() triggerspec.Scope {
+		capacityAdmission(ctx, policy, ev, func() triggerspec.Scope {
 			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
 		})
-		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, maxRunning, &spec); err != nil {
+		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, ev, limits, &spec); err != nil {
 			if capacitySettled(err) {
 				return f.settle(ctx, ev, def, core.TriggerEventSkipped, err.Error(), nil)
+			}
+			if errors.Is(err, errCapacityExpired) {
+				return f.settle(ctx, ev, def, core.TriggerEventFailed, capacityExpiredDetail, nil)
 			}
 			return nil, err
 		}
@@ -280,7 +286,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	switch {
 	case launchErr == nil:
 		if capped {
-			f.wake.wakeNext(ctx, f.repo, trigger, ev.ID)
+			f.wake.wakeNext(ctx, f.repo, trigger, limits, ev.Kind, ev.DedupeKey)
 		}
 		return &FireOutput{Outcome: string(core.TriggerEventLaunched), ChatID: res.Chat.ID, EventID: res.EventID}, nil
 	case errors.Is(launchErr, launch.ErrAlreadyLaunched):
@@ -297,7 +303,11 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 			reason = declined.Reason
 		}
 		if reason == capacityWaiting || isPoolWaiting(reason) {
-			// The event stays pending; the redriver fires it again.
+			// The event stays pending; the redriver fires it again. A capped
+			// event that is not the one the scope admits next hands its turn on.
+			if reason == capacityWaiting && capped {
+				f.wake.wakeNext(ctx, f.repo, trigger, limits, ev.Kind, ev.DedupeKey)
+			}
 			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason, EventID: ev.ID}, nil
 		}
 		return f.settle(ctx, ev, def, core.TriggerEventSkipped, reason, nil)

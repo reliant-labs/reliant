@@ -108,7 +108,7 @@ func TestActivationToolsCardFree(t *testing.T) {
 // An unattended run reaches an activation tool only when its step names it;
 // a tag or "*" does not sweep one in.
 func TestActivationToolsUnattendedOptIn(t *testing.T) {
-	for _, name := range []string{ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger} {
+	for _, name := range []string{ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolDeleteTrigger} {
 		require.NotEmpty(t, (&Capabilities{Unattended: true}).withheldUnattended(name))
 		require.Empty(t, (&Capabilities{Unattended: true, UnattendedOptIn: []string{name}}).withheldUnattended(name))
 	}
@@ -116,7 +116,7 @@ func TestActivationToolsUnattendedOptIn(t *testing.T) {
 
 func TestActivationToolsRegistered(t *testing.T) {
 	factory := NewToolsFactory(nil)
-	for _, name := range []string{ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger} {
+	for _, name := range []string{ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolDeleteTrigger} {
 		tool := factory.GetToolByName(name, nil)
 		require.NotNil(t, tool)
 		require.Equal(t, PermissionOrchestrator, MinimumPermissionForTool(name))
@@ -157,4 +157,57 @@ func TestActivationPrepareClassifiesBadInput(t *testing.T) {
 	reason := ActivationRefusalReason(err)
 	require.Equal(t, "tool input field params must be a JSON object", reason)
 	require.NotContains(t, reason, "secret-value")
+}
+
+// deleteBackend stands in for the trigger service on a delete: it always needs
+// a card, as automationpolicy.Decide says for OperationDelete.
+type deleteBackend struct{ deleted []string }
+
+func (b *deleteBackend) PrepareActivation(context.Context, string, string, ActivationParams) (ActivationPreview, error) {
+	return ActivationPreview{Title: "Delete activation (name withheld) (t)", Hash: "preview", CardRequired: true, Reason: "cannot be undone"}, nil
+}
+func (b *deleteBackend) ManageActivation(ctx context.Context, _ string, op string, p ActivationParams, hash string) (TriggerSummary, error) {
+	if automationpolicy.From(ctx).Unattended {
+		return TriggerSummary{}, svcerr.PermissionDenied(automationpolicy.Refusal())
+	}
+	if hash != "preview" {
+		return TriggerSummary{}, svcerr.PermissionDenied(DeleteApprovalRequiredMessage)
+	}
+	b.deleted = append(b.deleted, op+":"+p.TriggerID)
+	return TriggerSummary{ID: p.TriggerID, Name: "nightly", ProjectID: "p1"}, nil
+}
+
+// delete_trigger asks for a card, deletes only with that call's approval, says
+// so in its own words, and is refused in an unattended run.
+func TestDeleteTriggerToolNeedsCard(t *testing.T) {
+	b := &deleteBackend{}
+	tool := NewActivationTool(triggerCallerStore{chat: &db.Chat{UserID: "owner"}}, b, ToolDeleteTrigger)
+	require.Contains(t, tool.Description(), "cannot be undone")
+	ctx := rctx.NewToolContext(context.Background(), "chat", "thread", nil, nil)
+	call := ToolCall{ID: "call", Name: ToolDeleteTrigger, Input: `{"trigger_id":"t"}`}
+	_, ask, err := tool.(AutomationApprovalTool).PrepareAutomation(ctx, call, false)
+	require.NoError(t, err)
+	require.True(t, ask)
+	_, _, err = tool.(AutomationApprovalTool).PrepareAutomation(ctx, call, true)
+	require.ErrorContains(t, err, "an unattended run cannot show one")
+
+	resp, err := tool.Run(ctx, call)
+	require.NoError(t, err)
+	require.True(t, resp.IsError)
+	require.Equal(t, DeleteApprovalRequiredMessage, resp.Content)
+	require.Empty(t, b.deleted)
+
+	ctx.Context = automationpolicy.WithExecution(ctx.Context, automationpolicy.Execution{Approvals: map[string]string{"call": "preview"}})
+	resp, err = tool.Run(ctx, call)
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	require.Equal(t, []string{"delete_trigger:t"}, b.deleted)
+	require.Contains(t, resp.Content, "deleted activation nightly (id t)")
+}
+
+// A delete that fails says so without suggesting the change widened anything.
+func TestDeleteTriggerFailureMessage(t *testing.T) {
+	msg := activationFailureMessage(ToolDeleteTrigger, svcerr.NotFound("activation"))
+	require.Contains(t, msg, "Deleting the activation was not completed")
+	require.NotContains(t, msg, "widens")
 }

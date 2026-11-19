@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -76,6 +77,19 @@ func unattendedPauseGaveUp(cause error) error {
 		msg += ". Cause: " + cleanTemporalError(cause.Error())
 	}
 	return temporal.NewNonRetryableApplicationError(msg, unattendedPauseGaveUpErrType, nil)
+}
+
+// unattendedGiveUpUnpausesChangeID gates un-pausing a given-up run's rows
+// before its terminal handlers run (endedUnattendedPause). It adds a command
+// at the tail of a run that gave up, so a history recorded before it replays
+// without one.
+const unattendedGiveUpUnpausesChangeID = "unattended-give-up-unpauses"
+
+// endedUnattendedPause reports whether err is, or wraps, the error an
+// unattended run ends with when its self-pause outlived the ladder.
+func endedUnattendedPause(err error) bool {
+	var appErr *temporal.ApplicationError
+	return errors.As(err, &appErr) && appErr.Type() == unattendedPauseGaveUpErrType
 }
 
 // pauseCoordinator owns the workflow's cooperative pause/resume machinery:

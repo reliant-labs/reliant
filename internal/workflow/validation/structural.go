@@ -326,6 +326,9 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 	case model.NodeTypeGitPublish:
 		validateGitPublishNode(node, nodePath, result)
 
+	case model.NodeTypeInvokeTool:
+		validateInvokeToolNode(node, nodePath, result)
+
 	case model.NodeTypeRun:
 		args := node.GetRun()
 		if args == nil {

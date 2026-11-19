@@ -9,15 +9,30 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { QueryClient, QueryObserver, focusManager } from "@tanstack/react-query";
 
-import { createCoalescedInvalidator } from "../coalescedInvalidation";
+import { createCoalescedInvalidator, type CoalescedInvalidatorOptions, type PageVisibility } from "../coalescedInvalidation";
 
 const INTERVAL = 2_000;
 const KEY = ["inbox"] as const;
 
+/** A page whose visibility the test sets. */
+function fakeVisibility() {
+  let hidden = false;
+  const listeners: Array<() => void> = [];
+  const visibility: PageVisibility = {
+    hidden: () => hidden,
+    onChange: (listener) => listeners.push(listener),
+  };
+  const set = (next: "hidden" | "visible") => {
+    hidden = next === "hidden";
+    for (const listener of listeners) listener();
+  };
+  return { visibility, set };
+}
+
 /** A query under KEY whose fetches resolve when the test says so. */
-function setup() {
+function setup(options?: CoalescedInvalidatorOptions) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   const starts: number[] = [];
   const resolvers: Array<() => void> = [];
@@ -33,7 +48,7 @@ function setup() {
   // An observer makes the query active, as a mounted list would.
   const observer = new QueryObserver(client, { queryKey: [...KEY, "list"], queryFn });
   const unsubscribe = observer.subscribe(() => {});
-  const invalidator = createCoalescedInvalidator(client, INTERVAL);
+  const invalidator = createCoalescedInvalidator(client, INTERVAL, options);
   // Let any fetch that is about to start start, answer every pending one,
   // and let what follows (a trailing refetch due now) start.
   const settle = async () => {
@@ -41,7 +56,7 @@ function setup() {
     while (resolvers.length) resolvers.shift()!();
     await vi.advanceTimersByTimeAsync(0);
   };
-  return { client, queryFn, starts, invalidator, settle, unsubscribe };
+  return { client, queryFn, starts, resolvers, invalidator, settle, unsubscribe };
 }
 
 beforeEach(() => {
@@ -178,5 +193,162 @@ describe("createCoalescedInvalidator", () => {
     invalidator.reset();
     await vi.advanceTimersByTimeAsync(INTERVAL * 2);
     expect(queryFn).toHaveBeenCalledTimes(2);
+  });
+
+  describe("a hidden page", () => {
+    it("marks stale but refetches nothing while hidden, then reads what went stale once when shown", async () => {
+      const page = fakeVisibility();
+      const { client, queryFn, invalidator, settle } = setup({ visibility: page.visibility });
+      await settle();
+      expect(queryFn).toHaveBeenCalledTimes(1);
+
+      page.set("hidden");
+      // A busy stream for a minute in a background tab.
+      for (let t = 0; t < 60_000; t += 500) {
+        invalidator.invalidate(KEY);
+        await vi.advanceTimersByTimeAsync(500);
+        await settle();
+      }
+      expect(queryFn).toHaveBeenCalledTimes(1);
+      // A list mounted meanwhile would still fetch: the data is stale.
+      expect(client.getQueryState([...KEY, "list"])?.isInvalidated).toBe(true);
+
+      page.set("visible");
+      await settle();
+      expect(queryFn).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(INTERVAL * 5);
+      await settle();
+      expect(queryFn).toHaveBeenCalledTimes(2);
+    });
+
+    it("joins the window-focus refetch the same visibility change started, instead of sending a second read", async () => {
+      const page = fakeVisibility();
+      const { client, queryFn, invalidator, settle } = setup({ visibility: page.visibility });
+      client.mount(); // React Query's own refetch on focus
+      try {
+        await settle();
+        page.set("hidden");
+        invalidator.invalidate(KEY);
+        await settle();
+        expect(queryFn).toHaveBeenCalledTimes(1);
+
+        // The browser fires one visibilitychange; React Query's focus
+        // listener refetches the stale query, and so does the catch-up.
+        focusManager.setFocused(false);
+        page.set("visible");
+        focusManager.setFocused(true);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(queryFn).toHaveBeenCalledTimes(2);
+        await settle();
+        await vi.advanceTimersByTimeAsync(INTERVAL * 3);
+        expect(queryFn).toHaveBeenCalledTimes(2);
+      } finally {
+        client.unmount();
+        focusManager.setFocused(undefined);
+      }
+    });
+
+    it("refetches in full for a signal that arrives after the page is shown", async () => {
+      const page = fakeVisibility();
+      const { queryFn, invalidator, settle } = setup({ visibility: page.visibility });
+      await settle();
+      page.set("hidden");
+      invalidator.invalidate(KEY);
+      await settle();
+      page.set("visible");
+      await settle();
+      expect(queryFn).toHaveBeenCalledTimes(2);
+
+      invalidator.invalidate(KEY);
+      await vi.advanceTimersByTimeAsync(INTERVAL);
+      await settle();
+      expect(queryFn).toHaveBeenCalledTimes(3);
+    });
+
+    it("holds the trailing refetch of a read that was in flight when the page was hidden", async () => {
+      const page = fakeVisibility();
+      const { queryFn, invalidator, settle, resolvers } = setup({ visibility: page.visibility });
+      await settle();
+      invalidator.invalidate(KEY);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(queryFn).toHaveBeenCalledTimes(2); // in flight
+
+      page.set("hidden");
+      invalidator.invalidate(KEY);
+      while (resolvers.length) resolvers.shift()!();
+      await vi.advanceTimersByTimeAsync(INTERVAL * 10);
+      expect(queryFn).toHaveBeenCalledTimes(2);
+
+      page.set("visible");
+      await settle();
+      expect(queryFn).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe("latencyMultiple", () => {
+    it("spaces refetches of a slow list by that multiple of its last duration", async () => {
+      const { queryFn, starts, invalidator, resolvers } = setup({ latencyMultiple: 2 });
+      await vi.advanceTimersByTimeAsync(0);
+      resolvers.shift()!();
+      await vi.advanceTimersByTimeAsync(0);
+      const before = queryFn.mock.calls.length;
+
+      // The server takes 3 s per read; the stream signals every 100 ms.
+      const SERVER_MS = 3_000;
+      for (let t = 0; t < 30_000; t += 100) {
+        invalidator.invalidate(KEY);
+        await vi.advanceTimersByTimeAsync(100);
+        if (resolvers.length && Date.now() - starts.at(-1)! >= SERVER_MS) {
+          resolvers.shift()!();
+          await vi.advanceTimersByTimeAsync(0);
+        }
+      }
+
+      const refetches = starts.slice(before);
+      // Every 2 × 3 s = 6 s over 30 s, not back to back (which is every 3 s).
+      expect(refetches.length).toBeGreaterThanOrEqual(4);
+      expect(refetches.length).toBeLessThanOrEqual(6);
+      for (let i = 1; i < refetches.length; i++) {
+        expect(refetches[i]! - refetches[i - 1]!).toBeGreaterThanOrEqual(2 * SERVER_MS);
+      }
+    });
+
+    it("keeps the interval as the floor for a fast list", async () => {
+      const { queryFn, starts, invalidator, settle } = setup({ latencyMultiple: 2 });
+      await settle();
+      const before = queryFn.mock.calls.length;
+      for (let t = 0; t < 10_000; t += 100) {
+        invalidator.invalidate(KEY);
+        await vi.advanceTimersByTimeAsync(100);
+        await settle();
+      }
+      const refetches = starts.slice(before);
+      expect(refetches.length).toBeGreaterThanOrEqual(5);
+      for (let i = 1; i < refetches.length; i++) {
+        expect(refetches[i]! - refetches[i - 1]!).toBeGreaterThanOrEqual(INTERVAL);
+        expect(refetches[i]! - refetches[i - 1]!).toBeLessThan(INTERVAL + 200);
+      }
+    });
+
+    it("never stretches past maxIntervalMs", async () => {
+      const { starts, invalidator, resolvers } = setup({ latencyMultiple: 2, maxIntervalMs: 5_000 });
+      await vi.advanceTimersByTimeAsync(0);
+      resolvers.shift()!();
+      await vi.advanceTimersByTimeAsync(0);
+
+      invalidator.invalidate(KEY);
+      await vi.advanceTimersByTimeAsync(0);
+      const slowStart = starts.at(-1)!;
+      // A 4 s read: 2 × 4 s would hold the next one until 8 s after it started.
+      await vi.advanceTimersByTimeAsync(4_000);
+      resolvers.shift()!();
+      await vi.advanceTimersByTimeAsync(0);
+
+      invalidator.invalidate(KEY);
+      await vi.advanceTimersByTimeAsync(900);
+      expect(starts.at(-1)!).toBe(slowStart);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(starts.at(-1)! - slowStart).toBe(5_000);
+    });
   });
 });

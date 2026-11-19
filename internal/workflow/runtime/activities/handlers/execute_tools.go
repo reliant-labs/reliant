@@ -331,7 +331,7 @@ func (a *ExecuteToolsActivity) Category() schema.ActivityCategory {
 // Execute contains PURE BUSINESS LOGIC only
 func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {
 	rtx := input.Runtime
-	ctx = automationpolicy.WithExecution(ctx, automationpolicy.Execution{Unattended: rtx.Unattended, Approvals: rtx.ActivationApprovals})
+	ctx = automationpolicy.WithExecution(ctx, automationpolicy.Execution{Unattended: rtx.Unattended, Approvals: rtx.ActivationApprovals, Connections: rtx.ApprovedConnections})
 	// The run's own funding order, which may only tighten what the person
 	// chose, for the run scope of its tool calls (runFunding).
 	ctx = context.WithValue(ctx, runFundingOrderKey{}, rtx.Failover.Funding)

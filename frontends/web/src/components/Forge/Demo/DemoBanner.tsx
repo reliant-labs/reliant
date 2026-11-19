@@ -20,9 +20,10 @@ import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
 import { trackEvent } from "@/lib/analytics";
 
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
+import { appsPath, forgeLandingPath } from "@/lib/paths";
 
 /** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
-const exitHref = (shell: TourShell) => (shell === "forge" ? "/apps" : "/forge");
+const exitHref = (shell: TourShell) => (shell === "forge" ? appsPath() : forgeLandingPath());
 
 const LINK = "no-color inline-flex touch-target items-center gap-1.5 text-sm font-medium text-ink underline-offset-2 hover:underline";
 

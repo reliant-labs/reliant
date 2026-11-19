@@ -10,6 +10,13 @@ export default {
     extend: {
       colors: {
         border: "hsl(var(--border) / <alpha-value>)",
+        // The quiet rule: table row rules, the indent rule of a tool fold,
+        // chart gridlines. Nothing else (web-styling, "Borders").
+        // `border-border-subtle`.
+        "border-subtle": "hsl(var(--border-subtle) / <alpha-value>)",
+        // The user chat message's fill (`bg-bubble`), its own token so
+        // `bg-muted` stays interaction state only (web-styling, "Elevation").
+        bubble: "hsl(var(--bubble) / <alpha-value>)",
         input: "hsl(var(--input) / <alpha-value>)",
         ring: "hsl(var(--ring) / <alpha-value>)",
         background: "hsl(var(--background) / <alpha-value>)",
@@ -104,6 +111,30 @@ export default {
         "2xl": ["1.625rem",  { lineHeight: "2.25rem" }],   // 22.8px @md
         "3xl": ["2rem",      { lineHeight: "2.5rem" }],    // 28.0px @md
         "4xl": ["2.375rem",  { lineHeight: "2.75rem" }],   // 33.3px @md
+
+        // TYPE ROLES — size text by what it IS, not by a Tailwind step (the
+        // web-styling skill, "Type roles"). The steps above stay for the
+        // call sites that have not moved yet; new and restyled UI uses these.
+        // The px figures are at the default 15px root (lib/rootFontSize.ts,
+        // the `lg` preference); every role is rem, so it scales with the
+        // Appearance size like the rest of the scale. Held by
+        // components/Settings/__tests__/typeRoleContract.test.ts, and listed
+        // for tailwind-merge in lib/typeRoles.ts (so `cn()` knows they are
+        // font sizes, not colors): change a role in all three places.
+        //   meta     timestamps, captions, counts, axis labels: the floor
+        //   ui       every name, title, row, label, cell, button and input
+        //   copy     reading text: chat replies, user messages, docs
+        //   code     mono in tool rows and tables (with font-mono)
+        //   section  a panel's heading
+        //   title    a page's heading, once per page
+        //   figure   the one headline number on a dashboard (add tabular-nums)
+        meta:    ["0.8125rem", { lineHeight: "1.0667rem" }],                                         // 12.2 / 16
+        ui:      ["0.9375rem", { lineHeight: "1.3333rem" }],                                         // 14.1 / 20
+        copy:    ["1.0667rem", { lineHeight: "1.7333rem" }],                                         // 16 / 26
+        code:    ["0.8667rem", { lineHeight: "1.3333rem" }],                                         // 13 / 20
+        section: ["1.0667rem", { lineHeight: "1.6rem", fontWeight: "600" }],                         // 16 / 24
+        title:   ["1.6rem",    { lineHeight: "2.1333rem", fontWeight: "600", letterSpacing: "-0.02em" }], // 24 / 32
+        figure:  ["2.1333rem", { lineHeight: "2.6667rem", fontWeight: "600", letterSpacing: "-0.03em" }], // 32 / 40
       },
     },
   },

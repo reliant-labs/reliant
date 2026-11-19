@@ -73,7 +73,7 @@ A comment on (or inside) a node's mapping covers that node. A comment on a top-l
 
 ### slot-unbounded-wait
 
-**Error.** A workflow with `concurrency.max_running` holds a slot for as long as each run is open, paused runs included. Any step that can wait without bound holds that slot: a `run` node with no `timeout:`, a loop with no bound. (An `approval` or `ask_question` is not one: `max_running` bounds only trigger-launched runs, which are unattended, and an unattended run's human gates resolve at once.) One stuck run then queues every later firing behind it. A `workflow` or `loop` node's child holds the slot too, so lint reads the child (and every ref it reaches) and applies the same check to its steps; a `timeout:` on the node itself does not help ([timeout-ignored](#timeout-ignored)). Give every such step a timeout (or a bound).
+**Error.** A workflow with `concurrency.max_running` (or `max_running_per_key`) holds a slot for as long as each run is open, paused runs included. Any step that can wait without bound holds that slot: a `run` node with no `timeout:`, a loop with no bound. (An `approval` or `ask_question` is not one: `max_running` bounds only trigger-launched runs, which are unattended, and an unattended run's human gates resolve at once.) One stuck run then queues every later firing behind it. A `workflow` or `loop` node's child holds the slot too, so lint reads the child (and every ref it reaches) and applies the same check to its steps; a `timeout:` on the node itself does not help ([timeout-ignored](#timeout-ignored)). Give every such step a timeout (or a bound).
 
 ### shared-checkout-fetch
 

@@ -57,19 +57,25 @@ func (r *Repo) RestoreProject(ctx context.Context, id string, decided core.Proje
 	return resumed, err
 }
 
-// PurgeProjectNow deletes decided's owner's project at once, scheduled or
-// not (store.DeleteUserProject's batches): it is claimed first, under the
-// owner's org lock and only while the project is still decided's owner's and
-// in decided's org (else store.ErrOrgChanged), so it is hidden and can no
-// longer be restored while the batches run, and a purge that stops part way
-// is finished by the purge worker. afterClaim (nil: none) runs once the claim
-// committed and before the batches: the machine fan-out, which acts only on a
-// project whose authority was just re-checked. It returns the ids of the
-// triggers it deleted, whose schedules the caller removes. A project that is
-// missing or another user's is core.ErrProjectNotFound.
-func (r *Repo) PurgeProjectNow(ctx context.Context, id string, decided core.ProjectDecision, afterClaim func(ctx context.Context)) ([]string, error) {
+// ProjectPurgeLease is how long a purge's claim holds a project: the purge
+// worker takes a project again only once its claim is older than this, so a
+// purge that stopped part way (a replica that crashed, an immediate purge
+// that failed) is resumed after it. A purge of the largest project measured
+// (35k chats) ran 17 minutes in one statement; in batches each is short, so
+// an hour is generous.
+const ProjectPurgeLease = time.Hour
+
+// ClaimProjectPurgeNow claims decided's owner's project for an immediate
+// purge, scheduled or not: under the owner's org lock and only while the
+// project is still decided's owner's and in decided's org (else
+// store.ErrOrgChanged). From the claim on the project is hidden, can no
+// longer be restored, and is due: PurgeClaimedProject runs its batches, and
+// if they stop part way the purge worker finishes them once the claim is
+// older than ProjectPurgeLease. A project that is missing or another user's
+// is core.ErrProjectNotFound.
+func (r *Repo) ClaimProjectPurgeNow(ctx context.Context, id string, decided core.ProjectDecision) error {
 	if id == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
+		return fmt.Errorf("project ID cannot be empty")
 	}
 	var claimed bool
 	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
@@ -78,15 +84,21 @@ func (r *Repo) PurgeProjectNow(ctx context.Context, id string, decided core.Proj
 		return err
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !claimed {
-		return nil, core.ErrProjectNotFound
+		return core.ErrProjectNotFound
 	}
-	if afterClaim != nil {
-		afterClaim(ctx)
-	}
-	return r.purgeProject(ctx, id, decided.OwnerUserID)
+	return nil
+}
+
+// PurgeClaimedProject runs the batches of a purge ClaimProjectPurgeNow
+// claimed (store.DeleteUserProject), owner being the owner the claim was
+// decided on. It returns the ids of the triggers it deleted, whose schedules
+// the caller removes. A failure leaves the project hidden and claimed, for
+// the purge worker to resume.
+func (r *Repo) PurgeClaimedProject(ctx context.Context, id, owner string) ([]string, error) {
+	return r.purgeProject(ctx, id, owner)
 }
 
 // PurgeDueProject purges the project if its scheduled deletion is due and no

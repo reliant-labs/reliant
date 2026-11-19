@@ -18,6 +18,7 @@ import { isLive, primaryLink } from "@/services/forge/apps";
 
 import { consolePath } from "../Forge/Console/paths";
 import { verdictBusy, verdictTone } from "./appParts";
+import { appsPath } from "@/lib/paths";
 
 /** Enough to be a shortcut; the Apps page holds the rest. */
 const MAX_LISTED = 3;
@@ -31,7 +32,7 @@ export function SidebarApps() {
   const more = live.length - listed.length;
 
   return (
-    <ul className="space-y-0.5 pb-1 pl-6" aria-label="Live apps" data-testid="sidebar-apps">
+    <ul className="space-y-0.5" aria-label="Live apps" data-testid="sidebar-apps">
       {listed.map((app) => {
         const link = primaryLink(app)!;
         // The dot is the health of the environment the link opens, not of the app at large.
@@ -40,24 +41,36 @@ export function SidebarApps() {
         // Mid-rollout the dot is a spinner, so a deploy never reads as a fault.
         const busy = env ? verdictBusy(env.verdict) : false;
         return (
-          <li key={app.name} className="group flex h-7 items-center gap-1 rounded-md pr-1 hover:bg-muted/50">
+          // A sub-row under Apps, shaped like a chat row (restyle §11.3): the
+          // status dot in the 16px slot, the name, the site's link on hover.
+          <li
+            key={app.name}
+            className="group/app flex h-[var(--row-h)] items-center rounded-md pr-1 text-ui transition-colors hover:bg-foreground/5"
+          >
             <button
               type="button"
               onClick={() => void navigate({ href: consolePath(app.name, { kind: "overview" }) })}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm text-foreground/85 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-md pl-8 text-left text-foreground/80 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               data-testid={`sidebar-app-${app.name}`}
             >
-              <Status tone={tone} size="sm" busy={busy} className="shrink-0" />
+              <span className="flex w-4 shrink-0 items-center justify-center">
+                <Status tone={tone} size="md" busy={busy} />
+              </span>
               <span className="min-w-0 truncate">{app.name}</span>
             </button>
-            <Tooltip content={`Open ${link.host}`} side="right" delay={300} triggerClassName="inline-flex">
+            <Tooltip
+              content={`Open ${link.host}`}
+              side="right"
+              delay={300}
+              triggerClassName="hidden group-hover/app:inline-flex group-focus-within/app:inline-flex"
+            >
               <a
                 href={link.url}
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Open ${app.name} at ${link.host}`}
                 className={cn(
-                  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground",
+                  "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 )}
                 data-testid={`sidebar-app-link-${app.name}`}
@@ -72,7 +85,7 @@ export function SidebarApps() {
         <li>
           <button
             type="button"
-            onClick={() => void navigate({ to: "/apps" })}
+            onClick={() => void navigate({ to: appsPath() })}
             className="flex h-6 items-center rounded-md px-2 text-xs text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {more} more

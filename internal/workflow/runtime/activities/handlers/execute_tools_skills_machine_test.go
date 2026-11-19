@@ -47,9 +47,11 @@ func TestSkillToolReadsTheSkillsOfTheMachineTheCallRunsOn(t *testing.T) {
 	for daemonID, body := range map[string]string{a: "Deploy from machine A.", b: "Deploy from machine B."} {
 		sj, err := cfgpkg.EncodeCatalogJSON([]cfgpkg.StoredSkill{{SkillPath: "house-deploy", Name: "house-deploy", Description: "How we deploy", Scope: "project", Body: body}})
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, repo, project.ID, daemonID)
 		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: project.ID, DaemonID: daemonID, ProjectSkillsJSON: sj, PushedAt: time.Now().UTC(),
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, userID)

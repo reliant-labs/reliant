@@ -39,9 +39,11 @@ func TestSpawnToolDescribesThePresetsOfTheRunsCatalog(t *testing.T) {
 			YAMLContent: "name: reviewer\ndescription: " + description + "\ntag: agent\nparams:\n  mode: plan\n",
 		}})
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectPresetsJSON: pj, PushedAt: at,
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	push(cicd, now.Add(-time.Hour), "Reviews v1")

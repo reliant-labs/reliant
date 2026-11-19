@@ -2,7 +2,10 @@
 package tools
 
 import (
+	"sort"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 )
 
 // TestNodeExposureIsOptIn pins the property the whole mechanism exists for:
@@ -113,6 +116,45 @@ func TestNodeExposedToolsAreRegisteredTools(t *testing.T) {
 		}
 		if exposure.OutputType == nil {
 			t.Errorf("node-exposed tool %q declares no output type, so its fields cannot be type-checked", exposure.Tool)
+		}
+	}
+}
+
+// TestNodeExposedToolNamesMatchTable holds the workflow validator's copy of
+// the opt-in (names.NodeExposedToolNames) equal to the table here. A tool in
+// one and not the other is either rejected at save time and runnable, or
+// accepted at save time and refused on every attempt.
+func TestNodeExposedToolNamesMatchTable(t *testing.T) {
+	var table []string
+	for _, exposure := range NodeExposedTools() {
+		table = append(table, exposure.Tool)
+	}
+	mirror := append([]string(nil), names.NodeExposedToolNames...)
+	sort.Strings(mirror)
+	if len(table) != len(mirror) {
+		t.Fatalf("names.NodeExposedToolNames = %v, node_exposure.go exposes %v", mirror, table)
+	}
+	for i := range table {
+		if table[i] != mirror[i] {
+			t.Fatalf("names.NodeExposedToolNames = %v, node_exposure.go exposes %v", mirror, table)
+		}
+	}
+}
+
+// TestReportBugIsNodeExposed pins report_bug as a step an automation may draw
+// (control-plane main-red-fix's infra_bug node), with the report id its
+// output carries.
+func TestReportBugIsNodeExposed(t *testing.T) {
+	if !IsNodeExposedTool(ToolReportBug) {
+		t.Fatalf("%s should be node-exposed", ToolReportBug)
+	}
+	schema := NodeOutputSchema(ToolReportBug)
+	if schema == nil || schema.Properties == nil {
+		t.Fatalf("expected an output schema for %s", ToolReportBug)
+	}
+	for _, field := range []string{"report_id", "duplicate", "rate_limited"} {
+		if _, ok := schema.Properties.Get(field); !ok {
+			t.Errorf("%s output schema missing field %q", ToolReportBug, field)
 		}
 	}
 }

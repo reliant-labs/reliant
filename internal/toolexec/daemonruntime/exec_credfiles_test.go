@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
@@ -179,6 +180,10 @@ func TestFileTools_RefuseTheDaemonsCredentialFiles(t *testing.T) {
 }
 
 func TestFileTools_SearchAndGlobNeverListTheDaemonsCredentialFiles(t *testing.T) {
+	// fs.search runs ripgrep; a host without it cannot run this test.
+	if _, err := cmdutil.FindRipgrep(); err != nil {
+		t.Skipf("ripgrep (rg) is not installed on this host: %v", err)
+	}
 	home := credHome(t)
 	ctx := context.Background()
 

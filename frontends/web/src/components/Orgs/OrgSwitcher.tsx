@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { Building2, Check, ChevronsUpDown, Plus } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
 import { useActiveOrg, useSetDefaultOrg } from "@/hooks/useOrgs";
@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast-manager";
 import type { MyOrg } from "@/services/controlPlane/orgs";
 
+import { SIDEBAR_ORG_TRIGGER, SidebarOrgLabel } from "../Layout/sidebar/primitives";
 import { CreateOrganizationDialog } from "./CreateOrganizationDialog";
 
 /**
@@ -24,12 +25,22 @@ import { CreateOrganizationDialog } from "./CreateOrganizationDialog";
  * the org-scoped caches). "Make default" is the separate, server-side
  * preference that the CLI and other devices follow, so it is its own action
  * and says so.
+ *
+ * `sidebar-top` is the same menu as the sidebar's top row (restyle §11.3):
+ * the brand mark and the org's name, the whole row the trigger.
  */
-export function OrgSwitcher({ variant = "sidebar" }: { variant?: "sidebar" | "list" }) {
+export function OrgSwitcher({
+  variant = "sidebar",
+  fallback = null,
+}: {
+  variant?: "sidebar" | "sidebar-top" | "list";
+  /** What to render with no org (no control plane, or a person in none). */
+  fallback?: ReactNode;
+}) {
   const { orgs, active, canSwitch, select } = useActiveOrg();
-  if (!active) return null;
+  if (!active) return fallback;
   if (variant === "list") return canSwitch ? <OrgList orgs={orgs} activeId={active.id} onSelect={select} /> : null;
-  return <SidebarOrgSwitcher orgs={orgs} active={active} onSelect={select} />;
+  return <SidebarOrgSwitcher orgs={orgs} active={active} onSelect={select} top={variant === "sidebar-top"} />;
 }
 
 /** The org's role, in words. */
@@ -37,7 +48,17 @@ function roleLabel(org: MyOrg): string {
   return org.isOwner ? "Owner" : org.role.charAt(0).toUpperCase() + org.role.slice(1);
 }
 
-function SidebarOrgSwitcher({ orgs, active, onSelect }: { orgs: MyOrg[]; active: MyOrg; onSelect: (id: string) => void }) {
+function SidebarOrgSwitcher({
+  orgs,
+  active,
+  onSelect,
+  top,
+}: {
+  orgs: MyOrg[];
+  active: MyOrg;
+  onSelect: (id: string) => void;
+  top: boolean;
+}) {
   const setDefault = useSetDefaultOrg();
   const [creating, setCreating] = useState(false);
 
@@ -88,24 +109,30 @@ function SidebarOrgSwitcher({ orgs, active, onSelect }: { orgs: MyOrg[]; active:
         density="compact"
         menuClassName="min-w-[220px] max-w-[280px]"
         triggerClassName="w-full"
-        trigger={(props) => (
-          <button
-            {...props}
-            type="button"
-            data-testid="org-switcher"
-            className={cn(
-              "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
-              "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
-              "focus:outline-none focus:ring-2 focus:ring-ring"
-            )}
-          >
-            <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate" data-testid="org-switcher-name">
-              {active.name}
-            </span>
-            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          </button>
-        )}
+        trigger={(props) =>
+          top ? (
+            <button {...props} type="button" data-testid="org-switcher" className={SIDEBAR_ORG_TRIGGER}>
+              <SidebarOrgLabel name={active.name} menu nameTestId="org-switcher-name" />
+            </button>
+          ) : (
+            <button
+              {...props}
+              type="button"
+              data-testid="org-switcher"
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
+                "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
+                "focus:outline-none focus:ring-2 focus:ring-ring"
+              )}
+            >
+              <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate" data-testid="org-switcher-name">
+                {active.name}
+              </span>
+              <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            </button>
+          )
+        }
       />
       <CreateOrganizationDialog open={creating} onClose={() => setCreating(false)} />
     </>

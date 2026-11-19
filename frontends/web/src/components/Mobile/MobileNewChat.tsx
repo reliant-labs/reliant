@@ -108,6 +108,7 @@ import {
   workspacesOnMachine,
 } from "@/lib/workspaceMachine";
 import { daemonLabel } from "../Automations/daemonChoices";
+import { mobileChatPath, mobileChatsPath } from "@/lib/paths";
 
 // Workflow refs arrive in two shapes — bare names from ListWorkflows ("agent")
 // and URIs from preferences ("builtin://agent"). Every comparison has to
@@ -376,7 +377,7 @@ function MobileNewChatDraft() {
 
       setCreatedChatId(chat.id);
       try {
-        await navigate({ to: "/m/chats/$chatId", params: { chatId: chat.id } });
+        await navigate({ to: mobileChatPath(chat.id) });
       } catch {
         setError("Chat created. Open it to continue.");
       }
@@ -433,7 +434,7 @@ function MobileNewChatDraft() {
         subtitle={currentProject?.name ?? "No project"}
         leading={
           <Link
-            to="/m/chats"
+            to={mobileChatsPath()}
             // Explicit px, not `h-10 w-10`: rem sizing resolves against the
             // root font-size, and at the smallest Appearance step `h-10`
             // measures under 44px — on the only way out of this screen.
@@ -582,8 +583,7 @@ function MobileNewChatDraft() {
           {createdChatId && (
             <StatusLine>
               <Link
-                to="/m/chats/$chatId"
-                params={{ chatId: createdChatId }}
+                to={mobileChatPath(createdChatId)}
                 className="flex min-h-[44px] items-center font-medium text-primary-ink"
               >
                 Open created chat

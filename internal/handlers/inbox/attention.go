@@ -16,7 +16,8 @@ import (
 // failingAutomations combines actionable incident episodes with legacy trigger
 // streaks. Only registered attention actors leave legacy streaks; diagnostic
 // health still sees every firing. Incidents outlive paused/deleted triggers.
-// Independent reads run together, each holding one of lim's tokens. Incidents
+// Independent reads run together, each holding one of lim's tokens (readInbox
+// gives them a budget of their own, inboxHealthReadConcurrency). Incidents
 // are decided through reads like every other item about a chat: ownership
 // alone never lists one of an org the caller may no longer read.
 func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads *itemReads, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {

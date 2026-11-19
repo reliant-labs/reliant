@@ -308,9 +308,11 @@ func TestListInbox_BrokenDefinitionListsUnderItsProjectsOrg(t *testing.T) {
 		require.NoError(t, err)
 		sj, err := config.EncodeCatalogJSON([]config.SyncedRepoState{{Repo: "app", Branch: "main", Commit: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b", DefaultBranch: "main"}})
 		require.NoError(t, err)
+		db.HoldProjectOnMachineForTest(t, f.repo, f.project(), cicdID)
 		_, err = f.repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 			ProjectID: f.project(), DaemonID: cicdID, ProjectWorkflowsJSON: wj, RepoStatesJSON: sj, PushedAt: time.UnixMilli(at).UTC(),
-		}, false)
+		}, false, nil)
+
 		require.NoError(t, err)
 	}
 	push(1000, releaseWorkflow)

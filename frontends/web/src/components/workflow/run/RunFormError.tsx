@@ -9,6 +9,7 @@
  */
 
 import { Link } from "@tanstack/react-router";
+import { settingsPath } from "@/lib/paths";
 
 /**
  * Whether a start failure means the user has no model provider to run on.
@@ -30,8 +31,7 @@ export function RunFormError({ message, onNavigate }: { message: string; onNavig
       {isMissingProviderKeyError(message) && (
         <p className="mt-1.5">
           <Link
-            to="/settings/$section"
-            params={{ section: "ai" }}
+            to={settingsPath("ai")}
             onClick={onNavigate}
             className="font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >

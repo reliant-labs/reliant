@@ -46,6 +46,7 @@ import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
 import { PageVisitTracker } from './components/PageVisitTracker'
+import { homePath, mobileChatsPath } from '@/lib/paths'
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -335,7 +336,7 @@ const rootRoute = createRootRoute({
   // Keep `?tour=` across navigations that don't name it (retainTourParam).
   // The root has no search schema, so its middleware type is `{}`-shaped.
   search: { middlewares: [retainTourParam as never] },
-  notFoundComponent: () => <Navigate to="/" search={{}} />,
+  notFoundComponent: () => <Navigate to={homePath()} search={{}} />,
   errorComponent: RouteErrorFallback,
 })
 
@@ -555,7 +556,7 @@ const projectRoute = createRoute({
 const projectRootRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/project',
-  component: () => <Navigate to="/" search={{}} />,
+  component: () => <Navigate to={homePath()} search={{}} />,
 })
 
 const designSandboxRoute = createRoute({
@@ -583,7 +584,7 @@ const designSandboxRoute = createRoute({
 // ForgeGate. In a packaged build these fall through to rootRoute's
 // notFoundComponent and behave exactly as if they were never written.
 function DevOnlyRoute({ children }: { children: React.ReactNode }) {
-  if (!getIsDev()) return <Navigate to="/" search={{}} />
+  if (!getIsDev()) return <Navigate to={homePath()} search={{}} />
   return <>{children}</>
 }
 
@@ -780,7 +781,7 @@ const inboxRoute = createRoute({
 function ForgeGate({ children }: { children: React.ReactNode }) {
   // Read at render, never at module scope: the Developer settings toggle
   // changes this within a session and a snapshot would need a reload.
-  if (!isForgeUIEnabled()) return <Navigate to="/" search={{}} />
+  if (!isForgeUIEnabled()) return <Navigate to={homePath()} search={{}} />
   return <>{children}</>
 }
 
@@ -1016,7 +1017,7 @@ const mobileChatWorkflowRoute = createRoute({
 const mobileIndexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/m',
-  component: () => <Navigate to="/m/chats" />,
+  component: () => <Navigate to={mobileChatsPath()} />,
 })
 
 const routeTree = rootRoute.addChildren([

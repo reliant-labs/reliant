@@ -77,6 +77,9 @@ func approvalToProto(a *db.Approval) *reliantv1.Approval {
 			}
 		}
 	}
+	if p := a.ConnectionProposal(); p != nil {
+		proto.ConnectionProposal = proposalToProto(p)
+	}
 
 	return proto
 }
@@ -173,7 +176,7 @@ func (s *Service) Approve(
 	if req.Msg.RequestId == "" {
 		return nil, svcerr.InvalidArgument("request_id is required")
 	}
-	if _, _, _, err := s.resolveApprovals(ctx, []string{req.Msg.RequestId}, decision{approved: true, actionTaken: req.Msg.ActionTaken}); err != nil {
+	if _, _, _, err := s.resolveApprovals(ctx, []string{req.Msg.RequestId}, decision{approved: true, actionTaken: req.Msg.ActionTaken, connectionID: req.Msg.GetConnectionId()}); err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&reliantv1.ApproveResponse{
@@ -247,6 +250,9 @@ type decision struct {
 	denialReason string
 	// actionTaken is the button that was clicked, when the client names one.
 	actionTaken *string
+	// connectionID is the connection the person made to approve a
+	// connection proposal (Approve only).
+	connectionID string
 }
 
 func denialReasonOr(reason *string, fallback string) string {
@@ -278,7 +284,8 @@ func denialReasonOr(reason *string, fallback string) string {
 // is what lets a batch approve what is left of itself after one of its
 // approvals expired or was decided elsewhere.
 func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision) (string, int, int, error) {
-	if userID, ok := auth.GetUserIDFromContext(ctx); !ok || userID == "" {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
 		return "", 0, 0, svcerr.Unauthenticated("user ID not found in context")
 	}
 	if err := auth.RequireApprovalDecider(ctx, "decide an approval"); err != nil {
@@ -304,6 +311,40 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 		} else if chatID != approval.ChatID {
 			return "", 0, 0, svcerr.InvalidArgument("all approvals must belong to the same chat")
 		}
+	}
+	// A connection proposal is approved only by making its connection, one
+	// at a time: a batch leaves it pending, and approving it alone needs the
+	// connection, checked against the proposal (connection_proposal.go).
+	if d.approved {
+		var held *db.Approval
+		kept := ids[:0:0]
+		for _, id := range ids {
+			approval, err := s.deps.Repo.GetApproval(ctx, id)
+			if err != nil {
+				return "", 0, 0, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
+			}
+			p := approval.ConnectionProposal()
+			switch {
+			case p == nil:
+				kept = append(kept, id)
+			case len(ids) > 1 || d.connectionID == "":
+				held = approval
+			default:
+				if approval.Status == int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
+					if err := s.checkProposalConnection(ctx, userID, p, d.connectionID); err != nil {
+						return "", 0, 0, err
+					}
+				}
+				kept = append(kept, id)
+			}
+		}
+		if len(kept) == 0 && held != nil {
+			if held.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
+				return "", 0, 0, notActionable(held)
+			}
+			return "", 0, 0, connectionRequired(held.ConnectionProposal())
+		}
+		ids = kept
 	}
 
 	status := reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED
@@ -334,7 +375,13 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 				skipped = append(skipped, approval)
 				continue
 			}
-			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(status), denialReason, actionTaken, nil); err != nil {
+			var metadata *string
+			if d.approved && approval.ConnectionProposal() != nil {
+				if metadata, err = withConnectionID(approval, d.connectionID); err != nil {
+					return fmt.Errorf("failed to record the approving connection: %w", err)
+				}
+			}
+			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(status), denialReason, actionTaken, metadata); err != nil {
 				return fmt.Errorf("failed to update approval status: %w", err)
 			}
 			updateData := map[string]interface{}{
@@ -397,6 +444,15 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 		signal["denial_reason"] = *denialReason
 	}
 	for _, approval := range resolved {
+		if d.approved && approval.ConnectionProposal() != nil {
+			proposal := make(map[string]interface{}, len(signal)+1)
+			for k, v := range signal {
+				proposal[k] = v
+			}
+			proposal["connection_id"] = d.connectionID
+			s.signalApproval(ctx, approval, proposal)
+			continue
+		}
 		s.signalApproval(ctx, approval, signal)
 	}
 	return chatID, len(resolved), len(skipped), nil

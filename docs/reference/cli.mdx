@@ -480,8 +480,13 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
-| [`reliant machine`](#reliant-machine) | List, start, stop, resize and rename your machines |
+| [`reliant machine`](#reliant-machine) | List, start, stop, resize, rename and label your machines, and manage machine pools |
+| [`reliant machine label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
+| [`reliant machine pool`](#reliant-machine-pool) | List, define and delete machine pools |
+| [`reliant machine pool ls`](#reliant-machine-pool-ls) | List your machine pools and their members |
+| [`reliant machine pool put`](#reliant-machine-pool-put) | Define a machine pool, or change one |
+| [`reliant machine pool rm`](#reliant-machine-pool-rm) | Delete a machine pool (its machines and their labels are untouched) |
 | [`reliant machine rename`](#reliant-machine-rename) | Rename a machine |
 | [`reliant machine resize`](#reliant-machine-resize) | Change a suspended machine's size |
 | [`reliant machine start`](#reliant-machine-start) | Start (wake) a suspended machine |
@@ -953,6 +958,15 @@ applies. Two accounts can run side by side, even in the same workspace.
 To switch back to an account whose token is already stored:
   reliant daemon start --account `<user-id>`
 
+--label key=value declares a durable label for this machine (repeat it, or
+separate pairs with commas). On every connect the server merges the declared
+labels into the machine's labels: each key is set to its value, and labels
+you did not declare are left alone. Labels decide machine-pool membership, so
+a box started with
+  reliant daemon start --label pool=pipeline --label gate=yes
+joins the pool "pipeline" as soon as it connects, with no one labelling it.
+RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
+
 ```
 reliant daemon start [flags]
 ```
@@ -964,6 +978,7 @@ reliant daemon start [flags]
 | `--account` | `string` | - | Account (user id) this daemon runs as; selects among several accounts on one server [env: RELIANT_INSTANCE_ACCOUNT] |
 | `--data-dir` | `string` | - | Data directory (default: this instance's directory under ~/.reliant/instances) [env: DAEMON_DATA_DIR] |
 | `--grpc-url` | `string` | - | Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port) [env: DAEMON_GRPC_URL] |
+| `--label` | `key=value` | - | Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=`<name>` joins that machine pool |
 | `--listen-port` | `int32` | `9190` | Port to listen on in server mode [env: DAEMON_LISTEN_PORT] |
 | `--name` | `string` | - | Human-friendly daemon name (default: `<instance-id>`@`<hostname>`) |
 | `--non-interactive` | `bool` | - | Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead [env: RELIANT_DAEMON_NON_INTERACTIVE] |
@@ -20670,7 +20685,7 @@ reliant github gh [flags] -- <gh arguments>
 | `--as` | `string` | `app` | Who to act as: app (the Reliant bot, reliant-labs[bot]) or user (you) |
 | `--daemon-account` | `string` | - | Use this daemon account at --daemon-server |
 | `--daemon-server` | `string` | - | Use the session of the daemon at this server |
-| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents and level read or write; repeatable (default: all three at write) |
+| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
 
 ---
@@ -20691,14 +20706,14 @@ reliant github token [flags]
 | `--daemon-account` | `string` | - | Use this daemon account at --daemon-server |
 | `--daemon-server` | `string` | - | Use the session of the daemon at this server |
 | `--json` | `bool` | - | Print the token with who it speaks as, its repository and its expiry |
-| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents and level read or write; repeatable (default: all three at write) |
+| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
 
 ---
 
 ## reliant machine
 
-List, start, stop, resize and rename your machines
+List, start, stop, resize, rename and label your machines, and manage machine pools
 
 Manage your own machines, exactly as Settings -> Machines does.
 
@@ -20708,8 +20723,15 @@ m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
 running machine: stop, resize, start. rename changes what a machine is
 called, and nothing else.
 
-Needs a login made by this release ('reliant auth login'): it carries the
-daemon:manage permission, which only a person's login can hold.
+label sets a machine's durable labels, and pool defines machine pools: a
+pool is the set of your machines whose labels contain its selector, and a
+trigger or workflow that targets the pool runs on one of them. A machine can
+also declare its own labels when it starts ('reliant daemon start --label').
+
+start, stop, resize and rename need a login made by this release ('reliant
+auth login'): it carries the daemon:manage permission, which only a person's
+login can hold. An agent's shell is refused start, stop, resize, label and
+the pool changes.
 
 ```
 reliant machine
@@ -20719,7 +20741,9 @@ reliant machine
 
 | Command | Description |
 |---------|-------------|
+| [`label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`list`](#reliant-machine-list) | List your machines |
+| [`pool`](#reliant-machine-pool) | List, define and delete machine pools |
 | [`rename`](#reliant-machine-rename) | Rename a machine |
 | [`resize`](#reliant-machine-resize) | Change a suspended machine's size |
 | [`start`](#reliant-machine-start) | Start (wake) a suspended machine |
@@ -20734,12 +20758,130 @@ reliant machine
 
 ---
 
+### reliant machine label
+
+Set a machine's durable labels (which decide its machine pools)
+
+Set one of your machines' durable labels. A machine pool is the set of your
+machines whose labels contain its selector, so labelling a machine is how it
+joins or leaves a pool ('reliant machine pool ls' shows the pools).
+
+By default the labels you name are merged into the machine's current labels;
+--remove drops keys, and --replace makes the named labels the machine's only
+ones. Keys and values are lowercase slugs (a-z, 0-9, '.', '_', '-'), at most
+63 characters, and a machine carries at most 32 labels. Prints the labels the
+machine has afterwards.
+
+  reliant machine label build-box pool=pipeline gate=yes
+  reliant machine label build-box --remove gate
+  reliant machine label build-box --replace pool=gate
+
+A machine can also declare labels itself: 'reliant daemon start --label
+k=v' merges them in on every connect.
+
+```
+reliant machine label <name|id> [key=value...] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--remove` | `stringSlice` | `[]` | Label keys to remove (repeatable, or comma-separated) |
+| `--replace` | `bool` | - | Make the named labels the machine's only labels, instead of merging them in |
+
+---
+
 ### reliant machine list
 
 List your machines
 
 ```
 reliant machine list
+```
+
+---
+
+### reliant machine pool
+
+List, define and delete machine pools
+
+A machine pool is a named set of your machines: those whose durable labels
+contain the pool's selector (by default pool=`<name>`). A trigger or workflow
+that targets a pool runs on the connected member with the fewest live runs,
+waking a suspended one when none is free. Members are never listed by hand:
+label a machine ('reliant machine label', or 'reliant daemon start --label')
+to make it one.
+
+```
+reliant machine pool
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`ls`](#reliant-machine-pool-ls) | List your machine pools and their members |
+| [`put`](#reliant-machine-pool-put) | Define a machine pool, or change one |
+| [`rm`](#reliant-machine-pool-rm) | Delete a machine pool (its machines and their labels are untouched) |
+
+---
+
+#### reliant machine pool ls
+
+List your machine pools and their members
+
+```
+reliant machine pool ls
+```
+
+---
+
+#### reliant machine pool put
+
+Define a machine pool, or change one
+
+Define the machine pool `<name>`, or change it. For a pool that exists, only
+the flags you pass change; the rest keep their current values.
+
+--selector is the labels a member's labels must contain (repeatable, or
+comma-separated key=value); without one a new pool selects pool=`<name>`.
+--max-runs-per-member bounds the live runs the pool places on one member (0:
+no bound). --min-members is advisory (warned about when unmet);
+--max-members and --member-size are how far, and at what size, a scale-up
+may grow the pool. --member-idle-timeout is how long a member may sit idle
+before it sleeps (1m-4h; default 10m).
+
+  reliant machine pool put pipeline --max-runs-per-member 2
+  reliant machine pool put gate --selector pool=pipeline,gate=yes
+
+```
+reliant machine pool put <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--max-members` | `uint32` | `0` | Most members a scale-up may grow the pool to (0: it never grows) |
+| `--max-runs-per-member` | `uint32` | `0` | Most live runs the pool places on one member (0: no bound) |
+| `--member-idle-timeout` | `string` | - | How long a member may sit idle before it sleeps, 1m-4h (default 10m) |
+| `--member-size` | `string` | - | Machine size a scale-up creates (s1, s2, m, l, xl, 2xl, 3xl) |
+| `--min-members` | `uint32` | `0` | Fewest members the pool should have (advisory: warned about when unmet) |
+| `--selector` | `key=value` | - | Labels a member must carry, key=value (repeatable, or comma-separated; default pool=`<name>`) |
+
+---
+
+#### reliant machine pool rm
+
+Delete a machine pool (its machines and their labels are untouched)
+
+Delete the machine pool `<name>`. Its machines and their labels are untouched.
+Refused while a trigger still runs on the pool: point the trigger elsewhere
+first.
+
+```
+reliant machine pool rm <name>
 ```
 
 ---
@@ -21345,6 +21487,13 @@ reliant trigger enable <id-or-name>
 
 List a trigger's firings, newest first
 
+Prints one page: at most --limit firings.
+
+--outcome keeps only firings with that outcome: pending, launched, skipped, failed.
+Repeat it, or separate values with commas, to keep several. The server filters
+before it applies --limit, so "--outcome pending --limit 20" is the 20 newest
+pending firings however long the trigger's history is.
+
 ```
 reliant trigger events <id-or-name> [flags]
 ```
@@ -21354,6 +21503,7 @@ reliant trigger events <id-or-name> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--limit` | `int32` | `0` | Maximum firings to return (0 applies the server default) |
+| `--outcome` | `stringSlice` | `[]` | Only firings with this outcome: pending, launched, skipped, failed (repeatable or comma-separated) |
 
 ---
 

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -21,29 +22,36 @@ const (
 	ToolUpdateTriggerActivation = "update_trigger_activation"
 	ToolEnableTrigger           = "enable_trigger"
 	ToolPauseTrigger            = "pause_trigger"
+	ToolDeleteTrigger           = "delete_trigger"
 )
 
 func IsActivationManagementTool(name string) bool {
 	switch name {
-	case ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger:
+	case ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolDeleteTrigger:
 		return true
 	}
 	return false
 }
 
 type ActivationParams struct {
-	TriggerID       string            `json:"trigger_id,omitempty" jsonschema:"description=Existing activation ID. Required except for create."`
-	Name            string            `json:"name,omitempty" jsonschema:"description=Activation display name. Required on create; omitted update fields are kept."`
-	Workflow        string            `json:"workflow,omitempty" jsonschema:"description=Workflow slug or builtin:// ref. Required on create."`
-	WorkflowTrigger string            `json:"workflow_trigger,omitempty" jsonschema:"description=Declared trigger name. Required on create."`
-	ProjectID       string            `json:"project_id,omitempty" jsonschema:"description=Project ID. Required on create; may re-point on update."`
-	MachineID       *string           `json:"machine_id,omitempty" jsonschema:"description=Daemon ID of the machine to pin. Explicit empty string requires no_machine true."`
-	NoMachine       *bool             `json:"no_machine,omitempty" jsonschema:"description=Explicitly run without a machine."`
-	ConnectionID    *string           `json:"connection_id,omitempty" jsonschema:"description=Connection ID; empty selects the default connection."`
-	Params          map[string]any    `json:"params,omitempty" jsonschema:"description=Typed workflow inputs; replaces the params map when supplied."`
-	Presets         map[string]string `json:"presets,omitempty" jsonschema:"description=Workflow preset assignments."`
-	Message         *string           `json:"message,omitempty" jsonschema:"description=Seed prompt; omitted uses declaration prompt on create."`
-	ActingIdentity  *string           `json:"acting_identity,omitempty" jsonschema:"description=Who GitHub writes speak as: app (the Reliant GitHub bot) or owner. Defaults to app on create and to unchanged on update; choose owner only to write under the owner's own account."`
+	TriggerID       string  `json:"trigger_id,omitempty" jsonschema:"description=Existing activation ID. Required except for create."`
+	Name            string  `json:"name,omitempty" jsonschema:"description=Activation display name. Required on create; omitted update fields are kept."`
+	Workflow        string  `json:"workflow,omitempty" jsonschema:"description=Workflow slug or builtin:// ref. Required on create."`
+	WorkflowTrigger string  `json:"workflow_trigger,omitempty" jsonschema:"description=Declared trigger name. Required on create."`
+	ProjectID       string  `json:"project_id,omitempty" jsonschema:"description=Project ID. Required on create; may re-point on update."`
+	MachineID       *string `json:"machine_id,omitempty" jsonschema:"description=Daemon ID of the machine to pin. Explicit empty string requires no_machine true."`
+	NoMachine       *bool   `json:"no_machine,omitempty" jsonschema:"description=Explicitly run without a machine."`
+	// MachinePoolID and MachinePool bind the activation to one of the
+	// owner's machine pools (TriggerDefinition.machine_pool_id), by id or by
+	// name: give at most one. A pool replaces machine_id/no_machine, and
+	// either of those set on an update replaces the pool.
+	MachinePoolID  *string           `json:"machine_pool_id,omitempty" jsonschema:"description=Id of one of the owner's machine pools to run on instead of one machine (list_machines lists pools). Each run goes to the pool's least-loaded member\\, so machines can be added or swapped without editing the activation. Cannot be combined with machine_id or no_machine. On update an explicit empty string unbinds the pool; then give machine_id or no_machine."`
+	MachinePool    *string           `json:"machine_pool,omitempty" jsonschema:"description=Name of one of the owner's machine pools (e.g. pipeline): the same as machine_pool_id\\, by name. Give machine_pool or machine_pool_id\\, not both."`
+	ConnectionID   *string           `json:"connection_id,omitempty" jsonschema:"description=Connection ID; empty selects the default connection."`
+	Params         map[string]any    `json:"params,omitempty" jsonschema:"description=Typed workflow inputs; replaces the params map when supplied."`
+	Presets        map[string]string `json:"presets,omitempty" jsonschema:"description=Workflow preset assignments."`
+	Message        *string           `json:"message,omitempty" jsonschema:"description=Seed prompt; omitted uses declaration prompt on create."`
+	ActingIdentity *string           `json:"acting_identity,omitempty" jsonschema:"description=Who GitHub writes speak as: app (the Reliant GitHub bot) or owner. Defaults to app on create and to unchanged on update; choose owner only to write under the owner's own account."`
 }
 
 // ActivationPreview is a validated, immutable approval description, never a grant.
@@ -57,11 +65,21 @@ type ActivationPreview struct {
 	CardRequired bool `json:"card_required,omitempty"`
 	// Reason says why, in one display-safe line.
 	Reason string `json:"reason,omitempty"`
+	// Kind is PreviewKindConnectionProposal for a propose_connection card,
+	// "" for any other. The runtime settles a card by its kind.
+	Kind string `json:"kind,omitempty"`
+	// Connection is set for a propose_connection card: what it asks the
+	// person to connect. Its approval is decided by making the connection.
+	Connection *core.ConnectionProposal `json:"connection,omitempty"`
 }
 
 // ApprovalRequiredMessage is the refusal when a change needs a card and none
 // was approved.
 const ApprovalRequiredMessage = "This activation change widens its power and needs the owner's approval card in an interactive chat. It was not run."
+
+// DeleteApprovalRequiredMessage is the refusal of a delete_trigger call with
+// no approved card: a delete always needs one.
+const DeleteApprovalRequiredMessage = "Deleting an activation cannot be undone and needs the owner's approval card in an interactive chat. It was not deleted."
 
 // ActivationRefusal is a failure to prepare an activation whose Reason may be
 // shown to the agent and the owner: a fixed classification that names at most
@@ -132,7 +150,10 @@ type activationTypedTool struct{ outer *activationTool }
 
 func (t *activationTypedTool) Name() string { return t.outer.name }
 func (t *activationTypedTool) Description() string {
-	return "Manage a declared workflow trigger activation (" + t.outer.name + "). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context; never guess IDs. Every change is audit logged."
+	if t.outer.name == ToolDeleteTrigger {
+		return "Permanently delete a declared workflow trigger activation (delete_trigger): its schedule stops and the activation and its configuration history are removed, the same as `reliant trigger delete`. Accepts only trigger_id, from list_triggers; never guess IDs. Deleting cannot be undone, so it always needs the owner's approval card in an interactive chat, whatever their automation-approvals setting, and is refused in an unattended run. To stop an activation without losing it, use pause_trigger."
+	}
+	return "Manage a declared workflow trigger activation (" + t.outer.name + "). Uses the app's validation. The owner's automation-approvals setting decides whether a change needs their approval card: by default only a change that widens the activation's power (a new connection or scope, a different acting identity, a new machine, new secrets, or a production deploy step) does, and pausing never does. A change that needs a card is refused in an unattended run. Use machine_id to pin or re-point to a machine from list_triggers/project context, or machine_pool (a pool name) / machine_pool_id to run on one of the owner's machine pools (list_machines lists them) so machines can be swapped without editing the activation; never guess IDs. Re-pointing to the owner's own pool does not widen power; moving from a pool to one machine is a new machine. Every change is audit logged."
 }
 func (t *activationTypedTool) RequiresPermission(ActivationParams) (bool, error) { return true, nil }
 func NewActivationTool(repo runCallerStore, manager ActivationManager, name string) Tool {
@@ -189,13 +210,20 @@ func (t *activationTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall,
 // reason is the refusal's safe classification, or the client-safe message of
 // a classified service error (what the app itself shows for the same RPC);
 // an internal error keeps only the generic sentence, never its cause. A pause
-// never needs a card, so its failure never mentions approval.
+// never needs a card, so its failure never mentions approval; a delete always
+// does, and its failure never suggests the change widened anything.
 func activationFailureMessage(tool string, err error) string {
 	reason := ActivationRefusalReason(err)
 	if reason == "" && svcerr.IsUserError(err) {
 		if ce := svcerr.ToConnect(err); ce != nil {
 			reason = ce.Message()
 		}
+	}
+	if tool == ToolDeleteTrigger {
+		if reason == "" || reason == svcerr.InternalMessage {
+			return "Deleting the activation could not be completed. Inspect it with list_triggers before retrying."
+		}
+		return "Deleting the activation was not completed: " + strings.TrimSuffix(strings.TrimSpace(reason), ".") + ". Inspect it with list_triggers before retrying."
 	}
 	if tool == ToolPauseTrigger {
 		if reason == "" || reason == svcerr.InternalMessage {
@@ -258,7 +286,13 @@ func (t *activationTypedTool) Execute(ctx *rctx.ToolContext, p ActivationParams)
 		if strings.Contains(err.Error(), ApprovalRequiredMessage) {
 			return NewTextErrorResponse(ApprovalRequiredMessage), nil
 		}
+		if strings.Contains(err.Error(), DeleteApprovalRequiredMessage) {
+			return NewTextErrorResponse(DeleteApprovalRequiredMessage), nil
+		}
 		return NewTextErrorResponse(activationFailureMessage(o.name, err)), nil
 	}
-	return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: %s (id %s), enabled=%t, machine=%s (id %s), project=%s", o.name, summary.Name, summary.ID, summary.Enabled, summary.DaemonName, summary.DaemonID, summary.ProjectID)), summary), nil
+	if o.name == ToolDeleteTrigger {
+		return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: deleted activation %s (id %s) of project %s; its schedule and configuration history are gone", o.name, summary.Name, summary.ID, summary.ProjectID)), summary), nil
+	}
+	return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: %s (id %s), enabled=%t, %s, project=%s", o.name, summary.Name, summary.ID, summary.Enabled, summary.Placement(), summary.ProjectID)), summary), nil
 }
