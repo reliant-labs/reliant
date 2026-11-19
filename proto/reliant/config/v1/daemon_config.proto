@@ -138,11 +138,13 @@ message DaemonConfig {
     description: "Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead"
   }];
 
-  // 10 was daemon_type (RELIANT_DAEMON_TYPE). It describes the machine, and
-  // the end-user commands (`auth login`, `auth logout`) act on it too, so it
-  // is CLIConfig's machine.daemon_type, which every `daemon` command loads.
-  reserved 10;
-  reserved "daemon_type";
+  // Deprecated: read nowhere, and bound to no variable. RELIANT_DAEMON_TYPE
+  // describes the machine, and the end-user commands (`auth login`, `auth
+  // logout`) act on it too, so it is CLIConfig's machine.daemon_type, which
+  // every `daemon` command loads. A process may not declare one variable
+  // twice, so this field kept its number and name but lost its
+  // (forge.v1.config) binding.
+  string daemon_type = 10 [deprecated = true];
 
   // Pod-only settings the workspace operator stamps; a daemon on a user's
   // machine leaves them unset.
