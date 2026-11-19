@@ -4,7 +4,9 @@ package repo
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -246,4 +248,239 @@ func TestFindForgeApps_MissingRootIsAnError(t *testing.T) {
 	_, err := FindForgeApps(context.Background(), filepath.Join(t.TempDir(), "gone"), ForgeAppOptions{})
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "repository path"), err.Error())
+}
+
+// wideFS is tree with the directory at wide replaced by a synthetic one of
+// size entries, generated as they are asked for: a directory far wider than
+// any test could write to disk. served counts the entries handed out, and
+// onBatch, when set, runs after each batch.
+type wideFS struct {
+	t       *testing.T
+	tree    fstest.MapFS
+	wide    string
+	size    int
+	served  int
+	batches int
+	onBatch func()
+}
+
+func (w *wideFS) Open(name string) (fs.File, error) {
+	if name == w.wide {
+		return &wideDir{fsys: w}, nil
+	}
+	return w.tree.Open(name)
+}
+
+type wideDir struct{ fsys *wideFS }
+
+func (d *wideDir) Stat() (fs.FileInfo, error) {
+	return wideInfo{name: filepath.Base(d.fsys.wide), dir: true}, nil
+}
+func (d *wideDir) Read([]byte) (int, error) { return 0, io.EOF }
+func (d *wideDir) Close() error             { return nil }
+
+func (d *wideDir) ReadDir(n int) ([]fs.DirEntry, error) {
+	w := d.fsys
+	// A listing of the whole directory at once is the stall this bounds.
+	if n <= 0 || n > walkReadBatch {
+		w.t.Errorf("ReadDir(%d): a wide directory must be read in batches of at most %d", n, walkReadBatch)
+	}
+	if w.served >= w.size {
+		return nil, io.EOF
+	}
+	n = min(n, w.size-w.served)
+	out := make([]fs.DirEntry, 0, n)
+	for range n {
+		out = append(out, fs.FileInfoToDirEntry(wideInfo{name: fmt.Sprintf("f%010d.txt", w.served)}))
+		w.served++
+	}
+	w.batches++
+	if w.onBatch != nil {
+		w.onBatch()
+	}
+	return out, nil
+}
+
+type wideInfo struct {
+	name string
+	dir  bool
+}
+
+func (i wideInfo) Name() string { return i.name }
+func (i wideInfo) Size() int64  { return 0 }
+func (i wideInfo) Mode() fs.FileMode {
+	if i.dir {
+		return fs.ModeDir | 0o755
+	}
+	return 0o644
+}
+func (i wideInfo) ModTime() time.Time { return time.Time{} }
+func (i wideInfo) IsDir() bool        { return i.dir }
+func (i wideInfo) Sys() any           { return nil }
+
+// wideTree is a repository with an app, then a directory "wide" of size
+// entries: the app sorts first, so a scan the wide directory stops has still
+// found it.
+func wideTree(t *testing.T, size int) *wideFS {
+	return &wideFS{t: t, wide: "wide", size: size, tree: fstest.MapFS{
+		"apps/shop/forge.yaml": {Data: []byte(forgeManifestYAML("shop"))},
+		"wide/placeholder":     {Data: []byte("lists wide as a directory; its listing is wideDir's")},
+	}}
+}
+
+// One directory of a billion entries: the entry budget stops the scan within
+// one entry of the budget, never after listing (or sorting) the directory
+// whole, and the scan reports what it found before it as partial.
+func TestFindForgeApps_WideDirectoryStopsWithinBudget(t *testing.T) {
+	const budget = 1_000
+	fsys := wideTree(t, 1_000_000_000)
+	scan, err := FindForgeApps(context.Background(), "repo", ForgeAppOptions{FS: fsys, MaxEntries: budget})
+	require.NoError(t, err)
+	assert.True(t, scan.Truncated, "a scan the budget stopped is partial")
+	assert.Equal(t, fmt.Sprintf("it looked at %d entries", budget), scan.TruncatedReason)
+	assert.Equal(t, []ForgeApp{{Subpath: "apps/shop", Name: "shop"}}, scan.Apps)
+	assert.LessOrEqual(t, fsys.served, budget+1, "the wide directory is read no further than the budget")
+
+	// The default budget bounds it the same way.
+	fsys = wideTree(t, 1_000_000_000)
+	scan, err = FindForgeApps(context.Background(), "repo", ForgeAppOptions{FS: fsys})
+	require.NoError(t, err)
+	assert.True(t, scan.Truncated)
+	assert.Equal(t, []ForgeApp{{Subpath: "apps/shop", Name: "shop"}}, scan.Apps)
+	assert.LessOrEqual(t, fsys.served, DefaultForgeAppMaxEntries+1)
+}
+
+// The deadline and the request are checked between the batches of one
+// directory's listing, not only between the entries a walk visits.
+func TestFindForgeApps_WideDirectoryStopsBetweenBatches(t *testing.T) {
+	for _, tc := range []struct {
+		name, reason string
+		setup        func(t *testing.T, fsys *wideFS) (context.Context, ForgeAppOptions)
+	}{
+		{"the request ends", "the request ended", func(t *testing.T, fsys *wideFS) (context.Context, ForgeAppOptions) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			fsys.onBatch = cancel
+			return ctx, ForgeAppOptions{}
+		}},
+		{"the deadline passes", "it ran out of time", func(t *testing.T, fsys *wideFS) (context.Context, ForgeAppOptions) {
+			deadline := time.Now().Add(5 * time.Millisecond)
+			// The first batch outlasts the deadline.
+			fsys.onBatch = func() {
+				for time.Now().Before(deadline) {
+					time.Sleep(time.Millisecond)
+				}
+			}
+			return context.Background(), ForgeAppOptions{Deadline: deadline}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fsys := wideTree(t, 1_000_000_000)
+			ctx, opts := tc.setup(t, fsys)
+			opts.FS = fsys
+			opts.MaxEntries = 1 << 30
+			scan, err := FindForgeApps(ctx, "repo", opts)
+			require.NoError(t, err)
+			assert.True(t, scan.Truncated)
+			assert.Equal(t, tc.reason, scan.TruncatedReason)
+			assert.Equal(t, []ForgeApp{{Subpath: "apps/shop", Name: "shop"}}, scan.Apps)
+			assert.Equal(t, 1, fsys.batches, "the walk stops before the next batch")
+		})
+	}
+}
+
+// shuffledFS lists every directory of tree in an order seeded by seed, a few
+// entries at a time, as a filesystem with its own listing order would.
+type shuffledFS struct {
+	tree fstest.MapFS
+	seed int64
+}
+
+func (s shuffledFS) Open(name string) (fs.File, error) {
+	f, err := s.tree.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	rd, ok := f.(fs.ReadDirFile)
+	if !ok {
+		return f, nil
+	}
+	list, err := rd.ReadDir(-1)
+	if err != nil {
+		return nil, err
+	}
+	rand.New(rand.NewSource(s.seed)).Shuffle(len(list), func(i, j int) { list[i], list[j] = list[j], list[i] })
+	return &shuffledDir{ReadDirFile: rd, list: list}, nil
+}
+
+type shuffledDir struct {
+	fs.ReadDirFile
+	list []fs.DirEntry
+}
+
+func (d *shuffledDir) ReadDir(n int) ([]fs.DirEntry, error) {
+	if n <= 0 {
+		out := d.list
+		d.list = nil
+		return out, nil
+	}
+	if len(d.list) == 0 {
+		return nil, io.EOF
+	}
+	n = min(n, len(d.list), 7)
+	out := d.list[:n]
+	d.list = d.list[n:]
+	return out, nil
+}
+
+// The same tree gives the same scan whatever order the filesystem lists a
+// directory in, even when the budget stops it part-way: which apps a partial
+// scan saw must not flap between two scans of an unchanged repository.
+func TestFindForgeApps_PartialScanIsDeterministic(t *testing.T) {
+	tree := fstest.MapFS{}
+	for i := range 100 {
+		tree[fmt.Sprintf("apps/a%03d/forge.yaml", i)] = &fstest.MapFile{Data: []byte(forgeManifestYAML(fmt.Sprintf("a%03d", i)))}
+	}
+	// The root and apps/ are two entries, each app directory and its
+	// forge.yaml two more: the budget stops the walk part-way through them.
+	opts := ForgeAppOptions{MaxEntries: 120}
+
+	opts.FS = tree
+	want, err := FindForgeApps(context.Background(), "repo", opts)
+	require.NoError(t, err)
+	require.True(t, want.Truncated)
+	require.NotEmpty(t, want.Apps)
+	require.Less(t, len(want.Apps), 100)
+	assert.Equal(t, "a000", want.Apps[0].Name, "a partial scan walks in name order")
+
+	for seed := range int64(5) {
+		opts.FS = shuffledFS{tree: tree, seed: seed}
+		got, err := FindForgeApps(context.Background(), "repo", opts)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, "seed %d", seed)
+	}
+}
+
+// A wide directory on disk: os.DirFS's listing is read in batches too.
+func TestFindForgeApps_WideDirectoryOnDisk(t *testing.T) {
+	repoRoot := t.TempDir()
+	writeFile(t, repoRoot, "apps/shop/forge.yaml", forgeManifestYAML("shop"))
+	wide := filepath.Join(repoRoot, "wide")
+	require.NoError(t, os.Mkdir(wide, 0o755))
+	for i := range 2_000 {
+		f, err := os.Create(filepath.Join(wide, fmt.Sprintf("f%05d", i)))
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+	}
+
+	scan, err := FindForgeApps(context.Background(), repoRoot, ForgeAppOptions{MaxEntries: 500})
+	require.NoError(t, err)
+	assert.True(t, scan.Truncated)
+	assert.Equal(t, "it looked at 500 entries", scan.TruncatedReason)
+	assert.Equal(t, []ForgeApp{{Subpath: "apps/shop", Name: "shop"}}, scan.Apps)
+
+	scan, err = FindForgeApps(context.Background(), repoRoot, ForgeAppOptions{})
+	require.NoError(t, err)
+	assert.False(t, scan.Truncated, scan.TruncatedReason)
+	assert.Equal(t, []ForgeApp{{Subpath: "apps/shop", Name: "shop"}}, scan.Apps)
 }
