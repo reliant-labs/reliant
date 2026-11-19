@@ -146,9 +146,7 @@ message ListSharedChatsRequest {
   // 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
   repeated string project_ids = 6 [(buf.validate.field).repeated = {
     max_items: 200
-    items: {
-      string: {min_len: 1}
-    }
+    items: {string: {min_len: 1}}
   }];
 }
 

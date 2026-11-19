@@ -1056,9 +1056,7 @@ message ListChatsRequest {
   // main_worktrees then holds the main workspace of each listed project.
   repeated string project_ids = 6 [(buf.validate.field).repeated = {
     max_items: 200
-    items: {
-      string: {min_len: 1}
-    }
+    items: {string: {min_len: 1}}
   }];
 }
 
