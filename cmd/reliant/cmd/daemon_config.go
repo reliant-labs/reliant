@@ -3,12 +3,14 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -40,7 +42,46 @@ func loadDaemonConfig(cmd *cobra.Command) (*config.DaemonConfig, error) {
 			return nil, fmt.Errorf("config: %s = %d is not a TCP port (1-65535)", p.name, p.port)
 		}
 	}
+	if _, err := machinepool.ParseLabels(cfg.GetLabels(), "labels"); err != nil {
+		return nil, fmt.Errorf("config: RELIANT_DAEMON_LABELS (labels): %w", err)
+	}
 	return cfg, nil
+}
+
+// labelsFlag is a repeatable key=value flag (`--label pool=pipeline --label
+// gate=yes`, or `--label pool=pipeline,gate=yes`). Each use is checked as it
+// is parsed, so a bad label is refused before the command runs.
+type labelsFlag struct {
+	name string
+	args []string
+}
+
+func (f *labelsFlag) Set(s string) error {
+	if _, err := machinepool.ParseLabels([]string{s}, "--"+f.name); err != nil {
+		return err
+	}
+	f.args = append(f.args, s)
+	return nil
+}
+
+func (f *labelsFlag) String() string { return strings.Join(f.args, ",") }
+
+func (f *labelsFlag) Type() string { return "key=value" }
+
+// labels is every use of the flag as one label map (a key given twice takes
+// its last value); nil when it was not used.
+func (f *labelsFlag) labels() (map[string]string, error) {
+	return machinepool.ParseLabels(f.args, "--"+f.name)
+}
+
+// daemonMachineLabels are the durable labels `daemon start` declares for its
+// machine: --label when given (it replaces the config's list, as a flag
+// overrides its config value), else DaemonConfig.labels.
+func daemonMachineLabels(cmd *cobra.Command, cfg *config.DaemonConfig, flag *labelsFlag) (map[string]string, error) {
+	if cmd.Flags().Changed(flag.name) {
+		return flag.labels()
+	}
+	return machinepool.ParseLabels(cfg.GetLabels(), "labels")
 }
 
 // daemonHost is what the platform declared about where this daemon runs, in

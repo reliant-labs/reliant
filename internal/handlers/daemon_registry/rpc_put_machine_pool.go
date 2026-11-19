@@ -29,7 +29,7 @@ func (s *Service) PutMachinePool(
 	if spec == nil {
 		return nil, svcerr.InvalidArgument("pool is required")
 	}
-	if !labelSlug.MatchString(spec.GetName()) {
+	if !machinepool.IsSlug(spec.GetName()) {
 		return nil, svcerr.InvalidArgument("pool name: a lowercase slug (a-z, 0-9, '.', '_', '-'), at most 63 characters")
 	}
 	selector := spec.GetSelector()
