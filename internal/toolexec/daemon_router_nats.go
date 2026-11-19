@@ -1652,6 +1652,12 @@ func (r *NATSDaemonRouter) toolRequestRoundTrip(ctx context.Context, userID, dae
 		forget()
 		return nil, dispatchFinal, err
 	}
+	if resp.ErrorCode == ErrorCodeDaemonUpdating {
+		// The daemon is draining for a restart and did not take it, or its
+		// gateway did not send it: nothing ran (daemon_upgrade.go).
+		forget()
+		return nil, dispatchUndelivered, fmt.Errorf("tool request: %w", ErrDaemonUpdating)
+	}
 	if resp.ErrorCode == ErrorCodeDaemonInterrupted {
 		resp, outcome, err := r.awaitRedelivery(ctx, inbox, userID, daemonID, request, resp, deadline)
 		if resp != nil {
