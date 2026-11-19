@@ -97,6 +97,26 @@ func TestListSharedChats(t *testing.T) {
 	if ids := convChatIDs(byProject); !reflect.DeepEqual(ids, []string{"bob-other-project"}) {
 		t.Fatalf("one project's shared chats = %v", ids)
 	}
+	// Several projects (ProjectIDs, with ProjectID their union) is one list,
+	// ordered like the whole one; a project with nothing shared adds nothing.
+	for name, f := range map[string]core.SharedChatFilters{
+		"project_ids":            {ProjectIDs: []string{storetest.SeedProjectID, other.ID, "proj-nothing-shared"}},
+		"project_id+project_ids": {ProjectID: strp(other.ID), ProjectIDs: []string{storetest.SeedProjectID}},
+	} {
+		f.OrgID, f.ViewerUserID = "acme", "alice"
+		several, err := env.Repo.ListSharedChats(ctx, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ids := convChatIDs(several); !reflect.DeepEqual(ids, want) {
+			t.Fatalf("%s: several projects' shared chats = %v, want %v", name, ids, want)
+		}
+	}
+	if none, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{
+		OrgID: "acme", ViewerUserID: "alice", ProjectIDs: []string{"proj-nothing-shared"},
+	}); err != nil || len(none) != 0 {
+		t.Fatalf("a project with nothing shared lists %v, %v; want nothing (never every project)", convChatIDs(none), err)
+	}
 
 	// bob sees carol's and alice's, never his own.
 	bobs, err := env.Repo.ListSharedChats(ctx, core.SharedChatFilters{OrgID: "acme", ViewerUserID: "bob"})

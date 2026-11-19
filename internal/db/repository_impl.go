@@ -2067,9 +2067,10 @@ func (r *Repo) ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktre
 }
 
 // ListMainWorktreesForUser returns the main workspace of each of the user's
-// projects, or of the one project when projectID is set and the user owns it.
-func (r *Repo) ListMainWorktreesForUser(ctx context.Context, userID string, projectID *string) ([]*Worktree, error) {
-	return store.ListMainWorktreesForUser(ctx, r.ORM(), userID, projectID)
+// projects, or of each project named that the user owns when projects is
+// non-empty.
+func (r *Repo) ListMainWorktreesForUser(ctx context.Context, userID string, projects []string) ([]*Worktree, error) {
+	return store.ListMainWorktreesForUser(ctx, r.ORM(), userID, projects)
 }
 
 func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {

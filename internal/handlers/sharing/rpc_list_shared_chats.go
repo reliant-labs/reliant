@@ -2,6 +2,7 @@ package sharing
 
 import (
 	"context"
+	"fmt"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -25,6 +26,15 @@ func (s *Service) ListSharedChats(
 	if err := auth.RequirePerson(ctx, "read what others shared with your organization"); err != nil {
 		return nil, err
 	}
+	// A project list the request may name, as ListChats checks it.
+	if n := len(req.Msg.ProjectIds); n > core.MaxListProjectIDs {
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("project_ids names %d projects; at most %d", n, core.MaxListProjectIDs))
+	}
+	for _, id := range req.Msg.ProjectIds {
+		if id == "" {
+			return nil, svcerr.InvalidArgument("project_ids must not name an empty project id")
+		}
+	}
 	org, err := s.sharedOrg(ctx, userID, req.Msg.OrgId)
 	if err != nil {
 		return nil, err
@@ -35,7 +45,8 @@ func (s *Service) ListSharedChats(
 	}
 	limit, offset := page(req.Msg.GetLimit(), req.Msg.GetOffset())
 	filters := core.SharedChatFilters{
-		OrgID: org, ViewerUserID: userID, ProjectID: req.Msg.ProjectId, Limit: limit, Offset: offset,
+		OrgID: org, ViewerUserID: userID, ProjectID: req.Msg.ProjectId, ProjectIDs: req.Msg.ProjectIds,
+		Limit: limit, Offset: offset,
 	}
 	// An app's chat list; "" is the same as unset.
 	if app := req.Msg.GetAppName(); app != "" {

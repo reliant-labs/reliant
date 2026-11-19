@@ -70,7 +70,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=6f6d24e2947a37f3229df2e7e9017ed307e59ee6ee7e14b9816fe61dbcdcebc1
+// forge:hash=1e9b4c417d271fd0ce3e5ad1d163677397163c801d3c55eadb38f62ae17b66f4
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -138,7 +138,7 @@ type MockRepository struct {
 	GetLatestWorkflowNodeUpdatesFunc                         func(context.Context, string, string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequenceFunc                          func(context.Context, string) (int64, error)
 	ListWorktreesByIDsFunc                                   func(context.Context, []string) ([]*db.Worktree, error)
-	ListMainWorktreesForUserFunc                             func(context.Context, string, *string) ([]*db.Worktree, error)
+	ListMainWorktreesForUserFunc                             func(context.Context, string, []string) ([]*db.Worktree, error)
 	ListProjectsByIDsFunc                                    func(context.Context, []string) ([]*db.Project, error)
 	UnarchiveWorktreeFunc                                    func(context.Context, string) error
 	GetWorkflowCheckpointFunc                                func(context.Context, string) (*db.WorkflowCheckpoint, error)
@@ -764,10 +764,10 @@ func (m *MockRepository) ListWorktreesByIDs(ctx context.Context, ids []string) (
 }
 
 // ListMainWorktreesForUser records the call and delegates to ListMainWorktreesForUserFunc when set.
-func (m *MockRepository) ListMainWorktreesForUser(ctx context.Context, userID string, projectID *string) ([]*db.Worktree, error) {
-	m.Recorder.Record("ListMainWorktreesForUser", ctx, userID, projectID)
+func (m *MockRepository) ListMainWorktreesForUser(ctx context.Context, userID string, projects []string) ([]*db.Worktree, error) {
+	m.Recorder.Record("ListMainWorktreesForUser", ctx, userID, projects)
 	if m.ListMainWorktreesForUserFunc != nil {
-		return m.ListMainWorktreesForUserFunc(ctx, userID, projectID)
+		return m.ListMainWorktreesForUserFunc(ctx, userID, projects)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListMainWorktreesForUser")
 }

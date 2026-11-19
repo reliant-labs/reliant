@@ -282,9 +282,10 @@ func (s *Service) validateBuilderTest(ctx context.Context, userID string, msg *r
 	return nil
 }
 
-// ListChats lists the caller's non-archived chats: in one project, or across
-// all of their projects when project_id is empty (the sidebar's "All
-// projects" view). Chats are filtered by owner in both cases.
+// ListChats lists the caller's non-archived chats: in one project, in the
+// union of project_id and project_ids (the sidebar's multi-project filter), or
+// across all of their projects when both are empty (the sidebar's "All
+// projects" view). Chats are filtered by owner in every case.
 func (s *Service) ListChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListChatsRequest],
@@ -300,6 +301,9 @@ func (s *Service) ListChats(
 	if req.Msg.ProjectId != "" {
 		projectID = &req.Msg.ProjectId
 	}
+	if err := validListProjectIDs(req.Msg.ProjectIds); err != nil {
+		return nil, err
+	}
 	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
 	if err != nil {
 		return nil, err
@@ -307,6 +311,7 @@ func (s *Service) ListChats(
 	filters := db.ChatFilters{
 		UserID:          userID,
 		ProjectID:       projectID,
+		ProjectIDs:      req.Msg.ProjectIds,
 		Org:             scope,
 		Limit:           limit,
 		AppName:         appNameFilter(req.Msg.AppName),
@@ -329,7 +334,7 @@ func (s *Service) ListChats(
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
-	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, scope, chats, protoChats)
+	mainWorktrees := s.attachWorktrees(ctx, userID, filters.Projects(), scope, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -345,6 +350,21 @@ func (s *Service) ListChats(
 		LastUserUpdateSequence: latestSeq,
 		MainWorktrees:          mainWorktrees,
 	}), nil
+}
+
+// validListProjectIDs refuses a project_ids list longer than
+// core.MaxListProjectIDs, or one naming an empty id. An id the caller cannot
+// read is not refused: it lists nothing, like such a project_id.
+func validListProjectIDs(ids []string) error {
+	if len(ids) > core.MaxListProjectIDs {
+		return svcerr.InvalidArgument(fmt.Sprintf("project_ids names %d projects; at most %d", len(ids), core.MaxListProjectIDs))
+	}
+	for _, id := range ids {
+		if id == "" {
+			return svcerr.InvalidArgument("project_ids must not name an empty project id")
+		}
+	}
+	return nil
 }
 
 // GetChat retrieves a specific chat by ID

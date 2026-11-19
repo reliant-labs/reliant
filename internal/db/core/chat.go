@@ -345,6 +345,10 @@ type ArchivedChatInfo struct {
 type ChatFilters struct {
 	UserID    string
 	ProjectID *string
+	// ProjectIDs narrows the list to several projects. With ProjectID the
+	// list is narrowed to their union (Projects); with neither it is not
+	// narrowed by project at all.
+	ProjectIDs []string
 	// Org narrows the list to one organization; nil lists every chat UserID
 	// owns, in any org or none (every client before orgs).
 	Org *OrgScope
@@ -359,6 +363,41 @@ type ChatFilters struct {
 	SidebarOnly bool
 	Limit       int
 	Offset      int
+}
+
+// MaxListProjectIDs is how many project ids one list request may name
+// (ListChatsRequest.project_ids, ListSharedChatsRequest.project_ids).
+const MaxListProjectIDs = 200
+
+// Projects is the set of projects the list is narrowed to: ProjectID and
+// ProjectIDs together, each once, in the order given. Empty narrows nothing.
+func (f ChatFilters) Projects() []string { return projectUnion(f.ProjectID, f.ProjectIDs) }
+
+// projectUnion is one optional project id and a list of them as one set,
+// each id once, in the order given. Empty ids are not projects.
+func projectUnion(one *string, many []string) []string {
+	if (one == nil || *one == "") && len(many) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(many)+1)
+	seen := make(map[string]struct{}, len(many)+1)
+	add := func(id string) {
+		if id == "" {
+			return
+		}
+		if _, dup := seen[id]; dup {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	if one != nil {
+		add(*one)
+	}
+	for _, id := range many {
+		add(id)
+	}
+	return out
 }
 
 // ChatSearchFilters contains options for searching chats.
