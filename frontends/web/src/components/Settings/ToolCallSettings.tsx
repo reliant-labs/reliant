@@ -39,7 +39,7 @@ export interface ToolCollapseDefaults {
  */
 export const DEFAULT_TOOL_COLLAPSE_SETTINGS: ToolCollapseDefaults = {
   fileView: true,       // collapsed by default (view-only tools)
-  fileWrite: false,     // expanded by default — the diff is the point of the call
+  fileWrite: true,      // collapsed by default: the row says +4 −1, the diff opens on a click
   searchRead: true,     // collapsed by default (can expand to see results)
   execution: true,      // collapsed by default
   planning: true,       // collapsed by default

@@ -1,7 +1,7 @@
 import { useState, useMemo, memo } from "react";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
-import { ChevronDown, ChevronUp, History } from "lucide-react";
-import { cn } from "../../lib/utils";
+import { History } from "lucide-react";
+import { QuietRow } from "./QuietRow";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { useChat } from "../../store/chatStoreHooks";
 import type { Message } from "../../api/client";
@@ -93,52 +93,22 @@ export const CompactionMessage = memo(function CompactionMessage({
   );
   
   return (
-    <div className="mb-3 mx-2">
-      <div
-        className={cn(
-          "border rounded-lg transition-colors duration-200",
-          "bg-muted/30 border-border/50",
-          "hover:border-border/70"
-        )}
-      >
-        {/* Collapsed header - always visible */}
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className={cn(
-            "w-full flex items-center gap-2 px-3 py-2 text-left",
-            "text-sm text-muted-foreground hover:text-foreground",
-            "transition-colors duration-200"
-          )}
-        >
-          <History className="w-4 h-4 flex-shrink-0 text-blue-500" />
-          <span className="flex-1 font-medium">
-            Context continued from previous session
-          </span>
-          <span className="text-xs opacity-70">
-            {isExpanded ? "Hide" : "Show"} summary
-          </span>
-          {isExpanded ? (
-            <ChevronUp className="w-4 h-4 flex-shrink-0" />
-          ) : (
-            <ChevronDown className="w-4 h-4 flex-shrink-0" />
-          )}
-        </button>
-        
-        {/* Expanded content */}
-        {isExpanded && (
-          <div className="px-3 pb-3 border-t border-border/30">
-            <div className="pt-3 text-sm">
-              <MarkdownRenderer
-                content={summary}
-                isUser={false}
-                isStreaming={false}
-                worktreeId={worktreeId}
-                className="text-sm"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+    <QuietRow
+      icon={<History className="size-4" />}
+      expanded={isExpanded}
+      onToggle={() => setIsExpanded(!isExpanded)}
+      ariaLabel={`${isExpanded ? "Hide" : "Show"} summary`}
+      detail={
+        <MarkdownRenderer
+          content={summary}
+          isUser={false}
+          isStreaming={false}
+          worktreeId={worktreeId}
+          className="text-ui"
+        />
+      }
+    >
+      <span className="truncate">Context continued from previous session</span>
+    </QuietRow>
   );
 });

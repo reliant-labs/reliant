@@ -17,11 +17,11 @@ import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
 import { fetchFullToolBodies } from "../../hooks/tool-result-queries";
-import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
-import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
+import { isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
 import { DraftAutomationCard, isDraftAutomationTool } from "./tool-renderers/DraftAutomationToolRenderer";
 import { AskUserCard } from "./AskUserCard";
+import { ThoughtRow } from "./ThoughtRow";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
@@ -621,8 +621,9 @@ function ChatMessageComponent({
   const hasVisibleContent = slice
     ? sliceRole !== "prose" ||
       (hasChrome && hasAttachments) ||
-      visibleSegments.some(({ segment }) => segment.kind === "text" && Boolean(segment.text))
+      visibleSegments.some(({ segment }) => segment.kind !== "tools" && Boolean(segment.text))
     : parsed.text ||
+      parsed.segments.some((segment) => segment.kind === "thinking") ||
       hasAttachments ||
       hasUserCards ||
       (!hideToolExecutions &&
@@ -633,12 +634,8 @@ function ChatMessageComponent({
     return null;
   }
 
-  // Decide grouping: if more than 1 execution, show single grouped component
-  const shouldGroup = (enhancedToolExecutions?.length || 0) > 1;
-
   // Render one contiguous run of tool executions (a single "tools" segment).
-  // Read-only tools collapse together; write/planning tools use the existing
-  // group-or-list logic. keyPrefix keeps React keys unique across segments.
+  // keyPrefix keeps React keys unique across segments.
   const renderToolRun = (
     executions: EnhancedToolExecution[],
     keyPrefix: string,
@@ -646,80 +643,36 @@ function ChatMessageComponent({
     if (executions.length === 0) return null;
     // Mobile keeps original run order and ownership. Only successful, settled
     // work may recede; approvals, errors and live work stay directly visible.
-    if (isMobile) {
-      if (isQuietToolRun(executions)) {
-        return <ToolExecutionGroup executions={executions} messageId={message.id}
-          chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} />;
-      }
-      return <div className="space-y-1">{executions.map((exec) => (
-        <ToolExecution key={exec.call.content_block_id || exec.call.id}
-          toolCall={exec.call} toolResult={exec.result} status={exec.status}
-          onCancel={exec.onCancel} onConvertToBackground={exec.onConvertToBackground}
-          approval={exec.approval} chatId={chatId || undefined} showRichContent
-          onSelectThread={onSelectThread} />
-      ))}</div>;
+    const row = (exec: EnhancedToolExecution, idx: number) => (
+      <ToolExecution
+        key={exec.call.content_block_id || `${keyPrefix}-exec-${idx}`}
+        toolCall={exec.call}
+        toolResult={exec.result}
+        status={exec.status}
+        onCancel={exec.onCancel}
+        onConvertToBackground={exec.onConvertToBackground}
+        approval={exec.approval}
+        chatId={chatId || undefined}
+        showRichContent
+        onSelectThread={onSelectThread}
+      />
+    );
+    // Mobile keeps original run order and ownership. Only successful, settled
+    // work may recede into one group row; approvals, errors and live work
+    // stay directly visible.
+    if (isMobile && isQuietToolRun(executions)) {
+      return (
+        <div className="tool-executions-container my-2">
+          <ToolExecutionGroup executions={executions} messageId={message.id}
+            chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} />
+        </div>
+      );
     }
-    const readOnlyTools = executions.filter((exec) =>
-      isReadOnlyTool(exec.call.name),
-    );
-    const otherTools = executions.filter(
-      (exec) => !isReadOnlyTool(exec.call.name),
-    );
-
+    // One quiet row per call, tight against each other: the paragraphs
+    // around the run get the space, not the rows within it.
     return (
-      <div className="tool-executions-container mb-1 space-y-1">
-        {/* Render read-only tools - only group if 2+ tools */}
-        {readOnlyTools.length > 1 ? (
-          <ToolExecutionCollapsibleGroup
-            executions={readOnlyTools}
-            messageId={message.id}
-            chatId={chatId || undefined}
-            showRichContent={true}
-            onSelectThread={onSelectThread}
-          />
-        ) : (
-          readOnlyTools.map((exec, idx) => (
-            <ToolExecution
-              key={`${keyPrefix}-readonly-${idx}`}
-              toolCall={exec.call}
-              toolResult={exec.result}
-              status={exec.status}
-              onCancel={exec.onCancel}
-              onConvertToBackground={exec.onConvertToBackground}
-              approval={exec.approval}
-              chatId={chatId || undefined}
-              showRichContent={true}
-              onSelectThread={onSelectThread}
-            />
-          ))
-        )}
-
-        {/* Render other tools with existing logic */}
-        {otherTools.length > 0 &&
-          (shouldGroup && otherTools.length > 1 ? (
-            <ToolExecutionGroup
-              executions={otherTools}
-              messageId={message.id}
-              chatId={chatId || undefined}
-              showRichContent={true}
-              onSelectThread={onSelectThread}
-            />
-          ) : (
-            otherTools.map((exec, idx) => (
-              <ToolExecution
-                key={`${keyPrefix}-exec-${idx}`}
-                toolCall={exec.call}
-                toolResult={exec.result}
-                status={exec.status}
-                onCancel={exec.onCancel}
-                onConvertToBackground={exec.onConvertToBackground}
-                approval={exec.approval}
-                chatId={chatId || undefined}
-                showRichContent={true}
-                onSelectThread={onSelectThread}
-              />
-            ))
-          ))}
+      <div className="tool-executions-container my-2 flex flex-col gap-0.5">
+        {executions.map(row)}
       </div>
     );
   };
@@ -830,6 +783,13 @@ function ChatMessageComponent({
   const renderSegment = (segment: MessageSegment, segIdx: number): JSX.Element | null => {
     if (segment.kind === "text") {
       return sliceRole === "surfaced" ? null : renderTextSegment(segment.text, segIdx);
+    }
+    if (segment.kind === "thinking") {
+      return sliceRole === "surfaced" ? null : (
+        <div key={`${message.id}-seg-${segIdx}`} className="my-2">
+          <ThoughtRow text={segment.text} />
+        </div>
+      );
     }
     const executions = segment.executions
       .filter((exec) => !sliceCalls || sliceCalls.has(exec.call.id))

@@ -374,7 +374,7 @@ const GroupedErrorRow = memo(function GroupedErrorRow({
   return (
     <div>
       {affectedThreads > 1 && (
-        <div className="px-2 pb-1 text-xs text-muted-foreground">
+        <div className="pb-1 text-meta text-muted-foreground">
           ×{affectedThreads} — the same failure hit {affectedThreads} threads at once
         </div>
       )}
@@ -636,54 +636,24 @@ const TransitionDivider = memo(function TransitionDivider({
 }: TransitionDividerProps) {
   const Icon = icon === "fork" ? GitBranch : icon === "new" ? Plus : ArrowRightLeft;
 
+  // A quiet sentence, not a rule with a tinted chip: the thread's colour is
+  // its dot, the words are muted.
   return (
-    <div className="flex items-center gap-3 py-2 px-4">
-      <div className="flex-1 h-px bg-border" />
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {routingInfo ? (
-          <>
-            <Route className="h-3.5 w-3.5" style={{ color }} />
-            <span className="text-muted-foreground">Routed to</span>
-            <span
-              className="font-medium px-1.5 py-0.5 rounded"
-              style={{
-                color,
-                backgroundColor: `${color}15`,
-              }}
-            >
-              {routingInfo.workflow}
-            </span>
-            {routingInfo.preset && (
-              <span
-                className="font-medium px-1.5 py-0.5 rounded"
-                style={{
-                  color: `${color}cc`,
-                  backgroundColor: `${color}10`,
-                }}
-              >
-                {routingInfo.preset}
-              </span>
-            )}
-            <Icon className="h-3 w-3 opacity-60" />
-            <span>{label}</span>
-          </>
-        ) : (
-          <>
-            <Icon className="h-3.5 w-3.5" style={{ color }} />
-            <span
-              className="font-medium px-1.5 py-0.5 rounded"
-              style={{
-                color,
-                backgroundColor: `${color}15`,
-              }}
-            >
-              {name}
-            </span>
-            <span>{label}</span>
-          </>
-        )}
-      </div>
-      <div className="flex-1 h-px bg-border" />
+    <div className="flex min-h-7 items-center gap-2 py-1 text-ui text-muted-foreground">
+      <span className="inline-flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+        {routingInfo ? <Route className="size-4" style={{ color }} /> : <Icon className="size-4" style={{ color }} />}
+      </span>
+      {routingInfo ? (
+        <span className="min-w-0 truncate">
+          Routed to <span className="text-foreground">{routingInfo.workflow}</span>
+          {routingInfo.preset && <span className="text-foreground"> · {routingInfo.preset}</span>}
+          <span> · {label}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 truncate">
+          <span className="font-medium text-foreground">{name}</span> <span>{label}</span>
+        </span>
+      )}
     </div>
   );
 });
@@ -1438,13 +1408,15 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           // every frame of the animation and each one triggers a re-measure
           // and a follow-scroll correction.
           "transition-colors",
-          !workflow.isMain && "ml-1 pl-3",
+          !workflow.isMain && "pl-4",
         )}
         style={
           !workflow.isMain
             ? {
-                borderLeftColor: workflow.color,
-                borderLeftWidth: 3,
+                // A hairline in the thread's colour, faded: enough to say
+                // which thread a row is on, never a coloured bar.
+                borderLeftColor: `color-mix(in srgb, ${workflow.color} 45%, transparent)`,
+                borderLeftWidth: 1,
                 borderLeftStyle: "solid",
               }
             : undefined
