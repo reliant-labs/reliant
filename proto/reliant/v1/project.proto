@@ -410,6 +410,16 @@ service ProjectService {
   rpc ListProjectOrgMoves(ListProjectOrgMovesRequest) returns (ListProjectOrgMovesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // ListProjectsWithApps is the Projects list (unified-shell-and-projects.md
+  // §8.3): every project the caller may read in one org, each with the forge
+  // apps its code holds linked to the org's hosted apps, plus the org's apps
+  // that no listed project contains. The link is computed here, under
+  // reliant's project authorization and control-plane's app authorization.
+  // forge:custom — joins caller-visible projects with the org's hosted apps
+  rpc ListProjectsWithApps(ListProjectsWithAppsRequest) returns (ListProjectsWithAppsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // Project represents a project in the system
@@ -1224,4 +1234,98 @@ message ListProjectOrgMovesRequest {
 
 message ListProjectOrgMovesResponse {
   repeated ProjectOrgMove moves = 1;
+}
+
+message ListProjectsWithAppsRequest {
+  // The org to list; one the caller is a live member of (PERMISSION_DENIED
+  // otherwise). Unset: the caller's default org.
+  optional string org_id = 1;
+}
+
+message ListProjectsWithAppsResponse {
+  // The org listed.
+  string org_id = 1;
+  // The caller's own projects in the org, then projects shared with them in
+  // it, most recently active first.
+  repeated ProjectWithApps projects = 2;
+  // The org's apps that no project in `projects` contains: app-only rows.
+  repeated HostedApp unlinked_apps = 3;
+  // Whether the org's apps could be read. Not OK: `projects` still lists,
+  // their apps carry no `hosted`, and `unlinked_apps` is empty.
+  HostedAppsState hosted_apps_state = 4;
+}
+
+enum HostedAppsState {
+  HOSTED_APPS_STATE_UNSPECIFIED = 0;
+  HOSTED_APPS_STATE_OK = 1;
+  // The caller may not read the org's apps (no deploy:read).
+  HOSTED_APPS_STATE_NO_ACCESS = 2;
+  // The control plane could not be reached, or this server has none.
+  HOSTED_APPS_STATE_UNAVAILABLE = 3;
+}
+
+message ProjectWithApps {
+  // As ListProjects returns it; a shared project in the viewer's shape.
+  Project project = 1;
+  // The project's repos. For a viewer: name and relative_path only.
+  repeated ProjectRepoSummary repos = 2;
+  // One per forge.yaml in the project's repos, ordered by repo then subpath.
+  repeated ProjectApp apps = 3;
+  // The machines with a checkout. The owner's only; empty for a viewer.
+  repeated ProjectCheckout checkouts = 4;
+}
+
+message ProjectRepoSummary {
+  string id = 1;
+  string name = 2;
+  string relative_path = 3;
+  // forge's canonical "host/owner/repo"; "" without a shareable remote, and
+  // always "" for a viewer.
+  string remote = 4;
+}
+
+message ProjectCheckout {
+  string daemon_id = 1;
+  string daemon_name = 2;
+  ProjectInstallState install_state = 3;
+}
+
+message ProjectApp {
+  // forge.yaml `name`: the app's name in the project's org.
+  string name = 1;
+  string repo_id = 2;
+  // The forge.yaml's directory in the repo, "/"-separated; "" is the root.
+  string subpath = 3;
+  ProjectAppLink link = 4;
+  // The org's app of this name; unset when link is NOT_HOSTED.
+  HostedApp hosted = 5;
+}
+
+enum ProjectAppLink {
+  PROJECT_APP_LINK_UNSPECIFIED = 0;
+  // The org has no app of this name, or its apps could not be read.
+  PROJECT_APP_LINK_NOT_HOSTED = 1;
+  // Same name in the same org, but no recorded source from this repo's
+  // remote and subpath (a fork, a local folder, an older forge).
+  PROJECT_APP_LINK_NAME = 2;
+  // The app records a deploy from this repo's remote at this subpath.
+  PROJECT_APP_LINK_SOURCE = 3;
+}
+
+message HostedApp {
+  string name = 1;
+  string created_at = 2; // RFC 3339
+  optional string last_deployed_at = 3; // RFC 3339; unset: never deployed
+  repeated string environments = 4;
+  bool has_static_site = 5;
+  repeated HostedAppSource sources = 6; // newest first
+  // The two-repositories warning (D5); "" otherwise.
+  string warning = 7;
+}
+
+message HostedAppSource {
+  string remote = 1; // canonical host/owner/repo; "" = a local checkout
+  string subpath = 2;
+  string commit = 3;
+  string last_seen_at = 4; // RFC 3339
 }

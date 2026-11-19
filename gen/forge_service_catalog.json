@@ -24992,6 +24992,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ProjectService/ListProjectsWithApps",
+          "name": "ListProjectsWithApps",
+          "input": "reliant.v1.ListProjectsWithAppsRequest",
+          "output": "reliant.v1.ListProjectsWithAppsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/ListRepositoriesForDaemon",
           "name": "ListRepositoriesForDaemon",
           "input": "reliant.v1.ListRepositoriesForDaemonRequest",
@@ -25766,6 +25776,25 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "ListProjectsWithApps",
+            "InputType": "ListProjectsWithAppsRequest",
+            "OutputType": "ListProjectsWithAppsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListProjectsWithAppsRequest",
+            "OutputTypeFQ": "reliant.v1.ListProjectsWithAppsResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/project.proto",
@@ -26377,6 +26406,37 @@
             {
               "Name": "total",
               "ProtoType": "int32",
+              "IsOptional": false
+            }
+          ],
+          "ListProjectsWithAppsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ListProjectsWithAppsResponse": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "projects",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectWithApps"
+            },
+            {
+              "Name": "unlinked_apps",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.HostedApp"
+            },
+            {
+              "Name": "hosted_apps_state",
+              "ProtoType": "enum",
               "IsOptional": false
             }
           ],
@@ -27168,6 +27228,58 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.HostedApp": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            },
+            {
+              "name": "last_deployed_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "environments",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "has_static_site",
+              "kind": "bool"
+            },
+            {
+              "name": "sources",
+              "kind": "message",
+              "type_name": "reliant.v1.HostedAppSource",
+              "repeated": true
+            },
+            {
+              "name": "warning",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.HostedAppSource": [
+            {
+              "name": "remote",
+              "kind": "string"
+            },
+            {
+              "name": "subpath",
+              "kind": "string"
+            },
+            {
+              "name": "commit",
+              "kind": "string"
+            },
+            {
+              "name": "last_seen_at",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.InitializeGitRepoRequest": [
             {
               "name": "project_id",
@@ -27322,6 +27434,36 @@
             {
               "name": "total",
               "kind": "int32"
+            }
+          ],
+          "reliant.v1.ListProjectsWithAppsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ListProjectsWithAppsResponse": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "projects",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectWithApps",
+              "repeated": true
+            },
+            {
+              "name": "unlinked_apps",
+              "kind": "message",
+              "type_name": "reliant.v1.HostedApp",
+              "repeated": true
+            },
+            {
+              "name": "hosted_apps_state",
+              "kind": "enum",
+              "type_name": "reliant.v1.HostedAppsState"
             }
           ],
           "reliant.v1.ListRepositoriesForDaemonRequest": [
@@ -27531,6 +27673,45 @@
               "name": "purge_started_at",
               "kind": "string",
               "optional": true
+            }
+          ],
+          "reliant.v1.ProjectApp": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "repo_id",
+              "kind": "string"
+            },
+            {
+              "name": "subpath",
+              "kind": "string"
+            },
+            {
+              "name": "link",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectAppLink"
+            },
+            {
+              "name": "hosted",
+              "kind": "message",
+              "type_name": "reliant.v1.HostedApp"
+            }
+          ],
+          "reliant.v1.ProjectCheckout": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "install_state",
+              "kind": "enum",
+              "type_name": "reliant.v1.ProjectInstallState"
             }
           ],
           "reliant.v1.ProjectDaemon": [
@@ -27812,6 +27993,49 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.ProjectRepoSummary": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "relative_path",
+              "kind": "string"
+            },
+            {
+              "name": "remote",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ProjectWithApps": [
+            {
+              "name": "project",
+              "kind": "message",
+              "type_name": "reliant.v1.Project"
+            },
+            {
+              "name": "repos",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectRepoSummary",
+              "repeated": true
+            },
+            {
+              "name": "apps",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectApp",
+              "repeated": true
+            },
+            {
+              "name": "checkouts",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectCheckout",
+              "repeated": true
+            }
+          ],
           "reliant.v1.Prompt": [
             {
               "name": "id",
@@ -28037,6 +28261,8 @@
           "reliant.v1.GetProjectRequest": "reliant/v1/project.proto",
           "reliant.v1.GetProjectResponse": "reliant/v1/project.proto",
           "reliant.v1.GitBranch": "reliant/v1/project.proto",
+          "reliant.v1.HostedApp": "reliant/v1/project.proto",
+          "reliant.v1.HostedAppSource": "reliant/v1/project.proto",
           "reliant.v1.InitializeGitRepoRequest": "reliant/v1/project.proto",
           "reliant.v1.InitializeGitRepoResponse": "reliant/v1/project.proto",
           "reliant.v1.InitializeProjectRequest": "reliant/v1/project.proto",
@@ -28051,6 +28277,8 @@
           "reliant.v1.ListProjectOrgMovesResponse": "reliant/v1/project.proto",
           "reliant.v1.ListProjectsRequest": "reliant/v1/project.proto",
           "reliant.v1.ListProjectsResponse": "reliant/v1/project.proto",
+          "reliant.v1.ListProjectsWithAppsRequest": "reliant/v1/project.proto",
+          "reliant.v1.ListProjectsWithAppsResponse": "reliant/v1/project.proto",
           "reliant.v1.ListRepositoriesForDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.ListRepositoriesForDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.MarkProjectInstalledRequest": "reliant/v1/project.proto",
@@ -28060,6 +28288,8 @@
           "reliant.v1.PreviewProjectOrgMoveRequest": "reliant/v1/project.proto",
           "reliant.v1.PreviewProjectOrgMoveResponse": "reliant/v1/project.proto",
           "reliant.v1.Project": "reliant/v1/project.proto",
+          "reliant.v1.ProjectApp": "reliant/v1/project.proto",
+          "reliant.v1.ProjectCheckout": "reliant/v1/project.proto",
           "reliant.v1.ProjectDaemon": "reliant/v1/project.proto",
           "reliant.v1.ProjectMachineRemoval": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMove": "reliant/v1/project.proto",
@@ -28069,6 +28299,8 @@
           "reliant.v1.ProjectOrgMoveEffects": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveMachine": "reliant/v1/project.proto",
           "reliant.v1.ProjectOrgMoveTriggerSetup": "reliant/v1/project.proto",
+          "reliant.v1.ProjectRepoSummary": "reliant/v1/project.proto",
+          "reliant.v1.ProjectWithApps": "reliant/v1/project.proto",
           "reliant.v1.Prompt": "reliant/v1/project.proto",
           "reliant.v1.PullProjectOnDaemonRequest": "reliant/v1/project.proto",
           "reliant.v1.PullProjectOnDaemonResponse": "reliant/v1/project.proto",
@@ -28106,6 +28338,18 @@
             "FILE_CHANGE_STATUS_STAGED",
             "FILE_CHANGE_STATUS_UNTRACKED",
             "FILE_CHANGE_STATUS_DELETED"
+          ],
+          "reliant.v1.HostedAppsState": [
+            "HOSTED_APPS_STATE_UNSPECIFIED",
+            "HOSTED_APPS_STATE_OK",
+            "HOSTED_APPS_STATE_NO_ACCESS",
+            "HOSTED_APPS_STATE_UNAVAILABLE"
+          ],
+          "reliant.v1.ProjectAppLink": [
+            "PROJECT_APP_LINK_UNSPECIFIED",
+            "PROJECT_APP_LINK_NOT_HOSTED",
+            "PROJECT_APP_LINK_NAME",
+            "PROJECT_APP_LINK_SOURCE"
           ],
           "reliant.v1.ProjectInstallState": [
             "PROJECT_INSTALL_STATE_UNSPECIFIED",
@@ -28152,6 +28396,18 @@
             3,
             4
           ],
+          "reliant.v1.HostedAppsState": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.ProjectAppLink": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.ProjectInstallState": [
             0,
             1,
@@ -28187,6 +28443,14 @@
           "reliant.v1.FileChangeStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileChangeStatus"
+          },
+          "reliant.v1.HostedAppsState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "HostedAppsState"
+          },
+          "reliant.v1.ProjectAppLink": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ProjectAppLink"
           },
           "reliant.v1.ProjectInstallState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
