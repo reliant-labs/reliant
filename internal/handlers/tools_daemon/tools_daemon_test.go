@@ -244,9 +244,9 @@ func TestResolveUnboundDaemonIDMintsNewWhenNoExistingDaemons(t *testing.T) {
 }
 
 func TestResolveUnboundDaemonIDMintsNewWhenHostnameEmpty(t *testing.T) {
-	// Empty hostname must skip the lookup — otherwise an older daemon that
-	// doesn't send hostname would collide with the first row for the user
-	// and steal its identity.
+	// Empty hostname must skip the lookup — otherwise a daemon that reports
+	// none would collide with the first row for the user and steal its
+	// identity.
 	repo := &fakeDaemonRepo{daemons: []*db.Daemon{
 		{ID: "real-daemon", UserID: "u1", Hostname: ptrStr("real-host")},
 	}}

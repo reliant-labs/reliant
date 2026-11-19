@@ -56,9 +56,10 @@ func (s *Service) defaultDaemonForUser(userID string) *daemonConnection {
 			best = c
 			continue
 		}
-		// Prefer local over cloud. Empty daemonType is treated as "local" for backward compat.
-		cIsLocal := c.daemonType == "local" || c.daemonType == ""
-		bestIsLocal := best.daemonType == "local" || best.daemonType == ""
+		// Prefer local over cloud. Every daemon reports its type
+		// (daemonruntime resolveDaemonType).
+		cIsLocal := c.daemonType == "local"
+		bestIsLocal := best.daemonType == "local"
 		if cIsLocal && !bestIsLocal {
 			best = c
 			continue
