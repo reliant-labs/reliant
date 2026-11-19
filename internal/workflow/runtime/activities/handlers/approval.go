@@ -229,8 +229,31 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		BatchID:            batchID,
 	}
 
-	// Dual-write: create approval record + chat_update + mark chat unread atomically
-	err = a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	// Dual-write: create approval record + chat_update + mark chat unread atomically.
+	//
+	// READ COMMITTED, because every write here contends on rows a chat's
+	// other writers update too: the chats row (unread, and EmitBlocked's
+	// FOR UPDATE) and the user's and the chat's update_stream_counters rows.
+	// One assistant turn that makes N tool calls needing approval runs N of
+	// these at once on one chat. Under SERIALIZABLE each commit aborts every
+	// writer waiting on those rows with 40001 (a row version newer than its
+	// snapshot), and with 13 at once 5 exhausted the retry ladder and showed
+	// the user an error card. The helpers below already ask for READ
+	// COMMITTED (#2524, #2445), but join this transaction and run at its
+	// level, so the level is chosen here. It is correct without snapshot
+	// isolation because nothing here depends on it:
+	//   - the idempotency read is outside the transaction, and entity_id is
+	//     UNIQUE (approvals_entity_id_key), so a duplicate insert fails;
+	//   - each counter allocation is one UPDATE whose row lock orders the
+	//     sequence numbers by commit (Repo.CreateChatUpdate);
+	//   - unread=true is an idempotent last-writer-wins UPDATE;
+	//   - EmitBlocked's "is the run already blocked?" count runs after it
+	//     locks the chats row, so its statement snapshot sees every approval
+	//     a previous holder of that lock committed: exactly one transaction
+	//     records the run's "blocked" event. The lock, not a snapshot, is
+	//     what makes it correct.
+	// The full attempt budget keeps the Repo ladder (a deadlock, 40P01).
+	err = a.repo.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := a.repo.CreateApproval(txCtx, approval); err != nil {
 			return fmt.Errorf("failed to create approval: %w", err)
 		}
