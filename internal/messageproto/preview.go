@@ -301,6 +301,10 @@ func shortenStrings(v any, limit int) any {
 // update carries the call's status from when it was written, so it cannot
 // tell a finished call from a running one.
 //
+// In every mode a REDACTED_THINKING block's content is blanked
+// (db.ProviderOnlyContent). New updates are written blank; this also covers
+// the rows written before they were.
+//
 // raw is returned as it is when nothing in it needs a preview, and when it is
 // not a payload this understands.
 func PreviewMessageUpdate(raw []byte, mode reliantv1.ToolBodyMode) []byte {
@@ -308,10 +312,11 @@ func PreviewMessageUpdate(raw []byte, mode reliantv1.ToolBodyMode) []byte {
 	if !bytes.Contains(raw, []byte(`"content_blocks"`)) {
 		return raw
 	}
-	if !stub && len(raw) <= ToolResultPreviewBytes {
+	sealed := mayHoldBlockType(raw, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING)
+	if !stub && !sealed && len(raw) <= ToolResultPreviewBytes {
 		return raw // no block in it can be over the cap
 	}
-	if stub && len(raw) <= StubBodyThreshold && !mayHoldThinking(raw) {
+	if stub && !sealed && len(raw) <= StubBodyThreshold && !mayHoldThinking(raw) {
 		return raw // nothing in it can be elided; skip the decode
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -334,6 +339,13 @@ func PreviewMessageUpdate(raw []byte, mode reliantv1.ToolBodyMode) []byte {
 		}
 		content, ok := block["content"].(string)
 		if !ok {
+			continue
+		}
+		if isBlockType(block["type"], reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING) {
+			if content != "" {
+				block["content"] = ""
+				changed = true
+			}
 			continue
 		}
 		if stub && isThinkingBlockType(block["type"]) {
@@ -385,10 +397,15 @@ func isToolResultBlockType(v any) bool {
 // update's JSON, which spells a block type as its number. A false positive
 // costs only a decode.
 func mayHoldThinking(raw []byte) bool {
-	for _, t := range []reliantv1.ContentBlockType{
+	return mayHoldBlockType(raw,
 		reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING,
-		reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING,
-	} {
+		reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING)
+}
+
+// mayHoldBlockType is a cheap byte test for a block of one of types in a live
+// update's JSON, spelled as its number or its name.
+func mayHoldBlockType(raw []byte, types ...reliantv1.ContentBlockType) bool {
+	for _, t := range types {
 		if bytes.Contains(raw, []byte(`"type":`+strconv.Itoa(int(t)))) ||
 			bytes.Contains(raw, []byte(`"type":"`+t.String()+`"`)) {
 			return true
