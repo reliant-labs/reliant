@@ -637,7 +637,7 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, opts 
 		Messages:            assembledMessages,
 		OtherUpdates:        otherUpdates,
 		LatestSequence:      latestSeq,
-		Total:               int32(totalMessages),
+		Total:               int32(totalMessages), //nolint:staticcheck // SA1019: still counted for clients that do not set skip_total
 		HasMore:             hasMore,
 		OldestSeq:           oldestSeq,
 		ThreadTokenCount:    threadTokenCount,
