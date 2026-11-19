@@ -374,6 +374,11 @@ export const SETTINGS_SECTION_ALIASES: Readonly<Record<string, SettingsSection>>
   editor: "chat-editor",
   chat: "chat-editor",
   "web-browser": "browser",
+  // The forge host's own Settings sections, before both hosts shared one
+  // Settings (U6): its old links and bookmarks land on the same section here.
+  profile: "account",
+  organization: "member-permissions",
+  members: "member-permissions",
 };
 
 // Billing sub-navigation. This was `useState` inside BillingSection, with a

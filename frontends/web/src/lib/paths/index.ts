@@ -24,7 +24,6 @@
  * the same URL (`paths.test.ts` holds every builder to today's URL).
  */
 
-import type { ForgeSettingsSection } from "../../components/ForgeShell/ForgeSettingsPage";
 import type { SettingsSection } from "../../routeSchemas";
 import { orgRootPath, withOrg, type PathContext } from "./org";
 
@@ -104,17 +103,17 @@ export function inboxPath(ctx?: PathContext): string {
 
 // ── Apps (forge) ────────────────────────────────────────────────────────────
 
-/** The org's apps (components/Apps/AppsPage.tsx); also the forge shell's home. */
+/** The org's apps (components/Apps/AppsPage.tsx); also the forge brand's home for a person who has not onboarded. */
 export function appsPath(ctx?: PathContext): string {
   return withOrg("/apps", ctx);
 }
 
-/** The forge shell's hosted sites (ForgeShell/ForgeSitesPage.tsx). */
+/** The org's hosted sites (ForgeShell/ForgeSitesPage.tsx). */
 export function sitesPath(ctx?: PathContext): string {
   return withOrg("/sites", ctx);
 }
 
-/** The forge shell's usage and spend (ForgeShell). */
+/** The org's usage and spend on what forge provisions (ForgeShell/ForgeUsagePage.tsx). */
 export function usagePath(ctx?: PathContext): string {
   return withOrg("/usage", ctx);
 }
@@ -188,11 +187,6 @@ export function workflowBuilderPath(workflowName: string, ctx?: PathContext): st
 /** Settings, at one section; bare `/settings` opens the last-visited one. */
 export function settingsPath(section?: SettingsSection): string {
   return section ? `/settings/${section}` : "/settings";
-}
-
-/** The forge shell's own Settings sections (ForgeShell/ForgeSettingsPage.tsx), at the same paths. */
-export function forgeSettingsPath(section: ForgeSettingsSection): string {
-  return `/settings/${section}`;
 }
 
 /** One machine's page in Settings › Machines. */
