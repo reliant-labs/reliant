@@ -43,7 +43,7 @@ describe("DaemonStatusDot", () => {
     expect(button.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
     fireEvent.click(button);
     expect(state.navigate).toHaveBeenCalledWith({
-      to: "/settings/machines/$machineId", params: { machineId: "active" },
+      to: "/settings/machines/active",
     });
   });
 
@@ -60,7 +60,7 @@ describe("DaemonStatusDot", () => {
     render(<DaemonStatusDot />);
 
     fireEvent.click(screen.getByRole("button", { name: `${label}. Open machine settings` }));
-    expect(state.navigate).toHaveBeenCalledWith({ to: "/settings/$section", params: { section: "machines" } });
+    expect(state.navigate).toHaveBeenCalledWith({ to: "/settings/machines" });
   });
 
   it("opens machine settings from the keyboard", async () => {
@@ -71,6 +71,6 @@ describe("DaemonStatusDot", () => {
     await user.tab();
     expect(button).toHaveFocus();
     await user.keyboard("{Enter}");
-    expect(state.navigate).toHaveBeenCalledWith({ to: "/settings/$section", params: { section: "machines" } });
+    expect(state.navigate).toHaveBeenCalledWith({ to: "/settings/machines" });
   });
 });

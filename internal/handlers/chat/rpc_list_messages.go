@@ -199,7 +199,7 @@ func (s *Service) ListMessages(
 
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{
 		Messages:  protoMessages,
-		Total:     int32(totalCount),
+		Total:     int32(totalCount), //nolint:staticcheck // SA1019: deprecated for clients; the server still fills it when skip_total is unset
 		Count:     int32(len(protoMessages)),
 		HasMore:   hasMore,
 		OldestSeq: oldestSeq,

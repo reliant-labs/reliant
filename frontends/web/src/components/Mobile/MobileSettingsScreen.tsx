@@ -57,6 +57,7 @@ import {
   MobileScreenBody,
   MobileScreenHeader,
 } from "./MobileChrome";
+import { mobileSettingsPath } from "@/lib/paths";
 
 type SectionId =
   | "account"
@@ -228,10 +229,10 @@ export function MobileSettingsScreen() {
     (s) => !s.hidden && capabilities[s.capability],
   );
   const active = visible.find((s) => s.id === section)?.id ?? null;
-  const openSection = (id: SectionId) => void navigate({ href: `/m/settings?${new URLSearchParams({ section: id })}` });
+  const openSection = (id: SectionId) => void navigate({ href: `${mobileSettingsPath()}?${new URLSearchParams({ section: id })}` });
 
   if (active) {
-    const onBack = () => void navigate({ href: comeBackTo ?? "/m/settings" });
+    const onBack = () => void navigate({ href: comeBackTo ?? mobileSettingsPath() });
     switch (active) {
       case "account":
         return <MobileAccountScreen onBack={onBack} />;

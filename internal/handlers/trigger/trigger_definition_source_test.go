@@ -34,9 +34,11 @@ func TestActivationRunsTheProjectWorkflowAndShowsWhere(t *testing.T) {
 	projectYAML := strings.Replace(declaringWorkflowYAML, "name: triage\n", "name: triage\ndescription: the project's\n", 1)
 	wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "triage", Name: "triage", RelativePath: path, YAMLContent: projectYAML}})
 	require.NoError(t, err)
+	db.HoldProjectOnMachineForTest(t, env.repo, env.projectID, env.daemonID)
 	_, err = env.repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 		ProjectID: env.projectID, DaemonID: env.daemonID, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC(),
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 	// The owner's own account workflow of the same name, declaring nothing:
 	// were it what the automation resolved, the activation would be broken.

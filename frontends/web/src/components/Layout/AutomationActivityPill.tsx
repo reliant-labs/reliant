@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Sidebar footer pill: "N automations running" (WORKFLOW_UI.md §4.3, §6.6).
+ * "N running", the trail of the sidebar's Workflows row (WORKFLOW_UI.md §4.3,
+ * §6.6; restyle §11.3: it was a footer pill).
  *
  * The chat list holds conversations only, so automation runs that are live
  * right now have no row. This is the chat list's one nod to them: present
@@ -20,9 +21,6 @@ import { useMemo } from "react";
 import type { RunsSearch } from "@/routeSchemas";
 import { summarizeLiveAutomations, useLiveRuns } from "@/hooks/run-queries";
 import { cn } from "@/lib/utils";
-import { runStatusFromDisplayState } from "@/lib/runStatus";
-import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
-import { RunStatusDot } from "../runs/RunStatusIndicator";
 
 interface AutomationActivityPillProps {
   /** Chats the sidebar already lists; their runs are not counted again. */
@@ -38,8 +36,6 @@ interface AutomationActivityPillProps {
  */
 const LIVE_SEARCH: RunsSearch = { state: ["live"], allProjects: true, range: "all" };
 
-const RUNNING_STATUS = runStatusFromDisplayState(RunDisplayState.RUNNING);
-
 export function AutomationActivityPill({ listedChatIds, onOpenRuns }: AutomationActivityPillProps) {
   const { data } = useLiveRuns();
 
@@ -53,23 +49,28 @@ export function AutomationActivityPill({ listedChatIds, onOpenRuns }: Automation
   const more = summary.truncated ? "+" : "";
   const runningLabel = `${summary.running}${more} ${summary.running === 1 ? "automation" : "automations"} running`;
 
+  // Beside the Workflows row's button, not in it: its own target, Runs filtered to live.
   return (
-    <div className="flex flex-wrap items-center gap-1.5 px-1 pb-1.5" data-testid="automation-activity-pill">
+    <span className="flex min-w-0" data-testid="automation-activity-pill">
       <button
         type="button"
         onClick={() => onOpenRuns?.(LIVE_SEARCH)}
         disabled={!onOpenRuns}
         className={cn(
-          "inline-flex h-6 min-w-0 items-center gap-1.5 rounded-full border border-border/60 bg-background px-2.5 text-2xs font-medium text-foreground",
-          "transition-colors hover:border-border hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex h-6 min-w-0 items-center gap-1.5 rounded-md px-1.5 text-meta text-muted-foreground transition-colors",
+          "hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           "disabled:cursor-default",
         )}
         aria-label={`${runningLabel}. Open live runs`}
+        title={runningLabel}
         data-testid="automation-activity-pill-running"
       >
-        <RunStatusDot status={RUNNING_STATUS} size="sm" />
-        <span className="truncate">{runningLabel}</span>
+        <span aria-hidden="true" className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary-ink motion-reduce:animate-none" />
+        <span className="truncate tabular-nums">
+          {summary.running}
+          {more} running
+        </span>
       </button>
-    </div>
+    </span>
   );
 }

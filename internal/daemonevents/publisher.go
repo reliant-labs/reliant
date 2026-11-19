@@ -185,17 +185,20 @@ func (p *Publisher) OnDaemonConnectFailed(userID, daemonID, reason string) {
 
 // publishConnected resolves the display name and publishes a connected
 // event. This is the ONE place that decides name precedence — name, then
-// hostname, then the daemon id itself — so Event.Name is never empty on the
-// wire and every consumer, present or future, can use it as-is without
-// re-deriving the rule. Hostname/Platform still travel unresolved alongside
-// it for consumers (like the control plane) that want the raw value too.
+// hostname — so every consumer, present or future, can use Event.Name as-is
+// without re-deriving the rule. Hostname/Platform still travel unresolved
+// alongside it for consumers (like the control plane) that want the raw value
+// too.
+//
+// A machine that reported neither is sent with no name. It used to be sent
+// its own daemon id, which the control plane then stored as the machine's
+// name ("46e3682b-33cd-…" in every sentence naming it); the control plane now
+// names such a machine itself (hostname.GenerateMachineName), and an older one
+// that receives no name still falls back to the hostname and then the id.
 func (p *Publisher) publishConnected(userID, daemonID, name, hostname, platform string) {
 	resolvedName := strings.TrimSpace(name)
 	if resolvedName == "" {
 		resolvedName = strings.TrimSpace(hostname)
-	}
-	if resolvedName == "" {
-		resolvedName = daemonID
 	}
 	p.publish(EventTypeConnected, SubjectConnected, userID, daemonID, "", resolvedName, hostname, platform)
 }

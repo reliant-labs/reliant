@@ -4,6 +4,7 @@ import Modal from "./forge-ui/modal";
 import type { AppOutOfDateData } from "../store/modalStore";
 import { logger } from "../lib/logger";
 import { useAppUpdateStore } from "../store/appUpdateStore";
+import { settingsPath } from "@/lib/paths";
 
 export interface AppOutOfDateModalProps {
   isOpen: boolean;
@@ -31,7 +32,7 @@ export function AppOutOfDateModal({ isOpen, onClose }: AppOutOfDateModalProps) {
     }
     // Settings → About shows where the updater stands; the check opens the
     // update dialog over it when it finds an update.
-    void navigate({ to: "/settings/$section", params: { section: "about" } });
+    void navigate({ to: settingsPath("about") });
     useAppUpdateStore.getState().checkForUpdates().catch((err: unknown) => {
       logger.error("[AppOutOfDateModal] update check failed", err);
     });

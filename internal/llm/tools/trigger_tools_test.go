@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -140,4 +141,97 @@ func TestListTriggersSaysABrokenEnabledActivationLaunchesNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	assert.Equal(t, 1, strings.Count(resp.Content, "every firing is refused"), resp.Content)
+}
+
+// list_triggers without limit or page_token lists every trigger, as it did
+// before paging existed: no caller is silently cut short, and a long list
+// says it can be paged.
+func TestListTriggersWithoutPagingListsEveryTrigger(t *testing.T) {
+	ctx := rctx.NewToolContext(context.Background(), "chat", "chat", nil, nil)
+	repo := triggerCallerStore{chat: &db.Chat{UserID: "owner"}}
+	var list []TriggerSummary
+	for i := 0; i < 25; i++ {
+		list = append(list, TriggerSummary{ID: fmt.Sprintf("t%02d", i), Name: fmt.Sprintf("trigger %02d", i), Health: "HEALTHY", NoMachine: true})
+	}
+	tool := NewListTriggersTool(repo, brokenTriggerLister{list: list})
+	for _, input := range []string{`{}`, `{"health":"HEALTHY"}`} {
+		resp, err := tool.Run(ctx, ToolCall{Input: input})
+		require.NoError(t, err)
+		require.False(t, resp.IsError, resp.Content)
+		var got []TriggerSummary
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &got))
+		require.Len(t, got, 25, input)
+		assert.Equal(t, "t00", got[0].ID)
+		assert.Equal(t, "t24", got[24].ID)
+		assert.Equal(t, 25, strings.Count(resp.Content, "\n- trigger "), resp.Content)
+		assert.Contains(t, resp.Content, "25 trigger(s)")
+		assert.NotContains(t, resp.Content, "showing")
+		assert.NotContains(t, resp.Content, "next_page_token")
+		assert.Contains(t, resp.Content, "All 25 triggers are listed")
+	}
+	bad, err := tool.Run(ctx, ToolCall{Input: `{"limit":-1}`})
+	require.NoError(t, err)
+	assert.True(t, bad.IsError)
+}
+
+// list_triggers shows unhealthy triggers first; an explicit limit pages it,
+// with a next_page_token that reads the rest; health narrows it.
+func TestListTriggersPagesUnhealthyFirstAndFiltersByHealth(t *testing.T) {
+	ctx := rctx.NewToolContext(context.Background(), "chat", "chat", nil, nil)
+	repo := triggerCallerStore{chat: &db.Chat{UserID: "owner"}}
+	var list []TriggerSummary
+	for i := 0; i < 25; i++ {
+		list = append(list, TriggerSummary{ID: fmt.Sprintf("h%02d", i), Name: fmt.Sprintf("a healthy %02d", i), Health: "HEALTHY", NoMachine: true})
+	}
+	list = append(list,
+		TriggerSummary{ID: "f1", Name: "z failing", Health: "FAILING", NoMachine: true},
+		TriggerSummary{ID: "b1", Name: "z broken", Health: "BROKEN", NoMachine: true},
+		TriggerSummary{ID: "u1", Name: "m unknown", Health: "UNKNOWN", NoMachine: true},
+	)
+	tool := NewListTriggersTool(repo, brokenTriggerLister{list: list})
+	run := func(input string) ToolResponse {
+		t.Helper()
+		resp, err := tool.Run(ctx, ToolCall{Input: input})
+		require.NoError(t, err)
+		require.False(t, resp.IsError, resp.Content)
+		return resp
+	}
+	ids := func(resp ToolResponse) []string {
+		t.Helper()
+		var page []TriggerSummary
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &page))
+		out := make([]string, len(page))
+		for i, s := range page {
+			out[i] = s.ID
+		}
+		return out
+	}
+
+	first := run(`{"limit":20}`)
+	got := ids(first)
+	require.Len(t, got, 20)
+	assert.Equal(t, []string{"b1", "f1", "u1", "h00"}, got[:4], "unhealthy first, then unknown, then healthy by name")
+	assert.Contains(t, first.Content, "28 trigger(s), showing 1-20 (1 BROKEN, 1 FAILING, 1 UNKNOWN, 25 HEALTHY)")
+	assert.Contains(t, first.Content, "next_page_token: 20")
+
+	second := run(`{"page_token":"20"}`)
+	assert.Equal(t, []string{"h17", "h18", "h19", "h20", "h21", "h22", "h23", "h24"}, ids(second))
+	assert.NotContains(t, second.Content, "next_page_token")
+
+	// A smaller limit pages too, and its token continues where it stopped.
+	small := run(`{"limit":3}`)
+	assert.Equal(t, []string{"b1", "f1", "u1"}, ids(small))
+	assert.Contains(t, small.Content, "next_page_token: 3")
+	assert.Equal(t, []string{"h00", "h01", "h02"}, ids(run(`{"limit":3,"page_token":"3"}`)))
+
+	unhealthy := run(`{"health":"UNHEALTHY"}`)
+	assert.Equal(t, []string{"b1", "f1"}, ids(unhealthy))
+	assert.NotContains(t, unhealthy.Content, "next_page_token")
+	assert.Equal(t, []string{"u1"}, ids(run(`{"health":"UNKNOWN"}`)))
+
+	bad, err := tool.Run(ctx, ToolCall{Input: `{"page_token":"nope"}`})
+	require.NoError(t, err)
+	assert.True(t, bad.IsError)
+	none := run(`{"health":"DEGRADED"}`)
+	assert.Contains(t, none.Content, "None of the 28 trigger(s) is DEGRADED")
 }

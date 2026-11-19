@@ -71,6 +71,7 @@ import {
   UsagePanel,
   UsageViewHeader,
 } from "./usageParts";
+import { settingsPath } from "@/lib/paths";
 
 export interface OrganizationUsageViewProps {
   orgId: string;
@@ -85,7 +86,7 @@ export interface OrganizationUsageViewProps {
   nowMs?: number;
 }
 
-const BILLING_SETTINGS = "/settings/billing";
+const BILLING_SETTINGS = settingsPath("billing");
 const HOSTED = ["hosted_apps", "databases", "static_hosting", "hosted_other", "observability"] as const;
 
 export function OrganizationUsageView({ orgId, nowMs: fixedNow, scope = "organization" }: OrganizationUsageViewProps) {

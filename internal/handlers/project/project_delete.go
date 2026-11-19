@@ -35,7 +35,9 @@ import (
 //     exactly the triggers the delete paused.
 //   - PurgeProjectNow is the immediate, irreversible delete DeleteProject
 //     used to be, for the owner who means it: what an old caller that
-//     relied on the synchronous delete calls now.
+//     relied on the synchronous delete calls now. It claims the project
+//     (hidden, no longer restorable) and answers; the batches run after the
+//     response (rpc_purge_project_now.go).
 //
 // Old clients and the SDK keep calling DeleteProject and get the scheduled
 // delete; its response still says success.
@@ -149,18 +151,24 @@ func projectDeleteRefusal(ctx context.Context, err error, action string) error {
 }
 
 // convergeTriggerSchedules converges the Temporal Schedules of the triggers
-// a delete, restore or purge changed. A failure is drift the startup sync
-// repairs (a paused trigger's fires skip on its row until then), never a
-// reason to report the delete failed.
+// a delete, restore or purge changed. A failure is retried in the background
+// (trigger_schedule_retry.go), with the startup sync as the net behind it (a
+// paused trigger's fires skip on its row until then); it is never a reason to
+// report the delete failed.
 func (s *Service) convergeTriggerSchedules(ctx context.Context, triggerIDs []string) {
 	if s.deps.Schedules == nil {
 		return
 	}
 	for _, id := range triggerIDs {
-		if err := s.deps.Schedules.Sync(ctx, id); err != nil {
-			logging.WarnContext(ctx, "[project] could not converge a trigger's schedule after a project delete or restore; the startup sync repairs it",
-				"trigger_id", id, "error", err)
+		err := s.deps.Schedules.Sync(ctx, id)
+		// A retry already running for id converges once more after its
+		// current attempt, which may have read the row before this write.
+		if s.scheduleRetries.note(id) || err == nil {
+			continue
 		}
+		logging.WarnContext(ctx, "[project] could not converge a trigger's schedule after a project delete or restore; retrying in the background",
+			"trigger_id", id, "error", err)
+		s.retryScheduleSync(ctx, id)
 	}
 }
 

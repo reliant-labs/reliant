@@ -34,6 +34,7 @@ import { isElectron } from "@/lib/constants";
 import { forgeAppOrigin } from "@/lib/shell";
 import { useAuthStore } from "@/store/authStore";
 import { leaveOnboarding } from "./leaveOnboarding";
+import { settingsPath } from "@/lib/paths";
 
 export function OnboardingEscapeHatch({ className }: { className?: string }) {
   const navigate = useNavigate();
@@ -69,7 +70,7 @@ export function OnboardingEscapeHatch({ className }: { className?: string }) {
       <div className="flex items-center gap-1">
         <button
           type="button"
-          onClick={() => navigate({ to: "/settings" })}
+          onClick={() => navigate({ to: settingsPath() })}
           className={buttonClass}
           data-testid="onboarding-settings-link"
         >

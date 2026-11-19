@@ -141,6 +141,61 @@ func (ApprovalStatus) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{1}
 }
 
+// ConnectionProposalScope is whose connection an agent proposed.
+type ConnectionProposalScope int32
+
+const (
+	// The approver chooses: their own connection, or (an owner or admin of
+	// the chat's organization) the organization's.
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED ConnectionProposalScope = 0
+	// The approver's own connection.
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_PERSONAL ConnectionProposalScope = 1
+	// The chat's organization's connection; only its owners and admins may
+	// make one.
+	ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_ORG ConnectionProposalScope = 2
+)
+
+// Enum value maps for ConnectionProposalScope.
+var (
+	ConnectionProposalScope_name = map[int32]string{
+		0: "CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED",
+		1: "CONNECTION_PROPOSAL_SCOPE_PERSONAL",
+		2: "CONNECTION_PROPOSAL_SCOPE_ORG",
+	}
+	ConnectionProposalScope_value = map[string]int32{
+		"CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED": 0,
+		"CONNECTION_PROPOSAL_SCOPE_PERSONAL":    1,
+		"CONNECTION_PROPOSAL_SCOPE_ORG":         2,
+	}
+)
+
+func (x ConnectionProposalScope) Enum() *ConnectionProposalScope {
+	p := new(ConnectionProposalScope)
+	*p = x
+	return p
+}
+
+func (x ConnectionProposalScope) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConnectionProposalScope) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_approval_proto_enumTypes[2].Descriptor()
+}
+
+func (ConnectionProposalScope) Type() protoreflect.EnumType {
+	return &file_reliant_v1_approval_proto_enumTypes[2]
+}
+
+func (x ConnectionProposalScope) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConnectionProposalScope.Descriptor instead.
+func (ConnectionProposalScope) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{2}
+}
+
 // Approval represents a workflow approval request.
 type Approval struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
@@ -163,9 +218,14 @@ type Approval struct {
 	// (one turn's tool calls): every approval of the batch carries the same id,
 	// so they can be offered, and decided, together. Each stays its own row and
 	// can still be decided on its own.
-	BatchId       *string `protobuf:"bytes,23,opt,name=batch_id,json=batchId,proto3,oneof" json:"batch_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	BatchId *string `protobuf:"bytes,23,opt,name=batch_id,json=batchId,proto3,oneof" json:"batch_id,omitempty"`
+	// Set when an agent's propose_connection call raised this approval: it
+	// asks the person to set up a connection to an integration. It is decided
+	// by completing the connection dialog (Approve with connection_id), never
+	// by Approve alone or with others in a batch.
+	ConnectionProposal *ConnectionProposal `protobuf:"bytes,24,opt,name=connection_proposal,json=connectionProposal,proto3,oneof" json:"connection_proposal,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Approval) Reset() {
@@ -303,6 +363,98 @@ func (x *Approval) GetBatchId() string {
 	return ""
 }
 
+func (x *Approval) GetConnectionProposal() *ConnectionProposal {
+	if x != nil {
+		return x.ConnectionProposal
+	}
+	return nil
+}
+
+// ConnectionProposal is an agent's request that a person connect an
+// integration (the propose_connection tool). It carries no credential: the
+// person enters one in the connection dialog, and the agent learns only
+// whether a connection was made, and its id and name.
+type ConnectionProposal struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The catalog integration to connect: github, slack, gmail, twilio or http.
+	IntegrationId string `protobuf:"bytes,1,opt,name=integration_id,json=integrationId,proto3" json:"integration_id,omitempty"`
+	// Its display name ("Slack").
+	IntegrationName string                  `protobuf:"bytes,2,opt,name=integration_name,json=integrationName,proto3" json:"integration_name,omitempty"`
+	Scope           ConnectionProposalScope `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConnectionProposalScope" json:"scope,omitempty"`
+	// The chat's organization: the one an org connection is made in. Unset
+	// when the chat has none, and then only a personal connection is offered.
+	OrgId *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Why the agent asks, in its words, flattened to one line.
+	Reason        string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectionProposal) Reset() {
+	*x = ConnectionProposal{}
+	mi := &file_reliant_v1_approval_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectionProposal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectionProposal) ProtoMessage() {}
+
+func (x *ConnectionProposal) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_approval_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectionProposal.ProtoReflect.Descriptor instead.
+func (*ConnectionProposal) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ConnectionProposal) GetIntegrationId() string {
+	if x != nil {
+		return x.IntegrationId
+	}
+	return ""
+}
+
+func (x *ConnectionProposal) GetIntegrationName() string {
+	if x != nil {
+		return x.IntegrationName
+	}
+	return ""
+}
+
+func (x *ConnectionProposal) GetScope() ConnectionProposalScope {
+	if x != nil {
+		return x.Scope
+	}
+	return ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED
+}
+
+func (x *ConnectionProposal) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *ConnectionProposal) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 // ListApprovalsByChatRequest lists pending approvals for a chat
 type ListApprovalsByChatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -313,7 +465,7 @@ type ListApprovalsByChatRequest struct {
 
 func (x *ListApprovalsByChatRequest) Reset() {
 	*x = ListApprovalsByChatRequest{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[1]
+	mi := &file_reliant_v1_approval_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -325,7 +477,7 @@ func (x *ListApprovalsByChatRequest) String() string {
 func (*ListApprovalsByChatRequest) ProtoMessage() {}
 
 func (x *ListApprovalsByChatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[1]
+	mi := &file_reliant_v1_approval_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -338,7 +490,7 @@ func (x *ListApprovalsByChatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListApprovalsByChatRequest.ProtoReflect.Descriptor instead.
 func (*ListApprovalsByChatRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ListApprovalsByChatRequest) GetChatId() string {
@@ -359,7 +511,7 @@ type ListApprovalsByChatResponse struct {
 
 func (x *ListApprovalsByChatResponse) Reset() {
 	*x = ListApprovalsByChatResponse{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[2]
+	mi := &file_reliant_v1_approval_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -371,7 +523,7 @@ func (x *ListApprovalsByChatResponse) String() string {
 func (*ListApprovalsByChatResponse) ProtoMessage() {}
 
 func (x *ListApprovalsByChatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[2]
+	mi := &file_reliant_v1_approval_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -384,7 +536,7 @@ func (x *ListApprovalsByChatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListApprovalsByChatResponse.ProtoReflect.Descriptor instead.
 func (*ListApprovalsByChatResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListApprovalsByChatResponse) GetApprovals() []*Approval {
@@ -403,16 +555,20 @@ func (x *ListApprovalsByChatResponse) GetTotal() int32 {
 
 // ApproveRequest approves a single approval
 type ApproveRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	ActionTaken   *string                `protobuf:"bytes,2,opt,name=action_taken,json=actionTaken,proto3,oneof" json:"action_taken,omitempty"` // Which action button was clicked (e.g., "Deploy Now")
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	RequestId   string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	ActionTaken *string                `protobuf:"bytes,2,opt,name=action_taken,json=actionTaken,proto3,oneof" json:"action_taken,omitempty"` // Which action button was clicked (e.g., "Deploy Now")
+	// The connection the approver made for a connection proposal
+	// (Approval.connection_proposal): required to approve one, and checked
+	// against it (integration, owner, scope). Ignored for any other approval.
+	ConnectionId  *string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3,oneof" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ApproveRequest) Reset() {
 	*x = ApproveRequest{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[3]
+	mi := &file_reliant_v1_approval_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -424,7 +580,7 @@ func (x *ApproveRequest) String() string {
 func (*ApproveRequest) ProtoMessage() {}
 
 func (x *ApproveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[3]
+	mi := &file_reliant_v1_approval_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -437,7 +593,7 @@ func (x *ApproveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveRequest.ProtoReflect.Descriptor instead.
 func (*ApproveRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ApproveRequest) GetRequestId() string {
@@ -454,6 +610,13 @@ func (x *ApproveRequest) GetActionTaken() string {
 	return ""
 }
 
+func (x *ApproveRequest) GetConnectionId() string {
+	if x != nil && x.ConnectionId != nil {
+		return *x.ConnectionId
+	}
+	return ""
+}
+
 // ApproveResponse confirms the approval
 type ApproveResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -465,7 +628,7 @@ type ApproveResponse struct {
 
 func (x *ApproveResponse) Reset() {
 	*x = ApproveResponse{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[4]
+	mi := &file_reliant_v1_approval_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -477,7 +640,7 @@ func (x *ApproveResponse) String() string {
 func (*ApproveResponse) ProtoMessage() {}
 
 func (x *ApproveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[4]
+	mi := &file_reliant_v1_approval_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -490,7 +653,7 @@ func (x *ApproveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveResponse.ProtoReflect.Descriptor instead.
 func (*ApproveResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ApproveResponse) GetSuccess() bool {
@@ -519,7 +682,7 @@ type DenyRequest struct {
 
 func (x *DenyRequest) Reset() {
 	*x = DenyRequest{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[5]
+	mi := &file_reliant_v1_approval_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -531,7 +694,7 @@ func (x *DenyRequest) String() string {
 func (*DenyRequest) ProtoMessage() {}
 
 func (x *DenyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[5]
+	mi := &file_reliant_v1_approval_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -544,7 +707,7 @@ func (x *DenyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DenyRequest.ProtoReflect.Descriptor instead.
 func (*DenyRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DenyRequest) GetRequestId() string {
@@ -579,7 +742,7 @@ type DenyResponse struct {
 
 func (x *DenyResponse) Reset() {
 	*x = DenyResponse{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[6]
+	mi := &file_reliant_v1_approval_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -591,7 +754,7 @@ func (x *DenyResponse) String() string {
 func (*DenyResponse) ProtoMessage() {}
 
 func (x *DenyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[6]
+	mi := &file_reliant_v1_approval_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -604,7 +767,7 @@ func (x *DenyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DenyResponse.ProtoReflect.Descriptor instead.
 func (*DenyResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DenyResponse) GetSuccess() bool {
@@ -632,7 +795,7 @@ type BatchApproveRequest struct {
 
 func (x *BatchApproveRequest) Reset() {
 	*x = BatchApproveRequest{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[7]
+	mi := &file_reliant_v1_approval_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -644,7 +807,7 @@ func (x *BatchApproveRequest) String() string {
 func (*BatchApproveRequest) ProtoMessage() {}
 
 func (x *BatchApproveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[7]
+	mi := &file_reliant_v1_approval_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -657,7 +820,7 @@ func (x *BatchApproveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchApproveRequest.ProtoReflect.Descriptor instead.
 func (*BatchApproveRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *BatchApproveRequest) GetRequestIds() []string {
@@ -689,7 +852,7 @@ type BatchApproveResponse struct {
 
 func (x *BatchApproveResponse) Reset() {
 	*x = BatchApproveResponse{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[8]
+	mi := &file_reliant_v1_approval_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -701,7 +864,7 @@ func (x *BatchApproveResponse) String() string {
 func (*BatchApproveResponse) ProtoMessage() {}
 
 func (x *BatchApproveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[8]
+	mi := &file_reliant_v1_approval_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -714,7 +877,7 @@ func (x *BatchApproveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchApproveResponse.ProtoReflect.Descriptor instead.
 func (*BatchApproveResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *BatchApproveResponse) GetSuccess() bool {
@@ -757,7 +920,7 @@ type BatchDenyRequest struct {
 
 func (x *BatchDenyRequest) Reset() {
 	*x = BatchDenyRequest{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[9]
+	mi := &file_reliant_v1_approval_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -769,7 +932,7 @@ func (x *BatchDenyRequest) String() string {
 func (*BatchDenyRequest) ProtoMessage() {}
 
 func (x *BatchDenyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[9]
+	mi := &file_reliant_v1_approval_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -782,7 +945,7 @@ func (x *BatchDenyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchDenyRequest.ProtoReflect.Descriptor instead.
 func (*BatchDenyRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *BatchDenyRequest) GetRequestIds() []string {
@@ -821,7 +984,7 @@ type BatchDenyResponse struct {
 
 func (x *BatchDenyResponse) Reset() {
 	*x = BatchDenyResponse{}
-	mi := &file_reliant_v1_approval_proto_msgTypes[10]
+	mi := &file_reliant_v1_approval_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -833,7 +996,7 @@ func (x *BatchDenyResponse) String() string {
 func (*BatchDenyResponse) ProtoMessage() {}
 
 func (x *BatchDenyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_approval_proto_msgTypes[10]
+	mi := &file_reliant_v1_approval_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +1009,7 @@ func (x *BatchDenyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchDenyResponse.ProtoReflect.Descriptor instead.
 func (*BatchDenyResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *BatchDenyResponse) GetSuccess() bool {
@@ -882,7 +1045,7 @@ var File_reliant_v1_approval_proto protoreflect.FileDescriptor
 const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/approval.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xfe\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xec\x06\n" +
 	"\bApproval\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12=\n" +
@@ -902,7 +1065,8 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"workflowId\x88\x01\x01\x12\x1a\n" +
 	"\x06run_id\x18\x11 \x01(\tH\x05R\x05runId\x88\x01\x01\x12&\n" +
 	"\faction_taken\x18\x13 \x01(\tH\x06R\vactionTaken\x88\x01\x01\x12\x1e\n" +
-	"\bbatch_id\x18\x17 \x01(\tH\aR\abatchId\x88\x01\x01B\x0e\n" +
+	"\bbatch_id\x18\x17 \x01(\tH\aR\abatchId\x88\x01\x01\x12T\n" +
+	"\x13connection_proposal\x18\x18 \x01(\v2\x1e.reliant.v1.ConnectionProposalH\bR\x12connectionProposal\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x10\n" +
 	"\x0e_denial_reasonB\x0e\n" +
 	"\f_resolved_atB\r\n" +
@@ -910,18 +1074,28 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\f_workflow_idB\t\n" +
 	"\a_run_idB\x0f\n" +
 	"\r_action_takenB\v\n" +
-	"\t_batch_idJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\ttool_nameR\ftool_call_idR\n" +
-	"tool_inputR\x10integration_nameR\x10integration_icon\"=\n" +
+	"\t_batch_idB\x16\n" +
+	"\x14_connection_proposalJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\ttool_nameR\ftool_call_idR\n" +
+	"tool_inputR\x10integration_nameR\x10integration_icon\"\xe0\x01\n" +
+	"\x12ConnectionProposal\x12%\n" +
+	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\x12)\n" +
+	"\x10integration_name\x18\x02 \x01(\tR\x0fintegrationName\x129\n" +
+	"\x05scope\x18\x03 \x01(\x0e2#.reliant.v1.ConnectionProposalScopeR\x05scope\x12\x1a\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reasonB\t\n" +
+	"\a_org_id\"=\n" +
 	"\x1aListApprovalsByChatRequest\x12\x1f\n" +
 	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\"g\n" +
 	"\x1bListApprovalsByChatResponse\x122\n" +
 	"\tapprovals\x18\x01 \x03(\v2\x14.reliant.v1.ApprovalR\tapprovals\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"h\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\xa4\x01\n" +
 	"\x0eApproveRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12&\n" +
-	"\faction_taken\x18\x02 \x01(\tH\x00R\vactionTaken\x88\x01\x01B\x0f\n" +
-	"\r_action_taken\"E\n" +
+	"\faction_taken\x18\x02 \x01(\tH\x00R\vactionTaken\x88\x01\x01\x12(\n" +
+	"\rconnection_id\x18\x03 \x01(\tH\x01R\fconnectionId\x88\x01\x01B\x0f\n" +
+	"\r_action_takenB\x10\n" +
+	"\x0e_connection_id\"E\n" +
 	"\x0fApproveResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\xa1\x01\n" +
@@ -967,7 +1141,11 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\x18APPROVAL_STATUS_APPROVED\x10\x02\x12\x1a\n" +
 	"\x16APPROVAL_STATUS_DENIED\x10\x03\x12\x1b\n" +
 	"\x17APPROVAL_STATUS_EXPIRED\x10\x04\x12\x1d\n" +
-	"\x19APPROVAL_STATUS_CANCELLED\x10\x052\xa3\x05\n" +
+	"\x19APPROVAL_STATUS_CANCELLED\x10\x05*\x8f\x01\n" +
+	"\x17ConnectionProposalScope\x12)\n" +
+	"%CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"CONNECTION_PROPOSAL_SCOPE_PERSONAL\x10\x01\x12!\n" +
+	"\x1dCONNECTION_PROPOSAL_SCOPE_ORG\x10\x022\xa3\x05\n" +
 	"\x0fApprovalService\x12h\n" +
 	"\x13ListApprovalsByChat\x12&.reliant.v1.ListApprovalsByChatRequest\x1a'.reliant.v1.ListApprovalsByChatResponse\"\x00\x12y\n" +
 	"\aApprove\x12\x1a.reliant.v1.ApproveRequest\x1a\x1b.reliant.v1.ApproveResponse\"5\xa2\xbb\x181:/\n" +
@@ -998,42 +1176,46 @@ func file_reliant_v1_approval_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_approval_proto_rawDescData
 }
 
-var file_reliant_v1_approval_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_reliant_v1_approval_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_reliant_v1_approval_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_reliant_v1_approval_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_reliant_v1_approval_proto_goTypes = []any{
 	(ApprovalType)(0),                   // 0: reliant.v1.ApprovalType
 	(ApprovalStatus)(0),                 // 1: reliant.v1.ApprovalStatus
-	(*Approval)(nil),                    // 2: reliant.v1.Approval
-	(*ListApprovalsByChatRequest)(nil),  // 3: reliant.v1.ListApprovalsByChatRequest
-	(*ListApprovalsByChatResponse)(nil), // 4: reliant.v1.ListApprovalsByChatResponse
-	(*ApproveRequest)(nil),              // 5: reliant.v1.ApproveRequest
-	(*ApproveResponse)(nil),             // 6: reliant.v1.ApproveResponse
-	(*DenyRequest)(nil),                 // 7: reliant.v1.DenyRequest
-	(*DenyResponse)(nil),                // 8: reliant.v1.DenyResponse
-	(*BatchApproveRequest)(nil),         // 9: reliant.v1.BatchApproveRequest
-	(*BatchApproveResponse)(nil),        // 10: reliant.v1.BatchApproveResponse
-	(*BatchDenyRequest)(nil),            // 11: reliant.v1.BatchDenyRequest
-	(*BatchDenyResponse)(nil),           // 12: reliant.v1.BatchDenyResponse
+	(ConnectionProposalScope)(0),        // 2: reliant.v1.ConnectionProposalScope
+	(*Approval)(nil),                    // 3: reliant.v1.Approval
+	(*ConnectionProposal)(nil),          // 4: reliant.v1.ConnectionProposal
+	(*ListApprovalsByChatRequest)(nil),  // 5: reliant.v1.ListApprovalsByChatRequest
+	(*ListApprovalsByChatResponse)(nil), // 6: reliant.v1.ListApprovalsByChatResponse
+	(*ApproveRequest)(nil),              // 7: reliant.v1.ApproveRequest
+	(*ApproveResponse)(nil),             // 8: reliant.v1.ApproveResponse
+	(*DenyRequest)(nil),                 // 9: reliant.v1.DenyRequest
+	(*DenyResponse)(nil),                // 10: reliant.v1.DenyResponse
+	(*BatchApproveRequest)(nil),         // 11: reliant.v1.BatchApproveRequest
+	(*BatchApproveResponse)(nil),        // 12: reliant.v1.BatchApproveResponse
+	(*BatchDenyRequest)(nil),            // 13: reliant.v1.BatchDenyRequest
+	(*BatchDenyResponse)(nil),           // 14: reliant.v1.BatchDenyResponse
 }
 var file_reliant_v1_approval_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.Approval.approval_type:type_name -> reliant.v1.ApprovalType
 	1,  // 1: reliant.v1.Approval.status:type_name -> reliant.v1.ApprovalStatus
-	2,  // 2: reliant.v1.ListApprovalsByChatResponse.approvals:type_name -> reliant.v1.Approval
-	3,  // 3: reliant.v1.ApprovalService.ListApprovalsByChat:input_type -> reliant.v1.ListApprovalsByChatRequest
-	5,  // 4: reliant.v1.ApprovalService.Approve:input_type -> reliant.v1.ApproveRequest
-	7,  // 5: reliant.v1.ApprovalService.Deny:input_type -> reliant.v1.DenyRequest
-	9,  // 6: reliant.v1.ApprovalService.BatchApprove:input_type -> reliant.v1.BatchApproveRequest
-	11, // 7: reliant.v1.ApprovalService.BatchDeny:input_type -> reliant.v1.BatchDenyRequest
-	4,  // 8: reliant.v1.ApprovalService.ListApprovalsByChat:output_type -> reliant.v1.ListApprovalsByChatResponse
-	6,  // 9: reliant.v1.ApprovalService.Approve:output_type -> reliant.v1.ApproveResponse
-	8,  // 10: reliant.v1.ApprovalService.Deny:output_type -> reliant.v1.DenyResponse
-	10, // 11: reliant.v1.ApprovalService.BatchApprove:output_type -> reliant.v1.BatchApproveResponse
-	12, // 12: reliant.v1.ApprovalService.BatchDeny:output_type -> reliant.v1.BatchDenyResponse
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	4,  // 2: reliant.v1.Approval.connection_proposal:type_name -> reliant.v1.ConnectionProposal
+	2,  // 3: reliant.v1.ConnectionProposal.scope:type_name -> reliant.v1.ConnectionProposalScope
+	3,  // 4: reliant.v1.ListApprovalsByChatResponse.approvals:type_name -> reliant.v1.Approval
+	5,  // 5: reliant.v1.ApprovalService.ListApprovalsByChat:input_type -> reliant.v1.ListApprovalsByChatRequest
+	7,  // 6: reliant.v1.ApprovalService.Approve:input_type -> reliant.v1.ApproveRequest
+	9,  // 7: reliant.v1.ApprovalService.Deny:input_type -> reliant.v1.DenyRequest
+	11, // 8: reliant.v1.ApprovalService.BatchApprove:input_type -> reliant.v1.BatchApproveRequest
+	13, // 9: reliant.v1.ApprovalService.BatchDeny:input_type -> reliant.v1.BatchDenyRequest
+	6,  // 10: reliant.v1.ApprovalService.ListApprovalsByChat:output_type -> reliant.v1.ListApprovalsByChatResponse
+	8,  // 11: reliant.v1.ApprovalService.Approve:output_type -> reliant.v1.ApproveResponse
+	10, // 12: reliant.v1.ApprovalService.Deny:output_type -> reliant.v1.DenyResponse
+	12, // 13: reliant.v1.ApprovalService.BatchApprove:output_type -> reliant.v1.BatchApproveResponse
+	14, // 14: reliant.v1.ApprovalService.BatchDeny:output_type -> reliant.v1.BatchDenyResponse
+	10, // [10:15] is the sub-list for method output_type
+	5,  // [5:10] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_approval_proto_init() }
@@ -1042,17 +1224,18 @@ func file_reliant_v1_approval_proto_init() {
 		return
 	}
 	file_reliant_v1_approval_proto_msgTypes[0].OneofWrappers = []any{}
-	file_reliant_v1_approval_proto_msgTypes[3].OneofWrappers = []any{}
-	file_reliant_v1_approval_proto_msgTypes[5].OneofWrappers = []any{}
-	file_reliant_v1_approval_proto_msgTypes[7].OneofWrappers = []any{}
-	file_reliant_v1_approval_proto_msgTypes[9].OneofWrappers = []any{}
+	file_reliant_v1_approval_proto_msgTypes[1].OneofWrappers = []any{}
+	file_reliant_v1_approval_proto_msgTypes[4].OneofWrappers = []any{}
+	file_reliant_v1_approval_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reliant_v1_approval_proto_msgTypes[8].OneofWrappers = []any{}
+	file_reliant_v1_approval_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_approval_proto_rawDesc), len(file_reliant_v1_approval_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   11,
+			NumEnums:      3,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

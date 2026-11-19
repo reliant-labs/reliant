@@ -78,7 +78,8 @@ func New(cfg Config) *Limiter {
 }
 
 // enableCPU enables the cpu controller for the command cgroups, so a heavy
-// command's slot wrapper can cap its own cgroup at its CPU share (cpu.max,
+// command's slot wrapper can enable it in turn for a cgroup it makes under
+// its command cgroup, and cap that at its CPU share (cpu.max,
 // internal/heavyjob). Both levels hold no process of their own (the daemon is
 // in root's self/), as cgroup v2 requires.
 func enableCPU(root, commands string) error {
@@ -235,9 +236,24 @@ func (l *Limiter) drop(dir string) {
 	heldMu.Lock()
 	delete(held, dir)
 	heldMu.Unlock()
-	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EBUSY) {
+	if err := removeCgroup(dir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EBUSY) {
 		logging.Debug("proctree: cannot remove a command cgroup", "dir", dir, "error", err)
 	}
+}
+
+// removeCgroup removes the cgroup dir and, first, the empty cgroups under it:
+// a heavy command's slot wrapper makes two in its command's cgroup and removes
+// them when the command exits (internal/heavyjob), but a wrapper that was
+// killed leaves them, and a cgroup with children cannot be removed. One still
+// holding a process stays, and so does dir.
+func removeCgroup(dir string) error {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.IsDir() {
+			_ = removeCgroup(filepath.Join(dir, e.Name()))
+		}
+	}
+	return os.Remove(dir)
 }
 
 // sweepOwn sweeps this process's empty command cgroups, sparing the held ones.
@@ -404,7 +420,7 @@ func sweep(dir string, own bool) {
 			continue
 		}
 		if !populated(sub) {
-			_ = os.Remove(sub)
+			_ = removeCgroup(sub)
 		}
 	}
 }

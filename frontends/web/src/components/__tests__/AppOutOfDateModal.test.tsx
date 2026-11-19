@@ -31,7 +31,7 @@ describe("AppOutOfDateModal", () => {
 
     expect(onClose).toHaveBeenCalled();
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
-    expect(navigate).toHaveBeenCalledWith({ to: "/settings/$section", params: { section: "about" } });
+    expect(navigate).toHaveBeenCalledWith({ to: "/settings/about" });
   });
 
   it("reloads a browser tab onto the current bundle", () => {

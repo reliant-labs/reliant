@@ -801,6 +801,7 @@ func newDaemonStartCmd() *cobra.Command {
 	var (
 		useToken   bool
 		daemonName string
+		labelFlag  = &labelsFlag{name: "label"}
 	)
 
 	cmd := &cobra.Command{
@@ -839,13 +840,26 @@ identity (under ~/.reliant/instances/<server>/<account>/<workspace>/): with
 that account; otherwise --account, else the most recently connected account,
 applies. Two accounts can run side by side, even in the same workspace.
 To switch back to an account whose token is already stored:
-  reliant daemon start --account <user-id>`,
+  reliant daemon start --account <user-id>
+
+--label key=value declares a durable label for this machine (repeat it, or
+separate pairs with commas). On every connect the server merges the declared
+labels into the machine's labels: each key is set to its value, and labels
+you did not declare are left alone. Labels decide machine-pool membership, so
+a box started with
+  reliant daemon start --label pool=pipeline --label gate=yes
+joins the pool "pipeline" as soon as it connects, with no one labelling it.
+RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base, err := loadRootConfig(cmd)
 			if err != nil {
 				return err
 			}
 			dcfg, err := loadDaemonConfig(cmd)
+			if err != nil {
+				return err
+			}
+			machineLabels, err := daemonMachineLabels(cmd, dcfg, labelFlag)
 			if err != nil {
 				return err
 			}
@@ -988,11 +1002,12 @@ To switch back to an account whose token is already stored:
 					StorageReaper:   storageReaperConfig(base, host.Managed()),
 					WorktreeReclaim: worktreeReclaimConfig(base),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-						ServerMode: true,
-						ListenPort: listenPort,
-						DataDir:    dataDir,
-						Name:       daemonName,
-						Verbose:    verbose,
+						ServerMode:    true,
+						ListenPort:    listenPort,
+						DataDir:       dataDir,
+						Name:          daemonName,
+						MachineLabels: machineLabels,
+						Verbose:       verbose,
 					},
 					Host:               host,
 					ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
@@ -1042,7 +1057,10 @@ To switch back to an account whose token is already stored:
 						TLSMode:   parsedTLSMode,
 						DataDir:   dataDir,
 						Name:      daemonName,
-						ServerURL: conn.ServerURL,
+						// Declared on every registration; the server merges
+						// them into the machine's durable labels.
+						MachineLabels: machineLabels,
+						ServerURL:     conn.ServerURL,
 						// Per-instance identity, read from this instance's own
 						// data directory. Keyed by origin it was shared by
 						// every worktree on the machine, and the gateway —
@@ -1109,6 +1127,9 @@ To switch back to an account whose token is already stored:
 
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin and use it as the daemon credential")
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: <instance-id>@<hostname>)")
+	// Hand-registered: the generated flag of DaemonConfig.labels (a repeated
+	// field) would keep only its last use. It replaces that field's value.
+	cmd.Flags().Var(labelFlag, "label", "Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=<name> joins that machine pool")
 
 	return cmd
 }

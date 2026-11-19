@@ -93,6 +93,47 @@ describe("globalUpdatesStore → Inbox", () => {
     }
   });
 
+  // 2026-11-18: one user's 3–4 tabs, most of them in the background, each
+  // sent ~8 ListInbox a minute while agents ran.
+  it("a hidden tab marks the inbox stale but reads it only once it is shown", async () => {
+    vi.useFakeTimers();
+    let visibility: DocumentVisibilityState = "hidden";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+    try {
+      const listInbox = vi.fn().mockResolvedValue({ items: [] });
+      const observer = new QueryObserver(queryClient, {
+        queryKey: inboxServiceKeys.listInbox({}),
+        queryFn: listInbox,
+        staleTime: Infinity,
+      });
+      const unsubscribe = observer.subscribe(() => {});
+      await vi.advanceTimersByTimeAsync(0);
+      const before = listInbox.mock.calls.length;
+
+      for (let i = 0; i < 20; i++) {
+        useGlobalUpdatesStore.getState().handleUpdate([
+          {
+            ...buildUpdate(UserUpdateType.CHAT_ACTIVITY_CHANGED, { chat_id: "c-automation", activity: i % 2 }),
+            id: `u-hidden-${i}`,
+            sequence_number: i + 1,
+          },
+        ]);
+        await vi.advanceTimersByTimeAsync(STREAM_REFETCH_INTERVAL_MS);
+      }
+      expect(listInbox.mock.calls.length - before).toBe(0);
+      expect(queryClient.getQueryState(inboxServiceKeys.listInbox({}))?.isInvalidated).toBe(true);
+
+      visibility = "visible";
+      document.dispatchEvent(new Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(STREAM_REFETCH_INTERVAL_MS * 3);
+      expect(listInbox.mock.calls.length - before).toBe(1);
+      unsubscribe();
+    } finally {
+      delete (document as unknown as { visibilityState?: unknown }).visibilityState;
+      vi.useRealTimers();
+    }
+  });
+
   it("a title change leaves the inbox alone", () => {
     useGlobalUpdatesStore
       .getState()

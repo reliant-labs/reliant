@@ -12,6 +12,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -39,6 +40,12 @@ type ManagedDaemonState struct {
 	UserID   string `json:"userId"`
 	PodIP    string `json:"podIp"`
 	PodPort  int    `json:"podPort"`
+	// OrgID is the org that owns the machine (control-plane's
+	// daemons.org_id), recorded as the machine's org when it is dialed in.
+	// OrgUnresolved: the control plane could not read it this tick. Both
+	// absent from an older control plane.
+	OrgID         string `json:"orgId,omitempty"`
+	OrgUnresolved bool   `json:"orgUnresolved,omitempty"`
 }
 
 type managedDaemonStateSnapshot struct {
@@ -187,8 +194,10 @@ func (r *ManagedDaemonReconciler) reconcile(ctx context.Context, snap managedDae
 	// Snapshot the connector's current outbound attachments.
 	r.connector.mu.Lock()
 	active := make(map[string]bool, len(r.connector.activeConns))
+	activeOrgs := make(map[string]tools_daemon.MachineOrg, len(r.connector.activeConns))
 	for id := range r.connector.activeConns {
 		active[id] = true
+		activeOrgs[id] = r.connector.activeOrgs[id]
 	}
 	r.connector.mu.Unlock()
 
@@ -197,13 +206,22 @@ func (r *ManagedDaemonReconciler) reconcile(ctx context.Context, snap managedDae
 
 	// Start any desired that aren't currently active.
 	for daemonID, d := range desired {
-		if active[daemonID] {
+		org := tools_daemon.MachineOrg{ID: d.OrgID, Unresolved: d.OrgUnresolved}
+		if active[daemonID] && !orgChanged(activeOrgs[daemonID], org) {
 			continue
 		}
 		if d.PodIP == "" || d.PodPort == 0 {
 			continue
 		}
-		r.connector.startConnection(ctx, d.DaemonID, d.UserID, d.PodIP, d.PodPort)
+		if active[daemonID] {
+			// The machine's org resolved, or changed, since its connection
+			// registered: reconnect so it registers with the authoritative
+			// org (recorded on its row, held by the connection) and every
+			// later retry dials with it.
+			logging.InfoContext(ctx, reconcilerLogPrefix+" machine org changed in the snapshot; reconnecting so the connection uses it",
+				"daemonId", daemonID, "from", activeOrgs[daemonID].ID, "fromUnresolved", activeOrgs[daemonID].Unresolved, "to", org.ID)
+		}
+		r.connector.startConnection(ctx, d.DaemonID, d.UserID, d.PodIP, d.PodPort, org)
 		started++
 	}
 

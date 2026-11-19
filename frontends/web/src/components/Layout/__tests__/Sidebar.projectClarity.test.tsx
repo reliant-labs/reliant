@@ -146,7 +146,7 @@ const chatIn = (region: HTMLElement) =>
   Array.from(region.querySelectorAll("[data-chat-id]")).map((row) => row.getAttribute("data-chat-id"));
 
 describe("Sidebar: which project a chat is in", () => {
-  it("heads every project's chats with its mark and name, the project holding the open chat in primary", () => {
+  it("heads every project's chats with its mark and name, and marks the open chat on its row, not its project", () => {
     renderSidebar();
     const api = section("api");
     const web = section("web");
@@ -158,8 +158,11 @@ describe("Sidebar: which project a chat is in", () => {
     expect(within(apiHeader).getByRole("button", { name: "api" })).toHaveAttribute("aria-expanded", "true");
     // Pinned while its chats scroll under it.
     expect(apiHeader).toHaveClass("sticky");
-    // The open chat is in web.
-    expect(within(screen.getByTestId("sidebar-project-header-p-web")).getByTestId("project-mark")).toHaveClass("text-primary-ink");
+    // The open chat is in web: its row says so, and its project does not turn
+    // blue (a selection is not a link).
+    expect(within(screen.getByTestId("sidebar-project-header-p-web")).getByTestId("project-mark")).not.toHaveClass("text-primary-ink");
+    const open = within(section("web")).getAllByRole("button").find((b) => b.getAttribute("aria-current") === "true");
+    expect(open?.closest("[data-chat-id]")).not.toBeNull();
   });
 
   it("lists a main-only project's chats straight under the project, with no MAIN heading", () => {
@@ -196,10 +199,29 @@ describe("Sidebar: which project a chat is in", () => {
     expect(screen.queryByTestId("chat-project-web-main")).toBeNull();
   });
 
+  it("puts a needs-you dot on the project of a chat that waits on the user", () => {
+    useActivityStore.setState({ activities: new Map([["api-2", ChatActivity.AWAITING_INPUT]]) });
+    renderSidebar();
+    expect(screen.getByTestId("sidebar-project-needs-you-p-api")).toHaveAccessibleName("A chat needs you");
+    expect(screen.queryByTestId("sidebar-project-needs-you-p-web")).toBeNull();
+  });
+
+  it("names a filtered project in the Chats heading, with an X that shows every project again", async () => {
+    useWorkspaceStateStore.setState({ projectFilterId: "p-web" });
+    useProjectStore.setState({ setProjectFilter: vi.fn(async (id: string | null) => {
+      useWorkspaceStateStore.setState({ projectFilterId: id });
+    }) } as Partial<ReturnType<typeof useProjectStore.getState>>);
+    renderSidebar();
+    expect(screen.getByTestId("project-filter-label")).toHaveTextContent("web");
+    await userEvent.click(screen.getByTestId("project-filter-clear"));
+    expect(useWorkspaceStateStore.getState().projectFilterId).toBeNull();
+    expect(screen.queryByTestId("project-filter-label")).toBeNull();
+  });
+
   it("groups archived chats by project across projects, instead of one merged \"main\"", async () => {
     renderSidebar();
-    await userEvent.click(screen.getByRole("button", { name: "Sort chats" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "Archived chats" }));
+    await userEvent.click(screen.getByTestId("project-filter-trigger"));
+    await userEvent.click(await screen.findByRole("menuitemcheckbox", { name: "Archived chats" }));
     expect(await screen.findByText("api")).toBeInTheDocument();
     expect(screen.getByText("web")).toBeInTheDocument();
     expect(screen.queryByText("main")).toBeNull();

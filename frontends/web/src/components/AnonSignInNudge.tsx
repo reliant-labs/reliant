@@ -4,6 +4,7 @@ import Modal from "./forge-ui/modal";
 import { useAnonSignInNudge } from "@/hooks/useAnonSignInNudge";
 import { useSurface } from "@/lib/surfaceContext";
 import { isClaimPath } from "@/lib/claimLink";
+import { upgradePath } from "@/lib/paths";
 
 /**
  * Anonymous-session sign-in nudge.
@@ -45,7 +46,7 @@ export function AnonSignInNudge() {
     // wherever they were once an identity is attached.
     close();
     const returnTo = window.location.pathname + window.location.search;
-    void navigate({ to: "/upgrade", search: { returnTo } });
+    void navigate({ to: upgradePath(), search: { returnTo } });
   };
 
   return (

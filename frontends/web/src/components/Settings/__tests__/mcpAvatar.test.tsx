@@ -37,9 +37,10 @@ describe("mcpAvatar helpers", () => {
     expect(getMcpIconUrl("github")).toContain("cdn.simpleicons.org/github");
     expect(getMcpIconUrl("sqlite")).toContain("cdn.simpleicons.org/sqlite");
     expect(getMcpIconUrl("postgres")).toContain("cdn.simpleicons.org/postgresql");
-    expect(getMcpIconUrl("slack")).toContain("icons/slack.svg");
+    // Bundled (assets/mcp-icons): an asset URL, or a data: URL when inlined.
+    expect(getMcpIconUrl("slack")).toMatch(/^(?!https?:).*slack/i);
     expect(getMcpIconUrl("sentry")).toContain("cdn.simpleicons.org/sentry");
-    expect(getMcpIconUrl("aws")).toContain("icons/amazonaws.svg");
+    expect(getMcpIconUrl("aws")).toMatch(/^(?!https?:).*amazon/i);
     expect(getMcpIconUrl("docker")).toContain("cdn.simpleicons.org/docker");
   });
 

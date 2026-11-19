@@ -38,9 +38,10 @@ import {
 } from "@/services/controlPlane/members";
 import { switchToJoinedOrg, type MyOrg } from "@/services/controlPlane/orgs";
 import { useAuthStore } from "@/store/authStore";
+import { authPath } from "@/lib/paths";
 
 /** Where signing in returns to: this page, which picks the invitation up from storage. */
-export const SIGN_IN_TO_ACCEPT_URL = `/auth?redirect=${encodeURIComponent(ACCEPT_INVITE_PATH)}`;
+export const SIGN_IN_TO_ACCEPT_URL = `${authPath()}?redirect=${encodeURIComponent(ACCEPT_INVITE_PATH)}`;
 
 export type InviteRefusal = "expired" | "revoked" | "used";
 

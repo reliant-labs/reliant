@@ -2,35 +2,14 @@ package daemon_registry
 
 import (
 	"context"
-	"fmt"
-	"regexp"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 )
-
-// labelSlug is what a label key or value may be: a short slug, so a label
-// reads the same in a selector, a URL and a log line.
-var labelSlug = regexp.MustCompile(`^[a-z0-9]([a-z0-9._-]{0,61}[a-z0-9])?$`)
-
-// maxMachineLabels bounds how many labels one machine carries.
-const maxMachineLabels = 32
-
-// validateLabels refuses labels that are not short slugs.
-func validateLabels(labels map[string]string, what string) error {
-	if len(labels) > maxMachineLabels {
-		return svcerr.InvalidArgument(fmt.Sprintf("%s: at most %d labels", what, maxMachineLabels))
-	}
-	for k, v := range labels {
-		if !labelSlug.MatchString(k) || !labelSlug.MatchString(v) {
-			return svcerr.InvalidArgument(fmt.Sprintf("%s: %q=%q: keys and values are lowercase slugs (a-z, 0-9, '.', '_', '-'), at most 63 characters", what, k, v))
-		}
-	}
-	return nil
-}
 
 // SetMachineLabels replaces one of the caller's machines' durable labels.
 func (s *Service) SetMachineLabels(
@@ -45,7 +24,7 @@ func (s *Service) SetMachineLabels(
 	if msg.GetDaemonId() == "" {
 		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
-	if err := validateLabels(msg.GetLabels(), "labels"); err != nil {
+	if err := machinepool.ValidateLabels(msg.GetLabels(), "labels"); err != nil {
 		return nil, err
 	}
 	found, err := s.deps.Repo.SetDaemonLabels(ctx, userID, msg.GetDaemonId(), msg.GetLabels())

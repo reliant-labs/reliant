@@ -216,7 +216,7 @@ func TestProjectDaemonCommand_KeepsDaemonTextWithholdsTransportText(t *testing.T
 func TestProjectService_OnTheWire(t *testing.T) {
 	t.Parallel()
 	store := &project.MockRepository{
-		GetProjectByPathAndUserFunc: func(context.Context, string, string) (*db.Project, error) {
+		GetProjectByPathAndUserInScopeFunc: func(context.Context, string, string, *core.OrgScope) (*db.Project, error) {
 			return ownedProject(), nil
 		},
 		ListProjectsFunc: func(context.Context, db.ProjectFilters) ([]*db.Project, error) {

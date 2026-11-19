@@ -344,8 +344,7 @@ describe('MachinesSection', () => {
 
       fireEvent.click(await screen.findByText('onboarding-daemon'))
       expect(mocks.navigate).toHaveBeenCalledWith({
-        to: '/settings/machines/$machineId',
-        params: { machineId: managedDaemon.daemonId },
+        to: `/settings/machines/${managedDaemon.daemonId}`,
       })
     })
 
