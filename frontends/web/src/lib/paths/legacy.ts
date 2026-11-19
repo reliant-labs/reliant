@@ -20,6 +20,7 @@
  *     (`Chat.org_id`), and its route's loader redirects there
  *     (lib/chatRouteResolve.ts), not into the tab's.
  *   - links that name a resource by id or by app name: `/project/<id>`,
+ *     a project's page `/projects/<id>[/settings|/workspaces]`,
  *     `/workflows/runs/<id>`, `/workflows/automations/<id>`, `/forge/p/<app>`,
  *     `/forge?project=`, `/forge/env/<env>?forgeProject=`, and the org
  *     Observability with an app in its query. So do saved workflows, by name:

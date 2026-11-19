@@ -84,7 +84,7 @@ import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import { focusEventName } from "../../lib/keyboard/focus";
-import { inboxPath, newChatPath, settingsPath, withSearch } from "../../lib/paths";
+import { inboxPath, newChatPath, projectsPath, withSearch } from "../../lib/paths";
 import type { Chat } from "../../api/client";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
@@ -1826,7 +1826,7 @@ function SidebarComponent({
           filterId={projectFilterId}
           projects={projects}
           onAddProject={() => openAddProject()}
-          onManageProjects={() => go(settingsPath("projects"))}
+          onManageProjects={() => go(projectsPath())}
           sortOrder={sortOrder}
           onSortChange={setSortOrder}
           viewMode={viewMode}
