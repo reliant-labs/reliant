@@ -385,7 +385,8 @@
                   "guides/forge/deploy-static-site-cdn",
                   "guides/forge/bring-existing-app-any-language",
                   "guides/forge/adopt-existing-vite-nextjs",
-                  "guides/forge/port-codebase-to-forge"
+                  "guides/forge/port-codebase-to-forge",
+                  "guides/forge/add-expo-mobile-app"
                 ]
               },
               {
@@ -419,6 +420,7 @@
                   "guides/forge/scan-dependencies-vulnerabilities",
                   "guides/forge/connect-claude-code-cursor-mcp",
                   "guides/forge/keep-test-suite-fast",
+                  "guides/forge/debug-go-service-delve-cli",
                   "guides/forge/upgrade-forge-version"
                 ]
               }
@@ -476,7 +478,9 @@
                   "guides/observability/find-slowest-rpcs",
                   "guides/observability/route-alerts-slack-pagerduty",
                   "guides/observability/custom-alert-rules-as-code",
-                  "guides/observability/add-custom-metric"
+                  "guides/observability/dashboard-ui-to-code",
+                  "guides/observability/add-custom-metric",
+                  "guides/observability/active-users-from-product-events"
                 ]
               },
               {
