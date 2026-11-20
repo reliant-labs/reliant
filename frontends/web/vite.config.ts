@@ -417,8 +417,19 @@ const appConfig: ViteUserConfig = {
     // (lib/__tests__/telemetryBuildAttribute.test.ts,
     // api/__tests__/transport.trace.test.ts).
     server: { deps: { inline: ["@reliantlabs/forge-web-runtime", "@hyperdx/otel-web"] } },
+    // The runtime loads the SDK through its package.json import map
+    // ("#hyperdx-otel-web", forge-web-runtime >= 0.13.20): `browser` gets
+    // @hyperdx/otel-web, `node` a copy of the SDK pre-bundled into the
+    // runtime's dist. Vitest resolves with `node`, so without the second alias
+    // the runtime starts that copy, not the instance a test stubs, and every
+    // `Rum.init` spy sees no call. Resolve it as the browser bundle does.
     ...(process.env.VITEST
-      ? { alias: [{ find: /^@opentelemetry\/exporter-trace-otlp-http$/, replacement: browserTraceExporter() }] }
+      ? {
+          alias: [
+            { find: /^@opentelemetry\/exporter-trace-otlp-http$/, replacement: browserTraceExporter() },
+            { find: /^#hyperdx-otel-web$/, replacement: "@hyperdx/otel-web" },
+          ],
+        }
       : {}),
     // Read by src/test/setup.ts, which configures Testing Library with it.
     env: { RELIANT_ASYNC_UTIL_TIMEOUT_MS: String(asyncUtilTimeout) },
