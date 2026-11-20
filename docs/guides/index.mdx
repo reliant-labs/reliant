@@ -34,6 +34,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   <Card title="Turn labelled GitHub issues into pull requests with AI" icon="workflow" href="/guides/workflows/github-issues-to-pull-requests">
     Label a GitHub issue agent:ready and an AI agent writes a failing test and the fix, runs your checks and opens a pull request for a person to review and merge.
   </Card>
+  <Card title="Turn production alerts into GitHub issues with an on-call agent" icon="workflow" href="/guides/workflows/production-alerts-to-github-issues">
+    Get one investigated GitHub issue per new production alert or error: turn on Autopilot on-call, which deduplicates, reads the code and writes up a likely cause.
+  </Card>
   <Card title="Write your first multi-agent workflow in YAML" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
     Build a multi-agent coding workflow in YAML: a planner, an implementer and a reviewer that sends work back, checked locally, then run on your machine.
   </Card>
@@ -107,6 +110,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   <Card title="Build a Go and React app with Connect RPC and Postgres" icon="hammer" href="/guides/forge/build-go-react-app-connect-rpc">
     Create a Go Connect RPC service, a Postgres table and a React frontend with Forge, then run the whole stack on your machine with no account.
   </Card>
+  <Card title="Deploy a Vite or Next.js static site with a CDN" icon="hammer" href="/guides/forge/deploy-static-site-cdn">
+    Put a Vite or Next.js static site on Reliant's free static hosting behind a CDN: build one release, deploy it to prod, check the live URL, then clean up.
+  </Card>
   <Card title="Deploy an existing app from its Dockerfile, in any language" icon="hammer" href="/guides/forge/bring-existing-app-any-language">
     Adopt an Express, Django or Rails app where it stands: Forge reads its Dockerfile and compose file, writes the deploy config, and ships it to Reliant hosting.
   </Card>
@@ -138,6 +144,14 @@ Build a Go and React app with Forge: start a project, add features from the sche
 Deploy what you build to Reliant hosting, release it safely across environments, and manage its data and users. The [hosting overview](/hosting/overview) is the reference.
 
 {/* guides: hosting — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Deploy a Go API with managed Postgres to Reliant hosting" icon="cloud" href="/guides/hosting/deploy-go-api-managed-postgres">
+    Ship a Forge Go API, its migrations and a managed Postgres to production as one release, then prove it healthy with forge obs check.
+  </Card>
+  <Card title="Create a preview environment for every pull request" icon="cloud" href="/guides/hosting/preview-environment-every-pull-request">
+    Give each pull request its own hosted copy of your app on its own URL, created and deleted from GitHub Actions, and cleaned up by itself when it expires.
+  </Card>
+</CardGroup>
 {/* /guides: hosting */}
 
 ## Observability

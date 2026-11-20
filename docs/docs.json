@@ -291,7 +291,8 @@
                 "group": "Automate your repo",
                 "pages": [
                   "guides/workflows/review-pull-requests-with-ai",
-                  "guides/workflows/github-issues-to-pull-requests"
+                  "guides/workflows/github-issues-to-pull-requests",
+                  "guides/workflows/production-alerts-to-github-issues"
                 ]
               },
               {
@@ -348,6 +349,7 @@
                 "group": "Start a project",
                 "pages": [
                   "guides/forge/build-go-react-app-connect-rpc",
+                  "guides/forge/deploy-static-site-cdn",
                   "guides/forge/bring-existing-app-any-language"
                 ]
               },
@@ -362,6 +364,18 @@
                 "pages": [
                   "guides/forge/zero-downtime-postgres-migrations",
                   "guides/forge/measure-migration-locks"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Hosting",
+            "pages": [
+              {
+                "group": "Deploy",
+                "pages": [
+                  "guides/hosting/deploy-go-api-managed-postgres",
+                  "guides/hosting/preview-environment-every-pull-request"
                 ]
               }
             ]
