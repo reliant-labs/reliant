@@ -37,15 +37,14 @@ import {
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import { homePath, projectChatsPath, projectPath, projectsPath, runsPath, settingsPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { homePath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, type ConsoleNavEntry } from "../../../Forge/Console/consoleNavRegistry";
-import { consolePath, OBS_NAV_LABELS, orgPath, type ConsolePage, type ObsNavView } from "../../../Forge/Console/paths";
+import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, consolePath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
 import { settingsNavGroups } from "../../../Settings/SettingsNavigation";
 import { isAt, isAtOrBelow } from "../navLocation";
 import { isChatPage } from "../shellProject";
-import { analyticsPath, ANALYTICS_TABS, sandboxesPath, speedInsightsPath, usageBillingPath, type AnalyticsTab } from "./stubPaths";
 import type { NavArea, NavCtx, NavGroup, NavHeading, NavItem, NavRow, NavSlot } from "./types";
 
 const icon = (Icon: typeof Activity): ReactNode => <Icon className="size-4" aria-hidden="true" />;
@@ -55,7 +54,7 @@ const icon = (Icon: typeof Activity): ReactNode => <Icon className="size-4" aria
 const hasApp = (ctx: NavCtx) => !!ctx.app;
 
 /** A console page of the focused app, in the app's env scope. */
-const consoleHref = (page: ConsolePage) => (ctx: NavCtx) =>
+const consoleHref = (page: ConsoleTarget) => (ctx: NavCtx) =>
   ctx.app ? withSearch(consolePath(ctx.app, page), { env: ctx.console?.env }) : undefined;
 
 const pageIs = (...kinds: ConsolePage["kind"][]) => (ctx: NavCtx) => !!ctx.page && kinds.includes(ctx.page.kind);
@@ -115,17 +114,48 @@ export const configureGroup: NavGroup = {
 
 const hubKeys = (ctx: NavCtx) => ctx.console?.productAnalytics?.keys ?? [];
 
-export const dashboards: NavRow = {
-  kind: "row",
+/** A dashboard page no row of its own lights: not an Analytics tab, not one of the app's listed dashboards. */
+function isUnlistedDashboard(ctx: NavCtx): boolean {
+  const page = ctx.page;
+  if (page?.kind !== "dashboard" || hubKeys(ctx).includes(page.key)) return false;
+  return !(ctx.console?.customDashboards ?? []).some((d) => d.dashKind === page.dashKind && d.key === page.key);
+}
+
+const dashboardsAvailable = (ctx: NavCtx) => hasApp(ctx) || ctx.mode !== "one";
+
+/**
+ * Dashboards ▾: the Dashboards page, the built-in Live state, and the app's
+ * own dashboards (its repo's, saved ones). The only place dashboards are
+ * listed; across several projects, the org-wide page.
+ */
+export const dashboards: NavGroup = {
+  kind: "group",
   id: "dashboards",
   label: "Dashboards",
   icon: icon(LayoutGrid),
-  href: (ctx) => (ctx.mode !== "one" ? orgPath({ kind: "obs-view", view: "dashboards" }) : consoleHref({ kind: "obs-view", view: "dashboards" })(ctx)),
-  match: (ctx) =>
-    (ctx.page?.kind === "obs-view" && ctx.page.view === "dashboards") ||
-    (ctx.page?.kind === "dashboard" && !hubKeys(ctx).includes(ctx.page.key)) ||
-    (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view === "dashboards"),
-  available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
+  available: dashboardsAvailable,
+  children: (ctx) => [
+    {
+      kind: "row",
+      id: "dashboards-all",
+      label: "All dashboards",
+      href: (c) => (c.mode !== "one" ? orgPath({ kind: "obs-view", view: "dashboards" }) : consoleHref({ kind: "dashboards" })(c)),
+      match: (c) =>
+        (c.page?.kind === "obs-view" && c.page.view === "dashboards") ||
+        isUnlistedDashboard(c) ||
+        (c.orgPage?.kind === "obs-view" && c.orgPage.view === "dashboards"),
+    },
+    { kind: "row", id: "dashboards-live-state", label: "Live state", href: consoleHref({ kind: "live-state" }), match: pageIs("live-state"), available: hasApp },
+    ...(ctx.console?.customDashboards ?? []).map(
+      (dashboard): NavRow => ({
+        kind: "row",
+        id: `dashboard-${dashboard.dashKind}-${dashboard.key}`,
+        label: dashboard.title,
+        href: consoleHref({ kind: "dashboard", dashKind: dashboard.dashKind, key: dashboard.key }),
+        match: (c) => c.page?.kind === "dashboard" && c.page.dashKind === dashboard.dashKind && c.page.key === dashboard.key,
+      }),
+    ),
+  ],
 };
 
 // ── Observability ───────────────────────────────────────────────────────────
@@ -148,8 +178,8 @@ const speedInsights: NavRow = {
   kind: "row",
   id: "speed-insights",
   label: "Speed insights",
-  href: (ctx) => (ctx.app ? speedInsightsPath(ctx.app) : undefined),
-  match: (ctx) => !!ctx.app && isAt(ctx.pathname, speedInsightsPath(ctx.app)),
+  href: consoleHref({ kind: "speed-insights" }),
+  match: pageIs("speed-insights"),
   available: hasApp,
 };
 
@@ -176,7 +206,7 @@ export const sessionsRow = obsRow("sessions");
 /** The routes that are Observability: every view but Dashboards (top-level), Speed insights, and the org-wide pages. */
 export const isObservabilityRoute = (ctx: NavCtx): boolean =>
   (ctx.page?.kind === "obs-view" && ctx.page.view !== "dashboards") ||
-  speedInsights.match!(ctx) ||
+  ctx.page?.kind === "speed-insights" ||
   ctx.orgPage?.kind === "observability" ||
   (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view !== "dashboards");
 
@@ -219,25 +249,20 @@ export const performanceGroup: NavGroup = {
 
 // ── Analytics ───────────────────────────────────────────────────────────────
 
-const TAB_LABELS: Record<(typeof ANALYTICS_TABS)[number], string> = {
-  overview: "Product overview",
-  users: "Users",
-  product: "Product",
-  acquisition: "Acquisition",
-};
+const analyticsTabOf = (ctx: NavCtx): AnalyticsTab | null =>
+  ctx.page?.kind === "analytics" ? (ctx.page.tab ?? "overview") : ctx.page?.kind === "events" ? "events" : null;
 
-function analyticsTabRow(tab: (typeof ANALYTICS_TABS)[number]): NavRow {
+/** One Analytics tab as a row (Product overview, Users, Product, Acquisition, Events & metrics). */
+function analyticsTabRow(tab: AnalyticsTab): NavRow {
   return {
     kind: "row",
     id: `analytics-${tab}`,
-    label: TAB_LABELS[tab],
-    href: (ctx) => (ctx.app ? analyticsPath(ctx.app, tab) : undefined),
-    match: (ctx) => !!ctx.app && isAt(ctx.pathname, analyticsPath(ctx.app)) && ((ctx.search.tab as AnalyticsTab | undefined) ?? "overview") === tab,
+    label: ANALYTICS_TAB_LABELS[tab],
+    href: consoleHref({ kind: "analytics", tab }),
+    match: (ctx) => analyticsTabOf(ctx) === tab,
     available: hasApp,
   };
 }
-
-const eventsRow = consoleRow("analytics-events", "Events & metrics", { kind: "events" }, undefined, ["events"]);
 
 function registeredEntryOf(ctx: NavCtx): ConsoleNavEntry | undefined {
   const page = ctx.page;
@@ -262,12 +287,11 @@ function registeredRows(ctx: NavCtx): NavRow[] {
     }));
 }
 
-const analyticsChildren = (ctx: NavCtx): readonly NavItem[] => [...ANALYTICS_TABS.map(analyticsTabRow), eventsRow, ...registeredRows(ctx)];
+const analyticsChildren = (ctx: NavCtx): readonly NavItem[] => [...ANALYTICS_TABS.map(analyticsTabRow), ...registeredRows(ctx)];
 
 /** The routes that are Analytics: its page, Events & metrics, the built-in hub's dashboards, the registered pages. */
 export const isAnalyticsRoute = (ctx: NavCtx): boolean =>
-  ctx.page?.kind === "events" ||
-  (!!ctx.app && isAt(ctx.pathname, analyticsPath(ctx.app))) ||
+  analyticsTabOf(ctx) !== null ||
   (ctx.page?.kind === "dashboard" && hubKeys(ctx).includes(ctx.page.key)) ||
   !!registeredEntryOf(ctx);
 
