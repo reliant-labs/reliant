@@ -867,7 +867,7 @@ export const forgeConsoleDashboardsSearchSchema = z.object({
   view: z.enum(["all"]).optional().catch(undefined),
   q: z.string().optional().catch(undefined),
   group: z.enum(DASHBOARD_GROUPS).optional().catch(undefined),
-  source: z.enum(["release", "workspace"]).optional().catch(undefined),
+  source: z.enum(["builtin", "repo", "custom", "release", "workspace"]).optional().catch(undefined),
   owner: z.string().optional().catch(undefined),
   // Several projects in the shell (U6c): which apps' dashboards the org-wide list shows.
   apps: z.array(z.string()).optional().catch(undefined),
