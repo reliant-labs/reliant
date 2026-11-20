@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FilePen, Terminal, Wrench } from "lucide-react";
-import { editDiffStat, toolRowIcon } from "../toolRowParts";
+import { editDiffStat, sumDiffStats, toolRowIcon } from "../toolRowParts";
 
 describe("editDiffStat", () => {
   it("counts the lines a single edit adds and removes", () => {
@@ -41,5 +41,16 @@ describe("toolRowIcon", () => {
     expect(toolRowIcon("edit")).toBe(FilePen);
     expect(toolRowIcon("mcp__reliant__shell")).toBe(Terminal);
     expect(toolRowIcon("some_mcp_tool")).toBe(Wrench);
+  });
+});
+
+describe("sumDiffStats", () => {
+  it("adds up the edits it counted and skips the rest", () => {
+    expect(sumDiffStats([{ added: 2, removed: 1 }, null, { added: 3, removed: 0 }])).toEqual({ added: 5, removed: 1 });
+  });
+
+  it("is null when no edit was counted", () => {
+    expect(sumDiffStats([])).toBeNull();
+    expect(sumDiffStats([null, null])).toBeNull();
   });
 });
