@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon/configloader"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -220,6 +221,14 @@ type Manager struct {
 	// (shouldRetryServerLoad).
 	failedConfigs map[string]config.MCPServer
 
+	// toolListFlights dedupes concurrent first listings of one dir client
+	// (listDirClientTools), so a slow start is probed once.
+	toolListFlights singleflight.Group
+
+	// reloadLocks serializes, per logical server, deciding whether a project
+	// load must start or replace it and doing so (loadProjectServer).
+	reloadLocks map[string]*sync.Mutex
+
 	// projectConfigs is the config each project last loaded each server
 	// under, keyed by dirClientKey(server, project): how a project's edit to
 	// a running server's config is told apart from another project declaring
@@ -297,6 +306,7 @@ func NewManager(role Role, opts ...ManagerOption) *Manager {
 		nextRetryAt:         make(map[string]time.Time),
 		failedConfigs:       make(map[string]config.MCPServer),
 		projectConfigs:      make(map[string]config.MCPServer),
+		reloadLocks:         make(map[string]*sync.Mutex),
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -1370,49 +1380,82 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		default:
 		}
 
-		if runningServers[name] {
-			if m.projectConfigEdited(normalizedProjectPath, name, serverCfg) {
-				// The project's own config for this server changed since it
-				// last loaded it, and what is running is not the new config: an
-				// edit to mcp.json. Start the new one now. It used to stay on
-				// the old command until something restarted it, and a restart
-				// issued before the server-side copy of the config caught up
-				// restarted the old command again.
-				reason := fmt.Sprintf("its config changed in project %s", normalizedProjectPath)
-				if err := m.RemoveServer(name, reason); err != nil && !strings.Contains(err.Error(), "not found") {
-					logging.WarnContext(ctx, "Failed to stop an MCP server whose config changed", "name", name, "error", err)
-				}
-			} else {
-				m.trackProjectServer(normalizedProjectPath, name)
-				m.rememberProjectConfig(normalizedProjectPath, name, serverCfg)
-				logging.DebugContext(ctx, "MCP server already running; associated with requested project scope",
-					"name", name,
-					"projectPath", normalizedProjectPath)
-				result.LoadedServers = append(result.LoadedServers, name)
-				continue
-			}
-		} else if !m.shouldRetryServerLoad(name, serverCfg) {
-			logging.DebugContext(ctx, "Skipping MCP server autoload due to retry cooldown", "name", name)
-			continue
-		}
-
-		// Give first-time package downloads enough time (npx/uvx can be slow)
-		serverCtx, cancel := context.WithTimeout(ctx, defaultProjectServerLoadTimeout)
-
-		logging.DebugContext(ctx, "Loading MCP server from project config", "name", name)
-		if err := m.AddServer(serverCtx, name, serverCfg); err != nil {
-			logging.WarnContext(ctx, "Failed to load MCP server (will continue without it)", "name", name, "error", err)
-			result.FailedServers = append(result.FailedServers, name)
-			result.Errors[name] = err
-		} else {
-			m.trackProjectServer(normalizedProjectPath, name)
-			result.LoadedServers = append(result.LoadedServers, name)
-		}
-		m.rememberProjectConfig(normalizedProjectPath, name, serverCfg)
-		cancel()
+		m.loadProjectServer(ctx, normalizedProjectPath, name, serverCfg, result)
 	}
 
 	return result
+}
+
+// loadProjectServer starts, replaces or associates one server for a project
+// load, recording the outcome in result.
+//
+// The decision and the action are one step per logical server (reloadLock):
+// two loads that both read the state before either acted would otherwise both
+// replace an edited server, the second closing the process the first had just
+// started and dropping its project associations. The decision is re-read from
+// the live state after the lock is taken, so a load that waited sees what the
+// one before it did. Starting a server holds only its own lock, never m.mu.
+func (m *Manager) loadProjectServer(ctx context.Context, projectPath, name string, serverCfg config.MCPServer, result *ProjectServerLoadResult) {
+	unlock := m.reloadLock(name)
+	defer unlock()
+
+	m.mu.RLock()
+	_, running := m.clients[name]
+	m.mu.RUnlock()
+
+	if running {
+		if !m.projectConfigEdited(projectPath, name, serverCfg) {
+			m.trackProjectServer(projectPath, name)
+			m.rememberProjectConfig(projectPath, name, serverCfg)
+			logging.DebugContext(ctx, "MCP server already running; associated with requested project scope",
+				"name", name,
+				"projectPath", projectPath)
+			result.LoadedServers = append(result.LoadedServers, name)
+			return
+		}
+		// The project's own config for this server changed since it last
+		// loaded it, and what is running is not the new config: an edit to
+		// mcp.json. Start the new one now. It used to stay on the old command
+		// until something restarted it, and a restart issued before the
+		// server-side copy of the config caught up restarted the old command
+		// again.
+		reason := fmt.Sprintf("its config changed in project %s", projectPath)
+		if err := m.RemoveServer(name, reason); err != nil && !strings.Contains(err.Error(), "not found") {
+			logging.WarnContext(ctx, "Failed to stop an MCP server whose config changed", "name", name, "error", err)
+		}
+	} else if !m.shouldRetryServerLoad(name, serverCfg) {
+		logging.DebugContext(ctx, "Skipping MCP server autoload due to retry cooldown", "name", name)
+		return
+	}
+
+	// Give first-time package downloads enough time (npx/uvx can be slow)
+	serverCtx, cancel := context.WithTimeout(ctx, defaultProjectServerLoadTimeout)
+	defer cancel()
+
+	logging.DebugContext(ctx, "Loading MCP server from project config", "name", name)
+	if err := m.AddServer(serverCtx, name, serverCfg); err != nil {
+		logging.WarnContext(ctx, "Failed to load MCP server (will continue without it)", "name", name, "error", err)
+		result.FailedServers = append(result.FailedServers, name)
+		result.Errors[name] = err
+	} else {
+		m.trackProjectServer(projectPath, name)
+		result.LoadedServers = append(result.LoadedServers, name)
+	}
+	m.rememberProjectConfig(projectPath, name, serverCfg)
+}
+
+// reloadLock takes the per-server lock loadProjectServer holds, and returns
+// its release.
+func (m *Manager) reloadLock(name string) func() {
+	m.mu.Lock()
+	l, ok := m.reloadLocks[name]
+	if !ok {
+		l = &sync.Mutex{}
+		m.reloadLocks[name] = l
+	}
+	m.mu.Unlock()
+	l.Lock()
+	return l.Unlock
 }
 
 // shouldRetryServerLoad reports whether a server that failed to start may be
@@ -1606,6 +1649,11 @@ func (m *Manager) ProjectCallTool(session, projectPath, serverName, toolName str
 // for the wrong tree, which is how a dir-scoped server connected and yet its
 // tools were never offered to an agent. Every other server lists from the
 // shared client, as before.
+//
+// A dir client's first listing starts its server, which a tree indexer may
+// take a minute to do. The caller is answered within projectToolListBudget
+// either way (ErrToolsStillLoading when the start runs longer); the start goes
+// on, and the listing after it is served from its manifest.
 func (m *Manager) ProjectListTools(projectPath, serverName string) ([]Tool, error) {
 	if err := m.ensureInitialized(); err != nil {
 		return nil, fmt.Errorf("failed to initialize MCP servers: %w", err)
@@ -1618,7 +1666,7 @@ func (m *Manager) ProjectListTools(projectPath, serverName string) ([]Tool, erro
 		return nil, err
 	}
 	if ok {
-		return dirClient.ListTools()
+		return m.listDirClientTools(serverName, projectPath, dirClient)
 	}
 	m.mu.RLock()
 	client, exists := m.clients[serverName]
@@ -1627,6 +1675,73 @@ func (m *Manager) ProjectListTools(projectPath, serverName string) ([]Tool, erro
 		return nil, fmt.Errorf("server %q not found", serverName)
 	}
 	return client.ListTools()
+}
+
+// projectToolListBudget bounds how long a project's listing waits on a dir
+// client's tools. The worker gives each mcp.list_tools 10s
+// (toolexec daemonMCPRuntime.listTools); answering inside that keeps one slow
+// server from failing the listing of every other.
+var projectToolListBudget = 8 * time.Second
+
+// ErrToolsStillLoading is a dir-scoped server whose tools are not known yet
+// because its server is still starting for the project.
+var ErrToolsStillLoading = errors.New("still starting in this project; its tools are offered once it answers")
+
+// listDirClientTools lists a dir client's tools within projectToolListBudget.
+// Concurrent listings of one (server, project) share one probe.
+func (m *Manager) listDirClientTools(serverName, projectPath string, client Client) ([]Tool, error) {
+	if lc, ok := client.(*lazyClient); ok {
+		if tools, cached := lc.cachedManifest(); cached {
+			return tools, nil
+		}
+	}
+	ch := m.toolListFlights.DoChan(dirClientKey(serverName, normalizeProjectPath(projectPath)), func() (interface{}, error) {
+		return client.ListTools()
+	})
+	timer := time.NewTimer(projectToolListBudget)
+	defer timer.Stop()
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return nil, res.Err
+		}
+		tools, _ := res.Val.([]Tool)
+		return tools, nil
+	case <-timer.C:
+		return nil, fmt.Errorf("MCP server %q is %w", serverName, ErrToolsStillLoading)
+	}
+}
+
+// ProjectToolCount is how many tools a project-scoped server offers the
+// project, as far as is known WITHOUT starting anything: a status report must
+// answer at once, and a dir-scoped server's first listing may start a tree
+// indexer. ok is false when it is not known yet (a dir-scoped server not yet
+// listed for this project).
+func (m *Manager) ProjectToolCount(projectPath, serverName string) (int, bool) {
+	normalized := normalizeProjectPath(projectPath)
+	m.mu.RLock()
+	cfg, registered := m.serverConfigs[serverName]
+	dirClient, hasDir := m.dirClients[dirClientKey(serverName, normalized)]
+	shared, hasShared := m.clients[serverName]
+	m.mu.RUnlock()
+	if registered && isDirScopedServer(cfg) {
+		if !hasDir {
+			return 0, false
+		}
+		if lc, ok := dirClient.(*lazyClient); ok {
+			tools, cached := lc.cachedManifest()
+			return len(tools), cached
+		}
+		return 0, false
+	}
+	if !hasShared {
+		return 0, false
+	}
+	tools, err := shared.ListTools()
+	if err != nil {
+		return 0, false
+	}
+	return len(tools), true
 }
 
 // ListProjectTools returns tools from all connected project-scoped MCP servers.
@@ -1657,7 +1772,7 @@ func (m *Manager) ListProjectTools(projectPath string) (map[string][]Tool, error
 		if isDir {
 			// Private and lazily (re)spawned, like a dir-scoped call: its
 			// failure is not the shared server's health.
-			tools, err := dirClient.ListTools()
+			tools, err := m.listDirClientTools(name, projectPath, dirClient)
 			if err != nil {
 				logging.Error("Failed to list tools from dir-scoped MCP server", "name", name, "projectPath", projectPath, "error", err)
 				errors = append(errors, fmt.Errorf("%s: %w", name, err))

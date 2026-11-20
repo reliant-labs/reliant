@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
 )
@@ -271,5 +273,188 @@ func TestProjectServerConfig_ReadsTheCurrentProjectConfig(t *testing.T) {
 	}
 	if _, ok := m.ProjectServerConfig(context.Background(), "", "tickets"); ok {
 		t.Fatal("no project, no project config")
+	}
+}
+
+// slowStartClient is a server whose start takes as long as the test says: its
+// handshake waits for release.
+type slowStartClient struct {
+	fakeManagerClient
+	release <-chan struct{}
+}
+
+func (c *slowStartClient) Initialize(ctx context.Context) error {
+	select {
+	case <-c.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *slowStartClient) ListTools() ([]Tool, error) {
+	return []Tool{{Name: "find_symbol"}}, nil
+}
+
+func shortToolListBudget(t *testing.T) {
+	t.Helper()
+	prev := projectToolListBudget
+	projectToolListBudget = 20 * time.Millisecond
+	t.Cleanup(func() { projectToolListBudget = prev })
+}
+
+// A dir-scoped server that takes long to start for a project answers its
+// listing within the budget, as still starting, instead of holding the caller
+// past the worker's 10s per-listing timeout. The start goes on once, however
+// many listings ask meanwhile, and the listing after it has its tools.
+func TestProjectListTools_ColdDirServerAnswersWithinTheBudget(t *testing.T) {
+	shortToolListBudget(t)
+	project := t.TempDir()
+	release := make(chan struct{})
+	var starts atomic.Int32
+	m := NewManager(RoleDaemon)
+	defer func() { _ = m.Close() }()
+	m.clientFactory = func(string, config.MCPServer) (Client, error) {
+		starts.Add(1)
+		return &slowStartClient{release: release}, nil
+	}
+	cfg := config.MCPServer{Type: config.MCPStdio, Command: "gopls", Enabled: true, DirScoped: true}
+	if err := m.AddServer(context.Background(), "lsp", cfg); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	m.trackProjectServer(project, "lsp")
+
+	for i := 0; i < 3; i++ {
+		_, err := m.ProjectListTools(project, "lsp")
+		if !errors.Is(err, ErrToolsStillLoading) {
+			t.Fatalf("listing %d of a server still starting = %v, want ErrToolsStillLoading", i, err)
+		}
+	}
+	if n := starts.Load(); n != 1 {
+		t.Fatalf("concurrent listings started the server %d times, want once", n)
+	}
+	if _, ok := m.ProjectToolCount(project, "lsp"); ok {
+		t.Fatal("a tool count is not known before the server answered")
+	}
+
+	close(release)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if n, ok := m.ProjectToolCount(project, "lsp"); ok {
+			if n != 1 {
+				t.Fatalf("tool count = %d, want 1", n)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the start that outlived the budget never delivered its tools")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	tools, err := m.ProjectListTools(project, "lsp")
+	if err != nil || len(tools) != 1 || tools[0].Name != "find_symbol" {
+		t.Fatalf("listing after the start = %v, %v", tools, err)
+	}
+	if n := starts.Load(); n != 1 {
+		t.Fatalf("the listing after the start started it again (%d starts)", n)
+	}
+}
+
+// A status report never starts a dir-scoped server: ProjectToolCount answers
+// from what a listing already learned.
+func TestProjectToolCount_NeverStartsADirScopedServer(t *testing.T) {
+	project := t.TempDir()
+	var starts atomic.Int32
+	m := NewManager(RoleDaemon)
+	defer func() { _ = m.Close() }()
+	m.clientFactory = func(_ string, cfg config.MCPServer) (Client, error) {
+		starts.Add(1)
+		return &treeServerClient{dir: cfg.Dir}, nil
+	}
+	cfg := config.MCPServer{Type: config.MCPStdio, Command: "python3", Enabled: true, DirScoped: true}
+	if err := m.AddServer(context.Background(), "tickets", cfg); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	m.trackProjectServer(project, "tickets")
+
+	if _, ok := m.ProjectToolCount(project, "tickets"); ok || starts.Load() != 0 {
+		t.Fatalf("status started the server (%d starts) or invented a count", starts.Load())
+	}
+	if _, err := m.ProjectListTools(project, "tickets"); err != nil {
+		t.Fatalf("listing: %v", err)
+	}
+	if n, ok := m.ProjectToolCount(project, "tickets"); !ok || n != 1 {
+		t.Fatalf("count after a listing = %d, %v; want 1, true", n, ok)
+	}
+}
+
+// Two loads that see one edit at once replace the server once: the second
+// waits for the first and finds the new config already running, so it neither
+// closes the process the first started nor starts another.
+func TestEnsureProjectServersLoaded_ConcurrentLoadsReplaceAnEditedServerOnce(t *testing.T) {
+	config.UseUserConfigDirForTest(t, t.TempDir())
+	projA, projB := t.TempDir(), t.TempDir()
+	cfgs := &editableConfig{servers: map[string]config.MCPServer{}}
+	release := make(chan struct{})
+	var newStarts atomic.Int32
+	var started []*slowStartClient
+	var mu sync.Mutex
+	m := NewManager(RoleDaemon)
+	defer func() { _ = m.Close() }()
+	m.clientFactory = func(_ string, cfg config.MCPServer) (Client, error) {
+		if cfg.Command != "new-tickets" {
+			return &fakeManagerClient{}, nil
+		}
+		newStarts.Add(1)
+		c := &slowStartClient{release: release}
+		mu.Lock()
+		started = append(started, c)
+		mu.Unlock()
+		return c, nil
+	}
+	m.SetProjectConfigResolver(cfgs.resolve)
+
+	// Both projects load the user-scope server under its old config.
+	cfgs.set("tickets", config.MCPServer{Type: config.MCPStdio, Command: "old-tickets", Enabled: true})
+	m.EnsureProjectServersLoaded(context.Background(), projA)
+	m.EnsureProjectServersLoaded(context.Background(), projB)
+
+	cfgs.set("tickets", config.MCPServer{Type: config.MCPStdio, Command: "new-tickets", Enabled: true})
+	results := make([]*ProjectServerLoadResult, 2)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); results[0] = m.EnsureProjectServersLoaded(context.Background(), projA) }()
+	// A is starting the new server (blocked in its handshake). B now sees the
+	// same edit.
+	for newStarts.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	wg.Add(1)
+	go func() { defer wg.Done(); results[1] = m.EnsureProjectServersLoaded(context.Background(), projB) }()
+	// Give an unserialized B the time to start a second replacement; a
+	// serialized one is waiting for A and starts nothing either way.
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for newStarts.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	close(release)
+	wg.Wait()
+
+	if n := newStarts.Load(); n != 1 {
+		t.Fatalf("the edited server was replaced %d times, want once", n)
+	}
+	for i, r := range results {
+		if r.HasFailures() || len(r.LoadedServers) != 1 {
+			t.Fatalf("load %d: loaded=%v errors=%v", i, r.LoadedServers, r.Errors)
+		}
+	}
+	client, ok := m.GetClient("tickets")
+	if !ok || client != Client(started[0]) || started[0].closed {
+		t.Fatalf("the running client is not the one replacement, open (ok=%v)", ok)
+	}
+	for _, p := range []string{projA, projB} {
+		if _, ok := m.GetProjectClient(p, "tickets"); !ok {
+			t.Fatalf("project %s lost the server", p)
+		}
 	}
 }

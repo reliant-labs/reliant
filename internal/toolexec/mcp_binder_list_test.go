@@ -28,15 +28,20 @@ func (r *listingRouter) SendDaemonCommand(_ context.Context, _ string, commandTy
 			return nil, err
 		}
 		if r.failing[req.ServerName] {
-			return []byte(`{"error":"MCP server \"` + req.ServerName + `\" exited before completing the handshake"}`), nil
+			// What a daemon answers for a dir-scoped server still starting
+			// past its listing budget (mcp.ErrToolsStillLoading), or one
+			// that failed its handshake.
+			return []byte(`{"error":"MCP server \"` + req.ServerName + `\" is still starting in this project; its tools are offered once it answers"}`), nil
 		}
 		return []byte(`{"tools":[{"name":"` + req.ServerName + `_tool"}]}`), nil
 	}
 	return nil, nil
 }
 
-// One server that cannot list its tools leaves out only its own. It used to
-// fail the whole listing, so the turn lost every other server's tools too.
+// One server that cannot list its tools yet (a dir-scoped indexer still
+// starting for the project, or a broken command) leaves out only its own. It
+// used to fail the whole listing, so the turn lost every other server's tools
+// too.
 func TestDaemonMCPRuntime_OneFailingServerDoesNotHideTheOthers(t *testing.T) {
 	router := &listingRouter{failing: map[string]bool{"tickets": true}}
 	turn := bindSlowMCPRuntime(t, NewDaemonMCPContextBinder(router))

@@ -310,11 +310,14 @@ func handleMCPServerStatus(_ context.Context, payload []byte) ([]byte, error) {
 			entry.ResourcesEnabled = info.Capabilities.Resources != nil
 			entry.PromptsEnabled = info.Capabilities.Prompts != nil
 		}
-		listTools := client.ListTools
+		// A project's count never starts a server: a dir-scoped server's
+		// first start can outlast the caller's whole status budget, and the
+		// count is only what is known. Its tools come from mcp.list_tools.
 		if req.ProjectPath != "" {
-			listTools = func() ([]mcp.Tool, error) { return mgr.ProjectListTools(req.ProjectPath, name) }
-		}
-		if tools, err := listTools(); err == nil {
+			if n, ok := mgr.ProjectToolCount(req.ProjectPath, name); ok {
+				entry.ToolCount = n
+			}
+		} else if tools, err := client.ListTools(); err == nil {
 			entry.ToolCount = len(tools)
 		}
 
