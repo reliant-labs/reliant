@@ -36,6 +36,30 @@ import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
 import { DashboardView, type DashboardHrefs } from "./DashboardView";
 import type { DashboardHub } from "./dashboardHubs";
 import { useDashboardHub } from "./useDashboardHub";
+import { useSeveralApps } from "../../Console/severalProjects";
+import { orgDashboardHref } from "../../Org/OrgDashboards";
+import Link from "@/components/forge-ui/link";
+import { Activity } from "lucide-react";
+
+function LiveStateCard({ href }: { href: string }) {
+  return (
+    <Link
+      href={href}
+      className="no-color flex items-start gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-ink transition-colors hover:bg-ink/5"
+      data-testid="dashboards-live-state"
+    >
+      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg border border-border text-ink-muted">
+        <Activity className="size-4" aria-hidden="true" />
+      </span>
+      <span className="min-w-0">
+        <span className="flex items-center gap-2 text-ui font-medium">
+          Live state <span className="text-meta font-normal text-ink-muted">Built in</span>
+        </span>
+        <span className="block text-meta text-ink-muted">Every service&apos;s instances, CPU, memory, requests, latency and errors, as Services shows them.</span>
+      </span>
+    </Link>
+  );
+}
 
 /** The roster's recorded environments, as the observability pages address them (control-plane id ↔ name). */
 function useRecordedEnvs(): ObsEnvironment[] {
@@ -139,7 +163,45 @@ function useNavigateTo() {
 }
 
 export function DashboardsPage() {
-  const { forgeProject, env, roster } = useForgeConsole();
+  const several = useSeveralApps();
+  if (several) return <DashboardsAcrossProjects apps={several.apps.map((candidate) => candidate.app)} />;
+  return <ProjectDashboardsPage />;
+}
+
+/**
+ * Dashboards of several projects (U6c): the org-wide list (read-only; each
+ * row opens in its app), narrowed to the shell's projects by default, plus
+ * the organization's own views. The `apps` key is the URL's.
+ */
+function DashboardsAcrossProjects({ apps }: { apps: string[] }) {
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as DashboardsSearch & { apps?: string[] };
+  const onSearch = useSearchUpdater<DashboardsSearch>();
+  const navigateTo = useNavigateTo();
+  const orgEnvironments = useOrgScopedEnvs();
+  const selected = search.apps ?? apps;
+  const appFilter = useMemo(
+    () => ({
+      selected,
+      onChange: (next: string[]) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, apps: next.length ? next : undefined }), replace: true } as never),
+    }),
+    [selected, navigate]
+  );
+  return (
+    <div className="space-y-4" data-testid="console-dashboards" data-mode="several">
+      <div>
+        <h1 className="text-section text-ink">Dashboards</h1>
+        <p className="mt-1 text-ui text-ink-muted">Every dashboard of {apps.length} projects, and your organization&apos;s. Each opens in its own project.</p>
+      </div>
+      <DashboardsList env="all" environments={orgEnvironments.environments} search={{ q: search.q, group: search.group, source: search.source, owner: search.owner }} onSearch={onSearch} hrefs={ORG_HREFS} navigateTo={navigateTo} appFilter={appFilter} />
+    </div>
+  );
+}
+
+const ORG_HREFS = { dashboard: orgDashboardHref };
+
+function ProjectDashboardsPage() {
+  const { forgeProject, env, roster, href } = useForgeConsole();
   const search = useSearch({ strict: false }) as DashboardsSearch;
   const onSearch = useSearchUpdater<DashboardsSearch>();
   const environments = useRecordedEnvs();
@@ -155,6 +217,8 @@ export function DashboardsPage() {
     <div className="space-y-4" data-testid="console-dashboards">
       <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
       {environments.length === 0 && !roster.isLoading && !roster.resolvingName && <NoEnvironmentsState topic="dashboards" />}
+      {/* The built-in Live state (U6c): every service's charts, from the hook the Services tab reads. */}
+      {environments.length > 0 && <LiveStateCard href={href({ kind: "live-state" })} />}
       <DashboardsList
         project={forgeProject}
         env={env}
