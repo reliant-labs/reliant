@@ -378,7 +378,8 @@
                   "guides/forge/build-go-react-app-connect-rpc",
                   "guides/forge/build-app-from-one-prompt",
                   "guides/forge/deploy-static-site-cdn",
-                  "guides/forge/bring-existing-app-any-language"
+                  "guides/forge/bring-existing-app-any-language",
+                  "guides/forge/adopt-existing-vite-nextjs"
                 ]
               },
               {
@@ -404,7 +405,8 @@
                   "guides/forge/gate-prs-forge-lint-tests",
                   "guides/forge/test-go-api-real-postgres",
                   "guides/forge/find-endpoints-missing-auth-checks",
-                  "guides/forge/scan-dependencies-vulnerabilities"
+                  "guides/forge/scan-dependencies-vulnerabilities",
+                  "guides/forge/connect-claude-code-cursor-mcp"
                 ]
               }
             ]
