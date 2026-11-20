@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/uuid"
@@ -81,16 +82,18 @@ func TestRefusesToolRequestsOnlyWhileDraining(t *testing.T) {
 // A heartbeat without the field — a daemon that predates the protocol, or one
 // back to CURRENT — routes as before; a daemon that came back routes again.
 func TestHeartbeatWithoutUpgradeStatusRoutesNormally(t *testing.T) {
-	conn := newTestConn("u", "d", nil)
-	conn.recordUpgradeStatus(nil)
-	assert.False(t, conn.refusesToolRequests())
-	conn.recordUpgradeStatus(&reliantv1.DaemonUpgradeStatus{State: reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED})
-	require.True(t, conn.refusesToolRequests())
-	until, ok := conn.updatingUntil()
-	require.True(t, ok)
-	assert.WithinDuration(t, time.Now(), until, time.Second, "a drain with no deadline is waited on from now")
-	conn.recordUpgradeStatus(nil)
-	assert.False(t, conn.refusesToolRequests())
+	synctest.Test(t, func(t *testing.T) {
+		conn := newTestConn("u", "d", nil)
+		conn.recordUpgradeStatus(nil)
+		assert.False(t, conn.refusesToolRequests())
+		conn.recordUpgradeStatus(&reliantv1.DaemonUpgradeStatus{State: reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_DRAINED})
+		require.True(t, conn.refusesToolRequests())
+		until, ok := conn.updatingUntil()
+		require.True(t, ok)
+		assert.Equal(t, time.Now(), until, "a drain without a deadline uses the current virtual time")
+		conn.recordUpgradeStatus(nil)
+		assert.False(t, conn.refusesToolRequests())
+	})
 }
 
 // RestartRequested goes only to a daemon that declared it acts on it. An old
