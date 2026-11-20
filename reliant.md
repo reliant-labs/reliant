@@ -49,7 +49,10 @@ commit that lands is the commit that was tested. **Review first:** a PR push run
 nothing heavy (`CI result` is green on the PR in about a minute); the merge gate
 runs once, in the queue, after `pr-review` passes the PR; the full suite runs on
 main after the merge and gates the release, never the merge. Label a PR `ci:run`
-(then push) to run the merge gate on it before review.
+(then push) to run the merge gate on it before review. **Approval is a check,
+never a label** (owner, 2026-11-20): merging requires the required checks (`CI
+result`, `Reliant review`); the `review:*` and `merge:*` labels are markers only,
+and no label turns a check green.
 
 **GitHub identity (owner, 2026-10-30):** implementation is yours: commit, push
 and open PRs as the user, with plain `git` and `gh`. Every review, label, comment
