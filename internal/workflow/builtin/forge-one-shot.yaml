@@ -123,7 +123,11 @@ nodes:
       # FORGE_PLAN.md is checked first: this loop owns the scoping conversation and
       # the plan is the only artifact carrying its decisions to the fan-out units.
       # Skipping it fails silently — the units read nothing and invent their scope.
-      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && { [ -s FORGE_PLAN.md ] || { echo 'FORGE_PLAN.md is missing or empty — write the plan before the gate can pass'; exit 1; }; } && reliant forge generate && reliant forge lint"
+      # An unattended run must also record the decisions it made without a
+      # person, under the heading the scoping prompt names: it is the only mark
+      # of a choice nobody asked for, so the gate holds the run to it rather
+      # than trusting the prompt alone.
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && { [ -s FORGE_PLAN.md ] || { echo 'FORGE_PLAN.md is missing or empty — write the plan before the gate can pass'; exit 1; }; } && { [ '{{inputs.unattended}}' != true ] || grep -q '^## Decisions made without the user' FORGE_PLAN.md || { echo 'FORGE_PLAN.md has no \"## Decisions made without the user\" section: an unattended run records every decision it made without the user there, with the reason'; exit 1; }; } && reliant forge generate && reliant forge lint"
       build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge build"
       # The born CRUD tests are forge's own output, and the only check that a
       # generated Create works against the schema forge derived from the same
