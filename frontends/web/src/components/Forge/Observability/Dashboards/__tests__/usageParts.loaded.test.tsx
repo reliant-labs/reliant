@@ -27,21 +27,20 @@ describe("Loaded", () => {
     expect(screen.getByText("$4.00")).toBeInTheDocument();
   });
 
-  it("treats another organization's answer as still loading, asks again once, and says nothing about it", () => {
-    const q = query({ data: { orgId: "org-b", figure: "$9.99" } });
+  it("hides foreign cached data without starting, repeating, or cancelling a query fetch", () => {
+    const q = query({ isFetching: true, data: { orgId: "org-b", figure: "$9.99" } });
     const { rerender } = render(panel(q));
     expect(screen.getByRole("status")).toHaveTextContent("Loading credit…");
     expect(screen.queryByText("$9.99")).not.toBeInTheDocument();
-    expect(document.body).not.toHaveTextContent(/organization/i);
-    expect(q.refetch).toHaveBeenCalledTimes(1);
-    // Re-renders with the same foreign answer do not ask again.
-    rerender(panel({ ...q, isFetching: true }));
-    rerender(panel(q));
-    expect(q.refetch).toHaveBeenCalledTimes(1);
-    // Asked again and still foreign: a plain "couldn't load", never the figure.
+    rerender(panel({ ...q, data: undefined }));
+    expect(screen.getByRole("status")).toHaveTextContent("Loading credit…");
+    rerender(panel({ ...q, data: { orgId: "org-c", figure: "$6.66" } }));
+    expect(screen.queryByText("$6.66")).not.toBeInTheDocument();
+    rerender(panel({ ...q, isFetching: false }));
     expect(screen.getByTestId("panel-unavailable")).toHaveTextContent("Couldn't load credit.");
     expect(screen.queryByText("$9.99")).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/organization/i);
+    expect(q.refetch).not.toHaveBeenCalled();
   });
 
   it("says plainly that a failed read could not load, with a Try again that refetches", async () => {

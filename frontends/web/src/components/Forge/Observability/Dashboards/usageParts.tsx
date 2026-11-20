@@ -7,7 +7,7 @@
  * nothing to draw, and the permission and unavailable states.
  */
 
-import { useEffect, useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import Badge from "@/components/forge-ui/badge";
@@ -247,10 +247,9 @@ export interface LoadedQuery<T> {
  * A panel body over one query: loading, couldn't load (with Try again), or
  * the content.
  *
- * An answer for another organization is never shown. The hooks already keep
- * one out of the cache (organization-usage-queries forOrg), so this is a
- * backstop: it reads as loading and asks again, once per foreign answer, and
- * says nothing about it on screen.
+ * An answer for another organization is never shown. The query function owns
+ * the bounded retry (forOrg), once per fetch before caching anything. This
+ * backstop hides unexpected cached data without starting a competing fetch.
  */
 export function Loaded<T extends { orgId: string }>({
   query,
@@ -263,25 +262,16 @@ export function Loaded<T extends { orgId: string }>({
   what: string;
   children: (data: T) => ReactNode;
 }) {
-  const foreign = query.data !== undefined && query.data.orgId !== orgId ? `${orgId}\u0000${query.data.orgId}` : null;
-  const askedAgain = useRef<string | null>(null);
+  const foreign = query.data !== undefined && query.data.orgId !== orgId;
   const { refetch } = query;
-  useEffect(() => {
-    if (foreign === null || askedAgain.current === foreign) return;
-    askedAgain.current = foreign;
-    void refetch();
-  }, [foreign, refetch]);
-
-  // A foreign answer reads as loading until the second ask settles.
-  const reasking = foreign !== null && (askedAgain.current !== foreign || !!query.isFetching);
-  if (query.isPending || reasking) {
+  if (query.isPending || (query.isFetching && (foreign || query.data === undefined))) {
     return (
       <p role="status" className="text-sm text-ink-muted">
         Loading {what}…
       </p>
     );
   }
-  if (query.isError || !query.data || foreign !== null) {
+  if (query.isError || !query.data || foreign) {
     return (
       <div role="alert" className="text-sm text-ink-muted" data-testid="panel-unavailable">
         <p>Couldn't load {what}.</p>

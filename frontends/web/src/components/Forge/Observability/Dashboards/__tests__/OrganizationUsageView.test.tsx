@@ -223,6 +223,23 @@ describe("OrganizationUsageView", () => {
     expect(document.body).not.toHaveTextContent(/different organization|does not match/i);
   });
 
+  it("retries each fresh fetch once even when it repeats a previously seen foreign org", async () => {
+    const user = userEvent.setup();
+    const own = organizationCostFixture();
+    const foreign = { ...own, orgId: "org-someone-else" };
+    getSummary.mockReset().mockResolvedValueOnce(foreign).mockResolvedValueOnce(foreign).mockResolvedValueOnce(foreign).mockResolvedValueOnce(own);
+    view();
+    const credit = await screen.findByTestId("usage-credit");
+    await within(credit).findByText("Couldn't load credit.");
+    expect(getSummary).toHaveBeenCalledTimes(2);
+    expect(credit).not.toHaveTextContent("$");
+
+    await user.click(within(credit).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(credit).toHaveTextContent("-$2.50"));
+    expect(getSummary).toHaveBeenCalledTimes(4);
+    expect(getSummary.mock.calls.every(([org]) => org === ORG)).toBe(true);
+  });
+
   it("says only that a panel could not load when every answer names another organization", async () => {
     getSummary.mockReset().mockResolvedValue({ ...organizationCostFixture(), orgId: "org-someone-else" });
     view();
