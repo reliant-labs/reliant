@@ -827,6 +827,8 @@ export const forgeConsoleServicesSearchSchema = z.object({
   metric: textParam,
   // Several projects in the shell (U6c): the in-page project filter (Console/severalProjects.tsx).
   only: z.string().optional().catch(undefined),
+  // Services' view (U6e): absent is the table, `charts` every workload's charts (Services/ServiceCharts.tsx).
+  view: z.literal("charts").optional().catch(undefined),
 });
 
 /**

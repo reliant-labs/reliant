@@ -3,7 +3,7 @@
 /**
  * useAppLiveState(app, env, range): THE read behind every live-state view
  * (U6c, owner 2026-11-20) — the Services tab (list and detail), the
- * Overview's live-state strip, and the built-in Live state dashboard. It
+ * Overview's live-state strip, and Services' charts view (U6e). It
  * combines the live view (environments and their releases), ListWorkloads,
  * GetServiceOverview and GetStatus into one model (liveStateModel.ts), so the
  * three places always show the same numbers.
@@ -92,7 +92,7 @@ export function useAppLiveState(app: string | null, env: string, range: RangePre
 
 /**
  * One workload's CPU and memory over the window, summed over its containers
- * (GetWorkload): the live-state strip's sparklines and the dashboard's charts.
+ * (GetWorkload): the live-state strip's sparklines, Services' charts and Data's database figures.
  * Shares its cache entry with the service's page.
  */
 export function useWorkloadUsage(scope: ObsScope | null, range: RangePreset, name: string, envId: string | undefined) {

@@ -12,9 +12,10 @@
  *   /forge/p/:project/observability/dashboards/:kind/:key
  *                                             one dashboard: a release one (`release/<id>`)
  *                                             or a workspace one (`workspace/<slug>`)
- *   /forge/p/:project/storage                 Storage: the scoped environment's buckets, read-only
+ *   /forge/p/:project/storage                 Storage: the scoped environment's buckets, read-only (buckets only, U6e)
  *                                             (`bucket`, `prefix`, `object`, `token`: Storage/storageUrl-model.ts)
- *   /forge/p/:project/data                    Data: the scoped environment's databases, read-only
+ *   /forge/p/:project/data                    Data: the database's home (U6e): each managed Postgres in scope,
+ *                                             then the scoped environment's tables, read-only
  *                                             (`db`, `table`, `f`, `sort`, `cols`, `page`, `size`, `row`:
  *                                             Data/dataUrl-model.ts)
  *   /forge/p/:project/auth[/:tab]             Auth (U6d): users (who can sign in to the scoped environment,
@@ -26,14 +27,17 @@
  *   /forge/p/:project/domains                 Domains
  *   /forge/p/:project/activity                Activity (the audit log)
  *   /forge/p/:project/services                Services: every workload, the site and the database, live
- *   /forge/p/:project/services/:name          one of them, across the environments in scope
+ *                                             (`view=charts`: each workload's charts, U6e)
+ *   /forge/p/:project/services/:name          one of them, across the environments in scope; a
+ *                                             database's name redirects to Data (U6e)
  *   /forge/p/:project/usage                   Usage: what the app's hosting costs this month
  *   /forge/p/:project/events                  Product analytics › Events & metrics
  *   /forge/p/:project/analytics[/:tab]        Analytics: the built-in Product analytics dashboards as
  *                                             tabs (overview · users · product · acquisition) + events
  *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
  *   /forge/p/:project/observability/dashboards/live-state
- *                                             the built-in Live state dashboard
+ *                                             → services?view=charts (the retired Live state
+ *                                             dashboard, U6e; redirected, search kept)
  *   /forge/p/:project/security/vulnerabilities
  *                                             Security › Vulnerabilities: the findings of the
  *                                             scope's releases (`release`, `severity`, `fixable`,
@@ -187,9 +191,10 @@ export type ConsolePage =
   /** Speed insights (U6c): web vitals per page, from the browser runtime's RUM spans (Analytics/SpeedInsightsPage.tsx). */
   | { kind: "speed-insights" }
   /**
-   * The built-in Live state dashboard (U6c): charts per service — instances,
-   * CPU, memory, rate, latency, errors — from the hook the Services tab reads
-   * (LiveState/LiveStateDashboard.tsx). Listed on Dashboards beside the custom ones.
+   * @deprecated U6e: the Live state dashboard merged into Services
+   * (`?view=charts`, Services/ServiceCharts.tsx). Kept so links built with it
+   * still compile; it builds the Services path, and its old URL redirects
+   * there. Use `{ kind: "services" }` or servicesChartsPath.
    */
   | { kind: "live-state" }
   /** Security › Vulnerabilities: the findings of the scope's releases (Security/VulnerabilitiesPage.tsx). */
@@ -211,7 +216,7 @@ export function isAuthTab(value: string | undefined): value is AuthTab {
   return (AUTH_TABS as readonly string[]).includes(value ?? "");
 }
 
-/** The Live state dashboard's segment under Dashboards: one segment, so it never meets `dashboards/$kind/$key`. */
+/** The retired Live state dashboard's segment under Dashboards (its route only redirects to Services, U6e). */
 export const LIVE_STATE_SEGMENT = "live-state";
 
 /** The Analytics page's tabs, in order: forge's four built-in Product analytics dashboards, then Events & metrics. */
@@ -319,7 +324,8 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
     case "speed-insights":
       return `${base}/speed-insights`;
     case "live-state":
-      return `${base}/observability/dashboards/${LIVE_STATE_SEGMENT}`;
+      // Retired (U6e): the Live state dashboard is Services' charts view.
+      return `${base}/services`;
     case "extension":
       return `${base}/${encodeURIComponent(page.segment)}`;
     case "vulnerabilities":
@@ -336,12 +342,22 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
 /** The project's landing page: Home and Overview, merged. */
 export const overviewPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "overview" }, ctx);
 export const servicesPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "services" }, ctx);
-/** Storage: buckets and the managed Postgres databases. */
+/** Storage: buckets (object storage) only (U6e). */
 export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "storage" }, ctx);
 /** Dashboards: built-in and custom, the one place they are listed. */
 export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "dashboards" }, ctx);
 export const analyticsPath = (app: string, tab?: AnalyticsTab, ctx?: PathContext) => consolePath(app, { kind: "analytics", tab }, ctx);
-export const liveStatePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "live-state" }, ctx);
+/** Data: the database's home (U6e): its status, backups and metrics as reported, then its tables. */
+export const dataPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "data" }, ctx);
+/** Services' charts view (U6e): every workload's charts, what the Live state dashboard showed. */
+export const servicesChartsPath = (app: string, ctx?: PathContext) => withSearch(servicesPath(app, ctx), { view: "charts" });
+/**
+ * @deprecated U6e: the Live state dashboard merged into Services. Points at
+ * Services' charts view (servicesChartsPath), so callers on other branches
+ * still compile and land on the same content. Use servicesPath or
+ * servicesChartsPath.
+ */
+export const liveStatePath = servicesChartsPath;
 export const speedInsightsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "speed-insights" }, ctx);
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);

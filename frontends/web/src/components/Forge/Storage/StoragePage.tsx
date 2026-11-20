@@ -13,11 +13,13 @@
  * resolves the scope to one recorded environment and binds the URL.
  *
  * U6c (owner: "not seeing storage buckets"): Storage is a top-level
- * destination for everything the app keeps — its buckets AND its managed
- * Postgres databases (each a link to its Services page and to Data). With
- * every environment in scope it lists each environment's buckets instead of
- * asking for one; with several projects in the shell, one list across them
- * with a Project column and an in-page project filter (`?only=`).
+ * destination. With every environment in scope it lists each environment's
+ * buckets instead of asking for one; with several projects in the shell, one
+ * list across them with a Project column and an in-page project filter
+ * (`?only=`).
+ *
+ * U6e (owner: "data and storage got mixed up"): Storage is object storage —
+ * buckets — only. The managed Postgres databases are Data's.
  */
 
 import { useCallback, useMemo, type ReactNode } from "react";
@@ -37,15 +39,16 @@ import { CloudNotice } from "../SourceNotices";
 import { StorageBrowser } from "./StorageBrowser";
 import { StorageNote } from "./StorageStates";
 import { pickStorageSearch, type StorageSearch } from "./storageUrl-model";
-import { BucketsSection, BucketTable, EmptyRow, EnvBucketRows, ProjectDatabases, StorageAcrossProjects } from "./StorageOverview";
-import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { BucketsSection, BucketTable, EmptyRow, EnvBucketRows, StorageAcrossProjects } from "./StorageOverview";
 import { useSeveralApps } from "../Console/severalProjects";
 
-function Frame({ children, databases = true }: { children: ReactNode; databases?: boolean }) {
+/** Storage's own line (U6e): buckets only. The nav's shared subtitle still names the databases until it moves too. */
+const STORAGE_SUBTITLE = "Your app's buckets: uploads, assets and every file it keeps";
+
+function Frame({ children }: { children: ReactNode }) {
   return (
     <div className="min-w-0 space-y-6" data-testid="console-storage">
-      <PageHeader density="compact" title="Storage" subtitle={PAGE_SUBTITLES.storage} className="mb-0" />
-      {databases && <ProjectDatabases />}
+      <PageHeader density="compact" title="Storage" subtitle={STORAGE_SUBTITLE} className="mb-0" />
       {children}
     </div>
   );

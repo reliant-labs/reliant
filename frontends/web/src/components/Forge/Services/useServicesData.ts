@@ -2,8 +2,8 @@
 
 /**
  * The reads the Services list and a service's page share: the app's live
- * state (LiveState/useAppLiveState.ts, the one hook the Overview's strip and
- * the Live state dashboard read too), plus the console's strip environments,
+ * state (LiveState/useAppLiveState.ts, the one hook the Overview's strip
+ * reads too), plus the console's strip environments,
  * which a service's page needs for its recent deploys (who promoted what).
  */
 
@@ -16,6 +16,8 @@ import { useStripEnvs } from "../Workloads/WorkloadPages";
 export interface ServicesSearch {
   range?: RangePreset;
   metric?: string;
+  /** The list's view (U6e): absent is the table; `charts` is every workload's charts (the old Live state dashboard). */
+  view?: "charts";
 }
 
 export function useServicesData(range: RangePreset) {

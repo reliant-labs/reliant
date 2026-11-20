@@ -236,7 +236,6 @@ function renderAt(initialEntry: string, { inShell = false }: { inShell?: boolean
     events: probe("events"),
     analytics: probe("analytics"),
     speedInsights: probe("speed-insights"),
-    liveState: probe("live-state"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,

@@ -8,8 +8,12 @@
  *            the static site and the managed database: status, ready/desired,
  *            CPU and memory (each container's worst replica, summed), req/s,
  *            p95, error rate, and the release it runs.
+ *   charts   `?view=charts` (ServiceCharts.tsx, U6e): each workload's
+ *            charts — what the retired Live state dashboard showed, whose
+ *            URL redirects here. The view and the window are in the URL.
  *   detail   ServiceDetail.tsx: instances, charts, custom metrics, logs and
- *            traces, recent deploys; the database's own page.
+ *            traces, recent deploys. A database's row opens Data, the
+ *            database's home (U6e); its old /services/<db> URL redirects there.
  *
  * Read from what the Overview already reads (ListWorkloads, GetServiceOverview,
  * GetStatus), so the two pages agree. The Overview keeps a compact strip of
@@ -17,11 +21,13 @@
  */
 
 import type { ReactNode } from "react";
-import { useParams, useSearch } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 
 import Link from "@/components/forge-ui/link";
 import Status from "@/components/forge-ui/status";
+import Tabs from "@/components/forge-ui/tabs";
 import Tag from "@/components/forge-ui/tag";
+import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { useForgeConsole } from "../Console/consoleContext";
@@ -30,8 +36,10 @@ import { ENV_ALL } from "../Console/envScope";
 import { PAGE_SUBTITLES } from "../Console/groupedNav";
 import { formatBytes, formatCores, formatDuration, formatPercent, formatRate } from "../Observability/format";
 import { ObsAsOf, ObsError } from "../Observability/ObsStates";
+import { VariableSelect } from "../Observability/Dashboards/parts";
 import { shortVersion } from "../Releases/releaseModel";
 import { OVERVIEW_RANGE } from "../Workloads/workloadModel";
+import { ServiceCharts } from "./ServiceCharts";
 import { ServiceDetail } from "./ServiceDetail";
 import type { ServicesRow } from "./servicesModel";
 import { useServicesData, type ServicesSearch } from "./useServicesData";
@@ -45,11 +53,22 @@ export function ServicesPage() {
   return <ProjectServicesPage />;
 }
 
+/** The list's two views (U6e): the table, and every workload's charts (the old Live state dashboard). */
+const SERVICES_VIEWS = [
+  { id: "table", label: "Table" },
+  { id: "charts", label: "Charts" },
+];
+
 function ProjectServicesPage() {
   const { forgeProject, href } = useForgeConsole();
   const search = useSearch({ strict: false }) as ServicesSearch;
+  const navigate = useNavigate();
   const range = search.range ?? OVERVIEW_RANGE;
+  const charts = search.view === "charts";
   const data = useServicesData(range);
+  // The view and the window are the URL's, replaced in place: how the page looks, not a step Back retraces.
+  const setSearch = (patch: Partial<ServicesSearch>) =>
+    void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }), replace: true } as never);
   const { env, envs, envsLoading, listed, red, rows } = data;
   const all = env === ENV_ALL;
   if (!envsLoading && envs.length === 0) {
@@ -79,10 +98,30 @@ function ProjectServicesPage() {
           )
         }
       />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Tabs variant="pills" ariaLabel="Services view" tabs={SERVICES_VIEWS} activeTab={charts ? "charts" : "table"} onChange={(id) => setSearch({ view: id === "charts" ? "charts" : undefined })} />
+        <VariableSelect
+          id="services-range"
+          label="time"
+          value={range}
+          options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
+          onChange={(value) => setSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) })}
+        />
+      </div>
       {listed.error && !listed.data ? (
         <ObsError error={listed.error} subject={forgeProject} onRetry={() => void listed.refetch()} retrying={listed.isFetching} />
+      ) : charts ? (
+        <ServiceCharts live={data} loading={loading} range={range} />
       ) : (
-        <ServicesTable rows={rows} loading={loading} redLoading={red.isLoading} showEnv={all} hrefOf={(row) => href({ kind: "service", name: row.name }, all ? {} : { env: row.envName })} releaseHref={(version) => href({ kind: "release", version })} />
+        <ServicesTable
+          rows={rows}
+          loading={loading}
+          redLoading={red.isLoading}
+          showEnv={all}
+          // A database's page is Data (U6e): its tables, status and backups.
+          hrefOf={(row) => (row.type === "database" ? href({ kind: "data" }, { env: row.envName }) : href({ kind: "service", name: row.name }, all ? {} : { env: row.envName }))}
+          releaseHref={(version) => href({ kind: "release", version })}
+        />
       )}
       <p className="text-meta text-ink-muted">
         CPU and memory are each container&apos;s busiest instance, added up over the containers. Requests, p95 and errors are over the last {range}. A worker shows as a
@@ -295,7 +334,7 @@ function ProjectServiceRows({ project }: { project: SeveralApp }) {
       redLoading={live.red.isLoading}
       showEnv
       project={project.name}
-      hrefOf={(row) => withSearch(consolePath(project.app, { kind: "service", name: row.name }), { env: row.envName })}
+      hrefOf={(row) => withSearch(consolePath(project.app, row.type === "database" ? { kind: "data" } : { kind: "service", name: row.name }), { env: row.envName })}
       releaseHref={(version) => consolePath(project.app, { kind: "release", version })}
     />
   );
