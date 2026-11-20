@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	system "github.com/reliant-labs/reliant/internal/handlers/system"
@@ -30,5 +32,66 @@ func TestVersion_Generated(t *testing.T) {
 				}
 			},
 		},
+		{
+			Name: "no policy configured serves empty floors, not enforced",
+			Req:  connect.NewRequest(&pb.VersionRequest{}),
+			Check: func(t *testing.T, resp *connect.Response[pb.VersionResponse]) {
+				requireMinimums(t, resp.Msg.GetClientMinimums(), emptyMinimums())
+			},
+		},
 	}, svc.Version)
+}
+
+func TestVersion_ServesConfiguredClientMinimums(t *testing.T) {
+	t.Parallel()
+
+	svc := system.NewTestSystem(t, system.WithSystemDeps(system.Deps{ClientVersions: testPolicy()}))
+	resp, err := svc.Version(t.Context(), connect.NewRequest(&pb.VersionRequest{}))
+	if err != nil {
+		t.Fatalf("Version: %v", err)
+	}
+	requireMinimums(t, resp.Msg.GetClientMinimums(), testPolicyMinimums())
+}
+
+// testPolicy configures some kinds and leaves others unset, and sets the
+// daemon's commit-time key, which is the gateway's alone and must not be
+// served.
+func testPolicy() *configv1.ClientVersionPolicy {
+	return &configv1.ClientVersionPolicy{
+		Web: &configv1.WebClientVersionFloor{MinVersion: "1.9.0", UpgradeUrl: "https://app.reliantlabs.io"},
+		Desktop: &configv1.DesktopClientVersionFloor{
+			MinVersion: "1.9.0", UpgradeUrl: "https://reliantlabs.io/download",
+		},
+		Daemon: &configv1.DaemonClientVersionFloor{
+			MinVersion: "1.8.2-dev", UpgradeCommand: "reliant daemon restart", MinCommitTimeUnix: 1_763_000_000,
+		},
+		Cli:     &configv1.CliClientVersionFloor{MinVersion: "1.9.0", UpgradeCommand: "brew upgrade --cask reliant"},
+		Enforce: true,
+	}
+}
+
+func testPolicyMinimums() *pb.ClientMinimums {
+	return &pb.ClientMinimums{
+		Web:      &pb.ClientMinimum{MinVersion: "1.9.0", UpgradeUrl: "https://app.reliantlabs.io"},
+		Desktop:  &pb.ClientMinimum{MinVersion: "1.9.0", UpgradeUrl: "https://reliantlabs.io/download"},
+		Daemon:   &pb.ClientMinimum{MinVersion: "1.8.2-dev", UpgradeCommand: "reliant daemon restart"},
+		Cli:      &pb.ClientMinimum{MinVersion: "1.9.0", UpgradeCommand: "brew upgrade --cask reliant"},
+		SdkGo:    &pb.ClientMinimum{},
+		SdkTs:    &pb.ClientMinimum{},
+		Enforced: true,
+	}
+}
+
+func emptyMinimums() *pb.ClientMinimums {
+	return &pb.ClientMinimums{
+		Web: &pb.ClientMinimum{}, Desktop: &pb.ClientMinimum{}, Daemon: &pb.ClientMinimum{},
+		Cli: &pb.ClientMinimum{}, SdkGo: &pb.ClientMinimum{}, SdkTs: &pb.ClientMinimum{},
+	}
+}
+
+func requireMinimums(t *testing.T, got, want *pb.ClientMinimums) {
+	t.Helper()
+	if !proto.Equal(got, want) {
+		t.Fatalf("client_minimums = %v, want %v", got, want)
+	}
 }

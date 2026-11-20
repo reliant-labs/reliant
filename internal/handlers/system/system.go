@@ -89,13 +89,14 @@ func (s *Service) Info(
 	}
 
 	resp := &reliantv1.InfoResponse{
-		Version:      buildInfo.Version,
-		Commit:       buildInfo.Commit,
-		Date:         buildInfo.Date,
-		Branch:       buildInfo.Branch,
-		Api:          "v2",
-		Timestamp:    time.Now().UTC().Unix(),
-		WorktreeName: worktreeName,
+		Version:        buildInfo.Version,
+		Commit:         buildInfo.Commit,
+		Date:           buildInfo.Date,
+		Branch:         buildInfo.Branch,
+		Api:            "v2",
+		Timestamp:      time.Now().UTC().Unix(),
+		WorktreeName:   worktreeName,
+		ClientMinimums: clientMinimums(s.deps.ClientVersions),
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -108,10 +109,11 @@ func (s *Service) Version(
 	buildInfo := version.Get()
 
 	resp := &reliantv1.VersionResponse{
-		Version: buildInfo.Version,
-		Commit:  buildInfo.Commit,
-		Date:    buildInfo.Date,
-		Branch:  buildInfo.Branch,
+		Version:        buildInfo.Version,
+		Commit:         buildInfo.Commit,
+		Date:           buildInfo.Date,
+		Branch:         buildInfo.Branch,
+		ClientMinimums: clientMinimums(s.deps.ClientVersions),
 	}
 	return connect.NewResponse(resp), nil
 }

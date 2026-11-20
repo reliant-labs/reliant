@@ -1,0 +1,231 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// ClientVersionPolicy is the oldest build of each Reliant client this server
+// still serves, and whether it refuses older ones. Every server role reads it
+// (ServerProcessConfig.client_versions): the API server serves it on
+// SystemService.Version / Info and, when `enforce` is on, refuses a
+// below-floor client's calls with FailedPrecondition + upgrade_required; the
+// gateway compares registering daemons against the daemon floor.
+//
+// A client names itself in one request header, `Reliant-Client:
+// <kind>/<version>` (internal/clientversion). A floor with no min_version is
+// no floor. A client is below its floor only when its version is valid semver
+// and orders before min_version (prerelease and dev builds order by semver
+// precedence; build metadata is ignored). A missing or unparseable version is
+// never refused.
+//
+// One message per client kind, because a config field's env var is fixed by
+// its message: a single floor message reused for six kinds would read the
+// same variables six times. Each has the same min_version / upgrade_url /
+// upgrade_command getters; the daemon's adds min_commit_time_unix.
+//
+// The rules every config here follows are in config.proto's header.
+message ClientVersionPolicy {
+  WebClientVersionFloor web = 1;
+  DesktopClientVersionFloor desktop = 2;
+  DaemonClientVersionFloor daemon = 3;
+  CliClientVersionFloor cli = 4;
+  SdkGoClientVersionFloor sdk_go = 5;
+  SdkTsClientVersionFloor sdk_ts = 6;
+
+  // Off, a below-floor client is advertised the floor and logged and
+  // counted, never refused: the rollout's observe phase. Turning it on is an
+  // operational break for every client below a floor, so it is an owner's
+  // decision at a release cut.
+  bool enforce = 7 [(forge.v1.config) = {
+    env_var: "RELIANT_CLIENT_VERSION_ENFORCE"
+    description: "Refuse calls from clients below their minimum version (FailedPrecondition, upgrade_required); off only advertises and counts them"
+  }];
+
+  // The one lever that reaches a web or desktop bundle built before clients
+  // named themselves: a browser-origin reliant.v1 call (it carries an Origin
+  // header) with no Reliant-Client header is answered a bare HTTP 404, which
+  // those bundles show as their "app out of date" modal. SystemService is
+  // exempt, and a caller with no Origin (the CLI, an SDK, curl) never is
+  // refused by it. It makes every pre-header tab fail until it reloads, so it
+  // is an owner's switch for a breaking cut, never a default.
+  bool enforce_legacy_unidentified = 8 [(forge.v1.config) = {
+    env_var: "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED"
+    description: "Answer browser-origin reliant.v1 calls that carry no Reliant-Client header with HTTP 404, so pre-header web and desktop bundles show their out-of-date modal"
+  }];
+
+  // Refuse every reliant.v1 call (SystemService exempt) that carries no
+  // Reliant-Client header: a browser-origin one is answered the legacy HTTP
+  // 404 above (whatever enforce_legacy_unidentified says), any other —
+  // a pre-header CLI, SDK or daemon — FailedPrecondition + upgrade_required.
+  // Paths outside reliant.v1 (health, webhooks, OAuth callbacks, metrics)
+  // are never refused, and a header whose value does not parse is still
+  // served. It is turned on only once every first-party client sends the
+  // header, by the owner.
+  bool refuse_unidentified = 9 [(forge.v1.config) = {
+    env_var: "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"
+    description: "Refuse reliant.v1 calls (SystemService exempt) that carry no Reliant-Client header: HTTP 404 for browser-origin calls, FailedPrecondition upgrade_required for the rest"
+  }];
+}
+
+// WebClientVersionFloor is the floor of the web app (Reliant-Client: web/<v>).
+message WebClientVersionFloor {
+  string min_version = 1 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_MIN_WEB_VERSION"
+      description: "Oldest web app version served, semver without a leading v (empty: no floor)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.pattern = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+  ];
+  string upgrade_url = 2 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WEB_UPGRADE_URL"
+      description: "Where a below-floor web app is sent to upgrade"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.uri = true
+  ];
+  string upgrade_command = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_WEB_UPGRADE_COMMAND"
+    description: "What a below-floor web app is told to do to upgrade"
+  }];
+}
+
+// DesktopClientVersionFloor is the floor of the Electron app
+// (Reliant-Client: desktop/<v>).
+message DesktopClientVersionFloor {
+  string min_version = 1 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_MIN_DESKTOP_VERSION"
+      description: "Oldest desktop app version served, semver without a leading v (empty: no floor)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.pattern = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+  ];
+  string upgrade_url = 2 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DESKTOP_UPGRADE_URL"
+      description: "Where a below-floor desktop app is sent to upgrade"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.uri = true
+  ];
+  string upgrade_command = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_DESKTOP_UPGRADE_COMMAND"
+    description: "What a below-floor desktop app is told to do to upgrade"
+  }];
+}
+
+// DaemonClientVersionFloor is the floor of the tools daemon
+// (Reliant-Client: daemon/<v>, and DaemonRegister's build identity).
+message DaemonClientVersionFloor {
+  string min_version = 1 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_MIN_DAEMON_VERSION"
+      description: "Oldest daemon version served, semver without a leading v (empty: no floor)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.pattern = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+  ];
+  string upgrade_url = 2 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_UPGRADE_URL"
+      description: "Where a below-floor daemon's owner is sent to upgrade"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.uri = true
+  ];
+  string upgrade_command = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_UPGRADE_COMMAND"
+    description: "What a below-floor daemon's owner is told to run to upgrade"
+  }];
+  // The ordering key for daemon builds semver cannot order (dev and
+  // unstamped builds): a daemon whose DaemonRegister.commit_time_unix is
+  // before it is below the floor. control-plane's daemon floor
+  // (DAEMON_FLOOR_MIN_COMMIT_TIME) maps onto it. Zero: no commit-time floor.
+  int64 min_commit_time_unix = 4 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX"
+      description: "Oldest daemon build served, by its commit time in Unix seconds (0: no commit-time floor)"
+    },
+    (buf.validate.field).int64 = {gte: 0}
+  ];
+}
+
+// CliClientVersionFloor is the floor of the reliant CLI
+// (Reliant-Client: cli/<v>).
+message CliClientVersionFloor {
+  string min_version = 1 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_MIN_CLI_VERSION"
+      description: "Oldest CLI version served, semver without a leading v (empty: no floor)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.pattern = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+  ];
+  string upgrade_url = 2 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_CLI_UPGRADE_URL"
+      description: "Where a below-floor CLI is sent to upgrade"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.uri = true
+  ];
+  string upgrade_command = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_CLI_UPGRADE_COMMAND"
+    description: "What a below-floor CLI's user is told to run to upgrade (e.g. brew upgrade --cask reliant)"
+  }];
+}
+
+// SdkGoClientVersionFloor is the floor of the Go SDK
+// (Reliant-Client: sdk-go/<v>).
+message SdkGoClientVersionFloor {
+  string min_version = 1 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_MIN_SDK_GO_VERSION"
+      description: "Oldest Go SDK version served, semver without a leading v (empty: no floor)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.pattern = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+  ];
+  string upgrade_url = 2 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_SDK_GO_UPGRADE_URL"
+      description: "Where a below-floor Go SDK's user is sent to upgrade"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.uri = true
+  ];
+  string upgrade_command = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_SDK_GO_UPGRADE_COMMAND"
+    description: "What a below-floor Go SDK's user is told to run to upgrade"
+  }];
+}
+
+// SdkTsClientVersionFloor is the floor of the TypeScript SDK
+// (Reliant-Client: sdk-ts/<v>).
+message SdkTsClientVersionFloor {
+  string min_version = 1 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_MIN_SDK_TS_VERSION"
+      description: "Oldest TypeScript SDK version served, semver without a leading v (empty: no floor)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.pattern = "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+  ];
+  string upgrade_url = 2 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_SDK_TS_UPGRADE_URL"
+      description: "Where a below-floor TypeScript SDK's user is sent to upgrade"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).string.uri = true
+  ];
+  string upgrade_command = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_SDK_TS_UPGRADE_COMMAND"
+    description: "What a below-floor TypeScript SDK's user is told to run to upgrade"
+  }];
+}
