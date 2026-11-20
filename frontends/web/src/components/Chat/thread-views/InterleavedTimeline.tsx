@@ -393,11 +393,14 @@ const GroupedErrorRow = memo(function GroupedErrorRow({
 /**
  * The conversation column (§2.2 of the chat design): one width for every
  * transcript row, the pinned prompt and the footer, with the gutter inside
- * it. The composer and the new-chat screen read the same `--chat-column`.
+ * it. Fluid up to `--chat-column` of content (the gutter is added to the
+ * cap, so a row's content edge is the composer's). The composer and the
+ * new-chat screen read the same `--chat-column` and `--chat-gutter`.
  */
-const COLUMN_CLASS = "mx-auto w-full max-w-[var(--chat-column)] px-4 sm:px-6";
+const COLUMN_CLASS =
+  "mx-auto w-full max-w-[calc(var(--chat-column)+2*var(--chat-gutter))] px-[var(--chat-gutter)]";
 /** The column's gutter alone, for a full-width strip whose text aligns with it. */
-const GUTTER_CLASS = "px-4 sm:px-6";
+const GUTTER_CLASS = "px-[var(--chat-gutter)]";
 
 /**
  * How far past the header's bottom edge an already-pinned user message must
