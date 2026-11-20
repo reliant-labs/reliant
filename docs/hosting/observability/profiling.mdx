@@ -1,0 +1,161 @@
+---
+title: "Continuous profiling and profile-guided builds (PGO)"
+sidebarTitle: "Profiling and PGO"
+description: "How forge samples CPU and heap profiles from your Go services, how to read a flamegraph locally and on hosting, and how forge pgo pull feeds Go's PGO."
+---
+
+A profile answers a question that logs, traces and metrics only point at: which functions are using the CPU, or holding the memory. Every Go service forge builds profiles itself, in-process, and pushes the result over OpenTelemetry beside its traces. You get a flamegraph without attaching a profiler, and the same CPU profiles can feed Go's profile-guided optimization, so the compiler is tuned to how your binary runs in production.
+
+## What is collected, and how often
+
+The profiler is part of forge's runtime library, started when a service sets up its telemetry. It runs on its own goroutine, never blocks a request, and backs off if the collector is unreachable.
+
+| Profile | Sample types | Default | Cadence |
+|---|---|---|---|
+| CPU | `cpu` (nanoseconds) | on | a 5-second window every 5 minutes, jittered |
+| Live heap | `inuse_space`, `inuse_objects` | on | every 2 hours, plus one snapshot on the first cycle of a new process |
+| Heap allocations | `alloc_space`, `alloc_objects` | off | with the heap snapshot |
+| Goroutines | `goroutine` | off | every cycle |
+| Mutex and block | `contentions`, `delay` | off | every cycle |
+
+These are sparse on purpose, because every stored sample repeats its whole stack and profiles are the costliest signal per useful byte. A long-lived process has roughly a minute of CPU capture an hour. That is enough to find a sustained hotspot or a steady heap leak, and it can miss a short incident or a single slow request entirely. To look harder for a while, raise the cadence on one workload through its `env` (`FORGE_PROFILES_CPU_INTERVAL`, at least `30s`) and put it back afterwards; [Where the telemetry goes](/hosting/observability/where-it-goes#profile-volume) lists the variables.
+
+The allocation counters are off because Go reports them cumulatively since process start. Every snapshot repeats every allocation site the process ever had, so the cost grows with uptime. Turn them on for one workload when you are hunting allocations, and turn them off when you are done. Agents can load `observability/profiles` for the workload `profiling` block that does it.
+
+## Is it on?
+
+It depends on where the environment's telemetry goes. The environment's `observability` block decides, like every other signal, and `signals.profiles` is the switch.
+
+| Environment | `signals.profiles` unset | To change it |
+|---|---|---|
+| Local (`forge env up dev`, the default local stack) | **On** | `profiles = False` turns it off |
+| Reliant hosting (`forge.OnHosted`) | **Off** | `profiles = True` turns it on |
+| A cluster you run, or an environment with a `destination` | **Off** | `profiles = True` sends them; the destination must accept OTLP profiles |
+
+So the five-minute CPU and two-hour heap cadence is what a process does once profiling is on, and a hosted environment does not collect profiles until you opt in. To turn it on for an environment, declare the signal in its `main.k` and deploy:
+
+```python
+observability = forge.Observability {
+    signals = forge.ObservabilitySignals {profiles = True}
+}
+```
+
+The change takes effect with that environment's next deploy. To switch profiling off for a single process without touching the environment, set `OTEL_PROFILES_EXPORTER=none` or `FORGE_PROFILES=none` in its `env`.
+
+<Note>
+Profiles are billed as telemetry once they are collected, and a hosted environment that is over its observability cap stops storing them first. Retention is 24 hours for raw samples and 30 days for the per-minute aggregates behind range flamegraphs. [Observability billing](/hosting/observability-billing) has the included amounts and the cap.
+</Note>
+
+## Reading a profile
+
+Local and hosted profiles are read differently. Locally, the CLI exports them from the stack on your machine. On hosting, you read them in the Reliant app.
+
+### Locally, with `forge obs profile`
+
+`forge env up` keeps profiles in the same local store as your other telemetry, but the HyperDX UI cannot draw flamegraphs. `forge obs profile` exports them in a form other tools can open. It needs the local stack running.
+
+```bash
+forge obs profile --list                                       # which services sent profiles
+forge obs profile --service api --since 30m -o api.pb.gz
+go tool pprof -http=: api.pb.gz                                # flamegraph, top, source view
+forge obs profile --service api --format speedscope -o api.speedscope.json
+```
+
+`--format` is `pprof` (the default), `speedscope` or `folded`. Open the speedscope file at speedscope.app, or pipe the folded stacks to `flamegraph.pl` for an SVG. The default `--type` is `cpu`; `inuse_space` and `inuse_objects` show the live heap, and the allocation, goroutine, mutex and block types appear only for a workload that turned them on. `--since` defaults to one hour, and `--from` and `--to` take RFC 3339 times. `--sql` prints the query instead of running it, so you can run it yourself.
+
+CPU time is summed over the range. The live heap and goroutines are different: they are snapshots, so the export uses each instance's newest snapshot in the range, and looks back up to 24 hours when the range holds none. A one-hour window therefore still shows the heap even though snapshots are two hours apart.
+
+To see where one slow request spent its CPU, narrow to a trace, which uses the raw samples from the last 24 hours:
+
+```bash
+forge obs profile --trace 0af7651916cd43dd8448eb211c80319c
+```
+
+CPU samples are taken at 100 Hz, so a span under about 10 ms usually has no samples. Trace links are for slow spans.
+
+### On hosting, in the Reliant app
+
+Open **Apps**, pick your project and environment, and choose **Profiles** in the Observability section. It draws a flamegraph of a service's CPU, memory or goroutines over the time range you pick, with a table of the heaviest functions beside it. Opening it from a trace narrows it to that trace's samples. [Where the telemetry goes](/hosting/observability/where-it-goes#reading-it-in-apps) describes the rest of the Apps navigation.
+
+The page is a view over the control plane's `GetFlamegraph` call, which returns a service's aggregated profile as speedscope JSON. Reading it requires sign-in. `forge obs profile` is documented as exporting what the local stack collected; for a hosted environment's CPU profile outside the browser, `forge pgo pull` (next) writes a file Go can read.
+
+## Profile-guided builds (PGO)
+
+Go's compiler can use a CPU profile to inline the calls that are hot in production and to devirtualize hot interface calls it can see in the profile. The compiler reads the profile from a file named `default.pgo` in the main package's directory, so there is nothing to configure in the build. `forge pgo pull` writes that file from the CPU profiles your environment has already collected.
+
+PGO is not automatic. It uses a production profile that you pull and commit, and nothing refreshes it for you. A build never fetches a profile, so it depends only on the committed file and stays reproducible.
+
+<Steps>
+<Step title="Pull the profile">
+Run `forge pgo pull` for the environment whose traffic you want to optimize for. It merges that environment's recent CPU profiles into one `cmd/<bin>/default.pgo` per Go binary.
+
+```bash
+forge pgo pull --env prod
+```
+
+Profiles for a hosted environment are read through the control plane, which needs you to be signed in. For a local environment, they come from the local store. The environment has to be collecting profiles, so a hosted `prod` needs `signals.profiles = True` first, and it needs some time to gather data. A profile from `dev` reflects whatever you ran locally, which is rarely production traffic.
+</Step>
+<Step title="Review and commit it">
+`default.pgo` is a plain file in your repository. Check what was written with `forge pgo status`, which shows each binary's file, the environment, services and window it came from, how old the data is, and the effective PGO configuration. Then commit it.
+
+```bash
+forge pgo status
+git add cmd/*/default.pgo && git commit -m "pgo: refresh profiles"
+```
+</Step>
+<Step title="Build as usual">
+Go's default `-pgo=auto` picks up the committed file, so the Dockerfile build, a host build and the live-reload loop all use it with no flag changes. `forge env build` prints one line per Go binary: the file in use and its age, `pgo: none (run forge pgo pull)`, or `pgo: off`.
+
+```bash
+forge env build prod --release v1.4.0
+```
+</Step>
+</Steps>
+
+The binary, not the workload, is the unit. A binary that runs as a server, a worker and a cron job gets one profile that merges the CPU of all of them, weighted by CPU time, because Go applies PGO per main package. Use `--binary ./cmd/api` to pull a single binary, `--since 72h` to change the window (up to 30 days, default 7), `--from-env prod` to read another environment's profiles, and `--dry-run` to see what would be written. `--json` prints one document for a script or an agent.
+
+### When pull writes nothing
+
+`forge pgo pull` never damages an existing file. If PGO is off for a binary, the window holds no profile data, or the window holds less CPU than the `min_weight` threshold, it skips that binary with a reason and leaves its `default.pgo` as it was. A source it cannot read (the local stack is not running, you are not signed in, or the control plane is older than the call it needs) is reported per binary, with the file untouched. It exits 0 when every binary was written or skipped with a reason, 2 when a source could not be read, and 1 for a usage error or a file it could not write.
+
+Go tolerates a stale profile: edges that name functions that no longer exist are ignored. Refreshing it at each release, or weekly, is enough.
+
+### Configuring PGO in KCL
+
+PGO is enabled for every Go binary by default. To change that for a build, declare `forge.PGO` on it:
+
+```python
+build = forge.GoBuild {
+    cmd = "./cmd/app"
+    pgo = forge.PGO {from_env = "prod", since = "168h", min_weight = "10s"}
+}
+
+# an image that holds several binaries: key by package path
+build = forge.DockerBuild {
+    pgo = {"./cmd/proxy" = forge.PGO {enabled = False}}
+}
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `enabled` | `True` | `False` passes `-pgo=off` for this binary and makes `pull` skip it |
+| `from_env` | the env declaring the build | The environment whose profiles `pull` merges |
+| `since` | `"168h"` | The window to merge, at most 720h (30 days, as far back as forge keeps the data) |
+| `min_weight` | `"10s"` | The least CPU weight the window must hold before `pull` writes a file, so a thin profile is not mistaken for a hot path |
+| `services` | every workload running the binary | The service names to merge |
+
+Two workloads in one environment that run the same binary must declare the same PGO, or the environment does not render. A `-pgo=` in `GoBuild.flags` always wins over forge's.
+
+To opt a binary out, set `enabled = False`. That also stops its workloads from attaching the extra call-site attributes PGO needs to their CPU samples, which adds roughly a quarter to the size of a CPU profile on the wire. Deleting `default.pgo` alone does not stop that collection.
+
+<Note>
+PGO applies to Go binaries, and the profiler behind it is forge's Go runtime library. A service in another language is not profiled by it, and has no `default.pgo` to pull.
+</Note>
+
+## Related topics
+
+- [Where the telemetry goes](/hosting/observability/where-it-goes): the local store, the hosted store, retention, profile volume and opting out.
+- [Querying with forge obs](/hosting/observability/forge-obs): the other `forge obs` verbs, including `check`, `status` and `trace`.
+- [Hosted dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts): the rest of what Apps shows for an environment.
+- [Observability billing](/hosting/observability-billing): included amounts, the cap and what stops when it is reached.
+- [Releases and promotion](/forge/deploy/releases-and-promotion): how a release is built once, which is where a committed `default.pgo` takes effect.

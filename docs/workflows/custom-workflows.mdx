@@ -407,13 +407,15 @@ authenticate and returns at once: it never prompts.
   command: make test
 ```
 
-This is **not containment.** It removes what Reliant and the machine's environment hand a command. The
-command still runs as the daemon's Unix user, so it can read that user's files: `~/.config/gh/hosts.yml`,
-`~/.git-credentials`, `~/.ssh`, and the daemon's own credentials file. A command that goes looking can
-still find a login. Stopping that needs the shell to run as a different user or in a sandbox, which
-Reliant does not do yet. Treat `credentials: none` as the seatbelt that stops an accidental
-`git push`, not as a wall. Publish a branch with a `git_publish` node, which never gives its credential to
-a shell.
+On Linux, which every Reliant cloud machine runs, the command also starts in a sandbox: its own user,
+mount and PID namespaces, where the daemon's credential files (`~/.reliant/daemon.json`,
+`~/.git-credentials`, `~/.ssh`, `~/.config/gh`, cloud logins) are absent, the container engine's socket is
+`/dev/null`, and shell startup files and git config are read-only. Where the machine does not allow that
+sandbox, the command is refused, never run with credentials. On macOS and Windows only the environment is
+cleaned, so a command there that goes looking can still read those files. Either way the command keeps the
+network and can write its checkout: it is a boundary around your credentials, not around your code.
+Publish a branch with a `git_publish` node, which never gives its credential to a shell. See
+[Run AI agent commands without access to your credentials](/guides/machines/sandbox-agent-commands-credentials-none).
 
 **Loop nodes** repeat a sub-workflow while a condition is true:
 
