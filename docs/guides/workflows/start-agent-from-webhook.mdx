@@ -149,7 +149,7 @@ By the end of this guide your CI can start an agent with one HTTP request: when 
 
 - **It does not trust the payload.** Anyone holding the token can start a run with any body. The filter and the inputs mapping only pick fields out of it. The prompt above labels those fields as data and the agent can't change files, but a payload can still try to steer the agent. Keep agents that act on webhook data read-only, or put an [approval](/guides/workflows/require-human-approval) before anything that writes.
 - **The response is not the run's result.** The sender gets `202` as soon as the delivery is recorded. Read the outcome in the run, or have the workflow report it, for example with a Slack step.
-- **In an organization, runs spend only the organization's AI accounts** (`Unattended funding: org_only`). Without one that can run the model, the run stops at its first agent step.
+- **In an organization with two or more members, runs spend only the organization's AI accounts** (`Unattended funding: org_only`). Without one that can run the model, the run stops at its first agent step.
 - **A machine that is off can't run it.** A suspended [cloud machine](/machines/cloud) is woken; your own laptop or server must be online.
 - **Send your own idempotency key.** Two identical bodies sent without one were recorded as two events and would have started two runs.
 
