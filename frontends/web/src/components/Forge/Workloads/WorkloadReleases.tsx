@@ -78,7 +78,7 @@ function ReleaseRow({
   releaseHref: (version: string) => string;
 }) {
   const comparison = useWorkloadReleaseComparison(project, row.previousVersion, row.version, env.id, workload);
-  const change = workloadChange(row, comparison.data);
+  const change = workloadChange(row, comparison.data, workload);
   const bundle = usePromotionBundle(env.id, row.bundleId, row.bundleDigest);
   const rollout = usePromotionRollout(env.id, row.id);
   const observed = rollout.data?.workloads.find((item) => item.name === workload);

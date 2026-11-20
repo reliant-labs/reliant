@@ -36,7 +36,7 @@ import { AlertCircle, ArrowDown, ArrowUp, MonitorPlay, Search, X } from "lucide-
 import Card from "@/components/forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { useListTraces, type TraceFilters } from "@/hooks/observability-queries";
-import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
+import { FilterUnsupportedError, obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import type { ObsScope, TraceRed, TraceRedGroup, TraceSummary } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -185,7 +185,7 @@ function TraceList({
   const redGroups = traces.data?.pages[0]?.redGroups ?? [];
   // A filter the server ignored is drawn in place of the list (ObsError), not under the search box.
   const filterError =
-    traces.error && obsErrorKind(traces.error) === "invalid" ? obsErrorMessage(traces.error) : null;
+    traces.error && obsErrorKind(traces.error) === "invalid" && !(traces.error instanceof FilterUnsupportedError) ? obsErrorMessage(traces.error) : null;
   const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration || !!band || !!user || !!sessionId || hasClientFilters(client);
   const points = useMemo(() => pointsOf(rows), [rows]);
   // The brushed region belongs to the filters it was drawn over: new filters

@@ -26,7 +26,7 @@ import type {
   WorkloadPod,
 } from "@/services/controlPlane/observability/types";
 
-import type { ReleaseComparison, ReleasePromotion } from "@/services/forge/releases";
+import type { ObjectDelta, ReleaseComparison, ReleasePromotion } from "@/services/forge/releases";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 import { ENV_ALL } from "../Console/envScope";
@@ -592,6 +592,11 @@ export function workloadReleaseRows(
   });
 }
 
+/** An object belongs to the workload forge tagged it with, or, untagged, to the one it is named like (the server's filter). */
+export function deltaOfWorkload(delta: Pick<ObjectDelta, "workload" | "name">, workload: string): boolean {
+  return delta.workload === workload || (!delta.workload && delta.name === workload);
+}
+
 export type WorkloadChange =
   | { kind: "same-release" }
   | { kind: "first" }
@@ -601,17 +606,24 @@ export type WorkloadChange =
 
 /**
  * What one promotion changed in this workload, from the release comparison
- * against the release it replaced, which the server cut to the workload's
- * objects.
+ * against the release it replaced. Filtered to the workload here as well as
+ * by the server, because a control plane that predates the filter returns
+ * every object.
  */
-export function workloadChange(row: Pick<WorkloadReleaseRow, "version" | "previousVersion">, comparison: ReleaseComparison | null | undefined): WorkloadChange | null {
+export function workloadChange(row: Pick<WorkloadReleaseRow, "version" | "previousVersion">, comparison: ReleaseComparison | null | undefined, workload: string): WorkloadChange | null {
   if (row.previousVersion === null) return { kind: "first" };
   if (row.previousVersion === row.version) return { kind: "same-release" };
   if (!comparison) return null;
   const objects = comparison.objects;
   if (objects.state !== "compared") return { kind: "not-compared", detail: objects.detail };
-  const deltas = objects.deltas;
-  if (deltas.length === 0) return { kind: "unchanged", unchanged: objects.unchanged };
+  if (objects.workload && objects.workload !== workload) {
+    return { kind: "not-compared", detail: "The comparison names a different workload." };
+  }
+  const deltas = objects.deltas.filter((d) => deltaOfWorkload(d, workload));
+  if (deltas.length === 0) {
+    const scoped = objects.workload === workload && objects.deltas.length === 0;
+    return { kind: "unchanged", unchanged: scoped ? objects.unchanged : 0 };
+  }
   const image = deltas.flatMap((d) => d.images)[0] ?? null;
   return {
     kind: "changed",

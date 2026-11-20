@@ -16,7 +16,7 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { keepPreviousInOrgSegment } from "@/lib/orgScope";
 
-import { obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
+import { FilterUnsupportedError, obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
 import type { FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsReadApi } from "./observability-queries";
@@ -54,6 +54,19 @@ export const sessionKeys = {
   replayEvidence: (scope: RumScope | null, envIds: readonly string[]) => [...sessionKeys.root(), "replay-evidence", ...scopeKey(scope), envIds] as const,
 };
 
+/**
+ * Do not let sessions returned without a requested filter appear narrowed.
+ * Each row in a user- or client-filtered list must name the requested value.
+ */
+function assertSessionFiltersApplied(filters: SessionFilters, result: SessionList) {
+  for (const s of result.sessions) {
+    if (filters.userId && s.userId !== filters.userId) throw new FilterUnsupportedError("user", "sessions");
+    if (filters.browser && s.client.browserName !== filters.browser) throw new FilterUnsupportedError("browser", "sessions");
+    if (filters.os && s.client.osName !== filters.os) throw new FilterUnsupportedError("OS", "sessions");
+    if (filters.frontendVersion && s.serviceVersion !== filters.frontendVersion) throw new FilterUnsupportedError("frontend version", "sessions");
+  }
+}
+
 /** One page of the scope's sessions. The previous page stays on screen while the next one loads. */
 export function useSessions(scope: RumScope | null, filters: SessionFilters) {
   const api = useObsReadApi();
@@ -66,7 +79,8 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
         window: resolveWindow(filters.range),
         hasError: filters.hasError,
         // Only sessions with a replay exist as sessions: one with nothing to
-        // watch (a hidden window's background requests) is never listed.
+        // watch (a hidden window's background requests) is never listed. The
+        // control plane enforces it too; asking for it keeps an older one honest.
         hasReplay: true,
         userId: filters.userId,
         pathContains: filters.pathContains,
@@ -76,6 +90,7 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
         pageSize: SESSION_PAGE_SIZE,
         pageToken: filters.pageToken,
       }, { signal });
+      assertSessionFiltersApplied(filters, result);
       return result;
     },
     enabled: !!scope,
