@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/version"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const toolsDaemonLogFilename = "tools-daemon.log"
@@ -156,6 +158,9 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 		return fmt.Errorf("daemon login: %w", cliauth.ErrInteractiveRequired)
 	}
 	logging.InfoContext(ctx, "Registering daemon via control-plane pairing", "api_url", apiURL, "instance_id", instanceid.ID())
+	paired := false
+	defer func() { publishPairingDone(ctx, paired) }()
+	publishAwaitingPairing(ctx)
 
 	// daemon:connect ALONE. A daemon credential holds every scope its
 	// person holds — the control plane keys that on daemon:connect and
@@ -213,6 +218,7 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 		return fmt.Errorf("saving daemon credentials: %w", err)
 	}
 
+	paired = true
 	credsPath, _ := auth.DaemonCredentialsFilePath()
 	fmt.Fprintln(cmd.OutOrStdout(), "Daemon registered successfully")
 	if approved.Known() {
@@ -222,6 +228,44 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 	fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", conn.describeServer())
 	fmt.Fprintf(cmd.OutOrStdout(), "  Gateway:     %s\n", conn.describeGateway())
 	return nil
+}
+
+// pairingRecordKey carries `daemon start`'s data directory to registerDaemon,
+// so an interactive pairing publishes the runtime record a non-interactive
+// wait already does (waitForCredentialsNonInteractive). `daemon register`
+// pairs with no data directory, and publishes nothing.
+type pairingRecordKey struct{}
+
+// withPairingRecord marks ctx as `daemon start`'s, for dataDir.
+func withPairingRecord(ctx context.Context, dataDir string) context.Context {
+	return context.WithValue(ctx, pairingRecordKey{}, dataDir)
+}
+
+// publishAwaitingPairing records that the daemon is running and waiting for
+// this machine to be paired, so `daemon status` says so rather than "No
+// daemon running" while the code waits for approval (TL-33).
+func publishAwaitingPairing(ctx context.Context) {
+	dataDir, _ := ctx.Value(pairingRecordKey{}).(string)
+	if dataDir == "" {
+		return
+	}
+	if err := daemonstate.SetStream(dataDir, daemonstate.StreamAwaitingCredentials,
+		"waiting for this machine to be paired: approve the code `reliant daemon start` printed"); err != nil {
+		logging.WarnContext(ctx, "failed to publish awaiting-pairing daemon state", "error", err)
+	}
+}
+
+// publishPairingDone removes the awaiting-pairing record of a pairing that
+// failed, since the process is about to exit; a pairing that succeeded leaves
+// it to the runtime, which rewrites it when it starts.
+func publishPairingDone(ctx context.Context, paired bool) {
+	dataDir, _ := ctx.Value(pairingRecordKey{}).(string)
+	if dataDir == "" || paired {
+		return
+	}
+	if state, err := daemonstate.Read(dataDir); err == nil && state.PID == os.Getpid() && state.Stream == daemonstate.StreamAwaitingCredentials {
+		_ = daemonstate.Clear(dataDir)
+	}
 }
 
 func scopeGranted(granted []string, want string) bool {
@@ -429,7 +473,7 @@ func pollDaemonCredentials(cmd *cobra.Command, conn *connection, account string)
 // by both the initial credential resolution and the auth-failure retry path
 // in `daemon start`, so neither can regress into popping a browser.
 func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
-	creds, err := ensureDaemonCredentials(ctx, cmd, conn, account, want, nonInteractive)
+	creds, err := ensureDaemonCredentials(withPairingRecord(ctx, dataDir), cmd, conn, account, want, nonInteractive)
 	if err == nil {
 		shareDaemonSessionWithForge(conn, creds)
 		return creds, nil
@@ -452,7 +496,7 @@ func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *co
 // credentials and needs a fresh registration, but a non-interactive daemon
 // must idle rather than fail when that requires a login it cannot run.
 func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, want cliauth.Account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
-	regErr := registerDaemon(ctx, cmd, conn, account, want, nonInteractive)
+	regErr := registerDaemon(withPairingRecord(ctx, dataDir), cmd, conn, account, want, nonInteractive)
 	if regErr == nil {
 		newCreds, readErr := auth.ReadDaemonCredentials(conn.ServerURL, account)
 		if readErr != nil || newCreds == nil {
@@ -549,24 +593,46 @@ func readPastedToken(ctx context.Context, cmd *cobra.Command) (string, error) {
 		fmt.Fprint(cmd.OutOrStdout(), "Paste your access token: ")
 	}
 
-	type readResult struct {
-		token string
-		err   error
+	readCh := make(chan pastedTokenRead, 1)
+	// At a terminal the token is read without echo, as a password is: it is a
+	// credential, and echoing it leaves it in the scrollback and in any
+	// recording of the session (TL-34). If the read is interrupted the
+	// terminal's echo is restored before returning.
+	if fd := int(os.Stdin.Fd()); !isPiped && term.IsTerminal(fd) {
+		if saved, err := term.GetState(fd); err == nil {
+			defer func() { _ = term.Restore(fd, saved) }()
+			go func() {
+				b, err := term.ReadPassword(fd)
+				fmt.Fprintln(cmd.OutOrStdout())
+				readCh <- pastedTokenRead{token: strings.TrimSpace(string(b)), err: err}
+			}()
+			return finishPastedToken(ctx, readCh, isPiped)
+		}
 	}
-	readCh := make(chan readResult, 1)
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		if scanner.Scan() {
-			readCh <- readResult{token: strings.TrimSpace(scanner.Text())}
+			readCh <- pastedTokenRead{token: strings.TrimSpace(scanner.Text())}
 			return
 		}
 		if err := scanner.Err(); err != nil {
-			readCh <- readResult{err: err}
+			readCh <- pastedTokenRead{err: err}
 			return
 		}
-		readCh <- readResult{}
+		readCh <- pastedTokenRead{}
 	}()
+	return finishPastedToken(ctx, readCh, isPiped)
+}
 
+// pastedTokenRead is one read of a pasted token, or why it failed.
+type pastedTokenRead struct {
+	token string
+	err   error
+}
+
+// finishPastedToken waits for readPastedToken's read, or for ctx, and checks
+// the token it got.
+func finishPastedToken(ctx context.Context, readCh <-chan pastedTokenRead, isPiped bool) (string, error) {
 	var token string
 	select {
 	case <-ctx.Done():
@@ -716,7 +782,7 @@ func daemonStartFailure(err error, useToken bool, conn *connection) (failure err
 	case useToken:
 		// The user pasted this token explicitly; silently flipping into a
 		// browser login would surprise them.
-		return tokenRejectedError(conn, connect.CodeOf(err)), false
+		return tokenRejectedError(conn, err), false
 	default:
 		return nil, true
 	}
@@ -968,10 +1034,13 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 			if err != nil {
 				return err
 			}
-			// Before this daemon writes anything into the directory.
-			if err := refuseHeldDataDir(dataDir); err != nil {
+			// Before this daemon writes anything into the directory, and held
+			// until the runtime takes its own claim (claimDataDir).
+			claim, err := claimDataDir(dataDir)
+			if err != nil {
 				return err
 			}
+			defer claim.Release() //nolint:errcheck // safe twice; released before the runtime starts
 
 			// Keep the foreground stdout stream used by Electron/task while also
 			// persisting an independently rotated tools-daemon log. Do not share
@@ -1003,6 +1072,7 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 				logging.Info("Starting tools-daemon in server mode",
 					"listen_port", listenPort, "data_dir", dataDir)
 
+				_ = claim.Release()
 				err = daemonruntime.Start(ctx, daemonruntime.StartOptions{
 					StorageReaper:   storageReaperConfig(base, host.Managed()),
 					WorktreeReclaim: worktreeReclaimConfig(base),
@@ -1059,6 +1129,8 @@ RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.`,
 			logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
 
 			startDaemon := func(c *auth.DaemonCredentials) error {
+				// The runtime takes the claim over (claimDataDir).
+				_ = claim.Release()
 				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
 					StorageReaper:   storageReaperConfig(base, host.Managed()),
 					WorktreeReclaim: worktreeReclaimConfig(base),
@@ -1484,31 +1556,37 @@ func refuseToStop(state daemonstate.State, dataDir string) error {
 	return nil
 }
 
-// refuseHeldDataDir is `daemon start`'s check that no live daemon holds
-// dataDir, made before the new daemon logs into the directory or touches its
-// runtime record.
+// claimDataDir is `daemon start`'s claim on dataDir, taken before the new
+// daemon logs into the directory or touches its runtime record, and held while
+// it waits to be paired or signed in.
 //
 // The runtime claims the directory too (daemonstate.Acquire), but only once it
 // starts, and `daemon start` writes first: its log, and the awaiting-credentials
 // record while it waits to sign in. So a second daemon pointed at a running
 // one's directory overwrote that daemon's record with awaiting_credentials
-// while it was still connected (#2823). The probe is not a claim, so the
-// runtime's Acquire still settles a race between two starting daemons; a probe
-// that cannot run is logged and left to that Acquire.
-func refuseHeldDataDir(dataDir string) error {
-	locked, err := daemonstate.ProbeLocked(dataDir)
-	if err != nil {
-		logging.Warn("Could not check whether another daemon holds the data directory", "data_dir", dataDir, "error", err)
-		return nil
+// while it was still connected (#2823). A probe alone fixed that, but a daemon
+// still waiting for its credentials held nothing, so a second start in the same
+// directory ran alongside it (TL-48). The caller releases the claim just
+// before daemonruntime.Start takes its own; a second start that wins that
+// instant is refused by the runtime's Acquire, never run beside this one. A
+// claim that cannot be checked at all is logged and left to that Acquire.
+func claimDataDir(dataDir string) (*daemonstate.Lock, error) {
+	lock, err := daemonstate.Acquire(dataDir)
+	if err == nil {
+		return lock, nil
 	}
-	if !locked {
-		return nil
+	if !errors.Is(err, daemonstate.ErrLocked) {
+		logging.Warn("Could not check whether another daemon holds the data directory", "data_dir", dataDir, "error", err)
+		return nil, nil
 	}
 	who := "a running daemon"
 	if state, readErr := daemonstate.Read(dataDir); readErr == nil && state.PID != 0 {
 		who = fmt.Sprintf("daemon PID %d", state.PID)
+		if state.Stream == daemonstate.StreamAwaitingCredentials {
+			who += " (waiting to be signed in or paired)"
+		}
 	}
-	return fmt.Errorf("refusing to start: %s already runs in data directory %s (%w). "+
+	return nil, fmt.Errorf("refusing to start: %s already runs in data directory %s (%w). "+
 		"Stop it with `reliant daemon stop` first, or start this daemon in a directory of its own with --data-dir",
 		who, dataDir, daemonstate.ErrLocked)
 }
@@ -1654,41 +1732,45 @@ func newDaemonLogsCmd() *cobra.Command {
 	return cmd
 }
 
-// readLastLines reads the last n lines from a file.
+// readLastLines reads the last n lines from a file, reading backwards from its
+// end a chunk at a time until it has them (or reaches the start), so -n is
+// honoured however long the log or its lines are. It leaves f's offset at the
+// end, where --follow continues. It used to read only the last 1MB, so a
+// large -n silently showed fewer lines (TL-10).
 func readLastLines(f *os.File, n int) ([]string, error) {
 	stat, err := f.Stat()
 	if err != nil {
 		return nil, err
 	}
-
 	size := stat.Size()
-	if size == 0 {
+	if _, err := f.Seek(0, io.SeekEnd); err != nil {
+		return nil, err
+	}
+	if size == 0 || n <= 0 {
 		return nil, nil
 	}
 
-	// Read the whole file (or last 1MB if huge) and split into lines
-	readSize := size
-	const maxRead = 1 << 20 // 1MB
-	if readSize > maxRead {
-		if _, err := f.Seek(-maxRead, 2); err != nil {
+	const chunk = 64 << 10
+	var buf []byte
+	for off := size; off > 0; {
+		readLen := int64(chunk)
+		if off < readLen {
+			readLen = off
+		}
+		off -= readLen
+		b := make([]byte, readLen)
+		if _, err := f.ReadAt(b, off); err != nil && !errors.Is(err, io.EOF) {
 			return nil, err
 		}
-		readSize = maxRead
+		buf = append(b, buf...)
+		// n complete lines need n line breaks before the end (a final
+		// newline ends the last line rather than starting another).
+		if off > 0 && bytes.Count(bytes.TrimSuffix(buf, []byte("\n")), []byte("\n")) >= n {
+			break
+		}
 	}
 
-	buf := make([]byte, readSize)
-	nRead, err := f.Read(buf)
-	if err != nil {
-		return nil, err
-	}
-	buf = buf[:nRead]
-
-	allLines := strings.Split(string(buf), "\n")
-	// Remove trailing empty line from final newline
-	if len(allLines) > 0 && allLines[len(allLines)-1] == "" {
-		allLines = allLines[:len(allLines)-1]
-	}
-
+	allLines := strings.Split(strings.TrimSuffix(string(buf), "\n"), "\n")
 	if len(allLines) <= n {
 		return allLines, nil
 	}
