@@ -96,7 +96,8 @@ import {
 } from "./workloadModel";
 import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
-import { LiveStateStrip } from "../LiveState/LiveStateStrip";
+import { OverviewAnalyticsBox } from "./landing/OverviewAnalyticsBox";
+import { OverviewServicesStrip } from "./landing/OverviewServicesStrip";
 import { JobTimeline } from "./JobTimeline";
 import { ServiceCards } from "./ServiceCards";
 import { UsersCard } from "./UsersCard";
@@ -175,6 +176,11 @@ export interface OverviewHomeProps {
 export interface OverviewSummaryLinks {
   services: string;
   service: (name: string, env: string) => string;
+  /** The database's home (Data), scoped to its environment. */
+  data?: (env: string) => string;
+  /** Analytics, and its Events & metrics tab: the Analytics box's links (U6e). */
+  analytics?: string;
+  events?: string;
 }
 
 export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
@@ -368,6 +374,63 @@ export function OverviewHome({
   const filtered = !!(search.q || search.status || search.kind);
   const windowWords = RANGE_LABELS[range].toLowerCase();
 
+  // THE PROJECT SHELL'S LANDING (U6e, owner: "better separation of
+  // sections"): the headline signals, then one card per question — what needs
+  // you, what runs (a compact strip; the full live view is Services), your
+  // chats, what shipped, who uses it. The full tables below are the
+  // standalone console's.
+  if (summary) {
+    return (
+      <div className="space-y-6" data-testid="overview" data-layout="landing" data-state={loading ? "loading" : workloadsFailed ? "error" : "ready"}>
+        {header}
+        {deploys}
+        <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={workloadsFailed} scopedHref={hrefs.scoped} />
+        {unrecorded ? (
+          <p className="text-ui text-ink-muted" data-testid="overview-unrecorded-env">
+            Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
+            services and their health appear on this page.
+          </p>
+        ) : (
+          <HealthStrip scope={kpiScope} range={range} environments={environments} envId={scopedEnv?.id ?? null} alertsHref={hrefs.alerts} />
+        )}
+        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-6">
+            {!unrecorded && (
+              <LandingCard testId="overview-card-attention">
+                <NeedsAttention
+                  items={attention}
+                  loading={loading}
+                  failed={workloadsFailed}
+                  where={where}
+                  showEnv={all}
+                  hrefOf={(item) => (item.workload ? hrefs.workload(item.workload, item.envName) : hrefs.alerts)}
+                  navigateTo={navigateTo}
+                  envs={envs}
+                  releaseHref={hrefs.release}
+                  rollback={rollback}
+                />
+              </LandingCard>
+            )}
+            <LandingCard testId="overview-card-services">
+              {notSetUp ? <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} /> : <OverviewServicesStrip app={project} env={env} range={range} links={summary} />}
+            </LandingCard>
+            {chats && <LandingCard testId="overview-card-chats">{chats}</LandingCard>}
+          </div>
+          <aside className="min-w-0 space-y-6" aria-label="Releases and analytics" data-testid="overview-rail">
+            <LandingCard testId="overview-card-releases">
+              <RecentReleases project={project} envs={envs} hrefs={hrefs} />
+            </LandingCard>
+            {summary.analytics && (
+              <LandingCard testId="overview-card-analytics">
+                <OverviewAnalyticsBox scope={kpiScope} analyticsHref={summary.analytics} eventsHref={summary.events ?? summary.analytics} />
+              </LandingCard>
+            )}
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-10" data-testid="overview" data-state={loading ? "loading" : workloadsFailed ? "error" : "ready"}>
       {header}
@@ -407,14 +470,7 @@ export function OverviewHome({
         </aside>
       </div>
 
-      {summary ? (
-        notSetUp ? (
-          <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
-        ) : (
-          // The live state (U6c): the same hook the Services tab and the Live state dashboard read.
-          <LiveStateStrip app={project} env={env} range={range} links={summary} />
-        )
-      ) : notSetUp ? (
+      {notSetUp ? (
         <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
       ) : (
         <section className="space-y-3" aria-labelledby="overview-services-heading" data-testid="overview-services">
@@ -760,6 +816,15 @@ function EnvCell({
       )}
       {selected && <span aria-hidden="true" className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-ink" />}
     </Link>
+  );
+}
+
+/** One block of the landing: a card, so each section reads as its own (U6e). */
+function LandingCard({ testId, children }: { testId: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-border bg-surface px-5 py-4" data-testid={testId}>
+      {children}
+    </div>
   );
 }
 

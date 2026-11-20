@@ -59,6 +59,7 @@ import { LiveStateDashboardPage } from "../LiveState/LiveStateDashboard";
 import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
+import { ObsOverviewPage } from "../Observability/ObsOverview/ObsOverviewPage";
 import { AuthPage } from "../Users/AuthPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
@@ -446,6 +447,7 @@ function buildRouter(path: string) {
     releases: ReleasesPage,
     release: ReleasePage,
     observabilityView: ObservabilityViewPage,
+    obsOverview: ObsOverviewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
     storage: StoragePage,
