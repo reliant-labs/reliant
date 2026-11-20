@@ -3567,7 +3567,16 @@ type ListArchivedChatsRequest struct {
 	// is a live member of (PERMISSION_DENIED otherwise). Chats created before
 	// orgs list under the caller's default org. Unset lists every archived chat
 	// the caller owns, in any org, as before this field existed.
-	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Page size: at most this many chats, clamped to 200. Unset (or 0) with no
+	// page_token lists every archived chat in one response, as before paging
+	// existed; a page_token without a page size gets pages of 50. New clients
+	// always set it: a heavy account archives tens of thousands of chats.
+	PageSize *int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3,oneof" json:"page_size,omitempty"`
+	// Continues a previous response's next_page_token. Opaque. Pages are
+	// ordered most recently updated first, keyset on (updated time, id), so a
+	// chat archived mid-pagination can neither repeat nor be skipped.
+	PageToken     *string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3,oneof" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3609,11 +3618,29 @@ func (x *ListArchivedChatsRequest) GetOrgId() string {
 	return ""
 }
 
+func (x *ListArchivedChatsRequest) GetPageSize() int32 {
+	if x != nil && x.PageSize != nil {
+		return *x.PageSize
+	}
+	return 0
+}
+
+func (x *ListArchivedChatsRequest) GetPageToken() string {
+	if x != nil && x.PageToken != nil {
+		return *x.PageToken
+	}
+	return ""
+}
+
 // ListArchivedChatsResponse returns archived chats with worktree info
 type ListArchivedChatsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Chats         []*ArchivedChat        `protobuf:"bytes,1,rep,name=chats,proto3" json:"chats,omitempty"`
-	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Chats []*ArchivedChat        `protobuf:"bytes,1,rep,name=chats,proto3" json:"chats,omitempty"`
+	// Number of chats in this response (this page, when paged).
+	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	// Set when more archived chats follow; pass it as page_token. Empty on the
+	// last page, and always empty for an unpaged request.
+	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3660,6 +3687,13 @@ func (x *ListArchivedChatsResponse) GetTotal() int32 {
 		return x.Total
 	}
 	return 0
+}
+
+func (x *ListArchivedChatsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 // SendMessageRequest sends messages to a chat
@@ -8307,13 +8341,20 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\a_org_id\"S\n" +
 	"\x13SearchChatsResponse\x12&\n" +
 	"\x05chats\x18\x01 \x03(\v2\x10.reliant.v1.ChatR\x05chats\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"A\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\xa4\x01\n" +
 	"\x18ListArchivedChatsRequest\x12\x1a\n" +
-	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12 \n" +
+	"\tpage_size\x18\x02 \x01(\x05H\x01R\bpageSize\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tH\x02R\tpageToken\x88\x01\x01B\t\n" +
+	"\a_org_idB\f\n" +
+	"\n" +
+	"_page_sizeB\r\n" +
+	"\v_page_token\"\x89\x01\n" +
 	"\x19ListArchivedChatsResponse\x12.\n" +
 	"\x05chats\x18\x01 \x03(\v2\x18.reliant.v1.ArchivedChatR\x05chats\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xad\x06\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"\xad\x06\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12 \n" +
 	"\vattachments\x18\x03 \x03(\tR\vattachments\x12\x1f\n" +

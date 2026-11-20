@@ -35,7 +35,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
     case "data":
       return { title: "Data", shows: PAGE_SUBTITLES.data };
     case "users":
-      return { title: "Users", shows: "Who can sign in to your app, and when they last did" };
+    case "auth":
+      return { title: "Auth", shows: "Who can sign in to your app, and how" };
     case "storage":
       return { title: "Storage", shows: "The files your app keeps in its buckets" };
     case "environments":
@@ -58,6 +59,10 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
     case "live-state":
       return { title: "Live state", shows: "Every service's instances, CPU, memory, requests, latency and errors" };
+    case "vulnerabilities":
+    case "vulnerability":
+    case "sboms":
+      return { title: "Security", shows: "Known vulnerabilities in what your app ships, from the SBOM of every release" };
     case "speed-insights":
       return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
     case "extension": {

@@ -196,6 +196,9 @@ const chatNeedsAttention = (chat: ChatWithActivity) =>
 /** A chat with no title yet. Not "New chat": that is the button above the list. */
 const UNTITLED_CHAT = "Untitled chat";
 
+/** The archived list before its tab is opened: one stable empty array. */
+const NO_ARCHIVED_CHATS: Chat[] = [];
+
 /**
  * Up/Down (and Home/End) move focus between chat rows, in the order they are
  * drawn, across groups. Enter or Space on a row opens it (it is a button).
@@ -845,9 +848,7 @@ function SidebarComponent({
   const unarchiveMutation = useUnarchiveChat();
   const activities = useActivityStore((state) => state.activities);
   const workingThreads = useActivityStore((state) => state.workingThreads);
-  // Archived chats from React Query (auto-fetches)
-  const { data: archivedChats = [] } = useArchivedChats();
-  
+
   const adoptRunMutation = useAdoptRun();
   const unadoptRunMutation = useUnadoptRun();
 
@@ -859,6 +860,12 @@ function SidebarComponent({
 
   // UI State
   const [chatListTab, setChatListTab] = useState<"active" | "archived">("active");
+  // Archived chats, newest first, a page at a time. Read only while the
+  // Archived tab is open: closed, the list is unobserved, so the invalidations
+  // every archive and every generated ChatService mutation send it only mark
+  // it stale instead of refetching it.
+  const archivedQuery = useArchivedChats({ enabled: chatListTab === "archived" });
+  const archivedChats = archivedQuery.data ?? NO_ARCHIVED_CHATS;
 
   const [expandedWorktreeGroups, setExpandedWorktreeGroups] = useState<
     Record<string, boolean>
@@ -1361,6 +1368,8 @@ function SidebarComponent({
   // it on tab/expansion state would undo the user's own clicks, and re-running it
   // on every chat-list refetch would yank the sidebar around mid-browse.
   const revealedChatKeyRef = useRef<string | null>(null);
+  // The chat the Archived tab was last opened for, from its detail alone.
+  const archivedTabOpenedForRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeChatId || !scrollContainerRef.current) return;
 
@@ -1379,6 +1388,17 @@ function SidebarComponent({
         } as ChatWithActivity;
         isArchived = true;
       }
+    }
+
+    // The archived list is read only while its tab is open. An archived chat
+    // opened from elsewhere (the Inbox, a link) is known archived from its own
+    // detail: open the tab, once per chat, and reveal it when its page arrives.
+    if (!chat && openedChat?.id === activeChatId && openedChat.state === ChatState.ARCHIVED) {
+      if (archivedTabOpenedForRef.current !== activeChatId) {
+        archivedTabOpenedForRef.current = activeChatId;
+        setChatListTab("archived");
+      }
+      return;
     }
 
     // The chat lists load asynchronously, so an unknown id here just means the
@@ -1455,7 +1475,7 @@ function SidebarComponent({
     // reading them via the render closure keeps this effect from re-running when
     // the user toggles a group open or closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeChatId, viewMode, chatsWithActivity, projectArchivedChats, archivedGroups]);
+  }, [activeChatId, viewMode, chatsWithActivity, projectArchivedChats, archivedGroups, openedChat]);
 
 
   const toggleWorktreeGroup = (worktreeId: string) => {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 )
 
 // The retry ladder used to be completely silent: it runs inside a single
@@ -33,6 +34,7 @@ func TestStreamResponse_AnnouncesProviderBackoffBeforeWaiting(t *testing.T) {
 	defer srv.Close()
 
 	client := NewClient(llm.DriverOptions{ApiKey: "test", BaseURL: srv.URL, Model: models.Model{ID: "test-model"}})
+	client.ladder = ratelimit.Retryer{Jitter: func(d time.Duration) time.Duration { return d / 5 }}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

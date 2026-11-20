@@ -66,6 +66,14 @@ const mockChatListData = [
 ];
 
 const mockArchivedChatData: Array<Record<string, unknown>> = [];
+// The archived read's paging state, and the chat detail useChat answers.
+const mockArchivedPaging = { hasNextPage: false, isFetchingNextPage: false, fetchNextPage: vi.fn() };
+const mockUseArchivedChats = vi.fn((_options?: { enabled?: boolean }) => ({
+  data: mockArchivedChatData,
+  isFetched: true,
+  ...mockArchivedPaging,
+}));
+let mockOpenedChat: Record<string, unknown> | undefined;
 
 // Stable, as a query result is: a new array each render would re-run the
 // sidebar's effects on every render.
@@ -76,12 +84,12 @@ vi.mock("../../hooks/chat-queries", () => ({
     data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
-  useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
+  useArchivedChats: (options?: { enabled?: boolean }) => mockUseArchivedChats(options),
   usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
   useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
-  useChat: () => ({ data: undefined }),
+  useChat: () => ({ data: mockOpenedChat }),
 }));
 
 // The Inbox nav item reads its own counts; the Sidebar test only checks it is
@@ -111,6 +119,8 @@ describe("Sidebar selected chat scroll", () => {
     vi.clearAllMocks();
     scrollIntoViewMock.mockReset();
     mockArchivedChatData.length = 0;
+    mockArchivedPaging.hasNextPage = false;
+    mockOpenedChat = undefined;
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,

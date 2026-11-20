@@ -19,7 +19,8 @@
  *       /observability/dashboards, /observability/dashboards/$kind/$key
  *       /storage                            the storage browser (the scope's buckets)
  *       /data                               the data browser (the scope's databases)
- *       /users                              who can sign in to the scope (its managed identity)
+ *       /auth, /auth/$tab                   Auth: who can sign in to the scope, and how (U6d)
+ *       /users                              → /auth (the old Users page), search kept
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
  *       /services, /services/$name          everything the app runs, live; one of them
@@ -28,6 +29,10 @@
  *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
  *       /speed-insights                     web vitals per page (U6c)
  *       /observability/dashboards/live-state the built-in Live state dashboard (U6c)
+ *       /security/vulnerabilities           Security: the findings of the scope's releases
+ *       /security/vulnerabilities/$advisory one advisory across the project
+ *       /security/sboms                     each release artifact's SBOM and scan
+ *       /security                           → /security/vulnerabilities
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -49,7 +54,7 @@ import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tans
 
 import { memberOnly } from './lib/routeOrg'
 
-import { isAnalyticsTab, isObsNavView, LIVE_STATE_SEGMENT, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
+import { isAnalyticsTab, isAuthTab, isObsNavView, LIVE_STATE_SEGMENT, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
   forgeConsoleAnalyticsSearchSchema,
@@ -62,10 +67,12 @@ import {
   forgeConsoleReleaseSearchSchema,
   forgeConsoleReleasesSearchSchema,
   forgeConsoleSearchSchema,
+  forgeConsoleSbomsSearchSchema,
   forgeConsoleSecretsSearchSchema,
   forgeConsoleServicesSearchSchema,
   forgeConsoleStorageSearchSchema,
   forgeConsoleUsersSearchSchema,
+  forgeConsoleVulnerabilitiesSearchSchema,
   forgeConsoleWorkloadSearchSchema,
   forgeLegacyEnvSearchSchema,
   forgeLegacySearchSchema,
@@ -91,8 +98,8 @@ export interface ForgeConsoleComponents {
   storage: RouteComponent
   /** Data: the scoped environment's databases, read-only. */
   data: RouteComponent
-  /** Users: who can sign in to the scoped environment (its managed identity). */
-  users: RouteComponent
+  /** Auth (U6d): who can sign in to the scoped environment, and how. The old `users` route only redirects here. */
+  auth: RouteComponent
   environments: RouteComponent
   environment: RouteComponent
   secrets: RouteComponent
@@ -112,6 +119,12 @@ export interface ForgeConsoleComponents {
   speedInsights: RouteComponent
   /** The built-in Live state dashboard (U6c). */
   liveState: RouteComponent
+  /** Security › Vulnerabilities: the findings of the scope's releases. */
+  vulnerabilities: RouteComponent
+  /** One advisory in the project. */
+  vulnerability: RouteComponent
+  /** Security › SBOMs: each release artifact's SBOM and its scan. */
+  sboms: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
@@ -278,12 +291,32 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleDataSearchSchema,
     component: components.data,
   })
-  // Who can sign in to the scoped environment (components/Forge/Users).
+  // Auth (U6d): who can sign in (the old Users page) and how (components/Forge/Users/AuthPage.tsx).
+  const authRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'auth',
+    validateSearch: forgeConsoleUsersSearchSchema,
+    component: components.auth,
+  })
+  // A tab that is not one (a hand-edited URL) lands on the first.
+  const authTabRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'auth/$tab',
+    validateSearch: forgeConsoleUsersSearchSchema,
+    beforeLoad: memberOnly(({ params, location }) => {
+      if (isAuthTab(params.tab)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    }),
+    component: components.auth,
+  })
+  // The old Users page is Auth's Users tab: the link keeps its search (`user`, `q`, `env`).
   const usersRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'users',
     validateSearch: forgeConsoleUsersSearchSchema,
-    component: components.users,
+    beforeLoad: memberOnly(({ location }) => {
+      throw redirect({ href: `${location.pathname.replace(/\/users\/?$/, '/auth')}${location.searchStr}`, replace: true })
+    }),
   })
   const environmentsRoute = createRoute({
     getParentRoute: () => consoleRoute,
@@ -378,6 +411,33 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleServicesSearchSchema,
     component: components.liveState,
   })
+  // Security (components/Forge/Security). The section has no page of its
+  // own: its first page is where /security lands.
+  const securityRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security',
+    beforeLoad: memberOnly(({ location }) => {
+      throw redirect({ href: `${location.pathname.replace(/\/security\/?$/, '/security/vulnerabilities')}${location.searchStr}`, replace: true })
+    }),
+  })
+  const vulnerabilitiesRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/vulnerabilities',
+    validateSearch: forgeConsoleVulnerabilitiesSearchSchema,
+    component: components.vulnerabilities,
+  })
+  const vulnerabilityRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/vulnerabilities/$advisory',
+    validateSearch: forgeConsoleSearchSchema,
+    component: components.vulnerability,
+  })
+  const sbomsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/sboms',
+    validateSearch: forgeConsoleSbomsSearchSchema,
+    component: components.sboms,
+  })
   // The retired "Project settings": it held only the organization's usage,
   // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
@@ -409,6 +469,8 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       storageRoute,
       dataRoute,
       usersRoute,
+      authRoute,
+      authTabRoute,
       environmentsRoute,
       environmentRoute,
       secretsRoute,
@@ -424,6 +486,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       analyticsTabRoute,
       speedInsightsRoute,
       liveStateRoute,
+      securityRoute,
+      vulnerabilitiesRoute,
+      vulnerabilityRoute,
+      sbomsRoute,
     ]),
   ])
 }
