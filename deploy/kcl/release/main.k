@@ -11,6 +11,10 @@ declared in deploy/kcl/workloads.k:
 
   * reliant-image — the production server image: the root Dockerfile, as a
     DockerBuild.
+  * reliant-desktop — the packaged desktop app for this machine's platform,
+    unpublished: electron/scripts/pack-desktop.js, the electron-builder call
+    release.yml's desktop jobs run. Its prerequisites (backend binaries, the
+    renderer, the build config) are listed beside it in workloads.k.
 
 WHAT SHIPS TODAY IS UNCHANGED. This env declares the builds; it publishes
 nothing on its own and no workflow calls it yet. The server image prod runs is
@@ -57,5 +61,6 @@ output = forge.render(forge.Bundle {
     env = "release"
     workloads = [
         _server_image
+        wl.desktop_app
     ]
 })
