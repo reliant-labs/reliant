@@ -53,6 +53,14 @@ const (
 	// ForgeAPIDisabled: the operator turned the forge rpc surface off
 	// (RELIANT_DISABLE_FORGE_API). FailedPrecondition.
 	ForgeAPIDisabled = "forge_api_disabled"
+	// UpgradeRequired: the calling client (its Reliant-Client header) is
+	// older than the minimum this server serves, or names no version while
+	// the server refuses unidentified clients (ClientVersionPolicy).
+	// FailedPrecondition, with a google.rpc.ErrorInfo detail (reason
+	// UPGRADE_REQUIRED, domain reliantlabs.io) carrying client_kind,
+	// client_version, min_version, upgrade_url and upgrade_command. The
+	// client shows a blocking upgrade; retrying cannot succeed.
+	UpgradeRequired = "upgrade_required"
 
 	// ScopeMissing is forge's accesstoken.ReasonScopeMissing: authenticated,
 	// but the credential lacks a scope; the scopes ride
