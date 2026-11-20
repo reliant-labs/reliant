@@ -441,6 +441,11 @@ type bearerAuthTransport struct {
 func (t *bearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", "Bearer "+t.token)
+	// The CLI names itself on every request, so a server below whose floor it
+	// falls can refuse with the upgrade command (upgrade_required.go). Set, not
+	// Add: the SDK riding this transport is compiled into this binary, so the
+	// version to upgrade is the CLI's.
+	req.Header.Set(reliantClientHeader, cliClientIdentity())
 	rt := t.base
 	if rt == nil {
 		rt = http.DefaultTransport
