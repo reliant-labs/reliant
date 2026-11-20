@@ -86,10 +86,10 @@ func newInflightInterruptEnv(t *testing.T, env *testsuite.TestWorkflowEnvironmen
 		})
 	registerWrapped(env, registry, "ExecuteTools",
 		func(ctx context.Context, input types.ActivityInput) (map[string]interface{}, error) {
-			// Only the first dispatch blocks. InterruptThread records the
-			// in-flight call as Cancelled before it signals, so the step the
-			// loop re-dispatches after the cancel returns that recorded result
-			// at once (checkPriorTerminalResult) instead of waiting again.
+			// Only the first dispatch blocks. The loop settles the batch the
+			// interrupt cancelled with one more dispatch (InterruptedTurn),
+			// which returns the cancellation InterruptThread recorded at once
+			// instead of waiting again (interrupt_settle.go).
 			if blockIn == "execute_tools" && atomic.AddInt32(&e.toolsDispatches, 1) == 1 {
 				select {
 				case <-ctx.Done():

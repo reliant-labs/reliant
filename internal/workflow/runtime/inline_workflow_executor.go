@@ -1142,14 +1142,15 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				// attempt 1 thirty minutes later.
 				//
 				// Resuming in place is also what the top-level executor has always
-				// done (workflow.go, "Activity cancelled (pause), blocking until
-				// resume then retrying"), which is why a plain agent loop paused
+				// done (workflow.go, "Activity cancelled, blocking until resume
+				// then retrying"), which is why a plain agent loop paused
 				// correctly and only nested workflow nodes regressed.
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						e.logger.Info("[InlineWorkflow] Activity cancelled (pause), blocking until resume then retrying in place",
+						e.logger.Info("[InlineWorkflow] Activity cancelled, blocking until resume then retrying in place",
 							"stepID", running.StepID,
+							"cause", executor.cancelCause(running),
 						)
 						e.pauseCtrl.DoCheckPause(e.ctx)
 						// A genuine CancelWorkflow (not a pause) must still unwind,
@@ -1159,8 +1160,10 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						}
 						// Yield so replay does not trip deadlock detection.
 						_ = workflow.Sleep(e.ctx, 0)
-						// A call_llm the pause cut off continues its partial.
-						executor.noteCancelledForPause(running)
+						// A call_llm the pause cut off continues its partial;
+						// a tool batch an interrupt cancelled is settled
+						// instead of run again (interrupt_settle.go).
+						executor.noteCancelled(running)
 						newRunning := executor.Start(&core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,
