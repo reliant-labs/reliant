@@ -80,6 +80,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
 			"compaction_threshold":   {},
+			"continuation":           {},
 			"continue_turn":          {},
 			"exclude_ambient_memory": {},
 			"exclude_skill_catalog":  {},
