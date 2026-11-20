@@ -700,7 +700,7 @@ func (m *MocktaskScopeStore) GetThread(ctx context.Context, id string) (*db.Thre
 var _ taskScopeStore = (*MocktaskScopeStore)(nil)
 
 // forge:section MockupdateTaskStore
-// forge:hash=dfb4d2efafb39dea007f9cee48560ce7274dfdc161fc53124a68d2308cb3b35e
+// forge:hash=1907e6b22b12b017b6eb6c5d2b7fdc13992ede73ec022a656c7244a15f2e5c00
 
 // MockupdateTaskStore is a test mock for the updateTaskStore interface.
 //
@@ -711,6 +711,7 @@ var _ taskScopeStore = (*MocktaskScopeStore)(nil)
 type MockupdateTaskStore struct {
 	contractkit.Recorder
 	GetPlanFunc            func(context.Context, string) (*db.Plan, error)
+	RunTxFunc              func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	EmitChatRefetchFunc    func(context.Context, string, db.RefetchType) error
 	GetTaskFunc            func(context.Context, string) (*db.Task, error)
 	GetTaskByPositionFunc  func(context.Context, string, int) (*db.Task, error)
@@ -727,6 +728,15 @@ func (m *MockupdateTaskStore) GetPlan(ctx context.Context, id string) (*db.Plan,
 		return m.GetPlanFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockupdateTaskStore", "GetPlan")
+}
+
+// RunTx records the call and delegates to RunTxFunc when set.
+func (m *MockupdateTaskStore) RunTx(p0 context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error {
+	m.Recorder.Record("RunTx", p0, policy, f)
+	if m.RunTxFunc != nil {
+		return m.RunTxFunc(p0, policy, f)
+	}
+	return contractkit.MockNotSet("MockupdateTaskStore", "RunTx")
 }
 
 // EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.

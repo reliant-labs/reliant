@@ -3,6 +3,8 @@ package tools
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -116,4 +118,52 @@ func TestUpdateTask_SubAgentsUpdateOnlyTheirOwnTask(t *testing.T) {
 	sub, err = (&CreateSubtaskTool{repo: repo}).Execute(parentCtx, CreateSubtaskParams{ParentTaskID: taskA, Title: "owned"})
 	require.NoError(t, err)
 	assert.Contains(t, sub.Content, "Subtask created successfully")
+}
+
+// Two sibling sub-agents racing to take the same free task: exactly one holds
+// it. The holder check and the claim it writes are one serializable
+// transaction, so the loser is retried and then sees the claim (review B1 on
+// north-star AW-35).
+func TestUpdateTask_ConcurrentClaimsHaveOneWinner(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+	_, err := (&CreatePlanTool{repo: repo}).Execute(createTestContext(t, chatID), CreatePlanParams{
+		Title: "Race", Description: "One free task", Complexity: "simple", Tasks: []TaskInput{{Title: "Contested"}},
+	})
+	require.NoError(t, err)
+
+	const racers = 6
+	results := make(chan string, racers)
+	start := make(chan struct{})
+	for i := 0; i < racers; i++ {
+		ctx := createTestContextForThread(t, chatID, spawnChildThread(t, repo, chatID, chatID))
+		go func(i int) {
+			<-start
+			resp, err := (&UpdateTaskTool{repo: repo}).Execute(ctx, UpdateTaskParams{
+				TaskID: "1", Status: "in_progress", Assignee: fmt.Sprintf("agent-%d", i),
+			})
+			if err != nil {
+				results <- "error: " + err.Error()
+				return
+			}
+			results <- resp.Content
+		}(i)
+	}
+	close(start)
+	won := 0
+	for i := 0; i < racers; i++ {
+		got := <-results
+		switch {
+		case strings.Contains(got, "Task updated successfully"):
+			won++
+		case strings.Contains(got, "held by another sub-agent"):
+		default:
+			t.Errorf("unexpected result: %s", got)
+		}
+	}
+	assert.Equal(t, 1, won, "exactly one sibling holds the task")
 }

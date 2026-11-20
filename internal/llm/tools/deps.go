@@ -12,6 +12,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
@@ -135,6 +137,7 @@ type taskScopeStore interface {
 type updateTaskStore interface {
 	planLookupStore
 	GetPlan(ctx context.Context, id string) (*db.Plan, error)
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
 	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)

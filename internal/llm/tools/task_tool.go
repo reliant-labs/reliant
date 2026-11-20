@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -379,141 +381,19 @@ func (u *UpdateTaskTool) Execute(rctx *rctx.ToolContext, params UpdateTaskParams
 		return NewTextErrorResponse("Task ID is required"), nil
 	}
 
-	// Get thread ID from context to find the plan
 	threadID := rctx.Thread
-
 	var task *db.Task
-	var err error
-
-	// Check if TaskID is a number (ordinal position)
-	// Must be just a number, no other characters
-	position := 0
-	extra := ""
-	if n, _ := fmt.Sscanf(params.TaskID, "%d%s", &position, &extra); n == 1 && extra == "" {
-		// It's a number, try to get by position
-		if threadID == "" {
-			return NewTextErrorResponse("No thread context available for ordinal lookup"), nil
-		}
-
-		// Resolve the ordinal against the plan this thread can SEE, which for
-		// a sub-agent is its parent's board. This is the claim path: an agent
-		// spawned to do task 4 has to be able to say "4 is mine, and now it is
-		// done". Updating one task row it was handed is single-writer — it is
-		// mutating the plan's SHAPE (adding tasks, retitling it) that stays
-		// with the owning thread.
-		resolved, err := resolvePlanForRead(rctx.Context, u.repo, threadID)
-		if err != nil {
-			if svcerr.IsNotFound(err) {
-				return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
-			}
-			return NewTextErrorResponse(fmt.Sprintf("Failed to find plan for ordinal lookup: %v", err)), nil
-		}
-
-		// Ordinals are 1-indexed, matching what list_tasks prints and what
-		// create_plan's task_position documents; GetTaskByPosition slices
-		// 0-indexed. Without this conversion "1" silently updated the SECOND
-		// task and the last task in the list was unreachable.
-		if position < 1 {
-			return NewTextErrorResponse(fmt.Sprintf("Task position %d is out of range: task numbering starts at 1", position)), nil
-		}
-		task, err = u.repo.GetTaskByPosition(rctx.Context, resolved.plan.ID, position-1)
-		if err != nil {
-			return NewTextErrorResponse(fmt.Sprintf("Failed to find task at position %d: %v", position, err)), nil
-		}
-	} else {
-		// It's a UUID, get by ID
-		task, err = u.repo.GetTask(rctx.Context, params.TaskID)
-		if err != nil {
-			return NewTextErrorResponse(fmt.Sprintf("Failed to find task: %v", err)), nil
-		}
-	}
-
-	// Only a task on this thread's plan, or on the plan it was spawned from,
-	// is this thread's to change; and on an inherited plan only the task this
-	// thread holds (see inheritedTaskRefusal).
-	scope, ownerThreadID, err := scopeTaskForThread(rctx.Context, u.repo, threadID, task)
-	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to find the plan of task %s: %v", task.ID, err)), nil
-	}
-	meta := taskMetadataMap(task)
-	claim, _ := meta[claimedByThreadKey].(string)
-	switch scope {
-	case taskPlanForeign:
-		return NewTextErrorResponse(foreignTaskRefusal(params.TaskID)), nil
-	case taskPlanInherited:
-		if refusal := inheritedTaskRefusal(task, params, threadID, ownerThreadID, claim); refusal != "" {
-			return NewTextErrorResponse(refusal), nil
-		}
-	}
-
-	// Update fields
-	updated := false
-	if params.Title != "" {
-		task.Title = params.Title
-		updated = true
-	}
-	if params.Status != "" {
-		statusVal, ok := parseTaskStatus(params.Status)
-		if !ok {
-			return NewTextErrorResponse(fmt.Sprintf("Invalid status: %s", params.Status)), nil
-		}
-		task.Status = statusVal
-		updated = true
-	}
-
-	if params.Description != "" {
-		task.Description = &params.Description
-		updated = true
-	}
-	metaChanged := false
-	if params.Assignee != "" {
-		if scope == taskPlanOwn && claim != "" && (task.Assignee == nil || *task.Assignee != params.Assignee) {
-			// The plan's owner reassigning a task releases the old claim, so
-			// the agent it now goes to can take it.
-			delete(meta, claimedByThreadKey)
-			metaChanged = true
-		}
-		task.Assignee = &params.Assignee
-		updated = true
-	}
-
-	// Merge metadata. The claim key is the tool's own record, never a param.
-	for k, v := range params.Metadata {
-		if k == claimedByThreadKey {
-			continue
-		}
-		meta[k] = v
-		metaChanged = true
-		updated = true
-	}
-
-	if !updated {
-		return NewTextResponse("No updates provided"), nil
-	}
-
-	// A sub-agent that changes a task on its parent's board holds it from
-	// then on: a sibling's update to it is refused.
-	if scope == taskPlanInherited && claim != threadID {
-		meta[claimedByThreadKey] = threadID
-		metaChanged = true
-	}
-	if metaChanged {
-		if metaJSON, err := json.Marshal(meta); err == nil {
-			s := string(metaJSON)
-			task.Metadata = &s
-		}
-	}
-
-	task.UpdatedAt = time.Now()
-	if task.Status == int32(db.TaskStatusCompleted) {
-		now := time.Now()
-		task.CompletedAt = &now
-	}
-
-	// Update the task
-	if err := u.repo.UpdateTask(rctx.Context, task); err != nil {
-		logging.Error("Failed to update task", "error", err, "task_id", task.ID)
+	var early *ToolResponse
+	if err := u.repo.RunTx(rctx.Context, orm.Serializable, func(ctx context.Context) error {
+		var err error
+		task, early, err = u.apply(ctx, threadID, params)
+		return err
+	}); err != nil {
+		logging.Error("Failed to update task", "error", err, "task_id", params.TaskID)
 		return NewTextErrorResponse(fmt.Sprintf("Failed to update task: %v", err)), nil
+	}
+	if early != nil {
+		return *early, nil
 	}
 
 	// Check if all tasks are completed
@@ -556,6 +436,153 @@ Status: %s`,
 	logging.Debug("Task updated", "task_id", task.ID, "status", task.Status)
 	return NewTextResponse(responseText), nil
 }
+
+// apply resolves params' task, checks this thread may make the update, and
+// writes it: the task, or a response that ends the call instead (a refusal,
+// or nothing to update). It runs inside one SERIALIZABLE transaction (Execute):
+// the holder check and the claim it writes are a read-check-write, and two
+// sibling sub-agents racing to claim one task must not both pass the check
+// and both write. The loser's transaction is retried and then sees the claim.
+func (u *UpdateTaskTool) apply(ctx context.Context, threadID string, params UpdateTaskParams) (*db.Task, *ToolResponse, error) {
+	var task *db.Task
+	var err error
+
+	// Check if TaskID is a number (ordinal position)
+	// Must be just a number, no other characters
+	position := 0
+	extra := ""
+	if n, _ := fmt.Sscanf(params.TaskID, "%d%s", &position, &extra); n == 1 && extra == "" {
+		// It's a number, try to get by position
+		if threadID == "" {
+			return nil, respond(NewTextErrorResponse("No thread context available for ordinal lookup")), nil
+		}
+
+		// Resolve the ordinal against the plan this thread can SEE, which for
+		// a sub-agent is its parent's board. This is the claim path: an agent
+		// spawned to do task 4 has to be able to say "4 is mine, and now it is
+		// done". Updating one task row it was handed is single-writer — it is
+		// mutating the plan's SHAPE (adding tasks, retitling it) that stays
+		// with the owning thread.
+		resolved, err := resolvePlanForRead(ctx, u.repo, threadID)
+		if err != nil {
+			if svcerr.IsNotFound(err) {
+				return nil, respond(NewTextErrorResponse("No plan found for this thread. Use create_plan to create one.")), nil
+			}
+			return nil, respond(NewTextErrorResponse(fmt.Sprintf("Failed to find plan for ordinal lookup: %v", err))), nil
+		}
+
+		// Ordinals are 1-indexed, matching what list_tasks prints and what
+		// create_plan's task_position documents; GetTaskByPosition slices
+		// 0-indexed. Without this conversion "1" silently updated the SECOND
+		// task and the last task in the list was unreachable.
+		if position < 1 {
+			return nil, respond(NewTextErrorResponse(fmt.Sprintf("Task position %d is out of range: task numbering starts at 1", position))), nil
+		}
+		task, err = u.repo.GetTaskByPosition(ctx, resolved.plan.ID, position-1)
+		if err != nil {
+			return nil, respond(NewTextErrorResponse(fmt.Sprintf("Failed to find task at position %d: %v", position, err))), nil
+		}
+	} else {
+		// It's a UUID, get by ID
+		task, err = u.repo.GetTask(ctx, params.TaskID)
+		if err != nil {
+			return nil, respond(NewTextErrorResponse(fmt.Sprintf("Failed to find task: %v", err))), nil
+		}
+	}
+
+	// Only a task on this thread's plan, or on the plan it was spawned from,
+	// is this thread's to change; and on an inherited plan only the task this
+	// thread holds (see inheritedTaskRefusal).
+	scope, ownerThreadID, err := scopeTaskForThread(ctx, u.repo, threadID, task)
+	if err != nil {
+		return nil, nil, fmt.Errorf("find the plan of task %s: %w", task.ID, err)
+	}
+	meta := taskMetadataMap(task)
+	claim, _ := meta[claimedByThreadKey].(string)
+	switch scope {
+	case taskPlanForeign:
+		return nil, respond(NewTextErrorResponse(foreignTaskRefusal(params.TaskID))), nil
+	case taskPlanInherited:
+		if refusal := inheritedTaskRefusal(task, params, threadID, ownerThreadID, claim); refusal != "" {
+			return nil, respond(NewTextErrorResponse(refusal)), nil
+		}
+	}
+
+	// Update fields
+	updated := false
+	if params.Title != "" {
+		task.Title = params.Title
+		updated = true
+	}
+	if params.Status != "" {
+		statusVal, ok := parseTaskStatus(params.Status)
+		if !ok {
+			return nil, respond(NewTextErrorResponse(fmt.Sprintf("Invalid status: %s", params.Status))), nil
+		}
+		task.Status = statusVal
+		updated = true
+	}
+
+	if params.Description != "" {
+		task.Description = &params.Description
+		updated = true
+	}
+	metaChanged := false
+	if params.Assignee != "" {
+		if scope == taskPlanOwn && claim != "" && (task.Assignee == nil || *task.Assignee != params.Assignee) {
+			// The plan's owner reassigning a task releases the old claim, so
+			// the agent it now goes to can take it.
+			delete(meta, claimedByThreadKey)
+			metaChanged = true
+		}
+		task.Assignee = &params.Assignee
+		updated = true
+	}
+
+	// Merge metadata. The claim key is the tool's own record, never a param.
+	for k, v := range params.Metadata {
+		if k == claimedByThreadKey {
+			continue
+		}
+		meta[k] = v
+		metaChanged = true
+		updated = true
+	}
+
+	if !updated {
+		return nil, respond(NewTextResponse("No updates provided")), nil
+	}
+
+	// A sub-agent that changes a task on its parent's board holds it from
+	// then on: a sibling's update to it is refused.
+	if scope == taskPlanInherited && claim != threadID {
+		meta[claimedByThreadKey] = threadID
+		metaChanged = true
+	}
+	if metaChanged {
+		if metaJSON, err := json.Marshal(meta); err == nil {
+			s := string(metaJSON)
+			task.Metadata = &s
+		}
+	}
+
+	task.UpdatedAt = time.Now()
+	if task.Status == int32(db.TaskStatusCompleted) {
+		now := time.Now()
+		task.CompletedAt = &now
+	}
+
+	// Update the task
+	if err := u.repo.UpdateTask(ctx, task); err != nil {
+		// Returned, not answered: a serialization failure is retried by
+		// RunTx, and anything else becomes the tool's error below.
+		return nil, nil, err
+	}
+	return task, nil, nil
+}
+
+// respond is r as apply's early answer.
+func respond(r ToolResponse) *ToolResponse { return &r }
 
 // taskMetadataMap is task's metadata as a map, empty when it has none or it
 // is not a JSON object.
