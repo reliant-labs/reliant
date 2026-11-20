@@ -141,7 +141,7 @@ Deleting a machine releases everything bound to it. Chats pinned to it lose thei
 
 ### Reclaiming disk on a machine
 
-Each daemon reclaims the disk of linked git worktrees nobody is using on its own machine. A clean worktree whose HEAD is on a remote is reclaimed after a day idle. Before it deletes one, it captures everything git can see of it into a local ref, `refs/reliant/reclaimed/<key>/<time>`. A worktree with work that only it holds is never reclaimed automatically. After about five days idle it is proposed for a person to free. Captures never expire. Because the capture is a ref in that machine's repository, you list and restore it on that same machine with `reliant worktree reclaimed` and `reliant worktree restore`. Archiving a workspace in the app is the other cleanup path, described in [Workspaces](/features/worktrees#cleaning-up).
+Each daemon can reclaim the disk of linked git worktrees nobody is using on its own machine. Reclaim reports only (`RELIANT_WORKTREE_RECLAIM=dry-run`) unless it is switched `on`, and on your own computer the storage reaper must also be on (`RELIANT_STORAGE_REAPER=on`); see [Reclaim and restore worktrees](/guides/machines/reclaim-restore-worktrees). With it on, a clean worktree whose HEAD is on a remote is reclaimed after a day idle. Before it deletes one, it captures everything git can see of it into a local ref, `refs/reliant/reclaimed/<key>/<time>`. A worktree with work that only it holds is never reclaimed automatically. After about five days idle it is proposed for a person to free. Captures never expire. Because the capture is a ref in that machine's repository, you list and restore it on that same machine with `reliant worktree reclaimed` and `reliant worktree restore`. Archiving a workspace in the app is the other cleanup path, described in [Workspaces](/features/worktrees#cleaning-up).
 
 ## Design decisions and trade-offs
 
@@ -256,10 +256,10 @@ the project must already be checked out on that machine; otherwise the run
   <Card title="Start, stop and resize cloud machines" icon="cloud" href="/guides/machines/manage-cloud-machines-cli">
     `reliant machine list/start/stop/resize/rename`, and what wakes a machine.
   </Card>
-  <Card title="Reclaim and restore worktrees" icon="box-archive" href="/guides/machines/reclaim-restore-worktrees">
+  <Card title="Reclaim and restore worktrees" icon="archive" href="/guides/machines/reclaim-restore-worktrees">
     Free worktree disk and bring back a reclaimed worktree from its capture.
   </Card>
-  <Card title="Troubleshoot an offline machine" icon="plug-circle-exclamation" href="/guides/machines/troubleshoot-offline-machine">
+  <Card title="Troubleshoot an offline machine" icon="plug-zap" href="/guides/machines/troubleshoot-offline-machine">
     Get a chat's machine connected again and resume a paused run.
   </Card>
 </CardGroup>
