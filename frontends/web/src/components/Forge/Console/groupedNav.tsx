@@ -25,6 +25,7 @@ import { Activity, BarChart3, CircleAlert, Database, LayoutDashboard, LayoutGrid
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
+import { consoleNavEntries, CONSOLE_NAV_ANCHORS, type ConsoleNavAnchor, type ConsoleNavEntry } from "./consoleNavRegistry";
 import { configureNavRows, NAV_STARRED_MAX, type ConsoleNavDashboard, type ConsoleNavInput } from "./ConsoleShell";
 import { consolePath, OBS_NAV_LABELS, withSearch, type ConsolePage, type ObsNavView } from "./paths";
 
@@ -60,6 +61,8 @@ export interface GroupedNavInput extends ConsoleNavInput {
   hostPageActive?: boolean;
   /** The app's own dashboards (its repo's, the org's saved ones): a Dashboards group under Overview. */
   customDashboards?: readonly ConsoleNavDashboard[];
+  /** Rows other modules registered (consoleNavRegistry.ts); omitted, the registry's. */
+  extensions?: readonly ConsoleNavEntry[];
 }
 
 /** A nav group that shows its rows on every page, not only while one is open (the app's own dashboards). */
@@ -165,7 +168,57 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     },
     ...configureNavRows(input, href).map((item) => ({ ...item, active: lit(!!item.active), children: item.children?.map((child) => ({ ...child, active: lit(!!child.active) })) })),
   ];
-  return { items, footer: [row("Activity", { kind: "activity" }, icon(Activity), page.kind === "activity")] };
+  return { items: withExtensions(items, input, href, lit), footer: [row("Activity", { kind: "activity" }, icon(Activity), page.kind === "activity")] };
+}
+
+/** The anchor each built-in row is, by its label. */
+const ANCHOR_OF_LABEL: Readonly<Record<string, ConsoleNavAnchor>> = {
+  Overview: "overview",
+  Dashboards: "dashboards",
+  Issues: "issues",
+  Performance: "performance",
+  Sessions: "sessions",
+  "Product analytics": "product-analytics",
+  Releases: "releases",
+  Data: "data",
+  Users: "users",
+  "More tools": "more-tools",
+};
+
+/**
+ * The registered rows (consoleNavRegistry.ts) merged in: each one the app
+ * has (`available`), after its anchor — or, when this app's nav does not
+ * draw that anchor, after the nearest one before it that it does.
+ */
+function withExtensions(
+  items: SidebarNavItem[],
+  input: GroupedNavInput,
+  href: (target: ConsolePage) => string,
+  lit: (active: boolean) => boolean,
+): SidebarNavItem[] {
+  const extensions = (input.extensions ?? consoleNavEntries()).filter((entry) => entry.available?.(input) ?? true);
+  if (extensions.length === 0) return items;
+  const out = [...items];
+  for (const entry of extensions) {
+    const target: ConsolePage = { kind: "extension", id: entry.id, segment: entry.segment };
+    const rowItem: SidebarNavItem = {
+      label: entry.label,
+      href: href(target),
+      icon: entry.icon,
+      active: lit(input.page.kind === "extension" && input.page.id === entry.id),
+    };
+    // The last row at or before the anchor, by the anchors' order; the top of the list with none.
+    const rank = CONSOLE_NAV_ANCHORS.indexOf(entry.after);
+    let at = -1;
+    out.forEach((item, i) => {
+      const anchor = ANCHOR_OF_LABEL[item.label];
+      if (anchor && !item.section && CONSOLE_NAV_ANCHORS.indexOf(anchor) <= rank) at = i;
+    });
+    // After rows registered to the same anchor before it.
+    while (at + 1 < out.length && extensions.some((other) => other.label === out[at + 1].label && other.after === entry.after)) at += 1;
+    out.splice(at + 1, 0, rowItem);
+  }
+  return out;
 }
 
 type Crumb = { label: string; href?: string };

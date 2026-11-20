@@ -253,6 +253,8 @@ export interface SidebarSubRowProps {
   expanded?: boolean;
   /** Quiet trailing content: a count, a mark. */
   trail?: ReactNode;
+  /** The accessible name, when the trail is only a hint (a shortcut); defaults to the content. */
+  ariaLabel?: string;
   testId?: string;
 }
 
@@ -266,6 +268,7 @@ export function SidebarSubRow({
   current = false,
   expanded,
   trail,
+  ariaLabel,
   testId,
 }: SidebarSubRowProps) {
   const content = (
@@ -300,13 +303,14 @@ export function SidebarSubRow({
       onClick={routedClick(onClick)}
       aria-current={current ? "page" : undefined}
       aria-expanded={expanded}
+      aria-label={ariaLabel}
       data-testid={testId}
       className={cn(target, "no-color")}
     >
       {content}
     </a>
   ) : (
-    <button type="button" onClick={onClick} aria-expanded={expanded} data-testid={testId} className={target}>
+    <button type="button" onClick={onClick} aria-expanded={expanded} aria-label={ariaLabel} data-testid={testId} className={target}>
       {content}
     </button>
   );

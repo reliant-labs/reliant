@@ -11,7 +11,11 @@ import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "./sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 // Keeps the trigger wrapper's classes (triggerClassName): the hover-only
 // actions hide and show on it.
@@ -178,7 +182,7 @@ describe("Sidebar selected chat scroll", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>
     );
 
@@ -192,85 +196,13 @@ describe("Sidebar selected chat scroll", () => {
     vi.useRealTimers();
   });
 
-  it("stays on the archived tab when expanding an archived workspace group", () => {
-    mockArchivedChatData.push({
-      id: "chat-archived",
-      title: "Archived chat",
-      createdAt: "2024-01-01T00:00:00.000Z",
-      updatedAt: "2024-01-01T00:00:00.000Z",
-      lastMessageAt: "2024-01-01T00:00:00.000Z",
-      unread: false,
-      state: ChatState.ARCHIVED,
-      worktreeId: "worktree-archived",
-      worktreeName: "Archived workspace",
-      projectId: "project-1",
-    });
-    // One project's archive groups by workspace (across projects it groups
-    // by project: Sidebar.projectClarity.test.tsx).
-    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
-
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Sidebar />
-      </QueryClientProvider>
-    );
-
-    // The active chat is a non-archived one, so the sidebar starts on "Active".
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    fireEvent.click(screen.getByText("Archived chats"));
-
-    const groupHeader = screen.getByText("Archived workspace");
-    expect(screen.queryByText("Archived chat")).not.toBeInTheDocument();
-
-    fireEvent.click(groupHeader);
-
-    // The group expands and the list must NOT snap back to the active tab.
-    expect(screen.getByText("Archived chat")).toBeInTheDocument();
-    expect(screen.queryByText("Selected chat")).not.toBeInTheDocument();
-    useWorkspaceStateStore.setState({ projectFilterId: null });
-  });
-
-  it("closes the list menu after choosing an option, and on Escape", () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Sidebar />
-      </QueryClientProvider>
-    );
-
-    // Picking an option is a complete interaction — the menu should dismiss.
-    // The Chats heading then reads "Archived", with Back to the active list.
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    fireEvent.click(screen.getByText("Archived chats"));
-    expect(screen.queryByText("Archived chats")).not.toBeInTheDocument();
-    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent("Archived");
-    fireEvent.click(screen.getByTestId("chat-list-back"));
-    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent("Chats");
-
-    // Sort options dismiss too.
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    fireEvent.click(screen.getByText("Newest first"));
-    expect(screen.queryByText("Newest first")).not.toBeInTheDocument();
-
-    // Escape still dismisses without choosing anything.
-    fireEvent.click(screen.getByTestId("project-filter-trigger"));
-    expect(screen.getByText("Archived chats")).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByText("Archived chats")).not.toBeInTheDocument();
-  });
-
   it("closes the view menu after choosing a view mode", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>
     );
 
@@ -287,7 +219,7 @@ describe("Sidebar selected chat scroll", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>
     );
 
@@ -321,7 +253,7 @@ describe("Sidebar selected chat scroll", () => {
     expect(row.querySelector(".lucide-archive")).toBeNull();
   });
 
-  it("renders Codex-style navigation actions and opens each page through onNavigate", () => {
+  it("orders the project shell's nav Chats, Inbox, Search, Workflows, and opens each page through onNavigate", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -334,37 +266,37 @@ describe("Sidebar selected chat scroll", () => {
       </QueryClientProvider>
     );
 
-    // New chat is a link to the new-chat view (U5's /new), so a modified
-    // click opens it in a new tab; a plain one runs openNewChat.
-    expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute("href", "/new");
-    // Inbox is in the nav with its badge; the nav's order is pinned in Sidebar.forge-nav.test.tsx.
+    // The project shell (U6b): Chats (open on the chat home, New chat first),
+    // Inbox, Search, Workflows; no Projects, Usage or Apps rows.
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
-    expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));
+    const order = [...nav.querySelectorAll("a, button")]
+      .map((el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "")
+      .filter((name) => ["Chats", "New chat", "Inbox", "Search", "Workflows"].some((label) => name.startsWith(label)));
+    expect(order.slice(0, 2).map((name) => name.replace(/Ctrl.*$/, ""))).toEqual(["Chats", "New chat"]);
+    expect(order.filter((name) => ["Inbox", "Search", "Workflows"].some((label) => name.startsWith(label))).map((name) => name.match(/^(Inbox|Search|Workflows)/)?.[1])).toEqual([
+      "Inbox",
+      "Search",
+      "Workflows",
+    ]);
+    expect(within(nav).queryByRole("link", { name: "Projects" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Usage" })).toBeNull();
+    expect(screen.getByTestId("create-chat-button")).toHaveAttribute("href", "/new");
+    expect(screen.getByTestId("sidebar-chats-toggle")).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
-    // Projects is a place of its own (U6), beside the chat list's project filter.
-    expect(within(nav).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects");
-    // Unfiltered, the list's heading is just "Chats"; a filter would name its project there.
-    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent(/^Chats$/);
-    expect(screen.queryByTestId("project-filter-label")).toBeNull();
-    expect(screen.getByTestId("project-filter-trigger")).toHaveAccessibleName("Chat list options. Showing All projects");
     const workflows = within(nav).getByRole("link", { name: "Workflows" });
     // Automations and Runs are tabs of the Workflows area (§1.2): nested
     // under Workflows only while the area is open, never places of their own.
     expect(screen.queryByRole("link", { name: "Automations" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
     const settings = screen.getByRole("link", { name: "Settings" });
     expect(workflows).toHaveAttribute("data-onboarding", "workflow-button");
-    // Nothing is the current page on the chat home.
-    expect(nav.querySelector("[aria-current]")).toBeNull();
 
     fireEvent.click(workflows);
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(settings);
     fireEvent.click(screen.getByTestId("sidebar-inbox-button"));
-    fireEvent.click(within(nav).getByRole("link", { name: "Usage" }));
 
-    expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/workflows", "/settings", "/inbox", "/usage"]);
+    expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/workflows", "/settings", "/inbox"]);
     expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
   });
 
@@ -378,6 +310,25 @@ describe("Sidebar selected chat scroll", () => {
     );
     fireEvent.click(screen.getByRole("link", { name: "Settings" }), { metaKey: true });
     expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("folds Chats off a chat page, and its chevron opens them there without navigating", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onNavigate = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/settings/appearance" onNavigate={onNavigate} />
+      </QueryClientProvider>
+    );
+    const toggle = screen.getByTestId("sidebar-chats-toggle");
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("sidebar-chats")).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("sidebar-chats")).toBeInTheDocument();
+    expect(onNavigate).not.toHaveBeenCalled();
+    // The Chats row itself is a real link to the chats.
+    expect(screen.getByTestId("sidebar-chats-button").tagName).toBe("A");
   });
 
   it("marks Settings while a settings page is on screen", () => {

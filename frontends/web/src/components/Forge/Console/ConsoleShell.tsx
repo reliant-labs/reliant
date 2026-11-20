@@ -61,6 +61,7 @@ import {
   withSearch,
   type ConsolePage,
 } from "./paths";
+import { consoleNavEntries } from "./consoleNavRegistry";
 
 export interface ConsoleNavEnv {
   name: string;
@@ -254,6 +255,8 @@ export function consoleCrumbs(
       return [{ label: "Domains" }];
     case "activity":
       return [{ label: "Activity" }];
+    case "extension":
+      return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
   }
 }
 

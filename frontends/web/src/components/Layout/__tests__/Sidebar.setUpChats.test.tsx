@@ -66,12 +66,17 @@ vi.mock("../../../hooks/run-queries", async (importOriginal) => ({
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "../sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 function renderSidebar() {
   const onNavigate = vi.fn();
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <Sidebar pathname="/projects" onNavigate={onNavigate} />
+      <Sidebar pathname="/" onNavigate={onNavigate} />
     </QueryClientProvider>,
   );
   return onNavigate;
@@ -97,8 +102,8 @@ describe("the nav's Chats section with no usable machine", () => {
     // A real link: refresh, a new tab and a shared link all work.
     const link = within(card).getByRole("link", { name: "Set up" });
     expect(link).toHaveAttribute("href", href);
-    // The list and its heading are gone, chats and all.
-    expect(screen.queryByTestId("chat-list-heading")).toBeNull();
+    // The list is gone, chats and all.
+    expect(screen.queryByTestId("sidebar-scroller")).toBeNull();
     expect(screen.queryByText("Fix the build")).toBeNull();
 
     fireEvent.click(link);
@@ -136,7 +141,7 @@ describe("the nav's Chats section with no usable machine", () => {
     const onNavigate = renderSidebar();
 
     expect(screen.queryByTestId("set-up-chats-card")).toBeNull();
-    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent(/^Chats$/);
+    expect(screen.getByTestId("sidebar-scroller")).toBeInTheDocument();
     const newChat = screen.getByRole("link", { name: "New chat" });
     // A link to U5's new-chat view; a plain click runs openNewChat.
     expect(newChat).toHaveAttribute("href", "/new");

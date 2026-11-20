@@ -814,7 +814,8 @@ function SidebarComponent({
   const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
   // Where each place is, in the form the links use (lib/paths), and whether
   // its page is the one on screen.
-  const newChatHref = withSearch(newChatPath(), { project: shell.projectId ?? undefined });
+  // New chat starts in the shell's one project; across several, wherever openNewChat would.
+  const newChatHref = withSearch(newChatPath(), { project: projectFilterId ?? undefined });
   const inboxHref = inboxPath();
   const workflowsHref = workflowsPath();
   const settingsHref = settingsPath();
@@ -1120,7 +1121,7 @@ function SidebarComponent({
       go(chatSetupPath(setup));
       return;
     }
-    void openNewChat(shell.projectId ? { projectId: shell.projectId } : undefined);
+    void openNewChat(projectFilterId ? { projectId: projectFilterId } : undefined);
   };
 
   const handleSwitchToWorktreeNewChat = useCallback(
@@ -1892,13 +1893,25 @@ function SidebarComponent({
             <div id="sidebar-chats" className="flex max-h-[45dvh] min-h-0 flex-col" data-testid="sidebar-chats">
               {/* Chats cannot run yet (no machine): one card that sets them up, in place of the list. */}
               {setupNeeded ? (
-                <div className="py-1">
-                  <SetUpChatsCard setup={setup} variant="nav" onNavigate={go} />
+                <div className="py-0.5">
+                  {/* New chat sets chats up first (handleNewChat). */}
+                  <SidebarSubRow
+                    label="New chat"
+                    depth={1}
+                    icon={<SquarePen className="size-4" />}
+                    href={chatSetupPath(setup)}
+                    onClick={handleNewChat}
+                    testId="create-chat-button"
+                  />
+                  <div className="py-1">
+                    <SetUpChatsCard setup={setup} variant="nav" onNavigate={go} />
+                  </div>
                 </div>
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid="sidebar-scroller">
                   <SidebarSubRow
                     label="New chat"
+                    ariaLabel="New chat"
                     depth={1}
                     icon={<SquarePen className="size-4" />}
                     href={newChatHref}

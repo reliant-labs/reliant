@@ -15,6 +15,7 @@ import { homePath, projectChatsPath, withSearch } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 
 import { START_APP, START_REPO } from "../../Apps/appStart";
+import { consoleNavEntries } from "./consoleNavRegistry";
 import { PAGE_SUBTITLES } from "./groupedNav";
 import { OBS_NAV_LABELS, type ConsolePage } from "./paths";
 
@@ -46,6 +47,10 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Domains", shows: "The addresses your app answers on" };
     case "activity":
       return { title: "Activity", shows: "Every deploy, change and alert, newest first" };
+    case "extension": {
+      const label = consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment;
+      return { title: label, shows: `${label} for your app` };
+    }
   }
 }
 

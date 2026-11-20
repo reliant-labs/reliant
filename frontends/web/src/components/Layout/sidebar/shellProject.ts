@@ -155,6 +155,7 @@ export const SEVERAL_PROJECTS_PICK = "__several__";
 
 const LAST_PICK_KEY = "shell.currentProject";
 const FOCUS_KEY = "shell.focusProject";
+const SEVERAL_KEY = "shell.severalProjects";
 
 function read(key: string): string | null {
   try {
@@ -173,17 +174,22 @@ function write(key: string, value: string): void {
 }
 
 interface LastPickState {
-  /** A project key, or ALL_PROJECTS_PICK. */
+  /** A project key, ALL_PROJECTS_PICK, or SEVERAL_PROJECTS_PICK. */
   key: string | null;
+  /** The projects of the last choice of several (the tab's copy of `sidebar.projects`' filter). */
+  several: string[];
   /** The project last picked on its own (the switcher, an app page's picker): the focus of a choice of several. */
   focus: string | null;
   set: (key: string) => void;
   setFocus: (key: string) => void;
+  /** Choose several: SEVERAL_PROJECTS_PICK, remembering which. */
+  setSeveral: (ids: readonly string[]) => void;
 }
 
 export const useShellLastPick = create<LastPickState>((set) => ({
   key: read(LAST_PICK_KEY),
   focus: read(FOCUS_KEY),
+  several: (read(SEVERAL_KEY) ?? "").split(",").filter(Boolean),
   set: (key) => {
     write(LAST_PICK_KEY, key);
     const project = key !== ALL_PROJECTS_PICK && key !== SEVERAL_PROJECTS_PICK;
@@ -193,6 +199,11 @@ export const useShellLastPick = create<LastPickState>((set) => ({
   setFocus: (focus) => {
     write(FOCUS_KEY, focus);
     set({ focus });
+  },
+  setSeveral: (ids) => {
+    write(LAST_PICK_KEY, SEVERAL_PROJECTS_PICK);
+    write(SEVERAL_KEY, ids.join(","));
+    set({ key: SEVERAL_PROJECTS_PICK, several: [...ids] });
   },
 }));
 
@@ -241,7 +252,8 @@ export function useShellProject(pathname: string, search: Record<string, unknown
   // A choice of several outlives a reload of any page: the filter holds it
   // only for the tab, the setting for good.
   const { prefs } = useSidebarProjectPrefs();
-  const rememberedKey = prefs.filter.join(",");
+  const severalPick = useShellLastPick((state) => state.several);
+  const rememberedKey = (prefs.filter.length >= 2 ? prefs.filter : severalPick).join(",");
   useEffect(() => {
     if (lastPick !== SEVERAL_PROJECTS_PICK || filterIds.length >= 2 || !rememberedKey.includes(",")) return;
     useChatProjectFilterStore.getState().setMany(rememberedKey.split(","));

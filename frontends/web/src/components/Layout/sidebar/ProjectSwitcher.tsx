@@ -31,7 +31,7 @@ import { ProjectSelector, type ProjectSelection, type ProjectSelectorLeadItem } 
 import { isForgeShell } from "../../../lib/shell";
 import { ProjectMark } from "../ProjectMark";
 import { SIDEBAR_ORG_TRIGGER, SidebarOrgLabel, SidebarOrgRow } from "./primitives";
-import { ALL_PROJECTS_PICK, SEVERAL_PROJECTS_PICK, sectionInAnotherApp, sectionsAppOf, useShellLastPick, type ShellProject } from "./shellProject";
+import { ALL_PROJECTS_PICK, sectionInAnotherApp, sectionsAppOf, useShellLastPick, type ShellProject } from "./shellProject";
 
 /** Where picking `selection` goes from `pathname`, and the key it becomes. */
 export function pickTarget(selection: ProjectSelection, pathname: string): { key: string; href: string } {
@@ -54,6 +54,7 @@ export function ProjectSwitcherRow({
   onNavigate: (href: string) => void;
 }) {
   const setLastPick = useShellLastPick((state) => state.set);
+  const rememberSeveral = useShellLastPick((state) => state.setSeveral);
   const filter = useChatProjectFilter();
   const [open, setOpen] = useState(false);
   const [several, setSeveral] = useState(false);
@@ -105,7 +106,7 @@ export function ProjectSwitcherRow({
   const onChangeSeveral = (ids: string[]) => {
     if (ids.length >= 2) {
       filter.set(ids);
-      setLastPick(SEVERAL_PROJECTS_PICK);
+      rememberSeveral(ids);
       return;
     }
     if (ids.length === 1) {

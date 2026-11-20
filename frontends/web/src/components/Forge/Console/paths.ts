@@ -66,6 +66,7 @@ import { orgFreePath } from "@/lib/paths/org";
 
 import { isDashboardPageKind, type DashboardPageKind } from "../Observability/Dashboards/dashboardModel";
 import { OBS_SEARCH_KEYS, type ObsSearch, type ObsView } from "../Observability/obsSearch";
+import { consoleNavEntryForSegment } from "./consoleNavRegistry";
 
 /** The console's first segment, for reading a pathname back (consolePageOf, orgPageOf). */
 export const FORGE_ROOT = "/forge";
@@ -152,7 +153,9 @@ export type ConsolePage =
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
   | { kind: "domains" }
-  | { kind: "activity" };
+  | { kind: "activity" }
+  /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
+  | { kind: "extension"; id: string; segment: string };
 
 /**
  * One app's console. Its org form (flag `web.org_routes` on) is
@@ -195,6 +198,8 @@ export function consolePath(project: string, page: ConsolePage, ctx?: PathContex
       return `${base}/domains`;
     case "activity":
       return `${base}/activity`;
+    case "extension":
+      return `${base}/${encodeURIComponent(page.segment)}`;
   }
 }
 
@@ -239,8 +244,11 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "domains":
       case "activity":
         return sub ? null : { kind: section };
-      default:
-        return null;
+      default: {
+        // A page registered in the nav, while it is registered.
+        const entry = sub ? undefined : consoleNavEntryForSegment(section);
+        return entry ? { kind: "extension", id: entry.id, segment: entry.segment } : null;
+      }
     }
   })();
   return page ? { project, page } : null;
