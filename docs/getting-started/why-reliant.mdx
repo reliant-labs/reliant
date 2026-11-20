@@ -70,7 +70,7 @@ Hosted secrets are write-only: you can set and rotate one, but never read it bac
 Every default is a starting point, not a lock-in:
 
 - **Start anywhere.** Use any piece on its own, in any repo and any language. An existing app deploys from its own Dockerfile, and monitoring or release recording works without forge deploying anything. See [adopt an app that already exists](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists).
-- **Bring your own.** Point at your own database, identity provider or OpenTelemetry backend in config.
+- **Bring your own.** Point an environment at your own database, identity provider or OpenTelemetry backend in its config. See [bring your own](/forge/deploy/escape-hatches#bring-your-own-database-identity-provider-or-telemetry-backend).
 - **Deploy where you want.** Reliant hosting, your own Kubernetes cluster, Docker Compose or plain host processes. See [self-hosted delivery](/forge/deploy/self-hosted-delivery).
 - **Any model.** Use your Claude, ChatGPT or Copilot subscription, your own API key, or local models, and mix them per workflow step. See [API keys and subscriptions](/settings/api-keys).
 - **Try it without an account.** [Deploy a Vite or Next.js app](/forge/deploy-without-an-account) with no signup and claim it later.

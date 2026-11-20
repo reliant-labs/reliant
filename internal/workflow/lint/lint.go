@@ -104,6 +104,7 @@ const (
 	RuleScenarioTrigger        = "scenario-trigger-uncovered"
 	RuleScenarioTerminal       = "scenario-terminal-uncovered"
 	RuleAllowInvalid           = "lint-allow-invalid"
+	RuleAskQuestionType        = "ask-question-not-ask-user"
 )
 
 func rule(id string, sev Severity, summary string) Rule {
@@ -131,6 +132,7 @@ var rules = []Rule{
 	rule(RuleScenarioTrigger, SeverityWarning, "No scenario fires the workflow through this trigger (scenario `trigger:`)."),
 	rule(RuleScenarioTerminal, SeverityWarning, "No scenario expects the run to reach this terminal node."),
 	rule(RuleAllowInvalid, SeverityError, "A `lint:allow` comment names an unknown rule or gives no reason."),
+	rule(RuleAskQuestionType, SeverityWarning, "An ask_question node's metadata has no \"type\": \"ask_user\", so the app shows the question with no options and `reliant workflow answer` cannot answer it."),
 }
 
 // Rules lists every rule, in documentation order.

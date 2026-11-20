@@ -47,7 +47,7 @@ flowchart TD
 
 Reliant hosting groups the errors your services and pages report into **issues** and ties each to the release it first appeared in. It raises `NewIssue` when one appears, `IssueRegressed` when a resolved one comes back in a later release, and `IssueSpike` when an open one's rate jumps to five times its previous day. Those, `ReleaseRegressed` from a failed [release verdict](/deep-dives/how-release-verdicts-work), and your own `critical` and `error` rules reach Autopilot through the same alert routing as your other receivers.
 
-On-call's trigger is declared `webhook: {source: alerting}`, so turning it on creates a receiver for it with nothing to copy ([Webhooks](/automations/webhooks)). It takes alerts from the project's persistent environments, never previews, and a silence mutes it too.
+On-call's trigger is declared `webhook: {source: alerting}`, so turning it on creates a receiver for it with nothing to copy ([Webhooks](/automations/webhooks)). It takes alerts from every environment of the project that raises them, hosted or one you monitor with `forge obs init`, never previews, and a silence mutes it too.
 
 ### 2. On-call files one investigated issue
 

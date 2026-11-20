@@ -1,6 +1,6 @@
 ---
 title: "Tools Quick Reference"
-description: "Auto-generated quick reference for all tools (tags, names, descriptions)"
+description: "Every tool a Reliant agent can call, by tag: what it does, its parameters and when to use it. Generated from the live tool registry."
 ---
 
 {/*
@@ -383,6 +383,11 @@ ASSIGNEE:
 - Use a descriptive label: spawn title, role name, or agent identifier
 - Claim pattern: update_task(task_id="X", status="in_progress", assignee="researcher-auth")
 - Other agents see assignments in list_tasks and skip claimed work
+
+ON A PLAN YOU WERE SPAWNED FROM (your parent's board):
+- You may update the task you were given: status, description, assignee, metadata
+- The first sub-agent to update a task holds it; another sub-agent's update is refused
+- Titles and the plan's shape stay with the thread that owns the plan
 
 METADATA OPTIONS:
 - notes: Add discoveries, blockers, or important context
@@ -2764,7 +2769,7 @@ Unattended runs may only start the machine their trigger activation targets.
 
 Define or delete one of the user's machine pools: a named set of their machines (those whose labels match the pool's selector) that a trigger activation can run on instead of one machine (create/update_trigger_activation machine_pool). Each run goes to the least-loaded member, so machines join or leave by their labels with no edit to the activations. list_machines shows the pools, their members and every machine's labels; manage_machine label changes a machine's labels.
 
-- put: create the pool, or change its definition. Fields you omit keep the pool's current values; a new pool takes the defaults (selector `{"pool": `<name>`}`, member_idle_timeout 10m, no limits).
+- put: create the pool, or change its definition. Fields you omit keep the pool's current values; a new pool takes the defaults (selector `{"pool": <name>}`, member_idle_timeout 10m, no limits).
 - delete: remove the pool's definition. Its machines and their labels are untouched. Refused while an activation runs on the pool.
 
 Both change where runs execute, so an interactive call raises an approval card showing the exact resulting definition and members, and runs only once the user approves it. Unattended runs cannot use this tool.

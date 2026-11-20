@@ -108,6 +108,9 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 	if w, _ := strconv.Atoi(wait.Env["WAIT_S"]); w <= gl.TimeoutMinutes*60 {
 		t.Errorf("WAIT_S=%d is not above the job's %dm timeout: a slow lint would be read as unfinished, not failed", w, gl.TimeoutMinutes)
 	}
+	if polls, _ := strconv.Atoi(wait.Env["MAX_POLLS"]); polls < 2 || polls > 8 {
+		t.Fatalf("anonymous Actions poll budget %d, want 2–8 calls per gate", polls)
+	}
 	for _, s := range gate.Steps[:idx] {
 		if s.Name == "Five-minute budget" {
 			t.Error("the wait must come before the budget step, which reports the run's wall time")
@@ -127,29 +130,67 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "answers"), []byte(answers.String()), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		// Each call pops the next line; a line "fail" is an API error, and
-		// past the last line the last one repeats.
-		writeExec(t, filepath.Join(dir, "gh"), `#!/usr/bin/env bash
-case "$*" in *"/actions/runs/123/attempts/2/jobs"*) ;; *) echo "unexpected gh $*" >&2; exit 9 ;; esac
+		if err := os.WriteFile(filepath.Join(dir, "clock"), []byte("1000\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		writeExec(t, filepath.Join(dir, "date"), "#!/bin/sh\ncat \"$FIXTURE/clock\"\n")
+		writeExec(t, filepath.Join(dir, "sleep"), `#!/bin/sh
+read -r now < "$FIXTURE/clock"
+printf '%s\n' "$((now + $1))" > "$FIXTURE/clock"
+`)
+		// Each public API call pops the next answer without credentials.
+		writeExec(t, filepath.Join(dir, "curl"), `#!/usr/bin/env bash
+case "$*" in *"/actions/runs/123/attempts/2/jobs"*) ;; *) echo "unexpected curl $*" >&2; exit 9 ;; esac
+[[ -z ${GH_TOKEN:-} && -z ${GITHUB_TOKEN:-} ]] || exit 8
 f="`+dir+`/answers"
+read -r now < "$FIXTURE/clock"
+printf '%s\n' "$now" >>"$FIXTURE/calls"
 line=$(head -1 "$f"); [ "$(wc -l <"$f")" -gt 1 ] && { sed 1d "$f" >"$f.n"; mv "$f.n" "$f"; }
 [ "$line" = fail ] && exit 1
-printf '%s\n' "$line"
+if [[ $line == late ]]; then
+  if ((now >= 1900)); then line='completed success'; else line='in_progress '; fi
+fi
+read -r status conclusion <<<"$line"
+jq -n --arg job "$JOB" --arg status "$status" --arg conclusion "$conclusion" '{jobs:[{name:$job,status:$status,conclusion:$conclusion}]}'
 `)
 		env := map[string]string{
 			"PATH": dir + ":" + os.Getenv("PATH"), "GITHUB_REPOSITORY": "o/r", "GITHUB_RUN_ID": "123",
-			"GITHUB_RUN_ATTEMPT": "2", "GITHUB_SERVER_URL": "https://github.com", "GH_TOKEN": "tok",
-			"JOB": wait.Env["JOB"], "WAIT_S": waitS, "POLL_S": "0",
+			"GITHUB_RUN_ATTEMPT": "2", "GITHUB_SERVER_URL": "https://github.com", "GH_TOKEN": "", "GITHUB_TOKEN": "",
+			"JOB": wait.Env["JOB"], "WAIT_S": waitS, "POLL_S": wait.Env["POLL_S"],
+			"MAX_POLLS": wait.Env["MAX_POLLS"], "FIXTURE": dir,
 		}
-		return ciShell(t, wait.Run, env)
+		ok, out := ciShell(t, wait.Run, env)
+		calls, err := os.ReadFile(filepath.Join(dir, "calls"))
+		if err != nil {
+			t.Fatalf("no Actions API request was recorded: %v\n%s", err, out)
+		}
+		if count := strings.Count(string(calls), "\n"); count > 8 {
+			t.Fatalf("anonymous budget exceeded: %d calls\n%s", count, out)
+		}
+		if waitS == "960" && !strings.HasSuffix(string(calls), "1960\n") {
+			t.Fatalf("last poll did not reach the deadline: %q", calls)
+		}
+		return ok, out
 	}
 	if ok, out := run(t, "0", "completed success"); !ok {
 		t.Fatalf("harness: a passed job fails the step, so the cases below prove nothing:\n%s", out)
 	}
 	t.Run("passes after queuing, running and one API error", func(t *testing.T) {
 		t.Parallel()
-		if ok, out := run(t, "60", "queued ", "in_progress ", "fail", "completed success"); !ok {
+		if ok, out := run(t, "90", "queued ", "in_progress ", "fail", "completed success"); !ok {
 			t.Errorf("a job that passes after queuing, running and one API error fails the step:\n%s", out)
+		}
+	})
+	t.Run("late success is observed before anonymous allowance is exhausted", func(t *testing.T) {
+		t.Parallel()
+		if ok, out := run(t, "960", "late"); !ok {
+			t.Errorf("late success did not pass the required lint verdict:\n%s", out)
+		}
+	})
+	t.Run("unavailable at the final poll stays red", func(t *testing.T) {
+		t.Parallel()
+		if ok, out := run(t, "960", "fail"); ok {
+			t.Errorf("API outage produced a passed lint verdict:\n%s", out)
 		}
 	})
 	for _, bad := range [][]string{

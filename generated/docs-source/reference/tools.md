@@ -380,6 +380,11 @@ ASSIGNEE:
 - Claim pattern: update_task(task_id="X", status="in_progress", assignee="researcher-auth")
 - Other agents see assignments in list_tasks and skip claimed work
 
+ON A PLAN YOU WERE SPAWNED FROM (your parent's board):
+- You may update the task you were given: status, description, assignee, metadata
+- The first sub-agent to update a task holds it; another sub-agent's update is refused
+- Titles and the plan's shape stay with the thread that owns the plan
+
 METADATA OPTIONS:
 - notes: Add discoveries, blockers, or important context
 - preferred_agent: Suggest which agent should handle this
