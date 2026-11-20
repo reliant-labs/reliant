@@ -72,6 +72,8 @@ export function switchTarget(app: string, page: ConsolePage): string {
       ? { kind: "environments" }
       : page.kind === "workload"
         ? { kind: "overview" }
+        : page.kind === "service"
+          ? { kind: "services" }
         : page.kind === "release"
           ? { kind: "releases" }
           : page.kind === "dashboard"

@@ -787,6 +787,13 @@ export const forgeConsoleOverviewSearchSchema = z.object({
   kind: z.enum(OVERVIEW_KIND_FILTERS).optional().catch(undefined),
 });
 
+/** Services and one service: the scope, the window, and (on a service) the custom metric charted. */
+export const forgeConsoleServicesSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+  metric: textParam,
+});
+
 /**
  * One workload: its tab, and the Logs / Traces / Profiles tabs' own keys (the
  * explorers' vocabulary, as on the Observability pages). The environment is

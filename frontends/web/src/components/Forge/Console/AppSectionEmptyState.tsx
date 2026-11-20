@@ -47,6 +47,13 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Domains", shows: "The addresses your app answers on" };
     case "activity":
       return { title: "Activity", shows: "Every deploy, change and alert, newest first" };
+    case "services":
+    case "service":
+      return { title: "Services", shows: PAGE_SUBTITLES.services };
+    case "usage":
+      return { title: "Usage", shows: PAGE_SUBTITLES.usage };
+    case "events":
+      return { title: "Events & metrics", shows: PAGE_SUBTITLES.events };
     case "extension": {
       const label = consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment;
       return { title: label, shows: `${label} for your app` };

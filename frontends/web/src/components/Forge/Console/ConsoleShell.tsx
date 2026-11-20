@@ -255,6 +255,14 @@ export function consoleCrumbs(
       return [{ label: "Domains" }];
     case "activity":
       return [{ label: "Activity" }];
+    case "services":
+      return [{ label: "Services" }];
+    case "service":
+      return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
+    case "usage":
+      return [{ label: "Usage" }];
+    case "events":
+      return [{ label: "Product analytics" }, { label: "Events & metrics" }];
     case "extension":
       return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
   }

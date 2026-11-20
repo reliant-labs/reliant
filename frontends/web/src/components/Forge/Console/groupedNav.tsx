@@ -4,15 +4,17 @@
  * The console's nav grouped by what a reader is after, each page keeping its
  * technical name with a plain line under its title (PAGE_SUBTITLES):
  *
- *   Overview
+ *   Overview                the summary: health, what needs attention, a strip of the services
+ *   Services                everything the app runs, live (services, workers, jobs, the site, the database)
  *   Issues            ▾     Errors · Alerts
  *   Performance       ▾     Traces · RPC explorer
  *   Sessions
- *   Product analytics       the Users · Product · Acquisition hub, when the project has it
+ *   Product analytics ▸     Insights (the Users · Product · Acquisition hub, when the project has it) ·
+ *                           Events & metrics · registered rows (Experiments: consoleNavRegistry.ts `group`)
  *   Releases
  *   Data · Users
  *   More tools        ▸     Dashboards (and up to three stars) · Logs · Metrics · Profiles · Service graph · Storage
- *   ── Configure            Environments › · Secrets · Domains
+ *   ── Configure            Environments › · Secrets · Domains · Usage
  *   footer                  Activity
  *
  * The same rows, IA and links as buildConsoleNav, regrouped: a reader who
@@ -21,7 +23,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, CircleAlert, Database, LayoutDashboard, LayoutGrid, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, Boxes, CircleAlert, Database, LayoutDashboard, LayoutGrid, PlayCircle, Receipt, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
@@ -46,6 +48,9 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   profiles: "Where your code spends its CPU time",
   graph: "Which services call which, and how healthy each call is",
   dashboards: "Saved charts, yours and the ones Forge made",
+  services: "Everything your app runs, live: status, instances, CPU, memory and requests",
+  usage: "What your app's hosting costs this month, per environment",
+  events: "The product events and metrics your app sends",
 };
 
 /** The Product analytics hub: the dashboard its row opens, and every dashboard key that is one of its tabs. */
@@ -55,7 +60,7 @@ export interface ProductAnalyticsHub {
 }
 
 export interface GroupedNavInput extends ConsoleNavInput {
-  /** Omitted, the project has no Product analytics hub and the row is left out. */
+  /** Omitted, the project has no Product analytics hub: the group has no Insights row. */
   productAnalytics?: ProductAnalyticsHub;
   /** A host page (one that is not a console page) is open: no console row is the current one. */
   hostPageActive?: boolean;
@@ -136,7 +141,8 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     : null;
 
   const items: SidebarNavItem[] = [
-    row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview" || page.kind === "workload"),
+    row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview"),
+    row("Services", { kind: "services" }, icon(Boxes), page.kind === "services" || page.kind === "service" || page.kind === "workload"),
     ...(dashboardsGroup ? [dashboardsGroup] : []),
     {
       label: "Issues",
@@ -149,7 +155,16 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     },
     { label: "Performance", icon: icon(Timer), defaultExpanded: true, children: [obs("traces"), obs("rpc")] },
     row("Sessions", { kind: "obs-view", view: "sessions" }, icon(PlayCircle), isObs("sessions")),
-    ...(productAnalytics ? [row("Product analytics", productAnalytics.open, icon(BarChart3), onHub)] : []),
+    {
+      // Insights opens the built-in hub; the group opens by itself on one of its pages.
+      label: "Product analytics",
+      href: href(productAnalytics?.open ?? { kind: "events" }),
+      icon: icon(BarChart3),
+      children: [
+        ...(productAnalytics ? [{ label: "Insights", href: href(productAnalytics.open), active: lit(onHub) }] : []),
+        { label: "Events & metrics", href: href({ kind: "events" }), active: lit(page.kind === "events") },
+      ],
+    },
     row("Releases", { kind: "releases" }, icon(TagIcon), page.kind === "releases" || page.kind === "release"),
     row("Data", { kind: "data" }, icon(Database), page.kind === "data"),
     row("Users", { kind: "users" }, icon(Users), page.kind === "users"),
@@ -167,6 +182,7 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
       ],
     },
     ...configureNavRows(input, href).map((item) => ({ ...item, active: lit(!!item.active), children: item.children?.map((child) => ({ ...child, active: lit(!!child.active) })) })),
+    { ...row("Usage", { kind: "usage" }, icon(Receipt), page.kind === "usage"), section: "Configure" },
   ];
   return { items: withExtensions(items, input, href, lit), footer: [row("Activity", { kind: "activity" }, icon(Activity), page.kind === "activity")] };
 }
@@ -174,6 +190,7 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
 /** The anchor each built-in row is, by its label. */
 const ANCHOR_OF_LABEL: Readonly<Record<string, ConsoleNavAnchor>> = {
   Overview: "overview",
+  Services: "services",
   Dashboards: "dashboards",
   Issues: "issues",
   Performance: "performance",
@@ -187,8 +204,9 @@ const ANCHOR_OF_LABEL: Readonly<Record<string, ConsoleNavAnchor>> = {
 
 /**
  * The registered rows (consoleNavRegistry.ts) merged in: each one the app
- * has (`available`), after its anchor — or, when this app's nav does not
- * draw that anchor, after the nearest one before it that it does.
+ * has (`available`) — inside its `group` when it names one the nav draws
+ * (as the group's last child), else after its anchor, or, when this app's
+ * nav does not draw that anchor, after the nearest one before it that it does.
  */
 function withExtensions(
   items: SidebarNavItem[],
@@ -207,6 +225,12 @@ function withExtensions(
       icon: entry.icon,
       active: lit(input.page.kind === "extension" && input.page.id === entry.id),
     };
+    const group = entry.group ? out.findIndex((item) => ANCHOR_OF_LABEL[item.label] === entry.group && !item.section && item.children) : -1;
+    if (group >= 0) {
+      const parent = out[group]!;
+      out[group] = { ...parent, children: [...(parent.children ?? []), { label: rowItem.label, href: rowItem.href, active: rowItem.active }] };
+      continue;
+    }
     // The last row at or before the anchor, by the anchors' order; the top of the list with none.
     const rank = CONSOLE_NAV_ANCHORS.indexOf(entry.after);
     let at = -1;
@@ -233,7 +257,7 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     const group = GROUP_OF[page.view];
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
-  if (isHubPage(page, productAnalytics)) return [{ label: "Product analytics" }, ...own.slice(-1)];
+  if (isHubPage(page, productAnalytics)) return [{ label: "Product analytics" }, { label: "Insights" }, ...own.slice(-1)];
   if (page.kind === "dashboard") return [{ label: "More tools" }, ...own.filter((crumb) => crumb.label !== "Observability")];
   return null;
 }

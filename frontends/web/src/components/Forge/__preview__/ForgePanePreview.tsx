@@ -50,6 +50,9 @@ import { create } from "@bufbuild/protobuf";
 import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import { ActivityPage } from "../Console/ActivityPage";
+import { ServicePage, ServicesPage } from "../Services/ServicesPages";
+import { ProjectUsagePage } from "../Usage/ProjectUsagePage";
+import { EventsMetricsPage } from "../Analytics/EventsMetricsPage";
 import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
@@ -447,6 +450,10 @@ function buildRouter(path: string) {
     secrets: SecretsPage,
     domains: ForgeDomainsPage,
     activity: ActivityPage,
+    services: ServicesPage,
+    service: ServicePage,
+    usage: ProjectUsagePage,
+    events: EventsMetricsPage,
     orgLayout: OrgConsoleLayout,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,

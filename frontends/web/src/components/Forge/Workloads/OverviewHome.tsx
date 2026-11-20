@@ -83,7 +83,9 @@ import {
   attentionItems,
   formatAge,
   jobRows,
+  JOB_STATUS,
   previewsCell,
+  replicasText,
   serviceRows,
   stripCell,
   OVERVIEW_RANGE,
@@ -99,7 +101,7 @@ import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/Fro
 import { JobTimeline } from "./JobTimeline";
 import { ServiceCards } from "./ServiceCards";
 import { UsersCard } from "./UsersCard";
-import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL } from "./overviewRows";
+import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL, type OverviewRow } from "./overviewRows";
 import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
 export interface OverviewSearch {
@@ -161,6 +163,17 @@ export interface OverviewHomeProps {
   domains?: DomainsState;
   /** The Domains screen: where "Add a domain" lands. */
   domainsHref?: string;
+  /**
+   * The project shell's summary Overview (U6b round 3, prototype): the full
+   * services table, frontends, signal tiles and job runs move to Services,
+   * and the Overview keeps a compact strip of the services linking there.
+   */
+  summary?: OverviewSummaryLinks;
+}
+
+export interface OverviewSummaryLinks {
+  services: string;
+  service: (name: string, env: string) => string;
 }
 
 export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
@@ -184,6 +197,7 @@ export function OverviewHome({
   hostedLoading = false,
   domains,
   domainsHref = "",
+  summary,
 }: OverviewHomeProps) {
   const range = search.range ?? OVERVIEW_RANGE;
   const org = useObservabilityOrg();
@@ -389,7 +403,13 @@ export function OverviewHome({
         </aside>
       </div>
 
-      {notSetUp ? (
+      {summary ? (
+        notSetUp ? (
+          <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
+        ) : (
+          <ServicesStrip rows={rows} loading={loading && !workloadsFailed} showEnv={all} links={summary} />
+        )
+      ) : notSetUp ? (
         <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
       ) : (
         <section className="space-y-3" aria-labelledby="overview-services-heading" data-testid="overview-services">
@@ -482,7 +502,7 @@ export function OverviewHome({
         </section>
       )}
 
-      {!unrecorded && (
+      {!summary && !unrecorded && (
         <FrontendsPanel
           scope={env}
           envs={envs}
@@ -493,7 +513,7 @@ export function OverviewHome({
         />
       )}
 
-      {!unrecorded && !notSetUp && (
+      {!summary && !unrecorded && !notSetUp && (
         // Each tile reads, loads, fails and retries on its own (SignalTiles).
         <div className="grid grid-cols-[minmax(0,1fr)] gap-x-12 gap-y-10 lg:grid-cols-2" data-testid="overview-signals">
           <TracesTile
@@ -506,7 +526,7 @@ export function OverviewHome({
         </div>
       )}
 
-      {!notSetUp && (
+      {!summary && !notSetUp && (
         <div>
           <Section title="Job runs" meta={`Every run of each job, ${windowWords}`} testId="overview-jobs">
             {workloadsFailed ? (
@@ -537,6 +557,45 @@ export function OverviewHome({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The summary Overview's services: one chip per service or job — its status
+ * dot, its name, ready/desired — each opening its Services page. The full
+ * table (requests, CPU, memory, releases) is the Services page's.
+ */
+function ServicesStrip({ rows, loading, showEnv, links }: { rows: OverviewRow[]; loading: boolean; showEnv: boolean; links: OverviewSummaryLinks }) {
+  const shown = rows.filter((row) => row.type !== "process");
+  return (
+    <Section title="Services" meta={loading ? undefined : `${shown.length}`} actions={<RailLink href={links.services}>All services</RailLink>} testId="overview-services-strip">
+      {loading ? (
+        <div className="h-12 animate-pulse rounded-lg bg-ink/5 motion-reduce:animate-none" aria-label="Loading services" />
+      ) : shown.length === 0 ? (
+        <p className="text-ui text-ink-muted">Nothing has reported yet. Services appear once Reliant sees their pods.</p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {shown.map((row) => {
+            const ready = row.type === "service" ? replicasText(row.service) : row.type === "job" ? JOB_STATUS[row.job.latest.result].label : "";
+            return (
+              <li key={row.key}>
+                <Link
+                  href={links.service(row.name, row.envName)}
+                  className="no-color inline-flex h-9 items-center gap-2 rounded-md border border-border bg-surface px-3 text-ui text-ink hover:bg-ink/5"
+                  title={`${row.name}: ${row.status}`}
+                  data-testid={`overview-strip-${row.key}`}
+                >
+                  <Status tone={row.tone} label={row.status} hideLabel />
+                  <span className="font-medium">{row.name}</span>
+                  {showEnv && row.envName && <span className="text-meta text-ink-muted">{row.envName}</span>}
+                  {ready && <span className="text-meta tabular-nums text-ink-muted">{ready}</span>}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Section>
   );
 }
 

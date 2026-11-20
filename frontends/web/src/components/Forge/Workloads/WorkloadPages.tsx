@@ -22,6 +22,8 @@ import { isPlacedKind, type LiveEnvKind } from "@/services/forge/live";
 import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudEnvs";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
+import { useShellFrame } from "@/components/Layout/shell/shellFrame";
+
 import { useForgeConsole } from "../Console/consoleContext";
 import { deployStatusUnread } from "../Console/DeployStatusUnread";
 import { ENV_ALL } from "../Console/envScope";
@@ -38,7 +40,7 @@ import type { StripEnv } from "./workloadModel";
 import { useObsReadOnly } from "../Observability/obsReadOnly";
 
 /** The roster's recorded, deployed environments as the Overview's strip needs them: prod first, previews last. */
-function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
+export function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
   const { roster, forgeProject } = useForgeConsole();
   const names = usePromoterNames(forgeProject);
   // The declared workloads matter only where nothing is placed to observe
@@ -144,7 +146,7 @@ function useRollback(envs: readonly { id: string; name: string; release: string;
  * on the customer's cluster, but the sites the platform serves for it are
  * deployments GetStatus reports, and the Frontends panel links them.
  */
-function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boolean } {
+export function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boolean } {
   const statuses = useCloudEnvStatuses(envs.map((candidate) => candidate.id));
   const key = envs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
   const loading = envs.some((candidate) => statuses.get(candidate.id)?.isLoading);
@@ -163,6 +165,8 @@ function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boole
 
 export function OverviewPage() {
   const { forgeProject, env, roster, href } = useForgeConsole();
+  // In the project shell the Overview is the summary; the full tables are Services' (U6b round 3).
+  const { inShell } = useShellFrame();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as OverviewSearch;
   const onSearch = useSearchUpdater<OverviewSearch>();
@@ -205,6 +209,11 @@ export function OverviewPage() {
         hostedLoading={hostedLoading}
         domains={domains.data}
         domainsHref={href({ kind: "domains" })}
+        summary={
+          inShell
+            ? { services: href({ kind: "services" }), service: (name, envName) => href({ kind: "service", name }, env === ENV_ALL && envName ? { env: envName } : {}) }
+            : undefined
+        }
       />
       {dialog}
     </div>

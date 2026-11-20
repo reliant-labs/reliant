@@ -25,6 +25,10 @@
  *   /forge/p/:project/secrets                 Secrets
  *   /forge/p/:project/domains                 Domains
  *   /forge/p/:project/activity                Activity (the audit log)
+ *   /forge/p/:project/services                Services: every workload, the site and the database, live
+ *   /forge/p/:project/services/:name          one of them, across the environments in scope
+ *   /forge/p/:project/usage                   Usage: what the app's hosting costs this month
+ *   /forge/p/:project/events                  Product analytics › Events & metrics
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -154,6 +158,14 @@ export type ConsolePage =
   | { kind: "secrets" }
   | { kind: "domains" }
   | { kind: "activity" }
+  /** Everything the app runs, live: services, workers, jobs, the site and the database (Services/ServicesPage.tsx). */
+  | { kind: "services" }
+  /** One of them, across the environments in scope (Services/ServiceDetailPage.tsx). */
+  | { kind: "service"; name: string }
+  /** What the app costs this month: hosted compute, database storage, CDN (Usage/ProjectUsagePage.tsx). */
+  | { kind: "usage" }
+  /** Product analytics › Events & metrics: the app's custom product events and OTel metrics. */
+  | { kind: "events" }
   /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
   | { kind: "extension"; id: string; segment: string };
 
@@ -198,6 +210,14 @@ export function consolePath(project: string, page: ConsolePage, ctx?: PathContex
       return `${base}/domains`;
     case "activity":
       return `${base}/activity`;
+    case "services":
+      return `${base}/services`;
+    case "service":
+      return `${base}/services/${encodeURIComponent(page.name)}`;
+    case "usage":
+      return `${base}/usage`;
+    case "events":
+      return `${base}/events`;
     case "extension":
       return `${base}/${encodeURIComponent(page.segment)}`;
   }
@@ -237,12 +257,17 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return isObsNavView(sub) && !dashKind ? { kind: "obs-view", view: sub } : null;
       case "environments":
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
+      case "services":
+        if (!sub) return { kind: "services" };
+        return dashKind ? null : { kind: "service", name: safeDecode(sub) };
       case "storage":
       case "data":
       case "users":
       case "secrets":
       case "domains":
       case "activity":
+      case "usage":
+      case "events":
         return sub ? null : { kind: section };
       default: {
         // A page registered in the nav, while it is registered.

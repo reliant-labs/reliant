@@ -15,9 +15,15 @@
  *     label: "Experiments",
  *     icon: <FlaskConical className="h-4 w-4" aria-hidden="true" />,
  *     segment: "experiments",          // /forge/p/<app>/experiments, /o/<org>/apps/<app>/experiments
- *     after: "product-analytics",
+ *     after: "product-analytics",       // where it sits when the nav draws no group for it
+ *     group: "product-analytics",       // optional: a child of Product analytics, after Insights and Events & metrics
  *     available: (input) => true,       // optional: hide it for an app it does not apply to
  *   });
+ *
+ * With `group`, the row renders INSIDE that group (Product analytics is the
+ * one group a row can join; every app's nav draws it), so the group opens by
+ * itself while the page is current. Without it, the row is a top-level row
+ * after `after`.
  *
  * The page's path is `consolePath(app, { kind: "extension", id, segment })`
  * (paths.ts), and `consolePageOf` reads it back as that page while the entry
@@ -31,6 +37,7 @@ import type { GroupedNavInput } from "./groupedNav";
 /** The built-in rows an entry can follow, in the nav's order. */
 export const CONSOLE_NAV_ANCHORS = [
   "overview",
+  "services",
   "dashboards",
   "issues",
   "performance",
@@ -42,6 +49,8 @@ export const CONSOLE_NAV_ANCHORS = [
   "more-tools",
 ] as const;
 export type ConsoleNavAnchor = (typeof CONSOLE_NAV_ANCHORS)[number];
+/** The built-in groups a registered row can join. */
+export type ConsoleNavGroup = Extract<ConsoleNavAnchor, "product-analytics">;
 
 export interface ConsoleNavEntry {
   /** Unique; the page's id in its ConsolePage (`{ kind: "extension", id }`). */
@@ -56,6 +65,12 @@ export interface ConsoleNavEntry {
    * before it that it does.
    */
   after: ConsoleNavAnchor;
+  /**
+   * The group the row joins as its last child, when the nav draws that group.
+   * Product analytics (Insights · Events & metrics · Experiments) is the one
+   * group: the Experiments page registers with `group: "product-analytics"`.
+   */
+  group?: ConsoleNavGroup;
   /** Whether the app has the page; omitted, every app does. */
   available?: (input: GroupedNavInput) => boolean;
 }
