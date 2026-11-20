@@ -37,9 +37,20 @@ func NewOpenAISDKClient(opts ...openaiopt.RequestOption) openaisdk.Client {
 }
 
 // NewAnthropicSDKClient builds an anthropic-sdk-go client that streams safely.
+//
+// It also turns off the SDK's environment defaults. Left on, a client built
+// with no credential of its own picks up ANTHROPIC_API_KEY,
+// ANTHROPIC_AUTH_TOKEN, an ANTHROPIC_PROFILE or the fallback profile file,
+// workload-identity federation, ANTHROPIC_BASE_URL and ANTHROPIC_CUSTOM_HEADERS
+// from the process. Drivers run on the multi-tenant server roles, so any of
+// those would serve one tenant's request with the operator's credential, or
+// send its traffic where the operator's environment points. A driver passes
+// every credential and endpoint it means to use as an option.
 func NewAnthropicSDKClient(opts ...anthropicopt.RequestOption) anthropicsdk.Client {
-	withDefaults := make([]anthropicopt.RequestOption, 0, len(opts)+1)
-	withDefaults = append(withDefaults, anthropicopt.WithHTTPClient(StreamingHTTPClient()))
+	withDefaults := make([]anthropicopt.RequestOption, 0, len(opts)+2)
+	withDefaults = append(withDefaults,
+		anthropicopt.WithoutEnvironmentDefaults(),
+		anthropicopt.WithHTTPClient(StreamingHTTPClient()))
 	withDefaults = append(withDefaults, opts...)
 	return anthropicsdk.NewClient(withDefaults...)
 }
