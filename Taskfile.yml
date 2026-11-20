@@ -643,8 +643,9 @@ tasks:
       - ./scripts/visual-docker.sh {{.CLI_ARGS}}
 
   web:e2e:run:
-    # Playwright against the built renderer, no Go backend, one worker (the
-    # tests share one preview server). The runtime config document is the
+    # Playwright against the built renderer, no Go backend, two workers in CI
+    # (frontends/web/playwright.config.ts says why; the tests share only the
+    # preview server, which serves static files). The runtime config document is the
     # public KCL-sourced renderer config committed in
     # electron/release.config.json; `vite preview` serves it as config.js.
     # PLAYWRIGHT_DEPS=--with-deps also installs the browser's system

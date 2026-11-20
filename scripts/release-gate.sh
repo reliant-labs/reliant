@@ -28,8 +28,20 @@
 #       never published: CI runs the parts as parallel jobs, then
 #   release-gate.sh assemble <sha> <part.json>...
 #       composes them into the record and publishes it. Fails closed, writing
-#       nothing, unless every part is there (every shard 1..N of a sharded
-#       part, exactly once) and every step ran on <sha>.
+#       nothing, unless every step ran on <sha>, each part exactly once (every
+#       shard 1..N of a sharded part), and every go shard split the packages
+#       on the same timings.
+#   release-gate.sh go-timings-source [<rev>]
+#       Print the newest first-parent ancestor of <rev> (default HEAD, at most
+#       200 back) whose record carries go package seconds, or nothing. CI's
+#       Lanes job runs it once per run and hands the sha to every go shard
+#       (RG_GO_TIMINGS_FROM), so the shards balance on the latest measured
+#       times and all of them split on the same ones.
+#   release-gate.sh go-timings [<rev>]
+#       Print those seconds as scripts/release-gate-go-timings.json's JSON
+#       (the fallback a shard uses with no RG_GO_TIMINGS_FROM, or a record
+#       without them): `scripts/release-gate.sh go-timings >
+#       scripts/release-gate-go-timings.json` refreshes the file.
 #
 # Everything the merge gate (scripts/merge-gate.sh) leaves out runs here:
 # golangci-lint and buf lint (lint), link errors (build), slow tests, the race
@@ -61,9 +73,19 @@
 #   static       npm generate docs build webbuild typecheck vet
 #   lint         npm lint
 #   go           npm test-go     (sharded: --shard I/N; packages balanced on
+#                                 RG_GO_TIMINGS_FROM's record, else
 #                                 scripts/release-gate-go-timings.json)
 #   web          npm test-web test-electron integration e2e
+# CI splits static three ways, so its slow steps (generate ~280s, webbuild
+# ~220s) run side by side instead of one after another:
+#   generate     npm generate docs
+#   webbuild     npm webbuild
+#   compile      npm build typecheck vet
+# A record needs every step, not a fixed set of parts: static, or generate +
+# webbuild + compile (the RC train's rl-gate.sh runs the four above).
 # npm is in every part: each is a fresh runner that needs node_modules.
+# The go part records each package's `go test` seconds (go_seconds); the
+# assembled record carries them all, for the next run's shard split.
 #
 # Records: <git-common-dir>/release-gate/<sha>.{json,md} (outside every tree,
 # shared by every worktree of the clone), and a git note on the commit under
@@ -85,6 +107,10 @@ declare -A PART_STEPS=(
   [lint]="npm lint"
   [go]="npm test-go"
   [web]="npm test-web test-electron integration e2e"
+  # static, split three ways for CI (header).
+  [generate]="npm generate docs"
+  [webbuild]="npm webbuild"
+  [compile]="npm build typecheck vet"
 )
 NOTES_REF=refs/notes/release-gate
 die() { printf 'release-gate: %s\n' "$*" >&2; exit 2; }
@@ -217,7 +243,7 @@ cmd_run() {
     esac
   done
   if [ -n "$part" ]; then
-    [ -n "${PART_STEPS[$part]:-}" ] || die "unknown part '$part' (${PARTS[*]})"
+    [ -n "${PART_STEPS[$part]:-}" ] || die "unknown part '$part' (${!PART_STEPS[*]})"
     [ -n "${RG_ONLY:-}" ] && die "RG_ONLY and --part do not combine"
   fi
   if [ -n "$shard" ]; then
@@ -264,11 +290,17 @@ cmd_run() {
     steps_json=$(jq -c --arg n "$step" --arg r "$([ "$rc" = 0 ] && echo PASS || echo FAIL)" --argjson s $((e - s)) '. + [{name: $n, result: $r, seconds: $s}]' <<<"$steps_json")
   done
   e=$(date +%s)
-  json=$(jq -cn --arg sha "$sha" --arg r "$([ "$fail" = 0 ] && echo PASS || echo FAIL)" --argjson steps "$steps_json" \
+  # What the next run's go shards balance on (go_shard_packages), and which
+  # timings this shard split on, so assemble can refuse shards that disagreed.
+  local go_extra='{}'
+  if [ -f "$L/test-go.log" ]; then
+    go_extra=$(go_package_seconds <"$L/test-go.log" | jq -c --arg split "$(cat "$L/go-split" 2>/dev/null)" '{go_seconds: .} + (if $split != "" then {go_split: $split} else {} end)')
+  fi
+  json=$(jq -cn --arg sha "$sha" --arg r "$([ "$fail" = 0 ] && echo PASS || echo FAIL)" --argjson steps "$steps_json" --argjson go "$go_extra" \
     --arg started "$(date -u -d "@$t0" +%Y-%m-%dT%H:%M:%SZ)" --arg finished "$(date -u -d "@$e" +%Y-%m-%dT%H:%M:%SZ)" \
     --argjson seconds $((e - t0)) --argjson slot_wait "$slot_wait" --arg forge "$(sed -n 's/^forge_version:[[:space:]]*//p' "$snap/forge.yaml" | head -1)" \
     --arg host "$(hostname)" --arg by "$(git config user.email || whoami)" \
-    '{sha: $sha, result: $r, started: $started, finished: $finished, seconds: $seconds, slot_wait_seconds: $slot_wait, forge: $forge, host: $host, by: $by, steps: $steps}')
+    '{sha: $sha, result: $r, started: $started, finished: $finished, seconds: $seconds, slot_wait_seconds: $slot_wait, forge: $forge, host: $host, by: $by, steps: $steps} + $go')
   md=$( {
     echo "### release-gate: $(git rev-parse --short "$sha") $([ "$fail" = 0 ] && echo PASSED || echo FAILED)"
     echo
@@ -303,11 +335,14 @@ cmd_assemble() {
   if [ "$(result_of "$sha")" = PASS ]; then
     echo "release-gate: $(git rev-parse --short "$sha") already has a green record"; return 0
   fi
-  [ $# -ge 1 ] || die "no part records for $(git rev-parse --short "$sha")"
+  [ $# -ge 1 ] || die "no part records for $(git rev-parse --short "$sha") (run the parts: ${PARTS[*]})"
   parts=$(jq -cs . "$@") || die "unreadable part record(s)"
   [ "$(jq --arg s "$sha" 'all(.[]; .sha == $s)' <<<"$parts")" = true ] || die "a part record is not of $sha"
-  # Every part exactly once; a sharded part as one complete set 1/N..N/N.
-  for p in "${PARTS[@]}"; do
+  # Every part that ran, exactly once; a sharded part as one complete set
+  # 1/N..N/N. Which parts is free (static, or CI's generate + webbuild +
+  # compile): the step check below is what requires the whole gate.
+  for p in $(jq -r '[.[].part] | unique | .[]' <<<"$parts"); do
+    [ -n "${PART_STEPS[$p]:-}" ] || die "unknown part '$p' in the part records; nothing recorded"
     got=$(jq -r --arg p "$p" '[.[] | select(.part == $p) | .shard] | sort_by(split("/") | map(tonumber? // 0)) | join(",")' <<<"$parts")
     want=$(jq -r --arg p "$p" '[.[] | select(.part == $p) | .shard] as $s
       | if ($s | length) == 0 then "(none)"
@@ -315,6 +350,10 @@ cmd_assemble() {
         else ($s[0] | split("/")[1] | tonumber) as $n | [range(1; $n + 1) | "\(.)/\($n)"] | join(",") end' <<<"$parts")
     [ "$got" = "$want" ] || die "part $p: ran [${got:-unsharded}], want [${want:-exactly one unsharded run}]; nothing recorded"
   done
+  # Shards that balanced on different timings split the packages differently:
+  # some package may have run in no shard. Fail closed rather than record it.
+  [ "$(jq '[.[] | select(.part == "go") | .go_split // ""] | unique | length <= 1' <<<"$parts")" = true ] \
+    || die "the go shards split the packages on different timings ($(jq -r '[.[] | select(.part == "go") | "\(.shard): \(.go_split // "none")"] | join(", ")' <<<"$parts")); nothing recorded"
   json=$(jq -c --argjson steps "$(printf '%s\n' "${STEPS[@]}" | jq -R . | jq -s .)" \
     --arg forge "$(git show "$sha:forge.yaml" 2>/dev/null | sed -n 's/^forge_version:[[:space:]]*//p' | head -1)" \
     --arg by "$(git config user.email || whoami)" '
@@ -330,6 +369,7 @@ cmd_assemble() {
        slot_wait_seconds: ([$parts[].slot_wait_seconds] | max),
        forge: $forge, host: ([$parts[].host] | unique | join(",")), by: $by,
        parts: [$parts[] | {part, shard, seconds, result}],
+       go_seconds: ([$parts[].go_seconds // {}] | add),
        steps: [$steps[] as $n | $ran[$n] | {name: $n,
          result: (if all(.[]; .result == "PASS") then "PASS" else "FAIL" end),
          seconds: ([.[].seconds] | max)}]}' <<<"$parts") || die "cannot assemble the parts (above)"
@@ -352,19 +392,63 @@ cmd_assemble() {
   [ "$(jq -r .result <<<"$json")" = PASS ]
 }
 
+# go_package_seconds: `go test` output on stdin -> {"<import path>": <whole
+# seconds, at least 1>} for every package that reported a time (ok or FAIL).
+go_package_seconds() {
+  awk -F'\t' '$1 ~ /^(ok|FAIL)[[:space:]]*$/ && $3 ~ /^[0-9.]+s/ { s = $3 + 0; print $2 "\t" (s < 1 ? 1 : int(s + 0.5)) }' \
+    | jq -Rn '[inputs | split("\t") | {key: .[0], value: (.[1] | tonumber)}] | from_entries'
+}
+
+# record_go_seconds <sha>: the go_seconds of <sha>'s record (the newest one
+# that has any), or nothing.
+record_go_seconds() {
+  record_of "$1" | jq -cs '[.[] | .go_seconds // empty | select(type == "object" and length > 0)] | last // empty' 2>/dev/null
+}
+
+cmd_go_timings_source() {
+  local sha x
+  fetch_notes
+  local -A have; while read -r x; do have[$x]=1; done < <(recorded)
+  for sha in $(git rev-list --first-parent -n 200 "$(resolve "${1:-HEAD}")"); do
+    [ -n "${have[$sha]:-}" ] || continue
+    [ -n "$(record_go_seconds "$sha")" ] && { echo "$sha"; return 0; }
+  done
+  return 0
+}
+
+cmd_go_timings() {
+  local from
+  from=$(cmd_go_timings_source "${1:-HEAD}")
+  [ -n "$from" ] || die "no record in the last 200 first-parent commits carries go package seconds"
+  echo "release-gate: go package seconds of $(git rev-parse --short "$from")'s record" >&2
+  record_go_seconds "$from" | jq -S .
+}
+
+# go_timings: the package seconds a shard balances on. RG_GO_TIMINGS_FROM's
+# record (CI's Lanes job picks one sha for every shard of a run), else the
+# committed scripts/release-gate-go-timings.json.
+go_timings() {
+  local t=""
+  [ -n "${RG_GO_TIMINGS_FROM:-}" ] && t=$(record_go_seconds "$RG_GO_TIMINGS_FROM")
+  if [ -n "$t" ]; then echo "$t"; return; fi
+  [ -z "${RG_GO_TIMINGS_FROM:-}" ] || echo "test-go: ${RG_GO_TIMINGS_FROM:0:12}'s record has no go package seconds; balancing on scripts/release-gate-go-timings.json" >&2
+  cat scripts/release-gate-go-timings.json 2>/dev/null || echo '{}'
+}
+
 # go_shard_packages: with RG_GO_SHARD=I/N, this shard's packages (1-based I)
-# of those with test files, longest-processing-time first on the recorded
-# `go test -race` package seconds in scripts/release-gate-go-timings.json (a
-# package with no entry weighs the median); ties break on the path, so every
-# shard computes the same split. Without it, ./... .
+# of those with test files, longest-processing-time first on go_timings'
+# `go test -race` package seconds (a package with no entry weighs the
+# median); ties break on the path, so every shard given the same timings
+# computes the same split. It writes the timings' digest to $L/go-split for
+# assemble to compare across shards. Without RG_GO_SHARD, ./... .
 go_shard_packages() {
   [ -n "${RG_GO_SHARD:-}" ] || { echo ./...; return; }
-  local i=${RG_GO_SHARD%/*} n=${RG_GO_SHARD#*/} timings=scripts/release-gate-go-timings.json
-  [ -f "$timings" ] || timings=/dev/null
+  local i=${RG_GO_SHARD%/*} n=${RG_GO_SHARD#*/} timings
+  timings=$(go_timings)
+  [ -z "${L:-}" ] || jq -cS . <<<"$timings" | sha256sum | cut -c1-16 >"$L/go-split"
   go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./... \
-    | jq -rRn --slurpfile t <(cat "$timings" 2>/dev/null || echo '{}') --argjson i "$((i - 1))" --argjson n "$n" '
-      ($t[0] // {}) as $w
-      | [inputs | select(length > 0)] as $pkgs
+    | jq -rRn --argjson w "$timings" --argjson i "$((i - 1))" --argjson n "$n" '
+      [inputs | select(length > 0)] as $pkgs
       | ([$w[]] | sort) as $known
       | (if ($known | length) > 0 then $known[($known | length) / 2 | floor] else 1 end) as $median
       | [$pkgs[] | {p: ., s: ($w[.] // $median)}]
@@ -444,6 +528,8 @@ case "$sub" in
   latest) cmd_latest "$@" ;;
   show) record_of "$(resolve "${1:-HEAD}")" | jq . ;;
   assemble) cmd_assemble "$@" ;;
-  -h|--help|"") sed -n '2,78p' "$0" ;;
-  *) die "unknown command '$sub' (run, check, latest, show, assemble)" ;;
+  go-timings-source) cmd_go_timings_source "$@" ;;
+  go-timings) cmd_go_timings "$@" ;;
+  -h|--help|"") sed -n '2,/^set -uo pipefail$/p' "$0" | sed '$d' ;;
+  *) die "unknown command '$sub' (run, check, latest, show, assemble, go-timings-source, go-timings)" ;;
 esac

@@ -36,10 +36,11 @@ name: CI
 # Beside the gates run the lanes neither covers (scripts/ci-lanes.sh): the
 # renderer's release build, Playwright, the electron package, and the vendored
 # control-plane contract. A `ci:run` pull request runs those its paths reach;
-# main runs all of them, and the release record (`Release gate`) is written
-# only when the release build, Playwright and the electron smoke passed, so a
-# release is never cut over them. The merge queue runs none of them: they do
-# not fit its five-minute budget (merge-queue.yml).
+# main runs all of them (the release build as the release gate's webbuild
+# part), and the release record (`Release gate`) is written only when the
+# release build, Playwright and the electron smoke passed, so a release is
+# never cut over them. The merge queue runs none of them: they do not fit its
+# five-minute budget (merge-queue.yml).
 #
 # DB-backed tests need no service container and no DATABASE_URL: forge pgtest
 # boots an embedded Postgres per runner (internal/db/testutil.go).
@@ -97,6 +98,7 @@ jobs:
       playwright: ${{ steps.lanes.outputs.playwright }}
       electron: ${{ steps.lanes.outputs.electron }}
       cp_contract: ${{ steps.lanes.outputs.cp_contract }}
+      go_timings_from: ${{ steps.go-timings.outputs.from }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -134,6 +136,16 @@ jobs:
             push) task ci:lanes -- --full --base "${BASE}" ;;
             *) task ci:lanes -- --full ;;
           esac | tee -a "$GITHUB_OUTPUT"
+      # The release gate's go shards balance on the package seconds the newest
+      # record before this commit measured (scripts/release-gate.sh
+      # go-timings-source). Picked ONCE, here, for every shard: shards that
+      # each picked their own could split the packages on different timings,
+      # which assemble refuses. None found: the committed
+      # scripts/release-gate-go-timings.json.
+      - name: Go shard timings
+        id: go-timings
+        if: github.event_name != 'pull_request'
+        run: echo "from=$(scripts/release-gate.sh go-timings-source HEAD^ || true)" | tee -a "$GITHUB_OUTPUT"
 
   # ── Migration order (every event) ─────────────────────────────────────────
   # A migration versioned at or below main's newest is never applied, and the
@@ -254,8 +266,21 @@ jobs:
   # assembles their part records into the one record and publishes it. Run in
   # one job, one step after another, the gate took 45-70 minutes (2026-10-30:
   # test 1345-2112s, integration 591-897s, lint 365-549s, generate 201-396s),
-  # and every release waited on it. A missing part, or a shard of one, fails
+  # and every release waited on it. A missing step, or a shard of a part, fails
   # the assembly closed: no record is written.
+  #
+  # STATIC IS THREE PARTS HERE (generate, webbuild, compile). As one part its
+  # slow steps ran one after another, generate 283s then webbuild 223s, and it
+  # was one of the three jobs that set the run's wall time (~15 min). The
+  # webbuild part is also the renderer's release build on main: the
+  # `web-bundle` job runs the same `task build:web:verify` and now runs only on
+  # a ci:run pull request, where no release gate runs. The RC train
+  # (control-plane scripts/rc/rl-gate.sh) still runs static whole; assemble
+  # takes either.
+  #
+  # FOUR GO SHARDS, balanced on the package seconds the newest earlier record
+  # measured (Lanes' go_timings_from; the committed timings file without one).
+  # Three shards on timings from 2026-11-10 ran 587-1030s of tests each.
   release-gate:
     name: Release gate (${{ matrix.label }})
     needs: lanes
@@ -267,23 +292,32 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { label: "static", part: static, shard: "" }
+          - { label: "generate", part: generate, shard: "" }
+          - { label: "webbuild", part: webbuild, shard: "" }
+          - { label: "compile", part: compile, shard: "" }
           - { label: "lint", part: lint, shard: "" }
-          - { label: "go 1/3", part: go, shard: "1/3" }
-          - { label: "go 2/3", part: go, shard: "2/3" }
-          - { label: "go 3/3", part: go, shard: "3/3" }
+          - { label: "go 1/4", part: go, shard: "1/4" }
+          - { label: "go 2/4", part: go, shard: "2/4" }
+          - { label: "go 3/4", part: go, shard: "3/4" }
+          - { label: "go 4/4", part: go, shard: "4/4" }
           - { label: "web", part: web, shard: "" }
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      # webbuild is the renderer alone (node): no Go, buf or ripgrep to set up.
       - uses: ./.github/actions/setup
         id: setup
         with:
+          go: ${{ matrix.part == 'webbuild' && 'false' || 'true' }}
           node: "true"
-          ripgrep: "true"
-          free-disk: "true"
-          buf: "true"
+          ripgrep: ${{ matrix.part == 'webbuild' && 'false' || 'true' }}
+          free-disk: ${{ matrix.part == 'webbuild' && 'false' || 'true' }}
+          buf: ${{ matrix.part == 'webbuild' && 'false' || 'true' }}
+          # lint: the pinned golangci-lint release on PATH (cached; the merge
+          # queue's golangci job runs the same binary). With none on PATH,
+          # forge lint built golangci-lint from source on every run first.
+          golangci: ${{ matrix.part == 'lint' && 'true' || 'false' }}
       - name: Identify the record's author
         run: |
           git config user.name "github-actions[bot]"
@@ -329,11 +363,64 @@ jobs:
         with:
           path: ~/.cache/electron
           key: ${{ steps.electron-version.outputs.zip }}
+      # golangci-lint's analysis cache, for the lint part. golangci-lint over
+      # the whole module is most of the part's ~866s, and it ran cold on every
+      # push: nothing restored ~/.cache/golangci-lint. The cache is
+      # content-addressed (a package's entry is keyed on its files, its
+      # dependencies' and the analyzers), so a warm run re-lints what changed
+      # and reports the same findings. Measured on a 48-CPU host (2026-11-20):
+      # cold 779s, the same commit warm 136s, four commits later (a change to
+      # internal/workflow/cel, which most packages import) 616s. The key names
+      # .golangci.yml and go.mod (the forge pin, so golangci-lint's release,
+      # and Go's version): a change to either starts cold.
+      - name: Note when golangci-lint's cache was restored
+        if: matrix.part == 'lint'
+        run: echo "LINT_CACHE_RESTORED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - name: Restore golangci-lint's cache
+        if: matrix.part == 'lint'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/golangci-lint
+          key: release-gate-golangci-${{ runner.os }}-${{ hashFiles('.golangci.yml', 'go.mod') }}-${{ github.sha }}
+          restore-keys: release-gate-golangci-${{ runner.os }}-${{ hashFiles('.golangci.yml', 'go.mod') }}-
       - name: task release:gate (part ${{ matrix.label }})
         env:
           PART: ${{ matrix.part }}
           SHARD: ${{ matrix.shard }}
+          RG_GO_TIMINGS_FROM: ${{ needs.lanes.outputs.go_timings_from }}
         run: RELEASE_GATE_DIR="${RUNNER_TEMP}/release-gate" task release:gate -- --part "${PART}" ${SHARD:+--shard "${SHARD}"} "${GITHUB_SHA}"
+      # Saved on main, whatever the lint found, trimmed first to the entries
+      # this run used, as go-cache trims the build cache (its header says
+      # why): golangci-lint's cache is Go's format, which refreshes an entry's
+      # mtime when it is used and over an hour old, so anything older than the
+      # restore (minus an hour and five minutes) is an entry no package of
+      # this commit needed, and saving it would grow the entry every push.
+      - name: Trim golangci-lint's cache to this run's entries (main only)
+        if: ${{ !cancelled() && matrix.part == 'lint' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          set -euo pipefail
+          dir="$HOME/.cache/golangci-lint"
+          [ -d "${dir}" ] || exit 0
+          before="$(du -sh "${dir}" | cut -f1)"
+          find "${dir}" -type f -mmin +"$(( ($(date +%s) - LINT_CACHE_RESTORED_AT) / 60 + 65 ))" -delete
+          echo "golangci-lint cache: ${before} -> $(du -sh "${dir}" | cut -f1)"
+      - name: Save golangci-lint's cache (main only)
+        if: ${{ !cancelled() && matrix.part == 'lint' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ~/.cache/golangci-lint
+          key: release-gate-golangci-${{ runner.os }}-${{ hashFiles('.golangci.yml', 'go.mod') }}-${{ github.sha }}
+      # The renderer the webbuild part built and verified, also when the
+      # verification failed, so the offending asset can be downloaded (what
+      # the web-bundle job uploads on a pull request).
+      - if: ${{ !cancelled() && matrix.part == 'webbuild' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: ${{ runner.temp }}/release-gate/snap/frontends/web/dist
+          retention-days: 1
+          if-no-files-found: ignore
       - name: Save the Electron zip (main only)
         if: ${{ matrix.part == 'web' && steps.electron-zip.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         uses: actions/cache/save@v4
@@ -341,7 +428,7 @@ jobs:
           path: ~/.cache/electron
           key: ${{ steps.electron-version.outputs.zip }}
       - name: task ci:repo-checks
-        if: ${{ !cancelled() && matrix.part == 'static' }}
+        if: ${{ !cancelled() && matrix.part == 'compile' }}
         run: task ci:repo-checks BASE="${{ needs.lanes.outputs.base }}"
       - name: Locate the part record and logs
         if: ${{ !cancelled() }}
@@ -367,7 +454,7 @@ jobs:
       # Saves: main only, after the run, whatever it found. One part saves:
       # the key is the archive's, and a second save would only race it.
       - name: Save embedded Postgres binaries (main only)
-        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && matrix.label == 'go 1/3' }}
+        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && matrix.label == 'go 1/4' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/forge/embedded-postgres
@@ -379,7 +466,7 @@ jobs:
   # name `Release gate`, the verdict gate-health and main-health key on.
   release-record:
     name: Release gate
-    needs: [lanes, release-gate, web-bundle, playwright, electron-package]
+    needs: [lanes, release-gate, playwright, electron-package]
     if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -397,14 +484,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       # The path lanes are release blockers (the merge queue does not run
-      # them): no record for a commit whose release build, Playwright or
-      # electron smoke did not pass, so release:tag refuses it.
+      # them): no record for a commit whose Playwright or electron smoke did
+      # not pass, so release:tag refuses it. The release build is the gate's
+      # own webbuild step, which the record carries.
       - name: The path lanes passed
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          bad=$(jq -r 'to_entries[] | select(.key == "web-bundle" or .key == "playwright" or .key == "electron-package") | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "${RESULTS}")
+          bad=$(jq -r 'to_entries[] | select(.key == "playwright" or .key == "electron-package") | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "${RESULTS}")
           if [ -n "${bad}" ]; then echo "::error::release blockers that did not pass (no record is written):"; echo "${bad}"; exit 1; fi
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -550,10 +638,13 @@ jobs:
           CONTROL_PLANE_DIR: ${{ github.workspace }}/control-plane-sibling
         run: task contract:controlplane:check
 
+  # A ci:run pull request only. Off a pull request the release gate's webbuild
+  # part runs this same `task build:web:verify` (scripts/release-gate.sh), and
+  # its record carries the step; running both built the renderer twice.
   web-bundle:
     name: Web (lint, typecheck, release build, verify-bundle)
     needs: lanes
-    if: needs.lanes.outputs.web == 'true'
+    if: needs.lanes.outputs.web == 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -745,7 +836,8 @@ jobs:
   # passed. (The merge queue's CI result is merge-queue.yml's.) Off a PR every
   # lane runs (scripts/ci-lanes.sh --full), so a skip there is a broken `if:`,
   # never a pass: everything but the merge gate and golangci (merge tier only;
-  # the release gate lints the whole module), go-cache (only a push runs it)
+  # the release gate lints the whole module), web-bundle (a pull request's;
+  # the release gate's webbuild part off one), go-cache (only a push runs it)
   # and cp-contract (only a change to the vendored contract does) must have
   # succeeded.
   ci-result:
@@ -777,7 +869,7 @@ jobs:
             [ "$(jq -r '.golangci.result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"golangci: must run and pass on ${EVENT_NAME}"
           fi
           if [ "${merge_tier}" != true ]; then
-            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "golangci" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
+            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "golangci" and .key != "web-bundle" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
             bad="${bad}"$'\n'"${skipped}"
           fi
           bad=$(grep . <<< "${bad}" | sort -u || true)
