@@ -1,0 +1,237 @@
+// Copyright (c) 2025 Reliant Labs
+package store_test
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/storetest"
+)
+
+const (
+	prShaA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	prShaB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+)
+
+var prBase = time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
+
+type prChange struct {
+	key     string
+	updated int // minutes after prBase
+	head    string
+	labels  []string
+	add     string
+	rm      string
+	full    bool
+	state   string
+}
+
+var prIDs int
+
+func prNewID() string {
+	prIDs++
+	return fmt.Sprintf("id-%d", prIDs)
+}
+
+func (c prChange) change() core.PRRecordChange {
+	state := c.state
+	if state == "" {
+		state = core.PRRecordOpen
+	}
+	return core.PRRecordChange{
+		Delivery: core.PRRecordDelivery{Provider: "github", DeliveryKey: c.key, EventType: "pull_request.x", AppliedAt: prBase},
+		Snapshot: &core.PRRecordSnapshot{
+			ID: prNewID(), Provider: "github", AccountKey: "inst", RepositoryID: "42", Repository: "Acme/Widgets",
+			Number: 7, State: state, HeadSHA: c.head, Labels: c.labels, LabelAdded: c.add, LabelRemoved: c.rm,
+			SnapshotAt: prBase.Add(time.Duration(c.updated) * time.Minute), ObservedAt: prBase.Add(time.Hour), Full: c.full,
+		},
+		HeadID: prNewID(),
+	}
+}
+
+func applyPR(t *testing.T, env *storetest.Env, c core.PRRecordChange) bool {
+	t.Helper()
+	ok, err := env.Repo.ApplyPRRecordChange(context.Background(), c)
+	if err != nil {
+		t.Fatalf("apply %s: %v", c.Delivery.DeliveryKey, err)
+	}
+	return ok
+}
+
+func getPR(t *testing.T, env *storetest.Env) *core.PRRecord {
+	t.Helper()
+	rec, err := env.Repo.GetPRRecord(context.Background(), "github", "acme/widgets", 7)
+	if err != nil || rec == nil {
+		t.Fatalf("get: %v %v", rec, err)
+	}
+	return rec
+}
+
+// TestPRRecordSnapshotOrdering: a newer snapshot replaces, an older one
+// delivered late changes nothing, a tie applies only its label delta, and a
+// redelivery applies nothing.
+func TestPRRecordSnapshotOrdering(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+
+	if !applyPR(t, env, prChange{key: "d1", updated: 5, head: prShaA, labels: []string{"b", "a"}, full: true}.change()) {
+		t.Fatal("first delivery not applied")
+	}
+	rec := getPR(t, env)
+	if rec.HeadSHA != prShaA || !slices.Equal(rec.Labels, []string{"a", "b"}) || rec.Repository != "Acme/Widgets" {
+		t.Fatalf("record = %+v", rec)
+	}
+
+	// A redelivery of d1, even carrying other content, is a no-op.
+	if applyPR(t, env, prChange{key: "d1", updated: 50, head: prShaB, full: true}.change()) {
+		t.Fatal("redelivery applied")
+	}
+	// An older snapshot delivered late changes nothing.
+	applyPR(t, env, prChange{key: "d0", updated: 1, head: prShaB, labels: []string{"old"}, full: true}.change())
+	if rec = getPR(t, env); rec.HeadSHA != prShaA || !slices.Equal(rec.Labels, []string{"a", "b"}) {
+		t.Fatalf("stale snapshot applied: %+v", rec)
+	}
+	// Two label events in the same second: each applies its delta.
+	applyPR(t, env, prChange{key: "d2", updated: 5, head: prShaA, labels: []string{"a", "b", "c"}, add: "c", full: true}.change())
+	applyPR(t, env, prChange{key: "d3", updated: 5, head: prShaA, labels: []string{"b"}, rm: "a", full: true}.change())
+	if rec = getPR(t, env); !slices.Equal(rec.Labels, []string{"b", "c"}) {
+		t.Fatalf("tie deltas: labels = %v, want [b c]", rec.Labels)
+	}
+	// A slim snapshot (a review's) never overwrites an existing record.
+	applyPR(t, env, prChange{key: "d4", updated: 30, head: prShaB, state: core.PRRecordClosed}.change())
+	if rec = getPR(t, env); rec.State != core.PRRecordOpen || rec.HeadSHA != prShaA {
+		t.Fatalf("slim snapshot applied: %+v", rec)
+	}
+	// A newer push moves the head; the old head is superseded.
+	c := prChange{key: "d5", updated: 10, head: prShaB, full: true}.change()
+	c.PreviousHeadSHA = prShaA
+	applyPR(t, env, c)
+	heads, err := env.Repo.ListPRRecordHeads(ctx, rec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(heads) != 2 {
+		t.Fatalf("heads = %+v", heads)
+	}
+	for _, h := range heads {
+		switch h.HeadSHA {
+		case prShaA:
+			if h.SupersededAt == nil {
+				t.Errorf("old head not superseded: %+v", h)
+			}
+		case prShaB:
+			if h.SupersededAt != nil || h.PreviousHeadSHA != prShaA {
+				t.Errorf("new head = %+v", h)
+			}
+		}
+	}
+
+	list, err := env.Repo.ListPRRecords(ctx, core.PRRecordFilter{Provider: "github", Repository: "ACME/widgets", State: core.PRRecordOpen, Limit: 10})
+	if err != nil || len(list) != 1 || list[0].HeadSHA != prShaB {
+		t.Fatalf("list = %+v, %v", list, err)
+	}
+	if n, err := env.Repo.PrunePRRecordDeliveries(ctx, prBase.Add(time.Minute)); err != nil || n != 6 {
+		t.Fatalf("prune = %d, %v", n, err)
+	}
+}
+
+// TestPRRecordConcurrentFirstDeliveries: deliveries of one new pull request
+// racing each other create one record, and the newest snapshot wins.
+func TestPRRecordConcurrentFirstDeliveries(t *testing.T) {
+	env := storetest.New(t)
+	var wg sync.WaitGroup
+	changes := make([]core.PRRecordChange, 8)
+	for i := range changes {
+		changes[i] = prChange{key: fmt.Sprintf("c%d", i), updated: i, head: prShaA, labels: []string{fmt.Sprint(i)}, full: true}.change()
+	}
+	errs := make(chan error, len(changes))
+	for _, c := range changes {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := env.Repo.ApplyPRRecordChange(context.Background(), c); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	if rec := getPR(t, env); !slices.Equal(rec.Labels, []string{"7"}) {
+		t.Fatalf("labels = %v, want the newest snapshot's", rec.Labels)
+	}
+}
+
+// TestPRRecordReviewsAndChecks: review markers are kept once, and the newest
+// run of a check wins regardless of delivery order.
+func TestPRRecordReviewsAndChecks(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	c := prChange{key: "r1", updated: 1, head: prShaA}.change()
+	c.Reviews = []core.PRRecordReview{{
+		ID: prNewID(), ReviewID: "900", CommitSHA: prShaA, MarkerSHA: prShaA, Kind: core.PRReviewPassed,
+		AuthorLogin: "bot", SubmittedAt: prBase, ObservedAt: prBase,
+	}}
+	applyPR(t, env, c)
+	// The same review delivered again under another delivery id adds no row.
+	c2 := prChange{key: "r2", updated: 1, head: prShaA}.change()
+	c2.Reviews = []core.PRRecordReview{c.Reviews[0]}
+	c2.Reviews[0].ID = prNewID()
+	applyPR(t, env, c2)
+	rec := getPR(t, env)
+	reviews, err := env.Repo.ListPRRecordReviews(ctx, rec.ID, []string{prShaA})
+	if err != nil || len(reviews) != 1 || reviews[0].ReviewID != "900" || reviews[0].Kind != core.PRReviewPassed {
+		t.Fatalf("reviews = %+v, %v", reviews, err)
+	}
+
+	done := prBase.Add(time.Minute)
+	check := func(key string, run int64, conclusion string, completed *time.Time) core.PRRecordChange {
+		return core.PRRecordChange{
+			Delivery: core.PRRecordDelivery{Provider: "github", DeliveryKey: key, EventType: "check_run.completed", AppliedAt: prBase},
+			Check: &core.PRRecordCheck{
+				ID: prNewID(), Provider: "github", RepositoryID: "42", HeadSHA: prShaA, Name: "Reliant review",
+				AppSlug: "github-actions", CheckRunID: run, Status: "completed", Conclusion: conclusion,
+				CompletedAt: completed, ObservedAt: prBase,
+			},
+		}
+	}
+	applyPR(t, env, check("k2", 2, "success", &done))
+	applyPR(t, env, check("k1", 1, "failure", &done)) // an older run, delivered late
+	applyPR(t, env, check("k3", 2, "", nil))          // the same run's start, delivered late
+	checks, err := env.Repo.ListPRRecordChecks(ctx, "github", "42", []string{prShaA})
+	if err != nil || len(checks) != 1 || checks[0].CheckRunID != 2 || checks[0].Conclusion != "success" {
+		t.Fatalf("checks = %+v, %v", checks, err)
+	}
+}
+
+// TestHasFreshIntegrationAccess reads the routing grants.
+func TestHasFreshIntegrationAccess(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Now().UTC()
+	if err := env.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "99", at,
+		[]core.IntegrationAccessGrant{{AccountKey: "inst", ResourceKey: "42"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		resource string
+		after    time.Time
+		want     bool
+	}{
+		{"42", at.Add(-time.Minute), true},
+		{"43", at.Add(-time.Minute), false},
+		{"42", at.Add(time.Minute), false},
+	} {
+		got, err := env.Repo.HasFreshIntegrationAccess(ctx, storetest.SeedUserID, "github", "inst", tc.resource, tc.after)
+		if err != nil || got != tc.want {
+			t.Errorf("%+v: got %v, %v", tc, got, err)
+		}
+	}
+}
