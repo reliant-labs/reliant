@@ -298,7 +298,8 @@
                   "guides/workflows/github-issues-to-pull-requests",
                   "guides/workflows/production-alerts-to-github-issues",
                   "guides/workflows/production-error-to-fix",
-                  "guides/workflows/ai-security-review-pull-requests"
+                  "guides/workflows/ai-security-review-pull-requests",
+                  "guides/workflows/agent-addresses-review-comments"
                 ]
               },
               {
@@ -326,7 +327,11 @@
                   "guides/workflows/start-agent-from-webhook",
                   "guides/workflows/call-api-without-exposing-key",
                   "guides/workflows/run-workflow-from-github-actions",
-                  "guides/workflows/chain-workflows-on-finish"
+                  "guides/workflows/chain-workflows-on-finish",
+                  "guides/workflows/triage-email-with-an-agent",
+                  "guides/workflows/sms-whatsapp-agent",
+                  "guides/workflows/start-runs-from-go",
+                  "guides/workflows/stream-run-events-typescript"
                 ]
               }
             ]
@@ -460,7 +465,8 @@
               {
                 "group": "Data & users",
                 "pages": [
-                  "guides/hosting/restore-postgres-point-in-time"
+                  "guides/hosting/restore-postgres-point-in-time",
+                  "guides/hosting/manage-app-users-cli"
                 ]
               }
             ]
