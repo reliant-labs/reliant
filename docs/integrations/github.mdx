@@ -45,6 +45,7 @@ On a self-hosted deployment there is no control plane to mint tokens, so Reliant
 | `pr.reviews.list` | The reviews on a pull request, with verdicts | no |
 | `pr.review_comments.list` | The inline comments on a pull request's diff, with an optional `since` time | no |
 | `pr.review_comment.reply` | Reply in an inline review thread | yes |
+| `pr.merge` | Arm or disarm auto-merge, leave the merge queue, or merge at an exact reviewed head. Workflow steps only, never an agent tool | yes |
 | `repo.list_for_user` | Repositories the connection can see | no |
 | `app.installations.list` | The accounts the Reliant GitHub App is installed on that you can access | no |
 | `app.installation_repositories.list` | Repositories the App is installed on **and** you can see, across your installations, each with its `installation_id` and `can_push` | no |
@@ -137,9 +138,11 @@ The event is routed only when its `repository` is one of the input's values, so 
 
 GitHub's API opens a pull request with no labels. After `pr.create`, add them with `issue.labels.add` and the returned `number`.
 
-### Merging is deliberately not an action
+### Merging is a workflow step, never an agent tool
 
-There is no merge action, and `pr.update` cannot merge, whatever it is given. A person merges. Approving stays available through `pr.review.create` with the `APPROVE` verdict, so whether a workflow may approve is something you decide in the workflow.
+`pr.merge` merges only from an action node in a workflow you write; no agent can call it, and `pr.update` cannot merge, whatever it is given. Its `action` is `enable_auto` (arm auto-merge), `disable_auto`, `dequeue` (leave the merge queue) or `merge` (merge now, or join the merge queue when the base branch requires one). `enable_auto` and `merge` need `match_head_commit`, the full sha of the head that was reviewed: if the pull request's head is anything else, nothing changes and the step fails, so a push after the review is never merged. `method` is `squash` (the default), `merge` or `rebase`.
+
+The [Autopilot](/guides/autopilot) built-ins never call it: whether anything merges without a person is a decision you make by composing it into your own workflow. Approving stays available through `pr.review.create` with the `APPROVE` verdict.
 
 ### Check runs come from the App
 

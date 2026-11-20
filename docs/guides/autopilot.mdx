@@ -17,7 +17,7 @@ The three that touch code form a loop. The issue worker opens a PR labelled `age
 
 ## What it will never do
 
-- **Merge.** There is no merge action in the GitHub integration, and no workflow in the pack calls one.
+- **Merge, or cut a release.** No workflow in the pack calls a merge or a release. The GitHub integration does have a merge action, `github/pr.merge@1`, but it is a workflow step only, never an agent tool, so no agent in the pack can reach it. It exists for a pipeline you compose yourself: a custom workflow can call it in an [action node](/reference/nodes#action) when a person decides that workflow should merge, and it merges only the exact head commit the workflow passes it, so a push after the review is never merged.
 - **Approve.** PR review's verdict is `COMMENT` or `REQUEST_CHANGES`. The event is computed in one node from the reviewer's answer by an expression with exactly those two outcomes, so a reviewer that returns `APPROVE` (confused, or steered by text in the PR) still posts a `COMMENT`. The reviewer is also given no tool that can post a review.
 - **Push to your default branch, to a protected branch, to a fork, or with `--force`.** Pushes go through a `git_publish` node, which checks the branch against GitHub's own answers before anything leaves your machine and refuses a push that is not a plain fast-forward. The issue worker may only push `autopilot/*` branches; the review responder only the head branch of the PR it is answering, and only if the PR is in the same repository.
 - **Add `agent:ready`.** On-call files issues as `agent:triage`. A human promotes them.

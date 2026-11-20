@@ -121,6 +121,8 @@ Controls how much autonomy the agent has: **Auto** (full autonomy), **Manual** (
 
 A **workspace** is an isolated copy of your repo on its own git branch (a git worktree), on your machine. Reliant uses workspaces to let parallel agents work on separate branches without interfering, or to let you work on multiple branches simultaneously.
 
+The `reliant daemon` commands use the word more broadly: there, `--workspace` is the directory a daemon serves, which defaults to the git worktree root of the directory you start it in. That can be your main checkout as well as a workspace. See [Run a machine from the terminal](/cli/run-a-machine).
+
 **Related**: [Workspaces](/features/worktrees)
 
 ---
