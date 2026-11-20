@@ -20,11 +20,16 @@ message LLMConfig {
     description: "Reliant LLM gateway base URL"
   }];
 
-  // Field 2 was vertexai_project (VERTEXAI_PROJECT): Vertex AI calls now use
-  // the project of the service-account key a user or org connects, never a
-  // server-wide project and the server's own Google credentials.
-  reserved 2;
-  reserved "vertexai_project";
+  // Deprecated: accepted in existing configurations but not used for requests.
+  // Vertex AI uses the project of the connected service-account key, not this
+  // setting or the server's Google credentials.
+  string vertexai_project = 2 [
+    deprecated = true,
+    (forge.v1.config) = {
+      env_var: "VERTEXAI_PROJECT"
+      description: "Deprecated: accepted for compatibility; Vertex AI uses the connected service-account key's project"
+    }
+  ];
   string vertexai_location = 3 [(forge.v1.config) = {
     env_var: "VERTEXAI_LOCATION"
     default_value: "us-central1"

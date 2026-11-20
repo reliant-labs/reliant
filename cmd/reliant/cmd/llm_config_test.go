@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,10 +12,11 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 var llmEnv = []string{
-	"RELIANT_API_BASE_URL", "VERTEXAI_LOCATION",
+	"RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION",
 	"RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT",
 	"RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT",
 	"RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS",
@@ -82,6 +84,37 @@ func TestLLMEnvContract(t *testing.T) {
 	}
 	assert.Equal(t, want, api)
 	assert.Equal(t, want, worker)
+}
+
+func TestLegacyVertexProjectConfigDoesNotChangeDriverSettings(t *testing.T) {
+	isolateLLMEnv(t)
+	wantAPI, wantWorker, err := llmOf(t)
+	require.NoError(t, err)
+
+	file := filepath.Join(t.TempDir(), "reliant.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("llm:\n  vertexai_project: legacy-file-project\n"), 0o600))
+	assertLegacyProject := func(want string) {
+		t.Helper()
+		for _, role := range []string{"api", "worker"} {
+			cmd, _, err := NewRootCmd().Find([]string{"server", role})
+			require.NoError(t, err)
+			process, err := config.LoadServerProcessConfig(cmd)
+			require.NoError(t, err)
+			// Read the deprecated binding without making the driver consume it.
+			llmConfig := process.GetLlm().ProtoReflect()
+			field := llmConfig.Descriptor().Fields().ByNumber(2)
+			require.NotNil(t, field)
+			assert.Equal(t, want, llmConfig.Get(field).String(), role)
+		}
+		api, worker, err := llmOf(t)
+		require.NoError(t, err)
+		assert.Equal(t, wantAPI, api)
+		assert.Equal(t, wantWorker, worker)
+	}
+	t.Setenv("RELIANT_CONFIG", file)
+	assertLegacyProject("legacy-file-project")
+	t.Setenv("VERTEXAI_PROJECT", "legacy-env-project")
+	assertLegacyProject("legacy-env-project")
 }
 
 // A deadline the guard cannot honour stops the server at load (each used to

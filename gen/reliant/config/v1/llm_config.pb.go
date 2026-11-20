@@ -33,7 +33,13 @@ type LLMConfig struct {
 	// The Reliant LLM gateway (control-plane's LLM proxy). Unset is a
 	// misconfigured server: it falls back to loopback, never to production.
 	ReliantApiBaseUrl string `protobuf:"bytes,1,opt,name=reliant_api_base_url,json=reliantApiBaseUrl,proto3" json:"reliant_api_base_url,omitempty"`
-	VertexaiLocation  string `protobuf:"bytes,3,opt,name=vertexai_location,json=vertexaiLocation,proto3" json:"vertexai_location,omitempty"`
+	// Deprecated: accepted in existing configurations but not used for requests.
+	// Vertex AI uses the project of the connected service-account key, not this
+	// setting or the server's Google credentials.
+	//
+	// Deprecated: Marked as deprecated in reliant/config/v1/llm_config.proto.
+	VertexaiProject  string `protobuf:"bytes,2,opt,name=vertexai_project,json=vertexaiProject,proto3" json:"vertexai_project,omitempty"`
+	VertexaiLocation string `protobuf:"bytes,3,opt,name=vertexai_location,json=vertexaiLocation,proto3" json:"vertexai_location,omitempty"`
 	// The stream guards (internal/llm transport.go, stream_stall.go). Each is
 	// positive; the defaults are argued from measured streams there.
 	StreamIdleTimeout         *durationpb.Duration `protobuf:"bytes,4,opt,name=stream_idle_timeout,json=streamIdleTimeout,proto3" json:"stream_idle_timeout,omitempty"`
@@ -80,6 +86,14 @@ func (*LLMConfig) Descriptor() ([]byte, []int) {
 func (x *LLMConfig) GetReliantApiBaseUrl() string {
 	if x != nil {
 		return x.ReliantApiBaseUrl
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in reliant/config/v1/llm_config.proto.
+func (x *LLMConfig) GetVertexaiProject() string {
+	if x != nil {
+		return x.VertexaiProject
 	}
 	return ""
 }
@@ -137,10 +151,12 @@ var File_reliant_config_v1_llm_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_llm_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/llm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x96\v\n" +
+	"\"reliant/config/v1/llm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa8\f\n" +
 	"\tLLMConfig\x12i\n" +
 	"\x14reliant_api_base_url\x18\x01 \x01(\tB8\x82\xce\x184\n" +
-	"\x14RELIANT_API_BASE_URL*\x1cReliant LLM gateway base URLR\x11reliantApiBaseUrl\x12\x84\x01\n" +
+	"\x14RELIANT_API_BASE_URL*\x1cReliant LLM gateway base URLR\x11reliantApiBaseUrl\x12\xa7\x01\n" +
+	"\x10vertexai_project\x18\x02 \x01(\tB|\x82\xce\x18v\n" +
+	"\x10VERTEXAI_PROJECT*bDeprecated: accepted for compatibility; Vertex AI uses the connected service-account key's project\x18\x01R\x0fvertexaiProject\x12\x84\x01\n" +
 	"\x11vertexai_location\x18\x03 \x01(\tBW\x82\xce\x18S\n" +
 	"\x11VERTEXAI_LOCATION\x1a\vus-central1*1Vertex AI region for connected Vertex AI accountsR\x10vertexaiLocation\x12\xad\x01\n" +
 	"\x13stream_idle_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationBb\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18V\n" +
@@ -154,7 +170,7 @@ const file_reliant_config_v1_llm_config_proto_rawDesc = "" +
 	"\x1cdebug_openai_responses_input\x18\b \x01(\bBP\x82\xce\x18L\n" +
 	"$RELIANT_DEBUG_OPENAI_RESPONSES_INPUT*$Log each OpenAI Responses input itemR\x19debugOpenaiResponsesInput\x12\x90\x01\n" +
 	"\x19debug_openai_tool_schemas\x18\t \x01(\bBU\x82\xce\x18Q\n" +
-	"!RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS*,Log each OpenAI function tool schema as sentR\x16debugOpenaiToolSchemasJ\x04\b\x02\x10\x03R\x10vertexai_projectB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"!RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS*,Log each OpenAI function tool schema as sentR\x16debugOpenaiToolSchemasB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_llm_config_proto_rawDescOnce sync.Once
