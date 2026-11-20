@@ -88,9 +88,10 @@ func newPreviewAccessCmd() *cobra.Command {
 
   authenticated  you, signed in to Reliant (the default)
   public         anyone with the URL
-  token          a caller presenting the port's bearer token
 
-A port with no rule of its own follows the machine's default, which is
+A port shared by bearer token is set up in the app (the machine's Ports
+panel), which shows the token once; list shows such a port as token. A port
+with no rule of its own follows the machine's default, which is
 authenticated or public ('reliant preview access default').`,
 		Example: `  reliant preview access list build-box
   reliant preview access set build-box 5173 public
@@ -145,7 +146,7 @@ func printPortAccess(out io.Writer, d *controlplanev1.Daemon, rules []*controlpl
 
 func newPreviewAccessSetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "set <machine> <port> <public|authenticated|token>",
+		Use:     "set <machine> <port> <public|authenticated>",
 		Short:   "Set who may open one port's preview URL",
 		Args:    cobra.ExactArgs(3),
 		PreRunE: refusePortAccessFromAgentShell,
@@ -154,7 +155,10 @@ func newPreviewAccessSetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			mode, err := parsePortAccessMode(args[2], "public", "authenticated", "token")
+			// token mode is not offered: the control plane refuses to mint a
+			// port token for a CLI login, and returns the token only to the
+			// app, which shows it once.
+			mode, err := parsePortAccessMode(args[2], "public", "authenticated")
 			if err != nil {
 				return err
 			}

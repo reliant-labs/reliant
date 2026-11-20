@@ -89,6 +89,9 @@ func TestMachineLifecycleAndPreviewAccess(t *testing.T) {
 
 	_, err = executeRoot(t, "machine", "grow-disk", "cicd", "205")
 	assert.ErrorContains(t, err, "multiple of 10")
+	// 21474836580 truncates to 100 in 32 bits: refused, never sent as 100.
+	_, err = executeRoot(t, "machine", "grow-disk", "cicd", "21474836580")
+	assert.ErrorContains(t, err, "invalid size")
 	_, err = executeRoot(t, "machine", "grow-disk", "cicd", "200")
 	require.NoError(t, err)
 
@@ -98,6 +101,8 @@ func TestMachineLifecycleAndPreviewAccess(t *testing.T) {
 	assert.Contains(t, out, "5173")
 	assert.Contains(t, out, "public")
 
+	_, err = executeRoot(t, "preview", "access", "set", "cicd", "5173", "token")
+	assert.ErrorContains(t, err, "want one of public, authenticated", "token mode is the app's: the CLI could not show the token")
 	_, err = executeRoot(t, "preview", "access", "set", "cicd", "5173", "public")
 	require.NoError(t, err)
 	_, err = executeRoot(t, "preview", "access", "remove", "cicd", "5173")

@@ -21664,9 +21664,10 @@ Who may open a cloud machine's preview URLs, per port:
 
   authenticated  you, signed in to Reliant (the default)
   public         anyone with the URL
-  token          a caller presenting the port's bearer token
 
-A port with no rule of its own follows the machine's default, which is
+A port shared by bearer token is set up in the app (the machine's Ports
+panel), which shows the token once; list shows such a port as token. A port
+with no rule of its own follows the machine's default, which is
 authenticated or public ('reliant preview access default').
 
 ```
@@ -21722,7 +21723,7 @@ reliant preview access remove <machine> <port>
 Set who may open one port's preview URL
 
 ```
-reliant preview access set <machine> <port> <public|authenticated|token>
+reliant preview access set <machine> <port> <public|authenticated>
 ```
 
 ---

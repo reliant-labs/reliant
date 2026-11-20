@@ -116,10 +116,13 @@ allowance is billed as storage, and your plan caps the size.`,
 		Args:    cobra.ExactArgs(2),
 		PreRunE: refuseMachineFromAgentShell,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			gib, err := strconv.Atoi(strings.TrimSuffix(strings.TrimSpace(strings.ToLower(args[1])), "gib"))
-			if err != nil || gib <= 0 || gib%10 != 0 {
+			// Parsed as 32 bits, the request's width: a larger number is
+			// refused, never truncated into a different, billable size.
+			gib64, err := strconv.ParseInt(strings.TrimSuffix(strings.TrimSpace(strings.ToLower(args[1])), "gib"), 10, 32)
+			if err != nil || gib64 <= 0 || gib64%10 != 0 {
 				return fmt.Errorf("invalid size %q: give the new size in GiB, a multiple of 10 (e.g. 200)", args[1])
 			}
+			gib := int32(gib64)
 			client, err := machineClient(cmd.Context(), cmd)
 			if err != nil {
 				return err
@@ -130,7 +133,7 @@ allowance is billed as storage, and your plan caps the size.`,
 			}
 			if _, err := client.GrowDaemonDisk(cmd.Context(), connect.NewRequest(&daemonv1.GrowDaemonDiskRequest{
 				DaemonId:   d.GetId(),
-				StorageGib: int32(gib), //nolint:gosec // bounded by the Atoi of a user-typed size; the server validates it
+				StorageGib: gib,
 			})); err != nil {
 				return explainMachineErr(err)
 			}
