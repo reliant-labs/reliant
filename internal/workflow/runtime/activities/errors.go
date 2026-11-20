@@ -91,9 +91,21 @@ func ClassifyError(err error) error {
 		return fmt.Errorf("%w", transientErr)
 	}
 
+	// A prompt the provider refused as larger than the model's window, after
+	// call_llm already shrank it: terminal, by identity (see the runtime's
+	// classifyError, which this mirrors).
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return temporal.NewApplicationErrorWithOptions(err.Error(), ContextOverflowErrType,
+			temporal.ApplicationErrorOptions{NonRetryable: true, Cause: err})
+	}
+
 	// Auto-classify based on error content
 	return autoClassify(err)
 }
+
+// ContextOverflowErrType is the Temporal error type of a failure caused by
+// drivererrors.ErrContextOverflow. Mirrors runtime.ContextOverflowErrType.
+const ContextOverflowErrType = "LLMContextOverflow"
 
 // autoClassify attempts to automatically classify errors based on their content
 func autoClassify(err error) error {
@@ -221,6 +233,10 @@ func IsTerminal(err error) bool {
 		return appErr.NonRetryable() || appErr.Type() == "TerminalError"
 	}
 
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return true
+	}
+
 	return drivererrors.IsProviderCreditExhaustion(err)
 }
 
@@ -241,6 +257,10 @@ const (
 func CategorizeError(err error) ErrorCategory {
 	if err == nil {
 		return ErrorCategoryUnknown
+	}
+
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return ErrorCategoryTerminal
 	}
 
 	errStr := strings.ToLower(err.Error())

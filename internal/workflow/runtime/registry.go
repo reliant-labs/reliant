@@ -96,6 +96,11 @@ func markTextOnlyUserError(err error) error {
 	if drivererrors.IsProviderCreditExhaustion(err) {
 		return svcerr.WithClass(err, svcerr.ClassUser)
 	}
+	// A conversation that outgrew the model's window even after call_llm
+	// trimmed the request: the user's to change (a new chat, a larger model).
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return svcerr.WithClass(err, svcerr.ClassUser)
+	}
 	// The provider refused the user's prompt under its usage policy (prod
 	// c1ef7abd): the content is the user's to change.
 	if drivererrors.IsProviderPromptRefusal(err) {
@@ -108,6 +113,12 @@ func markTextOnlyUserError(err error) error {
 	}
 	return err
 }
+
+// ContextOverflowErrType is the Temporal error type of an activity failure
+// caused by drivererrors.ErrContextOverflow: a request the provider refused as
+// larger than the model's context window even after call_llm shrank it.
+// Never retryable.
+const ContextOverflowErrType = "LLMContextOverflow"
 
 // classifyError determines if an error is terminal or transient
 // Returns a Temporal-compatible error that controls retry behavior
@@ -197,6 +208,18 @@ func classifyError(err error) error {
 			// A policy the org's admins set, never a server fault.
 			Category: temporal.ApplicationErrorCategoryBenign,
 		})
+	}
+
+	// A prompt the provider refused as larger than the model's window. call_llm
+	// already shrank the request and resent it before giving up, so resending
+	// it again cannot succeed: terminal, and typed so the workflow side still
+	// knows what it was after Go identity is lost to serialization. Decided by
+	// identity before the text rules below: the streaming-429 rule matches
+	// "429" anywhere in the text, and a token count can contain it
+	// ("prompt is too long: 204291 tokens").
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return temporal.NewApplicationErrorWithOptions(err.Error(), ContextOverflowErrType,
+			temporal.ApplicationErrorOptions{NonRetryable: true, Cause: err})
 	}
 
 	// Auto-classify based on error content
@@ -336,6 +359,9 @@ func categorizeError(err error) string {
 
 	if errors.Is(err, drivererrors.ErrEmptyInput) {
 		return "validation"
+	}
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return "terminal"
 	}
 
 	// Before "not found": a database outage is what a mislabelled lookup
@@ -569,6 +595,10 @@ func isTerminal(err error) bool {
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) {
 		return appErr.NonRetryable() || appErr.Type() == "TerminalError"
+	}
+
+	if errors.Is(err, drivererrors.ErrContextOverflow) {
+		return true
 	}
 
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok {

@@ -1124,6 +1124,13 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				// turn was reported as a clean end.
 				finalResp = &v.Response
 			case responses.ResponseFailedEvent:
+				// A context-window refusal delivered in the stream is an error,
+				// so call_llm can shrink the request (see ContextOverflowFailure).
+				if err := responseswire.ContextOverflowFailure(&v.Response); err != nil {
+					logging.WarnContext(ctx, "[OpenAI Responses] Response failed: prompt exceeds the context window", "error", err)
+					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+					return
+				}
 				finalResp = &v.Response
 			default:
 				// Unhandled event type - ignore

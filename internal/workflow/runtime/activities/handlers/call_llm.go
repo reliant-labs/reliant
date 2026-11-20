@@ -1828,6 +1828,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// here (Codex/OpenAI envelopes are organisation-bound): drop it before the
 	// request rather than learn that from a 400.
 	history = stripForeignReasoning(history, models.DriverID(resolved.ProviderDriver), accountID)
+	// Snapshot before the trim, so a request the provider refuses as too long
+	// can be resent trimmed further (contextOverflowRecovery).
+	overflowRecovery := newContextOverflowRecovery(chat.ID, resolved.ProviderDriver, resolvedModelID, history, systemPrompts, availableTools, ceiling)
 	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling)
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
@@ -1924,7 +1927,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	llmCallStart := time.Now()
 	streamState.retries = newDriverRetries()
 	liveness := llm.NewStreamLiveness()
-	eventChan := driver.StreamResponse(llm.WithStreamLiveness(streamCtx, liveness), systemPrompts, history, availableTools)
+	eventChan := overflowRecovery.stream(llm.WithStreamLiveness(streamCtx, liveness), driver, history)
 	var streamErr error
 	streamInterrupted := false
 	// driverErrored is set when the driver itself reported the failure, as
