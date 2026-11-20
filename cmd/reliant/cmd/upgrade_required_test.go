@@ -141,7 +141,8 @@ func TestUpgradeRefusalSurvivesTheWire(t *testing.T) {
 	defer srv.Close()
 
 	isolateCLI(t)
-	loginFor(t, srv.URL, "rlat_upg000000000000000000000000000000")
+	// The loopback handler does not authenticate; use a non-token placeholder.
+	loginFor(t, srv.URL, "test-only-upgrade-refusal")
 
 	root := NewRootCmd()
 	root.SetOut(&bytes.Buffer{})
