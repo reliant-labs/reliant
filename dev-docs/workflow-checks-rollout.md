@@ -171,24 +171,52 @@ reliant forge db query prod --database reliant --confirm-env prod \
 A row with no `github_check_run_id` was never posted, so there is nothing on
 GitHub to close.
 
-**Confirm each on GitHub, then conclude it** as the Reliant App (only the App
-that created a check run may update it), `cancelled` with a summary saying why:
+**Confirm each on GitHub, then conclude it** as the Reliant App. First read
+`GET /repos/{owner}/{repo}/check-runs/{github_check_run_id}` with an authorized
+GitHub connection. Match the repository, check ID, name and creating App to the
+incident record, and continue only if the live status is `queued` or
+`in_progress`. Once writes from the affected syncer have stopped, recheck that
+status immediately before firing recovery. Do not update a completed check.
 
-```bash
-O=<owner> R=<repo> ID=<github_check_run_id>
-reliant github gh --repo "$O/$R" -- api "repos/$O/$R/check-runs/$ID" \
-  --jq '{name, app: .app.slug, status, conclusion}'
-# only if status is still queued or in_progress and app is the Reliant App:
-reliant github gh --repo "$O/$R" -- api -X PATCH "repos/$O/$R/check-runs/$ID" \
-  -f status=completed -f conclusion=cancelled \
-  -f 'output[title]=Cancelled by Reliant' \
-  -f 'output[summary]=Reliant stopped this check after a release problem and did not finish it. Re-run the check, or push again, to run it.'
+Use the existing workflow-only `github/check_run.update@1` action, in an
+**automation** acting as the Reliant bot. The delegated broker requests
+`checks:write` for that action on the single repository and refuses if the
+automation owner cannot push there, the installation cannot grant it, or the
+organization disallows the integration. The raw token is never handed to the
+operator. Do not use `reliant github gh` or its generic bot-token mint for the
+write: those credentials cannot be assumed to carry this action's permission.
+
+In a project the incident operator controls, use a workflow with this single
+step, substituting literal values from the verified incident row:
+
+```yaml
+name: Cancel a stale workflow check
+sequence:
+  - id: cancel_stale_check
+    type: action
+    uses: github/check_run.update@1
+    with:
+      owner: verified-owner
+      repo: verified-repository
+      check_run_id: 12345
+      status: completed
+      conclusion: cancelled
+      output:
+        title: Cancelled by Reliant
+        summary: Reliant stopped this check after a release problem and did not finish it.
 ```
 
-(`reliant github token --as app --repo "$O/$R"` gives the same identity for a
-plain `GH_TOKEN=… gh api …`.) For a batch, feed the listing's
-`owner,repo,github_check_run_id` rows through the same two calls in a loop,
-one repository at a time.
+Create a disabled scheduled activation for the workflow (so it never runs on a
+schedule), with **Acting as: Reliant bot**, and use its Run now action or
+`reliant trigger fire <activation-id-or-name>` once. Do not use
+`reliant workflow run`: an attended run writes as the signed-in user, not as
+its App. Use an API/worker release that still serves the GitHub integration
+and delegated broker; the workflow does not need the workflow-check syncer.
+Verify the action output has `is_error: false`, then re-read the same GitHub
+check: it must now be `completed` / `cancelled`. The workflow's overall status
+alone is not evidence. A credential refusal is a stop condition, not a reason
+to fall back to another identity. Delete the temporary activation once
+verified, and repeat the read/update/verify sequence for other confirmed IDs.
 
 If a syncer runs again later (a fixed release) and the row was not finished,
 it converges the check on what it derives from the firing and its run, so a
