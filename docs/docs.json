@@ -392,7 +392,8 @@
                   "guides/forge/add-custom-rpc",
                   "guides/forge/background-worker-cron-job",
                   "guides/forge/add-sign-in-passkeys",
-                  "guides/forge/scope-rows-to-owner"
+                  "guides/forge/scope-rows-to-owner",
+                  "guides/forge/call-llm-from-deployed-app"
                 ]
               },
               {
@@ -440,6 +441,12 @@
                   "guides/hosting/promote-release-staging-to-production",
                   "guides/hosting/gate-production-deploy-release-health",
                   "guides/hosting/recover-from-bad-deploy"
+                ]
+              },
+              {
+                "group": "Data & users",
+                "pages": [
+                  "guides/hosting/restore-postgres-point-in-time"
                 ]
               }
             ]

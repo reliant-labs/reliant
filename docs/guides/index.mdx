@@ -206,6 +206,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   <Card title="Scope rows to their owner in a multi-tenant API" icon="hammer" href="/guides/forge/scope-rows-to-owner">
     Make each signed-in user see and change only their own rows: declare a forge:owner column, finish the scaffolded owner filter and prove it with a two-user test.
   </Card>
+  <Card title="Call an LLM from your deployed app without managing API keys" icon="hammer" href="/guides/forge/call-llm-from-deployed-app">
+    Give a hosted Forge API a capped, per-environment model key: declare forge.LLM, add forge.llm_env(), and call the official Anthropic or OpenAI SDK unmodified.
+  </Card>
   <Card title="Write zero-downtime Postgres migrations and lint them" icon="hammer" href="/guides/forge/zero-downtime-postgres-migrations">
     Change a live Postgres schema without breaking the release that is still serving: declare compatibility, expand then contract, and lint each migration.
   </Card>
@@ -279,6 +282,9 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   </Card>
   <Card title="Recover from a bad deploy by redeploying an earlier release" icon="cloud" href="/guides/hosting/recover-from-bad-deploy">
     Put production back on the last good release in one deploy, check that rollback floors allow it, and set a floor so nobody deploys behind a release again.
+  </Card>
+  <Card title="Restore a managed Postgres database to a point in time" icon="cloud" href="/guides/hosting/restore-postgres-point-in-time">
+    Undo a bad delete on Reliant hosting: declare a new managed Postgres restored from backups to the moment before it, check the rows, and point your app at it.
   </Card>
 </CardGroup>
 
