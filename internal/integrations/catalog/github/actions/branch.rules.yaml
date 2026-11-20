@@ -2,7 +2,13 @@
 #
 # What a ship step must satisfy before it pushes or merges: the rules every
 # active ruleset (repository and organization) applies to one branch. Needs
-# only GitHub's Metadata (read) permission, which every App installation has.
+# only GitHub's Metadata (read) permission, which every App installation has:
+# GitHub's own permission data lists `metadata: read` for
+# GET /repos/{owner}/{repo}/rules/branches/{branch}, for an App installation
+# and a fine-grained token alike (github/docs
+# src/github-apps/data/fpt-2022-11-28/server-to-server-permissions.json and
+# fine-grained-pat-permissions.json). Administration is needed only to manage
+# rulesets (/rulesets), not to read the rules a branch is under.
 # The branch name is one percent-escaped path segment (GitHub decodes %2F); its
 # pattern refuses empty, "." and ".." segments, as git_ref.yaml's does.
 id: branch.rules
