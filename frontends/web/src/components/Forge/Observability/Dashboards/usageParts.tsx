@@ -7,7 +7,7 @@
  * nothing to draw, and the permission and unavailable states.
  */
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import Badge from "@/components/forge-ui/badge";
@@ -234,9 +234,23 @@ export function UsageUnavailable({ what, onRetry }: { what: string; onRetry?: ()
   );
 }
 
+/** What `Loaded` reads of a query. */
+export interface LoadedQuery<T> {
+  isPending: boolean;
+  isError: boolean;
+  isFetching?: boolean;
+  data: T | undefined;
+  refetch: () => unknown;
+}
+
 /**
- * A panel body over one query: loading, unavailable (unknown, not zero), a
- * response for another organization (refused), or the content.
+ * A panel body over one query: loading, couldn't load (with Try again), or
+ * the content.
+ *
+ * An answer for another organization is never shown. The hooks already keep
+ * one out of the cache (organization-usage-queries forOrg), so this is a
+ * backstop: it reads as loading and asks again, once per foreign answer, and
+ * says nothing about it on screen.
  */
 export function Loaded<T extends { orgId: string }>({
   query,
@@ -244,30 +258,37 @@ export function Loaded<T extends { orgId: string }>({
   what,
   children,
 }: {
-  query: { isPending: boolean; isError: boolean; data: T | undefined };
+  query: LoadedQuery<T>;
   orgId: string;
   what: string;
   children: (data: T) => ReactNode;
 }) {
-  if (query.isPending) {
+  const foreign = query.data !== undefined && query.data.orgId !== orgId ? `${orgId}\u0000${query.data.orgId}` : null;
+  const askedAgain = useRef<string | null>(null);
+  const { refetch } = query;
+  useEffect(() => {
+    if (foreign === null || askedAgain.current === foreign) return;
+    askedAgain.current = foreign;
+    void refetch();
+  }, [foreign, refetch]);
+
+  // A foreign answer reads as loading until the second ask settles.
+  const reasking = foreign !== null && (askedAgain.current !== foreign || !!query.isFetching);
+  if (query.isPending || reasking) {
     return (
       <p role="status" className="text-sm text-ink-muted">
         Loading {what}…
       </p>
     );
   }
-  if (query.isError || !query.data) {
+  if (query.isError || !query.data || foreign !== null) {
     return (
-      <p role="alert" className="text-sm text-ink-muted" data-testid="panel-unavailable">
-        Could not load {what}. It is unknown, not zero.
-      </p>
-    );
-  }
-  if (query.data.orgId !== orgId) {
-    return (
-      <p role="alert" className="text-sm text-ink-muted">
-        The answer was for a different organization, so it is not shown. Refresh to try again.
-      </p>
+      <div role="alert" className="text-sm text-ink-muted" data-testid="panel-unavailable">
+        <p>Couldn't load {what}.</p>
+        <button type="button" className={`${BUTTON_SECONDARY} mt-2`} onClick={() => void refetch()} disabled={query.isFetching}>
+          Try again
+        </button>
+      </div>
     );
   }
   return <>{children(query.data)}</>;
