@@ -23,7 +23,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import Button from "@/components/forge-ui/button";
 import ProgressBar from "@/components/forge-ui/progress_bar";
-import { day, gb } from "./observabilityBillingModel";
+import { day } from "./observabilityBillingModel";
 import { hasErrorReason } from "@/lib/errorReasons";
 import {
   isUnimplemented,
@@ -120,48 +120,60 @@ export function FreeTierView({ orgName, status, loading, error, onRetry, onMove 
   );
 }
 
-function Meter({ label, used, limit, value, max, note }: { label: string; used: string; limit: string; value: number; max: number; note?: string }) {
+function Meter({ label, used, limit, value, max, note }: { label: string; used: string; limit: string; value?: number; max: number; note?: string }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-ui font-medium text-foreground">{label}</span>
         <span className="text-ui tabular-nums text-muted-foreground">
-          <span className="text-foreground">{used}</span> of {limit}
+          <span className="text-foreground">{used}</span>
+          {value === undefined ? ` · ${limit} allowance` : ` of ${limit}`}
         </span>
       </div>
-      <div className="forge-ui">
-        <ProgressBar value={value} max={max} variant="default" ariaLabel={`${label} used against the free allowance`} />
-      </div>
+      {value !== undefined && (
+        <div className="forge-ui">
+          <ProgressBar value={value} max={max} variant="default" ariaLabel={`${label} used against the free allowance`} />
+        </div>
+      )}
       {note && <p className="text-meta text-muted-foreground">{note}</p>}
     </div>
   );
 }
 
+function gib(bytes: number | bigint): string {
+  return `${(Number(bytes) / 2 ** 30).toLocaleString(undefined, { maximumFractionDigits: 3 })} GiB`;
+}
+
 function DesignatedAllowance({ status }: { status: FreeHostingStatus }) {
   const sitesLimit = Number(status.sitesLimit);
+  const siteCount = status.sites.length;
+  const perSiteLimit = status.siteStorageLimitBytes ?? 0;
+  // Older servers may omit the measured flag; an explicit false always means unknown.
+  const storageMeasured = status.storageMeasured !== false;
   return (
     <div className="space-y-4">
       <p className="text-ui text-foreground">This organization holds the free static hosting allowance.</p>
       <div className="grid gap-4 sm:grid-cols-3">
-        <Meter
-          label="Sites"
-          used={String(status.sites.length)}
-          limit={String(sitesLimit)}
-          value={status.sites.length}
-          max={sitesLimit}
-        />
+        {sitesLimit > 0 ? (
+          <Meter label="Sites" used={String(siteCount)} limit={String(sitesLimit)} value={siteCount} max={sitesLimit} />
+        ) : (
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-ui font-medium text-foreground">Sites</span>
+            <span className="text-ui tabular-nums text-foreground">{siteCount}</span>
+          </div>
+        )}
         <Meter
           label="Storage"
-          used={status.storageMeasured === false ? "Not measured yet" : gb(status.storageBytes)}
-          limit={gb(status.storageLimitBytes)}
-          value={Number(status.storageBytes)}
+          used={storageMeasured ? gib(status.storageBytes) : "Not measured yet"}
+          limit={gib(status.storageLimitBytes)}
+          value={storageMeasured ? Number(status.storageBytes) : undefined}
           max={Number(status.storageLimitBytes)}
-          note={`Up to ${status.siteStorageLimitBytes ? gb(status.siteStorageLimitBytes) : "1 GiB"} per site.`}
+          note={perSiteLimit > 0 ? `Up to ${gib(perSiteLimit)} per site.` : undefined}
         />
         <Meter
           label="Transfer this month"
-          used={gb(status.transferBytes)}
-          limit={gb(status.transferLimitBytes)}
+          used={gib(status.transferBytes)}
+          limit={gib(status.transferLimitBytes)}
           value={Number(status.transferBytes)}
           max={Number(status.transferLimitBytes)}
           note={status.periodEnd ? `Resets ${day(status.periodEnd)}.` : undefined}
@@ -182,7 +194,7 @@ function DesignatedAllowance({ status }: { status: FreeHostingStatus }) {
                   </a>
                 )}
               </span>
-              <span className="tabular-nums text-muted-foreground">{site.storageMeasured ? gb(site.storageBytes) : "not measured yet"}</span>
+              <span className="tabular-nums text-muted-foreground">{site.storageMeasured ? gib(site.storageBytes) : "not measured yet"}</span>
             </li>
           ))}
         </ul>

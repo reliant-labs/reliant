@@ -23,9 +23,11 @@ function status(overrides: Partial<FreeHostingStatus> = {}): FreeHostingStatus {
       { deploymentId: "d1", environmentName: "prod", name: "landing", url: "https://landing.example.app", storageBytes: GiB / 4n, storageMeasured: true },
       { deploymentId: "d2", environmentName: "staging", name: "docs", url: "https://docs.example.app", storageBytes: 0n, storageMeasured: false },
     ],
-    sitesLimit: 3n,
+    sitesLimit: 5,
     storageBytes: GiB / 4n,
-    storageLimitBytes: 3n * GiB,
+    storageLimitBytes: 5n * GiB,
+    siteStorageLimitBytes: GiB,
+    storageMeasured: true,
     transferBytes: GiB * 2n,
     transferLimitBytes: GiB * 100n,
     periodEnd: ts("2026-11-30T23:59:59Z"),
@@ -54,19 +56,37 @@ describe("FreeTierView", () => {
     render(<FreeTierView orgName="Acme" status={status()} onMove={vi.fn()} />);
     const card = screen.getByTestId("free-tier-card");
     expect(card).toHaveTextContent("This organization holds the free static hosting allowance");
-    expect(card).toHaveTextContent("2 of 3");
-    expect(card).toHaveTextContent("0.25 GB of 3 GB");
+    expect(card).toHaveTextContent("2 of 5");
+    expect(card).toHaveTextContent("0.25 GiB of 5 GiB");
     expect(card).toHaveTextContent("Up to 1 GiB per site.");
-    expect(card).toHaveTextContent("2 GB of 100 GB");
+    expect(card).toHaveTextContent("2 GiB of 100 GiB");
     expect(card).toHaveTextContent("Resets 2026-11-30.");
     expect(screen.getAllByRole("progressbar")).toHaveLength(3);
     const sites = within(screen.getByTestId("free-tier-sites")).getAllByRole("listitem");
     expect(sites[0]).toHaveTextContent("landing");
     expect(sites[0]).toHaveTextContent("prod");
     expect(within(sites[0]).getByRole("link", { name: "https://landing.example.app" })).toHaveAttribute("href", "https://landing.example.app");
-    expect(sites[0]).toHaveTextContent("0.25 GB");
+    expect(sites[0]).toHaveTextContent("0.25 GiB");
     expect(sites[1]).toHaveTextContent("not measured yet");
     expect(screen.queryByTestId("free-tier-move")).not.toBeInTheDocument();
+  });
+
+  it("shows a count without a Sites meter for the storage-only allowance", () => {
+    render(<FreeTierView orgName="Acme" status={status({ sitesLimit: 0, storageLimitBytes: 10n * GiB, siteStorageLimitBytes: 0n })} onMove={vi.fn()} />);
+    const sites = screen.getByText("Sites", { exact: true }).parentElement;
+    expect(sites).toHaveTextContent(/^Sites2$/);
+    expect(screen.queryByRole("progressbar", { name: /^Sites used/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("progressbar")).toHaveLength(2);
+    expect(screen.getByTestId("free-tier-card")).toHaveTextContent("0.25 GiB of 10 GiB");
+    expect(screen.queryByText(/per site/i)).not.toBeInTheDocument();
+  });
+
+  it("does not invent a per-site cap or meter unmeasured aggregate storage", () => {
+    render(<FreeTierView orgName="Acme" status={status({ siteStorageLimitBytes: undefined, storageMeasured: false, storageBytes: 0n })} onMove={vi.fn()} />);
+    expect(screen.queryByText(/per site/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("free-tier-card")).toHaveTextContent("Not measured yet · 5 GiB allowance");
+    expect(screen.queryByRole("progressbar", { name: /^Storage used/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: /^Sites used/ })).toBeInTheDocument();
   });
 
   it("tells a non-founder this org has no allowance, without naming another org", () => {

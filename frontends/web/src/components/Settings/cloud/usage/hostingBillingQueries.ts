@@ -99,6 +99,7 @@ export interface FreeHostingStatus {
   heldByOrgName: string;
   callerIsFounder: boolean;
   sites: FreeHostingSite[];
+  /** Zero means there is no fixed site count limit. */
   sitesLimit: Int;
   storageBytes: Int;
   storageLimitBytes: Int;
@@ -106,7 +107,7 @@ export interface FreeHostingStatus {
   transferLimitBytes: Int;
   periodEnd?: Timestamp;
   nextMoveAllowedAt?: Timestamp;
-  /** The per-site cap (1 GiB today), from the server. */
+  /** The legacy per-site cap, when positive. Zero or absent means no cap is reported. */
   siteStorageLimitBytes?: Int;
   /** False until storage has been measured for this org. */
   storageMeasured?: boolean;
