@@ -3,21 +3,9 @@ package db
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/store"
 )
-
-// GetProjectConfigPushedAt returns when the daemon pushed the project's
-// current config record (pushed_at), without reading any of its payload. It
-// returns svcerr.NotFound when the project has no record, like
-// GetProjectConfigRecord. See store.GetProjectConfigPushedAt.
-func (r *Repo) GetProjectConfigPushedAt(ctx context.Context, projectID string) (time.Time, error) {
-	if projectID == "" {
-		return time.Time{}, fmt.Errorf("project ID cannot be empty")
-	}
-	return store.GetProjectConfigPushedAt(ctx, r.ORM(), projectID)
-}
 
 // GetProjectScenariosJSON reads one column of the project config record: the
 // synced .reliant scenarios. It returns svcerr.NotFound when the

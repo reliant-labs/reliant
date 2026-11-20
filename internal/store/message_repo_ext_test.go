@@ -430,7 +430,7 @@ func TestMessageUpdates_AcrossLayers(t *testing.T) {
 	if got.TokenCount == nil || *got.TokenCount != 42 || got.Cost == nil || *got.Cost != 1.5 || got.Model == nil || *got.Model != "model-m1" {
 		t.Fatalf("after UpdateMessageUsage: %+v", flat(*got))
 	}
-	if err := f.env.Repo.UpdateMessage(ctx, &core.Message{ID: "m1"}); err != nil {
+	if err := store.UpdateMessageUsage(ctx, o, "m1", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ = store.FindMessage(ctx, o, "m1"); got.TokenCount != nil || got.Cost != nil {

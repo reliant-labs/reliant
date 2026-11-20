@@ -41,7 +41,7 @@ func TestPresetQueries(t *testing.T) {
 		t.Fatalf("Repo.CreatePreset(plan): %v", err)
 	}
 
-	twin, err := env.Repo.GetPreset(ctx, "p-fast")
+	twin, err := store.GetPreset(ctx, env.Repo.ORM(), "p-fast")
 	if err != nil || twin.Name != "Fast" || twin.Tag != "coder" || *twin.Description != "Fast preset" || twin.ProjectID != nil || twin.Params["model"] != "Fast" {
 		t.Fatalf("Repo.GetPreset = %+v, %v; want the store's write", twin, err)
 	}
@@ -87,10 +87,10 @@ func TestPresetQueries(t *testing.T) {
 		}
 	}
 	all, err := store.ListUserPresets(ctx, env.ORM, user)
-	twinAll, twinErr := env.Repo.ListUserPresets(ctx, user)
+	twinAll, twinErr := store.ListUserPresets(ctx, env.Repo.ORM(), user)
 	check("ListUserPresets", all, err, twinAll, twinErr, "p-fast,p-plan,p-smart")
 	global, err := store.ListUserPresetsGlobal(ctx, env.ORM, user)
-	twinGlobal, twinErr := env.Repo.ListUserPresetsGlobal(ctx, user)
+	twinGlobal, twinErr := store.ListUserPresetsGlobal(ctx, env.Repo.ORM(), user)
 	check("ListUserPresetsGlobal", global, err, twinGlobal, twinErr, "p-fast,p-plan")
 	byProject, err := store.ListUserPresetsByProject(ctx, env.ORM, user, project)
 	twinByProject, twinErr := env.Repo.ListUserPresetsByProject(ctx, user, project)
@@ -117,7 +117,7 @@ func TestPresetQueries(t *testing.T) {
 	if up.ID != "p-smart" || up.Name != "Smarter" || up.Tag != "reviewer" || up.Description != nil || up.Params["model"] != "opus" || !up.CreatedAt.Equal(got.CreatedAt) {
 		t.Fatalf("UpsertPreset(project) = %+v, want p-smart replaced in place", up)
 	}
-	twinUp, err := env.Repo.UpsertPreset(ctx, &core.Preset{ID: "p-fast-2", UserID: user, Name: "Fast again", Slug: "fast", Tag: "coder"})
+	twinUp, err := store.UpsertPreset(ctx, env.Repo.ORM(), &core.Preset{ID: "p-fast-2", UserID: user, Name: "Fast again", Slug: "fast", Tag: "coder"})
 	if err != nil {
 		t.Fatalf("Repo.UpsertPreset(global): %v", err)
 	}
@@ -137,7 +137,7 @@ func TestPresetQueries(t *testing.T) {
 	if updated.Name != "Planner v2" || updated.Slug != "plan" || updated.UserID != user || updated.Description != nil || updated.Params["depth"] != 3.0 || updated.CreatedAt.IsZero() {
 		t.Fatalf("ReplacePreset = %+v, want the row as stored, slug and owner kept", updated)
 	}
-	twinPlan, err := env.Repo.GetPreset(ctx, "p-plan")
+	twinPlan, err := store.GetPreset(ctx, env.Repo.ORM(), "p-plan")
 	if err != nil || twinPlan.Name != "Planner v2" || !twinPlan.UpdatedAt.After(twinPlan.CreatedAt) {
 		t.Fatalf("Repo.GetPreset after ReplacePreset = %+v, %v", twinPlan, err)
 	}

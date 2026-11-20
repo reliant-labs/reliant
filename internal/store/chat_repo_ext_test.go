@@ -516,7 +516,7 @@ FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft
 	if err != nil {
 		t.Fatalf("GetChatActivity: %v", err)
 	}
-	twinActivity, err := env.Repo.GetChatActivity(ctx, "m-2")
+	twinActivity, err := store.GetChatActivity(ctx, env.Repo.ORM(), "m-2")
 	if err != nil {
 		t.Fatalf("Repo.GetChatActivity: %v", err)
 	}

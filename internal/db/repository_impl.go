@@ -849,33 +849,6 @@ func (r *Repo) CreateContentBlock(ctx context.Context, block *MessageContentBloc
 	return store.InsertContentBlock(ctx, r.ORM(), block)
 }
 
-func (r *Repo) CreateContentBlockIfNotExists(ctx context.Context, block *MessageContentBlock) error {
-	if block == nil {
-		return fmt.Errorf("content block cannot be nil")
-	}
-	if block.ID == "" {
-		return fmt.Errorf("content block ID cannot be empty")
-	}
-	if block.MessageID == "" {
-		return fmt.Errorf("content block MessageID cannot be empty")
-	}
-	return store.InsertContentBlockOnce(ctx, r.ORM(), block)
-}
-
-func (r *Repo) GetContentBlock(ctx context.Context, id string) (*MessageContentBlock, error) {
-	if id == "" {
-		return nil, fmt.Errorf("content block ID cannot be empty")
-	}
-	block, err := store.FindContentBlock(ctx, r.ORM(), id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get content block: %w", err)
-	}
-	if block == nil {
-		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("content block"), id)
-	}
-	return block, nil
-}
-
 // GetContentBlockByToolCallID finds a content block by its tool_call_id
 // Returns an error if the block is not found or if the tool_call_id is empty
 func (r *Repo) GetContentBlockByToolCallID(ctx context.Context, toolCallID string) (*MessageContentBlock, error) {
@@ -916,36 +889,6 @@ func (r *Repo) ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*Mes
 // row holds is absent from the result.
 func (r *Repo) ListMessagesByIDs(ctx context.Context, ids []string) ([]*Message, error) {
 	return store.ListMessagesByIDs(ctx, r.ORM(), ids)
-}
-
-func (r *Repo) AppendToContentBlock(ctx context.Context, blockID string, delta string) error {
-	if blockID == "" {
-		return fmt.Errorf("content block ID cannot be empty")
-	}
-	return store.AppendToContentBlock(ctx, r.ORM(), blockID, delta)
-}
-
-// AppendToolInputDelta appends JSON delta to a content block's tool_input field
-func (r *Repo) AppendToolInputDelta(ctx context.Context, chatID string, blockID string, delta string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	if blockID == "" {
-		return fmt.Errorf("content block ID cannot be empty")
-	}
-	return store.AppendToolInputDelta(ctx, r.ORM(), blockID, delta)
-}
-
-// UpdateMessage updates a message.
-func (r *Repo) UpdateMessage(ctx context.Context, msg *Message) error {
-	if msg == nil {
-		return fmt.Errorf("message cannot be nil")
-	}
-	if msg.ID == "" {
-		return fmt.Errorf("message ID cannot be empty")
-	}
-
-	return store.UpdateMessageUsage(ctx, r.ORM(), msg.ID, msg.TokenCount, msg.Cost)
 }
 
 // DeleteMessage deletes a message and cascades to content blocks (ON DELETE CASCADE)
@@ -1041,14 +984,6 @@ func (r *Repo) GetProject(ctx context.Context, id string) (*Project, error) {
 // with no project is absent. It checks no owner: the caller decides each row.
 func (r *Repo) ListProjectsByIDs(ctx context.Context, ids []string) ([]*Project, error) {
 	return store.ListProjectsByIDs(ctx, r.ORM(), ids)
-}
-
-func (r *Repo) GetProjectByPath(ctx context.Context, path string) (*Project, error) {
-	if path == "" {
-		return nil, fmt.Errorf("project path cannot be empty")
-	}
-
-	return store.GetProjectByPath(ctx, r.ORM(), path)
 }
 
 func (r *Repo) GetProjectByPathAndUser(ctx context.Context, path, userID string) (*Project, error) {
@@ -1882,10 +1817,6 @@ func (r *Repo) IsDaemonIDAttached(ctx context.Context, daemonID string, staleThr
 	return store.IsDaemonIDAttached(ctx, r.ORM(), daemonID, time.Now().UTC().Add(-staleThreshold))
 }
 
-func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
-	return store.ListOutboundAttachments(ctx, r.ORM())
-}
-
 // ListAllDaemonAttachments returns every attachment row regardless of source.
 // Used by the gateway's /flow-health endpoint, which cross-checks the rows
 // against the streams it actually holds — the rows alone cannot say whether a
@@ -2010,13 +1941,6 @@ func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {
 		return nil, fmt.Errorf("worktree ID cannot be empty")
 	}
 	return store.GetWorktree(ctx, r.ORM(), id)
-}
-
-func (r *Repo) GetWorktreeByPath(ctx context.Context, path string) (*Worktree, error) {
-	if path == "" {
-		return nil, fmt.Errorf("worktree path cannot be empty")
-	}
-	return store.GetWorktreeByPath(ctx, r.ORM(), path)
 }
 
 // GetWorktreeByIdempotencyKey returns a prior create's worktree for this
@@ -2365,21 +2289,6 @@ func (r *Repo) DeleteAutomationToken(ctx context.Context, userID, daemonID strin
 
 // ==================== Visibility Methods ====================
 
-// GetVisibilityOverride returns the user's visibility override for an item, or nil if none exists.
-func (r *Repo) GetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) (*bool, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user_id cannot be empty")
-	}
-	if itemType != 1 && itemType != 2 { // HIDDEN_ITEM_TYPE_WORKFLOW=1, HIDDEN_ITEM_TYPE_PRESET=2
-		return nil, fmt.Errorf("item_type must be WORKFLOW (1) or PRESET (2)")
-	}
-	if slug == "" {
-		return nil, fmt.Errorf("slug cannot be empty")
-	}
-
-	return store.GetVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug)
-}
-
 // ListVisibilityOverrides returns all user overrides for a given item type.
 func (r *Repo) ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error) {
 	if userID == "" {
@@ -2407,18 +2316,6 @@ func (r *Repo) SetVisibilityOverride(ctx context.Context, userID string, itemTyp
 	return store.SetVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug, isVisible)
 }
 
-// GetItemDefault returns the system default visibility for an item.
-func (r *Repo) GetItemDefault(ctx context.Context, itemType int32, slug string) (*ItemDefault, error) {
-	if itemType != 1 && itemType != 2 { // HIDDEN_ITEM_TYPE_WORKFLOW=1, HIDDEN_ITEM_TYPE_PRESET=2
-		return nil, fmt.Errorf("item_type must be WORKFLOW (1) or PRESET (2)")
-	}
-	if slug == "" {
-		return nil, fmt.Errorf("slug cannot be empty")
-	}
-
-	return store.GetItemDefault(ctx, r.ORM(), itemType, slug)
-}
-
 // ListHiddenItemDefaults returns all items that are hidden by default.
 func (r *Repo) ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error) {
 	if itemType != 1 && itemType != 2 { // HIDDEN_ITEM_TYPE_WORKFLOW=1, HIDDEN_ITEM_TYPE_PRESET=2
@@ -2426,16 +2323,6 @@ func (r *Repo) ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]st
 	}
 
 	return store.ListHiddenItemDefaults(ctx, r.ORM(), itemType)
-}
-
-// GetDefaultPresetAssignments returns the default preset assignments for a workflow.
-// Returns a map of group name to preset slug.
-func (r *Repo) GetDefaultPresetAssignments(ctx context.Context, workflowName string) (map[string]string, error) {
-	if workflowName == "" {
-		return nil, fmt.Errorf("workflow_name cannot be empty")
-	}
-
-	return store.GetDefaultPresetAssignments(ctx, r.ORM(), workflowName)
 }
 
 func (r *Repo) CreatePlan(ctx context.Context, plan *Plan) error {
@@ -2466,14 +2353,6 @@ func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, e
 	}
 
 	return store.GetPlanByThreadID(ctx, r.ORM(), threadID)
-}
-
-func (r *Repo) ListPlansByThread(ctx context.Context, threadID string) ([]*Plan, error) {
-	if threadID == "" {
-		return nil, fmt.Errorf("thread ID cannot be empty")
-	}
-
-	return store.ListPlansByThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, error) {
@@ -2619,27 +2498,6 @@ func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) er
 	return store.InsertTaskDependency(ctx, r.ORM(), dep)
 }
 
-func (r *Repo) GetTaskDependency(ctx context.Context, id string) (*TaskDependency, error) {
-	if id == "" {
-		return nil, fmt.Errorf("dependency ID cannot be empty")
-	}
-	return store.GetTaskDependency(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ListTaskDependenciesByTask(ctx context.Context, taskID string) ([]*TaskDependency, error) {
-	if taskID == "" {
-		return nil, fmt.Errorf("task ID cannot be empty")
-	}
-	return store.ListTaskDependenciesByTask(ctx, r.ORM(), taskID)
-}
-
-func (r *Repo) ListBlockersForTask(ctx context.Context, taskID string) ([]*TaskDependency, error) {
-	if taskID == "" {
-		return nil, fmt.Errorf("task ID cannot be empty")
-	}
-	return store.ListBlockersForTask(ctx, r.ORM(), taskID)
-}
-
 func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error) {
 	if planID == "" {
 		return nil, fmt.Errorf("plan ID cannot be empty")
@@ -2656,34 +2514,11 @@ func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTas
 
 // ==================== Background Processes ====================
 
-func (r *Repo) CreateBackgroundProcess(ctx context.Context, process *BackgroundProcess) error {
-	if process == nil {
-		return fmt.Errorf("process cannot be nil")
-	}
-	if process.ID == "" {
-		process.ID = generateID()
-	}
-	if process.CreatedAt.IsZero() {
-		process.CreatedAt = time.Now()
-	}
-	if process.UpdatedAt.IsZero() {
-		process.UpdatedAt = time.Now()
-	}
-	if process.StartedAt.IsZero() {
-		process.StartedAt = time.Now()
-	}
-	return store.InsertBackgroundProcess(ctx, r.ORM(), process)
-}
-
 func (r *Repo) GetBackgroundProcess(ctx context.Context, id string) (*BackgroundProcess, error) {
 	if id == "" {
 		return nil, fmt.Errorf("process ID cannot be empty")
 	}
 	return store.GetBackgroundProcess(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ListBackgroundProcesses(ctx context.Context, filters BackgroundProcessFilters) ([]*BackgroundProcess, error) {
-	return store.ListBackgroundProcesses(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) UpdateBackgroundProcessStatus(ctx context.Context, id string, status BackgroundProcessStatus, exitCode *int, endedAt *time.Time) error {
@@ -2693,33 +2528,7 @@ func (r *Repo) UpdateBackgroundProcessStatus(ctx context.Context, id string, sta
 	return store.SetBackgroundProcessStatus(ctx, r.ORM(), id, status, exitCode, endedAt)
 }
 
-func (r *Repo) GetRunningBackgroundProcesses(ctx context.Context) ([]*BackgroundProcess, error) {
-	return store.ListRunningBackgroundProcesses(ctx, r.ORM())
-}
-
-func (r *Repo) MarkStaleProcesses(ctx context.Context, processIDs []string) error {
-	return store.MarkStaleBackgroundProcesses(ctx, r.ORM(), processIDs)
-}
-
-func (r *Repo) CleanupOldBackgroundProcesses(ctx context.Context, olderThan time.Time) (int64, error) {
-	return store.DeleteEndedBackgroundProcesses(ctx, r.ORM(), olderThan)
-}
-
 // ==================== Background Process Output ====================
-
-func (r *Repo) CreateBackgroundProcessOutputBatch(ctx context.Context, lines []BackgroundProcessOutputLine) error {
-	return store.InsertBackgroundProcessOutput(ctx, r.ORM(), lines)
-}
-
-func (r *Repo) GetBackgroundProcessOutput(ctx context.Context, processID string, afterSeq int64, limit int) ([]BackgroundProcessOutputLine, error) {
-	if processID == "" {
-		return nil, fmt.Errorf("process ID cannot be empty")
-	}
-	if limit <= 0 {
-		limit = 10000
-	}
-	return store.ReadBackgroundProcessOutput(ctx, r.ORM(), processID, afterSeq, limit)
-}
 
 // ==================== Attachments ====================
 
@@ -3703,14 +3512,6 @@ func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, erro
 	return store.LoadRunEvent(ctx, r.ORM(), id)
 }
 
-// GetRunEventByDedupe returns ErrRunEventNotFound on a miss.
-func (r *Repo) GetRunEventByDedupe(ctx context.Context, dedupeKey string) (*core.RunEvent, error) {
-	if dedupeKey == "" {
-		return nil, fmt.Errorf("run event dedupe key cannot be empty")
-	}
-	return store.LoadRunEventByDedupe(ctx, r.ORM(), dedupeKey)
-}
-
 // HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
 // of the kind.
 func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
@@ -3865,14 +3666,6 @@ func (r *Repo) CreateStepExecution(ctx context.Context, exec *StepExecution) err
 	return store.InsertStepExecution(ctx, r.ORM(), exec)
 }
 
-func (r *Repo) GetStepExecution(ctx context.Context, id string) (*StepExecution, error) {
-	if id == "" {
-		return nil, fmt.Errorf("step execution ID cannot be empty")
-	}
-
-	return store.LoadStepExecution(ctx, r.ORM(), id)
-}
-
 func (r *Repo) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
 	return store.ListBasicChatStepExecutions(ctx, r.ORM(), chatID)
 }
@@ -3956,10 +3749,6 @@ func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 	return store.GetThread(ctx, r.ORM(), id)
 }
 
-func (r *Repo) ListThreadsByIDs(ctx context.Context, ids []string) ([]*Thread, error) {
-	return store.ListThreadsByIDs(ctx, r.ORM(), ids)
-}
-
 // ResolveThreadAmbientMemoryExclusion fails closed on persistence errors.
 func (r *Repo) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
 	return store.ResolveThreadAmbientMemoryExclusion(ctx, r.ORM(), chatID, threadID, requested)
@@ -3984,13 +3773,6 @@ func (r *Repo) ListThreadsByConversation(ctx context.Context, chatID string) ([]
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	return store.ListThreadsByConversation(ctx, r.ORM(), chatID)
-}
-
-func (r *Repo) ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error) {
-	if parentThreadID == "" {
-		return nil, fmt.Errorf("parent thread ID cannot be empty")
-	}
-	return store.ListChildThreads(ctx, r.ORM(), parentThreadID)
 }
 
 func (r *Repo) UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error) {
@@ -4098,20 +3880,6 @@ func (r *Repo) ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error) 
 	return reaped, nil
 }
 
-func (r *Repo) ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error) {
-	if conversationID == "" {
-		return nil, fmt.Errorf("conversation ID cannot be empty")
-	}
-	return store.ListThreadsByOrigin(ctx, r.ORM(), conversationID, origin)
-}
-
-func (r *Repo) CountThreadsInConversation(ctx context.Context, chatID string) (int64, error) {
-	if chatID == "" {
-		return 0, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.CountThreadsInConversation(ctx, r.ORM(), chatID)
-}
-
 // ==================== Context Windows ====================
 // Atomic unit for what gets sent to the LLM
 
@@ -4184,13 +3952,6 @@ func (r *Repo) GetContextWindowWithThread(ctx context.Context, id string) (*Cont
 		return nil, "", nil, nil, fmt.Errorf("context window ID cannot be empty")
 	}
 	return store.GetContextWindowWithThread(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ListContextWindowsByThread(ctx context.Context, threadID string) ([]*ContextWindow, error) {
-	if threadID == "" {
-		return nil, fmt.Errorf("thread ID cannot be empty")
-	}
-	return store.ListContextWindowsByThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error) {
@@ -4608,28 +4369,12 @@ func (r *Repo) CreatePreset(ctx context.Context, preset *Preset) (*Preset, error
 	return store.InsertPreset(ctx, r.ORM(), preset)
 }
 
-func (r *Repo) UpsertPreset(ctx context.Context, preset *Preset) (*Preset, error) {
-	return store.UpsertPreset(ctx, r.ORM(), preset)
-}
-
-func (r *Repo) GetPreset(ctx context.Context, id string) (*Preset, error) {
-	return store.GetPreset(ctx, r.ORM(), id)
-}
-
 func (r *Repo) GetPresetBySlug(ctx context.Context, userID, slug string) (*Preset, error) {
 	return store.GetPresetBySlug(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) GetPresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) (*Preset, error) {
 	return store.GetPresetBySlugAndProject(ctx, r.ORM(), userID, slug, projectID)
-}
-
-func (r *Repo) ListUserPresets(ctx context.Context, userID string) ([]*Preset, error) {
-	return store.ListUserPresets(ctx, r.ORM(), userID)
-}
-
-func (r *Repo) ListUserPresetsGlobal(ctx context.Context, userID string) ([]*Preset, error) {
-	return store.ListUserPresetsGlobal(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListUserPresetsByProject(ctx context.Context, userID, projectID string) ([]*Preset, error) {
