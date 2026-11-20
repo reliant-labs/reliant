@@ -34,28 +34,53 @@ const (
 // <kind>/<version>` (internal/clientversion). A floor with no min_version is
 // no floor. A client is below its floor only when its version is valid semver
 // and orders before min_version (prerelease and dev builds order by semver
-// precedence; build metadata is ignored). A missing or unparseable version is
-// never refused.
+// precedence; build metadata is ignored). An unparseable version is never
+// refused; a missing header only under refuse_unidentified.
 //
-// One message per client kind, because a config field's env var is fixed by
-// its message: a single floor message reused for six kinds would read the
-// same variables six times. Each has the same min_version / upgrade_url /
-// upgrade_command getters; the daemon's adds min_commit_time_unix.
+// Each kind's floor is three fields named <kind>_min_version,
+// <kind>_upgrade_url and <kind>_upgrade_command (the daemon's adds
+// daemon_min_commit_time_unix), flat rather than one floor message per kind:
+// forge projects a config block into KCL one level deep, and a floor nested
+// a level further would never reach control-plane's typed prod config.
+// internal/clientversion.FloorFor reads one kind's floor.
 //
 // The rules every config here follows are in config.proto's header.
 type ClientVersionPolicy struct {
-	state   protoimpl.MessageState     `protogen:"open.v1"`
-	Web     *WebClientVersionFloor     `protobuf:"bytes,1,opt,name=web,proto3" json:"web,omitempty"`
-	Desktop *DesktopClientVersionFloor `protobuf:"bytes,2,opt,name=desktop,proto3" json:"desktop,omitempty"`
-	Daemon  *DaemonClientVersionFloor  `protobuf:"bytes,3,opt,name=daemon,proto3" json:"daemon,omitempty"`
-	Cli     *CliClientVersionFloor     `protobuf:"bytes,4,opt,name=cli,proto3" json:"cli,omitempty"`
-	SdkGo   *SdkGoClientVersionFloor   `protobuf:"bytes,5,opt,name=sdk_go,json=sdkGo,proto3" json:"sdk_go,omitempty"`
-	SdkTs   *SdkTsClientVersionFloor   `protobuf:"bytes,6,opt,name=sdk_ts,json=sdkTs,proto3" json:"sdk_ts,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The web app (Reliant-Client: web/<v>).
+	WebMinVersion     string `protobuf:"bytes,1,opt,name=web_min_version,json=webMinVersion,proto3" json:"web_min_version,omitempty"`
+	WebUpgradeUrl     string `protobuf:"bytes,2,opt,name=web_upgrade_url,json=webUpgradeUrl,proto3" json:"web_upgrade_url,omitempty"`
+	WebUpgradeCommand string `protobuf:"bytes,3,opt,name=web_upgrade_command,json=webUpgradeCommand,proto3" json:"web_upgrade_command,omitempty"`
+	// The desktop app (Reliant-Client: desktop/<v>).
+	DesktopMinVersion     string `protobuf:"bytes,4,opt,name=desktop_min_version,json=desktopMinVersion,proto3" json:"desktop_min_version,omitempty"`
+	DesktopUpgradeUrl     string `protobuf:"bytes,5,opt,name=desktop_upgrade_url,json=desktopUpgradeUrl,proto3" json:"desktop_upgrade_url,omitempty"`
+	DesktopUpgradeCommand string `protobuf:"bytes,6,opt,name=desktop_upgrade_command,json=desktopUpgradeCommand,proto3" json:"desktop_upgrade_command,omitempty"`
+	// The daemon (Reliant-Client: daemon/<v>, and DaemonRegister's build identity).
+	DaemonMinVersion     string `protobuf:"bytes,7,opt,name=daemon_min_version,json=daemonMinVersion,proto3" json:"daemon_min_version,omitempty"`
+	DaemonUpgradeUrl     string `protobuf:"bytes,8,opt,name=daemon_upgrade_url,json=daemonUpgradeUrl,proto3" json:"daemon_upgrade_url,omitempty"`
+	DaemonUpgradeCommand string `protobuf:"bytes,9,opt,name=daemon_upgrade_command,json=daemonUpgradeCommand,proto3" json:"daemon_upgrade_command,omitempty"`
+	// The ordering key for daemon builds semver cannot order (dev and
+	// unstamped builds): a daemon whose DaemonRegister.commit_time_unix is
+	// before it is below the floor. control-plane's daemon floor
+	// (DAEMON_FLOOR_MIN_COMMIT_TIME) maps onto it. Zero: no commit-time floor.
+	DaemonMinCommitTimeUnix int64 `protobuf:"varint,10,opt,name=daemon_min_commit_time_unix,json=daemonMinCommitTimeUnix,proto3" json:"daemon_min_commit_time_unix,omitempty"`
+	// The CLI (Reliant-Client: cli/<v>).
+	CliMinVersion     string `protobuf:"bytes,11,opt,name=cli_min_version,json=cliMinVersion,proto3" json:"cli_min_version,omitempty"`
+	CliUpgradeUrl     string `protobuf:"bytes,12,opt,name=cli_upgrade_url,json=cliUpgradeUrl,proto3" json:"cli_upgrade_url,omitempty"`
+	CliUpgradeCommand string `protobuf:"bytes,13,opt,name=cli_upgrade_command,json=cliUpgradeCommand,proto3" json:"cli_upgrade_command,omitempty"`
+	// The Go SDK (Reliant-Client: sdk-go/<v>).
+	SdkGoMinVersion     string `protobuf:"bytes,14,opt,name=sdk_go_min_version,json=sdkGoMinVersion,proto3" json:"sdk_go_min_version,omitempty"`
+	SdkGoUpgradeUrl     string `protobuf:"bytes,15,opt,name=sdk_go_upgrade_url,json=sdkGoUpgradeUrl,proto3" json:"sdk_go_upgrade_url,omitempty"`
+	SdkGoUpgradeCommand string `protobuf:"bytes,16,opt,name=sdk_go_upgrade_command,json=sdkGoUpgradeCommand,proto3" json:"sdk_go_upgrade_command,omitempty"`
+	// The TypeScript SDK (Reliant-Client: sdk-ts/<v>).
+	SdkTsMinVersion     string `protobuf:"bytes,17,opt,name=sdk_ts_min_version,json=sdkTsMinVersion,proto3" json:"sdk_ts_min_version,omitempty"`
+	SdkTsUpgradeUrl     string `protobuf:"bytes,18,opt,name=sdk_ts_upgrade_url,json=sdkTsUpgradeUrl,proto3" json:"sdk_ts_upgrade_url,omitempty"`
+	SdkTsUpgradeCommand string `protobuf:"bytes,19,opt,name=sdk_ts_upgrade_command,json=sdkTsUpgradeCommand,proto3" json:"sdk_ts_upgrade_command,omitempty"`
 	// Off, a below-floor client is advertised the floor and logged and
 	// counted, never refused: the rollout's observe phase. Turning it on is an
 	// operational break for every client below a floor, so it is an owner's
 	// decision at a release cut.
-	Enforce bool `protobuf:"varint,7,opt,name=enforce,proto3" json:"enforce,omitempty"`
+	Enforce bool `protobuf:"varint,20,opt,name=enforce,proto3" json:"enforce,omitempty"`
 	// The one lever that reaches a web or desktop bundle built before clients
 	// named themselves: a browser-origin reliant.v1 call (it carries an Origin
 	// header) with no Reliant-Client header is answered a bare HTTP 404, which
@@ -63,7 +88,7 @@ type ClientVersionPolicy struct {
 	// exempt, and a caller with no Origin (the CLI, an SDK, curl) never is
 	// refused by it. It makes every pre-header tab fail until it reloads, so it
 	// is an owner's switch for a breaking cut, never a default.
-	EnforceLegacyUnidentified bool `protobuf:"varint,8,opt,name=enforce_legacy_unidentified,json=enforceLegacyUnidentified,proto3" json:"enforce_legacy_unidentified,omitempty"`
+	EnforceLegacyUnidentified bool `protobuf:"varint,21,opt,name=enforce_legacy_unidentified,json=enforceLegacyUnidentified,proto3" json:"enforce_legacy_unidentified,omitempty"`
 	// Refuse every reliant.v1 call (SystemService exempt) that carries no
 	// Reliant-Client header: a browser-origin one is answered the legacy HTTP
 	// 404 above (whatever enforce_legacy_unidentified says), any other —
@@ -72,7 +97,7 @@ type ClientVersionPolicy struct {
 	// are never refused, and a header whose value does not parse is still
 	// served. It is turned on only once every first-party client sends the
 	// header, by the owner.
-	RefuseUnidentified bool `protobuf:"varint,9,opt,name=refuse_unidentified,json=refuseUnidentified,proto3" json:"refuse_unidentified,omitempty"`
+	RefuseUnidentified bool `protobuf:"varint,22,opt,name=refuse_unidentified,json=refuseUnidentified,proto3" json:"refuse_unidentified,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -107,46 +132,137 @@ func (*ClientVersionPolicy) Descriptor() ([]byte, []int) {
 	return file_reliant_config_v1_client_version_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ClientVersionPolicy) GetWeb() *WebClientVersionFloor {
+func (x *ClientVersionPolicy) GetWebMinVersion() string {
 	if x != nil {
-		return x.Web
+		return x.WebMinVersion
 	}
-	return nil
+	return ""
 }
 
-func (x *ClientVersionPolicy) GetDesktop() *DesktopClientVersionFloor {
+func (x *ClientVersionPolicy) GetWebUpgradeUrl() string {
 	if x != nil {
-		return x.Desktop
+		return x.WebUpgradeUrl
 	}
-	return nil
+	return ""
 }
 
-func (x *ClientVersionPolicy) GetDaemon() *DaemonClientVersionFloor {
+func (x *ClientVersionPolicy) GetWebUpgradeCommand() string {
 	if x != nil {
-		return x.Daemon
+		return x.WebUpgradeCommand
 	}
-	return nil
+	return ""
 }
 
-func (x *ClientVersionPolicy) GetCli() *CliClientVersionFloor {
+func (x *ClientVersionPolicy) GetDesktopMinVersion() string {
 	if x != nil {
-		return x.Cli
+		return x.DesktopMinVersion
 	}
-	return nil
+	return ""
 }
 
-func (x *ClientVersionPolicy) GetSdkGo() *SdkGoClientVersionFloor {
+func (x *ClientVersionPolicy) GetDesktopUpgradeUrl() string {
 	if x != nil {
-		return x.SdkGo
+		return x.DesktopUpgradeUrl
 	}
-	return nil
+	return ""
 }
 
-func (x *ClientVersionPolicy) GetSdkTs() *SdkTsClientVersionFloor {
+func (x *ClientVersionPolicy) GetDesktopUpgradeCommand() string {
 	if x != nil {
-		return x.SdkTs
+		return x.DesktopUpgradeCommand
 	}
-	return nil
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetDaemonMinVersion() string {
+	if x != nil {
+		return x.DaemonMinVersion
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetDaemonUpgradeUrl() string {
+	if x != nil {
+		return x.DaemonUpgradeUrl
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetDaemonUpgradeCommand() string {
+	if x != nil {
+		return x.DaemonUpgradeCommand
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetDaemonMinCommitTimeUnix() int64 {
+	if x != nil {
+		return x.DaemonMinCommitTimeUnix
+	}
+	return 0
+}
+
+func (x *ClientVersionPolicy) GetCliMinVersion() string {
+	if x != nil {
+		return x.CliMinVersion
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetCliUpgradeUrl() string {
+	if x != nil {
+		return x.CliUpgradeUrl
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetCliUpgradeCommand() string {
+	if x != nil {
+		return x.CliUpgradeCommand
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetSdkGoMinVersion() string {
+	if x != nil {
+		return x.SdkGoMinVersion
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetSdkGoUpgradeUrl() string {
+	if x != nil {
+		return x.SdkGoUpgradeUrl
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetSdkGoUpgradeCommand() string {
+	if x != nil {
+		return x.SdkGoUpgradeCommand
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetSdkTsMinVersion() string {
+	if x != nil {
+		return x.SdkTsMinVersion
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetSdkTsUpgradeUrl() string {
+	if x != nil {
+		return x.SdkTsUpgradeUrl
+	}
+	return ""
+}
+
+func (x *ClientVersionPolicy) GetSdkTsUpgradeCommand() string {
+	if x != nil {
+		return x.SdkTsUpgradeCommand
+	}
+	return ""
 }
 
 func (x *ClientVersionPolicy) GetEnforce() bool {
@@ -170,463 +286,57 @@ func (x *ClientVersionPolicy) GetRefuseUnidentified() bool {
 	return false
 }
 
-// WebClientVersionFloor is the floor of the web app (Reliant-Client: web/<v>).
-type WebClientVersionFloor struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	MinVersion     string                 `protobuf:"bytes,1,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
-	UpgradeUrl     string                 `protobuf:"bytes,2,opt,name=upgrade_url,json=upgradeUrl,proto3" json:"upgrade_url,omitempty"`
-	UpgradeCommand string                 `protobuf:"bytes,3,opt,name=upgrade_command,json=upgradeCommand,proto3" json:"upgrade_command,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *WebClientVersionFloor) Reset() {
-	*x = WebClientVersionFloor{}
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WebClientVersionFloor) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WebClientVersionFloor) ProtoMessage() {}
-
-func (x *WebClientVersionFloor) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WebClientVersionFloor.ProtoReflect.Descriptor instead.
-func (*WebClientVersionFloor) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_client_version_config_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *WebClientVersionFloor) GetMinVersion() string {
-	if x != nil {
-		return x.MinVersion
-	}
-	return ""
-}
-
-func (x *WebClientVersionFloor) GetUpgradeUrl() string {
-	if x != nil {
-		return x.UpgradeUrl
-	}
-	return ""
-}
-
-func (x *WebClientVersionFloor) GetUpgradeCommand() string {
-	if x != nil {
-		return x.UpgradeCommand
-	}
-	return ""
-}
-
-// DesktopClientVersionFloor is the floor of the Electron app
-// (Reliant-Client: desktop/<v>).
-type DesktopClientVersionFloor struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	MinVersion     string                 `protobuf:"bytes,1,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
-	UpgradeUrl     string                 `protobuf:"bytes,2,opt,name=upgrade_url,json=upgradeUrl,proto3" json:"upgrade_url,omitempty"`
-	UpgradeCommand string                 `protobuf:"bytes,3,opt,name=upgrade_command,json=upgradeCommand,proto3" json:"upgrade_command,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *DesktopClientVersionFloor) Reset() {
-	*x = DesktopClientVersionFloor{}
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DesktopClientVersionFloor) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DesktopClientVersionFloor) ProtoMessage() {}
-
-func (x *DesktopClientVersionFloor) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DesktopClientVersionFloor.ProtoReflect.Descriptor instead.
-func (*DesktopClientVersionFloor) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_client_version_config_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *DesktopClientVersionFloor) GetMinVersion() string {
-	if x != nil {
-		return x.MinVersion
-	}
-	return ""
-}
-
-func (x *DesktopClientVersionFloor) GetUpgradeUrl() string {
-	if x != nil {
-		return x.UpgradeUrl
-	}
-	return ""
-}
-
-func (x *DesktopClientVersionFloor) GetUpgradeCommand() string {
-	if x != nil {
-		return x.UpgradeCommand
-	}
-	return ""
-}
-
-// DaemonClientVersionFloor is the floor of the tools daemon
-// (Reliant-Client: daemon/<v>, and DaemonRegister's build identity).
-type DaemonClientVersionFloor struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	MinVersion     string                 `protobuf:"bytes,1,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
-	UpgradeUrl     string                 `protobuf:"bytes,2,opt,name=upgrade_url,json=upgradeUrl,proto3" json:"upgrade_url,omitempty"`
-	UpgradeCommand string                 `protobuf:"bytes,3,opt,name=upgrade_command,json=upgradeCommand,proto3" json:"upgrade_command,omitempty"`
-	// The ordering key for daemon builds semver cannot order (dev and
-	// unstamped builds): a daemon whose DaemonRegister.commit_time_unix is
-	// before it is below the floor. control-plane's daemon floor
-	// (DAEMON_FLOOR_MIN_COMMIT_TIME) maps onto it. Zero: no commit-time floor.
-	MinCommitTimeUnix int64 `protobuf:"varint,4,opt,name=min_commit_time_unix,json=minCommitTimeUnix,proto3" json:"min_commit_time_unix,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *DaemonClientVersionFloor) Reset() {
-	*x = DaemonClientVersionFloor{}
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DaemonClientVersionFloor) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DaemonClientVersionFloor) ProtoMessage() {}
-
-func (x *DaemonClientVersionFloor) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DaemonClientVersionFloor.ProtoReflect.Descriptor instead.
-func (*DaemonClientVersionFloor) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_client_version_config_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *DaemonClientVersionFloor) GetMinVersion() string {
-	if x != nil {
-		return x.MinVersion
-	}
-	return ""
-}
-
-func (x *DaemonClientVersionFloor) GetUpgradeUrl() string {
-	if x != nil {
-		return x.UpgradeUrl
-	}
-	return ""
-}
-
-func (x *DaemonClientVersionFloor) GetUpgradeCommand() string {
-	if x != nil {
-		return x.UpgradeCommand
-	}
-	return ""
-}
-
-func (x *DaemonClientVersionFloor) GetMinCommitTimeUnix() int64 {
-	if x != nil {
-		return x.MinCommitTimeUnix
-	}
-	return 0
-}
-
-// CliClientVersionFloor is the floor of the reliant CLI
-// (Reliant-Client: cli/<v>).
-type CliClientVersionFloor struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	MinVersion     string                 `protobuf:"bytes,1,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
-	UpgradeUrl     string                 `protobuf:"bytes,2,opt,name=upgrade_url,json=upgradeUrl,proto3" json:"upgrade_url,omitempty"`
-	UpgradeCommand string                 `protobuf:"bytes,3,opt,name=upgrade_command,json=upgradeCommand,proto3" json:"upgrade_command,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *CliClientVersionFloor) Reset() {
-	*x = CliClientVersionFloor{}
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CliClientVersionFloor) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CliClientVersionFloor) ProtoMessage() {}
-
-func (x *CliClientVersionFloor) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CliClientVersionFloor.ProtoReflect.Descriptor instead.
-func (*CliClientVersionFloor) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_client_version_config_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *CliClientVersionFloor) GetMinVersion() string {
-	if x != nil {
-		return x.MinVersion
-	}
-	return ""
-}
-
-func (x *CliClientVersionFloor) GetUpgradeUrl() string {
-	if x != nil {
-		return x.UpgradeUrl
-	}
-	return ""
-}
-
-func (x *CliClientVersionFloor) GetUpgradeCommand() string {
-	if x != nil {
-		return x.UpgradeCommand
-	}
-	return ""
-}
-
-// SdkGoClientVersionFloor is the floor of the Go SDK
-// (Reliant-Client: sdk-go/<v>).
-type SdkGoClientVersionFloor struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	MinVersion     string                 `protobuf:"bytes,1,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
-	UpgradeUrl     string                 `protobuf:"bytes,2,opt,name=upgrade_url,json=upgradeUrl,proto3" json:"upgrade_url,omitempty"`
-	UpgradeCommand string                 `protobuf:"bytes,3,opt,name=upgrade_command,json=upgradeCommand,proto3" json:"upgrade_command,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *SdkGoClientVersionFloor) Reset() {
-	*x = SdkGoClientVersionFloor{}
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SdkGoClientVersionFloor) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SdkGoClientVersionFloor) ProtoMessage() {}
-
-func (x *SdkGoClientVersionFloor) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SdkGoClientVersionFloor.ProtoReflect.Descriptor instead.
-func (*SdkGoClientVersionFloor) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_client_version_config_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *SdkGoClientVersionFloor) GetMinVersion() string {
-	if x != nil {
-		return x.MinVersion
-	}
-	return ""
-}
-
-func (x *SdkGoClientVersionFloor) GetUpgradeUrl() string {
-	if x != nil {
-		return x.UpgradeUrl
-	}
-	return ""
-}
-
-func (x *SdkGoClientVersionFloor) GetUpgradeCommand() string {
-	if x != nil {
-		return x.UpgradeCommand
-	}
-	return ""
-}
-
-// SdkTsClientVersionFloor is the floor of the TypeScript SDK
-// (Reliant-Client: sdk-ts/<v>).
-type SdkTsClientVersionFloor struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	MinVersion     string                 `protobuf:"bytes,1,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
-	UpgradeUrl     string                 `protobuf:"bytes,2,opt,name=upgrade_url,json=upgradeUrl,proto3" json:"upgrade_url,omitempty"`
-	UpgradeCommand string                 `protobuf:"bytes,3,opt,name=upgrade_command,json=upgradeCommand,proto3" json:"upgrade_command,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *SdkTsClientVersionFloor) Reset() {
-	*x = SdkTsClientVersionFloor{}
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SdkTsClientVersionFloor) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SdkTsClientVersionFloor) ProtoMessage() {}
-
-func (x *SdkTsClientVersionFloor) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_client_version_config_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SdkTsClientVersionFloor.ProtoReflect.Descriptor instead.
-func (*SdkTsClientVersionFloor) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_client_version_config_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *SdkTsClientVersionFloor) GetMinVersion() string {
-	if x != nil {
-		return x.MinVersion
-	}
-	return ""
-}
-
-func (x *SdkTsClientVersionFloor) GetUpgradeUrl() string {
-	if x != nil {
-		return x.UpgradeUrl
-	}
-	return ""
-}
-
-func (x *SdkTsClientVersionFloor) GetUpgradeCommand() string {
-	if x != nil {
-		return x.UpgradeCommand
-	}
-	return ""
-}
-
 var File_reliant_config_v1_client_version_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_client_version_config_proto_rawDesc = "" +
 	"\n" +
-	"-reliant/config/v1/client_version_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x93\t\n" +
-	"\x13ClientVersionPolicy\x12:\n" +
-	"\x03web\x18\x01 \x01(\v2(.reliant.config.v1.WebClientVersionFloorR\x03web\x12F\n" +
-	"\adesktop\x18\x02 \x01(\v2,.reliant.config.v1.DesktopClientVersionFloorR\adesktop\x12C\n" +
-	"\x06daemon\x18\x03 \x01(\v2+.reliant.config.v1.DaemonClientVersionFloorR\x06daemon\x12:\n" +
-	"\x03cli\x18\x04 \x01(\v2(.reliant.config.v1.CliClientVersionFloorR\x03cli\x12A\n" +
-	"\x06sdk_go\x18\x05 \x01(\v2*.reliant.config.v1.SdkGoClientVersionFloorR\x05sdkGo\x12A\n" +
-	"\x06sdk_ts\x18\x06 \x01(\v2*.reliant.config.v1.SdkTsClientVersionFloorR\x05sdkTs\x12\xc4\x01\n" +
-	"\aenforce\x18\a \x01(\bB\xa9\x01\x82\xce\x18\xa4\x01\n" +
+	"-reliant/config/v1/client_version_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xf6\"\n" +
+	"\x13ClientVersionPolicy\x12\x98\x02\n" +
+	"\x0fweb_min_version\x18\x01 \x01(\tB\xef\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18f\n" +
+	"\x17RELIANT_MIN_WEB_VERSION*KOldest web app version served, semver without a leading v (empty: no floor)R\rwebMinVersion\x12\x80\x01\n" +
+	"\x0fweb_upgrade_url\x18\x02 \x01(\tBX\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18I\n" +
+	"\x17RELIANT_WEB_UPGRADE_URL*.Where a below-floor web app is sent to upgradeR\rwebUpgradeUrl\x12\x86\x01\n" +
+	"\x13web_upgrade_command\x18\x03 \x01(\tBV\x82\xce\x18R\n" +
+	"\x1bRELIANT_WEB_UPGRADE_COMMAND*3What a below-floor web app is told to do to upgradeR\x11webUpgradeCommand\x12\xa8\x02\n" +
+	"\x13desktop_min_version\x18\x04 \x01(\tB\xf7\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18n\n" +
+	"\x1bRELIANT_MIN_DESKTOP_VERSION*OOldest desktop app version served, semver without a leading v (empty: no floor)R\x11desktopMinVersion\x12\x90\x01\n" +
+	"\x13desktop_upgrade_url\x18\x05 \x01(\tB`\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18Q\n" +
+	"\x1bRELIANT_DESKTOP_UPGRADE_URL*2Where a below-floor desktop app is sent to upgradeR\x11desktopUpgradeUrl\x12\x96\x01\n" +
+	"\x17desktop_upgrade_command\x18\x06 \x01(\tB^\x82\xce\x18Z\n" +
+	"\x1fRELIANT_DESKTOP_UPGRADE_COMMAND*7What a below-floor desktop app is told to do to upgradeR\x15desktopUpgradeCommand\x12\xa0\x02\n" +
+	"\x12daemon_min_version\x18\a \x01(\tB\xf1\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18h\n" +
+	"\x1aRELIANT_MIN_DAEMON_VERSION*JOldest daemon version served, semver without a leading v (empty: no floor)R\x10daemonMinVersion\x12\x90\x01\n" +
+	"\x12daemon_upgrade_url\x18\b \x01(\tBb\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18S\n" +
+	"\x1aRELIANT_DAEMON_UPGRADE_URL*5Where a below-floor daemon's owner is sent to upgradeR\x10daemonUpgradeUrl\x12\x96\x01\n" +
+	"\x16daemon_upgrade_command\x18\t \x01(\tB`\x82\xce\x18\\\n" +
+	"\x1eRELIANT_DAEMON_UPGRADE_COMMAND*:What a below-floor daemon's owner is told to do to upgradeR\x14daemonUpgradeCommand\x12\xc9\x01\n" +
+	"\x1bdaemon_min_commit_time_unix\x18\n" +
+	" \x01(\x03B\x8a\x01\xbaH\x04\"\x02(\x00\x82\xce\x18\x7f\n" +
+	"#RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX*XOldest daemon build served, by its commit time in Unix seconds (0: no commit-time floor)R\x17daemonMinCommitTimeUnix\x12\x94\x02\n" +
+	"\x0fcli_min_version\x18\v \x01(\tB\xeb\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18b\n" +
+	"\x17RELIANT_MIN_CLI_VERSION*GOldest CLI version served, semver without a leading v (empty: no floor)R\rcliMinVersion\x12\x83\x01\n" +
+	"\x0fcli_upgrade_url\x18\f \x01(\tB[\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18L\n" +
+	"\x17RELIANT_CLI_UPGRADE_URL*1Where a below-floor CLI's user is sent to upgradeR\rcliUpgradeUrl\x12\x89\x01\n" +
+	"\x13cli_upgrade_command\x18\r \x01(\tBY\x82\xce\x18U\n" +
+	"\x1bRELIANT_CLI_UPGRADE_COMMAND*6What a below-floor CLI's user is told to do to upgradeR\x11cliUpgradeCommand\x12\x9f\x02\n" +
+	"\x12sdk_go_min_version\x18\x0e \x01(\tB\xf1\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18h\n" +
+	"\x1aRELIANT_MIN_SDK_GO_VERSION*JOldest Go SDK version served, semver without a leading v (empty: no floor)R\x0fsdkGoMinVersion\x12\x8e\x01\n" +
+	"\x12sdk_go_upgrade_url\x18\x0f \x01(\tBa\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18R\n" +
+	"\x1aRELIANT_SDK_GO_UPGRADE_URL*4Where a below-floor Go SDK's user is sent to upgradeR\x0fsdkGoUpgradeUrl\x12\x94\x01\n" +
+	"\x16sdk_go_upgrade_command\x18\x10 \x01(\tB_\x82\xce\x18[\n" +
+	"\x1eRELIANT_SDK_GO_UPGRADE_COMMAND*9What a below-floor Go SDK's user is told to do to upgradeR\x13sdkGoUpgradeCommand\x12\xa7\x02\n" +
+	"\x12sdk_ts_min_version\x18\x11 \x01(\tB\xf9\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18p\n" +
+	"\x1aRELIANT_MIN_SDK_TS_VERSION*ROldest TypeScript SDK version served, semver without a leading v (empty: no floor)R\x0fsdkTsMinVersion\x12\x96\x01\n" +
+	"\x12sdk_ts_upgrade_url\x18\x12 \x01(\tBi\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18Z\n" +
+	"\x1aRELIANT_SDK_TS_UPGRADE_URL*<Where a below-floor TypeScript SDK's user is sent to upgradeR\x0fsdkTsUpgradeUrl\x12\x9c\x01\n" +
+	"\x16sdk_ts_upgrade_command\x18\x13 \x01(\tBg\x82\xce\x18c\n" +
+	"\x1eRELIANT_SDK_TS_UPGRADE_COMMAND*AWhat a below-floor TypeScript SDK's user is told to do to upgradeR\x13sdkTsUpgradeCommand\x12\xc4\x01\n" +
+	"\aenforce\x18\x14 \x01(\bB\xa9\x01\x82\xce\x18\xa4\x01\n" +
 	"\x1eRELIANT_CLIENT_VERSION_ENFORCE*\x81\x01Refuse calls from clients below their minimum version (FailedPrecondition, upgrade_required); off only advertises and counts themR\aenforce\x12\x99\x02\n" +
-	"\x1benforce_legacy_unidentified\x18\b \x01(\bB\xd8\x01\x82\xce\x18\xd3\x01\n" +
+	"\x1benforce_legacy_unidentified\x18\x15 \x01(\bB\xd8\x01\x82\xce\x18\xd3\x01\n" +
 	"2RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED*\x9c\x01Answer browser-origin reliant.v1 calls that carry no Reliant-Client header with HTTP 404, so pre-header web and desktop bundles show their out-of-date modalR\x19enforceLegacyUnidentified\x12\x8d\x02\n" +
-	"\x13refuse_unidentified\x18\t \x01(\bB\xdb\x01\x82\xce\x18\xd6\x01\n" +
-	"*RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED*\xa7\x01Refuse reliant.v1 calls (SystemService exempt) that carry no Reliant-Client header: HTTP 404 for browser-origin calls, FailedPrecondition upgrade_required for the restR\x12refuseUnidentified\"\xa7\x04\n" +
-	"\x15WebClientVersionFloor\x12\x91\x02\n" +
-	"\vmin_version\x18\x01 \x01(\tB\xef\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18f\n" +
-	"\x17RELIANT_MIN_WEB_VERSION*KOldest web app version served, semver without a leading v (empty: no floor)R\n" +
-	"minVersion\x12y\n" +
-	"\vupgrade_url\x18\x02 \x01(\tBX\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18I\n" +
-	"\x17RELIANT_WEB_UPGRADE_URL*.Where a below-floor web app is sent to upgradeR\n" +
-	"upgradeUrl\x12\x7f\n" +
-	"\x0fupgrade_command\x18\x03 \x01(\tBV\x82\xce\x18R\n" +
-	"\x1bRELIANT_WEB_UPGRADE_COMMAND*3What a below-floor web app is told to do to upgradeR\x0eupgradeCommand\"\xc5\x04\n" +
-	"\x19DesktopClientVersionFloor\x12\x99\x02\n" +
-	"\vmin_version\x18\x01 \x01(\tB\xf7\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18n\n" +
-	"\x1bRELIANT_MIN_DESKTOP_VERSION*OOldest desktop app version served, semver without a leading v (empty: no floor)R\n" +
-	"minVersion\x12\x81\x01\n" +
-	"\vupgrade_url\x18\x02 \x01(\tB`\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18Q\n" +
-	"\x1bRELIANT_DESKTOP_UPGRADE_URL*2Where a below-floor desktop app is sent to upgradeR\n" +
-	"upgradeUrl\x12\x87\x01\n" +
-	"\x0fupgrade_command\x18\x03 \x01(\tB^\x82\xce\x18Z\n" +
-	"\x1fRELIANT_DESKTOP_UPGRADE_COMMAND*7What a below-floor desktop app is told to do to upgradeR\x0eupgradeCommand\"\x82\x06\n" +
-	"\x18DaemonClientVersionFloor\x12\x93\x02\n" +
-	"\vmin_version\x18\x01 \x01(\tB\xf1\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18h\n" +
-	"\x1aRELIANT_MIN_DAEMON_VERSION*JOldest daemon version served, semver without a leading v (empty: no floor)R\n" +
-	"minVersion\x12\x83\x01\n" +
-	"\vupgrade_url\x18\x02 \x01(\tBb\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18S\n" +
-	"\x1aRELIANT_DAEMON_UPGRADE_URL*5Where a below-floor daemon's owner is sent to upgradeR\n" +
-	"upgradeUrl\x12\x8a\x01\n" +
-	"\x0fupgrade_command\x18\x03 \x01(\tBa\x82\xce\x18]\n" +
-	"\x1eRELIANT_DAEMON_UPGRADE_COMMAND*;What a below-floor daemon's owner is told to run to upgradeR\x0eupgradeCommand\x12\xbc\x01\n" +
-	"\x14min_commit_time_unix\x18\x04 \x01(\x03B\x8a\x01\xbaH\x04\"\x02(\x00\x82\xce\x18\x7f\n" +
-	"#RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX*XOldest daemon build served, by its commit time in Unix seconds (0: no commit-time floor)R\x11minCommitTimeUnix\"\xc7\x04\n" +
-	"\x15CliClientVersionFloor\x12\x8d\x02\n" +
-	"\vmin_version\x18\x01 \x01(\tB\xeb\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18b\n" +
-	"\x17RELIANT_MIN_CLI_VERSION*GOldest CLI version served, semver without a leading v (empty: no floor)R\n" +
-	"minVersion\x12u\n" +
-	"\vupgrade_url\x18\x02 \x01(\tBT\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18E\n" +
-	"\x17RELIANT_CLI_UPGRADE_URL**Where a below-floor CLI is sent to upgradeR\n" +
-	"upgradeUrl\x12\xa6\x01\n" +
-	"\x0fupgrade_command\x18\x03 \x01(\tB}\x82\xce\x18y\n" +
-	"\x1bRELIANT_CLI_UPGRADE_COMMAND*ZWhat a below-floor CLI's user is told to run to upgrade (e.g. brew upgrade --cask reliant)R\x0eupgradeCommand\"\xc0\x04\n" +
-	"\x17SdkGoClientVersionFloor\x12\x93\x02\n" +
-	"\vmin_version\x18\x01 \x01(\tB\xf1\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18h\n" +
-	"\x1aRELIANT_MIN_SDK_GO_VERSION*JOldest Go SDK version served, semver without a leading v (empty: no floor)R\n" +
-	"minVersion\x12\x82\x01\n" +
-	"\vupgrade_url\x18\x02 \x01(\tBa\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18R\n" +
-	"\x1aRELIANT_SDK_GO_UPGRADE_URL*4Where a below-floor Go SDK's user is sent to upgradeR\n" +
-	"upgradeUrl\x12\x89\x01\n" +
-	"\x0fupgrade_command\x18\x03 \x01(\tB`\x82\xce\x18\\\n" +
-	"\x1eRELIANT_SDK_GO_UPGRADE_COMMAND*:What a below-floor Go SDK's user is told to run to upgradeR\x0eupgradeCommand\"\xd8\x04\n" +
-	"\x17SdkTsClientVersionFloor\x12\x9b\x02\n" +
-	"\vmin_version\x18\x01 \x01(\tB\xf9\x01\xbaH\x81\x01\xd8\x01\x01r|2z^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$\x82\xce\x18p\n" +
-	"\x1aRELIANT_MIN_SDK_TS_VERSION*ROldest TypeScript SDK version served, semver without a leading v (empty: no floor)R\n" +
-	"minVersion\x12\x8a\x01\n" +
-	"\vupgrade_url\x18\x02 \x01(\tBi\xbaH\b\xd8\x01\x01r\x03\x88\x01\x01\x82\xce\x18Z\n" +
-	"\x1aRELIANT_SDK_TS_UPGRADE_URL*<Where a below-floor TypeScript SDK's user is sent to upgradeR\n" +
-	"upgradeUrl\x12\x91\x01\n" +
-	"\x0fupgrade_command\x18\x03 \x01(\tBh\x82\xce\x18d\n" +
-	"\x1eRELIANT_SDK_TS_UPGRADE_COMMAND*BWhat a below-floor TypeScript SDK's user is told to run to upgradeR\x0eupgradeCommandB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"\x13refuse_unidentified\x18\x16 \x01(\bB\xdb\x01\x82\xce\x18\xd6\x01\n" +
+	"*RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED*\xa7\x01Refuse reliant.v1 calls (SystemService exempt) that carry no Reliant-Client header: HTTP 404 for browser-origin calls, FailedPrecondition upgrade_required for the restR\x12refuseUnidentifiedB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_client_version_config_proto_rawDescOnce sync.Once
@@ -640,28 +350,16 @@ func file_reliant_config_v1_client_version_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_client_version_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_client_version_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_reliant_config_v1_client_version_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_reliant_config_v1_client_version_config_proto_goTypes = []any{
-	(*ClientVersionPolicy)(nil),       // 0: reliant.config.v1.ClientVersionPolicy
-	(*WebClientVersionFloor)(nil),     // 1: reliant.config.v1.WebClientVersionFloor
-	(*DesktopClientVersionFloor)(nil), // 2: reliant.config.v1.DesktopClientVersionFloor
-	(*DaemonClientVersionFloor)(nil),  // 3: reliant.config.v1.DaemonClientVersionFloor
-	(*CliClientVersionFloor)(nil),     // 4: reliant.config.v1.CliClientVersionFloor
-	(*SdkGoClientVersionFloor)(nil),   // 5: reliant.config.v1.SdkGoClientVersionFloor
-	(*SdkTsClientVersionFloor)(nil),   // 6: reliant.config.v1.SdkTsClientVersionFloor
+	(*ClientVersionPolicy)(nil), // 0: reliant.config.v1.ClientVersionPolicy
 }
 var file_reliant_config_v1_client_version_config_proto_depIdxs = []int32{
-	1, // 0: reliant.config.v1.ClientVersionPolicy.web:type_name -> reliant.config.v1.WebClientVersionFloor
-	2, // 1: reliant.config.v1.ClientVersionPolicy.desktop:type_name -> reliant.config.v1.DesktopClientVersionFloor
-	3, // 2: reliant.config.v1.ClientVersionPolicy.daemon:type_name -> reliant.config.v1.DaemonClientVersionFloor
-	4, // 3: reliant.config.v1.ClientVersionPolicy.cli:type_name -> reliant.config.v1.CliClientVersionFloor
-	5, // 4: reliant.config.v1.ClientVersionPolicy.sdk_go:type_name -> reliant.config.v1.SdkGoClientVersionFloor
-	6, // 5: reliant.config.v1.ClientVersionPolicy.sdk_ts:type_name -> reliant.config.v1.SdkTsClientVersionFloor
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	0, // [0:0] is the sub-list for method output_type
+	0, // [0:0] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_client_version_config_proto_init() }
@@ -675,7 +373,7 @@ func file_reliant_config_v1_client_version_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_client_version_config_proto_rawDesc), len(file_reliant_config_v1_client_version_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
