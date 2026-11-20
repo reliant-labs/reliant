@@ -13,9 +13,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { inboxPath, newChatPath, projectChatsPath, runsPath, settingsPath } from "@/lib/paths";
 
-import { consolePageOf, consolePath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
+import { consolePageOf, consolePath, obsOverviewPath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
 import { activeArea, backHref, childrenOf, drillInIds, flattenIds, hrefOf, hybridNav, isCurrent, visibleItems, type NavCtx } from "../navConfig";
-import { obsOverviewPath } from "../navConfig/pendingPaths";
 import { NavRenderer } from "../NavRenderer";
 
 function ctxAt(href: string, over: Partial<NavCtx> = {}): NavCtx {

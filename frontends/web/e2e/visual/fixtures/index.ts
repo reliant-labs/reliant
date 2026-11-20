@@ -1,4 +1,4 @@
-import type { Fixtures } from '../rpc'
+import type { Fixture, Fixtures } from '../rpc'
 import { baseFixtures } from './base'
 import { billingFixtures } from './billing'
 import { chatFixtures } from './chat'
@@ -20,7 +20,7 @@ const u6cChain = u6cFixtures[QUERY_PANEL] as (req: Record<string, unknown>) => u
  * dashboards' gallery (withDashboardFixtures) → overview → speed insights →
  * u6c → services → console.
  */
-const queryPanel = (req: Record<string, unknown>) => overviewQueryPanel(req) ?? speedInsightsQueryPanel(req) ?? u6cChain(req)
+const queryPanel = ((req: Record<string, unknown>) => overviewQueryPanel(req) ?? speedInsightsQueryPanel(req) ?? u6cChain(req)) as Fixture
 
 /** Every fixture, later tables winning on a shared key. */
 export const allFixtures: Fixtures = withDashboardFixtures({

@@ -50,6 +50,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Activity", shows: "Every deploy, change and alert, newest first" };
     case "services":
     case "service":
+    // Retired (U6e): its URL redirects to Services.
+    case "live-state":
       return { title: "Services", shows: PAGE_SUBTITLES.services };
     case "usage":
       return { title: "Usage", shows: PAGE_SUBTITLES.usage };
@@ -57,8 +59,6 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Events & metrics", shows: PAGE_SUBTITLES.events };
     case "analytics":
       return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
-    case "live-state":
-      return { title: "Live state", shows: "Every service's instances, CPU, memory, requests, latency and errors" };
     case "vulnerabilities":
     case "vulnerability":
     case "sboms":

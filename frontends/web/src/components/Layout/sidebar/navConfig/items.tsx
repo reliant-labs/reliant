@@ -43,12 +43,11 @@ import { connectorsPath, homePath, inboxPath, projectChatsPath, projectPath, pro
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, type ConsoleNavEntry } from "../../../Forge/Console/consoleNavRegistry";
-import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, authPath, consolePath, securityPath, type SecurityView, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
+import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, authPath, consolePath, obsOverviewPath, securityPath, type SecurityView, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
 import { settingsNavGroups } from "../../../Settings/SettingsNavigation";
 import { isAt, isAtOrBelow } from "../navLocation";
 import { isChatPage } from "../shellProject";
 import { BrandMark } from "../../../icons/BrandMark";
-import { obsOverviewPath } from "./pendingPaths";
 import type { NavArea, NavCtx, NavGroup, NavHeading, NavItem, NavRow, NavSlot } from "./types";
 
 const icon = (Icon: typeof Activity): ReactNode => <Icon className="size-4" aria-hidden="true" />;
@@ -287,8 +286,7 @@ export const performanceRows: readonly NavItem[] = [
 ];
 
 /** The Observability Overview: golden signals, top errors, slowest endpoints, firing alerts (OVERVIEW agent's page). */
-const isObsOverview = (ctx: NavCtx) =>
-  (!!ctx.app && isAt(ctx.pathname, obsOverviewPath(ctx.app))) || ctx.orgPage?.kind === "observability";
+const isObsOverview = (ctx: NavCtx) => ctx.page?.kind === "obs-overview" || ctx.orgPage?.kind === "observability";
 
 export const obsOverview: NavRow = {
   kind: "row",

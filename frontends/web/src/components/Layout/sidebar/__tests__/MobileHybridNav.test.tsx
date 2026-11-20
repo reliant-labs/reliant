@@ -11,8 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { inboxPath, mobileChatPath, mobileChatsPath, mobileInboxPath, mobileRunsPath, mobileSettingsPath, chatPath, homePath, runsPath, settingsPath } from "@/lib/paths";
 
-import { consolePath } from "../../../Forge/Console/paths";
-import { obsOverviewPath } from "../navConfig/pendingPaths";
+import { consolePath, obsOverviewPath } from "../../../Forge/Console/paths";
 
 vi.mock("../shellProject", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../shellProject")>()),
