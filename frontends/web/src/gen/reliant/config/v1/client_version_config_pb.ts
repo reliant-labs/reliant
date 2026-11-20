@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/client_version_config.proto.
  */
 export const file_reliant_config_v1_client_version_config: GenFile = /*@__PURE__*/
-  fileDesc("Ci1yZWxpYW50L2NvbmZpZy92MS9jbGllbnRfdmVyc2lvbl9jb25maWcucHJvdG8SEXJlbGlhbnQuY29uZmlnLnYxIrIIChNDbGllbnRWZXJzaW9uUG9saWN5EjUKA3dlYhgBIAEoCzIoLnJlbGlhbnQuY29uZmlnLnYxLldlYkNsaWVudFZlcnNpb25GbG9vchI9CgdkZXNrdG9wGAIgASgLMiwucmVsaWFudC5jb25maWcudjEuRGVza3RvcENsaWVudFZlcnNpb25GbG9vchI7CgZkYWVtb24YAyABKAsyKy5yZWxpYW50LmNvbmZpZy52MS5EYWVtb25DbGllbnRWZXJzaW9uRmxvb3ISNQoDY2xpGAQgASgLMigucmVsaWFudC5jb25maWcudjEuQ2xpQ2xpZW50VmVyc2lvbkZsb29yEjoKBnNka19nbxgFIAEoCzIqLnJlbGlhbnQuY29uZmlnLnYxLlNka0dvQ2xpZW50VmVyc2lvbkZsb29yEjoKBnNka190cxgGIAEoCzIqLnJlbGlhbnQuY29uZmlnLnYxLlNka1RzQ2xpZW50VmVyc2lvbkZsb29yErsBCgdlbmZvcmNlGAcgASgIQqkBgs4YpAEKHlJFTElBTlRfQ0xJRU5UX1ZFUlNJT05fRU5GT1JDRSqBAVJlZnVzZSBjYWxscyBmcm9tIGNsaWVudHMgYmVsb3cgdGhlaXIgbWluaW11bSB2ZXJzaW9uIChGYWlsZWRQcmVjb25kaXRpb24sIHVwZ3JhZGVfcmVxdWlyZWQpOyBvZmYgb25seSBhZHZlcnRpc2VzIGFuZCBjb3VudHMgdGhlbRL+AQobZW5mb3JjZV9sZWdhY3lfdW5pZGVudGlmaWVkGAggASgIQtgBgs4Y0wEKMlJFTElBTlRfQ0xJRU5UX1ZFUlNJT05fRU5GT1JDRV9MRUdBQ1lfVU5JREVOVElGSUVEKpwBQW5zd2VyIGJyb3dzZXItb3JpZ2luIHJlbGlhbnQudjEgY2FsbHMgdGhhdCBjYXJyeSBubyBSZWxpYW50LUNsaWVudCBoZWFkZXIgd2l0aCBIVFRQIDQwNCwgc28gcHJlLWhlYWRlciB3ZWIgYW5kIGRlc2t0b3AgYnVuZGxlcyBzaG93IHRoZWlyIG91dC1vZi1kYXRlIG1vZGFsEvkBChNyZWZ1c2VfdW5pZGVudGlmaWVkGAkgASgIQtsBgs4Y1gEKKlJFTElBTlRfQ0xJRU5UX1ZFUlNJT05fUkVGVVNFX1VOSURFTlRJRklFRCqnAVJlZnVzZSByZWxpYW50LnYxIGNhbGxzIChTeXN0ZW1TZXJ2aWNlIGV4ZW1wdCkgdGhhdCBjYXJyeSBubyBSZWxpYW50LUNsaWVudCBoZWFkZXI6IEhUVFAgNDA0IGZvciBicm93c2VyLW9yaWdpbiBjYWxscywgRmFpbGVkUHJlY29uZGl0aW9uIHVwZ3JhZGVfcmVxdWlyZWQgZm9yIHRoZSByZXN0Iv8DChVXZWJDbGllbnRWZXJzaW9uRmxvb3IShQIKC21pbl92ZXJzaW9uGAEgASgJQu8BukiBAdgBAXJ8MnpeKDB8WzEtOV1bMC05XSopXC4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKSgtWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/KFwrWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/JILOGGYKF1JFTElBTlRfTUlOX1dFQl9WRVJTSU9OKktPbGRlc3Qgd2ViIGFwcCB2ZXJzaW9uIHNlcnZlZCwgc2VtdmVyIHdpdGhvdXQgYSBsZWFkaW5nIHYgKGVtcHR5OiBubyBmbG9vcikSbQoLdXBncmFkZV91cmwYAiABKAlCWLpICNgBAXIDiAEBgs4YSQoXUkVMSUFOVF9XRUJfVVBHUkFERV9VUkwqLldoZXJlIGEgYmVsb3ctZmxvb3Igd2ViIGFwcCBpcyBzZW50IHRvIHVwZ3JhZGUSbwoPdXBncmFkZV9jb21tYW5kGAMgASgJQlaCzhhSChtSRUxJQU5UX1dFQl9VUEdSQURFX0NPTU1BTkQqM1doYXQgYSBiZWxvdy1mbG9vciB3ZWIgYXBwIGlzIHRvbGQgdG8gZG8gdG8gdXBncmFkZSKbBAoZRGVza3RvcENsaWVudFZlcnNpb25GbG9vchKNAgoLbWluX3ZlcnNpb24YASABKAlC9wG6SIEB2AEBcnwyel4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKVwuKDB8WzEtOV1bMC05XSopKC1bMC05QS1aYS16LV0rKFwuWzAtOUEtWmEtei1dKykqKT8oXCtbMC05QS1aYS16LV0rKFwuWzAtOUEtWmEtei1dKykqKT8kgs4YbgobUkVMSUFOVF9NSU5fREVTS1RPUF9WRVJTSU9OKk9PbGRlc3QgZGVza3RvcCBhcHAgdmVyc2lvbiBzZXJ2ZWQsIHNlbXZlciB3aXRob3V0IGEgbGVhZGluZyB2IChlbXB0eTogbm8gZmxvb3IpEnUKC3VwZ3JhZGVfdXJsGAIgASgJQmC6SAjYAQFyA4gBAYLOGFEKG1JFTElBTlRfREVTS1RPUF9VUEdSQURFX1VSTCoyV2hlcmUgYSBiZWxvdy1mbG9vciBkZXNrdG9wIGFwcCBpcyBzZW50IHRvIHVwZ3JhZGUSdwoPdXBncmFkZV9jb21tYW5kGAMgASgJQl6CzhhaCh9SRUxJQU5UX0RFU0tUT1BfVVBHUkFERV9DT01NQU5EKjdXaGF0IGEgYmVsb3ctZmxvb3IgZGVza3RvcCBhcHAgaXMgdG9sZCB0byBkbyB0byB1cGdyYWRlIsUFChhEYWVtb25DbGllbnRWZXJzaW9uRmxvb3IShwIKC21pbl92ZXJzaW9uGAEgASgJQvEBukiBAdgBAXJ8MnpeKDB8WzEtOV1bMC05XSopXC4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKSgtWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/KFwrWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/JILOGGgKGlJFTElBTlRfTUlOX0RBRU1PTl9WRVJTSU9OKkpPbGRlc3QgZGFlbW9uIHZlcnNpb24gc2VydmVkLCBzZW12ZXIgd2l0aG91dCBhIGxlYWRpbmcgdiAoZW1wdHk6IG5vIGZsb29yKRJ3Cgt1cGdyYWRlX3VybBgCIAEoCUJiukgI2AEBcgOIAQGCzhhTChpSRUxJQU5UX0RBRU1PTl9VUEdSQURFX1VSTCo1V2hlcmUgYSBiZWxvdy1mbG9vciBkYWVtb24ncyBvd25lciBpcyBzZW50IHRvIHVwZ3JhZGUSegoPdXBncmFkZV9jb21tYW5kGAMgASgJQmGCzhhdCh5SRUxJQU5UX0RBRU1PTl9VUEdSQURFX0NPTU1BTkQqO1doYXQgYSBiZWxvdy1mbG9vciBkYWVtb24ncyBvd25lciBpcyB0b2xkIHRvIHJ1biB0byB1cGdyYWRlEqkBChRtaW5fY29tbWl0X3RpbWVfdW5peBgEIAEoA0KKAbpIBCICKACCzhh/CiNSRUxJQU5UX01JTl9EQUVNT05fQ09NTUlUX1RJTUVfVU5JWCpYT2xkZXN0IGRhZW1vbiBidWlsZCBzZXJ2ZWQsIGJ5IGl0cyBjb21taXQgdGltZSBpbiBVbml4IHNlY29uZHMgKDA6IG5vIGNvbW1pdC10aW1lIGZsb29yKSKfBAoVQ2xpQ2xpZW50VmVyc2lvbkZsb29yEoECCgttaW5fdmVyc2lvbhgBIAEoCULrAbpIgQHYAQFyfDJ6XigwfFsxLTldWzAtOV0qKVwuKDB8WzEtOV1bMC05XSopXC4oMHxbMS05XVswLTldKikoLVswLTlBLVphLXotXSsoXC5bMC05QS1aYS16LV0rKSopPyhcK1swLTlBLVphLXotXSsoXC5bMC05QS1aYS16LV0rKSopPySCzhhiChdSRUxJQU5UX01JTl9DTElfVkVSU0lPTipHT2xkZXN0IENMSSB2ZXJzaW9uIHNlcnZlZCwgc2VtdmVyIHdpdGhvdXQgYSBsZWFkaW5nIHYgKGVtcHR5OiBubyBmbG9vcikSaQoLdXBncmFkZV91cmwYAiABKAlCVLpICNgBAXIDiAEBgs4YRQoXUkVMSUFOVF9DTElfVVBHUkFERV9VUkwqKldoZXJlIGEgYmVsb3ctZmxvb3IgQ0xJIGlzIHNlbnQgdG8gdXBncmFkZRKWAQoPdXBncmFkZV9jb21tYW5kGAMgASgJQn2Czhh5ChtSRUxJQU5UX0NMSV9VUEdSQURFX0NPTU1BTkQqWldoYXQgYSBiZWxvdy1mbG9vciBDTEkncyB1c2VyIGlzIHRvbGQgdG8gcnVuIHRvIHVwZ3JhZGUgKGUuZy4gYnJldyB1cGdyYWRlIC0tY2FzayByZWxpYW50KSKWBAoXU2RrR29DbGllbnRWZXJzaW9uRmxvb3IShwIKC21pbl92ZXJzaW9uGAEgASgJQvEBukiBAdgBAXJ8MnpeKDB8WzEtOV1bMC05XSopXC4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKSgtWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/KFwrWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/JILOGGgKGlJFTElBTlRfTUlOX1NES19HT19WRVJTSU9OKkpPbGRlc3QgR28gU0RLIHZlcnNpb24gc2VydmVkLCBzZW12ZXIgd2l0aG91dCBhIGxlYWRpbmcgdiAoZW1wdHk6IG5vIGZsb29yKRJ2Cgt1cGdyYWRlX3VybBgCIAEoCUJhukgI2AEBcgOIAQGCzhhSChpSRUxJQU5UX1NES19HT19VUEdSQURFX1VSTCo0V2hlcmUgYSBiZWxvdy1mbG9vciBHbyBTREsncyB1c2VyIGlzIHNlbnQgdG8gdXBncmFkZRJ5Cg91cGdyYWRlX2NvbW1hbmQYAyABKAlCYILOGFwKHlJFTElBTlRfU0RLX0dPX1VQR1JBREVfQ09NTUFORCo6V2hhdCBhIGJlbG93LWZsb29yIEdvIFNESydzIHVzZXIgaXMgdG9sZCB0byBydW4gdG8gdXBncmFkZSKvBAoXU2RrVHNDbGllbnRWZXJzaW9uRmxvb3ISjwIKC21pbl92ZXJzaW9uGAEgASgJQvkBukiBAdgBAXJ8MnpeKDB8WzEtOV1bMC05XSopXC4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKSgtWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/KFwrWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/JILOGHAKGlJFTElBTlRfTUlOX1NES19UU19WRVJTSU9OKlJPbGRlc3QgVHlwZVNjcmlwdCBTREsgdmVyc2lvbiBzZXJ2ZWQsIHNlbXZlciB3aXRob3V0IGEgbGVhZGluZyB2IChlbXB0eTogbm8gZmxvb3IpEn4KC3VwZ3JhZGVfdXJsGAIgASgJQmm6SAjYAQFyA4gBAYLOGFoKGlJFTElBTlRfU0RLX1RTX1VQR1JBREVfVVJMKjxXaGVyZSBhIGJlbG93LWZsb29yIFR5cGVTY3JpcHQgU0RLJ3MgdXNlciBpcyBzZW50IHRvIHVwZ3JhZGUSgQEKD3VwZ3JhZGVfY29tbWFuZBgDIAEoCUJogs4YZAoeUkVMSUFOVF9TREtfVFNfVVBHUkFERV9DT01NQU5EKkJXaGF0IGEgYmVsb3ctZmxvb3IgVHlwZVNjcmlwdCBTREsncyB1c2VyIGlzIHRvbGQgdG8gcnVuIHRvIHVwZ3JhZGVCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("Ci1yZWxpYW50L2NvbmZpZy92MS9jbGllbnRfdmVyc2lvbl9jb25maWcucHJvdG8SEXJlbGlhbnQuY29uZmlnLnYxItUfChNDbGllbnRWZXJzaW9uUG9saWN5EokCCg93ZWJfbWluX3ZlcnNpb24YASABKAlC7wG6SIEB2AEBcnwyel4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKVwuKDB8WzEtOV1bMC05XSopKC1bMC05QS1aYS16LV0rKFwuWzAtOUEtWmEtei1dKykqKT8oXCtbMC05QS1aYS16LV0rKFwuWzAtOUEtWmEtei1dKykqKT8kgs4YZgoXUkVMSUFOVF9NSU5fV0VCX1ZFUlNJT04qS09sZGVzdCB3ZWIgYXBwIHZlcnNpb24gc2VydmVkLCBzZW12ZXIgd2l0aG91dCBhIGxlYWRpbmcgdiAoZW1wdHk6IG5vIGZsb29yKRJxCg93ZWJfdXBncmFkZV91cmwYAiABKAlCWLpICNgBAXIDiAEBgs4YSQoXUkVMSUFOVF9XRUJfVVBHUkFERV9VUkwqLldoZXJlIGEgYmVsb3ctZmxvb3Igd2ViIGFwcCBpcyBzZW50IHRvIHVwZ3JhZGUScwoTd2ViX3VwZ3JhZGVfY29tbWFuZBgDIAEoCUJWgs4YUgobUkVMSUFOVF9XRUJfVVBHUkFERV9DT01NQU5EKjNXaGF0IGEgYmVsb3ctZmxvb3Igd2ViIGFwcCBpcyB0b2xkIHRvIGRvIHRvIHVwZ3JhZGUSlQIKE2Rlc2t0b3BfbWluX3ZlcnNpb24YBCABKAlC9wG6SIEB2AEBcnwyel4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKVwuKDB8WzEtOV1bMC05XSopKC1bMC05QS1aYS16LV0rKFwuWzAtOUEtWmEtei1dKykqKT8oXCtbMC05QS1aYS16LV0rKFwuWzAtOUEtWmEtei1dKykqKT8kgs4YbgobUkVMSUFOVF9NSU5fREVTS1RPUF9WRVJTSU9OKk9PbGRlc3QgZGVza3RvcCBhcHAgdmVyc2lvbiBzZXJ2ZWQsIHNlbXZlciB3aXRob3V0IGEgbGVhZGluZyB2IChlbXB0eTogbm8gZmxvb3IpEn0KE2Rlc2t0b3BfdXBncmFkZV91cmwYBSABKAlCYLpICNgBAXIDiAEBgs4YUQobUkVMSUFOVF9ERVNLVE9QX1VQR1JBREVfVVJMKjJXaGVyZSBhIGJlbG93LWZsb29yIGRlc2t0b3AgYXBwIGlzIHNlbnQgdG8gdXBncmFkZRJ/ChdkZXNrdG9wX3VwZ3JhZGVfY29tbWFuZBgGIAEoCUJegs4YWgofUkVMSUFOVF9ERVNLVE9QX1VQR1JBREVfQ09NTUFORCo3V2hhdCBhIGJlbG93LWZsb29yIGRlc2t0b3AgYXBwIGlzIHRvbGQgdG8gZG8gdG8gdXBncmFkZRKOAgoSZGFlbW9uX21pbl92ZXJzaW9uGAcgASgJQvEBukiBAdgBAXJ8MnpeKDB8WzEtOV1bMC05XSopXC4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKSgtWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/KFwrWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/JILOGGgKGlJFTElBTlRfTUlOX0RBRU1PTl9WRVJTSU9OKkpPbGRlc3QgZGFlbW9uIHZlcnNpb24gc2VydmVkLCBzZW12ZXIgd2l0aG91dCBhIGxlYWRpbmcgdiAoZW1wdHk6IG5vIGZsb29yKRJ+ChJkYWVtb25fdXBncmFkZV91cmwYCCABKAlCYrpICNgBAXIDiAEBgs4YUwoaUkVMSUFOVF9EQUVNT05fVVBHUkFERV9VUkwqNVdoZXJlIGEgYmVsb3ctZmxvb3IgZGFlbW9uJ3Mgb3duZXIgaXMgc2VudCB0byB1cGdyYWRlEoABChZkYWVtb25fdXBncmFkZV9jb21tYW5kGAkgASgJQmCCzhhcCh5SRUxJQU5UX0RBRU1PTl9VUEdSQURFX0NPTU1BTkQqOldoYXQgYSBiZWxvdy1mbG9vciBkYWVtb24ncyBvd25lciBpcyB0b2xkIHRvIGRvIHRvIHVwZ3JhZGUSsAEKG2RhZW1vbl9taW5fY29tbWl0X3RpbWVfdW5peBgKIAEoA0KKAbpIBCICKACCzhh/CiNSRUxJQU5UX01JTl9EQUVNT05fQ09NTUlUX1RJTUVfVU5JWCpYT2xkZXN0IGRhZW1vbiBidWlsZCBzZXJ2ZWQsIGJ5IGl0cyBjb21taXQgdGltZSBpbiBVbml4IHNlY29uZHMgKDA6IG5vIGNvbW1pdC10aW1lIGZsb29yKRKFAgoPY2xpX21pbl92ZXJzaW9uGAsgASgJQusBukiBAdgBAXJ8MnpeKDB8WzEtOV1bMC05XSopXC4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKSgtWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/KFwrWzAtOUEtWmEtei1dKyhcLlswLTlBLVphLXotXSspKik/JILOGGIKF1JFTElBTlRfTUlOX0NMSV9WRVJTSU9OKkdPbGRlc3QgQ0xJIHZlcnNpb24gc2VydmVkLCBzZW12ZXIgd2l0aG91dCBhIGxlYWRpbmcgdiAoZW1wdHk6IG5vIGZsb29yKRJ0Cg9jbGlfdXBncmFkZV91cmwYDCABKAlCW7pICNgBAXIDiAEBgs4YTAoXUkVMSUFOVF9DTElfVVBHUkFERV9VUkwqMVdoZXJlIGEgYmVsb3ctZmxvb3IgQ0xJJ3MgdXNlciBpcyBzZW50IHRvIHVwZ3JhZGUSdgoTY2xpX3VwZ3JhZGVfY29tbWFuZBgNIAEoCUJZgs4YVQobUkVMSUFOVF9DTElfVVBHUkFERV9DT01NQU5EKjZXaGF0IGEgYmVsb3ctZmxvb3IgQ0xJJ3MgdXNlciBpcyB0b2xkIHRvIGRvIHRvIHVwZ3JhZGUSjgIKEnNka19nb19taW5fdmVyc2lvbhgOIAEoCULxAbpIgQHYAQFyfDJ6XigwfFsxLTldWzAtOV0qKVwuKDB8WzEtOV1bMC05XSopXC4oMHxbMS05XVswLTldKikoLVswLTlBLVphLXotXSsoXC5bMC05QS1aYS16LV0rKSopPyhcK1swLTlBLVphLXotXSsoXC5bMC05QS1aYS16LV0rKSopPySCzhhoChpSRUxJQU5UX01JTl9TREtfR09fVkVSU0lPTipKT2xkZXN0IEdvIFNESyB2ZXJzaW9uIHNlcnZlZCwgc2VtdmVyIHdpdGhvdXQgYSBsZWFkaW5nIHYgKGVtcHR5OiBubyBmbG9vcikSfQoSc2RrX2dvX3VwZ3JhZGVfdXJsGA8gASgJQmG6SAjYAQFyA4gBAYLOGFIKGlJFTElBTlRfU0RLX0dPX1VQR1JBREVfVVJMKjRXaGVyZSBhIGJlbG93LWZsb29yIEdvIFNESydzIHVzZXIgaXMgc2VudCB0byB1cGdyYWRlEn8KFnNka19nb191cGdyYWRlX2NvbW1hbmQYECABKAlCX4LOGFsKHlJFTElBTlRfU0RLX0dPX1VQR1JBREVfQ09NTUFORCo5V2hhdCBhIGJlbG93LWZsb29yIEdvIFNESydzIHVzZXIgaXMgdG9sZCB0byBkbyB0byB1cGdyYWRlEpYCChJzZGtfdHNfbWluX3ZlcnNpb24YESABKAlC+QG6SIEB2AEBcnwyel4oMHxbMS05XVswLTldKilcLigwfFsxLTldWzAtOV0qKVwuKDB8WzEtOV1bMC05XSopKC1bMC05QS1aYS16LV0rKFwuWzAtOUEtWmEtei1dKykqKT8oXCtbMC05QS1aYS16LV0rKFwuWzAtOUEtWmEtei1dKykqKT8kgs4YcAoaUkVMSUFOVF9NSU5fU0RLX1RTX1ZFUlNJT04qUk9sZGVzdCBUeXBlU2NyaXB0IFNESyB2ZXJzaW9uIHNlcnZlZCwgc2VtdmVyIHdpdGhvdXQgYSBsZWFkaW5nIHYgKGVtcHR5OiBubyBmbG9vcikShQEKEnNka190c191cGdyYWRlX3VybBgSIAEoCUJpukgI2AEBcgOIAQGCzhhaChpSRUxJQU5UX1NES19UU19VUEdSQURFX1VSTCo8V2hlcmUgYSBiZWxvdy1mbG9vciBUeXBlU2NyaXB0IFNESydzIHVzZXIgaXMgc2VudCB0byB1cGdyYWRlEocBChZzZGtfdHNfdXBncmFkZV9jb21tYW5kGBMgASgJQmeCzhhjCh5SRUxJQU5UX1NES19UU19VUEdSQURFX0NPTU1BTkQqQVdoYXQgYSBiZWxvdy1mbG9vciBUeXBlU2NyaXB0IFNESydzIHVzZXIgaXMgdG9sZCB0byBkbyB0byB1cGdyYWRlErsBCgdlbmZvcmNlGBQgASgIQqkBgs4YpAEKHlJFTElBTlRfQ0xJRU5UX1ZFUlNJT05fRU5GT1JDRSqBAVJlZnVzZSBjYWxscyBmcm9tIGNsaWVudHMgYmVsb3cgdGhlaXIgbWluaW11bSB2ZXJzaW9uIChGYWlsZWRQcmVjb25kaXRpb24sIHVwZ3JhZGVfcmVxdWlyZWQpOyBvZmYgb25seSBhZHZlcnRpc2VzIGFuZCBjb3VudHMgdGhlbRL+AQobZW5mb3JjZV9sZWdhY3lfdW5pZGVudGlmaWVkGBUgASgIQtgBgs4Y0wEKMlJFTElBTlRfQ0xJRU5UX1ZFUlNJT05fRU5GT1JDRV9MRUdBQ1lfVU5JREVOVElGSUVEKpwBQW5zd2VyIGJyb3dzZXItb3JpZ2luIHJlbGlhbnQudjEgY2FsbHMgdGhhdCBjYXJyeSBubyBSZWxpYW50LUNsaWVudCBoZWFkZXIgd2l0aCBIVFRQIDQwNCwgc28gcHJlLWhlYWRlciB3ZWIgYW5kIGRlc2t0b3AgYnVuZGxlcyBzaG93IHRoZWlyIG91dC1vZi1kYXRlIG1vZGFsEvkBChNyZWZ1c2VfdW5pZGVudGlmaWVkGBYgASgIQtsBgs4Y1gEKKlJFTElBTlRfQ0xJRU5UX1ZFUlNJT05fUkVGVVNFX1VOSURFTlRJRklFRCqnAVJlZnVzZSByZWxpYW50LnYxIGNhbGxzIChTeXN0ZW1TZXJ2aWNlIGV4ZW1wdCkgdGhhdCBjYXJyeSBubyBSZWxpYW50LUNsaWVudCBoZWFkZXI6IEhUVFAgNDA0IGZvciBicm93c2VyLW9yaWdpbiBjYWxscywgRmFpbGVkUHJlY29uZGl0aW9uIHVwZ3JhZGVfcmVxdWlyZWQgZm9yIHRoZSByZXN0QkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * ClientVersionPolicy is the oldest build of each Reliant client this server
@@ -27,13 +27,15 @@ export const file_reliant_config_v1_client_version_config: GenFile = /*@__PURE__
  * <kind>/<version>` (internal/clientversion). A floor with no min_version is
  * no floor. A client is below its floor only when its version is valid semver
  * and orders before min_version (prerelease and dev builds order by semver
- * precedence; build metadata is ignored). A missing or unparseable version is
- * never refused.
+ * precedence; build metadata is ignored). An unparseable version is never
+ * refused; a missing header only under refuse_unidentified.
  *
- * One message per client kind, because a config field's env var is fixed by
- * its message: a single floor message reused for six kinds would read the
- * same variables six times. Each has the same min_version / upgrade_url /
- * upgrade_command getters; the daemon's adds min_commit_time_unix.
+ * Each kind's floor is three fields named <kind>_min_version,
+ * <kind>_upgrade_url and <kind>_upgrade_command (the daemon's adds
+ * daemon_min_commit_time_unix), flat rather than one floor message per kind:
+ * forge projects a config block into KCL one level deep, and a floor nested
+ * a level further would never reach control-plane's typed prod config.
+ * internal/clientversion.FloorFor reads one kind's floor.
  *
  * The rules every config here follows are in config.proto's header.
  *
@@ -41,34 +43,116 @@ export const file_reliant_config_v1_client_version_config: GenFile = /*@__PURE__
  */
 export type ClientVersionPolicy = Message<"reliant.config.v1.ClientVersionPolicy"> & {
   /**
-   * @generated from field: reliant.config.v1.WebClientVersionFloor web = 1;
+   * The web app (Reliant-Client: web/<v>).
+   *
+   * @generated from field: string web_min_version = 1;
    */
-  web?: WebClientVersionFloor | undefined;
+  webMinVersion: string;
 
   /**
-   * @generated from field: reliant.config.v1.DesktopClientVersionFloor desktop = 2;
+   * @generated from field: string web_upgrade_url = 2;
    */
-  desktop?: DesktopClientVersionFloor | undefined;
+  webUpgradeUrl: string;
 
   /**
-   * @generated from field: reliant.config.v1.DaemonClientVersionFloor daemon = 3;
+   * @generated from field: string web_upgrade_command = 3;
    */
-  daemon?: DaemonClientVersionFloor | undefined;
+  webUpgradeCommand: string;
 
   /**
-   * @generated from field: reliant.config.v1.CliClientVersionFloor cli = 4;
+   * The desktop app (Reliant-Client: desktop/<v>).
+   *
+   * @generated from field: string desktop_min_version = 4;
    */
-  cli?: CliClientVersionFloor | undefined;
+  desktopMinVersion: string;
 
   /**
-   * @generated from field: reliant.config.v1.SdkGoClientVersionFloor sdk_go = 5;
+   * @generated from field: string desktop_upgrade_url = 5;
    */
-  sdkGo?: SdkGoClientVersionFloor | undefined;
+  desktopUpgradeUrl: string;
 
   /**
-   * @generated from field: reliant.config.v1.SdkTsClientVersionFloor sdk_ts = 6;
+   * @generated from field: string desktop_upgrade_command = 6;
    */
-  sdkTs?: SdkTsClientVersionFloor | undefined;
+  desktopUpgradeCommand: string;
+
+  /**
+   * The daemon (Reliant-Client: daemon/<v>, and DaemonRegister's build identity).
+   *
+   * @generated from field: string daemon_min_version = 7;
+   */
+  daemonMinVersion: string;
+
+  /**
+   * @generated from field: string daemon_upgrade_url = 8;
+   */
+  daemonUpgradeUrl: string;
+
+  /**
+   * @generated from field: string daemon_upgrade_command = 9;
+   */
+  daemonUpgradeCommand: string;
+
+  /**
+   * The ordering key for daemon builds semver cannot order (dev and
+   * unstamped builds): a daemon whose DaemonRegister.commit_time_unix is
+   * before it is below the floor. control-plane's daemon floor
+   * (DAEMON_FLOOR_MIN_COMMIT_TIME) maps onto it. Zero: no commit-time floor.
+   *
+   * @generated from field: int64 daemon_min_commit_time_unix = 10;
+   */
+  daemonMinCommitTimeUnix: bigint;
+
+  /**
+   * The CLI (Reliant-Client: cli/<v>).
+   *
+   * @generated from field: string cli_min_version = 11;
+   */
+  cliMinVersion: string;
+
+  /**
+   * @generated from field: string cli_upgrade_url = 12;
+   */
+  cliUpgradeUrl: string;
+
+  /**
+   * @generated from field: string cli_upgrade_command = 13;
+   */
+  cliUpgradeCommand: string;
+
+  /**
+   * The Go SDK (Reliant-Client: sdk-go/<v>).
+   *
+   * @generated from field: string sdk_go_min_version = 14;
+   */
+  sdkGoMinVersion: string;
+
+  /**
+   * @generated from field: string sdk_go_upgrade_url = 15;
+   */
+  sdkGoUpgradeUrl: string;
+
+  /**
+   * @generated from field: string sdk_go_upgrade_command = 16;
+   */
+  sdkGoUpgradeCommand: string;
+
+  /**
+   * The TypeScript SDK (Reliant-Client: sdk-ts/<v>).
+   *
+   * @generated from field: string sdk_ts_min_version = 17;
+   */
+  sdkTsMinVersion: string;
+
+  /**
+   * @generated from field: string sdk_ts_upgrade_url = 18;
+   */
+  sdkTsUpgradeUrl: string;
+
+  /**
+   * @generated from field: string sdk_ts_upgrade_command = 19;
+   */
+  sdkTsUpgradeCommand: string;
 
   /**
    * Off, a below-floor client is advertised the floor and logged and
@@ -76,7 +160,7 @@ export type ClientVersionPolicy = Message<"reliant.config.v1.ClientVersionPolicy
    * operational break for every client below a floor, so it is an owner's
    * decision at a release cut.
    *
-   * @generated from field: bool enforce = 7;
+   * @generated from field: bool enforce = 20;
    */
   enforce: boolean;
 
@@ -89,7 +173,7 @@ export type ClientVersionPolicy = Message<"reliant.config.v1.ClientVersionPolicy
    * refused by it. It makes every pre-header tab fail until it reloads, so it
    * is an owner's switch for a breaking cut, never a default.
    *
-   * @generated from field: bool enforce_legacy_unidentified = 8;
+   * @generated from field: bool enforce_legacy_unidentified = 21;
    */
   enforceLegacyUnidentified: boolean;
 
@@ -103,7 +187,7 @@ export type ClientVersionPolicy = Message<"reliant.config.v1.ClientVersionPolicy
    * served. It is turned on only once every first-party client sends the
    * header, by the owner.
    *
-   * @generated from field: bool refuse_unidentified = 9;
+   * @generated from field: bool refuse_unidentified = 22;
    */
   refuseUnidentified: boolean;
 };
@@ -114,193 +198,4 @@ export type ClientVersionPolicy = Message<"reliant.config.v1.ClientVersionPolicy
  */
 export const ClientVersionPolicySchema: GenMessage<ClientVersionPolicy> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_client_version_config, 0);
-
-/**
- * WebClientVersionFloor is the floor of the web app (Reliant-Client: web/<v>).
- *
- * @generated from message reliant.config.v1.WebClientVersionFloor
- */
-export type WebClientVersionFloor = Message<"reliant.config.v1.WebClientVersionFloor"> & {
-  /**
-   * @generated from field: string min_version = 1;
-   */
-  minVersion: string;
-
-  /**
-   * @generated from field: string upgrade_url = 2;
-   */
-  upgradeUrl: string;
-
-  /**
-   * @generated from field: string upgrade_command = 3;
-   */
-  upgradeCommand: string;
-};
-
-/**
- * Describes the message reliant.config.v1.WebClientVersionFloor.
- * Use `create(WebClientVersionFloorSchema)` to create a new message.
- */
-export const WebClientVersionFloorSchema: GenMessage<WebClientVersionFloor> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_client_version_config, 1);
-
-/**
- * DesktopClientVersionFloor is the floor of the Electron app
- * (Reliant-Client: desktop/<v>).
- *
- * @generated from message reliant.config.v1.DesktopClientVersionFloor
- */
-export type DesktopClientVersionFloor = Message<"reliant.config.v1.DesktopClientVersionFloor"> & {
-  /**
-   * @generated from field: string min_version = 1;
-   */
-  minVersion: string;
-
-  /**
-   * @generated from field: string upgrade_url = 2;
-   */
-  upgradeUrl: string;
-
-  /**
-   * @generated from field: string upgrade_command = 3;
-   */
-  upgradeCommand: string;
-};
-
-/**
- * Describes the message reliant.config.v1.DesktopClientVersionFloor.
- * Use `create(DesktopClientVersionFloorSchema)` to create a new message.
- */
-export const DesktopClientVersionFloorSchema: GenMessage<DesktopClientVersionFloor> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_client_version_config, 2);
-
-/**
- * DaemonClientVersionFloor is the floor of the tools daemon
- * (Reliant-Client: daemon/<v>, and DaemonRegister's build identity).
- *
- * @generated from message reliant.config.v1.DaemonClientVersionFloor
- */
-export type DaemonClientVersionFloor = Message<"reliant.config.v1.DaemonClientVersionFloor"> & {
-  /**
-   * @generated from field: string min_version = 1;
-   */
-  minVersion: string;
-
-  /**
-   * @generated from field: string upgrade_url = 2;
-   */
-  upgradeUrl: string;
-
-  /**
-   * @generated from field: string upgrade_command = 3;
-   */
-  upgradeCommand: string;
-
-  /**
-   * The ordering key for daemon builds semver cannot order (dev and
-   * unstamped builds): a daemon whose DaemonRegister.commit_time_unix is
-   * before it is below the floor. control-plane's daemon floor
-   * (DAEMON_FLOOR_MIN_COMMIT_TIME) maps onto it. Zero: no commit-time floor.
-   *
-   * @generated from field: int64 min_commit_time_unix = 4;
-   */
-  minCommitTimeUnix: bigint;
-};
-
-/**
- * Describes the message reliant.config.v1.DaemonClientVersionFloor.
- * Use `create(DaemonClientVersionFloorSchema)` to create a new message.
- */
-export const DaemonClientVersionFloorSchema: GenMessage<DaemonClientVersionFloor> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_client_version_config, 3);
-
-/**
- * CliClientVersionFloor is the floor of the reliant CLI
- * (Reliant-Client: cli/<v>).
- *
- * @generated from message reliant.config.v1.CliClientVersionFloor
- */
-export type CliClientVersionFloor = Message<"reliant.config.v1.CliClientVersionFloor"> & {
-  /**
-   * @generated from field: string min_version = 1;
-   */
-  minVersion: string;
-
-  /**
-   * @generated from field: string upgrade_url = 2;
-   */
-  upgradeUrl: string;
-
-  /**
-   * @generated from field: string upgrade_command = 3;
-   */
-  upgradeCommand: string;
-};
-
-/**
- * Describes the message reliant.config.v1.CliClientVersionFloor.
- * Use `create(CliClientVersionFloorSchema)` to create a new message.
- */
-export const CliClientVersionFloorSchema: GenMessage<CliClientVersionFloor> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_client_version_config, 4);
-
-/**
- * SdkGoClientVersionFloor is the floor of the Go SDK
- * (Reliant-Client: sdk-go/<v>).
- *
- * @generated from message reliant.config.v1.SdkGoClientVersionFloor
- */
-export type SdkGoClientVersionFloor = Message<"reliant.config.v1.SdkGoClientVersionFloor"> & {
-  /**
-   * @generated from field: string min_version = 1;
-   */
-  minVersion: string;
-
-  /**
-   * @generated from field: string upgrade_url = 2;
-   */
-  upgradeUrl: string;
-
-  /**
-   * @generated from field: string upgrade_command = 3;
-   */
-  upgradeCommand: string;
-};
-
-/**
- * Describes the message reliant.config.v1.SdkGoClientVersionFloor.
- * Use `create(SdkGoClientVersionFloorSchema)` to create a new message.
- */
-export const SdkGoClientVersionFloorSchema: GenMessage<SdkGoClientVersionFloor> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_client_version_config, 5);
-
-/**
- * SdkTsClientVersionFloor is the floor of the TypeScript SDK
- * (Reliant-Client: sdk-ts/<v>).
- *
- * @generated from message reliant.config.v1.SdkTsClientVersionFloor
- */
-export type SdkTsClientVersionFloor = Message<"reliant.config.v1.SdkTsClientVersionFloor"> & {
-  /**
-   * @generated from field: string min_version = 1;
-   */
-  minVersion: string;
-
-  /**
-   * @generated from field: string upgrade_url = 2;
-   */
-  upgradeUrl: string;
-
-  /**
-   * @generated from field: string upgrade_command = 3;
-   */
-  upgradeCommand: string;
-};
-
-/**
- * Describes the message reliant.config.v1.SdkTsClientVersionFloor.
- * Use `create(SdkTsClientVersionFloorSchema)` to create a new message.
- */
-export const SdkTsClientVersionFloorSchema: GenMessage<SdkTsClientVersionFloor> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_client_version_config, 6);
 
