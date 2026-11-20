@@ -1,0 +1,251 @@
+// Copyright (c) 2026 Reliant Labs
+
+/**
+ * The org-scoped app hosting reads and writes that sit beside the agreement:
+ * editable budget versions, the org's usage summary with its month-end
+ * projection, and the free static tier.
+ *
+ * ── CALLED STRUCTURALLY, UNTIL THE VENDORED CONTRACT CARRIES THEM ─────────
+ *
+ * These RPCs are added to control-plane's BillingService alongside this UI.
+ * Until `task contract:controlplane:sync` re-vendors that proto, the generated
+ * client has no such methods, so each call looks the method up by name. A
+ * missing method fails as Code.Unimplemented, the same way an older server
+ * answers. Every surface already treats that as "not available on this
+ * server yet" rather than as zero usage or an empty history. Once the sync
+ * lands, the lookup finds the generated method and nothing here changes.
+ *
+ * The shapes below are what the hosting surfaces read. The generated messages
+ * satisfy them structurally (int64 → bigint, Timestamp → wkt Timestamp), so
+ * the vendored types slot in without a translation layer.
+ */
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Code, ConnectError } from "@connectrpc/connect";
+import type { DescService } from "@bufbuild/protobuf";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+
+import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import { getControlPlaneClient } from "@/services/controlPlane/client";
+
+type Int = bigint | number;
+
+export interface UsageBillingBudgetVersion {
+  /** 0 is the budget consented at checkout. */
+  version: Int;
+  infraBudgetCents: Int;
+  actorUserId: string;
+  actorEmail: string;
+  createdAt?: Timestamp;
+  policyVersion: string;
+  /** "checkout_consent" | "budget_change". */
+  source: string;
+  agreementId: string;
+  current: boolean;
+}
+
+export interface SetUsageBillingBudgetRequest {
+  orgId: string;
+  infraBudgetCents: bigint;
+  policyVersion: string;
+  consent: boolean;
+  /** Optimistic concurrency: the version the user was looking at. */
+  expectedCurrentVersion?: bigint;
+}
+
+export interface HostingAppUsage {
+  deploymentId: string;
+  deploymentName: string;
+  environmentId: string;
+  environmentName: string;
+  spentCents: Int;
+  projectedCents: Int;
+  staticStorageBytes: Int;
+  staticTransferBytes: Int;
+  /** False until the static meter has read this site. */
+  staticStorageMeasured?: boolean;
+}
+
+export interface OrgHostingUsageSummary {
+  spentCents: Int;
+  projectedMonthEndCents: Int;
+  projectionIsEstimate: boolean;
+  budgetCents: Int;
+  periodStart?: Timestamp;
+  periodEnd?: Timestamp;
+  /** When new deploys would be refused at the current rate; absent when the budget holds. */
+  blockedAt?: Timestamp;
+  measuredThrough?: Timestamp;
+  runningRateCentsPerHour: number;
+  budgetReached: boolean;
+  billingActive: boolean;
+  apps: HostingAppUsage[];
+}
+
+export interface FreeHostingSite {
+  deploymentId: string;
+  environmentName: string;
+  name: string;
+  url: string;
+  storageBytes: Int;
+  storageMeasured: boolean;
+}
+
+export interface FreeHostingStatus {
+  /** This org holds its founder's free static allowance. */
+  isDesignated: boolean;
+  /** The org that holds it instead; empty unless the caller is that founder. */
+  heldByOrgName: string;
+  callerIsFounder: boolean;
+  sites: FreeHostingSite[];
+  sitesLimit: Int;
+  storageBytes: Int;
+  storageLimitBytes: Int;
+  transferBytes: Int;
+  transferLimitBytes: Int;
+  periodEnd?: Timestamp;
+  nextMoveAllowedAt?: Timestamp;
+  /** The per-site cap (1 GiB today), from the server. */
+  siteStorageLimitBytes?: Int;
+  /** False until storage has been measured for this org. */
+  storageMeasured?: boolean;
+}
+
+/** A site named by the designation move: the org and project it belongs to. */
+export interface DesignationSite {
+  deploymentId: string;
+  orgId: string;
+  project: string;
+  env: string;
+  name: string;
+  url: string;
+}
+
+export interface MoveFreeHostingDesignationResponse {
+  fromOrgId: string;
+  toOrgId: string;
+  /** Sites that stop being served free when the designation leaves their org. */
+  stoppingSites: DesignationSite[];
+  servedSites: DesignationSite[];
+  unservedSites: DesignationSite[];
+  cooldownApplies: boolean;
+  nextMoveAllowedAt?: Timestamp;
+  moved: boolean;
+}
+
+interface PendingBillingMethods {
+  setUsageBillingBudget(req: SetUsageBillingBudgetRequest): Promise<{ agreement?: { infraBudgetCents: Int }; version?: UsageBillingBudgetVersion }>;
+  listUsageBillingBudgetVersions(req: { orgId: string }): Promise<{ versions: UsageBillingBudgetVersion[] }>;
+  getOrgHostingUsageSummary(req: { orgId: string }): Promise<OrgHostingUsageSummary>;
+  getFreeHostingStatus(req: { orgId: string }): Promise<FreeHostingStatus>;
+}
+
+interface PendingOrganizationMethods {
+  moveFreeHostingDesignation(req: { orgId: string; dryRun: boolean }): Promise<MoveFreeHostingDesignationResponse>;
+}
+
+/**
+ * One BillingService method by name, or an Unimplemented failure when this
+ * build's generated client does not carry it yet.
+ */
+export function pendingBillingMethod<K extends keyof PendingBillingMethods>(name: K): PendingBillingMethods[K] {
+  return pendingMethod(BillingService, name) as PendingBillingMethods[K];
+}
+
+/** The OrganizationService twin of pendingBillingMethod. */
+export function pendingOrganizationMethod<K extends keyof PendingOrganizationMethods>(name: K): PendingOrganizationMethods[K] {
+  return pendingMethod(OrganizationService, name) as PendingOrganizationMethods[K];
+}
+
+function pendingMethod(service: DescService, name: string): (request: never) => Promise<unknown> {
+  return (request: never) => {
+    const client = getControlPlaneClient(service) as unknown as Record<string, unknown>;
+    const method = client[name];
+    if (typeof method !== "function") {
+      return Promise.reject(new ConnectError(`${name} is not in this build's control-plane client`, Code.Unimplemented));
+    }
+    return (method as (r: never) => Promise<unknown>).call(client, request);
+  };
+}
+
+/** Code.Unimplemented: the server (or this build) does not serve the RPC yet. */
+export function isUnimplemented(error: unknown): boolean {
+  return error instanceof ConnectError && error.code === Code.Unimplemented;
+}
+
+// Rollout and permission failures are not transient, and must never turn into zeros.
+const retryHosting = (failures: number, error: unknown) =>
+  failures < 2 &&
+  !(error instanceof ConnectError && [Code.Unimplemented, Code.PermissionDenied, Code.InvalidArgument, Code.Unauthenticated].includes(error.code));
+
+export const hostingBillingKeys = {
+  all: ["hosting-billing"] as const,
+  agreement: (orgId: string) => ["usage-billing", orgId] as const,
+  budgetVersions: (orgId: string) => ["hosting-billing", "budget-versions", orgId] as const,
+  usageSummary: (orgId: string) => ["hosting-billing", "usage-summary", orgId] as const,
+  freeTier: (orgId: string) => ["hosting-billing", "free-tier", orgId] as const,
+};
+
+export function useUsageBillingBudgetVersions(orgId: string, enabled = true) {
+  return useQuery({
+    queryKey: hostingBillingKeys.budgetVersions(orgId),
+    queryFn: () => pendingBillingMethod("listUsageBillingBudgetVersions")({ orgId }),
+    enabled: enabled && !!orgId,
+    staleTime: 30_000,
+    retry: retryHosting,
+  });
+}
+
+export function useSetUsageBillingBudget(orgId: string) {
+  const cache = useQueryClient();
+  return useMutation({
+    // Keyed to the org it was started in: an org switch detaches this observer
+    // without cancelling that org's valid write.
+    mutationKey: ["hosting-billing", "set-budget", orgId],
+    mutationFn: (request: Omit<SetUsageBillingBudgetRequest, "orgId">) =>
+      pendingBillingMethod("setUsageBillingBudget")({ ...request, orgId }),
+    onSettled: () => {
+      void cache.invalidateQueries({ queryKey: hostingBillingKeys.agreement(orgId) });
+      void cache.invalidateQueries({ queryKey: hostingBillingKeys.budgetVersions(orgId) });
+      void cache.invalidateQueries({ queryKey: hostingBillingKeys.usageSummary(orgId) });
+    },
+  });
+}
+
+export function useOrgHostingUsageSummary(orgId: string | null) {
+  return useQuery({
+    queryKey: hostingBillingKeys.usageSummary(orgId ?? ""),
+    queryFn: () => pendingBillingMethod("getOrgHostingUsageSummary")({ orgId: orgId as string }),
+    enabled: !!orgId,
+    staleTime: 60_000,
+    refetchInterval: 5 * 60_000,
+    retry: retryHosting,
+  });
+}
+
+/**
+ * Founder-only: make `orgId` the free hosting org. Always previewed with
+ * dryRun first (the sites that would stop, whether the 30-day cooldown
+ * applies); only an explicit confirmation sends dryRun=false.
+ */
+export function useMoveFreeHostingDesignation(orgId: string) {
+  const cache = useQueryClient();
+  return useMutation({
+    mutationKey: ["hosting-billing", "move-free-designation", orgId],
+    mutationFn: (dryRun: boolean) => pendingOrganizationMethod("moveFreeHostingDesignation")({ orgId, dryRun }),
+    onSuccess: (response) => {
+      if (response.moved) void cache.invalidateQueries({ queryKey: ["hosting-billing", "free-tier"] });
+    },
+  });
+}
+
+export function useFreeHostingStatus(orgId: string | null) {
+  return useQuery({
+    queryKey: hostingBillingKeys.freeTier(orgId ?? ""),
+    queryFn: () => pendingBillingMethod("getFreeHostingStatus")({ orgId: orgId as string }),
+    enabled: !!orgId,
+    staleTime: 60_000,
+    retry: retryHosting,
+  });
+}

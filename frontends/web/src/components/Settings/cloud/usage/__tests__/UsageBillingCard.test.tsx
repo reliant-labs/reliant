@@ -6,8 +6,16 @@ const base: UsageBillingCardProps = { enabled: true, policyVersion: "policy-1", 
 describe("independent hosting consent", () => {
   it("fails closed when disabled, with no machine checkout", () => {
     render(<UsageBillingCard {...base} enabled={false} />);
-    expect(screen.getByText(/Buying a machine plan does not enable it/)).toBeInTheDocument();
+    expect(screen.getByText("App hosting billing isn’t available yet.")).toBeInTheDocument();
+    expect(screen.getByTestId("hosting-billing-contact-support")).toHaveAttribute("href", expect.stringContaining("mailto:support@reliantlabs.io"));
+    // Machine plans are a different product: the unavailable state never sells one.
+    expect(screen.getByTestId("hosting-billing-unavailable").textContent).not.toMatch(/machine plan/i);
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+  it("puts the budget control in place of the read-only budget once active", () => {
+    render(<UsageBillingCard {...base} agreement={{ status: "active", infraBudgetCents: 2500n }} budgetControl={<p>budget editor</p>} />);
+    expect(screen.getByText("budget editor")).toBeInTheDocument();
+    expect(screen.queryByText(/not currently supported/)).not.toBeInTheDocument();
   });
   it("requires explicit consent and an exact positive budget", async () => {
     const checkout = vi.fn();
