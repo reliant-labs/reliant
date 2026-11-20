@@ -104,6 +104,20 @@ var (
 		},
 		[]string{"kind"},
 	)
+	// DaemonVersionFloorTotal counts daemons that registered below the
+	// daemon version floor (ClientVersionPolicy.daemon), by what the gateway
+	// did: restart_requested (sent RestartRequested), refused (enforce on,
+	// and the daemon predates RestartRequested) or observed (logged only:
+	// enforce off, or a managed machine the observe phase does not drain).
+	DaemonVersionFloorTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "daemon",
+			Name:      "version_floor_total",
+			Help:      "Daemons that registered below the daemon version floor, by outcome (restart_requested, refused, observed).",
+		},
+		[]string{"outcome"},
+	)
 )
 
 // ─── Terminal output ────────────────────────────────────────────────────────
@@ -565,6 +579,7 @@ func initMetrics() {
 		DaemonConnectWorkDeferredTotal,
 		DaemonCommandsHeldTotal,
 		DaemonRecoveryAdmissionRefusedTotal,
+		DaemonVersionFloorTotal,
 		// Terminal output
 		TerminalOutputOverflowTotal,
 		// DB

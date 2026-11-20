@@ -192,6 +192,7 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
+		ClientVersions:  g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 
