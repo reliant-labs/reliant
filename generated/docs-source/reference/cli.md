@@ -22725,15 +22725,17 @@ CLI and the app see the same scenarios. A sub-workflow ref (project://<name>)
 resolves by name: too, never by file name. Scenarios in the retired layouts
 (scenarios/<file>/, <file>_scenarios.yaml) are an error naming where they go.
 
-If a specific workflow file is given, runs scenarios for that workflow only.
-Otherwise, discovers all workflows in the workflow directory and runs their
+If a specific workflow file (or a builtin:// ref) is given, runs scenarios for
+that workflow only. Otherwise, discovers all workflows in the workflow directory and runs their
 associated scenarios.
 
 Examples:
   reliant workflow scenario run                               # run all project scenarios
   reliant workflow scenario run my-workflow.yaml              # run scenarios for one workflow
+  reliant workflow scenario run builtin://autopilot-oncall    # run one builtin's scenarios
   reliant workflow scenario run --include-builtins            # include builtin workflow scenarios
   reliant workflow scenario run --filter happy_path           # run only matching scenarios
+  reliant workflow scenario run --filter my-workflow/         # --filter also matches the printed <workflow>/<scenario> label
   reliant workflow scenario run --json                        # JSON output for CI
 
 Exit code 0 if all scenarios pass, 1 if any fail.
@@ -22748,7 +22750,7 @@ reliant workflow scenario run [workflow-path] [flags]
 |------|------|---------|-------------|
 | `--dir` | `string` | `.reliant/workflows` | Directory containing workflow YAML files |
 | `--fail-fast` | `bool` | - | Stop on first scenario failure |
-| `--filter` | `string` | - | Only run scenarios whose name contains this string |
+| `--filter` | `string` | - | Only run scenarios whose name, or <workflow>/<scenario> label, contains this string |
 | `--include-builtins` | `bool` | - | Also run builtin workflow scenarios |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each scenario |
