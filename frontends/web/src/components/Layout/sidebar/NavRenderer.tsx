@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * THE ONE RENDERER for a nav config (navConfig/, U6c prototype): rows,
- * accordions, headings, slots, and drill-in areas.
+ * THE ONE RENDERER for the nav config (navConfig/hybrid.ts, U6d prototype):
+ * rows, accordions, headings, slots, and drill-in areas.
  *
  * DRILL-IN. The route decides it (navConfig/model.ts activeArea): on a route
  * an area claims, the nav's rows are REPLACED by the area's, under a
@@ -22,7 +22,6 @@ import { cn } from "@/lib/utils";
 import { externalMark } from "./navConfig/items";
 import { activeArea, backHref, childrenOf, hrefOf, isCurrent, visibleItems } from "./navConfig/model";
 import type { NavBadge, NavConfig, NavCtx, NavItem, NavSlotId } from "./navConfig/types";
-import { withNavParam } from "./navConfig/variant";
 import { SidebarFooter, SidebarRow, SidebarSubLabel, SidebarSubRow } from "./primitives";
 
 /**
@@ -40,12 +39,8 @@ export type NavSlots = Partial<Record<NavSlotId, (layout: SlotLayout) => ReactNo
 export interface NavRendererProps {
   config: NavConfig;
   ctx: NavCtx;
-  /** A variant was chosen (`?nav=` or the tab's): links carry it, for a new tab. */
-  explicitVariant: boolean;
   slots: NavSlots;
   onNavigate: (href: string) => void;
-  /** Under the footer's rows (the variant picker). */
-  footerExtra?: ReactNode;
 }
 
 type Depth = 0 | 1 | 2 | 3;
@@ -66,9 +61,9 @@ function Badge({ badge }: { badge: NavBadge }) {
   );
 }
 
-export function NavRenderer({ config, ctx, explicitVariant, slots, onNavigate, footerExtra }: NavRendererProps) {
+export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps) {
   const area = activeArea(config, ctx);
-  const link = (href: string) => (explicitVariant ? withNavParam(href, ctx.variant) : href);
+  const link = (href: string) => href;
 
   // Accordions: the person's toggles, until a navigation reopens the group holding the new page.
   const [accordion, setAccordion] = useState<{ path: string; toggled: Record<string, boolean> }>({ path: ctx.pathname, toggled: {} });
@@ -127,6 +122,7 @@ export function NavRenderer({ config, ctx, explicitVariant, slots, onNavigate, f
               onClick={href ? () => onNavigate(link(href)) : undefined}
               current={current}
               trail={trail}
+              action={slot(item.action, { place: "row", depth })}
               testId={testId}
             />
           );
@@ -264,7 +260,6 @@ export function NavRenderer({ config, ctx, explicitVariant, slots, onNavigate, f
       {body}
       <SidebarFooter>
         {renderItems(config.footer, 0, "footer")}
-        {footerExtra}
       </SidebarFooter>
     </>
   );

@@ -1,16 +1,15 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * THE NAV AS DATA (U6c, prototype). Each nav variant (a.ts, b.ts, c.ts) is a
- * plain list of these items over the same pages, so the variant the owner
- * picks folds into the shell as config and the others delete as config.
+ * THE NAV AS DATA (U6d, prototype): the owner's chosen hybrid nav
+ * (hybrid.ts) is a plain list of these items over the shell's pages.
  *
  *   row      a link: its href is built from the context, `match` says whether
  *            it is the page on screen
  *   group    an accordion (Workflows ▾): its rows open in place; clicking an
  *            open one closes it, and the group holding the page on screen
  *            opens on every navigation
- *   area     a drill-in (Agents ›, Observability ›, Settings ›): on any route
+ *   area     a drill-in (Agents ›, Observability ›): on any route
  *            the area's `match` claims, the area's rows REPLACE the nav under a
  *            "‹ Area" back header. Its row links to its first page, so being
  *            "in" an area is always a URL (Back, refresh and share restore it)
@@ -18,8 +17,9 @@
  *   slot     a live widget the shell renders (the chat list, New chat, the
  *            Inbox bell): data says where it goes, the shell says what it is
  *
- * A config's `footer` holds the rows under the nav's hairline (Inbox, Usage &
- * billing, Settings ›); an area there drills in like one above it.
+ * A config's `footer` holds the rows under the nav's hairline (Usage &
+ * billing, Settings). `sectionPages` are pages whose own section list takes the
+ * nav column on their routes (Settings), reached by a plain link, not a drill-in.
  */
 
 import type { ReactNode } from "react";
@@ -28,11 +28,8 @@ import type { ConsolePage, OrgPage } from "../../../Forge/Console/paths";
 import type { GroupedNavInput } from "../../../Forge/Console/groupedNav";
 import type { ShellMode } from "../shellProject";
 
-export type NavVariant = "a" | "b" | "c";
-
 /** Everything an item's href, match or availability reads: the route and the shell's scope. */
 export interface NavCtx {
-  variant: NavVariant;
   /** The page on screen (either form, `/x` or `/o/<org>/x`). */
   pathname: string;
   search: Record<string, unknown>;
@@ -61,7 +58,7 @@ export type NavSlotId =
   | "new-chat"
   /** The chat list: grouped by branch, or by project across several. */
   | "chat-list"
-  /** The Inbox, as a bell with its count. */
+  /** The Inbox row, with its count. */
   | "inbox"
   /** A row's trail: the live automations pill (Workflows). */
   | "workflows-pill"
@@ -92,6 +89,8 @@ export interface NavRow extends NavItemBase {
   external?: boolean;
   badge?: (ctx: NavCtx) => NavBadge | undefined;
   trail?: NavSlotId;
+  /** A control after the row (Settings: the update button). */
+  action?: NavSlotId;
 }
 
 export interface NavGroup extends NavItemBase {
@@ -131,9 +130,8 @@ export interface NavSlot extends NavItemBase {
 export type NavItem = NavRow | NavGroup | NavArea | NavHeading | NavSlot;
 
 export interface NavConfig {
-  variant: NavVariant;
-  /** One line for the variant picker. */
-  title: string;
   items: readonly NavItem[];
   footer: readonly NavItem[];
+  /** Pages whose own sections take the nav column on their routes (Settings); reached by a plain link. */
+  sectionPages?: readonly NavArea[];
 }

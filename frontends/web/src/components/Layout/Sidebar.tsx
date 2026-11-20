@@ -36,7 +36,6 @@ import {
   Eye,
   EyeOff,
   MoreHorizontal,
-  Bell,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -98,7 +97,7 @@ import {
   SIDEBAR_HEADING_HOVER_ACTION,
   SIDEBAR_ICON_BUTTON,
   SidebarSubRow,
-  WorkspaceSubheading,
+  ChatSectionHeading,
 } from "./sidebar/primitives";
 import { ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
 import { useShellProject } from "./sidebar/shellProject";
@@ -106,7 +105,8 @@ import { FindBox } from "./sidebar/FindBox";
 import type { NavSlots } from "./sidebar/NavRenderer";
 import { ShellNavBody } from "./sidebar/ShellNavBody";
 import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
-import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
+// TODO(U6d CONNECTORS): import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta" once it merges.
+import { ConnectSandboxCta } from "./sidebar/PendingConnectSandboxCta";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { isAtOrBelow } from "./sidebar/navLocation";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
@@ -548,6 +548,13 @@ interface WorktreeGroupComponentProps {
    * only one, whose chats then sit directly under the project.
    */
   hideHeader?: boolean;
+  /** Nested: the project the workspace is in, so its heading reads "project · branch" (U6d). */
+  projectName?: string;
+  /** Nested: what the heading keeps at rest (the project's pin, hide, needs-you marks). */
+  headingTrail?: ReactNode;
+  /** Nested: more hover actions on the heading (the project's own: New chat in it, its menu). */
+  extraActions?: ReactNode;
+  testId?: string;
 }
 
 const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
@@ -565,6 +572,10 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   emptyState,
   nested = false,
   hideHeader = false,
+  projectName,
+  headingTrail,
+  extraActions,
+  testId,
 }: WorktreeGroupComponentProps) {
   if (hideHeader) {
     return (
@@ -579,7 +590,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   // New chat and Archive show on hover or focus, and take no width until
   // then: the branch keeps the row.
   const actions =
-    onNewChat || onArchiveWorktree ? (
+    onNewChat || onArchiveWorktree || extraActions ? (
       <>
         {onNewChat && (
           <Tooltip content="New chat in this workspace" side="left" delay={300}>
@@ -611,18 +622,22 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             </button>
           </Tooltip>
         )}
+        {extraActions}
       </>
     ) : undefined;
 
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-0.5" data-testid={testId}>
       {nested ? (
-        <WorkspaceSubheading
+        <ChatSectionHeading
+          project={projectName}
           branch={title}
           expanded={isExpanded}
           onToggle={onToggle}
+          trail={headingTrail}
           actions={actions}
           onContextMenu={onContextMenu}
+          testId={testId ? `${testId}-heading` : undefined}
         />
       ) : (
         <ProjectGroupHeader
@@ -653,7 +668,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             emptyState.onClick?.();
           }}
           className={cn(
-            "flex h-7 w-full items-center rounded-md pl-14 text-left text-meta text-muted-foreground transition-colors",
+            "flex h-7 w-full items-center rounded-md pl-8 text-left text-meta text-muted-foreground transition-colors",
             emptyState.onClick ? "cursor-pointer hover:bg-foreground/5 hover:text-foreground" : "cursor-default",
           )}
         >
@@ -1461,7 +1476,10 @@ function SidebarComponent({
   // `layout`: a workspace inside a project section is nested under it, and
   // the project's only workspace, its main one, has no header of its own.
   const renderWorktreeGroup = useCallback(
-    (group: ChatGroup, layout: { nested?: boolean; hideHeader?: boolean } = {}) => {
+    (
+      group: ChatGroup,
+      layout: { nested?: boolean; hideHeader?: boolean; projectName?: string; headingTrail?: ReactNode; extraActions?: ReactNode; testId?: string } = {},
+    ) => {
       // Handle main branch (no worktree) special case
       const isNoWorktree = group.worktreeId.startsWith("no-worktree");
       const isExpanded = isNoWorktree
@@ -1513,6 +1531,10 @@ function SidebarComponent({
           icon={worktreeIcon}
           nested={layout.nested}
           hideHeader={layout.hideHeader}
+          projectName={layout.projectName}
+          headingTrail={layout.headingTrail}
+          extraActions={layout.extraActions}
+          testId={layout.testId}
           chats={group.chats}
           isExpanded={isExpanded}
           onToggle={handleToggle}
@@ -1555,17 +1577,11 @@ function SidebarComponent({
     ]
   );
 
-  // A project section of the All projects view: the project's name, New
-  // chat in this project, its menu (pin, hide), and its workspace groups.
-  //
-  // The project is the strongest level of the list, so which project a chat
-  // is in reads at a glance: a project mark and the name, a header that stays
-  // pinned while its chats scroll under it, and its chats indented so their
-  // titles line up with its name. Its workspaces are quiet branch labels
-  // under it, and a project whose only workspace is main lists its chats
-  // directly: a "main" header under every project said nothing.
+  // A project's sections in the All projects view (U6d, owner): one small
+  // "project · branch" heading per workspace, every chat at the list's left
+  // edge. The project's own controls (New chat in it, pin, hide) and marks
+  // (pinned, hidden, needs you) sit on its first heading.
   const renderProjectSection = (group: (typeof projectGroups)[number]) => {
-    const isExpanded = expandedProjects[group.projectId] ?? group.chats.length > 0;
     const isPinned = projectPrefs.pinned.has(group.projectId);
     // Listed while hidden: under show-all, or as the current project.
     const isHidden = projectPrefs.hidden.has(group.projectId);
@@ -1591,10 +1607,6 @@ function SidebarComponent({
         ],
       },
     ];
-    const toggle = () =>
-      setExpandedProjects((prev) => ({ ...prev, [group.projectId]: !isExpanded }));
-    const onlyMain = group.workspaces.length === 1 && group.workspaces[0]?.isMain === true;
-    const mainWorkspace = onlyMain ? group.workspaces[0] : undefined;
     // At rest, in this order: pinned, hidden, needs you (restyle §12a).
     const trail =
       isPinned || isHidden || needsYou ? (
@@ -1626,76 +1638,61 @@ function SidebarComponent({
           )}
         </>
       ) : undefined;
-    return (
-      <section
-        key={group.projectId}
-        aria-label={group.projectName}
-        data-testid={`sidebar-project-${group.projectId}`}
-        className="space-y-0.5"
-      >
-        <ProjectGroupHeader
-          name={group.projectName}
-          mark={<ProjectMark name={group.projectName} />}
-          expanded={isExpanded}
-          onToggle={toggle}
-          muted={isHidden}
-          trail={trail}
-          testId={`sidebar-project-header-${group.projectId}`}
-          // The main workspace's header is folded into the project's, so its
-          // actions are here.
-          onContextMenu={
-            mainWorkspace && !mainWorkspace.worktreeId.startsWith("no-worktree")
-              ? (e) => handleWorktreeContextMenu(e, mainWorkspace.worktreeId)
-              : undefined
-          }
-          actions={
-            <>
-              <Tooltip content="New chat in this project" side="left" delay={300}>
-                <button
-                  type="button"
-                  aria-label={`New chat in ${group.projectName}`}
-                  onClick={() => void openNewChat({ projectId: group.projectId })}
-                  className={SIDEBAR_ICON_BUTTON}
-                >
-                  <Plus className="size-3.5" aria-hidden="true" />
-                </button>
-              </Tooltip>
-              <DropdownMenu
-                align="right"
-                density="compact"
-                label={`${group.projectName} actions`}
-                menuClassName="min-w-[170px]"
-                groups={projectActions}
-                trigger={(props) => (
-                  <button
-                    type="button"
-                    {...props}
-                    aria-label={`${group.projectName} actions`}
-                    data-testid={`sidebar-project-actions-${group.projectId}`}
-                    className={SIDEBAR_ICON_BUTTON}
-                  >
-                    <MoreHorizontal className="size-4" aria-hidden="true" />
-                  </button>
-                )}
-              />
-            </>
-          }
+    const projectControls = (
+      <>
+        <Tooltip content="New chat in this project" side="left" delay={300}>
+          <button
+            type="button"
+            aria-label={`New chat in ${group.projectName}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              void openNewChat({ projectId: group.projectId });
+            }}
+            className={SIDEBAR_ICON_BUTTON}
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+          </button>
+        </Tooltip>
+        <DropdownMenu
+          align="right"
+          density="compact"
+          label={`${group.projectName} actions`}
+          menuClassName="min-w-[170px]"
+          groups={projectActions}
+          trigger={(props) => (
+            <button
+              type="button"
+              {...props}
+              aria-label={`${group.projectName} actions`}
+              data-testid={`sidebar-project-actions-${group.projectId}`}
+              className={SIDEBAR_ICON_BUTTON}
+            >
+              <MoreHorizontal className="size-4" aria-hidden="true" />
+            </button>
+          )}
         />
-        {isExpanded && (
-          <div className="space-y-0.5">
-            {group.workspaces.map((workspace) =>
-              renderWorktreeGroup(workspace, { nested: true, hideHeader: onlyMain }),
-            )}
-            {group.chats.length === 0 && (
-              <button
-                type="button"
-                onClick={() => void openNewChat({ projectId: group.projectId })}
-                className="flex h-7 w-full items-center rounded-md pl-14 text-left text-meta text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              >
-                No chats yet · start one
-              </button>
-            )}
-          </div>
+      </>
+    );
+    return (
+      <section key={group.projectId} aria-label={group.projectName} data-testid={`sidebar-project-${group.projectId}`} className="space-y-0.5">
+        {group.workspaces.map((workspace, i) =>
+          renderWorktreeGroup(workspace, {
+            nested: true,
+            projectName: group.projectName,
+            headingTrail: i === 0 ? trail : undefined,
+            // The main workspace's own New chat is the project's; the project's controls ride its first heading.
+            extraActions: i === 0 ? projectControls : undefined,
+            testId: i === 0 ? `sidebar-project-header-${group.projectId}` : undefined,
+          }),
+        )}
+        {group.chats.length === 0 && (
+          <button
+            type="button"
+            onClick={() => void openNewChat({ projectId: group.projectId })}
+            className="flex h-7 w-full items-center rounded-md pl-8 text-left text-meta text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          >
+            No chats yet · start one
+          </button>
         )}
       </section>
     );
@@ -1865,11 +1862,9 @@ function SidebarComponent({
           )}
           {chatListActions}
         </div>
-        {/* Chats cannot run yet (no machine): one card that sets them up, in place of the list. */}
+        {/* No agent sandbox can run a chat yet: connect one (your machine, or a Reliant sandbox), in place of the list. */}
         {setupNeeded ? (
-          <div className="py-1">
-            <SetUpChatsCard setup={setup} variant="nav" onNavigate={go} />
-          </div>
+          <ConnectSandboxCta setup={setup} onNavigate={go} />
         ) : (
           // The one element that bounds the chats: the rest of a drill-in's column, or 45% of the window in an accordion.
           <div
@@ -1918,7 +1913,7 @@ function SidebarComponent({
                         projectFilterId ? (
                           shownGroups.length > 0 && (
                             <div className="space-y-0.5">
-                              {shownGroups.map((group) => renderWorktreeGroup(group, { nested: true, hideHeader: group.isMain }))}
+                              {shownGroups.map((group) => renderWorktreeGroup(group, { nested: true, projectName: projectNameOf(group.projectId) }))}
                             </div>
                           )
                         ) : (
@@ -2062,7 +2057,6 @@ function SidebarComponent({
       ) : null,
     inbox: () => (
       <InboxNavItem
-        icon={<Bell className="size-4" />}
         href={inboxHref}
         onOpen={() => go(inboxHref)}
         current={isAtOrBelow(pathname, inboxHref)}

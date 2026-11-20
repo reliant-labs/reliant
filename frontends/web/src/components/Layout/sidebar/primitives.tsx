@@ -477,6 +477,71 @@ export function WorkspaceSubheading({
   );
 }
 
+/**
+ * A section of the chat list (U6d, owner): "project · branch" as one small
+ * heading at the list's left edge, its chats under it at the same edge. The
+ * project and the workspace read at a glance without a deep indent.
+ */
+export function ChatSectionHeading({
+  project,
+  branch,
+  expanded,
+  onToggle,
+  trail,
+  actions,
+  testId,
+  onContextMenu,
+}: {
+  project?: string;
+  branch: string;
+  expanded: boolean;
+  onToggle: () => void;
+  /** At rest: a pin, the needs-you dot. */
+  trail?: ReactNode;
+  /** On hover or focus only: New chat here, Archive, the project's menu. */
+  actions?: ReactNode;
+  testId?: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      className="group/ws sticky top-0 z-10 mt-2 flex h-7 items-center gap-1 rounded-md bg-background pl-2 pr-1 text-meta text-muted-foreground first:mt-0"
+      data-testid={testId}
+      onContextMenu={onContextMenu}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded-md text-left hover:text-foreground", FOCUS_INSET)}
+      >
+        {project && (
+          <>
+            <span className="min-w-0 shrink truncate font-medium text-foreground/80" title={project}>
+              {project}
+            </span>
+            <span aria-hidden="true">·</span>
+          </>
+        )}
+        <span className="min-w-0 shrink-[2] truncate" title={branch}>
+          {branch}
+        </span>
+        <ChevronRight
+          className={cn(
+            "size-3 shrink-0 transition-transform",
+            expanded ? "hidden rotate-90 group-hover/ws:block group-focus-within/ws:block" : "block",
+          )}
+          aria-hidden="true"
+        />
+        {trail && <span className="ml-auto flex shrink-0 items-center gap-1.5 pl-1">{trail}</span>}
+      </button>
+      {actions && (
+        <span className="hidden shrink-0 items-center group-hover/ws:flex group-focus-within/ws:flex has-[[aria-expanded=true]]:flex">{actions}</span>
+      )}
+    </div>
+  );
+}
+
 // --- Chat rows ------------------------------------------------------------
 
 export interface ChatRowProps {
@@ -486,7 +551,10 @@ export interface ChatRowProps {
   tooltip?: string;
   current?: boolean;
   unread?: boolean;
-  /** Indented under a project's header, so titles line up with its name. */
+  /**
+   * Under a section heading. Rows sit at the list's one left edge either way
+   * (U6d, owner: no deep indent); kept so callers say where a row is.
+   */
   inProject?: boolean;
   /** The 16px state slot at the left (ChatStateSlot). */
   slot?: ReactNode;
@@ -515,7 +583,7 @@ export function ChatRow({
   tooltip,
   current = false,
   unread = false,
-  inProject = false,
+  inProject: _inProject = false,
   slot,
   suffix,
   glyph,
@@ -525,7 +593,7 @@ export function ChatRow({
   onClick,
   onContextMenu,
 }: ChatRowProps) {
-  const indent = inProject ? "pl-8" : "pl-2";
+  const indent = "pl-2";
   return (
     <div
       data-chat-id={chatId}

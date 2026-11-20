@@ -55,12 +55,21 @@ export function isCurrent(item: NavItem, ctx: NavCtx): boolean {
   }
 }
 
-/** The drill-in the route is in: the first available area (top to bottom, then the footer) whose routes include it. */
+/**
+ * What takes the nav column on this route: the first available drill-in area
+ * (top to bottom, then the footer) whose routes include it, else a section
+ * page's own list (Settings). Null: the top level.
+ */
 export function activeArea(config: NavConfig, ctx: NavCtx): NavArea | null {
-  for (const item of [...config.items, ...config.footer]) {
+  for (const item of [...config.items, ...config.footer, ...(config.sectionPages ?? [])]) {
     if (item.kind === "area" && isAvailable(item, ctx) && item.match(ctx)) return item;
   }
   return null;
+}
+
+/** The drill-in areas a config draws as rows (›): the areas among its items and footer. */
+export function drillInIds(config: NavConfig): string[] {
+  return [...config.items, ...config.footer].filter((item) => item.kind === "area").map((item) => item.id);
 }
 
 /** Every id a config draws for this context, depth first (tests: Dashboards appears once). */

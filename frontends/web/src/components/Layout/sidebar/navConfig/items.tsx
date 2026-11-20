@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The nav items the three variants share (U6c, prototype): every destination
- * once, with its href, its match and its all-projects behaviour. a.ts, b.ts
- * and c.ts only arrange these.
+ * The nav's items (U6d, the owner's hybrid; prototype): every destination
+ * once, with its href, its match and its all-projects behaviour. hybrid.ts
+ * arranges them.
  *
  * All projects (several, or every one, in the switcher): Overview is the
  * projects' summary; Observability's views and Dashboards are the org-wide
@@ -15,9 +15,11 @@ import {
   Activity,
   ArrowUpRight,
   BarChart3,
-  Bot,
   Boxes,
   CircleAlert,
+  Inbox,
+  Plug,
+  ShieldCheck,
   CreditCard,
   Database,
   Gauge,
@@ -38,7 +40,7 @@ import {
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import { homePath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, type ConsoleNavEntry } from "../../../Forge/Console/consoleNavRegistry";
@@ -46,6 +48,8 @@ import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, consolePath, OBS_NAV_LABELS, orgP
 import { settingsNavGroups } from "../../../Settings/SettingsNavigation";
 import { isAt, isAtOrBelow } from "../navLocation";
 import { isChatPage } from "../shellProject";
+import { BrandMark } from "../../../icons/BrandMark";
+import { authPath, connectorsPath, securityPath, type SecurityView } from "./pendingPaths";
 import type { NavArea, NavCtx, NavGroup, NavHeading, NavItem, NavRow, NavSlot } from "./types";
 
 const icon = (Icon: typeof Activity): ReactNode => <Icon className="size-4" aria-hidden="true" />;
@@ -95,20 +99,58 @@ export const releases = consoleRow("releases", "Releases", { kind: "releases" },
 export const environments = consoleRow("environments", "Environments", { kind: "environments" }, icon(Layers), ["environments", "environment"]);
 export const secrets = consoleRow("secrets", "Secrets", { kind: "secrets" }, icon(KeyRound), ["secrets"]);
 export const domains = consoleRow("domains", "Domains", { kind: "domains" }, icon(Globe), ["domains"]);
-/** Who can sign in to the app (its managed identity); "Users" alone is Analytics' tab. */
-export const signInUsers = consoleRow("users", "Sign-in users", { kind: "users" }, icon(UserRound), ["users"]);
+/**
+ * Auth: who can sign in to the app (its managed identity) and how. Beside
+ * Data and Storage; "Sign-in users" left Configure for it (U6d).
+ */
+export const auth: NavRow = {
+  kind: "row",
+  id: "auth",
+  label: "Auth",
+  icon: icon(UserRound),
+  href: (ctx) => (ctx.app ? withSearch(authPath(ctx.app), { env: ctx.console?.env }) : undefined),
+  match: (ctx) => ctx.page?.kind === "users" || (!!ctx.app && isAtOrBelow(ctx.pathname, authPath(ctx.app))),
+  available: hasApp,
+};
+
+/** Inbox: a top-level row with its count, under Overview (owner, 15:02Z); the one place it is. */
+export const inbox: NavSlot = slot("inbox");
+/** Its href and match, for the slot's row and the tests. */
+export const inboxRow: NavRow = { kind: "row", id: "inbox", label: "Inbox", icon: icon(Inbox), href: () => inboxPath(), match: (ctx) => isAtOrBelow(ctx.pathname, inboxPath()) };
 /** What this project's hosting costs (the org's is Usage & billing, in the footer). */
 export const projectUsage = consoleRow("project-usage", "Usage", { kind: "usage" }, icon(Receipt), ["usage"]);
-export const activity = consoleRow("activity", "Activity", { kind: "activity" }, icon(Activity), ["activity"]);
 
-/** Configure ▾ (A, C): the project's settings-like pages. */
+/** Configure ▾: the project's settings-like pages. */
 export const configureGroup: NavGroup = {
   kind: "group",
   id: "configure",
   label: "Configure",
   icon: icon(Wrench),
   available: hasApp,
-  children: [environments, secrets, domains, signInUsers, projectUsage, activity],
+  children: [environments, secrets, domains, projectUsage],
+};
+
+// ── Security (new, U6d) ─────────────────────────────────────────────────────
+
+function securityRow(view: SecurityView, label: string): NavRow {
+  return {
+    kind: "row",
+    id: `security-${view}`,
+    label,
+    href: (ctx) => (ctx.app ? securityPath(ctx.app, view) : undefined),
+    match: (ctx) => !!ctx.app && isAtOrBelow(ctx.pathname, securityPath(ctx.app, view)),
+    available: hasApp,
+  };
+}
+
+/** Security ▾: vulnerabilities (CVEs from each release's SBOM) and the SBOMs themselves. */
+export const securityGroup: NavGroup = {
+  kind: "group",
+  id: "security",
+  label: "Security",
+  icon: icon(ShieldCheck),
+  available: hasApp,
+  children: [securityRow("vulnerabilities", "Vulnerabilities"), securityRow("sboms", "SBOMs")],
 };
 
 // ── Dashboards (one place only: bug 4) ──────────────────────────────────────
@@ -191,18 +233,24 @@ const alertsRow = obsRow("alerts", {
   },
 });
 
-/** Round 5: Service graph, Metrics, Logs, RPC explorer, Speed insights (+ Profiles where it has data). */
+/** Service graph, Metrics, Logs, RPC explorer, Profiles (where it has data). */
 export const observabilityRows: readonly NavItem[] = [
   obsRow("graph"),
   obsRow("metrics"),
   obsRow("logs"),
   obsRow("rpc"),
   obsRow("profiles", { available: (ctx) => (hasApp(ctx) || ctx.mode !== "one") && ctx.console?.optionalViews?.profiles !== false }),
-  speedInsights,
 ];
-/** Round 5: "Performance & issues" = Errors, Alerts, Traces. */
-export const performanceRows: readonly NavItem[] = [obsRow("errors"), alertsRow, obsRow("traces")];
 export const sessionsRow = obsRow("sessions");
+
+/** Performance & issues ▾, an accordion inside the Observability drill-in (U6d): Errors, Alerts, Traces, Speed insights, Sessions. */
+export const performanceGroup: NavGroup = {
+  kind: "group",
+  id: "performance",
+  label: "Performance & issues",
+  icon: icon(CircleAlert),
+  children: [obsRow("errors"), alertsRow, obsRow("traces"), speedInsights, sessionsRow],
+};
 
 /** The routes that are Observability: every view but Dashboards (top-level), Speed insights, and the org-wide pages. */
 export const isObservabilityRoute = (ctx: NavCtx): boolean =>
@@ -211,7 +259,7 @@ export const isObservabilityRoute = (ctx: NavCtx): boolean =>
   ctx.orgPage?.kind === "observability" ||
   (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view !== "dashboards");
 
-/** Observability › (B, C). */
+/** Observability › — one of the two drill-ins. */
 export const observabilityArea: NavArea = {
   kind: "area",
   id: "observability",
@@ -219,33 +267,7 @@ export const observabilityArea: NavArea = {
   icon: icon(Gauge),
   match: isObservabilityRoute,
   available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
-  children: [
-    ...observabilityRows,
-    heading("performance-heading", "Performance & issues"),
-    ...performanceRows,
-    heading("frontend-heading", "Frontend"),
-    sessionsRow,
-  ],
-};
-
-/** Observability ▾ (A). */
-export const observabilityGroup: NavGroup = {
-  kind: "group",
-  id: "observability",
-  label: "Observability",
-  icon: icon(Gauge),
-  available: observabilityArea.available,
-  children: [...observabilityRows, sessionsRow],
-};
-
-/** Performance & issues ▾ (A). */
-export const performanceGroup: NavGroup = {
-  kind: "group",
-  id: "performance",
-  label: "Performance & issues",
-  icon: icon(CircleAlert),
-  available: observabilityArea.available,
-  children: performanceRows,
+  children: [...observabilityRows, performanceGroup],
 };
 
 // ── Analytics ───────────────────────────────────────────────────────────────
@@ -296,22 +318,11 @@ export const isAnalyticsRoute = (ctx: NavCtx): boolean =>
   (ctx.page?.kind === "dashboard" && hubKeys(ctx).includes(ctx.page.key)) ||
   !!registeredEntryOf(ctx);
 
-/** Analytics › (B). */
-export const analyticsArea: NavArea = {
-  kind: "area",
-  id: "analytics",
-  label: "Analytics",
-  icon: icon(BarChart3),
-  match: isAnalyticsRoute,
-  available: hasApp,
-  children: analyticsChildren,
-};
-
-/** Product analytics ▾ (A, C). */
+/** Analytics ▾: the built-in dashboards' tabs, Events & metrics, then registered rows (Experiments). */
 export const analyticsGroup: NavGroup = {
   kind: "group",
   id: "analytics",
-  label: "Product analytics",
+  label: "Analytics",
   icon: icon(BarChart3),
   available: hasApp,
   match: isAnalyticsRoute,
@@ -351,33 +362,32 @@ export const aiProviders: NavRow = {
   href: () => settingsPath("ai"),
 };
 
-/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the sandboxes. */
+/** Connectors: integrations and MCP servers on one page (owner, U6d). */
+export const connectors: NavRow = {
+  kind: "row",
+  id: "connectors",
+  label: "Connectors",
+  icon: icon(Plug),
+  href: () => connectorsPath(),
+  match: (ctx) => isAtOrBelow(ctx.pathname, connectorsPath()) || isAtOrBelow(ctx.pathname, connectorsPath("mcp")),
+};
+
+/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the sandboxes, Connectors. */
 export const isAgentsRoute = (ctx: NavCtx): boolean =>
-  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, sandboxesPath());
+  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, sandboxesPath()) || connectors.match!(ctx);
 
-/** Agents' rows; the chat list last, so in a drill-in it takes the rest of the column. */
-const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, aiProviders, slot("chat-list")];
+/** Agents' rows; the chat list last, so in the drill-in it takes the rest of the column. */
+const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, connectors, aiProviders, slot("chat-list")];
 
-/** Agents › (B, C). */
+/** Agents › — one of the two drill-ins; its mark is Reliant's, to set it apart. */
 export const agentsArea: NavArea = {
   kind: "area",
   id: "agents",
   label: "Agents",
-  icon: icon(Bot),
+  icon: <BrandMark className="size-4 shrink-0" />,
   match: isAgentsRoute,
   // Its first page: the chats (the project's, or every project's).
   href: (ctx) => (ctx.mode === "one" && ctx.projectId ? projectChatsPath(ctx.projectId) : homePath()),
-  trail: "chats-need-you",
-  children: agentsChildren,
-};
-
-/** Agents ▾ (A). */
-export const agentsGroup: NavGroup = {
-  kind: "group",
-  id: "agents",
-  label: "Agents",
-  icon: icon(Bot),
-  match: isAgentsRoute,
   trail: "chats-need-you",
   children: agentsChildren,
 };
@@ -418,20 +428,29 @@ function settingsChildren(): readonly NavItem[] {
   return items;
 }
 
-/** Settings › — every variant: it REPLACES the nav (owner item 8). */
-export const settingsArea: NavArea = {
-  kind: "area",
+const isSettingsRoute = (ctx: NavCtx) => isAtOrBelow(ctx.pathname, settingsPath());
+
+/** Settings: a plain link (U6d, owner); bare /settings opens the section last visited. */
+export const settings: NavRow = {
+  kind: "row",
   id: "settings",
   label: "Settings",
   icon: icon(Settings),
-  match: (ctx) => isAtOrBelow(ctx.pathname, settingsPath()),
-  // Bare /settings opens the section last visited.
   href: () => settingsPath(),
+  match: isSettingsRoute,
   action: "update-button",
   testId: "sidebar-settings-button",
+};
+
+/** On a Settings page its sections take the nav column, as Vercel's do: a section page, not a drill-in row. */
+export const settingsSections: NavArea = {
+  kind: "area",
+  id: "settings",
+  label: "Settings",
+  match: isSettingsRoute,
   children: settingsChildren,
 };
 
-export const footer: readonly NavItem[] = [slot("inbox"), usageBilling, settingsArea];
+export const footer: readonly NavItem[] = [usageBilling, settings];
 
 export const externalMark = <ArrowUpRight className="size-3.5" aria-hidden="true" />;
