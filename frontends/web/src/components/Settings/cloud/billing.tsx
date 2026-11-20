@@ -123,7 +123,7 @@ import { ALL_PROJECTS_PICK, refOfKey, SEVERAL_PROJECTS_PICK, useShellLastPick } 
 import { useProjectStore } from "@/store/projectStore";
 import { consolePath } from "@/components/Forge/Console/paths";
 import ForgeLink from "@/components/forge-ui/link";
-import { onboardingPath, projectsPath, settingsPath } from "@/lib/paths";
+import { onboardingPath, projectsPath, settingsPath, usageBillingPath } from "@/lib/paths";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -177,9 +177,11 @@ const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default
  * modals, so this component only renders inline errors for OTHER failures.
  */
 /**
- * Per-project hosting costs live on each project's Usage page (U6b round 3,
- * prototype); this line points there, at the shell's current project when
- * it has an app.
+ * Usage & billing (components/Usage/UsageBillingPage.tsx, U6c) is the
+ * org-wide read of usage and spend; this page is its admin side, so this line
+ * links back to it. Per-project hosting costs live on each project's Usage
+ * page (U6b round 3, prototype); the line points there too, at the shell's
+ * current project when it has an app.
  */
 function ProjectCostsPointer() {
   // The shell's last pick, else the current project's app: no route or catalog read, so Settings renders anywhere.
@@ -196,7 +198,11 @@ function ProjectCostsPointer() {
   const href = shell.app ? consolePath(shell.app, { kind: "usage" }) : null;
   return (
     <p className="-mt-3 text-sm text-muted-foreground" data-testid="billing-project-costs-pointer">
-      Per-project hosting costs are on each project&apos;s Usage page
+      Usage and spend across every project are on{" "}
+      <ForgeLink href={usageBillingPath()} className="text-primary-ink hover:underline" data-testid="billing-usage-billing-link">
+        Usage &amp; billing ›
+      </ForgeLink>
+      . Per-project hosting costs are on each project&apos;s Usage page
       {href ? (
         <>
           {" "}

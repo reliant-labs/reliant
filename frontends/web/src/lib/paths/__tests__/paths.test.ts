@@ -65,6 +65,7 @@ const ROWS: Record<string, Row> = {
   newChatPath: { build: () => paths.newChatPath(), url: "/new", template: "/new" },
   inboxPath: { build: () => paths.inboxPath(), url: "/inbox", template: "/inbox" },
   usagePath: { build: () => paths.usagePath(), url: "/usage", template: "/usage" },
+  usageBillingPath: { build: () => paths.usageBillingPath(), url: "/usage", template: "/usage" },
   forgeLandingPath: { build: () => paths.forgeLandingPath(), url: "/forge", template: "/forge" },
   forgeDemoPath: { build: () => paths.forgeDemoPath(), url: "/forge/demo", template: "/forge/demo" },
   workflowsPath: { build: () => paths.workflowsPath(), url: "/workflows", template: "/workflows" },
@@ -97,6 +98,12 @@ const ROWS: Record<string, Row> = {
     url: "/settings/org-ai-accounts",
     template: "/settings/$section",
     params: { section: "org-ai-accounts" },
+  },
+  sandboxesPath: {
+    build: () => paths.sandboxesPath(),
+    url: "/settings/machines",
+    template: "/settings/$section",
+    params: { section: "machines" },
   },
   machineSettingsPath: {
     build: () => paths.machineSettingsPath("d-1"),
@@ -186,6 +193,7 @@ const ORG_URLS: Record<string, string> = {
   newChatPath: "/o/acme/new",
   inboxPath: "/o/acme/inbox",
   usagePath: "/o/acme/usage",
+  usageBillingPath: "/o/acme/usage",
   forgeLandingPath: "/o/acme/forge",
   workflowsPath: "/o/acme/workflows",
   workflowLibraryPath: "/o/acme/workflows/library",

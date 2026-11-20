@@ -78,12 +78,12 @@ const sectionGroups: SectionGroup[] = [
     ],
   },
   {
-    label: "Machines & projects",
+    label: "Sandboxes & projects",
     items: [
       // Not gated on hasControlPlane: self-hosted machines, and the outside
       // AI apps granted access to each (its Access section), exist without
       // one — and Machines is the only place such a grant can be revoked.
-      { id: "machines", label: "Machines", icon: Server },
+      { id: "machines", label: "Agent sandboxes", icon: Server },
       { id: "projects", label: "Projects", icon: FolderOpen },
     ],
   },

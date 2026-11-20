@@ -117,7 +117,7 @@ function DaemonRow({ daemon, orgName }: { daemon: Daemon; orgName?: string }) {
 function DaemonListHeader({ onCreate }: { onCreate: () => void }) {
   return (
     <MobileScreenHeader
-      title="Machines"
+      title="Sandboxes"
       leading={<MobileMenuButton />}
       trailing={<NewMachineButton onCreate={onCreate} />}
     />
@@ -158,8 +158,8 @@ export function MobileDaemonList() {
         {header}
         <MobileEmptyState
           icon={Server}
-          title="No machines yet"
-          description="Machines run your agents. Start one here, then connect GitHub to clone repos onto it."
+          title="No agent sandboxes yet"
+          description="Agent sandboxes run your agents. Start one here, then connect GitHub to clone repos onto it."
           action={
             <button
               type="button"

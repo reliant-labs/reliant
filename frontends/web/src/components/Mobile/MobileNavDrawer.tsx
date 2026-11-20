@@ -71,7 +71,7 @@ function navItems(): NavItem[] {
     { to: mobileInboxPath(), label: "Inbox", icon: Inbox, inboxBadge: true },
     { to: mobileSearchPath(), label: "Search", icon: Search },
     { to: mobileWorkflowsPath(), label: "Workflows", icon: Workflow },
-    { to: mobileMachinesPath(), label: "Machines", icon: Server },
+    { to: mobileMachinesPath(), label: "Sandboxes", icon: Server },
     { to: mobileGitHubPath(), label: "GitHub", icon: Github },
     { to: mobileSettingsPath(), label: "Settings", icon: Settings },
     { to: mobileAccountPath(), label: "Account", icon: User },
