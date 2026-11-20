@@ -252,6 +252,12 @@ type daemonConnection struct {
 	lastDiskStored *reliantv1.DiskReport
 	lastDiskLoaded bool
 
+	// Machine stats bookkeeping (see logMachineStatsLines). machineStats
+	// holds whether the machine carries the selection label, when that was
+	// last read, when its lines were last logged, and whether a label read
+	// error has been logged. Only the inbound state worker touches it.
+	machineStats machineStatsState
+
 	// Local-model relay (see localmodel_gateway.go). Guarded by localModelMu.
 	localModelMu sync.Mutex
 	// localModelRelays maps request_id -> the bridge's chunk consumer.

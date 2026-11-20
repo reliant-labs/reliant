@@ -76,6 +76,38 @@ does **not** trust it: daemons run on user machines, so a caller-supplied
 Outbound Connect clients should use `observe.NewClientStack`; plain outbound
 HTTP clients use `otelhttp.NewTransport` over their existing transport.
 
+## Machine health lines
+
+control-plane's `Machine*` alerts and machine-health dashboard read two log
+messages from tenant zero's `otel_logs`: `machine health` and `machine volume`
+(`internal/machinehealth`, whose package comment and `HeartbeatLines` hold the
+attribute contract). They come from two places:
+
+- **Managed machines** (ws-* pods) log them themselves once a minute
+  (`machinehealth.Sampler`); the node agent ships the pod's stdout.
+- **Self-hosted machines** ship no logs. Every daemon that can read `/proc`
+  sends its host's load and memory on each heartbeat
+  (`DaemonHeartbeat.machine_stats`), beside its disk report, and the daemon
+  gateway writes the same two messages from them once a minute, with
+  `machine_source=heartbeat` and the machine's `machine` (name), `daemon_id`
+  and `org_id` (`internal/handlers/tools_daemon/tools_daemon_machine_stats.go`).
+  The lines land under `ServiceName = 'daemon-gateway'`.
+
+A self-hosted machine is watched only when all three hold, so nothing is
+watched by default and a customer cannot push lines into tenant zero:
+
+1. its org is in the gateway's `MACHINE_STATS_ORGS` (comma-separated org ids;
+   empty is off). control-plane sets the platform's own org.
+2. it carries the durable machine label `MACHINE_STATS_LABEL` (default
+   `monitor=platform`): set it in Settings → Machines, with
+   `DaemonRegistryService.SetMachineLabels`, or declare it from the box
+   (`reliant daemon start --label monitor=platform`). The gateway re-reads the
+   labels at most every five minutes. A laptop in the same org is not
+   labelled, so it never raises "not reporting" when it sleeps.
+3. it is not a managed workspace (those already log their own lines).
+
+Turning it off is unsetting `MACHINE_STATS_ORGS`, or removing the label.
+
 ## Known gaps
 
 - Temporal: the worker's `NewOTelWorkerInterceptor` (`internal/observability/temporal.go`)

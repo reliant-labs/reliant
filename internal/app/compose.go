@@ -192,6 +192,10 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
+		MachineStats: tools_daemon.MachineStatsSelection{
+			Orgs:  g.GatewayConfig.GetMachineStatsOrgs(),
+			Label: g.GatewayConfig.GetMachineStatsLabel(),
+		},
 	})
 }
 
