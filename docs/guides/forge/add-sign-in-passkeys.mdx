@@ -112,7 +112,7 @@ Who may do what after sign-in is code you write. Forge proves who the caller is;
     ```tsx frontends/web/src/lib/auth/route-guard.tsx
     const publicExactPaths: string[] = ["/products"];
     ```
-    Route guards scaffolded before forge v1.8 have only `publicPaths`, which matches prefixes: adding `"/products"` there also opens `/products/new`, though its create call still answers 401.
+    Route guards scaffolded before forge v1.8 have only `publicPaths`, which matches prefixes: adding `"/products"` there also opens `/products/new` and `/products/edit`, though their create and update calls still answer 401. The guard is scaffolded once and is yours, so upgrading forge does not replace it. Don't list a section's root in the prefix list to publish one page. Port the exact list first: `reliant forge project upgrade --check` shows the newer template's `route-guard.tsx`, and you copy its `publicExactPaths` list and its `RouteAccessContext.Provider` into your own.
   </Step>
   <Step title="Read the caller in a handler">
     Replace the scaffolded stub. `middleware.GetUser` returns the claims the auth interceptor validated, or `unauthenticated` when there are none:

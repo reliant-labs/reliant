@@ -33,6 +33,8 @@ reliant forge env preview delete --pr 123 --yes       # when the PR closes
 
 The instance directory is a throwaway. Edit the template, never the copy, because the next `create` overwrites it, and do not commit instances: a CI checkout makes them fresh each time.
 
+From forge v1.9.0, `create` also writes a `.gitignore` inside the instance directory that ignores all of it, so creating a preview leaves the checkout clean and its release is not a dirty-tree build. On v1.8.0 and earlier, add `deploy/kcl/preview-*/` to the project's `.gitignore` yourself. Without it, the untracked copy makes forge cut every preview release as `DIRTY TREE`.
+
 ### Names
 
 The name depends only on the pull request or branch, so the job that creates a preview when a PR opens and the job that deletes it when the PR closes agree without sharing any state. `--pr 123` gives `preview-pr-123`. `--branch feat/Login_Page` gives `preview-feat-login-page`. `reliant forge env preview name --pr 123` prints the name without creating anything, and `--name-template` changes the shape (`{env}` is the template's name, `{id}` is `pr-<n>` or the branch). A name is at most 40 bytes: a longer one is cut and given a short hash suffix so two long branch names never collide.
@@ -77,7 +79,8 @@ permissions:
   pull-requests: write
 jobs:
   up:
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    # never run a fork's code with your deploy token (a fork's PR gets no secrets anyway)
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       FORGE_CONTROL_PLANE_TOKEN: ${{ secrets.FORGE_CONTROL_PLANE_TOKEN }}
@@ -98,7 +101,7 @@ jobs:
             --body "Preview \`${{ steps.preview.outputs.name }}\` (expires $(jq -r .expires_at preview.json)):
           ${urls}"
   down:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       FORGE_CONTROL_PLANE_TOKEN: ${{ secrets.FORGE_CONTROL_PLANE_TOKEN }}
@@ -120,8 +123,10 @@ jobs:
 Every push to the pull request runs `create` again, which refreshes the copy and moves the expiry to a fresh 72 hours, and `deploy` then ships the new commit to the same environment. The `down` job deletes the preview when the PR closes. The `gc` job is the backstop for a PR whose close event never ran the job.
 
 <Warning>
-A pull request from a fork gets no repository secrets, and you should not give it your deploy token. Run previews only for branches in your own repository: add `if: github.event.pull_request.head.repo.full_name == github.repository` to the `up` job.
+A pull request from a fork gets no repository secrets, and you should not give it your deploy token. That is why the `up` and `down` jobs run only when `github.event.pull_request.head.repo.full_name == github.repository`, that is, for branches in your own repository. Keep that condition if you adapt the workflow.
 </Warning>
+
+The runner installs the standalone `forge` CLI from npm, so the workflow calls `forge`, not `reliant forge`.
 
 The same three commands work from anywhere that has a checkout of the project and a credential. A [Reliant workflow](/workflows/patterns) can run them from a `run` node, and on a Reliant machine forge uses your signed-in session instead of a token ([Forge sign-in](/forge/sign-in)).
 
