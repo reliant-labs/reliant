@@ -29,8 +29,10 @@ test.afterEach(({ page }) => {
 const ACME = { id: 'org_acme', name: 'Acme', slug: 'acme', role: 'owner', isOwner: true, isDefault: true };
 const SIDE = { id: 'org_side', name: 'Side Project', slug: 'side', role: 'member', isOwner: false, isDefault: false };
 
+// A fixed instant, not one read from the clock: nothing here asserts on the
+// environment's age, so the fixture need not follow the wall clock.
 const SIDE_ENVS = [
-  { id: 'env_blog_prod', name: 'prod', project: 'weekend-blog', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: new Date(Date.now() - 9_000_000).toISOString() },
+  { id: 'env_blog_prod', name: 'prod', project: 'weekend-blog', lifetime: 'DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT', secretPosture: 'DEPLOY_SECRET_POSTURE_WRITE_ONLY', hostedSlot: true, createdAt: '2026-11-18T13:00:00.000Z' },
 ];
 
 function twoOrgs(onOrgRequest?: (rpc: string, orgId: string | undefined) => void) {
