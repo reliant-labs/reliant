@@ -123,16 +123,15 @@ _web = forge.Frontend {
     dev_runner = "pnpm"
     port = ports.web
     runtime = forge.OnHost {}
+    # The dev SERVER's environment, not the bundle's: vite.config.ts reads
+    # these from process.env. What the browser reads is runtime config
+    # (config.k, reliant_web_config), served as config.js.
     env_vars = [
         # Vite proxies /reliant.v1.*, /health and the terminal WebSocket here.
         forge.EnvVar {name = "VITE_API_URL", value = "http://localhost:${ports.api}"}
-        # What the onboarding's `reliant daemon start` command dials.
-        forge.EnvVar {name = "VITE_GATEWAY_URL", value = "http://localhost:${ports.gateway}"}
-        forge.EnvVar {name = "VITE_DISABLE_TLS", value = "true"}
-        forge.EnvVar {name = "VITE_APP_URL", value = _web_origin}
-        # VITE_CONTROL_PLANE_API_URL is deliberately unset: the web app's one
-        # control-plane gate (src/services/controlPlane/config.ts) then takes
-        # its self-hosted path.
+        # VITE_CONTROL_PLANE_API_URL is deliberately unset: the dev server then
+        # proxies no control-plane routes, and the web app's one control-plane
+        # gate (src/services/controlPlane/config.ts) takes its self-hosted path.
     ]
 }
 
