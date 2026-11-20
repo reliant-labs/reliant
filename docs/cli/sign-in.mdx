@@ -30,6 +30,8 @@ The scopes show what the login asks for: `reliant:api` to use Reliant as you, an
 
 Logging in again from the same computer replaces that computer's previous login token rather than adding another.
 
+`reliant auth serve` is not another way to sign in. It waits for the Reliant web app to start a Claude or Codex account connection and handles the local callback. It does not check your CLI login or sign in using a daemon credential.
+
 ## Check who you are signed in as
 
 `reliant auth status` reads only local files and makes no network call, so it is quick and safe to put in scripts. It exits `0` when a credential is available for the server, and `1` when there is none:
