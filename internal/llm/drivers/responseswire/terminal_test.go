@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 )
 
 func TestGateToolCalls(t *testing.T) {
@@ -66,7 +66,7 @@ func TestGateToolCalls(t *testing.T) {
 }
 
 func TestErrStreamEndedWithoutTerminalEventIsTheTransientClass(t *testing.T) {
-	if !errors.Is(ErrStreamEndedWithoutTerminalEvent, llm.ErrStreamEndedEarly) {
-		t.Fatal("ErrStreamEndedWithoutTerminalEvent must match llm.ErrStreamEndedEarly, which the runtime retries")
+	if !errors.Is(ErrStreamEndedWithoutTerminalEvent, drivererrors.ErrStreamEndedEarly) {
+		t.Fatal("ErrStreamEndedWithoutTerminalEvent must match drivererrors.ErrStreamEndedEarly, which the runtime retries")
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/openai/openai-go/v3/responses"
-	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 )
 
 // ErrStreamEndedWithoutTerminalEvent is what a Responses driver reports when
@@ -15,10 +15,10 @@ import (
 // Without the terminal event there is no response object: no status, no usage,
 // no authoritative list of output items. The stream that was read is a prefix
 // of a response, not a response, so the turn is an error and is retried rather
-// than reported as an end of turn. It matches llm.ErrStreamEndedEarly under
+// than reported as an end of turn. It matches drivererrors.ErrStreamEndedEarly under
 // errors.Is, which is what classifies it as transient.
 var ErrStreamEndedWithoutTerminalEvent = fmt.Errorf(
-	"responses stream closed before a terminal event (response.completed): %w", llm.ErrStreamEndedEarly)
+	"responses stream closed before a terminal event (response.completed): %w", drivererrors.ErrStreamEndedEarly)
 
 // FunctionCallKey is the key both Responses drivers index a streamed function
 // call under: the output item's id, which is what argument deltas reference,

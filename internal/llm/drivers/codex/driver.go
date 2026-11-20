@@ -933,7 +933,9 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				if tc == nil {
 					tc = &message.ToolCall{ID: itemID, Type: "function"}
 					toolCallsByID[itemID] = tc
-					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: tc}
+					// A copy: tc.ID becomes the call_id later, and the card is
+					// keyed by the item id it opened under (see DroppedToolCalls).
+					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: &message.ToolCall{ID: itemID, Type: "function"}}
 				}
 				tc.Input += v.Delta
 				eventChan <- llm.DriverEvent{
@@ -950,7 +952,9 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				if tc == nil {
 					tc = &message.ToolCall{ID: itemID, Type: "function"}
 					toolCallsByID[itemID] = tc
-					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: tc}
+					// A copy: tc.ID becomes the call_id later, and the card is
+					// keyed by the item id it opened under (see DroppedToolCalls).
+					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: &message.ToolCall{ID: itemID, Type: "function"}}
 				}
 				tc.Name = v.Name
 				tc.Input = v.Arguments
@@ -1030,12 +1034,17 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 		// responseswire.ToolCallGate.
 		gate := responseswire.GateToolCalls(finalResp)
 		finalToolCalls := make([]message.ToolCall, 0, len(toolCallsByID))
+		// Calls that will not run, under the key their EventToolUseStart
+		// carried, so call_llm can close the cards it opened for them.
+		var droppedToolCalls []message.ToolCall
 		dropped := 0
 		for key, tc := range toolCallsByID {
 			if tc.ID == "" || tc.Name == "" {
+				droppedToolCalls = append(droppedToolCalls, message.ToolCall{ID: key, Name: tc.Name, Type: "function"})
 				continue
 			}
 			if !gate.Allows(key) {
+				droppedToolCalls = append(droppedToolCalls, message.ToolCall{ID: key, Name: tc.Name, Type: "function"})
 				dropped++
 				continue
 			}
@@ -1063,6 +1072,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 			Response: &llm.DriverResponse{
 				Content:            currentContent,
 				ToolCalls:          finalToolCalls,
+				DroppedToolCalls:   droppedToolCalls,
 				Usage:              usage,
 				FinishReason:       finishReason,
 				Phase:              responseswire.AssistantPhase(finalResp),

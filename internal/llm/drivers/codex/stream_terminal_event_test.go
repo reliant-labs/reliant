@@ -5,10 +5,13 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/openai/openai-go/v3/option"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -93,8 +96,8 @@ func TestStreamResponse_NoTerminalEventIsRetryableError(t *testing.T) {
 			if !errors.Is(streamErr, responseswire.ErrStreamEndedWithoutTerminalEvent) {
 				t.Errorf("error = %v, want ErrStreamEndedWithoutTerminalEvent", streamErr)
 			}
-			if !errors.Is(streamErr, llm.ErrStreamEndedEarly) {
-				t.Errorf("error = %v, want it to match llm.ErrStreamEndedEarly (the transient class)", streamErr)
+			if !errors.Is(streamErr, drivererrors.ErrStreamEndedEarly) {
+				t.Errorf("error = %v, want it to match drivererrors.ErrStreamEndedEarly (the transient class)", streamErr)
 			}
 		})
 	}
@@ -111,6 +114,12 @@ func TestStreamResponse_ToolCallsOfAnUnfinishedResponseDoNotRun(t *testing.T) {
 		events     []string
 		wantReason message.FinishReason
 		wantCalls  []string
+		// wantDropped are the calls reported in DroppedToolCalls, by the id
+		// their EventToolUseStart carried (the item id).
+		wantDropped []string
+		// keptStarts are started calls that ARE returned. Every other start
+		// must be in DroppedToolCalls, or its card is never closed.
+		keptStarts []string
 	}{
 		{
 			name: "incomplete max_output_tokens with a half-written call",
@@ -119,7 +128,8 @@ func TestStreamResponse_ToolCallsOfAnUnfinishedResponseDoNotRun(t *testing.T) {
 				sseEvent("response.function_call_arguments.delta", `{"type":"response.function_call_arguments.delta","sequence_number":1,"item_id":"fc_1","output_index":0,"delta":"{\"command\":\"rm -"}`),
 				sseEvent("response.incomplete", `{"type":"response.incomplete","sequence_number":2,"response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"bash","arguments":"{\"command\":\"rm -","status":"incomplete"}]}}`),
 			},
-			wantReason: message.FinishReasonMaxTokens,
+			wantReason:  message.FinishReasonMaxTokens,
+			wantDropped: []string{"fc_1"},
 		},
 		{
 			name: "incomplete keeps only the call it confirms completed",
@@ -128,8 +138,9 @@ func TestStreamResponse_ToolCallsOfAnUnfinishedResponseDoNotRun(t *testing.T) {
 				sseEvent("response.function_call_arguments.delta", `{"type":"response.function_call_arguments.delta","sequence_number":1,"item_id":"fc_2","output_index":1,"delta":"{\"path\":"}`),
 				sseEvent("response.incomplete", `{"type":"response.incomplete","sequence_number":2,"response":{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"interrupted"},"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read","arguments":"{\"path\":\"a\"}","status":"completed"},{"type":"function_call","id":"fc_2","call_id":"call_2","name":"read","arguments":"{\"path\":","status":"in_progress"}]}}`),
 			},
-			wantReason: message.FinishReasonPauseTurn,
-			wantCalls:  []string{"call_1"},
+			wantReason:  message.FinishReasonPauseTurn,
+			wantCalls:   []string{"call_1"},
+			wantDropped: []string{"fc_2"},
 		},
 		{
 			name: "failed drops every call, even a completed item",
@@ -137,7 +148,8 @@ func TestStreamResponse_ToolCallsOfAnUnfinishedResponseDoNotRun(t *testing.T) {
 				sseEvent("response.output_item.done", `{"type":"response.output_item.done","sequence_number":0,"output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"bash","arguments":"{\"command\":\"ls\"}","status":"completed"}}`),
 				sseEvent("response.failed", `{"type":"response.failed","sequence_number":1,"response":{"id":"resp_1","status":"failed","error":{"code":"server_error","message":"upstream exploded"},"output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"bash","arguments":"{\"command\":\"ls\"}","status":"completed"}]}}`),
 			},
-			wantReason: message.FinishReasonError,
+			wantReason:  message.FinishReasonError,
+			wantDropped: []string{"fc_1"},
 		},
 		{
 			name: "completed keeps its calls",
@@ -147,12 +159,14 @@ func TestStreamResponse_ToolCallsOfAnUnfinishedResponseDoNotRun(t *testing.T) {
 			},
 			wantReason: message.FinishReasonToolUse,
 			wantCalls:  []string{"call_1"},
+			keptStarts: []string{"fc_1"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := streamOnce(t, sseResponsesServer(t, tt.events...))
+			events := streamEvents(t, sseResponsesServer(t, tt.events...))
+			got := completeOf(t, events)
 
 			if got.FinishReason != tt.wantReason {
 				t.Errorf("FinishReason = %q, want %q", got.FinishReason, tt.wantReason)
@@ -169,6 +183,58 @@ func TestStreamResponse_ToolCallsOfAnUnfinishedResponseDoNotRun(t *testing.T) {
 					t.Errorf("ToolCalls = %v, want %v", ids, tt.wantCalls)
 				}
 			}
+			assertDroppedCallsReported(t, events, got, tt.wantDropped, tt.keptStarts)
 		})
+	}
+}
+
+// completeOf returns the response of the stream's EventComplete, failing the
+// test on an EventError or a missing EventComplete.
+func completeOf(t *testing.T, events []llm.DriverEvent) *llm.DriverResponse {
+	t.Helper()
+	var got *llm.DriverResponse
+	for _, ev := range events {
+		switch ev.Type {
+		case llm.EventError:
+			t.Fatalf("stream error: %v", ev.Error)
+		case llm.EventComplete:
+			got = ev.Response
+		}
+	}
+	if got == nil {
+		t.Fatal("stream produced no EventComplete")
+	}
+	return got
+}
+
+// assertDroppedCallsReported checks DroppedToolCalls against wantDropped, and
+// that every call the stream opened with EventToolUseStart is either returned
+// (keptStarts) or reported dropped under the id the start carried — the id
+// call_llm closes the card by. A start that is neither leaves a card open.
+func assertDroppedCallsReported(t *testing.T, events []llm.DriverEvent, got *llm.DriverResponse, wantDropped, keptStarts []string) {
+	t.Helper()
+	var dropped []string
+	droppedSet := map[string]bool{}
+	for _, tc := range got.DroppedToolCalls {
+		dropped = append(dropped, tc.ID)
+		droppedSet[tc.ID] = true
+	}
+	sort.Strings(dropped)
+	want := append([]string(nil), wantDropped...)
+	sort.Strings(want)
+	if strings.Join(dropped, ",") != strings.Join(want, ",") {
+		t.Errorf("DroppedToolCalls = %v, want %v", dropped, want)
+	}
+	kept := map[string]bool{}
+	for _, id := range keptStarts {
+		kept[id] = true
+	}
+	for _, ev := range events {
+		if ev.Type != llm.EventToolUseStart || ev.ToolCall == nil {
+			continue
+		}
+		if id := ev.ToolCall.ID; !kept[id] && !droppedSet[id] {
+			t.Errorf("call opened as %q is neither returned nor reported dropped; its card would never close", id)
+		}
 	}
 }
