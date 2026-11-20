@@ -398,8 +398,10 @@
               {
                 "group": "Quality & security",
                 "pages": [
+                  "guides/forge/gate-prs-forge-lint-tests",
                   "guides/forge/test-go-api-real-postgres",
-                  "guides/forge/find-endpoints-missing-auth-checks"
+                  "guides/forge/find-endpoints-missing-auth-checks",
+                  "guides/forge/scan-dependencies-vulnerabilities"
                 ]
               }
             ]
