@@ -90,8 +90,13 @@ func NewGenAISDKClient(ctx context.Context, in *genai.ClientConfig) (*genai.Clie
 		if strings.TrimSpace(cfg.Location) == "" {
 			cfg.Location = DefaultVertexLocation
 		}
-		if cfg.HTTPOptions.BaseURL == "" && cfg.APIKey == "" {
-			cfg.HTTPOptions.BaseURL = genAIVertexBaseURL(cfg.Location)
+		if cfg.HTTPOptions.BaseURL == "" {
+			location := cfg.Location
+			if cfg.APIKey != "" {
+				// GenAI uses the global Vertex endpoint for express API keys.
+				location = "global"
+			}
+			cfg.HTTPOptions.BaseURL = genAIVertexBaseURL(location)
 		}
 	case genai.BackendEnterprise:
 		// No caller uses it, and its endpoint and credential contract is not

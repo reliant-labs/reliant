@@ -109,6 +109,18 @@ func TestGenAISDKClientIgnoresProcessEnvironment(t *testing.T) {
 		}
 	})
 
+	t.Run("a Vertex API key uses Google's express endpoint, not the process endpoint", func(t *testing.T) {
+		client, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{
+			Backend: genai.BackendVertexAI, APIKey: "account-key", Project: "account-project", Location: "us-central1",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := client.ClientConfig().HTTPOptions.BaseURL; got != "https://aiplatform.googleapis.com/" {
+			t.Fatalf("resolved base URL = %q, want the Google Vertex express endpoint", got)
+		}
+	})
+
 	t.Run("a Gemini API request carries only the account's key", func(t *testing.T) {
 		var mu sync.Mutex
 		var seen []string
