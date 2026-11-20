@@ -433,9 +433,22 @@ const appConfig: ViteUserConfig = {
     // build: the bundle's SDK, and the same instance a test stubs
     // (lib/__tests__/telemetryBuildAttribute.test.ts,
     // api/__tests__/transport.trace.test.ts).
+    //
+    // The runtime (>= 0.13.20) loads the SDK through its package.json import
+    // "#hyperdx-otel-web", whose `node` condition is a pre-bundled copy of the
+    // SDK for runners that load it natively (forge #2344). Inlined, vite
+    // resolves that import with the `node` condition too, so the runtime would
+    // start that copy, not the SDK a test stubs, and every Rum spy would see
+    // nothing (v1.24.0-rc.3..rc.5's release gate). The alias sends it to the
+    // SDK itself, as the bundle does.
     server: { deps: { inline: ["@reliantlabs/forge-web-runtime", "@hyperdx/otel-web"] } },
     ...(process.env.VITEST
-      ? { alias: [{ find: /^@opentelemetry\/exporter-trace-otlp-http$/, replacement: browserTraceExporter() }] }
+      ? {
+          alias: [
+            { find: /^@opentelemetry\/exporter-trace-otlp-http$/, replacement: browserTraceExporter() },
+            { find: /^#hyperdx-otel-web$/, replacement: "@hyperdx/otel-web" },
+          ],
+        }
       : {}),
     // Read by src/test/setup.ts, which configures Testing Library with it.
     env: { RELIANT_ASYNC_UTIL_TIMEOUT_MS: String(asyncUtilTimeout) },
