@@ -354,6 +354,7 @@
                 "group": "Start a project",
                 "pages": [
                   "guides/forge/build-go-react-app-connect-rpc",
+                  "guides/forge/build-app-from-one-prompt",
                   "guides/forge/deploy-static-site-cdn",
                   "guides/forge/bring-existing-app-any-language"
                 ]
