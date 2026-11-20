@@ -1,6 +1,7 @@
 ---
-title: "Key Concepts"
-description: "Understand the core terminology of Reliant and Forge"
+title: "Reliant concepts and glossary"
+sidebarTitle: "Key Concepts"
+description: "Reliant concepts and glossary: machines, daemons, chats, projects, workflows, nodes, threads, Forge projects, environments, releases and hosting."
 ---
 
 Reliant is a cloud service. Its servers run your agents and call the AI model, and a **daemon** on a machine you choose does the hands-on work with your code. Everything else in Reliant is built from the handful of concepts below.
@@ -43,13 +44,13 @@ An **environment** is a place the project runs, declared as code under `deploy/k
 
 **Reliant hosting** is where `staging` and `prod` run by default: your services, workers and jobs, a managed Postgres, and frontends published as static sites behind a CDN, each with a hostname, with custom domains and managed secrets. It needs a Reliant Compute plan, except for a single static site per organization, which has a free tier. See the [pricing page](https://reliantlabs.io/pricing) for current plans.
 
-**Related**: [Hosting on Reliant](/forge/hosting)
+**Related**: [Hosting on Reliant](/hosting/overview)
 
 ### Build an App workflow
 
 **Build an App** is the built-in Reliant workflow that connects the two: it scopes an app with you, scaffolds it as a forge project, builds it, and verifies the running result. **Move to Forge** ports an existing codebase into a forge project one component at a time. Once an app is deployed, the **Apps** and **Observability** areas of Reliant show its releases, logs, traces, dashboards and alerts.
 
-**Related**: [Forge quick start](/forge/quick-start), [Observability](/forge/observability)
+**Related**: [Forge quick start](/forge/quick-start), [Observability](/hosting/observability)
 
 ---
 
@@ -119,6 +120,8 @@ Controls how much autonomy the agent has: **Auto** (full autonomy), **Manual** (
 ### Workspace
 
 A **workspace** is an isolated copy of your repo on its own git branch (a git worktree), on your machine. Reliant uses workspaces to let parallel agents work on separate branches without interfering, or to let you work on multiple branches simultaneously.
+
+The `reliant daemon` commands use the word more broadly: there, `--workspace` is the directory a daemon serves, which defaults to the git worktree root of the directory you start it in. That can be your main checkout as well as a workspace. See [Run a machine from the terminal](/cli/run-a-machine).
 
 **Related**: [Workspaces](/features/worktrees)
 

@@ -34,6 +34,13 @@
  *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
  *   /forge/p/:project/observability/dashboards/live-state
  *                                             the built-in Live state dashboard
+ *   /forge/p/:project/security/vulnerabilities
+ *                                             Security › Vulnerabilities: the findings of the
+ *                                             scope's releases (`release`, `severity`, `fixable`,
+ *                                             `kev`, `exempt`: Security/vulnModel.ts)
+ *   /forge/p/:project/security/vulnerabilities/:advisory
+ *                                             one advisory, across the project's releases
+ *   /forge/p/:project/security/sboms          Security › SBOMs: each artifact's SBOM and scan (`release`)
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -185,6 +192,12 @@ export type ConsolePage =
    * (LiveState/LiveStateDashboard.tsx). Listed on Dashboards beside the custom ones.
    */
   | { kind: "live-state" }
+  /** Security › Vulnerabilities: the findings of the scope's releases (Security/VulnerabilitiesPage.tsx). */
+  | { kind: "vulnerabilities" }
+  /** One advisory in the project (Security/VulnerabilityPage.tsx). */
+  | { kind: "vulnerability"; advisory: string }
+  /** Security › SBOMs: each release artifact's SBOM and its scan (Security/SbomsPage.tsx). */
+  | { kind: "sboms" }
   /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
   | { kind: "extension"; id: string; segment: string };
 
@@ -206,6 +219,16 @@ export const ANALYTICS_TAB_LABELS: Record<AnalyticsTab, string> = {
 export function isAnalyticsTab(value: string | undefined): value is AnalyticsTab {
   return (ANALYTICS_TABS as readonly string[]).includes(value ?? "");
 }
+
+/**
+ * The Security section's path segments: `/forge/p/<app>/security/<page>`. The
+ * nav's Security group points its rows at these pages through consolePath;
+ * the segments are exported for a reader of a pathname.
+ */
+export const SECURITY_SEGMENT = "security";
+export const SECURITY_PAGES = { vulnerabilities: "vulnerabilities", sboms: "sboms" } as const;
+/** The Security pages, in nav order. */
+export const SECURITY_PAGE_KINDS = ["vulnerabilities", "sboms"] as const satisfies readonly ConsolePage["kind"][];
 
 /**
  * What a link may name (U6c path-builder contract): every ConsolePage, plus
@@ -286,6 +309,12 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/observability/dashboards/${LIVE_STATE_SEGMENT}`;
     case "extension":
       return `${base}/${encodeURIComponent(page.segment)}`;
+    case "vulnerabilities":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}`;
+    case "vulnerability":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}/${encodeURIComponent(page.advisory)}`;
+    case "sboms":
+      return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.sboms}`;
   }
 }
 
@@ -356,6 +385,11 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "events":
       case "speed-insights":
         return sub ? null : { kind: section };
+      case SECURITY_SEGMENT:
+        if (sub === SECURITY_PAGES.vulnerabilities && !dashKey) {
+          return dashKind ? { kind: "vulnerability", advisory: safeDecode(dashKind) } : { kind: "vulnerabilities" };
+        }
+        return sub === SECURITY_PAGES.sboms && !dashKind ? { kind: "sboms" } : null;
       default: {
         // A page registered in the nav, while it is registered.
         const entry = sub ? undefined : consoleNavEntryForSegment(section);

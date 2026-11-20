@@ -62,6 +62,9 @@ import { DataPage } from "../Data/DataPage";
 import { UsersPage } from "../Users/UsersPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
+import { SbomsPage } from "../Security/SbomsPage";
+import { VulnerabilitiesPage } from "../Security/VulnerabilitiesPage";
+import { VulnerabilityPage } from "../Security/VulnerabilityPage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
@@ -448,6 +451,9 @@ function buildRouter(path: string) {
     storage: StoragePage,
     data: DataPage,
     users: UsersPage,
+    vulnerabilities: VulnerabilitiesPage,
+    vulnerability: VulnerabilityPage,
+    sboms: SbomsPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,

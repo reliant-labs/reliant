@@ -58,6 +58,10 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
     case "live-state":
       return { title: "Live state", shows: "Every service's instances, CPU, memory, requests, latency and errors" };
+    case "vulnerabilities":
+    case "vulnerability":
+    case "sboms":
+      return { title: "Security", shows: "Known vulnerabilities in what your app ships, from the SBOM of every release" };
     case "speed-insights":
       return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
     case "extension": {

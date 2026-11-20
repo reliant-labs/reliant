@@ -145,7 +145,7 @@ There are four ways to declare it. Pick by what you already have.
   </Tab>
 </Tabs>
 
-What a non-forge workload gives up is whatever relies on forge knowing the binary. A service forge did not build gets no default `/readyz` and `/healthz` probes unless you declare `probes`, and `GOMEMLIMIT` is derived only for `GoBuild` workloads (set `go_memory_limit_percent` for others). It does not read forge's typed config unless you project environment variables into it yourself, and its logs and traces appear in [Observability](/forge/observability) only if it exports OpenTelemetry. Its deploy, its plan, its release and its rollout wait are forge's, and are identical.
+What a non-forge workload gives up is whatever relies on forge knowing the binary. A service forge did not build gets no default `/readyz` and `/healthz` probes unless you declare `probes`, and `GOMEMLIMIT` is derived only for `GoBuild` workloads (set `go_memory_limit_percent` for others). It does not read forge's typed config unless you project environment variables into it yourself, and its logs and traces appear in [Observability](/hosting/observability) only if it exports OpenTelemetry. Its deploy, its plan, its release and its rollout wait are forge's, and are identical.
 
 On Reliant hosting, every image a workload runs comes from the platform's registry, under your organization's path, `registry.reliantapi.com/<org>/<project>/`. Forge puts it there in each case:
 
@@ -204,9 +204,9 @@ cd my-site                      # the app's root: package.json plus vite.config 
 forge project new --in-place --kind site --name my-site
 ```
 
-That writes `forge.yaml` (with no Go module, since a site has none) and `deploy/kcl/{dev,staging,prod}/main.k`, each declaring the app at the project root and binding it to its dev server in `dev` and to hosted static hosting in `staging` and `prod`. Your own files are untouched and `.gitignore` is merged. Build-time keys such as `VITE_*` and `NEXT_PUBLIC_*` become `env_vars` on the frontend, baked in per release; values that must change without a rebuild belong in `runtime_config`, which the platform writes into `config.js` after each deploy. [Hosting on Reliant](/forge/hosting) covers what static hosting serves.
+That writes `forge.yaml` (with no Go module, since a site has none) and `deploy/kcl/{dev,staging,prod}/main.k`, each declaring the app at the project root and binding it to its dev server in `dev` and to hosted static hosting in `staging` and `prod`. Your own files are untouched and `.gitignore` is merged. Build-time keys such as `VITE_*` and `NEXT_PUBLIC_*` become `env_vars` on the frontend, baked in per release; values that must change without a rebuild belong in `runtime_config`, which the platform writes into `config.js` after each deploy. [Hosting on Reliant](/hosting/overview) covers what static hosting serves.
 
-A server in another language, such as Node, Python, Ruby or Java, keeps every file. It is not scaffolded: there is no `forge project new` kind for it, and `forge project new --in-place` refuses a directory that has a Dockerfile and no `go.mod` rather than writing a Go server into it. Instead, your agent writes the declarations, following a skill:
+A server in another language, such as Node, Python, Ruby or Java, keeps every file too. `forge project new --in-place --kind app` (forge v1.5 or later) reads its Dockerfile and compose file and writes `forge.yaml` and `deploy/kcl/` declaring it; without `--kind app`, `--in-place` refuses a directory that has a Dockerfile and no `go.mod` rather than writing a Go server into it. [Deploy an existing app from its Dockerfile](/guides/forge/bring-existing-app-any-language) walks through it. For what the declarations mean and the tiers after them, load the skill:
 
 ```bash
 forge skill load adopt

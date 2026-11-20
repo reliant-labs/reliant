@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -31,6 +32,9 @@ type VertexAIClient struct {
 	geminiClient *genai.Client
 	// TODO: Add Claude client when implementing Claude support
 	// claudeClient *vertexaiClaude.Client
+
+	// ladder overrides the retry ladder's defaults; tests inject the clock.
+	ladder ratelimit.Retryer
 }
 
 // Name returns the name of the driver
