@@ -200,6 +200,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   <Card title="Migrate an existing Go app to Forge with Move to Forge" icon="hammer" href="/guides/forge/port-codebase-to-forge">
     Port a Go codebase into a new Forge project with the Move to Forge workflow: approve a plan, then agents port it one component at a time behind green gates.
   </Card>
+  <Card title="Add an Expo mobile app to a Forge backend" icon="hammer" href="/guides/forge/add-expo-mobile-app">
+    Scaffold an Expo React Native app beside your Forge API, call it through the same generated React Query hooks the web frontend uses, and bundle it.
+  </Card>
   <Card title="Add a database table with a CRUD API and pages" icon="hammer" href="/guides/forge/add-table-crud-api-pages">
     Generate a Postgres table, five CRUD RPCs, typed React hooks and list, detail and edit pages from one proto message marked // forge:entity.
   </Card>
@@ -253,6 +256,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   </Card>
   <Card title="Keep your test suite fast: mark slow tests and enforce budgets" icon="hammer" href="/guides/forge/keep-test-suite-fast">
     Find the Go tests that slow every edit, mark them with testkit.Slow so they leave the -short tier, and fail CI when a new slow test arrives unmarked.
+  </Card>
+  <Card title="Debug a running Go service from the terminal or an agent" icon="hammer" href="/guides/forge/debug-go-service-delve-cli">
+    Stop a Forge Go service on a breakpoint inside a handler, send it a request, and read its arguments and locals with forge debug, one command per step.
   </Card>
   <Card title="Upgrade Forge and apply its migration playbooks" icon="hammer" href="/guides/forge/upgrade-forge-version">
     Move a project's pinned Forge version forward: preview the change with --check, list the migration playbooks, run project upgrade, and review the diff.
@@ -342,8 +348,14 @@ See how a release behaves in production and find what broke when it does not. Th
   <Card title="Write alert rules as code and test them locally" icon="activity" href="/guides/observability/custom-alert-rules-as-code">
     Declare an alert rule in KCL as a SQL query, check it against your local stack's telemetry, watch it fire on your machine, and ship it with the next release.
   </Card>
+  <Card title="Build a dashboard in the UI and keep it as code" icon="activity" href="/guides/observability/dashboard-ui-to-code">
+    Build a dashboard panel by panel in the console or from the terminal, commit it as a file that ships with every release, and check that each panel has data.
+  </Card>
   <Card title="Add a custom metric without a cardinality explosion" icon="activity" href="/guides/observability/add-custom-metric">
     Declare a business metric with a unit and a closed set of attribute keys, record it from a handler, and query it with forge obs without one series per user.
+  </Card>
+  <Card title="Count active, new and returning users from product events" icon="activity" href="/guides/observability/active-users-from-product-events">
+    Record what signed-in users do with observe.Track, deploy, and read active, new and returning users per environment with forge obs users, no analytics SDK.
   </Card>
   <Card title="Find which release introduced a production error" icon="activity" href="/guides/observability/find-release-that-caused-error">
     Trace a production error to the release and commits that introduced it with forge obs issue, then resolve it in the next release so a recurrence reopens it.
