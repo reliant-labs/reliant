@@ -8856,6 +8856,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -19824,6 +19829,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -37136,6 +37146,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -48333,6 +48348,10 @@
             },
             {
               "name": "resolved_provider_account_id",
+              "kind": "string"
+            },
+            {
+              "name": "resolved_thinking_level",
               "kind": "string"
             }
           ],
