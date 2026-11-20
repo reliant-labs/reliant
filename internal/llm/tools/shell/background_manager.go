@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
+	"github.com/reliant-labs/reliant/internal/hotswap"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
 	"github.com/reliant-labs/reliant/internal/proctree"
@@ -514,7 +515,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 
 	// Start the command. The child holds its own copies of the sandbox's
 	// descriptors once Start returns.
-	err := cmd.Start()
+	err := hotswap.StartCmd(cmd)
 	credsandbox.Release(cmd)
 	if err != nil {
 		process.tree.Started(0)

@@ -178,16 +178,71 @@ const parentFDEnv = "RELIANT_CRED_SANDBOX_PARENT_FD"
 // of the process and closed by nothing but the process's exit. An init that
 // finds the pipe hung up knows the process that started it is gone.
 //
-// The write end is a bare descriptor, never wrapped in an *os.File: an
+// Both ends are held in package variables for the life of the process: an
 // *os.File that became unreachable would be closed by its finalizer, hanging
 // up the pipe under every live init.
-var liveness = sync.OnceValues(func() (*os.File, error) {
+func liveness() (*os.File, error) {
+	livenessMu.Lock()
+	defer livenessMu.Unlock()
+	if livenessR != nil || livenessErr != nil {
+		return livenessR, livenessErr
+	}
 	var fds [2]int
 	if err := unix.Pipe2(fds[:], unix.O_CLOEXEC); err != nil {
+		livenessErr = err
 		return nil, err
 	}
-	return os.NewFile(uintptr(fds[0]), "reliant-cred-sandbox-liveness"), nil
-})
+	livenessR = os.NewFile(uintptr(fds[0]), "reliant-cred-sandbox-liveness")
+	livenessW = os.NewFile(uintptr(fds[1]), "reliant-cred-sandbox-liveness-w")
+	return livenessR, nil
+}
+
+var (
+	livenessMu  sync.Mutex
+	livenessR   *os.File
+	livenessW   *os.File
+	livenessErr error
+)
+
+// Names of the liveness pipe's ends in a hot-swap handoff (internal/hotswap).
+const (
+	livenessHandoffR = "credsandbox-liveness-r"
+	livenessHandoffW = "credsandbox-liveness-w"
+)
+
+// HandoffLiveness is the liveness pipe, both ends, for a daemon that execs a
+// new image of itself in place (internal/hotswap). The new image takes them
+// over with AdoptLiveness, so the pipe never hangs up under the sandbox inits
+// still running: their daemon (the same process) is not gone. Nil when this
+// process started no sandbox.
+func HandoffLiveness() map[string]*os.File {
+	livenessMu.Lock()
+	defer livenessMu.Unlock()
+	if livenessR == nil || livenessW == nil {
+		return nil
+	}
+	return map[string]*os.File{livenessHandoffR: livenessR, livenessHandoffW: livenessW}
+}
+
+// AdoptLiveness takes over the liveness pipe a previous image of this process
+// handed over (HandoffLiveness), when files carries both ends. Call it before
+// the first sandbox starts; a pipe already made is kept and the handed one
+// closed. It reports whether it adopted.
+func AdoptLiveness(files map[string]*os.File) bool {
+	r, w := files[livenessHandoffR], files[livenessHandoffW]
+	if r == nil || w == nil {
+		return false
+	}
+	livenessMu.Lock()
+	defer livenessMu.Unlock()
+	if livenessR != nil {
+		_ = r.Close()
+		_ = w.Close()
+		return false
+	}
+	livenessR, livenessW = r, w
+	return true
+}
 
 // dieWithParent makes this init die with the process that started it (the
 // daemon, a test binary), so a sandbox is never left running with nobody to

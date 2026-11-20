@@ -2146,6 +2146,9 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	d.results.persistRunning(req.RequestId)
 
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
+	// A command this call runs is handed across a hot swap under its request
+	// id (internal/daemon/swap_run.go); without hot swap the tag is unused.
+	execCtx = daemon.WithToolRequestID(execCtx, req.RequestId)
 	// Registered under both ids. request_id is the transport's correlation key
 	// (a fresh timestamp per dispatch, known only to the server that sent it);
 	// tool_call_id is the LLM's identifier, and the only one a user cancelling

@@ -41,7 +41,11 @@ func readState(f *os.File) ([]byte, error) {
 // setInheritable clears (or sets back) close-on-exec on files.
 func setInheritable(files []*os.File, inherit bool) error {
 	for _, f := range files {
-		flags, err := unix.FcntlInt(f.Fd(), unix.F_GETFD, 0)
+		fd, err := rawFD(f)
+		if err != nil {
+			return err
+		}
+		flags, err := unix.FcntlInt(uintptr(fd), unix.F_GETFD, 0)
 		if err != nil {
 			return fmt.Errorf("hotswap: F_GETFD %s: %w", f.Name(), err)
 		}
@@ -50,7 +54,7 @@ func setInheritable(files []*os.File, inherit bool) error {
 		} else {
 			flags |= unix.FD_CLOEXEC
 		}
-		if _, err := unix.FcntlInt(f.Fd(), unix.F_SETFD, flags); err != nil {
+		if _, err := unix.FcntlInt(uintptr(fd), unix.F_SETFD, flags); err != nil {
 			return fmt.Errorf("hotswap: F_SETFD %s: %w", f.Name(), err)
 		}
 	}
@@ -62,8 +66,10 @@ func execve(path string, argv, env []string) error {
 }
 
 // adopt wraps an inherited descriptor, close-on-exec again so no command the
-// new image starts inherits it.
+// new image starts inherits it, and non-blocking so the *os.File is pollable
+// (read deadlines work, which is how the next handover stops its readers).
 func adopt(fd int, name string) *os.File {
 	unix.CloseOnExec(fd)
+	_ = unix.SetNonblock(fd, true)
 	return os.NewFile(uintptr(fd), name)
 }

@@ -52,3 +52,9 @@ func Dispatch() {
 		os.Exit(RefusedExitCode)
 	}
 }
+
+// HandoffLiveness has nothing to hand over off Linux.
+func HandoffLiveness() map[string]*os.File { return nil }
+
+// AdoptLiveness adopts nothing off Linux.
+func AdoptLiveness(map[string]*os.File) bool { return false }

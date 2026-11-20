@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
+	"github.com/reliant-labs/reliant/internal/hotswap"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/osutil"
 	"github.com/reliant-labs/reliant/internal/proctree"
@@ -188,7 +189,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
-	err = cmd.Start()
+	err = hotswap.StartCmd(cmd)
 	// The child holds its own copies of the sandbox's descriptors now.
 	credsandbox.Release(cmd)
 	if err != nil {

@@ -51,6 +51,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"sync/atomic"
 )
 
 // StateEnv names the descriptor the new image reads its handoff from. Restore
@@ -152,13 +153,21 @@ func (s *Spawner) Exec(path string, argv, env []string, procs []Process, extra m
 		w := wireProcess{Process: p, FDs: map[string]int{}}
 		for _, name := range sortedNames(p.Files) {
 			f := p.Files[name]
-			w.FDs[name] = int(f.Fd())
+			fd, err := rawFD(f)
+			if err != nil {
+				return err
+			}
+			w.FDs[name] = fd
 			keep = append(keep, f)
 		}
 		h.Processes = append(h.Processes, w)
 	}
 	for _, name := range sortedNames(extra) {
-		h.Extra[name] = int(extra[name].Fd())
+		fd, err := rawFD(extra[name])
+		if err != nil {
+			return err
+		}
+		h.Extra[name] = fd
 		keep = append(keep, extra[name])
 	}
 	state, err := json.Marshal(h)
@@ -171,7 +180,11 @@ func (s *Spawner) Exec(path string, argv, env []string, procs []Process, extra m
 	}
 	defer stateFile.Close()
 	keep = append(keep, stateFile)
-	env = append(withoutEnv(env, StateEnv), StateEnv+"="+strconv.Itoa(int(stateFile.Fd())))
+	stateFD, err := rawFD(stateFile)
+	if err != nil {
+		return err
+	}
+	env = append(withoutEnv(env, StateEnv), StateEnv+"="+strconv.Itoa(stateFD))
 
 	var execErr error
 	s.Do(func() {
@@ -233,6 +246,54 @@ func Restore() (procs []Process, extra map[string]*os.File, ok bool, err error) 
 		return nil, nil, true, fmt.Errorf("hotswap: handoff version %d, this image reads %d; taking over nothing", h.Version, handoffVersion)
 	}
 	return procs, extra, true, nil
+}
+
+// defaultSpawner is the process-wide spawner, set once by Enable.
+var defaultSpawner atomic.Pointer[Spawner]
+
+// Enable makes every command started through StartCmd start on one spawner
+// thread, so this process can later hand them across an exec. It is opt-in
+// (a self-hosted daemon started with self_update); with it off StartCmd is
+// cmd.Start and nothing in this package runs. Call it before the first
+// command starts; later calls return the same spawner.
+func Enable() *Spawner {
+	if !Supported {
+		return nil
+	}
+	if s := defaultSpawner.Load(); s != nil {
+		return s
+	}
+	defaultSpawner.CompareAndSwap(nil, NewSpawner())
+	return defaultSpawner.Load()
+}
+
+// Enabled reports whether Enable was called.
+func Enabled() bool { return defaultSpawner.Load() != nil }
+
+// Default is the spawner Enable made, or nil.
+func Default() *Spawner { return defaultSpawner.Load() }
+
+// StartCmd starts cmd on the spawner when hot swap is enabled, and plainly
+// otherwise. Every command a handover may carry must start through it.
+func StartCmd(cmd *exec.Cmd) error {
+	if s := defaultSpawner.Load(); s != nil {
+		return s.Start(cmd)
+	}
+	return cmd.Start()
+}
+
+// rawFD is f's descriptor, read without f.Fd(), which would switch a pipe to
+// blocking mode and take away its read deadlines for good.
+func rawFD(f *os.File) (int, error) {
+	rc, err := f.SyscallConn()
+	if err != nil {
+		return 0, fmt.Errorf("hotswap: %s: %w", f.Name(), err)
+	}
+	fd := -1
+	if err := rc.Control(func(u uintptr) { fd = int(u) }); err != nil {
+		return 0, fmt.Errorf("hotswap: %s: %w", f.Name(), err)
+	}
+	return fd, nil
 }
 
 // Wait collects pid's exit status. pid must be a child of this process —

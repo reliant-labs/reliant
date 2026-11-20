@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/fileutil"
 	"github.com/reliant-labs/reliant/internal/ghshim"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
+	"github.com/reliant-labs/reliant/internal/hotswap"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -794,6 +795,16 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 		timeoutMs = 60000 // 60s default
 	}
 
+	// A command the previous image of this daemon started for this same tool
+	// request and handed over in a hot swap (swap_run.go): finish it, never
+	// start it again.
+	requestID := toolRequestIDFrom(ctx)
+	if requestID != "" {
+		if run := swapRuns.takeAdopted(requestID); run != nil {
+			return c.resumeRun(ctx, req, run)
+		}
+	}
+
 	// Not context.WithTimeout: that deadline runs on the monotonic clock, which
 	// stops while the machine sleeps, and its deferred cancel would kill a
 	// command adopted into the background below. See ExecDeadline.
@@ -832,6 +843,21 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	}
 	// A return before Start must not keep the sandbox's descriptors open.
 	defer credsandbox.Release(cmd)
+
+	// With hot swap on, a tool request's command runs so that a swap can hand
+	// it to the next image of this daemon (swap_run.go). The rest of this
+	// function is the ordinary path, unchanged.
+	if requestID != "" && hotswap.Enabled() {
+		stopGrace := osutil.ApplyGracefulCancel(cmd, ExecGraceDelay)
+		tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
+		res, swapErr := c.runSwappable(ctx, req, requestID, cmd, time.Duration(timeoutMs)*time.Millisecond, deadline, tree, heavy, stopGrace)
+		if swapErr == nil {
+			return res, nil
+		}
+		// Could not make its pipes: run it the ordinary way.
+		stopGrace()
+		tree.Release()
+	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	// Output stamps activity, so if the command is detached into the
@@ -872,7 +898,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
 
 	start := time.Now()
-	err = cmd.Start()
+	err = hotswap.StartCmd(cmd)
 	// The child holds its own copies of the sandbox's descriptors now.
 	credsandbox.Release(cmd)
 	if err != nil {
