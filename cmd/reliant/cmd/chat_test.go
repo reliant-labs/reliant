@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -14,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
 
 type fakeChats struct {
@@ -121,4 +124,42 @@ func TestChatCommands(t *testing.T) {
 	assert.ErrorContains(t, err, "--clear", "neither a machine nor --clear is a usage error")
 	_, err = runChat(t, "set-machine", "c1", "nope")
 	assert.ErrorContains(t, err, `no machine "nope"`)
+}
+
+type chatHandler struct {
+	reliantv1connect.UnimplementedChatServiceHandler
+	chats *fakeChats
+}
+
+func (h chatHandler) ListChats(ctx context.Context, req *connect.Request[reliantv1.ListChatsRequest]) (*connect.Response[reliantv1.ListChatsResponse], error) {
+	return h.chats.ListChats(ctx, req)
+}
+
+type registryHandler struct {
+	reliantv1connect.UnimplementedDaemonRegistryServiceHandler
+	machines fakeMachines
+}
+
+func (h registryHandler) ListDaemons(ctx context.Context, req *connect.Request[reliantv1.ListDaemonsRequest]) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
+	return h.machines.ListDaemons(ctx, req)
+}
+
+// `reliant chat` dials the server through the CLI's own connection, which
+// loads CLIConfig: the command must be inside its subtrees, or every call
+// fails before it is made.
+func TestChatCommandsDialTheServer(t *testing.T) {
+	isolateControlPlaneEnv(t)
+	mux := http.NewServeMux()
+	mux.Handle(reliantv1connect.NewChatServiceHandler(chatHandler{chats: &fakeChats{chats: []*reliantv1.Chat{
+		{Id: "c1", Title: "Fix the build", ActiveDaemonId: proto.String("d-build"), State: reliantv1.ChatState_CHAT_STATE_IDLE},
+	}}}))
+	mux.Handle(reliantv1connect.NewDaemonRegistryServiceHandler(registryHandler{machines: fakeMachines{daemons: []*reliantv1.DaemonInfo{{DaemonId: "d-build", Name: "build-box"}}}}))
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	t.Setenv(envServerURL, srv.URL)
+	t.Setenv(envToken, "rlat_login")
+
+	out, err := executeRoot(t, "chat", "list")
+	require.NoError(t, err)
+	assert.Contains(t, out, "build-box (d-build)")
 }

@@ -22,6 +22,7 @@ message CLIConfig {
     binary: "reliant"
     subtrees: [
       {path: ["auth"]},
+      {path: ["chat"]},
       {path: ["daemon"]},
       {path: ["github"]},
       {path: ["machine"]},

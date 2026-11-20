@@ -853,6 +853,13 @@ reliant chat
 | [`set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
 | [`show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
 
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
 ---
 
 ### reliant chat list
