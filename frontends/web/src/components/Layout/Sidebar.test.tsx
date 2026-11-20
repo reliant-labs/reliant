@@ -253,53 +253,53 @@ describe("Sidebar selected chat scroll", () => {
     expect(row.querySelector(".lucide-archive")).toBeNull();
   });
 
-  it("orders the project shell's nav Chats, Inbox, Search, Workflows, and opens each page through onNavigate", () => {
+  it("draws the default nav (B): the top level off an area, the footer Inbox, Usage & billing, Settings, each through onNavigate", () => {
+    sessionStorage.clear();
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     const onNavigate = vi.fn();
-    const onOpenChatSearch = vi.fn();
 
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar pathname="/" onNavigate={onNavigate} onOpenChatSearch={onOpenChatSearch} />
+        <Sidebar pathname="/inbox" onNavigate={onNavigate} />
       </QueryClientProvider>
     );
 
-    // The project shell (U6b): Home, Chats (open on the chat home, New chat first),
-    // Inbox, Search, Workflows; no Projects, Usage or Apps rows.
-    const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
-    const order = [...nav.querySelectorAll("a, button")]
-      .map((el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "")
-      .filter((name) => ["Home", "Chats", "New chat", "Inbox", "Search", "Workflows"].some((label) => name.startsWith(label)));
-    expect(order.slice(0, 3).map((name) => name.replace(/Ctrl.*$/, ""))).toEqual(["Home", "Chats", "New chat"]);
-    // Home is its own page; on the chat home only the chats are about it.
-    expect(screen.getByTestId("sidebar-home-button")).not.toHaveAttribute("aria-current");
-    expect(order.filter((name) => ["Inbox", "Search", "Workflows"].some((label) => name.startsWith(label))).map((name) => name.match(/^(Inbox|Search|Workflows)/)?.[1])).toEqual([
-      "Inbox",
-      "Search",
-      "Workflows",
-    ]);
-    expect(within(nav).queryByRole("link", { name: "Projects" })).toBeNull();
-    expect(within(nav).queryByRole("link", { name: "Usage" })).toBeNull();
-    expect(screen.getByTestId("create-chat-button")).toHaveAttribute("href", "/new");
-    expect(screen.getByTestId("sidebar-chats-toggle")).toHaveAttribute("aria-expanded", "true");
+    // Find first, then the switcher, then the nav (U6c).
+    expect(screen.getByTestId("nav-find")).toBeInTheDocument();
+    const nav = screen.getByTestId("nav-top");
+    expect(screen.getByTestId("sidebar-home-button")).toHaveTextContent("Overview");
+    expect(within(nav).getByTestId("nav-agents")).toHaveTextContent("Agents");
+    // No chat list off an Agents route: it lives in the Agents drill-in.
+    expect(screen.queryByTestId("sidebar-chats")).toBeNull();
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
-    const workflows = within(nav).getByRole("link", { name: "Workflows" });
-    // Automations and Runs are tabs of the Workflows area (§1.2): nested
-    // under Workflows only while the area is open, never places of their own.
-    expect(screen.queryByRole("link", { name: "Automations" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
-    const settings = screen.getByRole("link", { name: "Settings" });
-    expect(workflows).toHaveAttribute("data-onboarding", "workflow-button");
+    expect(screen.getByTestId("sidebar-inbox-button")).toHaveAttribute("aria-current", "page");
 
-    fireEvent.click(workflows);
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
-    fireEvent.click(settings);
-    fireEvent.click(screen.getByTestId("sidebar-inbox-button"));
+    fireEvent.click(within(nav).getByTestId("nav-agents"));
+    fireEvent.click(screen.getByTestId("nav-usage-billing"));
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+    expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/", "/usage", "/settings"]);
+  });
 
-    expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/workflows", "/settings", "/inbox"]);
-    expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
+  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, AI providers, then the chats full height", () => {
+    sessionStorage.clear();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onNavigate = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/" onNavigate={onNavigate} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    expect(screen.queryByTestId("nav-top")).toBeNull();
+    expect(screen.getByTestId("create-chat-button")).toHaveAttribute("href", "/new");
+    expect(screen.getByTestId("nav-workflows")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("nav-sandboxes")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-ai-providers")).toHaveAttribute("href", "/settings/ai");
+    expect(screen.getByTestId("sidebar-chats")).toHaveAttribute("data-place", "fill");
+    fireEvent.click(screen.getByTestId("nav-back"));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 
   it("leaves a modified click on a row to the browser (a new tab)", () => {
@@ -314,23 +314,16 @@ describe("Sidebar selected chat scroll", () => {
     expect(onNavigate).not.toHaveBeenCalled();
   });
 
-  it("folds Chats off a chat page, and its chevron opens them there without navigating", () => {
+  it("on a settings page, Settings replaces the nav with its sections", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const onNavigate = vi.fn();
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar pathname="/settings/appearance" onNavigate={onNavigate} />
+        <Sidebar pathname="/settings/appearance" onNavigate={vi.fn()} />
       </QueryClientProvider>
     );
-    const toggle = screen.getByTestId("sidebar-chats-toggle");
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "settings");
+    expect(screen.getByTestId("nav-settings-appearance")).toHaveAttribute("aria-current", "page");
     expect(screen.queryByTestId("sidebar-chats")).toBeNull();
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByTestId("sidebar-chats")).toBeInTheDocument();
-    expect(onNavigate).not.toHaveBeenCalled();
-    // The Chats row itself is a real link to the chats.
-    expect(screen.getByTestId("sidebar-chats-button").tagName).toBe("A");
   });
 
   it("links Home to the summary of every project, current only there", () => {
