@@ -131,7 +131,7 @@ The runner only starts and watches the run. The workflow itself runs on one of y
                 --hook "on=node_failed cmd=echo ::error::Reliant step \$RELIANT_EVENT_NODE_ID failed in run \$RELIANT_EVENT_EXECUTION_ID"
     ```
 
-    The job builds the CLI with `go install`, pinned to the version you run locally (`reliant version`). The first build takes about seven minutes; the cache saves the binary when the job succeeds, so later runs skip it.
+    The job builds the CLI with `go install`, pinned to the version you run locally (`reliant version`). The first build takes about seven minutes; the cache saves the binary when the job succeeds, so later runs skip it. From v1.24.0 you can download the release's prebuilt CLI archive instead of building it; see [CLI only](/getting-started/installation#cli-only-headless-linux-ci-runners).
 
     `--hook` runs a command for each step that fails, here an error annotation. It hooks `node_failed` because a run that ends at an `outcome: failure` node finishes as `workflow_completed` with `"outcome":"failure"`, so `workflow_failed` does not fire for it.
   </Step>
