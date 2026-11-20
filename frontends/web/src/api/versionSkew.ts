@@ -11,6 +11,11 @@
  * So: tell the user once, in a modal that offers exactly that fix, and record
  * the skew once per session as a warning — the procedure name is how we learn
  * which old builds are still out there.
+ *
+ * The same modal, forced, is the answer to a server that REQUIRES a newer
+ * build (noteUpgradeRequired, below). A 404 is still how a build from before
+ * the `Reliant-Client` header is pushed: the server's legacy lever answers its
+ * header-less calls with one, and this skew prompt opens.
  */
 
 import { reportFailure } from "../lib/errorReporting";
@@ -45,8 +50,47 @@ export function noteVersionSkew(serviceTypeName: string, methodName: string): vo
   })();
 }
 
+/** Why the server requires a newer build: it refused a call, or it publishes a minimum above this one. */
+export type UpgradeRequiredSource = "refused" | "served-minimum";
+
+let _forcedShown = false;
+
+/**
+ * The server requires a newer build of this app. Unlike a skew this is not a
+ * suggestion: the server refuses this build's calls (or will once it enforces
+ * the minimum it publishes), so the prompt is forced. It cannot be dismissed,
+ * it replaces whatever modal is up (that modal's actions would be refused
+ * too), and nothing replaces it (store/modalStore.ts).
+ */
+export function noteUpgradeRequired(
+  source: UpgradeRequiredSource,
+  info: { minVersion?: string; upgradeUrl?: string } = {},
+): void {
+  if (_forcedShown) return;
+  _forcedShown = true;
+  reportFailure(`upgrade-required: ${source}`, {
+    upgrade_source: source,
+    min_version: info.minVersion ?? "",
+  });
+  void (async () => {
+    try {
+      // Lazy, for the same import cycle as noteVersionSkew.
+      const { useModalStore } = await import("../store/modalStore");
+      useModalStore.getState().openModal("app-out-of-date", {
+        forced: true,
+        minVersion: info.minVersion,
+        upgradeUrl: info.upgradeUrl,
+      });
+    } catch (err) {
+      logger.error("[versionSkew] failed to open the forced upgrade prompt", err);
+      _forcedShown = false;
+    }
+  })();
+}
+
 /** Test seam. */
 export function resetVersionSkewForTests(): void {
   _modalShown = false;
+  _forcedShown = false;
   _reported.clear();
 }

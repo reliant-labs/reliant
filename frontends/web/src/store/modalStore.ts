@@ -18,8 +18,22 @@ export type ModalId =
 
 export interface AppOutOfDateData {
   // The `<service>/<method>` the server did not serve (api/versionSkew.ts).
-  // Not shown to the user; kept for the support conversation.
-  procedure: string;
+  // Not shown to the user; kept for the support conversation. Absent when the
+  // prompt came from the server's minimum rather than a failed call.
+  procedure?: string;
+  // The server requires a newer build (an `upgrade_required` refusal, or this
+  // build below the served minimum). The prompt cannot be dismissed, and no
+  // other modal replaces it: every call this build makes is refused.
+  forced?: boolean;
+  // The oldest version the server serves, when it named one.
+  minVersion?: string;
+  // Where to get the latest version, when the server named one.
+  upgradeUrl?: string;
+}
+
+/** A forced out-of-date prompt is up: nothing may close or replace it. */
+function isForcedUpgrade(state: Pick<ModalState, "activeModal" | "data">): boolean {
+  return state.activeModal === "app-out-of-date" && !!(state.data as AppOutOfDateData | undefined)?.forced;
 }
 
 export interface UpgradeRequiredData {
@@ -57,9 +71,15 @@ interface ModalState {
   closeModal(): void;
 }
 
-export const useModalStore = create<ModalState>((set) => ({
+export const useModalStore = create<ModalState>((set, get) => ({
   activeModal: null,
   data: undefined,
-  openModal: (id, data) => set({ activeModal: id, data }),
-  closeModal: () => set({ activeModal: null, data: undefined }),
+  openModal: (id, data) => {
+    if (isForcedUpgrade(get())) return;
+    set({ activeModal: id, data });
+  },
+  closeModal: () => {
+    if (isForcedUpgrade(get())) return;
+    set({ activeModal: null, data: undefined });
+  },
 }));
