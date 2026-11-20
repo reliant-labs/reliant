@@ -467,6 +467,15 @@ describe("the environment scope", () => {
     await landsOn(redirected, "/forge/p/alpha/security/vulnerabilities", { env: "e2e" });
   });
 
+  it("routes Auth's tabs, and sends the old Users URL to Auth with its search", async () => {
+    const router = renderAt("/forge/p/alpha/auth/sign-in?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "auth");
+    await landsOn(router, "/forge/p/alpha/auth/sign-in", { env: "e2e" });
+
+    const redirected = renderAt("/forge/p/alpha/users?env=e2e&user=u-1");
+    await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
+  });
+
   it("routes Security › SBOMs", async () => {
     const router = renderAt("/forge/p/alpha/security/sboms?env=e2e&release=v1.5.0");
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "sboms");

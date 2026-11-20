@@ -45,7 +45,8 @@ const PAGES: ConsolePage[] = [
   { kind: "dashboard", dashKind: "workspace", key: "checkout latency/2" },
   { kind: "storage" },
   { kind: "data" },
-  { kind: "users" },
+  { kind: "auth" },
+  { kind: "auth", tab: "sign-in" },
   { kind: "environments" },
   { kind: "environment", env: "prod" },
   { kind: "environment", env: "pr 12/x" },
@@ -67,7 +68,10 @@ describe("console paths", () => {
     expect(consolePath("control-plane", { kind: "workload", env: "prod", name: "admin-server" })).toBe("/forge/p/control-plane/workloads/prod/admin-server");
     expect(consolePath("control-plane", { kind: "storage" })).toBe("/forge/p/control-plane/storage");
     expect(consolePath("control-plane", { kind: "data" })).toBe("/forge/p/control-plane/data");
-    expect(consolePath("control-plane", { kind: "users" })).toBe("/forge/p/control-plane/users");
+    // The old Users page is Auth's first tab (U6d): its path is Auth's.
+    expect(consolePath("control-plane", { kind: "users" })).toBe("/forge/p/control-plane/auth");
+    expect(consolePath("control-plane", { kind: "auth" })).toBe("/forge/p/control-plane/auth");
+    expect(consolePath("control-plane", { kind: "auth", tab: "sign-in" })).toBe("/forge/p/control-plane/auth/sign-in");
   });
 
   it("pins a workload's page to its environment, as an environment's page is", () => {

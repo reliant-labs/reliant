@@ -416,9 +416,9 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const securityRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'security',
-    beforeLoad: ({ location }) => {
+    beforeLoad: memberOnly(({ location }) => {
       throw redirect({ href: `${location.pathname.replace(/\/security\/?$/, '/security/vulnerabilities')}${location.searchStr}`, replace: true })
-    },
+    }),
   })
   const vulnerabilitiesRoute = createRoute({
     getParentRoute: () => consoleRoute,

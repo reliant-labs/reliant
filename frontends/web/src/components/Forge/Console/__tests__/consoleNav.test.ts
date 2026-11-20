@@ -46,7 +46,8 @@ describe("buildConsoleNav", () => {
   it("links Users with the scope, lights it on its page, and crumbs it", () => {
     const { items } = buildConsoleNav({ project: "shop", page: { kind: "users" }, env: "staging", envs: ENVS });
     const users = items.find((item) => item.label === "Users")!;
-    expect(users.href).toBe("/forge/p/shop/users?env=staging");
+    // Users is Auth's first tab now (U6d): the link goes straight there.
+    expect(users.href).toBe("/forge/p/shop/auth?env=staging");
     expect(users.active).toBe(true);
     expect(items.filter((item) => item.active).map((item) => item.label)).toEqual(["Users"]);
     expect(consoleCrumbs("shop", { kind: "users" }, "staging")).toEqual([{ label: "Users" }]);
