@@ -526,7 +526,7 @@ describe("the nav", () => {
     // The console's own "Observability" parent is gone; its views sit in their groups.
     expect(within(nav).queryByText("Observability")).toBeNull();
     expect(screen.getByRole("link", { name: "Errors" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Issues›Errors");
+    expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Performance & issues›Errors");
   });
 
   it("marks an environment whose deploy is queued", async () => {
@@ -570,7 +570,7 @@ describe("inside the one shell", () => {
     const frame = screen.getByTestId("forge-console-frame");
     expect(frame.className).toContain("forge-ui");
     const header = screen.getByTestId("forge-console-header");
-    expect(within(header).getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("alpha›Issues›Errors");
+    expect(within(header).getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("alpha›Performance & issues›Errors");
     // Inside the shell the frame (AppShellFrame) is the one main landmark: the console's body is a plain region.
     expect(within(frame).queryByRole("main")).toBeNull();
     expect(frame).toContainElement(page);

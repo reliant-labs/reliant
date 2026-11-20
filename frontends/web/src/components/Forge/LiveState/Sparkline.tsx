@@ -31,8 +31,8 @@ export function Sparkline({
   const last = values.length - 1 || 1;
   const d = points.map((p, n) => `${n === 0 ? "M" : "L"}${((p.i / last) * width).toFixed(1)},${(height - 2 - ((p.v - min) / span) * (height - 4)).toFixed(1)}`).join(" ");
   return (
-    <svg role="img" aria-label={label} width={width} height={height} viewBox={`0 0 ${width} ${height}`} className={cn("inline-block overflow-visible text-primary", className)}>
-      <path d={d} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    <svg role="img" aria-label={label} width={width} height={height} viewBox={`0 0 ${width} ${height}`} className={cn("inline-block overflow-visible stroke-primary", className)}>
+      <path d={d} fill="none" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

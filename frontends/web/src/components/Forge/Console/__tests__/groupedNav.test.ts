@@ -95,10 +95,10 @@ describe("buildGroupedConsoleNav", () => {
 });
 
 describe("groupedCrumbs", () => {
-  it("puts a view under its group, a hub tab under Product analytics, and a dashboard under Dashboards", () => {
-    expect(groupedCrumbs({ kind: "obs-view", view: "errors" }, [])).toEqual([{ label: "Issues" }, { label: "Errors" }]);
-    expect(groupedCrumbs({ kind: "obs-view", view: "sessions" }, [])).toEqual([{ label: "Sessions" }]);
-    expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Product analytics" }, { label: "Insights" }, { label: "Users" }]);
+  it("puts a view under its variant group, a hub tab under Analytics, and a dashboard under Dashboards", () => {
+    expect(groupedCrumbs({ kind: "obs-view", view: "errors" }, [])).toEqual([{ label: "Performance & issues" }, { label: "Errors" }]);
+    expect(groupedCrumbs({ kind: "obs-view", view: "logs" }, [])).toEqual([{ label: "Observability" }, { label: "Logs" }]);
+    expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Analytics" }, { label: "Users" }]);
     expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "api" }, [{ label: "Observability" }, { label: "Dashboards", href: "/d" }, { label: "api" }])).toEqual([
       { label: "Dashboards", href: "/d" },
       { label: "api" },

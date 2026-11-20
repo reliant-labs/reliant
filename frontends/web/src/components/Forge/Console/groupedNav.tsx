@@ -78,16 +78,18 @@ export interface GroupedNavInput extends ConsoleNavInput {
 /** A nav group that shows its rows on every page, not only while one is open (the app's own dashboards). */
 export type OpenNavItem = SidebarNavItem & { alwaysOpen?: boolean };
 
-/** The group each view sits in, for the nav and the breadcrumb ("Issues › Errors"). */
+/** The group each view sits in, for the breadcrumb ("Performance & issues › Errors"). */
+// The groups of the shell's nav variants (Layout/sidebar/navConfig, U6c), not this nav's own Issues / Performance / More tools.
 const GROUP_OF: Partial<Record<ObsNavView, string>> = {
-  errors: "Issues",
-  alerts: "Issues",
-  traces: "Performance",
-  rpc: "Performance",
-  logs: "More tools",
-  metrics: "More tools",
-  profiles: "More tools",
-  graph: "More tools",
+  errors: "Performance & issues",
+  alerts: "Performance & issues",
+  traces: "Performance & issues",
+  rpc: "Observability",
+  logs: "Observability",
+  metrics: "Observability",
+  profiles: "Observability",
+  graph: "Observability",
+  sessions: "Observability",
 };
 
 const isHubPage = (page: ConsolePage, hub: ProductAnalyticsHub | undefined) => !!hub && page.kind === "dashboard" && hub.keys.includes(page.key);
@@ -245,7 +247,7 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     const group = GROUP_OF[page.view];
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
-  if (isHubPage(page, productAnalytics)) return [{ label: "Product analytics" }, { label: "Insights" }, ...own.slice(-1)];
+  if (isHubPage(page, productAnalytics)) return [{ label: "Analytics" }, ...own.slice(-1)];
   if (page.kind === "dashboard") {
     const rest = own.filter((crumb) => crumb.label !== "Observability");
     return rest[0]?.label === "Dashboards" ? rest : [{ label: "Dashboards" }, ...rest];
