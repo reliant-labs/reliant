@@ -13,10 +13,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/localprobe"
 )
 
 // fakeModelCatalog is CatalogService as the model picker uses it.
@@ -38,16 +40,61 @@ func (f *fakeModelCatalog) ListModels(_ context.Context, req *connect.Request[re
 	}}), nil
 }
 
-// fakeModelsRegistry is DaemonRegistryService for Local & custom.
+// fakeModelsRegistry is DaemonRegistryService for Local & custom, over
+// machines that behave like real daemons: each keeps its configured base URLs
+// as sent, and reports each as the daemon's prober does,
+// localprobe.NormalizeRoot(url)+"/v1" (internal/localprobe).
 type fakeModelsRegistry struct {
 	reliantv1connect.UnimplementedDaemonRegistryServiceHandler
 	daemons []*reliantv1.DaemonInfo
-	sets    []*reliantv1.SetLocalModelEndpointsRequest
-	offline bool
+	// configured is each machine's configured list, by daemon id.
+	configured map[string][]string
+	// storedMissing makes ListDaemons return no stored inventory, as it does
+	// when the stored copy cannot be read.
+	storedMissing bool
+	sets          []*reliantv1.SetLocalModelEndpointsRequest
+	offline       bool
+}
+
+func (f *fakeModelsRegistry) inventory(daemonID string) *reliantv1.LocalModelInventory {
+	inv := &reliantv1.LocalModelInventory{}
+	if daemonID == "d-laptop" {
+		inv.Endpoints = append(inv.Endpoints, &reliantv1.LocalModelEndpoint{Id: "ollama", Kind: "ollama", BaseUrl: "http://localhost:11434/v1", Source: "detected",
+			Models: []*reliantv1.LocalModelInfo{{Name: "qwen3:latest", SupportsChat: true}, {Name: "nomic-embed", SupportsChat: false}}})
+	}
+	for _, u := range f.configured[daemonID] {
+		root, _ := localprobe.NormalizeRoot(u)
+		ep := &reliantv1.LocalModelEndpoint{Id: localprobe.EndpointID(root), Kind: "vllm", BaseUrl: root + "/v1", Source: "configured"}
+		switch {
+		case strings.Contains(u, "down"):
+			ep.Error = "connection refused"
+		case strings.Contains(u, "gpu-box"):
+			ep.Error = "timeout"
+		default:
+			ep.Models = []*reliantv1.LocalModelInfo{{Name: "mistral", SupportsChat: true}, {Name: "embed", SupportsChat: false}}
+		}
+		inv.Endpoints = append(inv.Endpoints, ep)
+	}
+	return inv
 }
 
 func (f *fakeModelsRegistry) ListDaemons(context.Context, *connect.Request[reliantv1.ListDaemonsRequest]) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
-	return connect.NewResponse(&reliantv1.ListDaemonsResponse{Daemons: f.daemons}), nil
+	out := make([]*reliantv1.DaemonInfo, 0, len(f.daemons))
+	for _, d := range f.daemons {
+		c := proto.Clone(d).(*reliantv1.DaemonInfo)
+		if !f.storedMissing {
+			c.LocalModels = f.inventory(d.GetDaemonId())
+		}
+		out = append(out, c)
+	}
+	return connect.NewResponse(&reliantv1.ListDaemonsResponse{Daemons: out}), nil
+}
+
+func (f *fakeModelsRegistry) RefreshLocalModels(_ context.Context, req *connect.Request[reliantv1.RefreshLocalModelsRequest]) (*connect.Response[reliantv1.RefreshLocalModelsResponse], error) {
+	if f.offline {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("daemon is offline"))
+	}
+	return connect.NewResponse(&reliantv1.RefreshLocalModelsResponse{LocalModels: f.inventory(req.Msg.GetDaemonId())}), nil
 }
 
 func (f *fakeModelsRegistry) SetLocalModelEndpoints(_ context.Context, req *connect.Request[reliantv1.SetLocalModelEndpointsRequest]) (*connect.Response[reliantv1.SetLocalModelEndpointsResponse], error) {
@@ -55,17 +102,8 @@ func (f *fakeModelsRegistry) SetLocalModelEndpoints(_ context.Context, req *conn
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("daemon is offline"))
 	}
 	f.sets = append(f.sets, req.Msg)
-	inv := &reliantv1.LocalModelInventory{}
-	for _, u := range req.Msg.GetBaseUrls() {
-		ep := &reliantv1.LocalModelEndpoint{Id: "cfg", Kind: "vllm", BaseUrl: u, Source: "configured"}
-		if strings.Contains(u, "down") {
-			ep.Error = "connection refused"
-		} else {
-			ep.Models = []*reliantv1.LocalModelInfo{{Name: "mistral", SupportsChat: true}, {Name: "embed", SupportsChat: false}}
-		}
-		inv.Endpoints = append(inv.Endpoints, ep)
-	}
-	return connect.NewResponse(&reliantv1.SetLocalModelEndpointsResponse{LocalModels: inv}), nil
+	f.configured[req.Msg.GetDaemonId()] = req.Msg.GetBaseUrls()
+	return connect.NewResponse(&reliantv1.SetLocalModelEndpointsResponse{LocalModels: f.inventory(req.Msg.GetDaemonId())}), nil
 }
 
 type fakeCustomEndpoints struct {
@@ -77,23 +115,20 @@ func (fakeCustomEndpoints) ListModelEndpoints(context.Context, *connect.Request[
 		{Id: "ep-1", Name: "Lab GPU", BaseUrl: "https://llm.example.test/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT,
 			Models: []*reliantv1.ModelEndpointModel{{Name: "llama3"}, {Name: "secret", Hidden: true}},
 			Probe:  &reliantv1.LocalModelEndpoint{Kind: "openai_compatible"}},
+		{Id: "ep-2", Name: "VPN box", BaseUrl: "http://vpn-box.internal:8000/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_VIA_DAEMON,
+			DaemonId: "d-laptop", Probe: &reliantv1.LocalModelEndpoint{Kind: "vllm"}},
 	}}), nil
 }
 
 func laptopDaemon() *reliantv1.DaemonInfo {
-	return &reliantv1.DaemonInfo{DaemonId: "d-laptop", Name: "laptop", Status: reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE,
-		LocalModels: &reliantv1.LocalModelInventory{Endpoints: []*reliantv1.LocalModelEndpoint{
-			{Id: "ollama", Kind: "ollama", BaseUrl: "http://localhost:11434/v1", Source: "detected",
-				Models: []*reliantv1.LocalModelInfo{{Name: "qwen3:latest", SupportsChat: true}, {Name: "nomic-embed", SupportsChat: false}}},
-			{Id: "cfg", Kind: "vllm", BaseUrl: "http://gpu-box.lan:8000/v1/", Source: "configured", Error: "timeout"},
-		}}}
+	return &reliantv1.DaemonInfo{DaemonId: "d-laptop", Name: "laptop", Status: reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE}
 }
 
 func newModelsHarness(t *testing.T, daemons ...*reliantv1.DaemonInfo) (*fakeModelCatalog, *fakeModelsRegistry) {
 	t.Helper()
 	isolateCLI(t)
 	catalog := &fakeModelCatalog{}
-	registry := &fakeModelsRegistry{daemons: daemons}
+	registry := &fakeModelsRegistry{daemons: daemons, configured: map[string][]string{"d-laptop": {"http://gpu-box.lan:8000/v1/"}}}
 	mux := http.NewServeMux()
 	p1, h1 := reliantv1connect.NewCatalogServiceHandler(catalog)
 	mux.Handle(p1, h1)
@@ -143,42 +178,73 @@ func TestModelsEndpointList(t *testing.T) {
 	out, err := executeRoot(t, "models", "endpoint", "list")
 	require.NoError(t, err)
 	assert.Regexp(t, `laptop\s+ollama\s+http://localhost:11434/v1\s+detected\s+qwen3:latest\n`, out, "embedding-only models are not offered")
-	assert.Regexp(t, `laptop\s+vllm\s+http://gpu-box.lan:8000/v1/\s+configured\s+unreachable: timeout`, out)
+	assert.Regexp(t, `laptop\s+vllm\s+http://gpu-box.lan:8000/v1\s+configured\s+unreachable: timeout`, out)
 	assert.Regexp(t, `Lab GPU\s+openai_compatible\s+https://llm.example.test/v1\s+custom\s+llama3\n`, out, "hidden models are left out")
 }
 
 func TestModelsEndpointAddAndRemove(t *testing.T) {
 	_, registry := newModelsHarness(t, laptopDaemon())
 
-	out, err := executeRoot(t, "models", "endpoint", "add", "http://localhost:9000/v1/")
+	// A URL without /v1: the daemon reports it as <root>/v1.
+	out, err := executeRoot(t, "models", "endpoint", "add", "http://localhost:9000/")
 	require.NoError(t, err)
 	require.Len(t, registry.sets, 1)
 	assert.Equal(t, "d-laptop", registry.sets[0].GetDaemonId())
-	assert.Equal(t, []string{"http://gpu-box.lan:8000/v1", "http://localhost:9000/v1"}, registry.sets[0].GetBaseUrls(),
-		"the machine's configured endpoints are kept, and the new one is added once")
-	assert.Contains(t, out, "Added http://localhost:9000/v1 on laptop.")
+	assert.Equal(t, []string{"http://gpu-box.lan:8000/v1", "http://localhost:9000"}, registry.sets[0].GetBaseUrls(),
+		"the machine's configured endpoints are kept, and the new one is added")
+	assert.Contains(t, out, "Added http://localhost:9000 on laptop.")
 	assert.Contains(t, out, "It serves: mistral@local")
 
-	// The same server twice is a no-op.
-	out, err = executeRoot(t, "models", "endpoint", "add", "http://gpu-box.lan:8000/v1", "--machine", "laptop")
+	// The same server, spelled with /v1 as the inventory shows it, is a no-op.
+	out, err = executeRoot(t, "models", "endpoint", "add", "http://localhost:9000/v1", "--machine", "laptop")
 	require.NoError(t, err)
-	assert.Contains(t, out, "laptop already looks for http://gpu-box.lan:8000/v1")
+	assert.Contains(t, out, "laptop already looks for http://localhost:9000/v1")
 	assert.Len(t, registry.sets, 1)
 
-	_, err = executeRoot(t, "models", "endpoint", "remove", "http://gpu-box.lan:8000/v1", "--machine", "d-laptop")
+	// Removing it by the URL it was added with finds it in the canonical
+	// inventory.
+	out, err = executeRoot(t, "models", "endpoint", "remove", "http://localhost:9000", "--machine", "d-laptop")
 	require.NoError(t, err)
+	assert.Contains(t, out, "Removed http://localhost:9000 on laptop.")
 	require.Len(t, registry.sets, 2)
-	assert.Empty(t, registry.sets[1].GetBaseUrls())
+	assert.Equal(t, []string{"http://gpu-box.lan:8000/v1"}, registry.sets[1].GetBaseUrls())
 
 	_, err = executeRoot(t, "models", "endpoint", "remove", "http://localhost:11434/v1")
-	assert.ErrorContains(t, err, "was not added to this machine")
+	assert.ErrorContains(t, err, "was not added to laptop")
 
 	_, err = executeRoot(t, "models", "endpoint", "add", "localhost:9000")
 	assert.ErrorContains(t, err, "is not a model server URL")
+}
 
+// The new list is built from what the machine itself reports, never from the
+// stored copy: a missing stored inventory must not turn an add into the
+// deletion of every endpoint the machine had.
+func TestModelsEndpointAddKeepsEndpointsTheStoredCopyLacks(t *testing.T) {
+	_, registry := newModelsHarness(t, laptopDaemon())
+	registry.storedMissing = true
+
+	_, err := executeRoot(t, "models", "endpoint", "add", "http://localhost:9000/v1")
+	require.NoError(t, err)
+	require.Len(t, registry.sets, 1)
+	assert.Equal(t, []string{"http://gpu-box.lan:8000/v1", "http://localhost:9000/v1"}, registry.sets[0].GetBaseUrls())
+
+	// A machine that cannot be read is not written.
 	registry.offline = true
 	_, err = executeRoot(t, "models", "endpoint", "add", "http://localhost:9001/v1")
 	assert.ErrorContains(t, err, "laptop must be online")
+	assert.ErrorContains(t, err, "nothing was changed")
+	assert.Len(t, registry.sets, 1)
+}
+
+// A URL a custom endpoint relays through the machine is that endpoint's, and
+// is removed by deleting it.
+func TestModelsEndpointRemoveRefusesACustomEndpointsRelay(t *testing.T) {
+	_, registry := newModelsHarness(t, laptopDaemon())
+	registry.configured["d-laptop"] = append(registry.configured["d-laptop"], "http://vpn-box.internal:8000/v1")
+
+	_, err := executeRoot(t, "models", "endpoint", "remove", "http://vpn-box.internal:8000")
+	assert.ErrorContains(t, err, `your custom endpoint "VPN box" reaches its server through laptop`)
+	assert.Empty(t, registry.sets)
 }
 
 func TestModelsEndpointAddNeedsAMachineWhenThereAreSeveral(t *testing.T) {
@@ -191,6 +257,7 @@ func TestModelsEndpointAddNeedsAMachineWhenThereAreSeveral(t *testing.T) {
 	out, err := executeRoot(t, "models", "endpoint", "add", "http://down.lan:9000/v1", "--machine", "desk")
 	require.NoError(t, err)
 	assert.Contains(t, out, "Added http://down.lan:9000/v1 on desk.")
+	assert.Contains(t, out, "desk could not reach it yet: connection refused")
 	assert.Equal(t, []string{"http://down.lan:9000/v1"}, registry.sets[0].GetBaseUrls())
 
 	// An agent's shell may list, and is refused changes before any call.

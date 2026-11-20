@@ -16,6 +16,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/localprobe"
 )
 
 // `reliant models` shows the models a person's chats and workflow steps can
@@ -253,6 +254,7 @@ func yesNo(b bool) string {
 type modelEndpointsClient interface {
 	ListDaemons(context.Context, *connect.Request[reliantv1.ListDaemonsRequest]) (*connect.Response[reliantv1.ListDaemonsResponse], error)
 	SetLocalModelEndpoints(context.Context, *connect.Request[reliantv1.SetLocalModelEndpointsRequest]) (*connect.Response[reliantv1.SetLocalModelEndpointsResponse], error)
+	RefreshLocalModels(context.Context, *connect.Request[reliantv1.RefreshLocalModelsRequest]) (*connect.Response[reliantv1.RefreshLocalModelsResponse], error)
 	ListModelEndpoints(context.Context, *connect.Request[reliantv1.ListModelEndpointsRequest]) (*connect.Response[reliantv1.ListModelEndpointsResponse], error)
 }
 
@@ -431,22 +433,16 @@ machine probes. The machine probes it at once; its chat models are then listed
 by 'reliant models list --local' as <name>@local.
 
 --machine names the machine by id or name; with one machine it may be left out.
-The machine must be online.`,
+The machine must be online: its current servers are read from it before the
+list is changed, so nothing added elsewhere is lost.`,
 		Args:    cobra.ExactArgs(1),
 		PreRunE: refuseModelsFromAgentShell,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseURL, err := normalizeEndpointURL(args[0])
+			target, err := parseEndpointURL(args[0])
 			if err != nil {
 				return err
 			}
-			return changeMachineEndpoints(cmd, machine, func(current []string) ([]string, error) {
-				for _, u := range current {
-					if u == baseURL {
-						return nil, errEndpointUnchanged
-					}
-				}
-				return append(current, baseURL), nil
-			}, baseURL, "Added")
+			return changeMachineEndpoints(cmd, machine, target, true)
 		},
 	}
 	cmd.Flags().StringVar(&machine, "machine", "", "The machine, by id or name (default: your only machine)")
@@ -460,44 +456,68 @@ func newModelsEndpointRemoveCmd() *cobra.Command {
 		Short: "Stop a machine looking for a local model server you added",
 		Long: `Removes a base URL added with 'models endpoint add' (or Add endpoint in the
 app) from the machine's servers. A detected server cannot be removed: it is found
-again on its well-known port.`,
+again on its well-known port. A server a custom endpoint reaches through this
+machine is removed by deleting that endpoint in the app.`,
 		Args:    cobra.ExactArgs(1),
 		PreRunE: refuseModelsFromAgentShell,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseURL, err := normalizeEndpointURL(args[0])
+			target, err := parseEndpointURL(args[0])
 			if err != nil {
 				return err
 			}
-			return changeMachineEndpoints(cmd, machine, func(current []string) ([]string, error) {
-				kept := make([]string, 0, len(current))
-				for _, u := range current {
-					if u != baseURL {
-						kept = append(kept, u)
-					}
-				}
-				if len(kept) == len(current) {
-					return nil, fmt.Errorf("%s was not added to this machine: 'reliant models endpoint list' shows its servers", baseURL)
-				}
-				return kept, nil
-			}, baseURL, "Removed")
+			return changeMachineEndpoints(cmd, machine, target, false)
 		},
 	}
 	cmd.Flags().StringVar(&machine, "machine", "", "The machine, by id or name (default: your only machine)")
 	return cmd
 }
 
-var errEndpointUnchanged = errors.New("endpoint already added")
+// endpointURL is a base URL as typed and its identity on the daemon: the root
+// the daemon keys a configured endpoint by (localprobe.NormalizeRoot), so
+// "http://host:8000", "http://host:8000/" and "http://host:8000/v1" are one
+// server.
+type endpointURL struct {
+	raw  string
+	root string
+}
 
-// changeMachineEndpoints replaces a machine's configured endpoints with
-// edit(current). SetLocalModelEndpoints takes the whole list, so the current
-// one is read from the machine's last inventory (its "configured" endpoints).
-func changeMachineEndpoints(cmd *cobra.Command, machine string, edit func([]string) ([]string, error), baseURL, verb string) error {
+func parseEndpointURL(raw string) (endpointURL, error) {
+	s := strings.TrimRight(strings.TrimSpace(raw), "/")
+	root, err := localprobe.NormalizeRoot(s)
+	if err != nil || s == "" {
+		return endpointURL{}, fmt.Errorf("%q is not a model server URL: pass its OpenAI-compatible base URL, e.g. http://localhost:11434/v1", raw)
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.User != nil {
+		return endpointURL{}, fmt.Errorf("%q must not contain credentials", raw)
+	}
+	return endpointURL{raw: s, root: root}, nil
+}
+
+// rootOf is the daemon identity of a URL an inventory reports, "" when it does
+// not parse.
+func rootOf(u string) string {
+	root, err := localprobe.NormalizeRoot(u)
+	if err != nil {
+		return ""
+	}
+	return root
+}
+
+// changeMachineEndpoints adds or removes target in a machine's configured
+// endpoints. SetLocalModelEndpoints REPLACES the machine's list, so the
+// current list is read from the machine itself first (RefreshLocalModels, the
+// same read the server's own endpoint sync does), never from the stored copy
+// ListDaemons returns, which may be stale or missing: building the new list
+// from a missing one would delete every endpoint the machine had.
+func changeMachineEndpoints(cmd *cobra.Command, machine string, target endpointURL, add bool) error {
 	conn, err := resolveConnection(cmd)
 	if err != nil {
 		return err
 	}
+	ctx := cmd.Context()
 	client := newModelEndpointsClient(conn)
-	resp, err := client.ListDaemons(cmd.Context(), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	resp, err := client.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
 	if err != nil {
 		return conn.annotate(explainRegistryErr(fmt.Errorf("listing machines: %w", err)))
 	}
@@ -506,39 +526,61 @@ func changeMachineEndpoints(cmd *cobra.Command, machine string, edit func([]stri
 		return err
 	}
 	name := machineDisplayName(d)
+
+	fresh, err := client.RefreshLocalModels(ctx, connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: d.GetDaemonId()}))
+	if err != nil {
+		return machineEndpointsErr(conn, name, "reading", err)
+	}
+	inv := fresh.Msg.GetLocalModels()
+	if inv == nil {
+		return fmt.Errorf("%s did not report its local model servers, so nothing was changed: try again in a minute", name)
+	}
 	var current []string
-	for _, ep := range d.GetLocalModels().GetEndpoints() {
-		if ep.GetSource() == "configured" {
-			if u, err := normalizeEndpointURL(ep.GetBaseUrl()); err == nil {
-				current = append(current, u)
+	has := false
+	for _, ep := range inv.GetEndpoints() {
+		if ep.GetSource() != "configured" {
+			continue
+		}
+		current = append(current, ep.GetBaseUrl())
+		if rootOf(ep.GetBaseUrl()) == target.root {
+			has = true
+		}
+	}
+
+	var next []string
+	switch {
+	case add && has:
+		fmt.Fprintf(cmd.OutOrStdout(), "%s already looks for %s.\n", name, target.raw)
+		return nil
+	case add:
+		next = append(current, target.raw)
+	case !has:
+		return fmt.Errorf("%s was not added to %s: 'reliant models endpoint list --machine %s' shows its servers", target.raw, name, d.GetDaemonId())
+	default:
+		if user, ok := customEndpointUsing(ctx, client, d.GetDaemonId(), target.root); ok {
+			return fmt.Errorf("%s is how your custom endpoint %q reaches its server through %s: delete that endpoint in %s instead", target.raw, user, name, localModelsPlace)
+		}
+		for _, u := range current {
+			if rootOf(u) != target.root {
+				next = append(next, u)
 			}
 		}
 	}
-	next, err := edit(current)
-	if errors.Is(err, errEndpointUnchanged) {
-		fmt.Fprintf(cmd.OutOrStdout(), "%s already looks for %s.\n", name, baseURL)
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	set, err := client.SetLocalModelEndpoints(cmd.Context(), connect.NewRequest(&reliantv1.SetLocalModelEndpointsRequest{
+
+	set, err := client.SetLocalModelEndpoints(ctx, connect.NewRequest(&reliantv1.SetLocalModelEndpointsRequest{
 		DaemonId: d.GetDaemonId(), BaseUrls: next,
 	}))
 	if err != nil {
-		if connect.CodeOf(err) == connect.CodeUnavailable || connect.CodeOf(err) == connect.CodeFailedPrecondition {
-			return fmt.Errorf("%s must be online to change its local model servers: %w", name, err)
-		}
-		return conn.annotate(fmt.Errorf("updating %s's local model servers: %w", name, err))
+		return machineEndpointsErr(conn, name, "updating", err)
 	}
 	w := cmd.OutOrStdout()
-	fmt.Fprintf(w, "%s %s on %s.\n", verb, baseURL, name)
-	if verb != "Added" {
+	if !add {
+		fmt.Fprintf(w, "Removed %s on %s.\n", target.raw, name)
 		return nil
 	}
+	fmt.Fprintf(w, "Added %s on %s.\n", target.raw, name)
 	for _, ep := range set.Msg.GetLocalModels().GetEndpoints() {
-		u, err := normalizeEndpointURL(ep.GetBaseUrl())
-		if err != nil || u != baseURL {
+		if rootOf(ep.GetBaseUrl()) != target.root {
 			continue
 		}
 		if ep.GetError() != "" {
@@ -558,6 +600,28 @@ func changeMachineEndpoints(cmd *cobra.Command, machine string, edit func([]stri
 		return nil
 	}
 	return nil
+}
+
+// customEndpointUsing names the custom endpoint relayed through daemonID at
+// root, if any: removing that URL by hand would stop its relay.
+func customEndpointUsing(ctx context.Context, client modelEndpointsClient, daemonID, root string) (string, bool) {
+	resp, err := client.ListModelEndpoints(ctx, connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))
+	if err != nil {
+		return "", false
+	}
+	for _, e := range resp.Msg.GetEndpoints() {
+		if e.GetRoute() == reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_VIA_DAEMON && e.GetDaemonId() == daemonID && rootOf(e.GetBaseUrl()) == root {
+			return e.GetName(), true
+		}
+	}
+	return "", false
+}
+
+func machineEndpointsErr(conn *connection, name, doing string, err error) error {
+	if code := connect.CodeOf(err); code == connect.CodeUnavailable || code == connect.CodeFailedPrecondition || code == connect.CodeDeadlineExceeded {
+		return fmt.Errorf("%s must be online to change its local model servers, and nothing was changed: %w", name, err)
+	}
+	return conn.annotate(fmt.Errorf("%s %s's local model servers: %w", doing, name, err))
 }
 
 // pickMachine finds one machine by id or name; with no ref, the only machine.
@@ -592,15 +656,4 @@ func pickMachine(daemons []*reliantv1.DaemonInfo, ref string) (*reliantv1.Daemon
 		return nil, fmt.Errorf("no machine %q: 'reliant machine list' shows yours", ref)
 	}
 	return nil, fmt.Errorf("%d machines are named %q: pass the id instead", len(byName), ref)
-}
-
-// normalizeEndpointURL checks a base URL and drops a trailing slash, so the
-// same server is never added twice.
-func normalizeEndpointURL(raw string) (string, error) {
-	s := strings.TrimRight(strings.TrimSpace(raw), "/")
-	u, err := url.Parse(s)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return "", fmt.Errorf("%q is not a model server URL: pass its OpenAI-compatible base URL, e.g. http://localhost:11434/v1", raw)
-	}
-	return s, nil
 }
