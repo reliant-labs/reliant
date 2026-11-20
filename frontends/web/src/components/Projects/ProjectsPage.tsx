@@ -19,7 +19,8 @@ import PageHeader from "@/components/forge-ui/page_header";
 import Tabs from "@/components/forge-ui/tabs";
 import { useProjects } from "@/hooks/project-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import { projectPath, projectsPath } from "@/lib/paths";
+import { projectChatsPath, projectsPath } from "@/lib/paths";
+import { isLive } from "@/services/forge/apps";
 
 import { AppsBody } from "../Apps/AppsPage";
 import { useStartBuildingApp } from "../Apps/startBuilding";
@@ -97,7 +98,7 @@ function CodeProjects() {
       </h2>
       <ul className="divide-y divide-border-subtle rounded-xl border border-border">
         {sorted.map((project) => {
-          const href = projectPath(project.id);
+          const href = projectChatsPath(project.id);
           return (
             <li key={project.id}>
               <a

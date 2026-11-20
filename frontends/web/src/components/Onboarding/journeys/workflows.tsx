@@ -35,7 +35,7 @@ import { layoutActions } from "./layoutActions";
 import { EdgeLesson, FOCUS_TARGET, OnCanvas } from "./workflowsCanvas";
 import { APPROVE, LESSONS, LOOP, MERGE, REPORT, REVIEW, SCHEDULE, START, SWITCH } from "./workflowsLessons";
 import { WorkflowsPhoneDeck } from "./workflowsPhone";
-import { homePath, newWorkflowPath, projectPath, workflowBuilderPath, workflowLibraryPath } from "@/lib/paths";
+import { homePath, newWorkflowPath, projectChatsPath, workflowBuilderPath, workflowLibraryPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
 function exampleSlug(context: JourneyContext): string | undefined {
@@ -251,7 +251,7 @@ export const workflowsJourney: Journey = {
         alsoAt: CHAT_SHELL_PREFIXES,
         open: () => {
           const projectId = useProjectStore.getState().currentProject?.id;
-          return projectId ? { to: projectPath(projectId) } : { to: homePath() };
+          return projectId ? { to: projectChatsPath(projectId) } : { to: homePath() };
         },
         label: "Open the chat",
       },

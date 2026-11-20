@@ -92,10 +92,17 @@ export function newChatPath(ctx?: PathContext): string {
   return withOrg("/new", ctx);
 }
 
-/** The chat home filtered to one project (the sidebar's project filter). */
-export function projectPath(projectId: string, ctx?: PathContext): string {
+/**
+ * The chat home filtered to one project (the sidebar's project filter,
+ * `/project/<id>`). Not the project's page: that is projectPath. The design
+ * (R6) moves this filter back into the sidebar; until then it is how a
+ * chat's project is opened.
+ */
+export function projectChatsPath(projectId: string, ctx?: PathContext): string {
   return withOrg(`/project/${seg(projectId)}`, ctx);
 }
+
+// ── Projects (the merged list, §8.3–§8.4) ──────────────────────────────────
 
 /** The person's projects: their apps and sites, and their code (components/Projects/ProjectsPage.tsx). */
 export function projectsPath(ctx?: PathContext): string {
@@ -108,6 +115,23 @@ export type ProjectsShow = "apps" | "sites";
 /** Projects as an href, narrowed to its apps or its sites (`?show=`); every project without one. */
 export function projectsHref(show?: ProjectsShow, ctx?: PathContext): string {
   return withSearch(projectsPath(ctx), { show });
+}
+
+/** A project page's sub-pages (design §4, R7–R9, R18); the page itself has none. */
+export type ProjectPageTab = "settings" | "workspaces" | "move" | "delete";
+
+/** A project's page: its code, checkouts, apps and chats; `tab` one of its sub-pages. */
+export function projectPath(projectId: string, tab?: ProjectPageTab, ctx?: PathContext): string {
+  return withOrg(`/projects/${seg(projectId)}${tab ? `/${tab}` : ""}`, ctx);
+}
+
+/**
+ * One app's console (`/o/<org>/apps/<name>`; `/forge/p/<name>` with org
+ * links off): `name` is forge.yaml's `name`. The console's own builders
+ * (components/Forge/Console/paths.ts consoleBase) spell the same root.
+ */
+export function appPath(name: string, ctx?: PathContext): string {
+  return withOrg(`/forge/p/${seg(name)}`, ctx);
 }
 
 /** Everything waiting on the person, across every chat and project. */
