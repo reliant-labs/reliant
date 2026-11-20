@@ -475,6 +475,12 @@ describe("the environment scope", () => {
     await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
   });
 
+  it("sends the retired Live state dashboard to Services' charts view with its search (U6e)", async () => {
+    const redirected = renderAt("/forge/p/alpha/observability/dashboards/live-state?env=e2e&range=7d");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "services");
+    await landsOn(redirected, "/forge/p/alpha/services", { env: "e2e", range: "7d", view: "charts" });
+  });
+
   it("routes Security › SBOMs", async () => {
     const router = renderAt("/forge/p/alpha/security/sboms?env=e2e&release=v1.5.0");
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "sboms");
