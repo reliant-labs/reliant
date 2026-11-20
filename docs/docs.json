@@ -310,7 +310,9 @@
                   "guides/workflows/delegate-to-sub-agents",
                   "guides/workflows/choose-model-per-step",
                   "guides/workflows/test-workflows-with-scenarios",
-                  "guides/workflows/lint-unattended-workflows"
+                  "guides/workflows/give-agents-tools-mcp-server",
+                  "guides/workflows/lint-unattended-workflows",
+                  "guides/workflows/pause-and-steer-a-run"
                 ]
               },
               {
@@ -321,7 +323,8 @@
                   "guides/workflows/daily-slack-digest",
                   "guides/workflows/slack-bot-agent",
                   "guides/workflows/start-agent-from-webhook",
-                  "guides/workflows/call-api-without-exposing-key"
+                  "guides/workflows/call-api-without-exposing-key",
+                  "guides/workflows/chain-workflows-on-finish"
                 ]
               }
             ]
