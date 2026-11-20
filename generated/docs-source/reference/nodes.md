@@ -417,7 +417,7 @@ Execute a shell command
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `command` | string | No | - | The shell command to run in the project directory |
-| `credentials` | string | No | - | Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable |
+| `credentials` | string | No | - | Set to none to run the command with no GitHub, git, ssh or cloud credentials. On Linux it runs in a sandbox where the daemon's credential files are absent, and is refused where the kernel cannot provide one; on macOS and Windows only the environment is cleaned |
 
 ### Outputs
 

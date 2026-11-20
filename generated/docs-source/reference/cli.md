@@ -22020,7 +22020,7 @@ reliant trigger activate [flags]
 | `--acting-as` | `string` | - | Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise) |
 | `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
 | `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
-| `--message` | `string` | - | Prompt for a declared trigger that has none |
+| `--message` | `string` | - | Prompt for a declared trigger that has none (not needed when the workflow runs no agent) |
 | `--name-prefix` | `string` | - | Names new activations "<prefix> · <trigger>" (default: the workflow) |
 | `--no-machine` | `bool` | - | Run without a machine (workflows that only need the web and integrations) |
 | `--notify` | `bool` | - | Desktop notification when a run succeeds; never an Inbox item (failures always notify) |

@@ -3687,9 +3687,10 @@ type RunArgs struct {
 	// ssh agent socket, GIT_TERMINAL_PROMPT=0 and an empty gh config directory.
 	// Empty (or "inherit") keeps the daemon's own environment.
 	//
-	// A guard rail against a command that pushes or merges when it should not,
-	// not containment: the command still runs as the daemon's Unix user and can
-	// read that user's files.
+	// On Linux the command also runs in internal/credsandbox's user, mount and
+	// PID namespaces, where the daemon's credential files are absent (refused
+	// where the kernel does not allow them); on macOS and Windows only the
+	// environment is scrubbed.
 	Credentials string `protobuf:"bytes,5,opt,name=credentials,proto3" json:"credentials,omitempty"`
 	// WritableCheckouts are the shared project checkouts, or directories inside
 	// one, that a credentials: none command writes. On Linux such a command sees
@@ -9423,7 +9424,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x11BaseBranchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:f\x8a\xb5\x18b\n" +
-	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\x81\b\n" +
+	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xfa\b\n" +
 	"\aRunArgs\x12~\n" +
 	"\acommand\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBM\x82\xb5\x18I\n" +
 	"1The shell command to run in the project directoryp\x01\x82\x01\x11npm test -- --runR\acommand\x12M\n" +
@@ -9432,9 +9433,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\bwork_dir\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB/\x82\xb5\x18+\n" +
 	"'Working directory for command execution \x01R\aworkDir\x12]\n" +
 	"\blog_file\x18\x04 \x01(\v2\x15.reliant.v1.CelStringB+\x82\xb5\x18'\n" +
-	"#Redirect stdout+stderr to this file \x01R\alogFile\x12\xca\x01\n" +
-	"\vcredentials\x18\x05 \x01(\tB\xa7\x01\x82\xb5\x18\xa2\x01\n" +
-	"\x8b\x01Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readableJ\vCredentials\x82\x01\x04noneR\vcredentials\x12\x99\x02\n" +
+	"#Redirect stdout+stderr to this file \x01R\alogFile\x12\xc3\x02\n" +
+	"\vcredentials\x18\x05 \x01(\tB\xa0\x02\x82\xb5\x18\x9b\x02\n" +
+	"\x84\x02Set to none to run the command with no GitHub, git, ssh or cloud credentials. On Linux it runs in a sandbox where the daemon's credential files are absent, and is refused where the kernel cannot provide one; on macOS and Windows only the environment is cleanedJ\vCredentials\x82\x01\x04noneR\vcredentials\x12\x99\x02\n" +
 	"\x12writable_checkouts\x18\x06 \x03(\tB\xe9\x01\x82\xb5\x18\xe4\x01\n" +
 	"\xd5\x01With credentials: none, the shared project checkouts, or hand-off directories under the cache directory, the command may write. Every other checkout but its own is read-only to it, and its cache writes are its own \x01\x82\x01\areliantR\x11writableCheckouts\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +

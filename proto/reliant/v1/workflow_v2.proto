@@ -1230,11 +1230,12 @@ message RunArgs {
   // ssh agent socket, GIT_TERMINAL_PROMPT=0 and an empty gh config directory.
   // Empty (or "inherit") keeps the daemon's own environment.
   //
-  // A guard rail against a command that pushes or merges when it should not,
-  // not containment: the command still runs as the daemon's Unix user and can
-  // read that user's files.
+  // On Linux the command also runs in internal/credsandbox's user, mount and
+  // PID namespaces, where the daemon's credential files are absent (refused
+  // where the kernel does not allow them); on macOS and Windows only the
+  // environment is scrubbed.
   string credentials = 5 [(reliant) = {
-    description: "Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable"
+    description: "Set to none to run the command with no GitHub, git, ssh or cloud credentials. On Linux it runs in a sandbox where the daemon's credential files are absent, and is refused where the kernel cannot provide one; on macOS and Windows only the environment is cleaned"
     example: "none"
     label: "Credentials"
   }];
