@@ -6,13 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -83,47 +79,22 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 			"hasTools", len(convertedTools) > 0,
 			"messageCount", len(convertedMessages.([]map[string]interface{})))
 
-		// Connect with retry logic for transient errors
-		streamClient := llm.StreamingHTTPClient()
-		var resp *http.Response
-		for attempt := 1; ; attempt++ {
-			httpReq, err := c.newOpenRouterRequest(ctx, requestBody)
-			if err != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to create request: %w", err)}
-				return
-			}
-
-			resp, err = streamClient.Do(httpReq)
-			if err != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to send request: %w", err)}
-				return
-			}
-
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-
-			if !isRetryableStatus(resp.StatusCode) || attempt > models.MaxRetries {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))}
-				return
-			}
-
-			delay := retryDelay(attempt, resp)
-			logging.WarnContext(ctx, "OpenRouter retrying streaming request",
-				"status", resp.StatusCode,
-				"attempt", attempt,
-				"maxRetries", models.MaxRetries,
-				"delay", delay)
+		// Connect through the retry ladder
+		emitCancelled := false
+		resp, err := c.openRequest(ctx, llm.StreamingHTTPClient(), requestBody, func(wait llm.RetryWait) error {
 			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
 			case <-ctx.Done():
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-				return
-			case <-time.After(delay):
-				continue
+				emitCancelled = true
+				return ctx.Err()
 			}
+		})
+		if err != nil {
+			if !emitCancelled {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+			}
+			return
 		}
 		defer resp.Body.Close()
 
@@ -356,47 +327,22 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 			"messageCount", len(convertedMessages),
 			"hasReasoning", request["reasoning"] != nil)
 
-		// Connect with retry logic for transient errors
-		streamClient := llm.StreamingHTTPClient()
-		var resp *http.Response
-		for attempt := 1; ; attempt++ {
-			httpReq, err := c.newOpenRouterRequest(ctx, requestBody)
-			if err != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to create request: %w", err)}
-				return
-			}
-
-			resp, err = streamClient.Do(httpReq)
-			if err != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to send request: %w", err)}
-				return
-			}
-
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-
-			if !isRetryableStatus(resp.StatusCode) || attempt > models.MaxRetries {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))}
-				return
-			}
-
-			delay := retryDelay(attempt, resp)
-			logging.WarnContext(ctx, "OpenRouter retrying Gemini streaming request",
-				"status", resp.StatusCode,
-				"attempt", attempt,
-				"maxRetries", models.MaxRetries,
-				"delay", delay)
+		// Connect through the retry ladder
+		emitCancelled := false
+		resp, err := c.openRequest(ctx, llm.StreamingHTTPClient(), requestBody, func(wait llm.RetryWait) error {
 			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
 			case <-ctx.Done():
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-				return
-			case <-time.After(delay):
-				continue
+				emitCancelled = true
+				return ctx.Err()
 			}
+		})
+		if err != nil {
+			if !emitCancelled {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+			}
+			return
 		}
 		defer resp.Body.Close()
 
