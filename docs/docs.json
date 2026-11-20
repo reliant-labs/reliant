@@ -303,7 +303,9 @@
                 "pages": [
                   "guides/workflows/first-multi-agent-workflow",
                   "guides/workflows/run-tests-until-they-pass",
-                  "guides/workflows/require-human-approval"
+                  "guides/workflows/require-human-approval",
+                  "guides/workflows/test-workflows-with-scenarios",
+                  "guides/workflows/lint-unattended-workflows"
                 ]
               },
               {
