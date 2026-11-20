@@ -175,3 +175,33 @@ daemon_gateway = fw.Workload {
 } | _pod | config_gen.root_of("gateway")
 
 ALL: [fw.Workload] = [migrate, api_server, temporal_worker, daemon_gateway]
+
+# ── What reliant builds and ships, but never runs ───────────────────────────
+#
+# Artifacts, not processes: each is `kind = "tool"` on `forge.BuildOnly`, so
+# no env runs it and `ALL` above (what control-plane binds) does not name it.
+# deploy/kcl/release/main.k binds them, and `forge env build release` builds
+# them; an env that does not list one never builds it.
+
+# The production server image: the root Dockerfile, which compiles
+# ./cmd/reliant in a glibc builder and packages it on debian (the one image
+# every server role runs; the Dockerfile's header says why the builder's libc
+# is load-bearing). The four server workloads above keep their GoBuild, which
+# is what a host env runs; this is the image a cluster pulls.
+#
+# The Dockerfile's version stamp is five build args (VERSION, COMMIT,
+# BUILD_DATE, BRANCH, COMMIT_TIME). Their values are per build, so the env that
+# binds this passes them (`server_image_build`), never this declaration.
+server_image_build = lambda build_args: {str: str} -> forge.DockerBuild {
+    forge.DockerBuild {
+        dockerfile = "Dockerfile"
+        build_args = build_args
+    }
+}
+
+server_image = fw.Workload {
+    name = "reliant-image"
+    kind = "tool"
+    runtime = forge.BuildOnly {}
+    build = server_image_build({})
+}
