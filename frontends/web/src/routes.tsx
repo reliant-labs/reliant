@@ -97,7 +97,7 @@ const DesignSandboxPage = lazyRoute(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
 // Proving harness for the forge → reliant token bridge (see index.css).
 const ForgeTokenSandbox = lazyRoute(
-  () => import('./components/forge-ui/ForgeTokenSandbox'), 'default')
+  () => import('./components/DesignSandbox/forgeTokens/ForgeTokenSandbox'), 'default')
 // The download / connect / buy-a-machine surfaces against a fake network.
 const SetupSurfacesPreview = lazyRoute(
   () => import('./components/OnboardingFlow/__preview__/SetupSurfacesPreview'), 'default')

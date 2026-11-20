@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -91,12 +90,10 @@ func TestUsageMeter_DriverRetriesAreProviderRequestsOfTheirOwn(t *testing.T) {
 	assert.EqualValues(t, 540, in)
 }
 
-// The same through a real driver and its real transport: OpenAI's Chat
-// Completions stream reports usage, then fails mid-stream; the driver's own
-// ladder retries and the second request answers. Both requests are in the
-// ledger, the failed one with what it was billed.
-func TestUsageMeter_RealDriverRetryKeepsTheFailedStreamsUsage(t *testing.T) {
-	testkit.Slow(t, "the OpenAI driver's ladder sleeps its 2s base backoff between the two requests")
+// After Chat Completions delivers a chunk, the driver must not replay its
+// deltas. It reports the failure and the billed usage, and the activity retry
+// owns the second provider request. The ledger records both attempts.
+func TestUsageMeter_RealStreamFailureKeepsUsageAcrossActivityRetry(t *testing.T) {
 	t.Parallel()
 	const chunk = `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"gpt-4o",%s}`
 	var hits atomic.Int32
@@ -121,19 +118,23 @@ func TestUsageMeter_RealDriverRetryKeepsTheFailedStreamsUsage(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-ladder-real", project.ID, project.UserID)
 
 	driver := openai.NewClient(llm.DriverOptions{Model: models.Model{ID: "gpt-4o", APIModel: "gpt-4o"}, ApiKey: "k", BaseURL: srv.URL, MaxTokens: 100})
-	meterOnce(t, h, driver, project.UserID, chat.ID)
+	resolved := &resolvedLLMCall{Driver: driver, Model: driver.Model()}
+	runRetried(t, "MeteredStream", func(ctx context.Context, _ string) error {
+		_, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
+		return err
+	}, "x")
 
 	require.EqualValues(t, 2, hits.Load())
 	rows := ledgerRows(t, h, "compaction")
 	require.Len(t, rows, 2, "%+v", rows)
-	var failed, answered ledgerPathRow
+	byAttempt := map[int]ledgerPathRow{}
 	for _, r := range rows {
-		if strings.HasSuffix(r.ID, "/request/1") {
-			failed = r
-		} else {
-			answered = r
-		}
+		byAttempt[r.Attempt] = r
 	}
+	require.Contains(t, byAttempt, 1, "the first stream failed back to Temporal")
+	require.Contains(t, byAttempt, 2, "the successful request was a new activity attempt, not a driver replay")
+	failed, answered := byAttempt[1], byAttempt[2]
+	assert.Equal(t, failed.ID, answered.ID, "the attempts are separate rows for one logical request")
 	assert.Equal(t, "error", failed.Outcome)
 	assert.Equal(t, [2]int64{500, 120}, [2]int64{failed.In, failed.Out}, "the failed stream's billed tokens are counted")
 	assert.Equal(t, "success", answered.Outcome)

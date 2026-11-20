@@ -1,13 +1,18 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { loadConfig } from "@/lib/config_gen";
 import type { DbCell, DbColumn, DbTable } from "@/services/controlPlane/observability/appDatabaseApi";
 import { cellCut } from "./dataCells-model";
 import { encodeFilter, type DataSearch } from "./dataUrl-model";
 
-// Owned build-time containment seam; absence keeps the normal behavior.
-// Disable only the optional crosslinks, never Identity administration or Data.
+// Per-environment containment seam (runtime config IDENTITY_DATA_LINKS); absence
+// keeps the normal behavior. Disable only the optional crosslinks, never
+// Identity administration or Data. The build-time VITE_IDENTITY_DATA_LINKS is a
+// deprecated fallback, read only when config.js leaves the key unset, so a
+// bundle built with it keeps its behavior until its deploy sets the key.
 export function identityDataLinksEnabled(): boolean {
-  return import.meta.env.VITE_IDENTITY_DATA_LINKS !== "disabled";
+  const setting = loadConfig().IDENTITY_DATA_LINKS || import.meta.env.VITE_IDENTITY_DATA_LINKS;
+  return setting !== "disabled";
 }
 
 // GetIdentityUserRequest.user_id max_len, not the ListUsers email-query bound.

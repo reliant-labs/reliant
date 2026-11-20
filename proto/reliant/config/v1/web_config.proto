@@ -233,8 +233,13 @@ message ReliantWebConfig {
     description: "\"true\": the `reliant` binary released beside this deployment has its server, gateway and auth defaults compiled in, so the copy-paste CLI commands render bare instead of behind RELIANT_*= overrides. Only the release knows this; set it where that release is the one users download."
   }];
 
+  string identity_data_links = 30 [(forge.v1.config) = {
+    env_var: "IDENTITY_DATA_LINKS"
+    description: "\"disabled\": the forge console's Identity and Data pages render no crosslinks between an identity and the app rows that name it (and make no lookup for them); Identity administration and Data browsing are unaffected. Unset: the links render. Replaces the build-time VITE_IDENTITY_DATA_LINKS, which a bundle still honours when this key is unset."
+  }];
+
   // ── Routing ───────────────────────────────────────────────────────────
-  string org_routes = 30 [(forge.v1.config) = {
+  string org_routes = 31 [(forge.v1.config) = {
     env_var: "ORG_ROUTES"
     description: "The flag web.org_routes (control-plane docs/design/unified-shell-and-projects.md, D12). \"true\": the app's links name the org (`/o/<org slug>/…`) and the org-less paths of org-scoped pages redirect into the tab's org. Unset or \"false\": links keep today's form and nothing redirects. The `/o/<org>` routes resolve either way, so turning it off is the rollback: every link printed in either form keeps working."
   }];

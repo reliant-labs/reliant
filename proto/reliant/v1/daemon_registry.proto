@@ -27,9 +27,7 @@ service DaemonRegistryService {
   // ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
   // the resolved daemon is not currently active.
   rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "reports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does"}
-    };
+    option (forge.v1.method) = {activity: {none: "reports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does"}};
   }
 
   // RefreshLocalModels asks an online daemon to re-probe its local model
@@ -37,9 +35,7 @@ service DaemonRegistryService {
   // "Test connection" / "Refresh". Fails with Unavailable when the daemon is
   // offline.
   rpc RefreshLocalModels(RefreshLocalModelsRequest) returns (RefreshLocalModelsResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "re-probes the machine's local model servers: refreshes an observed inventory and configures nothing"}
-    };
+    option (forge.v1.method) = {activity: {none: "re-probes the machine's local model servers: refreshes an observed inventory and configures nothing"}};
   }
 
   // SetLocalModelEndpoints replaces the user-configured local model

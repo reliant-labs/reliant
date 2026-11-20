@@ -13,6 +13,12 @@ import { ResourceVisibility } from "../../../gen/reliant/v1/common_pb";
 const state = vi.hoisted(() => ({ chat: {} as Record<string, unknown> }));
 
 vi.mock("../../../services/controlPlane/config", () => ({ hasControlPlane: true }));
+vi.mock("../../../hooks/useOnboardingQueries", () => ({
+  useDaemonList: () => ({ data: [
+    { daemonId: "other", name: "Other machine" },
+    { daemonId: "assigned", name: "Build workstation" },
+  ] }),
+}));
 vi.mock("../thread-views/useChatThreadMode", () => ({
   useChatThreadMode: () => ({ mode: "detailed", preference: "auto" }),
   setChatThreadMode: vi.fn(),
@@ -61,6 +67,21 @@ async function openMenu() {
 
 beforeEach(() => {
   state.chat = { id: "chat-1", title: "Deploy fix", orgId: "acme", visibility: ResourceVisibility.PRIVATE, worktreeId: "wt-1" };
+});
+
+describe("ChatHeader machine", () => {
+  it("names only the chat's assigned machine", async () => {
+    state.chat = { ...state.chat, activeDaemonId: "assigned" };
+    await openMenu();
+    expect(screen.getByText("Machine: Build workstation")).toBeInTheDocument();
+    expect(screen.queryByText("Machine: Other machine")).not.toBeInTheDocument();
+  });
+
+  it("doesn't guess when the assigned machine isn't in the registry", async () => {
+    state.chat = { ...state.chat, activeDaemonId: "missing" };
+    await openMenu();
+    expect(screen.queryByText(/^Machine:/)).not.toBeInTheDocument();
+  });
 });
 
 describe("ChatHeader sharing", () => {

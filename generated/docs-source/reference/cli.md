@@ -21,7 +21,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant auth`](#reliant-auth) | Manage authentication |
 | [`reliant auth login`](#reliant-auth-login) | Log in to a Reliant server |
 | [`reliant auth logout`](#reliant-auth-logout) | Sign this machine out of the resolved server |
-| [`reliant auth serve`](#reliant-auth-serve) | Start a local OAuth helper server |
+| [`reliant auth serve`](#reliant-auth-serve) | Start the local callback helper for Claude and Codex |
 | [`reliant auth status`](#reliant-auth-status) | Show the login for the resolved server |
 | [`reliant auth token`](#reliant-auth-token) | Manage API tokens (rlat_ access tokens acting as you) |
 | [`reliant auth token create`](#reliant-auth-token-create) | Create a new API token |
@@ -585,7 +585,7 @@ reliant auth
 |---------|-------------|
 | [`login`](#reliant-auth-login) | Log in to a Reliant server |
 | [`logout`](#reliant-auth-logout) | Sign this machine out of the resolved server |
-| [`serve`](#reliant-auth-serve) | Start a local OAuth helper server |
+| [`serve`](#reliant-auth-serve) | Start the local callback helper for Claude and Codex |
 | [`status`](#reliant-auth-status) | Show the login for the resolved server |
 | [`token`](#reliant-auth-token) | Manage API tokens (rlat_ access tokens acting as you) |
 
@@ -684,10 +684,12 @@ reliant auth logout
 
 ### reliant auth serve
 
-Start a local OAuth helper server
+Start the local callback helper for Claude and Codex
 
 Starts a lightweight HTTP server on localhost that handles OAuth
-callback flows for Claude and Codex authentication.
+callback flows for Claude and Codex authentication. It does not sign in to
+Reliant or start a browser on its own. To sign in to the Reliant CLI, run
+'reliant auth login'.
 
 USUALLY YOU DO NOT NEED THIS. `reliant daemon start` serves the same
 endpoints when it runs on the machine your browser is on, so a local daemon
@@ -21332,7 +21334,7 @@ reliant github gh [flags] -- <gh arguments>
 | `--as` | `string` | `app` | Who to act as: app (the Reliant bot, reliant-labs[bot]) or user (you) |
 | `--daemon-account` | `string` | - | Use this daemon account at --daemon-server |
 | `--daemon-server` | `string` | - | Use the session of the daemon at this server |
-| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions and level read or write; repeatable (default: issues, pull_requests and contents at write) |
+| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions, checks and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
 
 ---
@@ -21353,7 +21355,7 @@ reliant github token [flags]
 | `--daemon-account` | `string` | - | Use this daemon account at --daemon-server |
 | `--daemon-server` | `string` | - | Use the session of the daemon at this server |
 | `--json` | `bool` | - | Print the token with who it speaks as, its repository and its expiry |
-| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions and level read or write; repeatable (default: issues, pull_requests and contents at write) |
+| `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions, checks and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
 
 ---

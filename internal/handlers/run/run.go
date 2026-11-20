@@ -3,7 +3,6 @@ package run
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -634,16 +634,15 @@ func runItemToProto(item *db.RunListItem) *reliantv1.Run {
 // It is opaque to callers; the keyset it encodes is the list's sort key, so a
 // row inserted mid-pagination can neither repeat nor be skipped.
 func encodeRunCursor(c db.RunCursor) string {
-	raw := strconv.FormatInt(c.CreatedAt.UnixMicro(), 10) + "|" + c.ChatID
-	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+	return orm.EncodeCursor(strconv.FormatInt(c.CreatedAt.UnixMicro(), 10) + "|" + c.ChatID)
 }
 
 func decodeRunCursor(token string) (*db.RunCursor, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(token)
+	raw, err := orm.DecodeCursor(token)
 	if err != nil {
 		return nil, err
 	}
-	micros, id, ok := strings.Cut(string(raw), "|")
+	micros, id, ok := strings.Cut(raw, "|")
 	if !ok || id == "" {
 		return nil, fmt.Errorf("malformed cursor")
 	}

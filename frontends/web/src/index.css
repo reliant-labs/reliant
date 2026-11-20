@@ -1374,13 +1374,6 @@
       0 4px 6px -1px rgb(33 71 139 / 0.16);
   }
 
-  /* Improved message bubble styling */
-  .message-bubble {
-    border-radius: 0.75rem;
-    border: 1px solid transparent;
-    transition: all 0.2s ease-in-out;
-  }
-
   /* Remove hover effects that cause movement */
   .hover-lift {
     transition: none;
@@ -1396,12 +1389,6 @@
     background-image:
       radial-gradient(circle at 1px 1px, hsl(var(--border) / 0.1) 1px, transparent 0);
     background-size: 20px 20px;
-  }
-
-  /* Improved visual hierarchy */
-  .chat-message-container {
-    backdrop-filter: blur(8px);
-    background: hsl(var(--background) / 0.8);
   }
 
   /* Improved focus states */
@@ -1466,12 +1453,6 @@
     display: none;
   }
 
-  /* Enhanced message layout for better UX */
-  .message-container {
-    position: relative;
-    transition: all 0.2s ease-in-out;
-  }
-
   /* Message content area improvements */
   .message-content {
     position: relative;
@@ -1502,32 +1483,12 @@
     max-width: 100%;
   }
 
-  /* User message content - removed blue left border highlight */
   /*
-   * Overflow deliberately is NOT set here. This rule is emitted after
-   * Tailwind's utilities, so an `overflow` declaration silently beats the
-   * `overflow-hidden` the bubble sets in ChatMessage — which is what has to
-   * clip the inner scroll container for a long expanded message to scroll.
+   * The user bubble (.user-message-content) is styled by ChatMessage's
+   * utilities alone; it keeps the class for the chat font above. Nothing
+   * here may set its box: this file is emitted after Tailwind's utilities,
+   * so a padding or overflow rule would silently beat them.
    */
-  .user-message-content {
-    display: block;
-    position: relative;
-    padding: 4px 8px;
-    box-sizing: border-box;
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  /* Message layout - no avatar column */
-  .message-layout {
-    display: flex;
-    align-items: flex-start;
-    width: 100%;
-  }
-
-  /* User message bubble with max height and fade */
-  .user-message-content .message-bubble {
-    position: relative;
-  }
 
   /* Improved visual hierarchy */
   .message-role {

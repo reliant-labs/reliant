@@ -76,7 +76,7 @@ const ALLOWED_ROUTE: Record<string, { why: string; texts: readonly string[] }> =
 
 /** Files allowed to navigate to a path literal, by why. */
 const ALLOWED_NAVIGATION: Record<string, string> = {
-  "components/forge-ui/ForgeTokenSandbox.tsx": "A dev-only harness whose links point at its own dev-only route; never org-scoped.",
+  "components/DesignSandbox/forgeTokens/ForgeTokenSandbox.tsx": "A dev-only harness whose links point at its own dev-only route; never org-scoped.",
 };
 
 const { sites, roots } = findPathSites(SRC);
