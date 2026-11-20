@@ -258,7 +258,9 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
       data-collapsed={resolved ? "false" : undefined}
       // break-words: a question or answer is agent-written text, and an
       // unbroken URL or path in it ran past the card instead of wrapping.
-      className="rounded-xl border border-border bg-background p-4 break-words sm:p-5"
+      // w-full: the transcript's message column sizes children to fit, and
+      // a question card takes the whole column, like an approval.
+      className="w-full rounded-xl border border-border bg-background p-4 break-words sm:p-5"
     >
       {resolved ? (
         // The open settled card: its header closes it again.

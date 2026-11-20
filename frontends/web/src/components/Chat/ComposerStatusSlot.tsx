@@ -238,7 +238,7 @@ export function StatusBandColumn({
     );
   }
   return (
-    <div className="flex-shrink-0 px-4 sm:px-6" data-testid={testId}>
+    <div className="flex-shrink-0 px-[var(--chat-gutter)]" data-testid={testId}>
       <div className="mx-auto max-w-[var(--chat-column)]">
         <div className={cn(bandClassName, className)}>{children}</div>
       </div>
@@ -457,7 +457,7 @@ function StatusLines({
   return (
     // Same gutters and column as the composer it belongs to.
     <div
-      className="flex-shrink-0 px-4 sm:px-6"
+      className="flex-shrink-0 px-[var(--chat-gutter)]"
       data-testid="composer-status-slot"
       data-line-count={lines.length}
     >

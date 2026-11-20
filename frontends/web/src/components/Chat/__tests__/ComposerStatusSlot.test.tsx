@@ -431,7 +431,7 @@ describe("banners in the status sheet", () => {
     expect(recovery.closest("[data-status-slot-item]")).toHaveClass("contents");
 
     const gutter = screen.getByTestId("gutter-banner");
-    expect(gutter).toHaveClass("px-4", "sm:px-6");
+    expect(gutter).toHaveClass("px-[var(--chat-gutter)]");
     expect(gutter.querySelector(".max-w-\\[var\\(--chat-column\\)\\]")).not.toBeNull();
   });
 });
