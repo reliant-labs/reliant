@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,6 +74,29 @@ func TestMarkersGrammar(t *testing.T) {
 		{"inline code", "the review leaves `<!-- review-passed sha=abc -->` at its end", nil},
 		{"double-backtick span", "``<!-- x -->`` <!-- y -->", []any{marker("y")}},
 		{"after a closed span", "`code` <!-- y -->", []any{marker("y")}},
+
+		// Code spans run across lines, as GitHub renders them. Each expectation
+		// below was checked against GitHub's renderer (POST /markdown, gfm):
+		// a marker counts exactly where it renders as an HTML comment.
+		{"span across lines", "see `foo\nbar <!-- review-passed sha=abc --> baz` end", nil},
+		{"span across several lines", "``a\nb\nc <!-- m -->\nd``", nil},
+		{"a run of another length does not close", "x `` y\nz ` <!-- m --> `\nw `` <!-- after -->", []any{marker("after")}},
+		{"an unclosed run is a literal backtick", "stray ` tick <!-- m --> after", []any{marker("m")}},
+		{"a closer of another length only is no closer", "x `` y\nz <!-- m --> ` w", []any{marker("m")}},
+		{"a blank line ends an unclosed span", "`open\n\nlater <!-- m -->", []any{marker("m")}},
+		{"a span does not cross a blank line", "`open\n\nlater <!-- m --> `", []any{marker("m")}},
+		{"a blank line ends the paragraph a span would close in", "`a\n\n<!-- m --> b`", []any{marker("m")}},
+		// A line that starts with <!-- is an HTML block, which interrupts the
+		// paragraph: GitHub renders `\n<!-- … -->\n` as two literal backticks
+		// around a hidden comment, not as code.
+		{"an HTML-comment line interrupts a span", "`\n<!-- review-passed sha=abc -->\n`", []any{marker("review-passed", "sha", "abc")}},
+		{"an HTML-comment line ends the paragraph", "a ``b\n<!-- m -->`` c", []any{marker("m")}},
+		{"backticks in an HTML block are text", "<!-- a --> `\n<!-- b --> `", []any{marker("a"), marker("b")}},
+		{"a marker inside a longer span", "``a ` <!-- m --> `` after <!-- second -->", []any{marker("second")}},
+		{"a fence ends the paragraph", "`a\n```\n<!-- in -->\n```\n<!-- out --> `", []any{marker("out")}},
+		{"indented code", "para\n\n    <!-- m -->\n\nnext", nil},
+		{"tab-indented code", "\t<!-- m -->", nil},
+		{"an indented paragraph line is not code", "para\n    <!-- m -->", []any{marker("m")}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -99,34 +121,68 @@ func TestMarkersAreBounded(t *testing.T) {
 	assert.Len(t, got, maxMarkers)
 }
 
-// The body is untrusted: a megabyte built to make a scanner backtrack is read
-// in one pass.
+// The body is untrusted: an input built to make a scanner backtrack is read in
+// one pass. The scan counts the bytes it visits (markerScan.steps), so this
+// proves the bound without a clock: steps stay under a fixed multiple of the
+// input, and doubling the input at most doubles them.
 func TestMarkersScanIsLinear(t *testing.T) {
-	const mb = 1 << 20
-	inputs := map[string]string{
-		"openers":        strings.Repeat("<!--", mb/4),
-		"open names":     strings.Repeat("<!-- a ", mb/7),
-		"open pairs":     strings.Repeat("<!-- a k=v ", mb/11),
-		"long value":     "<!-- a k=" + strings.Repeat("v", mb),
-		"dashes":         "<!-- a k=" + strings.Repeat("-", mb),
-		"backtick runs":  strings.Repeat("`` ` <!-- ", mb/10),
-		"fence lines":    strings.Repeat("```\n<!--\n", mb/9),
-		"one long line":  strings.Repeat("<!-- free text that never closes ", mb/34),
-		"blank-filled":   "<!--" + strings.Repeat(" ", mb),
-		"marker storm":   strings.Repeat("<!-- m k=v -->", mb/14),
-		"newline storm":  strings.Repeat("\n", mb),
-		"unclosed fence": "```\n" + strings.Repeat("<!-- m -->\n", mb/11),
+	// Every pass but marker parsing is a fixed number of reads per byte; a
+	// candidate marker starts at a "<!--" (they cannot overlap, so at most one
+	// per 4 bytes) and reads at most maxMarkerBytes.
+	const perByte = 4 + maxMarkerBytes/len("<!--")
+	inputs := map[string]func(n int) string{
+		"openers":            func(n int) string { return strings.Repeat("<!--", n) },
+		"open names":         func(n int) string { return strings.Repeat("<!-- a ", n) },
+		"open pairs":         func(n int) string { return strings.Repeat("<!-- a k=v ", n) },
+		"openers in values":  func(n int) string { return "<!-- a" + strings.Repeat(" k=<!--", n) },
+		"long value":         func(n int) string { return "<!-- a k=" + strings.Repeat("v", n) },
+		"dashes":             func(n int) string { return "<!-- a k=" + strings.Repeat("-", n) },
+		"backtick runs":      func(n int) string { return strings.Repeat("`` ` <!-- ", n) },
+		"growing runs":       func(n int) string { return growingRuns(n) },
+		"unclosed spans":     func(n int) string { return strings.Repeat("`` <!-- free -->\n", n) },
+		"fence lines":        func(n int) string { return strings.Repeat("```\n<!--\n", n) },
+		"html block lines":   func(n int) string { return strings.Repeat("<!-- `\n", n) },
+		"indented lines":     func(n int) string { return strings.Repeat("    <!-- m -->\n", n) },
+		"one long line":      func(n int) string { return strings.Repeat("<!-- free text that never closes ", n) },
+		"blank-filled":       func(n int) string { return "<!--" + strings.Repeat(" ", n) },
+		"marker storm":       func(n int) string { return strings.Repeat("<!-- m k=v -->", n) },
+		"marker storm spans": func(n int) string { return "x " + strings.Repeat("<!-- m k=v --> `", n) },
+		"newline storm":      func(n int) string { return strings.Repeat("\n", n) },
+		"unclosed fence":     func(n int) string { return "```\n" + strings.Repeat("<!-- m -->\n", n) },
 	}
-	for name, in := range inputs {
+	const mb = 1 << 20
+	for name, gen := range inputs {
 		t.Run(name, func(t *testing.T) {
-			start := time.Now()
-			got := markers(in)
-			assert.LessOrEqual(t, len(got), maxMarkers)
-			// A linear scan of 1 MB takes milliseconds; a quadratic one,
-			// minutes. The bound leaves room for a loaded machine.
-			assert.Less(t, time.Since(start), 2*time.Second)
+			n := max(1, mb/len(gen(1000))*1000/2) // about half a megabyte
+			small, big := gen(n), gen(2*n)
+			got, smallSteps := scanSteps(small)
+			assert.LessOrEqual(t, got, maxMarkers)
+			got, bigSteps := scanSteps(big)
+			assert.LessOrEqual(t, got, maxMarkers)
+			assert.LessOrEqual(t, bigSteps, perByte*len(big), "steps per input byte")
+			// A candidate in the last maxMarkerBytes of an input reads less, so
+			// the smaller input's tail may be up to that much cheaper.
+			assert.LessOrEqual(t, bigSteps, 2*smallSteps+perByte*maxMarkerBytes, "twice the input, at most twice the work")
 		})
 	}
+}
+
+// growingRuns is backtick runs of every length 1..n with no closer for any:
+// a scanner that searched forward from each run for its closer would be
+// quadratic.
+func growingRuns(n int) string {
+	var b strings.Builder
+	for i := 1; b.Len() < n; i++ {
+		b.WriteString(strings.Repeat("`", i))
+		b.WriteString(" <!-- x")
+	}
+	return b.String()
+}
+
+func scanSteps(body string) (markersFound, steps int) {
+	var s markerScan
+	s.scan(body)
+	return len(s.out), s.steps
 }
 
 func reviewWithBody(t *testing.T, body string) []byte {
