@@ -1,9 +1,0 @@
-# Release policy, read at the commit being released by scripts/semver-next.sh (this
-# repo's, and control-plane's, which the rc-train runs over this checkout).
-schema: release-policy/v1
-# The v2 breaking window (owner, 2026-11-20; reliant.md). While the newest final release's
-# major is below this number, a breaking change (a `!` title, a `BREAKING CHANGE:` footer)
-# makes the next release v<this>.0.0 instead of refusing the cut. Once v<this>.0.0 is the
-# newest final release the window is closed by itself: breaking changes are refused again.
-# Only the owner opens a window; delete the line (or leave it, it is inert) after the cut.
-breaking_window_major: 2
