@@ -49,6 +49,7 @@ import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
 import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
+import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
 import { useMarkUnread } from "../../hooks/message-queries";
@@ -702,7 +703,7 @@ function SidebarComponent({
   // unless it is one.
   const shell = useShellProject(pathname, search);
   // The bridges of the chat filter of several (URL, remembered choice, org), run once, here.
-  useChatProjectFilter({ sync: { pathname, search } });
+  const chatProjectFilter = useChatProjectFilter({ sync: { pathname, search } });
   const projectFilterId = shell.mode === "one" ? shell.projectId : null;
   const severalProjects = shell.mode === "many" ? shell.ids : null;
   // One app with no code here has no chats to list.
@@ -1851,7 +1852,17 @@ function SidebarComponent({
           data-onboarding="project-filter"
           data-testid="sidebar-chats-heading"
         >
-          <span className="min-w-0 flex-1 truncate">Chats</span>
+          <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
+            Chats
+            {/* "· 3 projects ×" while the list is a choice of several (#3027). */}
+            <ChatProjectFilterScope filter={chatProjectFilter} clearClassName={SIDEBAR_ICON_BUTTON} />
+          </span>
+          {!setupNeeded && !noChatsHere && (
+            // The project filter, choose N of M (#3027); at rest only on hover unless it filters.
+            <span className={cn("flex", chatProjectFilter.mode === "all" && SIDEBAR_HEADING_HOVER_ACTION)}>
+              <ChatProjectFilterButton filter={chatProjectFilter} needsYouByProject={needsYouByProject} className={SIDEBAR_ICON_BUTTON} />
+            </span>
+          )}
           {chatListActions}
         </div>
         {/* Chats cannot run yet (no machine): one card that sets them up, in place of the list. */}

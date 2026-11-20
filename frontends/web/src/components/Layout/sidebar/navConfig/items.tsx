@@ -33,6 +33,7 @@ import {
   Sparkles,
   Tag,
   UserRound,
+  Workflow,
   Wrench,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
@@ -323,6 +324,7 @@ export const workflowsGroup: NavGroup = {
   kind: "group",
   id: "workflows",
   label: "Workflows",
+  icon: icon(Workflow),
   trail: "workflows-pill",
   children: [
     { kind: "row", id: "workflows-runs", label: "Runs", href: () => runsPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "runs" },
