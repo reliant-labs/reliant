@@ -1,13 +1,10 @@
 /**
- * shopfront, U6c pages: what Storage and Speed insights read.
+ * shopfront, U6c pages: what Storage and Usage & billing read.
  *
  *   Storage          prod declares two buckets (uploads, private; assets,
  *                    public read, on Reliant hosting), staging one; uploads
  *                    lists a few folders and files.
- *   Speed insights   p75 web vitals for six pages of the storefront, from the
- *                    browser runtime's `webvitals` spans (one SQL QueryPanel,
- *                    panel id `speed-insights-pages`): mostly good, checkout's
- *                    LCP and search's INP needing work, one poor CLS.
+ *   Speed insights   moved to speedInsights.ts (U6e).
  *   Usage & billing  the org's daily usage by category over the requested
  *                    window (hosted apps, databases, static hosting,
  *                    observability at list price; managed AI as settled
@@ -43,27 +40,6 @@ function listObjects(req: Record<string, unknown>) {
     nextPageToken: '',
     auditId: 'audit-u6c-1',
   }
-}
-
-// page, lcp ms, inp ms, cls, ttfb ms, page views
-const VITALS: [string, number, number, number, number, number][] = [
-  ['/', 1820, 96, 0.02, 310, 18_420],
-  ['/products', 2140, 142, 0.05, 380, 9_870],
-  ['/products/view', 2390, 168, 0.31, 410, 7_215],
-  ['/cart', 1610, 88, 0.01, 290, 3_402],
-  ['/checkout', 3120, 184, 0.04, 640, 1_288],
-  ['/search', 2010, 356, 0.07, 350, 2_960],
-]
-
-export function u6cQueryPanel(req: Record<string, unknown>): Record<string, unknown> | undefined {
-  const panel = (req.panel ?? {}) as { id?: string }
-  if (panel.id === 'speed-insights-pages') {
-    return {
-      panelId: panel.id, kind: 'sql', unit: '', stepSeconds: 0, series: [], columns: ['lcp', 'inp', 'cls', 'ttfb', 'samples'],
-      rows: VITALS.map(([page, lcp, inp, cls, ttfb, views]) => ({ group: { page }, values: [lcp, inp, cls, ttfb, views], missingValueIndexes: [] })),
-    }
-  }
-  return undefined
 }
 
 // category, list or actual, dollars per day, quantities per day [id, unit, value]
@@ -166,5 +142,5 @@ export const u6cFixtures: Fixtures = {
   'controlplane.v1.BillingService/ListCurrentUserInvoices': () => ({ invoices: invoices() }),
   'controlplane.v1.StorageBrowserService/ListBrowsableBuckets': (req) => ({ buckets: BUCKETS[String(req.environmentId)] ?? [], policy: 'STORAGE_ACCESS_POLICY_OPEN' }),
   'controlplane.v1.StorageBrowserService/ListObjects': listObjects,
-  'controlplane.v1.ObservabilityService/QueryPanel': (req) => u6cQueryPanel(req) ?? servicesQueryPanel(req) ?? queryPanel(req),
+  'controlplane.v1.ObservabilityService/QueryPanel': (req) => servicesQueryPanel(req) ?? queryPanel(req),
 }
