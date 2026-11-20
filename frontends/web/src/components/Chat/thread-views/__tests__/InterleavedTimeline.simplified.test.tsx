@@ -2,7 +2,7 @@
  * The simplified thread through the real InterleavedTimeline, ChatMessage and
  * TurnWorkFold: the agent's prose stays on screen, each run of tool work
  * between it becomes one fold row, and the fold's contents come and go with
- * its header. (Every run is held to its summary form here; see the mock.)
+ * its header.
  *
  * Only the leaves are stubbed (virtualizer, markdown, tool cards, stores);
  * the timeline pass, the slicing and the fold are real.
@@ -80,17 +80,9 @@ vi.mock("../../ToolExecution", () => ({
 vi.mock("../../ToolExecutionGroup", () => ({
   ToolExecutionGroup: () => <div data-testid="tool-group">group</div>,
 }));
-// These cases drive a run's summary row (open / closed, live, counts): every
-// run takes that form here, however short. A short run's inline rows are
-// TurnWorkFold.test.tsx's.
-vi.mock("../../TurnWorkFold", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../TurnWorkFold")>();
-  const Fold = actual.TurnWorkFold;
-  return {
-    ...actual,
-    TurnWorkFold: (props: React.ComponentProps<typeof Fold>) => <Fold {...props} inlineStepsMax={0} />,
-  };
-});
+vi.mock("../../ToolExecutionCollapsibleGroup", () => ({
+  ToolExecutionCollapsibleGroup: () => <div data-testid="tool-collapsible-group">collapsible</div>,
+}));
 vi.mock("../../MarkdownRenderer", () => ({
   MarkdownRenderer: ({ content }: { content: string }) => <div data-testid="text-run">{content}</div>,
 }));

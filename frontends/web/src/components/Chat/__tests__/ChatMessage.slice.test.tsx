@@ -343,3 +343,47 @@ describe("ChatMessage slice", () => {
     expect(screen.getByRole("button", { name: /copy message/i })).toBeInTheDocument();
   });
 });
+
+describe("ChatMessage tool run grouping (desktop)", () => {
+  const order = () =>
+    Array.from(
+      document.querySelectorAll(
+        '[data-testid="tool-card"], [data-testid="tool-group"], [data-testid="tool-collapsible-group"]',
+      ),
+    ).map((el) => (el.getAttribute("data-testid") === "tool-card" ? el.textContent : el.getAttribute("data-testid")));
+
+  it("reads a run's read-only calls as one Explored group, and its other calls as one group", () => {
+    const message = assistant([
+      tool(0, "grep", "call-1"),
+      tool(1, "view", "call-2"),
+      tool(2, "edit", "call-3"),
+      tool(3, "shell", "call-4"),
+    ]);
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work", [0])} />);
+    expect(order()).toEqual(["tool-collapsible-group", "tool-group"]);
+  });
+
+  it("puts each group where its first call ran, and a lone call as its own row", () => {
+    const message = assistant([tool(0, "edit", "call-1"), tool(1, "view", "call-2"), tool(2, "grep", "call-3")]);
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work", [0])} />);
+    expect(order()).toEqual(["tool:edit", "tool-collapsible-group"]);
+  });
+
+  it("leaves a single read as its own row", () => {
+    const message = assistant([tool(0, "view", "call-1"), tool(1, "edit", "call-2")]);
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work", [0])} />);
+    expect(order()).toEqual(["tool:view", "tool:edit"]);
+  });
+
+  it("groups the same way in the detailed transcript", () => {
+    const message = assistant([
+      text(0, "Looking."),
+      tool(1, "view", "call-1"),
+      tool(2, "glob", "call-2"),
+      tool(3, "shell", "call-3"),
+      tool(4, "shell", "call-4"),
+    ]);
+    render(<ChatMessage message={message} chatId="chat-1" />);
+    expect(order()).toEqual(["tool-collapsible-group", "tool-group"]);
+  });
+});

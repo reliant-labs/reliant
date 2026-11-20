@@ -122,3 +122,13 @@ export function editDiffStat(rawName: string, input: unknown, inputElided = fals
   }
   return stat.added === 0 && stat.removed === 0 ? null : stat;
 }
+
+/** The sum of several edits' line counts (a fold's `+12 −3`); null when none counted. */
+export function sumDiffStats(stats: ReadonlyArray<DiffStat | null>): DiffStat | null {
+  const counted = stats.filter((stat): stat is DiffStat => stat !== null);
+  if (counted.length === 0) return null;
+  return counted.reduce((total, stat) => ({ added: total.added + stat.added, removed: total.removed + stat.removed }), {
+    added: 0,
+    removed: 0,
+  });
+}

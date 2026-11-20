@@ -6,7 +6,8 @@ import { useChat, useToolCallStates, useToolResultsByCallId } from "../../store/
 import { viewerSafeMessage } from "../../lib/viewerResults";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { findWorkflowById } from "../../lib/workflowTree";
-import { workflowLifecycleToDisplayStatus } from "./ToolExecution";
+import { DiffStatText, workflowLifecycleToDisplayStatus } from "./ToolExecution";
+import { editDiffStat, sumDiffStats } from "./toolRowParts";
 import { ChatMessage } from "./ChatMessage";
 import {
   formatTurnWorkHeadline,
@@ -31,8 +32,6 @@ interface TurnWorkFoldProps {
   /** The turn is still being worked on: the header shows live text and ticks. */
   isStreaming?: boolean;
   onSelectThread?: (threadId: string | null) => void;
-  /** The most steps shown as rows of their own; more read as one summary row. */
-  inlineStepsMax?: number;
 }
 
 const NO_APPROVALS: Approval[] = [];
@@ -47,12 +46,6 @@ const workSlice = (part: TurnWork["parts"][number]): MessageSlice =>
   part.callIds
     ? { segmentIndexes: part.segmentIndexes, role: "work", callIds: part.callIds }
     : { segmentIndexes: part.segmentIndexes, role: "work" };
-
-/**
- * The most steps (tool calls and agent mail) a run shows as rows of their
- * own. A longer run reads as one summary row that opens onto them.
- */
-export const INLINE_STEPS_MAX = 5;
 
 /** How long each step stays on the live line before the next replaces it. */
 const STEP_MIN_DWELL_MS = 1200;
@@ -69,7 +62,6 @@ function TurnWorkFoldComponent({
   approvals = NO_APPROVALS,
   isStreaming = false,
   onSelectThread,
-  inlineStepsMax = INLINE_STEPS_MAX,
 }: TurnWorkFoldProps) {
   const surface = useSurface();
   const canBranch = useCapability("chatBranching");
@@ -187,26 +179,29 @@ function TurnWorkFoldComponent({
   const showChrome = surface !== "mobile";
   const branchFrom = canBranch ? work.parts[work.parts.length - 1]?.message : undefined;
 
-  // A short run is its steps, each a quiet row of its own, in place. A long
-  // one is a single summary row ("Read 6 files · ran 4 commands") that opens
-  // onto the same rows.
-  const steps = executions.length + (work.events?.length ?? 0);
-  const inline = steps <= inlineStepsMax;
+  // The lines the run's edits added and removed, beside its counts. An edit
+  // whose input this client was sent without (a stub read) counts once its
+  // body is read.
+  const diffTotal = useMemo(
+    () => sumDiffStats(executions.map(({ call }) => editDiffStat(call.name, call.input, call.inputElided))),
+    [executions],
+  );
   const endAt = !live && endMs !== null ? new Date(endMs).toISOString() : undefined;
 
-  // Collapsed by default, even while live: the summary carries the live state.
+  // Collapsed by default, even while live, however short the run: the
+  // summary carries the live state.
   const [expanded, setExpanded] = useState(false);
   const toggle = useCallback(() => setExpanded((open) => !open), []);
 
-  // Opening the summary reads the bodies its rows were sent without (a stub
+  // Opening the fold reads the bodies its rows were sent without (a stub
   // read) in one batch, so the rows that render expanded do not each start a
   // request and the ones the user opens next are already here.
   const elidedIds = useMemo(() => elidedBlockIdsOf(executions), [executions]);
   const elidedKey = elidedIds.join(",");
   useEffect(() => {
-    if (inline || !expanded || !chatId || elidedKey === "") return;
+    if (!expanded || !chatId || elidedKey === "") return;
     prefetchContentBlockBodies(chatId, elidedKey.split(","));
-  }, [inline, expanded, chatId, elidedKey]);
+  }, [expanded, chatId, elidedKey]);
 
   const common = { chatId, approvals, isStreaming, onSelectThread };
   const renderEvents = (afterPart: number) => (work.events ?? [])
@@ -216,17 +211,6 @@ function TurnWorkFoldComponent({
     ) : (
       <SystemNotificationMessage key={message.id} message={message} />
     ));
-  const rows = (
-    <>
-      {renderEvents(0)}
-      {work.parts.map((part, index) => (
-        <Fragment key={`${part.message.id}-work`}>
-          <ChatMessage message={part.message} slice={workSlice(part)} {...common} />
-          {renderEvents(index + 1)}
-        </Fragment>
-      ))}
-    </>
-  );
   const branchButton = showChrome && branchFrom ? (
     // Revealed with the run, like a message's actions; inert while hidden so
     // it never swallows a click it does not show.
@@ -237,22 +221,8 @@ function TurnWorkFoldComponent({
     />
   ) : null;
 
-  if (inline) {
-    return (
-      <div
-        className="group/fold relative my-2 flex flex-col gap-0.5"
-        data-testid="turn-work-fold"
-        data-form="rows"
-        data-live={live ? "true" : "false"}
-      >
-        {rows}
-        {branchButton && <div className="absolute -right-7 top-0.5">{branchButton}</div>}
-      </div>
-    );
-  }
-
   return (
-    <div className="group/fold my-2" data-testid="turn-work-fold" data-form="summary" data-live={live ? "true" : "false"}>
+    <div className="group/fold my-2" data-testid="turn-work-fold" data-live={live ? "true" : "false"}>
       <QuietRow
         icon={
           live ? (
@@ -290,7 +260,13 @@ function TurnWorkFoldComponent({
                 {summary.failed} {summary.failed === 1 ? "step failed" : "steps failed"}. Expand the steps below to inspect their errors.
               </p>
             )}
-            {rows}
+            {renderEvents(0)}
+            {work.parts.map((part, index) => (
+              <Fragment key={`${part.message.id}-work`}>
+                <ChatMessage message={part.message} slice={workSlice(part)} {...common} />
+                {renderEvents(index + 1)}
+              </Fragment>
+            ))}
           </div>
         }
       >
@@ -299,6 +275,7 @@ function TurnWorkFoldComponent({
           <span>{headline}</span>
           {counts && <span className="text-muted-foreground/70"> · {counts}</span>}
         </span>
+        {diffTotal && <DiffStatText stat={diffTotal} />}
         {failedLabel && <span className="shrink-0 text-destructive-ink">{failedLabel}</span>}
       </QuietRow>
       {/* Nothing of the run renders outside the body: what must stay on
