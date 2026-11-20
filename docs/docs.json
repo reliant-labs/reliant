@@ -257,7 +257,8 @@
             "pages": [
               "forge/services",
               "forge/data",
-              "forge/storage"
+              "forge/storage",
+              "forge/auth"
             ]
           },
           {
