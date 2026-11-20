@@ -173,9 +173,11 @@ ci:
   gate:
     extra_checks:
       - name: forge-lint
-        command: [forge, lint]
+        command: [task, lint]
         heavy: true
 ```
+
+`task lint` runs the forge version `forge.yaml` pins, so the check works where no `forge` is on the `PATH`, such as under Reliant (`reliant forge`).
 </Warning>
 
 **In the release workflow.** The scaffolded `release.yml` runs `forge lint --gate-json gates/lint.json` as its lint step. The gate document records what the run proved: how many gating lanes ran, which could not, which were skipped. A run where nothing could execute records as `skipped`, never `passed`. `forge env deploy --gate` reads that evidence. In CI, `CI=true` keeps lint report-only, so the release is cut from the commit that was reviewed and not from a checkout lint repaired.
