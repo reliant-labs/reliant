@@ -2,7 +2,7 @@
 
 Keep a valid `public.idx_chats_user_archived` on application rollback. An extra index does not change query results. A failed concurrent build is different: it can leave an invalid index and a dirty migration record. Dropping the invalid index alone does not make the migrator retry.
 
-Use the authorized database recovery path in the control-plane runbook, **Database recovery (prod)**. Pause deploy retries and make sure no other migration is running. From the exact release that failed, use its `reliant db migrate status` against the same database and inspect the migration logs. A nonzero status is expected for a dirty schema. Confirm that the dirty version is the version of `*_chats_user_archived_index.up.sql` in that release and identify the last successfully applied version from its migration logs and ordered migration list. Do not derive it by subtracting one from the dirty version.
+Use the authorized database recovery path in the control-plane runbook, **Database recovery (prod)**. Pause deploy retries, make sure no other migration is running, and confirm a restorable backup or point-in-time recovery option with the incident lead before writing. From the exact release that failed, use its `reliant db migrate status` against the same database and inspect the migration logs. A nonzero status is expected for a dirty schema. Confirm that the dirty version matches `*_chats_user_archived_index.up.sql` in that release. Use the migration logs and ordered migration list to confirm every preceding migration completed and identify the actual last successfully applied version. Do not assume the preceding filename was applied, force past an unapplied migration, or derive the version by subtracting one.
 
 Check whether the build left an index:
 
