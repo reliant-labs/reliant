@@ -44739,6 +44739,11 @@
               "map_key_kind": "string",
               "map_value_kind": "message",
               "map_value_type_name": "google.protobuf.Value"
+            },
+            {
+              "name": "webhook_hmac_secret",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.WorkflowTriggerResult": [

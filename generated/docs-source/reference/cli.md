@@ -27,6 +27,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant auth token create`](#reliant-auth-token-create) | Create a new API token |
 | [`reliant auth token list`](#reliant-auth-token-list) | List API tokens (metadata only, never secrets) |
 | [`reliant auth token revoke`](#reliant-auth-token-revoke) | Revoke an API token by name or ID |
+| [`reliant chat`](#reliant-chat) | List your chats, and see or change the machine a chat runs on |
+| [`reliant chat list`](#reliant-chat-list) | List your chats (not archived ones) with the machine each runs on |
+| [`reliant chat set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
+| [`reliant chat show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
 | [`reliant daemon`](#reliant-daemon) | Manage the local tools daemon |
 | [`reliant daemon logs`](#reliant-daemon-logs) | Tail daemon logs |
 | [`reliant daemon ls`](#reliant-daemon-ls) | List every daemon instance on this machine |
@@ -530,6 +534,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant trigger fire`](#reliant-trigger-fire) | Run a trigger now |
 | [`reliant trigger get`](#reliant-trigger-get) | Show one trigger |
 | [`reliant trigger list`](#reliant-trigger-list) | List your triggers |
+| [`reliant trigger rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`reliant trigger update`](#reliant-trigger-update) | Replace a trigger's definition |
 | [`reliant version`](#reliant-version) | Print version information |
 | [`reliant workflow`](#reliant-workflow) | Manage and validate workflows |
@@ -782,6 +787,11 @@ its own login. Hand the printed token to automation as RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
 
+--expires-in asks for a shorter-lived token (a CI job's, say): 1h, 12h, 7d.
+The server never grants more than 90 days. A control plane too old to honour it
+mints its 90-day default, and then the command does not print the token: it
+names it so you can revoke it.
+
 You approve it the way you approve 'reliant auth login': in a browser that
 calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
 you approve on any device. The browser is the default, except where its
@@ -805,6 +815,7 @@ reliant auth token create [flags]
 |------|------|---------|-------------|
 | `--browser` | `bool` | - | Approve in a browser that calls back to this machine (the default on a desktop) |
 | `--device` | `bool` | - | Approve with a device code on any device (the default where a browser cannot reach this machine) |
+| `--expires-in` | `string` | - | How long the token lives, e.g. 1h, 12h, 7d (at least 1m, at most 90 days). An older control plane ignores it; the token is then not printed |
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
 | `--scope` | `stringSlice` | `[]` | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
@@ -833,6 +844,95 @@ Revoke an API token by name or ID
 ```
 reliant auth token revoke <name-or-id>
 ```
+
+---
+
+## reliant chat
+
+List your chats, and see or change the machine a chat runs on
+
+List your chats, show one, and move a chat to another of your machines.
+
+A chat runs its tools on one machine: the one picked in the chat header, else
+your default machine. A chat in a branch workspace stays on the machine that
+holds the workspace's checkout; moving it elsewhere is refused.
+
+```
+reliant chat
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-chat-list) | List your chats (not archived ones) with the machine each runs on |
+| [`set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
+| [`show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant chat list
+
+List your chats (not archived ones) with the machine each runs on
+
+```
+reliant chat list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the chats as JSON |
+| `--limit` | `int32` | `100` | Most chats to list, most recently active first |
+| `--project` | `string` | - | List only this project's chats (a project id; default: every project) |
+
+---
+
+### reliant chat set-machine
+
+Run a chat's tools on another of your machines
+
+Pins a chat to one of your machines, named by id or by name, as the machine
+picker in the chat header does. Its next turn runs there. --clear removes the
+pin, so the chat follows your default machine again.
+
+The machine must be yours and, when the project tracks where it is installed,
+have the project. A chat in a branch workspace cannot leave the machine that
+holds its checkout.
+
+```
+reliant chat set-machine <chat-id> [machine] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--clear` | `bool` | - | Remove the chat's machine pin, so it follows your default machine |
+
+---
+
+### reliant chat show
+
+Show one chat: its project, workspace and machine
+
+```
+reliant chat show <chat-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the chat as JSON |
 
 ---
 
@@ -22144,6 +22244,7 @@ reliant trigger
 | [`fire`](#reliant-trigger-fire) | Run a trigger now |
 | [`get`](#reliant-trigger-get) | Show one trigger |
 | [`list`](#reliant-trigger-list) | List your triggers |
+| [`rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`update`](#reliant-trigger-update) | Replace a trigger's definition |
 
 **Flags:**
@@ -22173,6 +22274,13 @@ brought to them.
 them) and leaves the workflow's other activations as they are. A named
 trigger that is already activated is brought to the flags, not duplicated.
 
+A webhook trigger's URL and token are printed when its activation is created,
+once: store the token in the sender then. `reliant trigger rotate` issues a new
+one. A webhook that declares hmac: needs the secret its sender signs with:
+--hmac-secret-file <trigger>=<file> reads it from a file ("-" for standard
+input), keeping it out of your shell history. It is stored sealed and never
+shown; pass it again to replace it.
+
 --notify is about successful runs only. With it, a run that completes
 successfully is marked unread, which raises a desktop notification, and stays
 out of the archive so the notification has a run to open. It never puts the
@@ -22193,6 +22301,7 @@ reliant trigger activate [flags]
 |------|------|---------|-------------|
 | `--acting-as` | `string` | - | Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise) |
 | `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
+| `--hmac-secret-file` | `stringArray` | `[]` | Signing secret of a webhook trigger that declares hmac:, as trigger=path (path - reads standard input); repeatable |
 | `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
 | `--message` | `string` | - | Prompt for a declared trigger that has none (not needed when the workflow runs no agent) |
 | `--name-prefix` | `string` | - | Names new activations "<prefix> · <trigger>" (default: the workflow) |
@@ -22375,6 +22484,22 @@ reliant trigger list [flags]
 |------|------|---------|-------------|
 | `--all` | `bool` | - | List triggers across every project |
 | `--project-id` | `string` | - | List one project's triggers |
+
+---
+
+### reliant trigger rotate
+
+Replace a webhook trigger's token
+
+Replace a webhook trigger's token, and print the new one once.
+
+The old token stops working at once, so give the new one to the sender. A
+webhook Reliant delivers to itself (a managed webhook, such as alerting) has
+no token to print: rotating re-provisions its sender with a new one.
+
+```
+reliant trigger rotate <id-or-name>
+```
 
 ---
 

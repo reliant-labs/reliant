@@ -371,7 +371,7 @@ func machineDisplayName(d *reliantv1.DaemonInfo) string {
 
 // resolveRegistryMachine finds one of the user's machines in the registry by
 // id, else by name (a machine with no name by hostname).
-func resolveRegistryMachine(ctx context.Context, client reliantv1connect.DaemonRegistryServiceClient, ref string) (*reliantv1.DaemonInfo, error) {
+func resolveRegistryMachine(ctx context.Context, client machineLister, ref string) (*reliantv1.DaemonInfo, error) {
 	resp, err := client.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
 	if err != nil {
 		return nil, explainRegistryErr(err)
