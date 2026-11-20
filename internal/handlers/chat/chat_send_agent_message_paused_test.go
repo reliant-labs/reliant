@@ -10,9 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -54,6 +56,18 @@ func (c *orderedSignalClient) SignalWorkflow(ctx context.Context, workflowID, ru
 		*c.log = append(*c.log, "wake:"+wake.Thread)
 	}
 	return c.wakeTestTemporalClient.SignalWorkflow(ctx, workflowID, runID, signalName, arg)
+}
+
+// emptyAgentLoopsClient represents a run paused before its first agent loop.
+type emptyAgentLoopsClient struct {
+	*orderedSignalClient
+}
+
+func (c *emptyAgentLoopsClient) QueryWorkflowWithOptions(ctx context.Context, req *client.QueryWorkflowWithOptionsRequest) (*client.QueryWorkflowWithOptionsResponse, error) {
+	if req.QueryType == v2.AgentLoopThreadsQuery {
+		return fakeQueryResponse(req, false, jsonEncodedValue{v: []v2.AgentLoopThread{}}, nil)
+	}
+	return c.orderedSignalClient.QueryWorkflowWithOptions(ctx, req)
 }
 
 type pausedAgentMessageFixture struct {
@@ -109,6 +123,7 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) 
 	t.Parallel()
 
 	fx := setupPausedAgentMessageFixture(t)
+	fx.service.deps.Temporal = &emptyAgentLoopsClient{fx.temporal}
 
 	resp := fx.send(t, fx.rootThreadID, "continue")
 	require.True(t, resp.Success, "got: %s", resp.Message)
@@ -126,6 +141,47 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the message stays queued for the resumed run's next call_llm")
 	assert.Equal(t, "continue", queued[0].Body)
+}
+
+// A chat paused before its first loop has no registered listener yet. Only the
+// builtin agent guarantees that resuming will give the root a reader.
+func TestPausedRunWithNoAgentLoop(t *testing.T) {
+	t.Parallel()
+
+	t.Run("send to builtin agent resumes", func(t *testing.T) {
+		fx := setupPausedAgentMessageFixture(t)
+		fx.service.deps.Temporal = &emptyAgentLoopsClient{fx.temporal}
+
+		resp, err := fx.service.SendMessage(fx.ctx, sendMessageRequest(t, fx.chatID, "continue"))
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Msg.MessageId)
+		// The send can also save a hidden system note for the model update.
+		var userCopies int
+		for _, body := range transcriptBodies(t, fx.ctx, fx.repo, fx.chatID) {
+			if body == "continue" {
+				userCopies++
+			}
+		}
+		assert.Equal(t, 1, userCopies, "the user's message is persisted once")
+		assert.Equal(t, []string{"resume:" + fx.rootThreadID, "wake:" + fx.rootThreadID}, *fx.log)
+	})
+
+	t.Run("graph without a listener is still refused", func(t *testing.T) {
+		fx := setupPausedAgentMessageFixture(t)
+		fx.service.deps.Temporal = &emptyAgentLoopsClient{fx.temporal}
+		require.NoError(t, fx.repo.UpdateWorkflowStatus(fx.ctx, fx.rootThreadID, db.Pending()))
+		require.NoError(t, fx.repo.UpdateWorkflowName(fx.ctx, fx.rootThreadID, "project://pr-fix"))
+		require.NoError(t, fx.repo.UpdateWorkflowStatus(fx.ctx, fx.rootThreadID, db.Paused()))
+
+		_, err := fx.service.SendMessage(fx.ctx, sendMessageRequest(t, fx.chatID, "continue"))
+		require.ErrorIs(t, err, core.ErrRunNoListeningAgent)
+		resp := fx.send(t, fx.rootThreadID, "continue")
+		assert.False(t, resp.Success)
+		assert.Contains(t, resp.Message, "no agent is running")
+		assert.Empty(t, transcriptBodies(t, fx.ctx, fx.repo, fx.chatID))
+		assert.Empty(t, queuedBodies(t, fx.ctx, fx.repo, fx.rootThreadID))
+		assert.Empty(t, *fx.log, "neither input should resume or wake a graph with no recipient")
+	})
 }
 
 // The pause is the chat's, not the thread's: every thread runs in the chat's

@@ -230,7 +230,7 @@ A person who writes a bad query usually feels it: the test fails, they read the 
 
 Every forge finding names the rule, the file and line, what is wrong, and the exact change to make, and many name a command that makes it (`forge lint --tracing --fix`, `forge fix connect-errors`, `forge fix narrow-deps`). That turns "the build is red" into one more turn of the loop instead of an investigation. A large share of the rules cover failures that give no signal at all. A misspelled `forge:` marker compiles and does nothing. A filter without `optional` runs and never filters. A migration numbered below the merged head applies nowhere and reports the schema current. A model reading its own diff will not find these, and tests rarely do, so a mechanical check has to.
 
-Two properties make this work for unattended agents. The check is deterministic, so the same tree gives the same answer. And it fails closed: a lane that cannot run fails the run instead of passing silently, and `--gate-json` records exactly what was proved. See [observability](/forge/observability) for the production half, where the same idea applies to a running system.
+Two properties make this work for unattended agents. The check is deterministic, so the same tree gives the same answer. And it fails closed: a lane that cannot run fails the run instead of passing silently, and `--gate-json` records exactly what was proved. See [observability](/hosting/observability) for the production half, where the same idea applies to a running system.
 
 ## Where to go next
 

@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -84,6 +84,9 @@ func init() {
 
 type Client struct {
 	*openai.OpenaiClient
+
+	// ladder overrides the raw-HTTP paths' retry ladder; tests inject the clock.
+	ladder ratelimit.Retryer
 }
 
 // newOpenRouterRequest creates an HTTP POST request to the OpenRouter chat completions
@@ -139,30 +142,6 @@ func mapFinishReason(reason string) message.FinishReason {
 	}
 }
 
-// isRetryableStatus returns true if the HTTP status code warrants a retry.
-func isRetryableStatus(code int) bool {
-	return code == 429 || code == 500 || code == 502 || code == 503 || code == 529
-}
-
-// retryDelay calculates the delay before the next retry attempt using exponential
-// backoff with 20% jitter. If the response includes a Retry-After header (in seconds),
-// that value is used instead.
-func retryDelay(attempt int, resp *http.Response) time.Duration {
-	backoffMs := 2000 * (1 << (attempt - 1)) // 2s, 4s, 8s, ...
-	jitterMs := int(float64(backoffMs) * 0.2)
-	delayMs := backoffMs + jitterMs
-
-	if resp != nil {
-		if ra := resp.Header.Get("Retry-After"); ra != "" {
-			if secs, err := strconv.Atoi(ra); err == nil {
-				delayMs = secs * 1000
-			}
-		}
-	}
-
-	return time.Duration(delayMs) * time.Millisecond
-}
-
 // Name returns the name of the driver
 func (c *Client) Name() string {
 	return "openrouter"
@@ -178,7 +157,9 @@ func NewClient(opts llm.DriverOptions) *Client {
 	// too (see llm.NewToolCallID).
 	delegate := openai.NewClient(opts)
 	delegate.MintToolCallIDs = true
-	return &Client{delegate}
+	delegate.RetryProvider = "OpenRouter"
+	delegate.DescribeFailure = describeOpenRouterAPIError
+	return &Client{OpenaiClient: delegate}
 }
 
 // ephemeralCacheControl is the cache_control object for every breakpoint this
