@@ -37,6 +37,7 @@ type Deps struct {
 // satisfies it.
 type Store interface {
 	GetPRRecord(ctx context.Context, provider, repository string, number int) (*core.PRRecord, error)
+	ListPRRecordRepositories(ctx context.Context, provider, repository string) ([]core.PRRecordRepository, error)
 	ListPRRecords(ctx context.Context, f core.PRRecordFilter) ([]*core.PRRecord, error)
 	ListPRRecordHeads(ctx context.Context, recordID string) ([]core.PRRecordHead, error)
 	ListPRRecordReviews(ctx context.Context, recordID string, commits []string) ([]core.PRRecordReview, error)

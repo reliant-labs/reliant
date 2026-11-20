@@ -29,6 +29,7 @@ type prChange struct {
 	rm      string
 	full    bool
 	state   string
+	delta   core.PRRecordDelta
 }
 
 var prIDs int
@@ -43,11 +44,15 @@ func (c prChange) change() core.PRRecordChange {
 	if state == "" {
 		state = core.PRRecordOpen
 	}
+	d := c.delta
+	if c.add != "" || c.rm != "" {
+		d.LabelAdded, d.LabelRemoved = c.add, c.rm
+	}
 	return core.PRRecordChange{
 		Delivery: core.PRRecordDelivery{Provider: "github", DeliveryKey: c.key, EventType: "pull_request.x", AppliedAt: prBase},
 		Snapshot: &core.PRRecordSnapshot{
 			ID: prNewID(), Provider: "github", AccountKey: "inst", RepositoryID: "42", Repository: "Acme/Widgets",
-			Number: 7, State: state, HeadSHA: c.head, Labels: c.labels, LabelAdded: c.add, LabelRemoved: c.rm,
+			Number: 7, State: state, HeadSHA: c.head, Labels: c.labels, Delta: d,
 			SnapshotAt: prBase.Add(time.Duration(c.updated) * time.Minute), ObservedAt: prBase.Add(time.Hour), Full: c.full,
 		},
 		HeadID: prNewID(),
@@ -140,6 +145,73 @@ func TestPRRecordSnapshotOrdering(t *testing.T) {
 	}
 }
 
+const prShaC = "cccccccccccccccccccccccccccccccccccccccc"
+
+// TestPRRecordSameSecondTransitions: GitHub's updated_at has one-second
+// resolution, so two events of one pull request may carry the same snapshot
+// time. Each applies its own transition, in either order, and a full snapshot
+// completes a slim one of the same second.
+func TestPRRecordSameSecondTransitions(t *testing.T) {
+	ctx := context.Background()
+	yes, no := true, false
+
+	t.Run("a full snapshot completes a slim one", func(t *testing.T) {
+		env := storetest.New(t)
+		applyPR(t, env, prChange{key: "review", updated: 5, head: prShaA}.change())
+		applyPR(t, env, prChange{key: "closed", updated: 5, head: prShaA, full: true, state: core.PRRecordMerged}.change())
+		if rec := getPR(t, env); rec.State != core.PRRecordMerged {
+			t.Fatalf("state = %s, want merged", rec.State)
+		}
+	})
+
+	t.Run("close, draft and edit transitions", func(t *testing.T) {
+		env := storetest.New(t)
+		applyPR(t, env, prChange{key: "opened", updated: 5, head: prShaA, full: true, labels: []string{"x"}}.change())
+		applyPR(t, env, prChange{key: "ready", updated: 5, head: prShaA, full: true, delta: core.PRRecordDelta{Draft: &no}}.change())
+		applyPR(t, env, prChange{key: "draft", updated: 5, head: prShaA, full: true, delta: core.PRRecordDelta{Draft: &yes}}.change())
+		applyPR(t, env, prChange{key: "edited", updated: 5, head: prShaA, full: true, delta: core.PRRecordDelta{Title: "renamed", BaseRef: "release"}}.change())
+		merged := prBase.Add(5 * time.Minute)
+		applyPR(t, env, prChange{key: "merged", updated: 5, head: prShaA, full: true, state: core.PRRecordMerged,
+			delta: core.PRRecordDelta{State: core.PRRecordMerged, MergedAt: &merged, MergeCommit: prShaC}}.change())
+		// A reopen of the same second never takes a record out of merged.
+		applyPR(t, env, prChange{key: "reopened", updated: 5, head: prShaA, full: true, delta: core.PRRecordDelta{State: core.PRRecordOpen}}.change())
+		rec := getPR(t, env)
+		if rec.State != core.PRRecordMerged || rec.MergedAt == nil || rec.MergeCommit != prShaC || !rec.Draft ||
+			rec.Title != "renamed" || rec.BaseRef != "release" || !slices.Equal(rec.Labels, []string{"x"}) {
+			t.Fatalf("record = %+v", rec)
+		}
+	})
+
+	push := func(key, from, to string) core.PRRecordChange {
+		c := prChange{key: key, updated: 5, head: to, full: true, delta: core.PRRecordDelta{FromHead: from, HeadSHA: to}}.change()
+		c.PreviousHeadSHA = from
+		return c
+	}
+	for _, order := range [][]string{{"ab", "bc"}, {"bc", "ab"}} {
+		t.Run("two pushes in one second, "+order[0]+" first", func(t *testing.T) {
+			env := storetest.New(t)
+			applyPR(t, env, prChange{key: "opened", updated: 5, head: prShaA, full: true}.change())
+			pushes := map[string]core.PRRecordChange{"ab": push("ab", prShaA, prShaB), "bc": push("bc", prShaB, prShaC)}
+			for _, k := range order {
+				applyPR(t, env, pushes[k])
+			}
+			rec := getPR(t, env)
+			if rec.HeadSHA != prShaC {
+				t.Fatalf("head = %s, want the last push's", rec.HeadSHA)
+			}
+			heads, err := env.Repo.ListPRRecordHeads(ctx, rec.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, h := range heads {
+				if (h.HeadSHA == prShaC) != (h.SupersededAt == nil) {
+					t.Errorf("head %s superseded_at = %v", h.HeadSHA[:4], h.SupersededAt)
+				}
+			}
+		})
+	}
+}
+
 // TestPRRecordConcurrentFirstDeliveries: deliveries of one new pull request
 // racing each other create one record, and the newest snapshot wins.
 func TestPRRecordConcurrentFirstDeliveries(t *testing.T) {
@@ -215,7 +287,7 @@ func TestPRRecordReviewsAndChecks(t *testing.T) {
 func TestHasFreshIntegrationAccess(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	at := time.Now().UTC()
+	at := prBase
 	if err := env.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "99", at,
 		[]core.IntegrationAccessGrant{{AccountKey: "inst", ResourceKey: "42"}}); err != nil {
 		t.Fatal(err)

@@ -78,16 +78,7 @@ func (p *projector) decode(provider string, ev Event, now time.Time) (core.PRRec
 			return core.PRRecordChange{}, false
 		}
 		c := core.PRRecordChange{Snapshot: snap, HeadID: p.newID()}
-		switch action {
-		case "labeled":
-			snap.LabelAdded = strOf(ev.Data["label"])
-		case "unlabeled":
-			snap.LabelRemoved = strOf(ev.Data["label"])
-		case "synchronize":
-			if before := lowerSHA(strOf(ev.Data["before"])); isSHA(before) {
-				c.PreviousHeadSHA = before
-			}
-		}
+		c.PreviousHeadSHA = delta(action, ev, snap)
 		return c, true
 	case "pull_request_review":
 		if action != "submitted" {
@@ -106,6 +97,39 @@ func (p *projector) decode(provider string, ev Event, now time.Time) (core.PRRec
 		return core.PRRecordChange{Check: check}, true
 	}
 	return core.PRRecordChange{}, false
+}
+
+// delta records on the snapshot what this event's own action changed, which
+// is all that applies when the record already holds a snapshot of the same
+// second (core.PRRecordDelta). It returns the head a push replaced.
+func delta(action string, ev Event, snap *core.PRRecordSnapshot) (previousHead string) {
+	d := &snap.Delta
+	switch action {
+	case "labeled":
+		d.LabelAdded = strOf(ev.Data["label"])
+	case "unlabeled":
+		d.LabelRemoved = strOf(ev.Data["label"])
+	case "closed", "reopened":
+		d.State = snap.State
+		d.MergedAt, d.MergeCommit = snap.MergedAt, snap.MergeCommit
+	case "ready_for_review", "converted_to_draft":
+		draft := snap.Draft
+		d.Draft = &draft
+	case "edited":
+		d.Title, d.BaseRef = snap.Title, snap.BaseRef
+	case "synchronize":
+		before := lowerSHA(strOf(ev.Data["before"]))
+		if !isSHA(before) {
+			return ""
+		}
+		after := lowerSHA(strOf(ev.Data["after"]))
+		if !isSHA(after) {
+			after = snap.HeadSHA
+		}
+		d.FromHead, d.HeadSHA, d.HeadRef = before, after, snap.HeadRef
+		return before
+	}
+	return ""
 }
 
 // snapshot reads the pull request object of a GitHub event's data

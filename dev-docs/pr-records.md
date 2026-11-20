@@ -148,14 +148,20 @@ intake.**
 
 GitHub does not order deliveries. Rules:
 
-- **PR snapshot** (`pull_request.*`, and the PR object on `pull_request_review.submitted`): applied
-  only when its `updated_at` ≥ `snapshot_at`. Strictly newer replaces state, draft, head, base,
-  title and the label set. On a tie, only the event's own delta applies (`labeled` X adds X,
-  `unlabeled` X removes X), because two label events in the same second carry different full
-  sets. A tie that adds and removes one label in the same second can still end wrong; the
-  reconciler (§5) corrects it.
-- **Heads**: a head row is created for every sha a snapshot or `synchronize` names; the newer
-  snapshot's head becomes current and the old one gets `superseded_at`.
+- **PR snapshot** (`pull_request.*`, and the PR object on `pull_request_review.submitted`): a
+  full snapshot strictly newer (by the PR's own `updated_at`) replaces state, draft, head, base,
+  title and labels. A review event's slim PR (no `merged`) only creates a missing record, and a
+  full snapshot of the same second completes it (`snapshot_full`).
+- **Same-second ties.** `updated_at` has one-second resolution, so two events of one PR can tie.
+  Then each applies only its own transition (`core.PRRecordDelta`): `labeled`/`unlabeled` add or
+  remove one label; `closed`/`reopened` set the state (a merged record never leaves merged);
+  `ready_for_review`/`converted_to_draft` set draft; `edited` sets title and base;
+  `synchronize` moves the head only from its `before`, and then follows one known push over the
+  new head (two pushes in one second, applied out of order, still end on the last). What a tie
+  cannot order (three pushes in a second out of order; a label added and removed in one second)
+  is corrected by the reconciler (§5).
+- **Heads**: a head row is created for every sha a snapshot or `synchronize` names; the current
+  head is the record's, and every other gets `superseded_at`.
 - **Reviews and checks**: insert-or-ignore by review id; checks keep the highest run id. Both are
   commutative.
 - **Closed / merged** is terminal for automation but reversible (`reopened`), guarded by
@@ -180,7 +186,7 @@ GitHub does not order deliveries. Rules:
 
 ### 3.1 Phase 1 (read only)
 
-`reliant.v1.PullRequestRecordService` (`proto/reliant/v1/pull_request_record.proto`; withheld from the SDK in `proto/public-api.txt` until the flip):
+`reliant.v1.PullRequestRecordService` (`proto/reliant/v1/pull_request_record.proto`; withheld from the SDK in `proto/public-api.txt` until the flip). List resolves the repository identities the caller's grants reach before it pages (a name can have named a deleted repository), with a `(number, repository id)` cursor:
 
 | RPC | Request | Returns |
 |---|---|---|

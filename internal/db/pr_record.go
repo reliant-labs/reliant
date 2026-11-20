@@ -48,6 +48,13 @@ func (r *Repo) ApplyPRRecordChange(ctx context.Context, c core.PRRecordChange) (
 					return err
 				}
 			}
+			// A same-second push that moved the head may have been preceded by
+			// the push over it, which could not apply then: follow it.
+			if res.Tied && c.Snapshot.Delta.HeadSHA != "" && res.HeadSHA == c.Snapshot.Delta.HeadSHA {
+				if res.HeadSHA, err = store.AdvancePRRecordHead(tx, r.ORM(), res.RecordID); err != nil {
+					return err
+				}
+			}
 			if res.HeadSHA != "" {
 				if err := store.SupersedePRRecordHeads(tx, r.ORM(), res.RecordID, res.HeadSHA, c.Snapshot.ObservedAt); err != nil {
 					return err
@@ -80,9 +87,15 @@ func (r *Repo) GetPRRecord(ctx context.Context, provider, repository string, num
 	return store.GetPRRecord(ctx, r.ORM(), provider, repository, number)
 }
 
-// ListPRRecords lists one repository's records in number order.
+// ListPRRecords lists one repository's records in (number, repository id) order.
 func (r *Repo) ListPRRecords(ctx context.Context, f core.PRRecordFilter) ([]*core.PRRecord, error) {
 	return store.ListPRRecords(ctx, r.ORM(), f)
+}
+
+// ListPRRecordRepositories lists the repository identities records were kept
+// under a repository name.
+func (r *Repo) ListPRRecordRepositories(ctx context.Context, provider, repository string) ([]core.PRRecordRepository, error) {
+	return store.ListPRRecordRepositories(ctx, r.ORM(), provider, repository)
 }
 
 // ListPRRecordHeads lists a record's heads, oldest first.

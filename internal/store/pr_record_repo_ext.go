@@ -19,7 +19,7 @@ import (
 
 const prRecordColumns = `id, provider, account_key, repository_id, repository, number, state, draft,
 	head_sha, head_ref, base_ref, base_sha, author_id, author_login, title, labels,
-	merged_at, merge_commit_sha, snapshot_at, observed_at, created_at, updated_at`
+	merged_at, merge_commit_sha, snapshot_at, snapshot_full, observed_at, created_at, updated_at`
 
 type prRecordRow struct {
 	ID, Provider, AccountKey, RepositoryID, Repository string
@@ -31,7 +31,9 @@ type prRecordRow struct {
 	Labels                                             []byte
 	MergedAt                                           *time.Time
 	MergeCommitSHA                                     string
-	SnapshotAt, ObservedAt, CreatedAt, UpdatedAt       time.Time
+	SnapshotAt                                         time.Time
+	SnapshotFull                                       bool
+	ObservedAt, CreatedAt, UpdatedAt                   time.Time
 }
 
 func (r prRecordRow) core() (*core.PRRecord, error) {
@@ -104,10 +106,11 @@ type PRRecordApplied struct {
 	// HeadSHA is the record's current head after the apply, which may be
 	// another snapshot's when this one was stale.
 	HeadSHA string
-	// Applied is false when the snapshot was older than the record (or a
-	// slim snapshot of a record that exists) and changed nothing but, on a
-	// tie, its label delta.
+	// Applied is true when the snapshot replaced the record, or when it tied
+	// the record's snapshot time and its delta was applied.
 	Applied bool
+	// Tied is true when the snapshot was exactly as new as the record's.
+	Tied bool
 }
 
 // ApplyPRRecordSnapshot applies a pull request snapshot to its record, in one
@@ -115,10 +118,12 @@ type PRRecordApplied struct {
 // themselves on the row lock:
 //
 //   - a record that does not exist is created from any snapshot;
-//   - a full snapshot strictly newer than the record (by the pull request's
-//     own updated_at) replaces its state, head, base, title and labels;
-//   - a snapshot exactly as new applies only its label delta (two label
-//     events in one second carry different full sets, so neither set wins);
+//   - a full snapshot newer than the record (by the pull request's own
+//     updated_at), or exactly as new as a slim one, replaces its state,
+//     head, base, title and labels;
+//   - a full snapshot exactly as new as a full one applies only its own
+//     transition (core.PRRecordDelta): GitHub's timestamps have one-second
+//     resolution, so neither snapshot of a same-second pair is the later;
 //   - anything older only marks the record observed.
 func ApplyPRRecordSnapshot(ctx context.Context, db orm.Context, s core.PRRecordSnapshot) (PRRecordApplied, error) {
 	labels, err := json.Marshal(sortedLabels(s.Labels))
@@ -127,9 +132,10 @@ func ApplyPRRecordSnapshot(ctx context.Context, db orm.Context, s core.PRRecordS
 	}
 	var out struct {
 		ID, HeadSHA string
+		Tied        bool
 	}
 	err = db.Bun().NewRaw(`INSERT INTO pr_records AS r (`+prRecordColumns+`)
-		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15::jsonb, ?16, ?17, ?18, ?19, ?19, ?19)
+		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15::jsonb, ?16, ?17, ?18, ?20, ?19, ?19, ?19)
 		ON CONFLICT (provider, repository_id, number) DO UPDATE SET
 			account_key = EXCLUDED.account_key, repository = EXCLUDED.repository,
 			state = EXCLUDED.state, draft = EXCLUDED.draft,
@@ -138,9 +144,10 @@ func ApplyPRRecordSnapshot(ctx context.Context, db orm.Context, s core.PRRecordS
 			author_id = EXCLUDED.author_id, author_login = EXCLUDED.author_login,
 			title = EXCLUDED.title, labels = EXCLUDED.labels,
 			merged_at = EXCLUDED.merged_at, merge_commit_sha = EXCLUDED.merge_commit_sha,
-			snapshot_at = EXCLUDED.snapshot_at,
+			snapshot_at = EXCLUDED.snapshot_at, snapshot_full = EXCLUDED.snapshot_full,
 			observed_at = GREATEST(r.observed_at, EXCLUDED.observed_at), updated_at = EXCLUDED.observed_at
-		WHERE ?20 AND r.snapshot_at < EXCLUDED.snapshot_at
+		WHERE EXCLUDED.snapshot_full AND (r.snapshot_at < EXCLUDED.snapshot_at
+			OR (r.snapshot_at = EXCLUDED.snapshot_at AND NOT r.snapshot_full))
 		RETURNING r.id, r.head_sha`,
 		s.ID, s.Provider, s.AccountKey, s.RepositoryID, s.Repository, s.Number, s.State, s.Draft,
 		s.HeadSHA, s.HeadRef, s.BaseRef, s.BaseSHA, s.AuthorID, s.AuthorLogin, s.Title, string(labels),
@@ -152,22 +159,57 @@ func ApplyPRRecordSnapshot(ctx context.Context, db orm.Context, s core.PRRecordS
 	if !errors.Is(err, sql.ErrNoRows) {
 		return PRRecordApplied{}, fmt.Errorf("apply pr record snapshot: %w", err)
 	}
-	// The record is at least as new: apply a tie's label delta and mark it seen.
+	// The record is at least as new. On a tie of two full snapshots, apply
+	// this event's own transition; either way, mark the record seen. Every
+	// right-hand side reads the row as it was before this statement.
+	d := s.Delta
+	draftSet, draft := d.Draft != nil, d.Draft != nil && *d.Draft
 	err = db.Bun().NewRaw(`UPDATE pr_records AS r SET
-			labels = CASE WHEN r.snapshot_at = ?3 AND (?4 <> '' OR ?5 <> '') THEN (
+			labels = CASE WHEN ?3 AND r.snapshot_at = ?4 AND (?5 <> '' OR ?6 <> '') THEN (
 				SELECT coalesce(jsonb_agg(DISTINCT x ORDER BY x), '[]'::jsonb)
-				FROM jsonb_array_elements_text(r.labels || CASE WHEN ?4 = '' THEN '[]'::jsonb ELSE jsonb_build_array(?4::text) END) AS t(x)
-				WHERE ?5 = '' OR x <> ?5)
+				FROM jsonb_array_elements_text(r.labels || CASE WHEN ?5 = '' THEN '[]'::jsonb ELSE jsonb_build_array(?5::text) END) AS t(x)
+				WHERE ?6 = '' OR x <> ?6)
 				ELSE r.labels END,
-			observed_at = GREATEST(r.observed_at, ?6)
+			state = CASE WHEN ?3 AND r.snapshot_at = ?4 AND ?7 <> '' AND r.state <> 'merged' THEN ?7 ELSE r.state END,
+			merged_at = CASE WHEN ?3 AND r.snapshot_at = ?4 AND ?7 = 'merged' AND r.state <> 'merged' THEN ?8 ELSE r.merged_at END,
+			merge_commit_sha = CASE WHEN ?3 AND r.snapshot_at = ?4 AND ?7 = 'merged' AND r.state <> 'merged' THEN ?9 ELSE r.merge_commit_sha END,
+			draft = CASE WHEN ?3 AND r.snapshot_at = ?4 AND ?10 THEN ?11 ELSE r.draft END,
+			head_sha = CASE WHEN ?3 AND r.snapshot_at = ?4 AND ?13 <> '' AND r.head_sha = ?12 THEN ?13 ELSE r.head_sha END,
+			head_ref = CASE WHEN ?3 AND r.snapshot_at = ?4 AND ?13 <> '' AND r.head_sha = ?12 AND ?14 <> '' THEN ?14 ELSE r.head_ref END,
+			title = CASE WHEN ?3 AND r.snapshot_at = ?4 AND ?15 <> '' THEN ?15 ELSE r.title END,
+			base_ref = CASE WHEN ?3 AND r.snapshot_at = ?4 AND ?16 <> '' THEN ?16 ELSE r.base_ref END,
+			observed_at = GREATEST(r.observed_at, ?17)
 		WHERE r.provider = ?0 AND r.repository_id = ?1 AND r.number = ?2
-		RETURNING r.id, r.head_sha`,
-		s.Provider, s.RepositoryID, s.Number, s.SnapshotAt.UTC(), s.LabelAdded, s.LabelRemoved, s.ObservedAt.UTC()).
-		Scan(ctx, &out.ID, &out.HeadSHA)
+		RETURNING r.id, r.head_sha, (?3 AND r.snapshot_at = ?4)`,
+		s.Provider, s.RepositoryID, s.Number, s.Full, s.SnapshotAt.UTC(),
+		d.LabelAdded, d.LabelRemoved, d.State, d.MergedAt, d.MergeCommit, draftSet, draft,
+		d.FromHead, d.HeadSHA, d.HeadRef, d.Title, d.BaseRef, s.ObservedAt.UTC()).
+		Scan(ctx, &out.ID, &out.HeadSHA, &out.Tied)
 	if err != nil {
 		return PRRecordApplied{}, fmt.Errorf("observe pr record: %w", err)
 	}
-	return PRRecordApplied{RecordID: out.ID, HeadSHA: out.HeadSHA}, nil
+	return PRRecordApplied{RecordID: out.ID, HeadSHA: out.HeadSHA, Tied: out.Tied, Applied: out.Tied && d != (core.PRRecordDelta{})}, nil
+}
+
+// AdvancePRRecordHead moves a record's head one push forward when exactly one
+// known head was pushed over it: the push that arrived first of two in one
+// second, which could not apply until the one it replaced had. It returns the
+// head after the move.
+func AdvancePRRecordHead(ctx context.Context, db orm.Context, recordID string) (string, error) {
+	var head string
+	err := db.Bun().NewRaw(`UPDATE pr_records AS r SET head_sha = n.head_sha
+		FROM (SELECT min(h.head_sha) AS head_sha FROM pr_record_heads h JOIN pr_records p ON p.id = h.record_id
+			WHERE h.record_id = ?0 AND h.previous_head_sha = p.head_sha AND h.head_sha <> p.head_sha
+			HAVING count(*) = 1) AS n
+		WHERE r.id = ?0
+		RETURNING r.head_sha`, recordID).Scan(ctx, &head)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = db.Bun().NewRaw(`SELECT head_sha FROM pr_records WHERE id = ?`, recordID).Scan(ctx, &head)
+	}
+	if err != nil {
+		return "", fmt.Errorf("advance pr record head: %w", err)
+	}
+	return head, nil
 }
 
 // EnsurePRRecordHead records a head of a pull request. A head already known
@@ -252,15 +294,36 @@ func GetPRRecord(ctx context.Context, db orm.Context, provider, repository strin
 	return rows[0].core()
 }
 
-// ListPRRecords lists one repository's records in number order.
+// ListPRRecordRepositories lists the repository identities records were
+// kept under a repository name (case-insensitive).
+func ListPRRecordRepositories(ctx context.Context, db orm.Context, provider, repository string) ([]core.PRRecordRepository, error) {
+	var out []core.PRRecordRepository
+	err := db.Bun().NewRaw(`SELECT DISTINCT account_key, repository_id FROM pr_records
+		WHERE provider = ? AND lower(repository) = lower(?)
+		ORDER BY repository_id, account_key`, provider, repository).Scan(ctx, &out)
+	if err != nil {
+		return nil, fmt.Errorf("list pr record repositories: %w", err)
+	}
+	return out, nil
+}
+
+// ListPRRecords lists one repository's records in (number, repository id)
+// order.
 func ListPRRecords(ctx context.Context, db orm.Context, f core.PRRecordFilter) ([]*core.PRRecord, error) {
 	if f.Limit <= 0 {
 		return nil, nil
 	}
+	ids := f.RepositoryIDs
+	if ids == nil {
+		ids = []string{}
+	}
 	var rows []prRecordRow
 	err := db.Bun().NewRaw(`SELECT `+prRecordColumns+` FROM pr_records
-		WHERE provider = ?0 AND lower(repository) = lower(?1) AND (?2 = '' OR state = ?2) AND number > ?3
-		ORDER BY number LIMIT ?4`, f.Provider, f.Repository, f.State, f.AfterNumber, f.Limit).Scan(ctx, &rows)
+		WHERE provider = ?0 AND lower(repository) = lower(?1) AND (?2 = '' OR state = ?2)
+			AND (cardinality(?3::text[]) = 0 OR repository_id = ANY(?3::text[]))
+			AND (number, repository_id) > (?4, ?5)
+		ORDER BY number, repository_id LIMIT ?6`,
+		f.Provider, f.Repository, f.State, orm.Arg(ids), f.AfterNumber, f.AfterRepositoryID, f.Limit).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("list pr records: %w", err)
 	}

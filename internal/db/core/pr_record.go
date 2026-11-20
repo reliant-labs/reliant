@@ -62,12 +62,34 @@ type PRRecordSnapshot struct {
 	SnapshotAt   time.Time
 	ObservedAt   time.Time
 	Full         bool
-	// LabelAdded / LabelRemoved is the label a labeled / unlabeled event
-	// changed. When the snapshot is exactly as new as the record (two label
-	// events in one second carry different full sets), only this delta is
-	// applied.
+	// Delta is what this event's own action changed. GitHub's updated_at has
+	// one-second resolution, so two events of one pull request can carry the
+	// same snapshot time; then neither snapshot is newer, and each applies
+	// only its delta.
+	Delta PRRecordDelta
+}
+
+// PRRecordDelta is the transition one event made, applied on a snapshot-time
+// tie. A zero field changes nothing.
+type PRRecordDelta struct {
+	// LabelAdded / LabelRemoved: labeled / unlabeled.
 	LabelAdded   string
 	LabelRemoved string
+	// State: closed (or merged, with MergedAt and MergeCommit) / reopened.
+	// A merged record never leaves merged.
+	State       string
+	MergedAt    *time.Time
+	MergeCommit string
+	// Draft: ready_for_review (false) / converted_to_draft (true).
+	Draft *bool
+	// FromHead -> HeadSHA: synchronize. The head moves only from FromHead,
+	// so two pushes in one second applied out of order cannot move it back.
+	FromHead string
+	HeadSHA  string
+	HeadRef  string
+	// Title and BaseRef: edited.
+	Title   string
+	BaseRef string
 }
 
 // PRRecordHead is one head a pull request has had.
@@ -154,13 +176,24 @@ type PRRecordChange struct {
 	Check *PRRecordCheck
 }
 
-// PRRecordFilter narrows a listing of one repository's records.
+// PRRecordFilter narrows a listing of one repository's records, in
+// (number, repository id) order.
 type PRRecordFilter struct {
 	Provider   string
 	Repository string
+	// RepositoryIDs, when set, are the only repository ids listed: a name
+	// may have named another repository (deleted and re-created) before.
+	RepositoryIDs []string
 	// State, when set, is one of the PRRecord* states.
 	State string
-	// AfterNumber pages: only numbers above it, in number order.
-	AfterNumber int
-	Limit       int
+	// AfterNumber and AfterRepositoryID page: only records after that key.
+	AfterNumber       int
+	AfterRepositoryID string
+	Limit             int
+}
+
+// PRRecordRepository is one repository identity a repository name has had.
+type PRRecordRepository struct {
+	AccountKey   string
+	RepositoryID string
 }

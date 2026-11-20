@@ -33,6 +33,9 @@ CREATE TABLE pr_records (
     -- The pull request's own updated_at in the newest applied snapshot: an
     -- older snapshot delivered late never overwrites a newer one.
     snapshot_at TIMESTAMPTZ NOT NULL,
+    -- Whether that snapshot was the full pull request. A review event's
+    -- slimmer one (no merged) is completed by a full one of the same second.
+    snapshot_full BOOLEAN NOT NULL DEFAULT true,
     -- When Reliant last applied anything to the record.
     observed_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

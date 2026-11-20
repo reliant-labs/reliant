@@ -81,6 +81,9 @@ func TestProjectorPullRequestSnapshot(t *testing.T) {
 	if c.PreviousHeadSHA != shaB {
 		t.Errorf("previous head = %q, want lower-cased before", c.PreviousHeadSHA)
 	}
+	if d := s.Delta; d.FromHead != shaB || d.HeadSHA != shaA || d.HeadRef != "feat/x" {
+		t.Errorf("synchronize delta = %+v", d)
+	}
 	if c.Delivery.DeliveryKey != "d-1" || c.Delivery.EventIndex != 0 || c.Delivery.EventType != "pull_request.synchronize" {
 		t.Errorf("delivery = %+v", c.Delivery)
 	}
@@ -97,11 +100,12 @@ func TestProjectorMergedAndLabelDelta(t *testing.T) {
 	if len(changes) != 3 {
 		t.Fatalf("changes = %d, want 3", len(changes))
 	}
-	if s := changes[0].Snapshot; s.State != core.PRRecordMerged || s.MergedAt == nil || s.MergeCommit != shaB {
+	if s := changes[0].Snapshot; s.State != core.PRRecordMerged || s.MergedAt == nil || s.MergeCommit != shaB ||
+		s.Delta.State != core.PRRecordMerged || s.Delta.MergeCommit != shaB {
 		t.Errorf("merged snapshot = %+v", s)
 	}
-	if changes[1].Snapshot.LabelAdded != "hold" || changes[2].Snapshot.LabelRemoved != "hold" {
-		t.Errorf("label deltas = %q / %q", changes[1].Snapshot.LabelAdded, changes[2].Snapshot.LabelRemoved)
+	if changes[1].Snapshot.Delta.LabelAdded != "hold" || changes[2].Snapshot.Delta.LabelRemoved != "hold" {
+		t.Errorf("label deltas = %q / %q", changes[1].Snapshot.Delta.LabelAdded, changes[2].Snapshot.Delta.LabelRemoved)
 	}
 	if changes[1].Delivery.EventIndex != 1 || changes[2].Delivery.EventIndex != 2 {
 		t.Errorf("event indexes = %d, %d", changes[1].Delivery.EventIndex, changes[2].Delivery.EventIndex)

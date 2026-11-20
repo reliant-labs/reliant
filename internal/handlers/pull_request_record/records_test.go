@@ -20,16 +20,24 @@ import (
 const (
 	head = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	old  = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+	alice = "user-alice" // granted the repository
+	bob   = "user-bob"   // a member of the same org, never granted it
 )
 
-func seed(t *testing.T, env *storetest.Env, number int, labels ...string) {
+// now is the service's clock in every test: grant freshness is judged by it.
+var now = time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
+
+// seed records pull request number of the repository with id repoID under
+// the name acme/widgets.
+func seed(t *testing.T, env *storetest.Env, repoID string, number int, labels ...string) {
 	t.Helper()
 	at := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
-	key := fmt.Sprintf("d-%d", number)
+	key := fmt.Sprintf("d-%s-%d", repoID, number)
 	_, err := env.Repo.ApplyPRRecordChange(context.Background(), core.PRRecordChange{
 		Delivery: core.PRRecordDelivery{Provider: "github", DeliveryKey: key, EventType: "pull_request.synchronize", AppliedAt: at},
 		Snapshot: &core.PRRecordSnapshot{
-			ID: key, Provider: "github", AccountKey: "inst", RepositoryID: "42", Repository: "acme/widgets",
+			ID: key, Provider: "github", AccountKey: "inst", RepositoryID: repoID, Repository: "acme/widgets",
 			Number: number, State: core.PRRecordOpen, HeadSHA: head, Labels: labels, SnapshotAt: at, ObservedAt: at, Full: true,
 		},
 		HeadID:          key + "-h",
@@ -44,11 +52,23 @@ func seed(t *testing.T, env *storetest.Env, number int, labels ...string) {
 	}
 }
 
+func grant(t *testing.T, env *storetest.Env, userID string, at time.Time, repoIDs ...string) {
+	t.Helper()
+	var grants []core.IntegrationAccessGrant
+	for _, id := range repoIDs {
+		grants = append(grants, core.IntegrationAccessGrant{AccountKey: "inst", ResourceKey: id})
+	}
+	if err := env.Repo.ReplaceIntegrationAccess(context.Background(), userID, "github", "gh-"+userID, at, grants); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newService(t *testing.T) (*pull_request_record.Service, *storetest.Env) {
 	t.Helper()
 	env := storetest.New(t)
 	svc, err := pull_request_record.New(pull_request_record.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{}, Store: env.Repo,
+		Now: func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -60,37 +80,132 @@ func asUser(userID string) context.Context {
 	return auth.WithUser(context.Background(), userID, "user", userID+"@example.com")
 }
 
-func TestRecordsReadNeedsAccess(t *testing.T) {
-	svc, env := newService(t)
-	seed(t, env, 7, "review:changes")
-	get := &pb.GetPullRequestRecordRequest{Repository: "Acme/Widgets", Number: 7}
+func get(svc *pull_request_record.Service, userID string, number int32) error {
+	_, err := svc.GetPullRequestRecord(asUser(userID), connect.NewRequest(&pb.GetPullRequestRecordRequest{Repository: "Acme/Widgets", Number: number}))
+	return err
+}
 
-	// No grant for the repository: the record does not exist for the caller.
-	if _, err := svc.GetPullRequestRecord(asUser(storetest.SeedUserID), connect.NewRequest(get)); connect.CodeOf(err) != connect.CodeNotFound {
-		t.Fatalf("without access: err = %v, want NotFound", err)
+func list(t *testing.T, svc *pull_request_record.Service, userID string, size int32, token string) ([]int32, string) {
+	t.Helper()
+	resp, err := svc.ListPullRequestRecords(asUser(userID), connect.NewRequest(&pb.ListPullRequestRecordsRequest{
+		Repository: "acme/widgets", PageSize: size, PageToken: token,
+	}))
+	if err != nil {
+		t.Fatalf("list as %s: %v", userID, err)
 	}
-	list, err := svc.ListPullRequestRecords(asUser(storetest.SeedUserID), connect.NewRequest(&pb.ListPullRequestRecordsRequest{Repository: "acme/widgets"}))
-	if err != nil || len(list.Msg.GetRecords()) != 0 {
-		t.Fatalf("without access: list = %v, %v", list, err)
+	var nums []int32
+	for _, r := range resp.Msg.GetRecords() {
+		nums = append(nums, r.GetNumber())
 	}
-	if _, err := svc.GetPullRequestRecord(context.Background(), connect.NewRequest(get)); connect.CodeOf(err) != connect.CodeUnauthenticated {
+	return nums, resp.Msg.GetNextPageToken()
+}
+
+// TestRecordsReadOnlyWithTheCallersOwnAccess: a record is read only through
+// the caller's own fresh grant for the repository; another user's grant, a
+// stale grant or a revoked one reads as not found.
+func TestRecordsReadOnlyWithTheCallersOwnAccess(t *testing.T) {
+	svc, env := newService(t)
+	seed(t, env, "42", 7, "review:changes")
+	grant(t, env, alice, now.Add(-time.Minute), "42")
+
+	if err := get(svc, alice, 7); err != nil {
+		t.Fatalf("alice (granted): %v", err)
+	}
+	if nums, _ := list(t, svc, alice, 0, ""); len(nums) != 1 {
+		t.Fatalf("alice lists %v", nums)
+	}
+	// Bob holds no grant: alice's does not reach him.
+	if err := get(svc, bob, 7); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("bob: err = %v, want NotFound", err)
+	}
+	if nums, tok := list(t, svc, bob, 0, ""); len(nums) != 0 || tok != "" {
+		t.Fatalf("bob lists %v (token %q)", nums, tok)
+	}
+	// A grant for another repository of the installation does not reach it.
+	grant(t, env, bob, now.Add(-time.Minute), "43")
+	if err := get(svc, bob, 7); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("bob with another repository: err = %v", err)
+	}
+	// A grant no refresh has confirmed within the freshness window is stale.
+	grant(t, env, bob, now.Add(-core.IntegrationAccessFreshness-time.Minute), "42")
+	if err := get(svc, bob, 7); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("bob with a stale grant: err = %v", err)
+	}
+	// A revocation (the repository removed from the installation) ends it.
+	if _, err := env.Repo.RevokeIntegrationAccess(context.Background(), "github",
+		core.IntegrationAccessRevocation{AccountKey: "inst", ResourceKey: "42"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := get(svc, alice, 7); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("alice after revocation: err = %v", err)
+	}
+	if nums, _ := list(t, svc, alice, 0, ""); len(nums) != 0 {
+		t.Fatalf("alice after revocation lists %v", nums)
+	}
+
+	if _, err := svc.GetPullRequestRecord(context.Background(), connect.NewRequest(&pb.GetPullRequestRecordRequest{Repository: "acme/widgets", Number: 7})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("signed out: err = %v", err)
 	}
-	if _, err := svc.GetPullRequestRecord(asUser(storetest.SeedUserID), connect.NewRequest(&pb.GetPullRequestRecordRequest{Repository: "widgets", Number: 7})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if err := get(svc, alice, 0); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("number 0: err = %v", err)
+	}
+	if _, err := svc.GetPullRequestRecord(asUser(alice), connect.NewRequest(&pb.GetPullRequestRecordRequest{Repository: "widgets", Number: 7})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("bad repository: err = %v", err)
+	}
+}
+
+// TestRecordsListAcrossARecreatedRepository: a name that named a deleted
+// repository lists only the identity the caller can see, and pages through
+// numbers both identities share without skipping or stopping early.
+func TestRecordsListAcrossARecreatedRepository(t *testing.T) {
+	svc, env := newService(t)
+	// The deleted repository (id 41) had 1-4; the re-created one (id 42) has 3-6.
+	for n := 1; n <= 4; n++ {
+		seed(t, env, "41", n)
+	}
+	for n := 3; n <= 6; n++ {
+		seed(t, env, "42", n)
+	}
+	grant(t, env, alice, now.Add(-time.Minute), "42")
+	var got []int32
+	token := ""
+	for page := 0; page < 10; page++ {
+		nums, next := list(t, svc, alice, 1, token)
+		got = append(got, nums...)
+		if next == "" {
+			break
+		}
+		token = next
+	}
+	if fmt.Sprint(got) != "[3 4 5 6]" {
+		t.Fatalf("alice pages through %v, want [3 4 5 6]", got)
+	}
+
+	// Granted both, every record of both, in (number, repository) order, a
+	// shared number split across a page boundary.
+	grant(t, env, bob, now.Add(-time.Minute), "41", "42")
+	got, token = nil, ""
+	for page := 0; page < 20; page++ {
+		nums, next := list(t, svc, bob, 3, token)
+		got = append(got, nums...)
+		if next == "" {
+			break
+		}
+		token = next
+	}
+	if fmt.Sprint(got) != "[1 2 3 3 4 4 5 6]" {
+		t.Fatalf("bob pages through %v", got)
+	}
+	if _, err := svc.ListPullRequestRecords(asUser(alice), connect.NewRequest(&pb.ListPullRequestRecordsRequest{Repository: "acme/widgets", PageToken: "x"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("bad token: %v", err)
 	}
 }
 
 func TestRecordsReadComputesTheVerdict(t *testing.T) {
 	svc, env := newService(t)
-	for n := 1; n <= 3; n++ {
-		seed(t, env, n)
-	}
-	if err := env.Repo.ReplaceIntegrationAccess(context.Background(), storetest.SeedUserID, "github", "99", time.Now(),
-		[]core.IntegrationAccessGrant{{AccountKey: "inst", ResourceKey: "42"}}); err != nil {
-		t.Fatal(err)
-	}
-	ctx := asUser(storetest.SeedUserID)
+	seed(t, env, "42", 2)
+	grant(t, env, alice, now.Add(-time.Minute), "42")
+	ctx := asUser(alice)
 	policy := &pb.VerdictPolicy{TrustedAuthors: []string{"reliant-labs[bot]"}}
 
 	got, err := svc.GetPullRequestRecord(ctx, connect.NewRequest(&pb.GetPullRequestRecordRequest{Repository: "acme/widgets", Number: 2, Policy: policy}))
@@ -109,20 +224,8 @@ func TestRecordsReadComputesTheVerdict(t *testing.T) {
 	if err != nil || got.Msg.GetRecord().GetVerdict().GetKind() != "" {
 		t.Fatalf("no policy: %v, %v", got, err)
 	}
-
-	// Paging.
-	page, err := svc.ListPullRequestRecords(ctx, connect.NewRequest(&pb.ListPullRequestRecordsRequest{Repository: "acme/widgets", PageSize: 2, Policy: policy}))
-	if err != nil || len(page.Msg.GetRecords()) != 2 || page.Msg.GetNextPageToken() != "2" {
-		t.Fatalf("page 1 = %v, %v", page, err)
-	}
-	page, err = svc.ListPullRequestRecords(ctx, connect.NewRequest(&pb.ListPullRequestRecordsRequest{Repository: "acme/widgets", PageSize: 2, PageToken: "2", Policy: policy}))
-	if err != nil || len(page.Msg.GetRecords()) != 1 || page.Msg.GetRecords()[0].GetNumber() != 3 || page.Msg.GetNextPageToken() != "" {
-		t.Fatalf("page 2 = %v, %v", page, err)
-	}
-	if page.Msg.GetRecords()[0].GetVerdict().GetKind() != core.PRReviewChanges {
-		t.Fatalf("listed verdict = %v", page.Msg.GetRecords()[0].GetVerdict())
-	}
-	if _, err := svc.ListPullRequestRecords(ctx, connect.NewRequest(&pb.ListPullRequestRecordsRequest{Repository: "acme/widgets", PageToken: "x"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("bad token: %v", err)
+	listed, err := svc.ListPullRequestRecords(ctx, connect.NewRequest(&pb.ListPullRequestRecordsRequest{Repository: "acme/widgets", Policy: policy}))
+	if err != nil || len(listed.Msg.GetRecords()) != 1 || listed.Msg.GetRecords()[0].GetVerdict().GetKind() != core.PRReviewChanges {
+		t.Fatalf("listed = %v, %v", listed, err)
 	}
 }
