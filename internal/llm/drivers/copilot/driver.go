@@ -69,7 +69,7 @@ func NewClient(opts llm.DriverOptions) (*CopilotClient, error) {
 		opts.ReasoningEffort = "medium"
 	}
 
-	// The stored credential is a GitHub OAuth token (device flow or GitHub CLI).
+	// The stored credential is the GitHub OAuth token from the device flow.
 	// The resolver passes it via ApiKey/BearerToken.
 	githubToken, err := resolveGitHubToken(opts)
 	if err != nil {
