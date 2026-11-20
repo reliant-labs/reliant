@@ -191,7 +191,24 @@ ALL: [fw.Workload] = [migrate, api_server, temporal_worker, daemon_gateway]
 #
 # The Dockerfile's version stamp is five build args (VERSION, COMMIT,
 # BUILD_DATE, BRANCH, COMMIT_TIME). Their values are per build, so the env that
-# binds this passes them (`server_image_build`), never this declaration.
+# binds this passes them (`server_image_build`), never this declaration. forge
+# passes a DockerBuild only the build_args declared here, plus its own
+# SOURCE_DATE_EPOCH and --provenance=false (reproducible digests); it stamps
+# nothing itself.
+#
+# `pgo` is left at its default on purpose. The Dockerfile's `go build` takes
+# Go's own -pgo=auto, which would read cmd/reliant/default.pgo if one were
+# committed (none is), and it declares no FORGE_PGO_* ARG, so `pgo` here could
+# only change what `forge pgo pull` reads. That has nowhere to read from: no
+# reliant env runs the server under forge observability (prod runs it from
+# control-plane), so the profiles live there.
+#
+# No `inputs_file` either. At the forge this repo pins, `inputs_file` (like
+# ShellBuild's `inputs`) drives build reuse only for a ShellBuild; a
+# DockerBuild accepts the field and ignores it, so declaring the image's inputs
+# here would claim a reuse that never happens.
+# Every `forge env build` runs the docker build (BuildKit's layer cache is the
+# only reuse). Reported to forge as "DockerBuild ignores inputs_file/inputs".
 server_image_build = lambda build_args: {str: str} -> forge.DockerBuild {
     forge.DockerBuild {
         dockerfile = "Dockerfile"
