@@ -387,6 +387,9 @@ func TestUsageMeter_FailureIsRecordedAsClassOnly(t *testing.T) {
 //     (recordLLMCallUsage, asserted below) beside the stream it reads.
 //   - handlers/llm_usage_record.go: usageMeter, the seam every other request
 //     goes through.
+//   - handlers/context_overflow_recovery.go: the chat turn's resends after a
+//     context-window refusal, part of CallLLM's stream; each refused request
+//     reaches CallLLM's ledger as a retry event (recordDriverRetries).
 //   - handlers/llm_probe.go and tools/reliant-dev: an operator's probe of a
 //     model, run from the dev CLI and never as part of a user's usage.
 func TestModelRequestsGoThroughTheUsageLedger(t *testing.T) {
@@ -394,9 +397,10 @@ func TestModelRequestsGoThroughTheUsageLedger(t *testing.T) {
 	root := filepath.Join("..", "..", "..", "..", "..")
 	handlers := filepath.ToSlash(filepath.Join("internal", "workflow", "runtime", "activities", "handlers"))
 	allowedFile := map[string]bool{
-		handlers + "/call_llm.go":         true,
-		handlers + "/llm_usage_record.go": true,
-		handlers + "/llm_probe.go":        true,
+		handlers + "/call_llm.go":                  true,
+		handlers + "/llm_usage_record.go":          true,
+		handlers + "/context_overflow_recovery.go": true,
+		handlers + "/llm_probe.go":                 true,
 	}
 	allowedDir := []string{"internal/llm/", "tools/reliant-dev/", "gen/", "node_modules/", ".git/"}
 	entryPoints := map[string]bool{"StreamResponse": true, "SendMessages": true, "StreamAndAccumulate": true}

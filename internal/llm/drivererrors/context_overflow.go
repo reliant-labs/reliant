@@ -138,7 +138,7 @@ var overflowExclusions = []*regexp.Regexp{
 	regexp.MustCompile(`memory (?:limit|guard|ceiling)`),
 }
 
-// IsContextOverflow reports whether the failure is a context-window refusal.
+// IsOverflowFailure reports whether the failure is a context-window refusal.
 //
 // The order is the point:
 //  1. A 429 is never an overflow, whatever its body says, and neither is a
@@ -148,7 +148,7 @@ var overflowExclusions = []*regexp.Regexp{
 //  3. Throttle and out-of-memory wordings exclude before any overflow wording
 //     is tried.
 //  4. Only then the overflow wordings.
-func (f ProviderFailure) IsContextOverflow() bool {
+func IsOverflowFailure(f ProviderFailure) bool {
 	if f.Status != 0 && (f.Status < 400 || f.Status >= 500 || f.Status == 429) {
 		return false
 	}
@@ -178,7 +178,7 @@ func (f ProviderFailure) IsContextOverflow() bool {
 // failure describes a context-window refusal, and err unchanged otherwise
 // (including when it is already marked).
 func MarkContextOverflow(err error, f ProviderFailure) error {
-	if err == nil || errors.Is(err, ErrContextOverflow) || !f.IsContextOverflow() {
+	if err == nil || errors.Is(err, ErrContextOverflow) || !IsOverflowFailure(f) {
 		return err
 	}
 	actual, limit := OverflowTokenCounts(err.Error())
@@ -198,7 +198,7 @@ func IsContextOverflow(err error) bool {
 		return true
 	}
 	text := err.Error()
-	return ProviderFailure{Status: StatusFromText(text), Message: text}.IsContextOverflow()
+	return IsOverflowFailure(ProviderFailure{Status: StatusFromText(text), Message: text})
 }
 
 // statusPatterns find the HTTP status a driver printed into an error's text:
@@ -231,7 +231,7 @@ var overflowCountPatterns = []*regexp.Regexp{
 	// Anthropic: "prompt is too long: 1114231 tokens > 1000000 maximum"
 	regexp.MustCompile(`(?i)prompt is too long: (?P<actual>\d+) tokens > (?P<limit>\d+) maximum`),
 	// Anthropic: "input length and `max_tokens` exceed context limit: 188240 + 21333 > 200000"
-	regexp.MustCompile("(?i)exceed context limit: (?P<actual>\\d+) \\+ (?P<output>\\d+) > (?P<limit>\\d+)"),
+	regexp.MustCompile(`(?i)exceed context limit: (?P<actual>\d+) \+ (?P<output>\d+) > (?P<limit>\d+)`),
 	// OpenAI chat / OpenRouter / vLLM: "maximum context length is 128000
 	// tokens. However, your messages resulted in 130000 tokens." OpenRouter
 	// says "you requested about 234543 tokens".

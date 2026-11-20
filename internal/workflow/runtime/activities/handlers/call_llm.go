@@ -3177,7 +3177,10 @@ func (a *CallLLMActivity) processStreamEvent(ctx context.Context, chatID string,
 		if state.retries != nil && event.Retry != nil {
 			state.retries.observe(*event.Retry)
 		}
-		a.recordProviderBackoff(ctx, chatID, thread, event.Retry, state)
+		// A resend after a context-window refusal takes no wait, so nothing is parked.
+		if event.Retry == nil || event.Retry.Reason != contextOverflowRetryReason {
+			a.recordProviderBackoff(ctx, chatID, thread, event.Retry, state)
+		}
 		return nil
 	}
 	a.releaseProviderBackoff(ctx, thread, state)

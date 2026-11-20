@@ -82,12 +82,12 @@ func TestProviderFailure_StatusDecidesFirst(t *testing.T) {
 	t.Parallel()
 	overflowBody := "prompt is too long: 210000 tokens > 200000 maximum"
 	for _, status := range []int{429, 500, 503, 529, 200} {
-		assert.False(t, ProviderFailure{Status: status, Codes: []string{"context_length_exceeded"}, Message: overflowBody}.IsContextOverflow(),
+		assert.False(t, IsOverflowFailure(ProviderFailure{Status: status, Codes: []string{"context_length_exceeded"}, Message: overflowBody}),
 			"status %d", status)
 	}
-	assert.True(t, ProviderFailure{Status: 400, Message: overflowBody}.IsContextOverflow())
-	assert.True(t, ProviderFailure{Status: 413, Codes: []string{"request_too_large"}}.IsContextOverflow())
-	assert.True(t, ProviderFailure{Message: overflowBody}.IsContextOverflow(), "no status: a mid-stream error")
+	assert.True(t, IsOverflowFailure(ProviderFailure{Status: 400, Message: overflowBody}))
+	assert.True(t, IsOverflowFailure(ProviderFailure{Status: 413, Codes: []string{"request_too_large"}}))
+	assert.True(t, IsOverflowFailure(ProviderFailure{Message: overflowBody}), "no status: a mid-stream error")
 }
 
 // A structured code decides without any wording, and with wording that would
@@ -97,9 +97,9 @@ func TestProviderFailure_CodeDecides(t *testing.T) {
 	t.Parallel()
 	for _, code := range []string{"context_length_exceeded", "model_context_window_exceeded", "request_too_large",
 		"model_max_prompt_tokens_exceeded", "exceed_context_size_error", " Context_Length_Exceeded "} {
-		assert.True(t, ProviderFailure{Status: 400, Codes: []string{"invalid_request_error", code}, Message: "bad request"}.IsContextOverflow(), code)
+		assert.True(t, IsOverflowFailure(ProviderFailure{Status: 400, Codes: []string{"invalid_request_error", code}, Message: "bad request"}), code)
 	}
-	assert.False(t, ProviderFailure{Status: 400, Codes: []string{"invalid_request_error"}, Message: "bad request"}.IsContextOverflow())
+	assert.False(t, IsOverflowFailure(ProviderFailure{Status: 400, Codes: []string{"invalid_request_error"}, Message: "bad request"}))
 }
 
 func TestMarkContextOverflow_KeepsTextAndIdentity(t *testing.T) {

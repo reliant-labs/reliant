@@ -224,10 +224,16 @@ func TestContextOverflowRecovery_NeverResendsAfterOutput(t *testing.T) {
 func TestCallLLM_ContextOverflowIsRecoveredInTheTurn(t *testing.T) {
 	t.Parallel()
 	driver := &windowLimitedDriver{fits: 450_000}
-	out, err := runCallLLMWithToolOutput(t, driver, 600_000)
+	out, h, err := runCallLLMWithToolOutput(t, driver, 600_000)
 	require.NoError(t, err)
 	assert.Equal(t, "answered", out.GetResponseText())
 	assert.Len(t, driver.requests(), 3)
+
+	// Every request the provider answered is in the usage ledger: the two
+	// refusals as failed requests, then the answer.
+	callRows, _, rollupErrors, _, _, _, _ := ledgerTotals(t, h)
+	assert.Equal(t, int64(3), callRows)
+	assert.Equal(t, int64(2), rollupErrors)
 }
 
 // And when no resend fits, the turn fails with the explanation, still
@@ -235,7 +241,7 @@ func TestCallLLM_ContextOverflowIsRecoveredInTheTurn(t *testing.T) {
 func TestCallLLM_ContextOverflowGivesUpWithAnExplanation(t *testing.T) {
 	t.Parallel()
 	driver := &windowLimitedDriver{fits: 1_000}
-	_, err := runCallLLMWithToolOutput(t, driver, 600_000)
+	_, _, err := runCallLLMWithToolOutput(t, driver, 600_000)
 	require.Error(t, err)
 	assert.Len(t, driver.requests(), 1+len(contextOverflowShrink))
 	assert.ErrorIs(t, err, drivererrors.ErrContextOverflow)
@@ -244,7 +250,7 @@ func TestCallLLM_ContextOverflowGivesUpWithAnExplanation(t *testing.T) {
 
 // runCallLLMWithToolOutput runs CallLLM on a turn whose last tool result is
 // toolChars long, returning the activity's own output and error.
-func runCallLLMWithToolOutput(t *testing.T, driver llm.Driver, toolChars int) (*CallLLMOutput, error) {
+func runCallLLMWithToolOutput(t *testing.T, driver llm.Driver, toolChars int) (*CallLLMOutput, *IdempotencyTestHelper, error) {
 	t.Helper()
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
@@ -271,5 +277,5 @@ func runCallLLMWithToolOutput(t *testing.T, driver llm.Driver, toolChars int) (*
 	}
 	h.env.RegisterActivity(run)
 	_, _ = h.env.ExecuteActivity(run, input)
-	return out, returned
+	return out, h, returned
 }

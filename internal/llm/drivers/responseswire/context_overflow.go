@@ -27,7 +27,7 @@ func ContextOverflowFailure(resp *responses.Response) error {
 	}
 	code, msg := string(resp.Error.Code), resp.Error.Message
 	failure := drivererrors.ProviderFailure{Codes: []string{code}, Message: msg}
-	if !failure.IsContextOverflow() {
+	if !drivererrors.IsOverflowFailure(failure) {
 		return nil
 	}
 	return drivererrors.MarkContextOverflow(fmt.Errorf("responses %s: %s: %s", resp.Status, code, msg), failure)
