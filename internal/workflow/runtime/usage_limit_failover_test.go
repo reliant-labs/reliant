@@ -2,11 +2,14 @@
 package runtime
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
@@ -266,6 +269,149 @@ func (s *UsageLimitFailoverSuite) TestUseModelNow_TurnsTheWaitIntoALease() {
 	rt2 := e.callRuntime["parent#2"]
 	e.mu.Unlock()
 	s.Equal("gpt-5.6-sol@codex", rt2.FallbackModel, "the retry runs on the model the person picked")
+}
+
+// A saved Claude pin applies to the root and its spawns. One banner click
+// wakes all three and temporarily routes them to the exact Codex selection.
+func (s *UsageLimitFailoverSuite) TestBannerFallbackOverridesPinForRootAndSpawnsUntilReset() {
+	env := s.NewTestWorkflowEnvironment()
+	env.SetTestTimeout(30 * time.Second)
+	const pin = "claude"
+	const fallback = "gpt-6.2-sol@codex"
+	input := spawnE2EWorkflowInput("chat-failover-bound")
+	input.Inputs[InputKeyProviderSwitch] = pin
+	e := newSubAgentFailureEnv(s.T(), env, input.ExecContext.Thread)
+	start := env.Now()
+	reset := start.Add(time.Hour)
+	claudeLimited := limitWithFacts(reset, types.UsageLimitFacts{Provider: pin})
+	e.parentTurn = func(turn int) ([]map[string]interface{}, error) {
+		switch turn {
+		case 1:
+			return []map[string]interface{}{spawnToolCall("agent-a", "research A"), spawnToolCall("agent-b", "research B")}, nil
+		case 2:
+			return nil, claudeLimited
+		case 3:
+			// Keep the next request off the wire until the original lease has
+			// expired, then check that dispatch goes back to the stored pin.
+			return nil, limitWithFacts(start.Add(2*time.Hour), types.UsageLimitFacts{Provider: "codex"})
+		default:
+			return nil, nil
+		}
+	}
+	e.childTurn = func(_ string, turn int) (map[string]interface{}, error) {
+		if turn == 1 {
+			return nil, claudeLimited
+		}
+		return map[string]interface{}{"response_text": "done", "tool_calls": nil}, nil
+	}
+	// Signal while the third marker activity is still in flight. The other
+	// two can already be parked. The started listener runs before the stub
+	// returns, so the workflow sees the signal before that marker completes.
+	markersStarted := 0
+	env.SetOnActivityStartedListener(func(info *activity.Info, _ context.Context, args converter.EncodedValues) {
+		if info.ActivityType.Name != "UsageLimitWait" {
+			return
+		}
+		var in map[string]interface{}
+		if err := args.Get(&in); err != nil {
+			s.T().Error(err)
+			return
+		}
+		resumeAt, _ := in["resume_at"].(string)
+		until, _ := time.Parse(time.RFC3339, resumeAt)
+		if in["notice"] == nil && until.After(reset) && until.Before(start.Add(2*time.Hour)) {
+			markersStarted++
+			if markersStarted == 3 {
+				env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{UseModel: fallback, ManualFallback: true})
+			}
+		}
+	})
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+
+	s.Require().NoError(env.GetWorkflowError())
+	s.Equal(3, markersStarted)
+	for _, pair := range []struct{ first, retry string }{{"parent#2", "parent#3"}, {"agent-a#1", "agent-a#2"}, {"agent-b#1", "agent-b#2"}} {
+		s.Equal(pin, e.callRuntime[pair.first].ChatProvider, pair.first)
+		rtx, ok := e.callRuntime[pair.retry]
+		s.Require().True(ok, pair.retry)
+		s.Equal(fallback, rtx.FallbackModel, pair.retry)
+		s.True(rtx.ManualFallback, pair.retry)
+		s.Empty(rtx.ChatProvider, pair.retry)
+		s.Empty(rtx.ProviderPreference, pair.retry)
+		s.False(rtx.ClearProviderPins, pair.retry)
+	}
+	at, ok := e.callAt("parent", 3)
+	s.Require().True(ok)
+	s.True(at.Before(reset), "retried before the original reset")
+	original := e.callRuntime["parent#4"]
+	s.Equal(pin, original.ChatProvider)
+	s.Equal([]string{pin}, original.ProviderPreference)
+	s.Empty(original.FallbackModel)
+	s.False(original.ManualFallback)
+	s.Require().NotNil(original.FallbackReturn)
+	s.Equal(fallback, original.FallbackReturn.Model)
+}
+
+func (s *UsageLimitFailoverSuite) TestPickerHintDoesNotOverridePin() {
+	env := s.NewTestWorkflowEnvironment()
+	input := spawnE2EWorkflowInput("chat-failover-picker-hint")
+	input.Inputs[InputKeyProviderSwitch] = "claude"
+	e := newSubAgentFailureEnv(s.T(), env, input.ExecContext.Thread)
+	start := env.Now()
+	e.parentTurn = func(turn int) ([]map[string]interface{}, error) {
+		if turn == 1 {
+			return nil, limitWithFacts(start.Add(time.Hour), types.UsageLimitFacts{Provider: "claude", FallbackModel: "gpt-6.2-sol@codex"})
+		}
+		return nil, nil
+	}
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{UseModel: "gpt-6.2-sol@codex"})
+	}, time.Minute)
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+
+	s.Require().NoError(env.GetWorkflowError())
+	at, ok := e.callAt("parent", 2)
+	s.Require().True(ok)
+	s.GreaterOrEqual(at.Sub(start), time.Minute, "automatic failover did not bypass the pin")
+	s.Less(at.Sub(start), time.Hour, "the hint still wakes the wait")
+	s.Equal("claude", e.callRuntime["parent#2"].ChatProvider)
+	s.Empty(e.callRuntime["parent#2"].FallbackModel)
+}
+
+func (s *UsageLimitFailoverSuite) TestPickerClearsActiveBannerLeaseWithoutChangingPin() {
+	env := s.NewTestWorkflowEnvironment()
+	input := spawnE2EWorkflowInput("chat-failover-picker-clears")
+	input.Inputs[InputKeyProviderSwitch] = "claude"
+	e := newSubAgentFailureEnv(s.T(), env, input.ExecContext.Thread)
+	reset := env.Now().Add(time.Hour)
+	const fallback = "gpt-6.2-sol@codex"
+	const picked = "claude-4.6-sonnet@claude"
+	e.parentTurn = func(turn int) ([]map[string]interface{}, error) {
+		switch turn {
+		case 1:
+			return nil, limitWithFacts(reset, types.UsageLimitFacts{Provider: "claude"})
+		case 2:
+			// Same-provider picker edits also win during a lease. The state
+			// edit and the unmarked wake are what the picker sends in order.
+			env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": picked}})
+			env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{UseModel: picked})
+			return []map[string]interface{}{{"id": "read", "name": "read_file", "input": `{"path":"a.txt"}`}}, nil
+		}
+		return nil, nil
+	}
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{UseModel: fallback, ManualFallback: true})
+	}, time.Minute)
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+
+	s.Require().NoError(env.GetWorkflowError())
+	s.Equal(fallback, e.callRuntime["parent#2"].FallbackModel)
+	at, ok := e.callAt("parent", 3)
+	s.Require().True(ok)
+	s.True(at.Before(reset), "the picker won without waiting for the reset")
+	s.Equal("claude", e.callRuntime["parent#3"].ChatProvider)
+	s.Empty(e.callRuntime["parent#3"].FallbackModel)
+	s.Nil(e.callRuntime["parent#3"].FallbackReturn, "picking a model is not a provider recovery")
 }
 
 // A plain "Retry now" (no model) is unchanged: no lease.

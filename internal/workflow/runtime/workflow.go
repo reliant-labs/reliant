@@ -1663,6 +1663,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// provider is exactly what the switched (or unbound) chat replaces.
 	childTracker.switchProvider = func(wakeCtx workflow.Context) {
 		usageLimitWaiter.leases = map[string]*fallbackLease{}
+		if usageLimitWaiter.manualFallback {
+			// A banner click still being processed must not re-create the stay
+			// after the picker has changed the binding.
+			usageLimitWaiter.useModel, usageLimitWaiter.manualFallback = "", false
+		}
 		childTracker.resumeWholeChat(wakeCtx)
 	}
 	// A capacity wake (an account added, the provider switched, Resume) goes
