@@ -164,6 +164,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   <Card title="Add a database table with a CRUD API and pages" icon="hammer" href="/guides/forge/add-table-crud-api-pages">
     Generate a Postgres table, five CRUD RPCs, typed React hooks and list, detail and edit pages from one proto message marked // forge:entity.
   </Card>
+  <Card title="Scope rows to their owner in a multi-tenant API" icon="hammer" href="/guides/forge/scope-rows-to-owner">
+    Make each signed-in user see and change only their own rows: declare a forge:owner column, finish the scaffolded owner filter and prove it with a two-user test.
+  </Card>
   <Card title="Write zero-downtime Postgres migrations and lint them" icon="hammer" href="/guides/forge/zero-downtime-postgres-migrations">
     Change a live Postgres schema without breaking the release that is still serving: declare compatibility, expand then contract, and lint each migration.
   </Card>
@@ -172,6 +175,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   </Card>
   <Card title="Let AI agents query production data read-only" icon="hammer" href="/guides/forge/let-agents-query-production-data">
     Give an AI agent audited, read-only SQL access to production with forge db query: Postgres withholds secret columns, refuses writes and every query is recorded.
+  </Card>
+  <Card title="Find API endpoints that never check who is calling" icon="hammer" href="/guides/forge/find-endpoints-missing-auth-checks">
+    List every signed-in RPC whose handler never reads the caller, then fix each with a role or owner check, or mark it global with a reason a reviewer reads.
   </Card>
 </CardGroup>
 

@@ -378,7 +378,8 @@
               {
                 "group": "Build features",
                 "pages": [
-                  "guides/forge/add-table-crud-api-pages"
+                  "guides/forge/add-table-crud-api-pages",
+                  "guides/forge/scope-rows-to-owner"
                 ]
               },
               {
@@ -387,6 +388,12 @@
                   "guides/forge/zero-downtime-postgres-migrations",
                   "guides/forge/measure-migration-locks",
                   "guides/forge/let-agents-query-production-data"
+                ]
+              },
+              {
+                "group": "Quality & security",
+                "pages": [
+                  "guides/forge/find-endpoints-missing-auth-checks"
                 ]
               }
             ]
