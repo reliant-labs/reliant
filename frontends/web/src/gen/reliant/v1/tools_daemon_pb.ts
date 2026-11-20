@@ -1795,7 +1795,7 @@ export type RestartRequested = Message<"reliant.v1.RestartRequested"> & {
   /**
    * What the owner of a person's machine runs to upgrade, and where they are
    * sent to, when the request comes from a version floor
-   * (ClientVersionPolicy.daemon's upgrade_command / upgrade_url). Empty when
+   * (ClientVersionPolicy daemon_upgrade_command / daemon_upgrade_url). Empty when
    * the server names none; the daemon then prints its own advice. A daemon
    * that predates them ignores them.
    *

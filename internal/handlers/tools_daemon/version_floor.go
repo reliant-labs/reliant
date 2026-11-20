@@ -20,7 +20,7 @@ import (
 )
 
 // The daemon version floor, from the gateway's side: ClientVersionPolicy's
-// daemon floor (ServerProcessConfig.client_versions.daemon) held against the
+// daemon floor (ServerProcessConfig.client_versions.daemon_*) held against the
 // build a daemon reports when it registers (daemonBuildFromRegister).
 //
 // A daemon is below the floor when its commit time is before
@@ -131,15 +131,34 @@ func daemonSemver(v string) string {
 	return "v" + v
 }
 
+// daemonFloor is ClientVersionPolicy's daemon floor (its daemon_* fields).
+// The zero value is no floor.
+type daemonFloor struct {
+	minVersion        string
+	minCommitTimeUnix int64
+	upgradeURL        string
+	upgradeCommand    string
+}
+
+// daemonFloorOf reads the daemon floor from policy; nil is no floor.
+func daemonFloorOf(policy *configv1.ClientVersionPolicy) daemonFloor {
+	return daemonFloor{
+		minVersion:        policy.GetDaemonMinVersion(),
+		minCommitTimeUnix: policy.GetDaemonMinCommitTimeUnix(),
+		upgradeURL:        policy.GetDaemonUpgradeUrl(),
+		upgradeCommand:    policy.GetDaemonUpgradeCommand(),
+	}
+}
+
 // judgeDaemonBuild holds build against floor (see the top of this file).
-func judgeDaemonBuild(build db.DaemonBuild, floor *configv1.DaemonClientVersionFloor) floorVerdict {
-	if minTime := floor.GetMinCommitTimeUnix(); minTime > 0 && build.CommitTimeUnix > 0 {
+func judgeDaemonBuild(build db.DaemonBuild, floor daemonFloor) floorVerdict {
+	if minTime := floor.minCommitTimeUnix; minTime > 0 && build.CommitTimeUnix > 0 {
 		if build.CommitTimeUnix < minTime {
 			return floorBelow
 		}
 		return floorMet
 	}
-	minVersion, version := daemonSemver(floor.GetMinVersion()), daemonSemver(build.Version)
+	minVersion, version := daemonSemver(floor.minVersion), daemonSemver(build.Version)
 	if minVersion == "" || version == "" {
 		return floorUnknown
 	}
@@ -153,7 +172,7 @@ func judgeDaemonBuild(build db.DaemonBuild, floor *configv1.DaemonClientVersionF
 // reg, under policy. managed is whether the daemon may restart itself when
 // asked (a workspace pod); outbound is a stream the gateway dialed.
 func decideFloorAction(policy *configv1.ClientVersionPolicy, reg *reliantv1.DaemonRegister, managed, outbound bool) (floorAction, floorVerdict) {
-	verdict := judgeDaemonBuild(daemonBuildFromRegister(reg), policy.GetDaemon())
+	verdict := judgeDaemonBuild(daemonBuildFromRegister(reg), daemonFloorOf(policy))
 	if verdict != floorBelow {
 		return floorActionNone, verdict
 	}
@@ -188,12 +207,12 @@ func (s *Service) applyVersionFloor(ctx context.Context, userID, daemonID string
 	if action == floorActionNone {
 		return nil, nil
 	}
-	floor := policy.GetDaemon()
+	floor := daemonFloorOf(policy)
 	observability.DaemonVersionFloorTotal.WithLabelValues(action.outcome()).Inc()
 	attrs := []any{
 		"userID", userID, "daemonID", daemonID, "verdict", verdict.String(),
 		"version", reg.GetVersion(), "commit", reg.GetCommit(), "commitTimeUnix", reg.GetCommitTimeUnix(),
-		"minVersion", floor.GetMinVersion(), "minCommitTimeUnix", floor.GetMinCommitTimeUnix(),
+		"minVersion", floor.minVersion, "minCommitTimeUnix", floor.minCommitTimeUnix,
 		"drainsOnRestartRequest", reg.GetDrainsOnRestartRequest(), "managed", managed,
 		"outbound", outbound, "enforce", policy.GetEnforce(),
 	}
@@ -214,31 +233,31 @@ func (s *Service) applyVersionFloor(ctx context.Context, userID, daemonID string
 // NORMAL urgency with no deadline of the gateway's own: a managed daemon
 // restarts at a quiet point within its drain limit, and a person's machine is
 // only told (D6).
-func floorRestartRequest(floor *configv1.DaemonClientVersionFloor) *reliantv1.ServerMessage {
+func floorRestartRequest(floor daemonFloor) *reliantv1.ServerMessage {
 	return &reliantv1.ServerMessage{Message: &reliantv1.ServerMessage_RestartRequested{RestartRequested: &reliantv1.RestartRequested{
-		TargetVersion:  floor.GetMinVersion(),
-		CommitTimeUnix: floor.GetMinCommitTimeUnix(),
+		TargetVersion:  floor.minVersion,
+		CommitTimeUnix: floor.minCommitTimeUnix,
 		Urgency:        reliantv1.RestartUrgency_RESTART_URGENCY_NORMAL,
 		Reason:         floorRestartReason,
-		UpgradeCommand: floor.GetUpgradeCommand(),
-		UpgradeUrl:     floor.GetUpgradeUrl(),
+		UpgradeCommand: floor.upgradeCommand,
+		UpgradeUrl:     floor.upgradeURL,
 	}}}
 }
 
 // floorRefusal is the refusal of a daemon below floor that cannot be asked to
 // restart, in the frozen upgrade_required shape every client reads.
-func floorRefusal(reg *reliantv1.DaemonRegister, floor *configv1.DaemonClientVersionFloor) error {
+func floorRefusal(reg *reliantv1.DaemonRegister, floor daemonFloor) error {
 	version := reg.GetVersion()
 	if version == "" {
 		version = "unknown version"
 	}
-	minimum := floor.GetMinVersion()
-	if t := floor.GetMinCommitTimeUnix(); t > 0 && reg.GetCommitTimeUnix() > 0 {
+	minimum := floor.minVersion
+	if t := floor.minCommitTimeUnix; t > 0 && reg.GetCommitTimeUnix() > 0 {
 		minimum = "a build of " + time.Unix(t, 0).UTC().Format(time.RFC3339) + " or later"
 	}
-	how := floor.GetUpgradeCommand()
+	how := floor.upgradeCommand
 	if how == "" {
-		how = floor.GetUpgradeUrl()
+		how = floor.upgradeURL
 	}
 	if how == "" {
 		how = "install the latest version"
@@ -252,9 +271,9 @@ func floorRefusal(reg *reliantv1.DaemonRegister, floor *configv1.DaemonClientVer
 			Metadata: map[string]string{
 				"client_kind":     "daemon",
 				"client_version":  reg.GetVersion(),
-				"min_version":     floor.GetMinVersion(),
-				"upgrade_url":     floor.GetUpgradeUrl(),
-				"upgrade_command": floor.GetUpgradeCommand(),
+				"min_version":     floor.minVersion,
+				"upgrade_url":     floor.upgradeURL,
+				"upgrade_command": floor.upgradeCommand,
 			},
 		})
 }

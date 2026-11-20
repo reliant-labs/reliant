@@ -25,13 +25,11 @@ const (
 
 func testFloorPolicy(enforce bool) *configv1.ClientVersionPolicy {
 	return &configv1.ClientVersionPolicy{
-		Enforce: enforce,
-		Daemon: &configv1.DaemonClientVersionFloor{
-			MinVersion:        floorVersion,
-			MinCommitTimeUnix: floorCommitTime,
-			UpgradeCommand:    "brew upgrade --cask reliant",
-			UpgradeUrl:        "https://reliantlabs.io/download",
-		},
+		Enforce:                 enforce,
+		DaemonMinVersion:        floorVersion,
+		DaemonMinCommitTimeUnix: floorCommitTime,
+		DaemonUpgradeCommand:    "brew upgrade --cask reliant",
+		DaemonUpgradeUrl:        "https://reliantlabs.io/download",
 	}
 }
 
@@ -39,13 +37,13 @@ func testFloorPolicy(enforce bool) *configv1.ClientVersionPolicy {
 // has none; a build that can be compared with nothing is unknown.
 func TestJudgeDaemonBuild(t *testing.T) {
 	t.Parallel()
-	both := testFloorPolicy(false).GetDaemon()
-	versionOnly := &configv1.DaemonClientVersionFloor{MinVersion: floorVersion}
-	timeOnly := &configv1.DaemonClientVersionFloor{MinCommitTimeUnix: floorCommitTime}
+	both := daemonFloorOf(testFloorPolicy(false))
+	versionOnly := daemonFloor{minVersion: floorVersion}
+	timeOnly := daemonFloor{minCommitTimeUnix: floorCommitTime}
 
 	for name, tc := range map[string]struct {
 		build db.DaemonBuild
-		floor *configv1.DaemonClientVersionFloor
+		floor daemonFloor
 		want  floorVerdict
 	}{
 		"older commit":                     {build: db.DaemonBuild{CommitTimeUnix: floorCommitTime - 1}, floor: both, want: floorBelow},
@@ -59,7 +57,7 @@ func TestJudgeDaemonBuild(t *testing.T) {
 		"bare commit, version floor":       {build: db.DaemonBuild{Version: "8bcfc6ee"}, floor: versionOnly, want: floorUnknown},
 		"unknown build":                    {build: db.DaemonBuild{}, floor: both, want: floorUnknown},
 		"commit-time floor, unordered":     {build: db.DaemonBuild{Version: "1.0.0"}, floor: timeOnly, want: floorUnknown},
-		"no floor":                         {build: db.DaemonBuild{Version: "1.0.0", CommitTimeUnix: 1}, floor: nil, want: floorUnknown},
+		"no floor":                         {build: db.DaemonBuild{Version: "1.0.0", CommitTimeUnix: 1}, floor: daemonFloor{}, want: floorUnknown},
 		"semver floor, newer prerelease":   {build: db.DaemonBuild{Version: "1.21.0-rc.1"}, floor: versionOnly, want: floorMet},
 		"commit-time floor, newer commit":  {build: db.DaemonBuild{CommitTimeUnix: floorCommitTime + 100}, floor: timeOnly, want: floorMet},
 		"commit-time floor, older commit":  {build: db.DaemonBuild{CommitTimeUnix: 1}, floor: timeOnly, want: floorBelow},
