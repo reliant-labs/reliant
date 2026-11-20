@@ -27,6 +27,23 @@ Put agents to work on your repository: run the built-in workflows, write your ow
 </CardGroup>
 
 {/* guides: agents-and-workflows — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Write your first multi-agent workflow in YAML" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
+    Build a multi-agent coding workflow in YAML: a planner, an implementer and a reviewer that sends work back, checked locally, then run on your machine.
+  </Card>
+  <Card title="Require human approval before an AI agent acts" icon="workflow" href="/guides/workflows/require-human-approval">
+    Pause an agent workflow until a person approves. Gate the change on an approval node, handle approve, deny and timeout, and ask questions mid-run.
+  </Card>
+</CardGroup>
+
+**How it works**
+
+<CardGroup cols={2}>
+  <Card title="How Reliant workflows run: nodes, edges, CEL, durable execution" icon="book-open" href="/deep-dives/how-workflows-run">
+    How a Reliant workflow runs: nodes as steps, CEL edges that choose the next one, loops and joins, approvals that wait idle, and runs that survive restarts.
+  </Card>
+</CardGroup>
+{/* /guides: agents-and-workflows */}
 
 ## Machines & daemons
 
@@ -34,23 +51,57 @@ Choose where agents run: your own computer, a server or a Reliant cloud machine,
 
 {/* guides: machines-and-daemons — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
 
+**How it works**
+
+<CardGroup cols={2}>
+  <Card title="How a tool call reaches your machine" icon="book-open" href="/deep-dives/how-tool-calls-reach-your-machine">
+    How an agent's tool call travels from the cloud worker through NATS and the gateway to the daemon on your machine, and what happens when the link drops.
+  </Card>
+</CardGroup>
+{/* /guides: machines-and-daemons */}
+
 ## Forge
 
 Build a Go and React app with Forge: start a project, add features from the schema and the API, and keep it tested and secure. The [Forge overview](/forge/overview) is the reference.
 
 {/* guides: forge — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Build a Go and React app with Connect RPC and Postgres" icon="hammer" href="/guides/forge/build-go-react-app-connect-rpc">
+    Create a Go Connect RPC service, a Postgres table and a React frontend with Forge, then run the whole stack on your machine with no account.
+  </Card>
+  <Card title="Add a database table with a CRUD API and pages" icon="hammer" href="/guides/forge/add-table-crud-api-pages">
+    Generate a Postgres table, five CRUD RPCs, typed React hooks and list, detail and edit pages from one proto message marked // forge:entity.
+  </Card>
+  <Card title="Write zero-downtime Postgres migrations and lint them" icon="hammer" href="/guides/forge/zero-downtime-postgres-migrations">
+    Change a live Postgres schema without breaking the release that is still serving: declare compatibility, expand then contract, and lint each migration.
+  </Card>
+  <Card title="Measure migration locks and table rewrites before production" icon="hammer" href="/guides/forge/measure-migration-locks">
+    See which Postgres locks, table rewrites and full scans each pending migration causes, on a disposable database, before the migration reaches production.
+  </Card>
+</CardGroup>
+
+**How it works**
+
+<CardGroup cols={2}>
+  <Card title="How Forge keeps Postgres migrations safe" icon="book-open" href="/deep-dives/safe-migrations">
+    How Forge keeps a Postgres schema change from breaking the release still serving: declared compatibility, lint, measured locks, gated rollouts and rollback floors.
+  </Card>
+</CardGroup>
+{/* /guides: forge */}
 
 ## Hosting
 
 Deploy what you build to Reliant hosting, release it safely across environments, and manage its data and users. The [hosting overview](/hosting/overview) is the reference.
 
 {/* guides: hosting — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+{/* /guides: hosting */}
 
 ## Observability
 
 See how a release behaves in production and find what broke when it does not. The [observability page](/hosting/observability) is the reference.
 
 {/* guides: observability — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+{/* /guides: observability */}
 
 {/*
 Rules for guide writers (plan §2). Every guide and deep dive in this tab follows them.

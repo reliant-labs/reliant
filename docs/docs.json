@@ -277,6 +277,65 @@
             "pages": [
               "guides/index"
             ]
+          },
+          {
+            "group": "Agents & workflows",
+            "pages": [
+              {
+                "group": "How it works",
+                "pages": [
+                  "deep-dives/how-workflows-run"
+                ]
+              },
+              {
+                "group": "Build workflows",
+                "pages": [
+                  "guides/workflows/first-multi-agent-workflow",
+                  "guides/workflows/require-human-approval"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Machines & daemons",
+            "pages": [
+              {
+                "group": "How it works",
+                "pages": [
+                  "deep-dives/how-tool-calls-reach-your-machine"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Forge",
+            "pages": [
+              {
+                "group": "How it works",
+                "pages": [
+                  "deep-dives/safe-migrations"
+                ]
+              },
+              {
+                "group": "Start a project",
+                "pages": [
+                  "guides/forge/build-go-react-app-connect-rpc"
+                ]
+              },
+              {
+                "group": "Build features",
+                "pages": [
+                  "guides/forge/add-table-crud-api-pages"
+                ]
+              },
+              {
+                "group": "Data & migrations",
+                "pages": [
+                  "guides/forge/zero-downtime-postgres-migrations",
+                  "guides/forge/measure-migration-locks"
+                ]
+              }
+            ]
           }
         ]
       }
