@@ -108,10 +108,13 @@ itself, with a step that messages you.`,
 			req := f.enableRequest(choices)
 			resp, err := newTriggerServiceClient(conn).EnableWorkflow(cmd.Context(), connect.NewRequest(req))
 			if err != nil {
-				return conn.annotate(fmt.Errorf("enabling workflow %q: %w", f.workflow, err))
+				return conn.annotate(fmt.Errorf("enabling workflow %q: %w%s", f.workflow, err, builtinRefHint(f.workflow)))
 			}
 			printWorkflowTriggerResults(cmd.OutOrStdout(), resp.Msg.GetResults())
 			if !resp.Msg.GetEnabled() {
+				if hint := builtinRefHint(f.workflow); hint != "" {
+					return fmt.Errorf("%w%s", activateFailure(f.workflow, resp.Msg.GetResults()), hint)
+				}
 				return activateFailure(f.workflow, resp.Msg.GetResults())
 			}
 			return nil
@@ -129,7 +132,7 @@ itself, with a step that messages you.`,
 	fl.StringVar(&f.paramsJSON, "params-json", "", "Workflow inputs as one JSON object; --param entries win over its keys")
 	fl.StringArrayVar(&f.presets, "preset", nil, "Preset assignment as group=name, or just name for the top level; repeatable")
 	fl.StringArrayVar(&f.connections, "connection", nil, "Connection an integration listens through, as integration=connection-id (default: your default connection)")
-	fl.StringVar(&f.message, "message", "", "Prompt for a declared trigger that has none")
+	fl.StringVar(&f.message, "message", "", "Prompt for a declared trigger that has none (not needed when the workflow runs no agent)")
 	fl.StringVar(&f.namePrefix, "name-prefix", "", "Names new activations \"<prefix> · <trigger>\" (default: the workflow)")
 	fl.StringVar(&f.actingAs, "acting-as", "", "Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise)")
 	fl.BoolVar(&f.notify, "notify", false, "Desktop notification when a run succeeds; never an Inbox item (failures always notify)")
@@ -139,11 +142,15 @@ itself, with a step that messages you.`,
 // newTriggerDeactivateCmd pauses every activation of a workflow, the inverse
 // of activate. Pausing is the safe direction, so an agent may run it.
 func newTriggerDeactivateCmd() *cobra.Command {
-	var workflow, projectID string
+	var workflow, projectID, projectPath string
 	cmd := &cobra.Command{
 		Use:   "deactivate",
 		Short: "Pause every activation of a workflow",
 		Long: `Pause every activation of a workflow, as the app's Disable does.
+
+With no --project or --project-id it pauses the workflow's activations in
+EVERY project, so it says so first, and each paused line names its project.
+Pass --project (a path) or --project-id to pause one project's only.
 
 It is not all or nothing: a pause that fails is reported and the rest still
 pause. Resume with activate; remove one activation with delete.`,
@@ -155,17 +162,32 @@ pause. Resume with activate; remove one activation with delete.`,
 			if err != nil {
 				return err
 			}
+			if projectID == "" && projectPath != "" {
+				id, err := resolveProjectPathToID(cmd.Context(), conn, projectPath)
+				if err != nil {
+					return fmt.Errorf("resolving project %q: %w", projectPath, err)
+				}
+				if id == "" {
+					return fmt.Errorf("could not resolve a project for %q; pass --project-id", projectPath)
+				}
+				projectID = id
+			}
 			req := &reliantv1.DisableWorkflowRequest{Workflow: workflow}
 			if projectID != "" {
 				req.ProjectId = &projectID
+			} else {
+				// The unscoped default is kept for compatibility, but it is
+				// never silent: it reaches production automations in every
+				// project (TL-38).
+				fmt.Fprintf(cmd.ErrOrStderr(), "Pausing %q in every project (pass --project or --project-id to pause one project's only).\n", workflow)
 			}
 			resp, err := newTriggerServiceClient(conn).DisableWorkflow(cmd.Context(), connect.NewRequest(req))
 			if err != nil {
-				return conn.annotate(fmt.Errorf("disabling workflow %q: %w", workflow, err))
+				return conn.annotate(fmt.Errorf("disabling workflow %q: %w%s", workflow, err, builtinRefHint(workflow)))
 			}
 			out := cmd.OutOrStdout()
 			for _, t := range resp.Msg.GetPaused() {
-				fmt.Fprintf(out, "paused  %s (%s)\n", t.GetName(), t.GetId())
+				fmt.Fprintf(out, "paused  %s (%s)  project %s\n", t.GetName(), t.GetId(), t.GetProjectId())
 			}
 			for _, fail := range resp.Msg.GetFailed() {
 				fmt.Fprintf(out, "FAILED  %s (%s): %s\n", fail.GetName(), fail.GetTriggerId(), fail.GetMessage())
@@ -174,13 +196,14 @@ pause. Resume with activate; remove one activation with delete.`,
 				return fmt.Errorf("%d activation(s) of %q could not be paused", len(resp.Msg.GetFailed()), workflow)
 			}
 			if len(resp.Msg.GetPaused()) == 0 {
-				fmt.Fprintf(out, "No enabled activations of %q.\n", workflow)
+				fmt.Fprintf(out, "No enabled activations of %q.%s\n", workflow, builtinRefHint(workflow))
 			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&workflow, "workflow", "", "Workflow whose activations to pause (required)")
-	cmd.Flags().StringVar(&projectID, "project-id", "", "Pause only this project's activations (default: every project)")
+	cmd.Flags().StringVar(&workflow, "workflow", "", "Workflow whose activations to pause: a slug, or builtin://<name> (required)")
+	cmd.Flags().StringVar(&projectPath, "project", "", "Pause only the activations of the project at this path")
+	cmd.Flags().StringVar(&projectID, "project-id", "", "Pause only this project's activations (default, with no --project either: every project)")
 	return cmd
 }
 
@@ -333,6 +356,18 @@ func workflowOutcomeLabel(o reliantv1.WorkflowTriggerOutcome) string {
 // new is running" is true only when no trigger was left enabled: an undo that
 // failed (a request deadline mid-write, say) leaves one on, and saying
 // otherwise sent people to re-run an activation that was already live.
+// builtinRefHint is a suffix naming the built-in a bare --workflow may have
+// meant: activate resolves a bare name as a project workflow, never a
+// built-in, so `--workflow autopilot-oncall` failed with "no project workflow
+// is named autopilot-oncall" and no word of builtin://autopilot-oncall
+// (TL-45). Empty when the name has a scheme or no built-in has it.
+func builtinRefHint(workflow string) string {
+	if ref := normalizeRunWorkflowRef(workflow); ref != workflow {
+		return fmt.Sprintf("\n  a built-in workflow is named %q: did you mean --workflow %s?", workflow, ref)
+	}
+	return ""
+}
+
 func activateFailure(workflow string, results []*reliantv1.WorkflowTriggerResult) error {
 	var left []string
 	for _, r := range results {

@@ -22020,7 +22020,7 @@ reliant trigger activate [flags]
 | `--acting-as` | `string` | - | Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise) |
 | `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
 | `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
-| `--message` | `string` | - | Prompt for a declared trigger that has none |
+| `--message` | `string` | - | Prompt for a declared trigger that has none (not needed when the workflow runs no agent) |
 | `--name-prefix` | `string` | - | Names new activations "<prefix> · <trigger>" (default: the workflow) |
 | `--no-machine` | `bool` | - | Run without a machine (workflows that only need the web and integrations) |
 | `--notify` | `bool` | - | Desktop notification when a run succeeds; never an Inbox item (failures always notify) |
@@ -22071,6 +22071,10 @@ Pause every activation of a workflow
 
 Pause every activation of a workflow, as the app's Disable does.
 
+With no --project or --project-id it pauses the workflow's activations in
+EVERY project, so it says so first, and each paused line names its project.
+Pass --project (a path) or --project-id to pause one project's only.
+
 It is not all or nothing: a pause that fails is reported and the rest still
 pause. Resume with activate; remove one activation with delete.
 
@@ -22082,8 +22086,9 @@ reliant trigger deactivate [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--project-id` | `string` | - | Pause only this project's activations (default: every project) |
-| `--workflow` | `string` | - | Workflow whose activations to pause (required) |
+| `--project` | `string` | - | Pause only the activations of the project at this path |
+| `--project-id` | `string` | - | Pause only this project's activations (default, with no --project either: every project) |
+| `--workflow` | `string` | - | Workflow whose activations to pause: a slug, or builtin://<name> (required) |
 
 ---
 
@@ -22827,10 +22832,14 @@ input/output type verification, and cross-workflow contract validation.
 If a specific file path is given, validates that file only. Otherwise,
 validates all *.yaml files in the workflow directory.
 
-With --trigger-payload, each declared trigger is also run against that sample
-event: its filter, its inputs mapping and its prompt are evaluated the way a
-real firing would, and anything that fails (or that the integration's declared
-payload rules out) is reported as an error. For an integration trigger the
+With --trigger-payload, each declared trigger the sample can belong to is also
+run against that sample event: its filter, its inputs mapping and its prompt
+are evaluated the way a real firing would, and anything that fails (or that the
+integration's declared payload rules out) is reported as an error. Each
+trigger's outcome is printed (matched, with the inputs it maps; filtered out;
+failed; or not run). An integration trigger that does not listen for the
+sample's "event" (or "integration") is not run against it; --trigger <name>
+runs the sample against that one trigger only. For an integration trigger the
 payload is merged over a sample generated from the event's declared payload, so
 give only the fields your expressions read. The JSON may be a file: @event.json.
 --activation-params supplies trigger.activation.params, as an activation of the workflow
@@ -22849,6 +22858,10 @@ broke in its owner's Inbox.
 Each project workflow is also linted (reliant workflow lint --rules lists the
 rules): a lint error fails validation, a lint warning is reported.
 
+Each workflow's "No machine" line says whether it can run with No machine, by
+the rule the server applies when you start it in a chat with no machine or
+enable a trigger with none (--json: no_machine).
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.
 
 ```
@@ -22866,6 +22879,7 @@ reliant workflow validate [path] [flags]
 | `--include-builtins` | `bool` | - | Also validate builtin workflows |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
 | `--owner-github-id` | `string` | - | Sample trigger.activation.owner.github_id (a string), used with --trigger-payload |
+| `--trigger` | `string` | - | Run --trigger-payload against this declared trigger only |
 | `--trigger-payload` | `string` | - | Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it |
 | `--trigger-sender` | `string` | - | Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each workflow |

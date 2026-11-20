@@ -81,7 +81,7 @@ There is no alert route or token to set up: on Reliant hosting the on-call trigg
       "type": "RECEIVER_TYPE_AUTOPILOT",
       "settings": {
         "always_alertnames": "NewIssue,IssueRegressed,IssueSpike,ReleaseRegressed,ServiceAnomaly",
-        "env_kinds": "persistent",
+        "env_kinds": "persistent,self_managed",
         "projects": "guides-sandbox-oncall",
         "repos": "github.com/reliant-labs/guides-sandbox",
         "severities": "critical,error"
@@ -89,7 +89,7 @@ There is no alert route or token to set up: on Reliant hosting the on-call trigg
     }
     ```
 
-    It takes `critical` and `error` alerts, plus the error and release alerts at any severity, from this project's persistent environments, not previews. Your other receivers are unchanged.
+    It takes `critical` and `error` alerts, plus the error and release alerts at any severity, from every environment of this project that raises alerts (`persistent` ones Reliant hosts and `self_managed` ones such as an environment `forge obs init` registered), not previews. Your other receivers are unchanged.
   </Step>
 
   <Step title="Make an alert fire">
@@ -160,7 +160,7 @@ There is no alert route or token to set up: on Reliant hosting the on-call trigg
     No `service_repos` key matched and `default_repo` is empty. Run `reliant trigger activate` again with new `--params-json`.
   </Accordion>
   <Accordion title="No firings yet.">
-    `obs status` shows an alert firing but `reliant trigger events` lists nothing. Check the alert passes the filter (step 4) and that `obs receivers list` shows the `autopilot-<activation id>` receiver. Pausing and resuming the activation connects its receiver again. `NewIssue` fires once per issue, so test again with a new error.
+    `obs status` shows an alert firing but `reliant trigger events` lists nothing. Check the alert passes the filter (step 4) and that `obs receivers list` shows the `autopilot-<activation id>` receiver. If its `env_kinds` is `persistent` alone, it was created before self-managed environments were included: pause and resume the activation to recreate it with the current filter. Pausing and resuming the activation connects its receiver again. `NewIssue` fires once per issue, so test again with a new error.
   </Accordion>
 </AccordionGroup>
 

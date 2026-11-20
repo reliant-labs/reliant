@@ -66,11 +66,11 @@ On Reliant's hosted platform, enabling it connects the automation to your organi
 | `413` | Body larger than 1 MiB |
 | `503` | The delivery could not be recorded; retry |
 
-By default the `202` body contains `event_id`, `outcome`, and `duplicate`. The event has been recorded and evaluated, but a run may not have started. With no explicit idempotency key, the default mode still treats an identical body within the same minute as a retry.
+By default the `202` body contains `event_id`, `outcome`, and `duplicate`. The event has been recorded and evaluated, but a run may not have started.
 
 Send `Prefer: respond-async` if you only need to know the delivery was stored and want filtering and dispatch to happen in the background. A `202` with `Preference-Applied: respond-async` returns `{"delivery_id":"…","status":"pending"}`. The delivery ID is a receipt, not a trigger event ID; check the automation's history for the eventual result.
 
-For either mode, the first supplied header among `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id`, and `X-Delivery-Id` identifies an intentional retry. Without one, each async request is a separate delivery, even with an identical body. A workflow's explicit `dedupe_key` still applies when it evaluates the event.
+For either mode, the first non-empty header among `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id`, and `X-Delivery-Id` identifies the delivery. If none reaches the receiver, the default mode treats an identical body within the same minute as a retry, while async mode stores each POST as a separate delivery. On Reliant's hosted service, the proxy adds an `X-Request-Id` to each delivery, so identical posts do not use the body fallback. To make a retry count as one event, send the same `Idempotency-Key` on each attempt or declare a workflow `dedupe_key` (below).
 
 ### Deduplicating by what the event is about
 

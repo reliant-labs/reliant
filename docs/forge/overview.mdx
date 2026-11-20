@@ -42,7 +42,7 @@ A landing page, docs site, SPA or PWA with no backend is a complete forge projec
 
 ### An app you already have, in any language
 
-A server written in another language keeps its code and its Dockerfile. Your agent adopts it by following `forge skill load adopt`, which works in tiers. Tier 1 ships the app to Reliant hosting with a managed Postgres, and you can stop there. The later tiers add OpenTelemetry, gated promotion and CI, and, only when it pays, moving pieces onto Forge's Go stack. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) has the details.
+A server written in another language keeps its code and its Dockerfile. `forge project new --in-place --kind app` reads them and writes `forge.yaml` and the environments declaring the app, without changing a file of yours ([Deploy an existing app from its Dockerfile](/guides/forge/bring-existing-app-any-language)). From there your agent follows `forge skill load adopt`, which works in tiers. Tier 1 ships the app to Reliant hosting with a managed Postgres, and you can stop there. The later tiers add OpenTelemetry, gated promotion and CI, and, only when it pays, moving pieces onto Forge's Go stack. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) has the details.
 
 ## How Forge and Reliant fit together
 
