@@ -38,12 +38,10 @@ func TestClientVersionPolicyValidatesFloors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			cfg := &config.ServerProcessConfig{ClientVersions: &configv1.ClientVersionPolicy{
-				Daemon: &configv1.DaemonClientVersionFloor{
-					MinVersion:        tc.minVersion,
-					UpgradeUrl:        tc.upgradeURL,
-					MinCommitTimeUnix: tc.commitTime,
-				},
-				SdkTs: &configv1.SdkTsClientVersionFloor{MinVersion: tc.minVersion},
+				DaemonMinVersion:        tc.minVersion,
+				DaemonUpgradeUrl:        tc.upgradeURL,
+				DaemonMinCommitTimeUnix: tc.commitTime,
+				SdkTsMinVersion:         tc.minVersion,
 			}}
 			err := forgeconfig.Validate(cfg)
 			if tc.wantErr && err == nil {
