@@ -226,7 +226,12 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('project-selector-chosen-count').getByText('3 chosen'),
     act: async (page) => {
       await page.getByTestId('chat-project-filter-trigger').click()
-      for (const id of FILTER_PROJECT_IDS) await page.getByTestId(`project-selector-row-${id}`).click()
+      // One at a time: each pick moves the URL (one project is `/project/<id>`,
+      // two or more `?projects=`), so wait for it to land before the next.
+      for (const [i, id] of FILTER_PROJECT_IDS.entries()) {
+        await page.getByTestId(`project-selector-row-${id}`).click()
+        await expect(page.getByTestId('project-selector-chosen-count')).toHaveText(`${i + 1} chosen`)
+      }
     },
     harness: { fixtures: selectorSurfaceFixtures },
   },
