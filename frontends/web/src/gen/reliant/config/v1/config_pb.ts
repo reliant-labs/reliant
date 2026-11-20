@@ -249,10 +249,11 @@ export const StorageReaperConfigSchema: GenMessage<StorageReaperConfig> = /*@__P
  * (internal/worktreereclaim/sweep.go): every linked git worktree on the
  * machine, whether Reliant made it or an agent ran `git worktree add`, is
  * captured into a local ref of its own repository
- * (refs/reliant/reclaimed/...) before it is deleted. It rides the storage
- * reaper's schedule and single-flight (RELIANT_STORAGE_REAPER), so it runs
- * only where that does. Durations are Go durations; a value the daemon cannot
- * use is named in a warning and replaced by its default.
+ * (refs/reliant/reclaimed/...) before it is deleted. It runs on the storage
+ * reaper's schedule and single-flight (RELIANT_STORAGE_REAPER): in dry-run
+ * only where the reaper runs, and in mode on also where the reaper is off,
+ * on its own. Durations are Go durations; a value the daemon cannot use is
+ * named in a warning and replaced by its default.
  *
  * @generated from message reliant.config.v1.WorktreeReclaimConfig
  */

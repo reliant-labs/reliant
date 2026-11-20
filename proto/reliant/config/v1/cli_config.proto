@@ -29,7 +29,8 @@ message CLIConfig {
       {path: ["project"]},
       {path: ["providers"]},
       {path: ["trigger"]},
-      {path: ["workflow"]}
+      {path: ["workflow"]},
+      {path: ["worktree"]}
     ]
   };
 

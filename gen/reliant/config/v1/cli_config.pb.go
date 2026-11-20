@@ -306,13 +306,13 @@ var File_reliant_config_v1_cli_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_cli_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/cli_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xb2\x02\n" +
+	"\"reliant/config/v1/cli_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xbe\x02\n" +
 	"\tCLIConfig\x12F\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2&.reliant.config.v1.CLIConnectionConfigR\n" +
 	"connection\x121\n" +
 	"\x03web\x18\x02 \x01(\v2\x1f.reliant.config.v1.CLIWebConfigR\x03web\x12=\n" +
-	"\amachine\x18\x03 \x01(\v2#.reliant.config.v1.CLIMachineConfigR\amachine:k\xca\xc1\x18g\n" +
+	"\amachine\x18\x03 \x01(\v2#.reliant.config.v1.CLIMachineConfigR\amachine:w\xca\xc1\x18s\n" +
 	"\areliant\x1a\x06\n" +
 	"\x04auth\x1a\x06\n" +
 	"\x04chat\x1a\b\n" +
@@ -323,7 +323,9 @@ const file_reliant_config_v1_cli_config_proto_rawDesc = "" +
 	"\tproviders\x1a\t\n" +
 	"\atrigger\x1a\n" +
 	"\n" +
-	"\bworkflow\"\xa0\x04\n" +
+	"\bworkflow\x1a\n" +
+	"\n" +
+	"\bworktree\"\xa0\x04\n" +
 	"\x13CLIConnectionConfig\x12s\n" +
 	"\n" +
 	"server_url\x18\x01 \x01(\tBT\x82\xce\x18P\n" +
