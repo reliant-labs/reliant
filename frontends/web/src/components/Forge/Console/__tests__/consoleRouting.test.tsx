@@ -568,7 +568,9 @@ describe("inside the one shell", () => {
     expect(frame.className).toContain("forge-ui");
     const header = screen.getByTestId("forge-console-header");
     expect(within(header).getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("alpha›Issues›Errors");
-    expect(within(frame).getByRole("main")).toContainElement(page);
+    // Inside the shell the frame (AppShellFrame) is the one main landmark: the console's body is a plain region.
+    expect(within(frame).queryByRole("main")).toBeNull();
+    expect(frame).toContainElement(page);
   });
 
   it("still defaults the scope and reflects it into the URL", async () => {

@@ -19,7 +19,7 @@ import PageHeader from "@/components/forge-ui/page_header";
 import Tabs from "@/components/forge-ui/tabs";
 import { useProjects } from "@/hooks/project-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import { projectChatsPath, projectsPath, withSearch } from "@/lib/paths";
+import { projectChatsPath, projectsPath } from "@/lib/paths";
 
 import { AppsBody } from "../Apps/AppsPage";
 import { ProjectsOverview } from "../Forge/Console/ProjectsOverview";
@@ -74,11 +74,11 @@ export function ProjectsBody() {
         </div>
         <div className="mx-auto max-w-[var(--page-max)] text-right">
           <a
-            href={withSearch(projectsPath(), { browse: 1 })}
+            href={`${projectsPath()}?browse=1`}
             onClick={(event) => {
               if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
               event.preventDefault();
-              void navigate({ href: withSearch(projectsPath(), { browse: 1 }) });
+              void navigate({ href: `${projectsPath()}?browse=1` });
             }}
             className="no-color text-meta text-muted-foreground hover:text-foreground hover:underline"
             data-testid="projects-browse-all"

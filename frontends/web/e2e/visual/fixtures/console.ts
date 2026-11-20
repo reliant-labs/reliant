@@ -148,7 +148,7 @@ export function queryPanel(req: Record<string, unknown>) {
 
 // shopfront's own dashboards: one from its repo, one saved in the org (the
 // project shell lists an app's own dashboards under Overview).
-const customDashboard = (source: 'DASHBOARD_SOURCE_REPO' | 'DASHBOARD_SOURCE_WORKSPACE', key: string, title: string) => ({
+const customDashboard = (source: 'DASHBOARD_SOURCE_REPO' | 'DASHBOARD_SOURCE_WORKSPACE' | 'DASHBOARD_SOURCE_GENERATED', key: string, title: string) => ({
   ref: { source, projectId: 'shopfront', key }, source, title, description: '', readOnly: source === 'DASHBOARD_SOURCE_REPO',
   starred: false, panelCount: 4, previewPanels: [], tags: [], group: '',
 })
@@ -160,6 +160,11 @@ export const consoleFixtures: Fixtures = {
           dashboards: [
             customDashboard('DASHBOARD_SOURCE_REPO', 'checkout-funnel', 'Checkout funnel'),
             customDashboard('DASHBOARD_SOURCE_WORKSPACE', 'order-latency', 'Order latency'),
+            // forge's generated Product analytics hub (Insights in the project shell).
+            customDashboard('DASHBOARD_SOURCE_GENERATED', 'product-overview', 'shopfront: product overview'),
+            customDashboard('DASHBOARD_SOURCE_GENERATED', 'users', 'shopfront: users'),
+            customDashboard('DASHBOARD_SOURCE_GENERATED', 'product', 'shopfront: product'),
+            customDashboard('DASHBOARD_SOURCE_GENERATED', 'acquisition', 'shopfront: acquisition'),
           ],
           canWrite: true,
         }

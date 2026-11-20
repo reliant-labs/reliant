@@ -148,7 +148,9 @@ export function ServicesTable({
                     </a>
                   )}
                   {row.type === "workload" && row.workload.restartsInWindow > 0 && (
-                    <span className="block text-meta text-ink-muted">{row.workload.restartsInWindow} restarts · {row.workload.healthReason || "restarting"}</span>
+                    <span className="block truncate text-meta text-ink-muted" title={row.workload.healthReason || undefined}>
+                      {row.workload.restartsInWindow} restarts in the window
+                    </span>
                   )}
                 </td>
                 <td className={TD}>
