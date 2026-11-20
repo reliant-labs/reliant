@@ -48,7 +48,7 @@ describe("forge-demo build target (the actual Vite config)", () => {
     expect(config.define?.__WEB_TARGET__).toBe(JSON.stringify("app"));
     expect(config.build?.outDir).toBeUndefined(); // Vite's default dist
     expect(config.build?.rolldownOptions?.input).toEqual({
-      main: path.resolve(__dirname, "index.html"),
+      index: path.resolve(__dirname, "index.html"),
       findBar: path.resolve(__dirname, "find-bar.html"),
     });
   });

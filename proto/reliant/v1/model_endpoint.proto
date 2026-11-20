@@ -52,9 +52,7 @@ service ModelEndpointService {
   // TestModelEndpoint probes an endpoint (saved, or an unsaved draft) and
   // returns the models it serves. Backs the UI's "Test connection".
   rpc TestModelEndpoint(TestModelEndpointRequest) returns (TestModelEndpointResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "probes an endpoint and reports its models and latency; a saved endpoint's last probe is cached, which no person changed"}
-    };
+    option (forge.v1.method) = {activity: {none: "probes an endpoint and reports its models and latency; a saved endpoint's last probe is cached, which no person changed"}};
   }
 }
 

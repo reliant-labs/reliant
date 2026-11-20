@@ -432,8 +432,8 @@ importers:
         specifier: ^1.9.1
         version: 1.9.1
       '@reliantlabs/forge-web-runtime':
-        specifier: ^0.13.0
-        version: 0.13.1(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/browser@0.26.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)
+        specifier: ^0.13.19
+        version: 0.13.19(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)
       '@tanstack/react-query':
         specifier: ^5.100.9
         version: 5.100.9(react@19.2.3)
@@ -831,9 +831,6 @@ packages:
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
 
-  '@hyperdx/browser@0.26.0':
-    resolution: {integrity: sha512-2DCINliMrFcTFR+FJJW3m9JXDkHfNMUirJu4CZGBXzMJoQUZLP/qAlpkhr7NyRO5HSY+mzMjoXkCpja4purq0w==}
-
   '@hyperdx/instrumentation-exception@0.3.0':
     resolution: {integrity: sha512-4u0Rp02xNfd8uVg2UYEuDOvEXuYzvgQAEUn2ZpZ/50wXWES4X7yE30fan4JcMB3CN8el0LkKb127dnSC62/qEg==}
     engines: {node: '>=22.0.0'}
@@ -845,11 +842,6 @@ packages:
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@opentelemetry/api': ^1.9.1
-
-  '@hyperdx/otel-web-session-recorder@4.0.0':
-    resolution: {integrity: sha512-z7NLYsOW1KFgJTAzP10vpsCTT6ZySZvdLS5Gxw9WNh49FOIL1sBW04PwSWACRUk7oO4WkBfatpc9gzMXCIxHVA==}
-    peerDependencies:
-      '@hyperdx/otel-web': ^0.20.0
 
   '@hyperdx/otel-web@0.20.0':
     resolution: {integrity: sha512-MSKVNU4ZPWDJUkCOKR5pZnC/giODpMiqTgTxpihE8UBMVbBwUV9dcQA8QFUsQjn8x4FMdUhfYzvtTN4AaYF0dg==}
@@ -1047,55 +1039,6 @@ packages:
     resolution: {integrity: sha512-fWza+Lpbj6SkQKCrU6si4iu+fD2dD3gxNHFhUPxsfXBPhnv3rRSQVd0NtBUT9Z/RhF/boCBcuUaMUSTRTopjZg==}
     engines: {node: '>=18'}
     hasBin: true
-
-  '@protobufjs/aspromise@1.1.2':
-    resolution: {integrity: sha512-j+gKExEuLmKwvz3OgROXtrJ2UG2x8Ch2YZUxahh+s1F2HZ+wAceUNLkvy6zKCPVRkU++ZWQrdxsUeQXmcg4uoQ==}
-
-  '@protobufjs/base64@1.1.2':
-    resolution: {integrity: sha512-AZkcAA5vnN/v4PDqKyMR5lx7hZttPDgClv83E//FMNhR2TMcLUhfRUBHCmSl0oi9zMgDDqRUJkSxO3wm85+XLg==}
-
-  '@protobufjs/codegen@2.0.5':
-    resolution: {integrity: sha512-zgXFLzW3Ap33e6d0Wlj4MGIm6Ce8O89n/apUaGNB/jx+hw+ruWEp7EwGUshdLKVRCxZW12fp9r40E1mQrf/34g==}
-
-  '@protobufjs/eventemitter@1.1.1':
-    resolution: {integrity: sha512-vW1GmwMZNnL+gMRaovlh9yZX74kc+TTU3FObkkurpMaRtBfLP3ldjS9KQWlwZgraRE0+dheEEoAxdzcJQ8eXZg==}
-
-  '@protobufjs/fetch@1.1.1':
-    resolution: {integrity: sha512-GpptLrs57adMSuHi3VNj0mAF8dwh36LMaYF6XyJ6JMWlVsc+t42tm1HSEDmOs3A8fC9yyeisgLhsTVQokOZ0zw==}
-
-  '@protobufjs/float@1.0.2':
-    resolution: {integrity: sha512-Ddb+kVXlXst9d+R9PfTIxh1EdNkgoRe5tOX6t01f1lYWOvJnSPDBlG241QLzcyPdoNTsblLUdujGSE4RzrTZGQ==}
-
-  '@protobufjs/path@1.1.2':
-    resolution: {integrity: sha512-6JOcJ5Tm08dOHAbdR3GrvP+yUUfkjG5ePsHYczMFLq3ZmMkAD98cDgcT2iA1lJ9NVwFd4tH/iSSoe44YWkltEA==}
-
-  '@protobufjs/pool@1.1.0':
-    resolution: {integrity: sha512-0kELaGSIDBKvcgS4zkjz1PeddatrjYcmMWOlAuAPwAeccUrPHdUqo/J6LiymHHEiJT5NrF1UVwxY14f+fy4WQw==}
-
-  '@protobufjs/utf8@1.1.2':
-    resolution: {integrity: sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug==}
-
-  '@reliantlabs/forge-web-runtime@0.13.1':
-    resolution: {integrity: sha512-KB3LRZdoIBJwgQFDiUyizFiJyTeSIIOOZqIyVthRH6wlWIOKSWpCQaw+tVqio2yISgEIrl6yE5a+2l9+JvbJ+g==}
-    engines: {node: '>=22'}
-    peerDependencies:
-      '@bufbuild/protobuf': ^2.5.0
-      '@connectrpc/connect': ^2.0.0
-      '@hyperdx/browser': 0.26.0
-      '@opentelemetry/api': ^1.9.0
-      '@tanstack/react-query': ^5.62.0
-      react: ^18.3.0 || ^19.0.0
-    peerDependenciesMeta:
-      '@bufbuild/protobuf':
-        optional: true
-      '@connectrpc/connect':
-        optional: true
-      '@hyperdx/browser':
-        optional: true
-      '@tanstack/react-query':
-        optional: true
-      react:
-        optional: true
 
   '@reliantlabs/forge-web-runtime@0.13.19':
     resolution: {integrity: sha512-EKcyFbQjGA2JaowhU9lbbWu9Ou5t99tVv8D1X5KeBfJ+c2WYK2XbyweU6/j8WpuFTyTFGJ63qYWG8xee+5KKtw==}
@@ -2126,9 +2069,6 @@ packages:
       picomatch:
         optional: true
 
-  fflate@0.7.4:
-    resolution: {integrity: sha512-5u2V/CDW15QM1XbbgS+0DfPxVB+jUKhWEKuuFuHncbk3tEEqzmoXL+2KyOFuKGqOnmdIy0/davWF1CkuwtibCw==}
-
   file-entry-cache@11.1.2:
     resolution: {integrity: sha512-N2WFfK12gmrK1c1GXOqiAJ1tc5YE+R53zvQ+t5P8S5XhnmKYVB5eZEiLNZKDSmoG8wqqbF9EXYBBW/nef19log==}
 
@@ -2582,9 +2522,6 @@ packages:
   lodash@4.18.1:
     resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
 
-  long@5.3.2:
-    resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
-
   longest-streak@3.1.0:
     resolution: {integrity: sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==}
 
@@ -2944,10 +2881,6 @@ packages:
   property-information@7.1.0:
     resolution: {integrity: sha512-TwEZ+X+yCJmYfL7TPUOcvBZ4QfoT5YenQiJuX//0th53DE6w0xxLEtfK3iyryQFddXuvkIk51EEgrJQ0WJkOmQ==}
 
-  protobufjs@7.6.6:
-    resolution: {integrity: sha512-dYDWdjSl5RNb7SgPxGQcRU+GtvP7s2fpkrY0r432PcOIaZ0/rBcxEZnQN67iJhFuQiVw754JDoPruPCNdGsbjg==}
-    engines: {node: '>=12.0.0'}
-
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
@@ -3275,10 +3208,6 @@ packages:
   type-check@0.4.0:
     resolution: {integrity: sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==}
     engines: {node: '>= 0.8.0'}
-
-  type-fest@4.20.1:
-    resolution: {integrity: sha512-R6wDsVsoS9xYOpy8vgeBlqpdOyzJ12HNfQhC/aAKWM3YoCV9TtunJzh/QpkMgeDhkoynDcw5f1y+qF9yc/HHyg==}
-    engines: {node: '>=16'}
 
   typescript-eslint@8.53.0:
     resolution: {integrity: sha512-xHURCQNxZ1dsWn0sdOaOfCSQG0HKeqSj9OexIxrz6ypU6wHYOdX2I3D2b8s8wFSsSOYJb+6q283cLiLlkEsBYw==}
@@ -3822,15 +3751,6 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@hyperdx/browser@0.26.0(supports-color@10.2.2)(zone.js@0.16.3)':
-    dependencies:
-      '@hyperdx/otel-web': 0.20.0(supports-color@10.2.2)(zone.js@0.16.3)
-      '@hyperdx/otel-web-session-recorder': 4.0.0(@hyperdx/otel-web@0.20.0(supports-color@10.2.2)(zone.js@0.16.3))
-    transitivePeerDependencies:
-      - supports-color
-      - zone.js
-    optional: true
-
   '@hyperdx/instrumentation-exception@0.3.0(@opentelemetry/api@1.9.1)(supports-color@10.2.2)':
     dependencies:
       '@hyperdx/instrumentation-sentry-node': 0.2.1(@opentelemetry/api@1.9.1)(supports-color@10.2.2)
@@ -3858,21 +3778,6 @@ snapshots:
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
-
-  '@hyperdx/otel-web-session-recorder@4.0.0(@hyperdx/otel-web@0.20.0(supports-color@10.2.2)(zone.js@0.16.3))':
-    dependencies:
-      '@hyperdx/otel-web': 0.20.0(supports-color@10.2.2)(zone.js@0.16.3)
-      '@opentelemetry/api': 1.9.1
-      '@opentelemetry/core': 2.11.0(@opentelemetry/api@1.9.1)
-      '@opentelemetry/resources': 2.11.0(@opentelemetry/api@1.9.1)
-      '@rrweb/types': 2.1.7
-      fflate: 0.7.4
-      long: 5.3.2
-      protobufjs: 7.6.6
-      rrweb: 2.1.7
-      rrweb-snapshot: 2.1.7
-      type-fest: 4.20.1
-    optional: true
 
   '@hyperdx/otel-web@0.20.0(supports-color@10.2.2)(zone.js@0.16.3)':
     dependencies:
@@ -4115,45 +4020,6 @@ snapshots:
   '@playwright/test@1.58.0':
     dependencies:
       playwright: 1.58.0
-
-  '@protobufjs/aspromise@1.1.2':
-    optional: true
-
-  '@protobufjs/base64@1.1.2':
-    optional: true
-
-  '@protobufjs/codegen@2.0.5':
-    optional: true
-
-  '@protobufjs/eventemitter@1.1.1':
-    optional: true
-
-  '@protobufjs/fetch@1.1.1':
-    dependencies:
-      '@protobufjs/aspromise': 1.1.2
-    optional: true
-
-  '@protobufjs/float@1.0.2':
-    optional: true
-
-  '@protobufjs/path@1.1.2':
-    optional: true
-
-  '@protobufjs/pool@1.1.0':
-    optional: true
-
-  '@protobufjs/utf8@1.1.2':
-    optional: true
-
-  '@reliantlabs/forge-web-runtime@0.13.1(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/browser@0.26.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)':
-    dependencies:
-      '@opentelemetry/api': 1.9.1
-    optionalDependencies:
-      '@bufbuild/protobuf': 2.10.2
-      '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.10.2)
-      '@hyperdx/browser': 0.26.0(supports-color@10.2.2)(zone.js@0.16.3)
-      '@tanstack/react-query': 5.100.9(react@19.2.3)
-      react: 19.2.3
 
   '@reliantlabs/forge-web-runtime@0.13.19(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)':
     dependencies:
@@ -5141,9 +5007,6 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
-  fflate@0.7.4:
-    optional: true
-
   file-entry-cache@11.1.2:
     dependencies:
       flat-cache: 6.1.22
@@ -5537,9 +5400,6 @@ snapshots:
   lodash.truncate@4.4.2: {}
 
   lodash@4.18.1: {}
-
-  long@5.3.2:
-    optional: true
 
   longest-streak@3.1.0: {}
 
@@ -6094,21 +5954,6 @@ snapshots:
 
   property-information@7.1.0: {}
 
-  protobufjs@7.6.6:
-    dependencies:
-      '@protobufjs/aspromise': 1.1.2
-      '@protobufjs/base64': 1.1.2
-      '@protobufjs/codegen': 2.0.5
-      '@protobufjs/eventemitter': 1.1.1
-      '@protobufjs/fetch': 1.1.1
-      '@protobufjs/float': 1.0.2
-      '@protobufjs/path': 1.1.2
-      '@protobufjs/pool': 1.1.0
-      '@protobufjs/utf8': 1.1.2
-      '@types/node': 24.10.9
-      long: 5.3.2
-    optional: true
-
   punycode@2.3.1: {}
 
   qified@0.9.1:
@@ -6496,9 +6341,6 @@ snapshots:
   type-check@0.4.0:
     dependencies:
       prelude-ls: 1.2.1
-
-  type-fest@4.20.1:
-    optional: true
 
   typescript-eslint@8.53.0(eslint@9.39.2(jiti@2.6.1)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@5.8.3):
     dependencies:

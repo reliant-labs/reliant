@@ -247,7 +247,7 @@ func handleCheckResource(_ context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	expandedPath := os.ExpandEnv(req.Path)
+	expandedPath := os.ExpandEnv(req.Path) //nolint:forbidigo // expands the $VAR references in a user's MCP resource path against the daemon's (the user's) environment, as their shell would; not configuration
 	_, err := os.Stat(expandedPath)
 	exists := err == nil
 

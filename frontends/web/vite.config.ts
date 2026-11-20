@@ -244,7 +244,9 @@ const appConfig: ViteUserConfig = {
       // Two documents: the app, and the desktop app's find bar, which Electron
       // loads into a view of its own over a window (src/findBar/protocol.ts).
       input: {
-        main: path.resolve(__dirname, "index.html"),
+        // Rolldown uses this key for the emitted entry chunk name. Keep the
+        // assets/index-*.js contract checked by the release bundle verifier.
+        index: path.resolve(__dirname, "index.html"),
         findBar: path.resolve(__dirname, "find-bar.html"),
       },
       output: {
