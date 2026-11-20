@@ -40,16 +40,15 @@ import {
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { connectorsPath, homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, type ConsoleNavEntry } from "../../../Forge/Console/consoleNavRegistry";
-import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, consolePath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
+import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, authPath, consolePath, securityPath, type SecurityView, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
 import { settingsNavGroups } from "../../../Settings/SettingsNavigation";
 import { isAt, isAtOrBelow } from "../navLocation";
 import { isChatPage } from "../shellProject";
 import { BrandMark } from "../../../icons/BrandMark";
-import { authPath, connectorsPath, securityPath, type SecurityView } from "./pendingPaths";
 import type { NavArea, NavCtx, NavGroup, NavHeading, NavItem, NavRow, NavSlot } from "./types";
 
 const icon = (Icon: typeof Activity): ReactNode => <Icon className="size-4" aria-hidden="true" />;
@@ -109,7 +108,7 @@ export const auth: NavRow = {
   label: "Auth",
   icon: icon(UserRound),
   href: (ctx) => (ctx.app ? withSearch(authPath(ctx.app), { env: ctx.console?.env }) : undefined),
-  match: (ctx) => ctx.page?.kind === "users" || (!!ctx.app && isAtOrBelow(ctx.pathname, authPath(ctx.app))),
+  match: pageIs("auth", "users"),
   available: hasApp,
 };
 
@@ -117,17 +116,19 @@ export const auth: NavRow = {
 export const inbox: NavSlot = slot("inbox");
 /** Its href and match, for the slot's row and the tests. */
 export const inboxRow: NavRow = { kind: "row", id: "inbox", label: "Inbox", icon: icon(Inbox), href: () => inboxPath(), match: (ctx) => isAtOrBelow(ctx.pathname, inboxPath()) };
+export const activity = consoleRow("activity", "Activity", { kind: "activity" }, icon(Activity), ["activity"]);
 /** What this project's hosting costs (the org's is Usage & billing, in the footer). */
 export const projectUsage = consoleRow("project-usage", "Usage", { kind: "usage" }, icon(Receipt), ["usage"]);
 
-/** Configure ▾: the project's settings-like pages. */
+/** Configure ▾: the project's settings-like pages, and its Activity. */
 export const configureGroup: NavGroup = {
   kind: "group",
   id: "configure",
   label: "Configure",
   icon: icon(Wrench),
   available: hasApp,
-  children: [environments, secrets, domains, projectUsage],
+  // Activity (the audit log) stays its last row (owner): no page loses its nav entry.
+  children: [environments, secrets, domains, projectUsage, activity],
 };
 
 // ── Security (new, U6d) ─────────────────────────────────────────────────────
@@ -137,8 +138,9 @@ function securityRow(view: SecurityView, label: string): NavRow {
     kind: "row",
     id: `security-${view}`,
     label,
-    href: (ctx) => (ctx.app ? securityPath(ctx.app, view) : undefined),
-    match: (ctx) => !!ctx.app && isAtOrBelow(ctx.pathname, securityPath(ctx.app, view)),
+    href: (ctx) => (ctx.app ? withSearch(securityPath(ctx.app, view), { env: ctx.console?.env }) : undefined),
+    // An advisory's own page is under Vulnerabilities.
+    match: view === "vulnerabilities" ? pageIs("vulnerabilities", "vulnerability") : pageIs(view),
     available: hasApp,
   };
 }

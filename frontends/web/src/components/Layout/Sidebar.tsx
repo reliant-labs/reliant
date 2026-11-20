@@ -105,8 +105,7 @@ import { FindBox } from "./sidebar/FindBox";
 import type { NavSlots } from "./sidebar/NavRenderer";
 import { ShellNavBody } from "./sidebar/ShellNavBody";
 import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
-// TODO(U6d CONNECTORS): import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta" once it merges.
-import { ConnectSandboxCta } from "./sidebar/PendingConnectSandboxCta";
+import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { isAtOrBelow } from "./sidebar/navLocation";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
@@ -1884,7 +1883,7 @@ function SidebarComponent({
         </div>
         {/* No agent sandbox can run a chat yet: connect one (your machine, or a Reliant sandbox), in place of the list. */}
         {setupNeeded ? (
-          <ConnectSandboxCta setup={setup} onNavigate={go} />
+          <ConnectSandboxCta variant="nav" />
         ) : (
           // The one element that bounds the chats: the rest of a drill-in's column, or 45% of the window in an accordion.
           <div
