@@ -62,7 +62,7 @@ export function ProjectsOverview() {
  * the Overview of several projects and a project's Home.
  */
 export function useAppHealth(app: string, deployed: boolean) {
-  const { apps } = useApps();
+  const { apps, loading } = useApps();
   const summary = apps.find((candidate) => candidate.name === app);
   const prod = summary?.envs.find((env) => env.name === "prod") ?? summary?.envs[0];
   const org = useObservabilityOrg();
@@ -73,7 +73,9 @@ export function useAppHealth(app: string, deployed: boolean) {
   const panel = useMemo(() => redPanel("number"), []);
   const totals = usePanelQuery(deployed ? scope : null, "24h", panel, []);
   const value = (label: string) => totals.data?.series.find((series) => series.label === label)?.value ?? null;
-  return { prod, requests: value("requests"), errors: value("errors"), p95: value("p95") };
+  // The org's environments answered and none is this app's: nothing is deployed, whatever the catalog said.
+  const noEnvironments = !loading && !prod;
+  return { prod, noEnvironments, requests: value("requests"), errors: value("errors"), p95: value("p95") };
 }
 
 export const VERDICT_WORDS = VERDICT_LABEL;

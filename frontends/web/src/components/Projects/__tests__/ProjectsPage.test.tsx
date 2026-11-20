@@ -25,6 +25,8 @@ vi.mock("@/hooks/project-queries", () => ({
 vi.mock("../../OnboardingFlow/useChatSetup", () => ({ useChatSetup: () => state.setup }));
 const startBuilding = vi.fn();
 vi.mock("../../Apps/startBuilding", () => ({ useStartBuildingApp: () => startBuilding }));
+// The summary of several projects (the project shell's Home) has its own tests.
+vi.mock("../../Forge/Console/ProjectsOverview", () => ({ ProjectsOverview: () => null }));
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 // The apps list and the sites list are covered where they live: here, which one shows.
 vi.mock("../../Apps/AppsPage", () => ({

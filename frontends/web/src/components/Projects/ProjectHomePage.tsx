@@ -67,7 +67,7 @@ export function ProjectHomePage() {
   const { projectId = "" } = useParams({ strict: false }) as { projectId?: string };
   const { catalog } = useSelectorCatalog(undefined);
   const row = rowForRef(catalog, { kind: "project", id: projectId });
-  const deployed = deployedAppOf(row);
+  const catalogApp = deployedAppOf(row);
   const app = sectionsAppOf(row);
   const name = row?.name ?? "Project";
 
@@ -80,7 +80,8 @@ export function ProjectHomePage() {
     [chats],
   );
 
-  const health = useAppHealth(deployed ?? "", !!deployed);
+  const health = useAppHealth(catalogApp ?? "", !!catalogApp);
+  const deployed = health.noEnvironments ? null : catalogApp;
   const org = useObservabilityOrg();
   const alerts = useAlerts(org.orgId);
   const firing = (alerts.data ?? []).filter((alert) => alert.state === "firing" && !!health.prod && alert.envId === health.prod.id);
