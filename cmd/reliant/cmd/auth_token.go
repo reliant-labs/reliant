@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -135,6 +136,7 @@ func newAuthTokenCreateCmd() *cobra.Command {
 	var name string
 	var scopeFlags []string
 	var forceDevice, forceBrowser bool
+	var expiresIn string
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -144,6 +146,11 @@ login you approve, and prints it once. It is NOT stored: this CLI keeps using
 its own login. Hand the printed token to automation as RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
+
+--expires-in asks for a shorter-lived token (a CI job's, say): 1h, 12h, 7d.
+The server never grants more than 90 days. A control plane too old to honour it
+mints its 90-day default, and then the command does not print the token: it
+names it so you can revoke it.
 
 You approve it the way you approve 'reliant auth login': in a browser that
 calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
@@ -159,12 +166,17 @@ PermissionDenied (scope_missing) on the rest. Valid scopes:
 ` + tokenScopeChoices() + `.`,
 		Example: `  reliant auth token create --name ci --scope runs:read --scope triggers:fire
   reliant auth token create --name inbox-bot --scope inbox:read,inbox:manage
-  reliant auth token create --name ci --device`,
+  reliant auth token create --name ci --device
+  reliant auth token create --name nightly-job --scope runs:start --expires-in 12h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if strings.TrimSpace(name) == "" {
 				return fmt.Errorf("--name is required")
 			}
 			scopes, err := tokenScopesFromFlags(scopeFlags)
+			if err != nil {
+				return err
+			}
+			lifetime, err := parseTokenLifetime(expiresIn)
 			if err != nil {
 				return err
 			}
@@ -187,12 +199,16 @@ PermissionDenied (scope_missing) on the rest. Valid scopes:
 					cliauth.ClientID+"@"+name, strings.Join(scopes, " "))
 			}
 			cred, err := runLogin(cmd.Context(), prompts, loginRequest{
-				Server: conn.ServerURL,
-				Scopes: scopes,
-				Name:   name,
+				Server:    conn.ServerURL,
+				Scopes:    scopes,
+				Name:      name,
+				ExpiresIn: lifetime,
 			}, flow)
 			if err != nil {
 				return fmt.Errorf("minting token: %w", err)
+			}
+			if err := lifetimeMismatch(lifetime, cred.ExpiresAt, time.Now(), cliauth.ClientID+"@"+name); err != nil {
+				return err
 			}
 			// RFC 6749 3.3: a reply with no scope field means "as requested".
 			if len(cred.Scopes) > 0 {
@@ -217,6 +233,7 @@ PermissionDenied (scope_missing) on the rest. Valid scopes:
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "Label for the token, e.g. ci-deploy (required)")
+	cmd.Flags().StringVar(&expiresIn, "expires-in", "", "How long the token lives, e.g. 1h, 12h, 7d (at least 1m, at most 90 days). An older control plane ignores it; the token is then not printed")
 	cmd.Flags().StringSliceVar(&scopeFlags, "scope", nil, "Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api)")
 	cmd.Flags().BoolVar(&forceDevice, "device", false, "Approve with a device code on any device (the default where a browser cannot reach this machine)")
 	cmd.Flags().BoolVar(&forceBrowser, "browser", false, "Approve in a browser that calls back to this machine (the default on a desktop)")
@@ -352,4 +369,68 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// minTokenLifetime is the shortest lifetime the control plane mints
+// (cliauth.ExpiresInParam: at least 60 seconds).
+const minTokenLifetime = time.Minute
+
+// maxTokenLifetime is the longest lifetime the control plane mints (its
+// default, which it clamps every request to).
+const maxTokenLifetime = 90 * 24 * time.Hour
+
+// parseTokenLifetime reads --expires-in: a Go duration (90m, 12h) or whole
+// days (7d). Empty asks for nothing: the server's default lifetime.
+func parseTokenLifetime(raw string) (time.Duration, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	var d time.Duration
+	if days, ok := strings.CutSuffix(raw, "d"); ok {
+		n, err := strconv.Atoi(days)
+		if err != nil || n <= 0 {
+			return 0, fmt.Errorf("--expires-in %q: give a duration such as 1h, 12h or 7d", raw)
+		}
+		// Checked before multiplying: a huge day count would overflow
+		// time.Duration and wrap to a short, wrong lifetime.
+		if n > int(maxTokenLifetime/(24*time.Hour)) {
+			return 0, fmt.Errorf("--expires-in %q: a token lives at most 90d", raw)
+		}
+		d = time.Duration(n) * 24 * time.Hour
+	} else {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			return 0, fmt.Errorf("--expires-in %q: give a duration such as 1h, 12h or 7d", raw)
+		}
+		d = parsed
+	}
+	if d < minTokenLifetime {
+		return 0, fmt.Errorf("--expires-in %q: a token lives at least 1m", raw)
+	}
+	if d > maxTokenLifetime {
+		return 0, fmt.Errorf("--expires-in %q: a token lives at most 90d", raw)
+	}
+	return d, nil
+}
+
+// lifetimeMismatch refuses a token that outlives what --expires-in asked
+// for: a control plane that predates cliauth.ExpiresInParam ignores it and
+// mints its default, and a person who asked for an hour must not be handed a
+// 90-day token unawares. The token is not printed, so it cannot leak; it is
+// named so it can be revoked. A minute of slack covers the clocks and the
+// approval wait.
+func lifetimeMismatch(requested time.Duration, expiresAt *time.Time, now time.Time, tokenName string) error {
+	if requested <= 0 {
+		return nil
+	}
+	if expiresAt != nil && !expiresAt.After(now.Add(requested+time.Minute)) {
+		return nil
+	}
+	granted := "no expiry"
+	if expiresAt != nil {
+		granted = "until " + expiresAt.Format(time.RFC3339)
+	}
+	return fmt.Errorf("the server granted the token %s, longer than --expires-in %s asked for (it predates --expires-in); "+
+		"the token was not printed, revoke it with 'reliant auth token revoke %s'", granted, requested, tokenName)
 }

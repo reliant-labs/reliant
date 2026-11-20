@@ -1,6 +1,6 @@
 ---
 title: "CLI Reference"
-description: "Complete reference for all Reliant CLI commands, flags, and options"
+description: "Every reliant CLI command, subcommand and flag, generated from the command tree: daemons, workflows, triggers, machines, projects, worktrees, auth and forge."
 ---
 
 {/*
@@ -521,6 +521,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant trigger fire`](#reliant-trigger-fire) | Run a trigger now |
 | [`reliant trigger get`](#reliant-trigger-get) | Show one trigger |
 | [`reliant trigger list`](#reliant-trigger-list) | List your triggers |
+| [`reliant trigger rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`reliant trigger update`](#reliant-trigger-update) | Replace a trigger's definition |
 | [`reliant version`](#reliant-version) | Print version information |
 | [`reliant workflow`](#reliant-workflow) | Manage and validate workflows |
@@ -773,6 +774,11 @@ its own login. Hand the printed token to automation as RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
 
+--expires-in asks for a shorter-lived token (a CI job's, say): 1h, 12h, 7d.
+The server never grants more than 90 days. A control plane too old to honour it
+mints its 90-day default, and then the command does not print the token: it
+names it so you can revoke it.
+
 You approve it the way you approve 'reliant auth login': in a browser that
 calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
 you approve on any device. The browser is the default, except where its
@@ -796,6 +802,7 @@ reliant auth token create [flags]
 |------|------|---------|-------------|
 | `--browser` | `bool` | - | Approve in a browser that calls back to this machine (the default on a desktop) |
 | `--device` | `bool` | - | Approve with a device code on any device (the default where a browser cannot reach this machine) |
+| `--expires-in` | `string` | - | How long the token lives, e.g. 1h, 12h, 7d (at least 1m, at most 90 days). An older control plane ignores it; the token is then not printed |
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
 | `--scope` | `stringSlice` | `[]` | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
@@ -2395,7 +2402,7 @@ ADDRESS — the API server the control plane dials, from its own pods:
 
   default        the context's cluster.server and CA. On a GKE context, the
                  cluster's PUBLIC endpoint and CA from GKE (gcloud describe).
-  --address      an https://host[:port] override, port 443 or 6443. Use it when
+  --address      an `https://host[:port]` override, port 443 or 6443. Use it when
                  the control plane reaches the cluster at another address than
                  your kubeconfig does.
   --ca-file      a PEM bundle for the API server's certificate, over the CA
@@ -2480,7 +2487,7 @@ reliant forge cloud cluster connect <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--address` | `string` | - | https://host[:port] the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
+| `--address` | `string` | - | `https://host[:port]` the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:`<ns>`[,`<ns>`…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
 | `--ca-file` | `string` | - | PEM file for the API server's certificate authority (default: read from the context, or GKE) |
@@ -3166,7 +3173,7 @@ declare in KCL:
 
     control_plane = forge.ControlPlane `{}`    # Reliant cloud (https://admin.reliantapi.com)
     control_plane = forge.ControlPlane \{     # any other control plane
-        endpoint = "http://127.0.0.1:8090"
+        endpoint = `"http://127.0.0.1:8090"`
     \}
 
 (two envs declaring the same endpoint share one login). When nothing declares
@@ -3579,7 +3586,7 @@ ADDRESS — the API server the control plane dials, from its own pods:
 
   default        the context's cluster.server and CA. On a GKE context, the
                  cluster's PUBLIC endpoint and CA from GKE (gcloud describe).
-  --address      an https://host[:port] override, port 443 or 6443. Use it when
+  --address      an `https://host[:port]` override, port 443 or 6443. Use it when
                  the control plane reaches the cluster at another address than
                  your kubeconfig does.
   --ca-file      a PEM bundle for the API server's certificate, over the CA
@@ -3664,7 +3671,7 @@ reliant forge cluster connect <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--address` | `string` | - | https://host[:port] the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
+| `--address` | `string` | - | `https://host[:port]` the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:`<ns>`[,`<ns>`…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
 | `--ca-file` | `string` | - | PEM file for the API server's certificate authority (default: read from the context, or GKE) |
@@ -11862,7 +11869,7 @@ declare in KCL:
 
     control_plane = forge.ControlPlane `{}`    # Reliant cloud (https://admin.reliantapi.com)
     control_plane = forge.ControlPlane \{     # any other control plane
-        endpoint = "http://127.0.0.1:8090"
+        endpoint = `"http://127.0.0.1:8090"`
     \}
 
 (two envs declaring the same endpoint share one login). When nothing declares
@@ -21938,6 +21945,7 @@ reliant trigger
 | [`fire`](#reliant-trigger-fire) | Run a trigger now |
 | [`get`](#reliant-trigger-get) | Show one trigger |
 | [`list`](#reliant-trigger-list) | List your triggers |
+| [`rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`update`](#reliant-trigger-update) | Replace a trigger's definition |
 
 **Flags:**
@@ -21967,6 +21975,13 @@ brought to them.
 them) and leaves the workflow's other activations as they are. A named
 trigger that is already activated is brought to the flags, not duplicated.
 
+A webhook trigger's URL and token are printed when its activation is created,
+once: store the token in the sender then. `reliant trigger rotate` issues a new
+one. A webhook that declares hmac: needs the secret its sender signs with:
+--hmac-secret-file `<trigger>`=`<file>` reads it from a file ("-" for standard
+input), keeping it out of your shell history. It is stored sealed and never
+shown; pass it again to replace it.
+
 --notify is about successful runs only. With it, a run that completes
 successfully is marked unread, which raises a desktop notification, and stays
 out of the archive so the notification has a run to open. It never puts the
@@ -21987,8 +22002,9 @@ reliant trigger activate [flags]
 |------|------|---------|-------------|
 | `--acting-as` | `string` | - | Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise) |
 | `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
+| `--hmac-secret-file` | `stringArray` | `[]` | Signing secret of a webhook trigger that declares hmac:, as trigger=path (path - reads standard input); repeatable |
 | `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
-| `--message` | `string` | - | Prompt for a declared trigger that has none |
+| `--message` | `string` | - | Prompt for a declared trigger that has none (not needed when the workflow runs no agent) |
 | `--name-prefix` | `string` | - | Names new activations "`<prefix>` · `<trigger>`" (default: the workflow) |
 | `--no-machine` | `bool` | - | Run without a machine (workflows that only need the web and integrations) |
 | `--notify` | `bool` | - | Desktop notification when a run succeeds; never an Inbox item (failures always notify) |
@@ -22039,6 +22055,10 @@ Pause every activation of a workflow
 
 Pause every activation of a workflow, as the app's Disable does.
 
+With no --project or --project-id it pauses the workflow's activations in
+EVERY project, so it says so first, and each paused line names its project.
+Pass --project (a path) or --project-id to pause one project's only.
+
 It is not all or nothing: a pause that fails is reported and the rest still
 pause. Resume with activate; remove one activation with delete.
 
@@ -22050,8 +22070,9 @@ reliant trigger deactivate [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--project-id` | `string` | - | Pause only this project's activations (default: every project) |
-| `--workflow` | `string` | - | Workflow whose activations to pause (required) |
+| `--project` | `string` | - | Pause only the activations of the project at this path |
+| `--project-id` | `string` | - | Pause only this project's activations (default, with no --project either: every project) |
+| `--workflow` | `string` | - | Workflow whose activations to pause: a slug, or builtin://`<name>` (required) |
 
 ---
 
@@ -22167,6 +22188,22 @@ reliant trigger list [flags]
 
 ---
 
+### reliant trigger rotate
+
+Replace a webhook trigger's token
+
+Replace a webhook trigger's token, and print the new one once.
+
+The old token stops working at once, so give the new one to the sender. A
+webhook Reliant delivers to itself (a managed webhook, such as alerting) has
+no token to print: rotating re-provisions its sender with a new one.
+
+```
+reliant trigger rotate <id-or-name>
+```
+
+---
+
 ### reliant trigger update
 
 Replace a trigger's definition
@@ -22276,7 +22313,7 @@ Answer a pending question on a workflow execution
 Answers the pending question for a workflow execution via
 QuestionService.ResolveQuestion — no hand-built JSON required. The response is
 assembled into the exact ask_user shape the workflow expects
-(`{"answers":`[\{question, selected, freetext\}]`}`), including multi-sub-question
+(`{"answers":[{question, selected, freetext}]}`), including multi-sub-question
 asks.
 
 Selecting options:
@@ -22795,10 +22832,14 @@ input/output type verification, and cross-workflow contract validation.
 If a specific file path is given, validates that file only. Otherwise,
 validates all *.yaml files in the workflow directory.
 
-With --trigger-payload, each declared trigger is also run against that sample
-event: its filter, its inputs mapping and its prompt are evaluated the way a
-real firing would, and anything that fails (or that the integration's declared
-payload rules out) is reported as an error. For an integration trigger the
+With --trigger-payload, each declared trigger the sample can belong to is also
+run against that sample event: its filter, its inputs mapping and its prompt
+are evaluated the way a real firing would, and anything that fails (or that the
+integration's declared payload rules out) is reported as an error. Each
+trigger's outcome is printed (matched, with the inputs it maps; filtered out;
+failed; or not run). An integration trigger that does not listen for the
+sample's "event" (or "integration") is not run against it; --trigger `<name>`
+runs the sample against that one trigger only. For an integration trigger the
 payload is merged over a sample generated from the event's declared payload, so
 give only the fields your expressions read. The JSON may be a file: @event.json.
 --activation-params supplies trigger.activation.params, as an activation of the workflow
@@ -22817,6 +22858,10 @@ broke in its owner's Inbox.
 Each project workflow is also linted (reliant workflow lint --rules lists the
 rules): a lint error fails validation, a lint warning is reported.
 
+Each workflow's "No machine" line says whether it can run with No machine, by
+the rule the server applies when you start it in a chat with no machine or
+enable a trigger with none (--json: no_machine).
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.
 
 ```
@@ -22834,6 +22879,7 @@ reliant workflow validate [path] [flags]
 | `--include-builtins` | `bool` | - | Also validate builtin workflows |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
 | `--owner-github-id` | `string` | - | Sample trigger.activation.owner.github_id (a string), used with --trigger-payload |
+| `--trigger` | `string` | - | Run --trigger-payload against this declared trigger only |
 | `--trigger-payload` | `string` | - | Sample trigger.payload (JSON or @file.json): also run each declared trigger's filter, inputs and prompt against it |
 | `--trigger-sender` | `string` | - | Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each workflow |

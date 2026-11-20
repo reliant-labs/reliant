@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/workflow/lint"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -117,7 +120,7 @@ func TestWorkflowValidate_TriggerPayloadDryRunsDeclaredTriggers(t *testing.T) {
 	dir := writeWorkflowsDir(t, map[string]string{"triage.yaml": triggerDryRunWorkflow})
 	file := filepath.Join(dir, "triage.yaml")
 
-	sample, err := triggerSampleFromFlags(`{"data":{"issue":{"number":7,"labels":["bug"]}}}`, "", "", "")
+	sample, err := triggerSampleFromFlags(`{"data":{"issue":{"number":7,"labels":["bug"]}}}`, "", "", "", "")
 	require.NoError(t, err)
 	layout, err := readWorkflowLayout(dir)
 	require.NoError(t, err)
@@ -128,7 +131,7 @@ func TestWorkflowValidate_TriggerPayloadDryRunsDeclaredTriggers(t *testing.T) {
 
 	// A filter that does not match is a note, not an error.
 	res = validateWorkflowFileIn(file, dir, layout)
-	sample, _ = triggerSampleFromFlags(`{"data":{"issue":{"number":7,"labels":["wontfix"]}}}`, "", "", "")
+	sample, _ = triggerSampleFromFlags(`{"data":{"issue":{"number":7,"labels":["wontfix"]}}}`, "", "", "", "")
 	dryRunTriggers(&res, file, sample)
 	assert.True(t, res.Valid, "%v", res.Errors)
 	assert.Contains(t, res.Warnings[len(res.Warnings)-1], "does not match this sample event")
@@ -153,15 +156,102 @@ nodes:
 	require.NoError(t, err)
 	file2 := filepath.Join(dir2, "bad.yaml")
 	res = validateWorkflowFileIn(file2, dir2, layout2)
-	sample, _ = triggerSampleFromFlags(`{"data":{"issue":{"labels":["bug"]}}}`, "", "", "")
+	sample, _ = triggerSampleFromFlags(`{"data":{"issue":{"labels":["bug"]}}}`, "", "", "", "")
 	dryRunTriggers(&res, file2, sample)
 	assert.False(t, res.Valid, "a filter that cannot work on a real event fails the dry run")
 }
 
 func TestWorkflowValidate_TriggerSenderNeedsAPayload(t *testing.T) {
-	_, err := triggerSampleFromFlags("", `{"id":"1"}`, "", "")
+	_, err := triggerSampleFromFlags("", `{"id":"1"}`, "", "", "")
 	require.Error(t, err)
-	s, err := triggerSampleFromFlags("", "", "", "")
+	s, err := triggerSampleFromFlags("", "", "", "", "")
 	require.NoError(t, err)
 	assert.Nil(t, s)
+}
+
+const multiTriggerWorkflow = `name: reviewer
+inputs:
+  pr_number: {type: integer, default: 0}
+triggers:
+  - name: opened
+    integration:
+      integration: github
+      events: [pull_request.opened]
+    inputs:
+      pr_number: "{{ trigger.payload.data.pull_request.number }}"
+  - name: labeled
+    integration:
+      integration: github
+      events: [pull_request.labeled]
+    filter: "trigger.payload.data.label == 're-review'"
+    inputs:
+      pr_number: "{{ trigger.payload.data.pull_request.number }}"
+  - name: commented
+    integration:
+      integration: github
+      events: [issue_comment.*]
+    inputs:
+      pr_number: "{{ trigger.payload.data.issue.number }}"
+entry: [note]
+nodes:
+  - id: note
+    type: save_message
+    args: {role: assistant, content: hello}
+`
+
+// One sample event belongs to the triggers that listen for it: the others are
+// not run against it (each says why), so a multi-trigger workflow validates
+// with a real event instead of always failing on the triggers it cannot reach.
+func TestWorkflowValidate_TriggerPayloadRunsOnlyTheTriggersItCanReach(t *testing.T) {
+	dir := writeWorkflowsDir(t, map[string]string{"reviewer.yaml": multiTriggerWorkflow})
+	file := filepath.Join(dir, "reviewer.yaml")
+	layout, err := readWorkflowLayout(dir)
+	require.NoError(t, err)
+
+	sample, err := triggerSampleFromFlags(`{"event":"pull_request.opened","data":{"pull_request":{"number":7}}}`, "", "", "", "")
+	require.NoError(t, err)
+	res := validateWorkflowFileIn(file, dir, layout)
+	dryRunTriggers(&res, file, sample)
+	assert.True(t, res.Valid, "%v", res.Errors)
+	require.Len(t, res.TriggerRuns, 3)
+	assert.Equal(t, "", res.TriggerRuns[0].Skipped)
+	assert.Equal(t, map[string]any{"pr_number": int64(7)}, res.TriggerRuns[0].Inputs, "a match reports the inputs it maps")
+	assert.Contains(t, res.TriggerRuns[1].Skipped, "pull_request.labeled, not pull_request.opened")
+	assert.Contains(t, res.TriggerRuns[2].Skipped, "issue_comment.*")
+
+	// A wildcard event pattern reaches its events.
+	sample, _ = triggerSampleFromFlags(`{"event":"issue_comment.created","data":{"issue":{"number":3}}}`, "", "", "", "")
+	res = validateWorkflowFileIn(file, dir, layout)
+	dryRunTriggers(&res, file, sample)
+	assert.True(t, res.Valid, "%v", res.Errors)
+	assert.Equal(t, "", res.TriggerRuns[2].Skipped)
+
+	// --trigger picks one; a name the workflow does not declare is an error.
+	sample, _ = triggerSampleFromFlags(`{"data":{"label":"re-review","pull_request":{"number":7}}}`, "", "", "", "labeled")
+	res = validateWorkflowFileIn(file, dir, layout)
+	dryRunTriggers(&res, file, sample)
+	assert.True(t, res.Valid, "%v", res.Errors)
+	assert.Equal(t, "", res.TriggerRuns[1].Skipped)
+	assert.Contains(t, res.TriggerRuns[0].Skipped, "--trigger names labeled")
+
+	sample, _ = triggerSampleFromFlags(`{}`, "", "", "", "nope")
+	res = validateWorkflowFileIn(file, dir, layout)
+	dryRunTriggers(&res, file, sample)
+	assert.False(t, res.Valid)
+	assert.Contains(t, strings.Join(res.Errors, "\n"), `--trigger "nope": the workflow declares no such trigger`)
+
+	_, err = triggerSampleFromFlags("", "", "", "", "opened")
+	require.Error(t, err, "--trigger needs --trigger-payload")
+}
+
+// The summary's warning count includes the lint warnings the results list.
+func TestWorkflowValidate_WarningCountIncludesLintWarnings(t *testing.T) {
+	r := validateResult{Valid: true, Warnings: []string{"w"}, Lint: []lint.Finding{
+		{Rule: lint.RuleScenarioNone, Severity: lint.SeverityWarning},
+		{Rule: lint.RuleEdgeNoDefault, Severity: lint.SeverityWarning},
+		{Rule: lint.RuleSecretLiteral, Severity: lint.SeverityError},
+	}}
+	assert.Equal(t, 2, lintWarnings(r.Lint))
+	out := captureStdout(t, func() { printValidateSummary([]validateResult{r}) })
+	assert.Contains(t, out, "Warnings: 3")
 }

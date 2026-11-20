@@ -64,7 +64,27 @@ func ListeningLoopbackPorts(exclude map[int]bool) (ports []uint32, ok bool) {
 	return listeningLoopbackPorts(procTCP4Path, procTCP6Path, procPortRangePath, exclude)
 }
 
-func listeningLoopbackPorts(tcp4Path, tcp6Path, portRangePath string, exclude map[int]bool) ([]uint32, bool) {
+// IsLoopbackListening reports whether port has a LISTEN socket bound to
+// loopback or the wildcard address, across the WHOLE port range. ok is false
+// when the proc tables are absent (non-Linux hosts).
+//
+// Unlike ListeningLoopbackPorts it does not skip the ephemeral range: that
+// filter keeps auto-assigned listeners out of an unprompted list, but a caller
+// asking about one port it was given (`reliant preview-url 45123`) means that
+// port, wherever it is. With the filter, a dev server on an ephemeral-range
+// port was reported as "nothing listening", and --require-listening failed.
+func IsLoopbackListening(port int) (listening, ok bool) {
+	return isLoopbackListening(procTCP4Path, procTCP6Path, port)
+}
+
+func isLoopbackListening(tcp4Path, tcp6Path string, port int) (bool, bool) {
+	seen, ok := listeningSockets(tcp4Path, tcp6Path)
+	return ok && seen[port], ok
+}
+
+// listeningSockets is every loopback or wildcard LISTEN port in the proc
+// tables. ok is false when neither table can be read.
+func listeningSockets(tcp4Path, tcp6Path string) (map[int]bool, bool) {
 	seen := map[int]bool{}
 	anyTable := false
 	for _, path := range []string{tcp4Path, tcp6Path} {
@@ -76,6 +96,11 @@ func listeningLoopbackPorts(tcp4Path, tcp6Path, portRangePath string, exclude ma
 		parseProcTCP(f, seen)
 		f.Close()
 	}
+	return seen, anyTable
+}
+
+func listeningLoopbackPorts(tcp4Path, tcp6Path, portRangePath string, exclude map[int]bool) ([]uint32, bool) {
+	seen, anyTable := listeningSockets(tcp4Path, tcp6Path)
 	if !anyTable {
 		return nil, false
 	}

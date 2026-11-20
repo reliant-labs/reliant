@@ -5,8 +5,6 @@ description: "How Reliant lets AI agents investigate alerts, read production dat
 keywords: ["AI agents in production", "AI on-call", "AI incident response", "human in the loop", "read-only production access", "AI agent guardrails", "autopilot on-call"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge v1.6.1-0.20261115024114-0ab7c562e817 (embedded) · run in guides-scratch/agents-in-production: `reliant workflow scenario run --include-builtins` (exit 0, 217/217; autopilot-oncall 22, autopilot-issue-worker 23, autopilot-pr-review 14), `--filter reviewer_never_approves` single run, `reliant forge obs --help`, `reliant forge obs issue --help`, `reliant forge db query --help`, `reliant trigger --help` · H/G steps: not re-run for this page; hosted output is in the linked guides (production-alerts-to-github-issues, github-issues-to-pull-requests, review-pull-requests-with-ai, let-agents-query-production-data, debug-production-with-ai-agent) · sources: reliant internal/workflow/builtin/autopilot-oncall.yaml (trigger source: alerting, dedupe_key, dedupe_window 4h, max_investigations, lease_minutes, investigator tools and credentials: none, untrusted-input prompt), autopilot-issue-worker.yaml (description, credentials: none, git_publish, max_turns, retry at half the turns), autopilot-pr-review.yaml, autopilot_oncall_untrusted_test.go, the oncall/issue-worker/pr-review scenarios; no builtin YAML calls pr.merge (grep); control-plane internal/obsratelimit/obsratelimit.go (DefaultPerMinute 60), internal/obsread/service.go (releasePerMinute 6, releaseBurst 40); docs guides/autopilot.mdx, automations/overview.mdx (unattended by design, loop cap, who an automation acts as, who can decide an approval), integrations/github.mdx (merging is a workflow step), sdk/overview.mdx (scopes, what the SDKs will not do), account/billing.mdx (auto-recharge ceiling), guides/workflows/require-human-approval.mdx, deep-dives/security-model.mdx, deep-dives/daemon-security-model.mdx, deep-dives/how-release-verdicts-work.mdx */}
-
 **In short**
 
 - An alert or a new production error reaches Autopilot on-call through your organization's alert routing, with no URL or token to wire. On-call files **one** deduplicated GitHub issue, investigates it read-only and writes up a cause and a proposed fix. It stops there.
@@ -49,7 +47,7 @@ flowchart TD
 
 Reliant hosting groups the errors your services and pages report into **issues** and ties each to the release it first appeared in. It raises `NewIssue` when one appears, `IssueRegressed` when a resolved one comes back in a later release, and `IssueSpike` when an open one's rate jumps to five times its previous day. Those, `ReleaseRegressed` from a failed [release verdict](/deep-dives/how-release-verdicts-work), and your own `critical` and `error` rules reach Autopilot through the same alert routing as your other receivers.
 
-On-call's trigger is declared `webhook: {source: alerting}`, so turning it on creates a receiver for it with nothing to copy ([Webhooks](/automations/webhooks)). It takes alerts from the project's persistent environments, never previews, and a silence mutes it too.
+On-call's trigger is declared `webhook: {source: alerting}`, so turning it on creates a receiver for it with nothing to copy ([Webhooks](/automations/webhooks)). It takes alerts from every environment of the project that raises them, hosted or one you monitor with `forge obs init`, never previews, and a silence mutes it too.
 
 ### 2. On-call files one investigated issue
 
@@ -105,7 +103,7 @@ Deciding what runs unattended stays with people as well. An agent can write or e
 
 - **Leases.** Before on-call investigates or the issue worker codes, the run posts a lease comment as its own GitHub account, mirrored by `agent:working`. A second run that finds a live lease exits having written nothing. If two runs post at once, the later one steps aside. A run that dies leaves a lease that expires (60 minutes for on-call, 90 for the issue worker), and the next run takes over and says so. The lease is a convention between the workflows, not a lock GitHub enforces ([Leases](/guides/autopilot#leases)).
 - **Turn caps, not dollar budgets.** An on-call investigation runs up to 45 turns, an issue-worker attempt 120 plus a 60-turn retry, and a PR review 40. These are inputs you can lower ([What it costs](/guides/autopilot#what-it-costs)). No workflow has a spend budget of its own. The hard ceiling on Reliant AI spend is the monthly limit on [automatic top-ups](/account/billing#auto-recharge).
-- **Whose money.** In an organization, an automation turned on from the CLI spends only the organization's AI accounts (`Unattended funding: org_only`). If none can run the model, the firing fails and nothing is written.
+- **Whose money.** An automation created in an organization with two or more live members spends only the organization's AI accounts (`Unattended funding: org_only`), whether it was turned on from the app or the CLI. If none can run the run's model, the firing fails and nothing is written ([How automations fire](/deep-dives/how-automations-fire#7-launch-and-which-ai-accounts-it-spends)).
 - **Loops.** A chain of event-driven launches stops at five hops whatever the filters say, and comments the bot writes never fire a comment trigger, so a run cannot start itself ([The loop cap](/automations/overview#the-loop-cap)).
 
 ## Design decisions and trade-offs
@@ -213,7 +211,7 @@ reliant trigger events <activation id>
   <Card title="Issues to pull requests" icon="git-pull-request" href="/guides/workflows/github-issues-to-pull-requests">
     Label an issue `agent:ready` and review the pull request the issue worker opens.
   </Card>
-  <Card title="AI pull request review" icon="magnifying-glass" href="/guides/workflows/review-pull-requests-with-ai">
+  <Card title="AI pull request review" icon="search" href="/guides/workflows/review-pull-requests-with-ai">
     A review on every pull request that never approves or merges.
   </Card>
   <Card title="Agents query prod data" icon="database" href="/guides/forge/let-agents-query-production-data">
@@ -222,7 +220,7 @@ reliant trigger events <activation id>
   <Card title="Debug prod with an agent" icon="bug" href="/guides/observability/debug-production-with-ai-agent">
     Errors, logs and traces through rate-limited read-only verbs.
   </Card>
-  <Card title="Find the culprit release" icon="code-commit" href="/guides/observability/find-release-that-caused-error">
+  <Card title="Find the culprit release" icon="git-commit-horizontal" href="/guides/observability/find-release-that-caused-error">
     Tie an error to the release and commits that introduced it.
   </Card>
   <Card title="Require human approval" icon="user-check" href="/guides/workflows/require-human-approval">
