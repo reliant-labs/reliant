@@ -187,6 +187,9 @@ type loginRequest struct {
 	Server string
 	Scopes []string
 	Name   string
+	// ExpiresIn, when positive, asks for a token that lives that long
+	// (cliauth.ExpiresInParam).
+	ExpiresIn time.Duration
 }
 
 // runLogin gets a token by flow: `reliant auth login`'s own, or an API token
@@ -200,13 +203,14 @@ func runLogin(ctx context.Context, out io.Writer, req loginRequest, flow loginFl
 			fmt.Fprintf(out, "Signing in with a device code: %s, so a browser login's callback could not reach your browser (--browser overrides).\n", flow.Remote)
 		}
 		dev := cliauth.DeviceLogin{
-			Server:   server,
-			Scopes:   scopes,
-			Name:     req.Name,
-			Hostname: instanceid.Hostname(),
-			Platform: runtime.GOOS + "/" + runtime.GOARCH,
-			Out:      out,
-			Sleep:    deviceLoginSleep,
+			Server:    server,
+			Scopes:    scopes,
+			Name:      req.Name,
+			Hostname:  instanceid.Hostname(),
+			Platform:  runtime.GOOS + "/" + runtime.GOARCH,
+			Out:       out,
+			Sleep:     deviceLoginSleep,
+			ExpiresIn: req.ExpiresIn,
 		}
 		// Only where a browser here could show it: on a remote host an
 		// opener at best fails and at worst starts a terminal browser over
@@ -225,11 +229,12 @@ func runLogin(ctx context.Context, out io.Writer, req loginRequest, flow loginFl
 		fmt.Fprintf(out, "%s does not offer device-code sign-in; approving in your browser instead.\n", server)
 	}
 	return cliauth.Login{
-		Server:  server,
-		Scopes:  scopes,
-		Name:    req.Name,
-		Out:     out,
-		OpenURL: loginOpener,
+		Server:    server,
+		Scopes:    scopes,
+		Name:      req.Name,
+		Out:       out,
+		OpenURL:   loginOpener,
+		ExpiresIn: req.ExpiresIn,
 	}.Run(ctx)
 }
 

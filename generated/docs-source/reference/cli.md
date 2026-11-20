@@ -773,6 +773,11 @@ its own login. Hand the printed token to automation as RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
 
+--expires-in asks for a shorter-lived token (a CI job's, say): 1h, 12h, 7d.
+The server never grants more than 90 days. A control plane too old to honour it
+mints its 90-day default, and then the command does not print the token: it
+names it so you can revoke it.
+
 You approve it the way you approve 'reliant auth login': in a browser that
 calls back to a loopback port of THIS machine, or with a device code (RFC 8628)
 you approve on any device. The browser is the default, except where its
@@ -796,6 +801,7 @@ reliant auth token create [flags]
 |------|------|---------|-------------|
 | `--browser` | `bool` | - | Approve in a browser that calls back to this machine (the default on a desktop) |
 | `--device` | `bool` | - | Approve with a device code on any device (the default where a browser cannot reach this machine) |
+| `--expires-in` | `string` | - | How long the token lives, e.g. 1h, 12h, 7d (at least 1m, at most 90 days). An older control plane ignores it; the token is then not printed |
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
 | `--scope` | `stringSlice` | `[]` | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
