@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -119,7 +119,8 @@ import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
 import { isSafeReturnTo } from "@/lib/returnTo";
-import { useShellProject } from "@/components/Layout/sidebar/shellProject";
+import { ALL_PROJECTS_PICK, refOfKey, SEVERAL_PROJECTS_PICK, useShellLastPick } from "@/components/Layout/sidebar/shellProject";
+import { useProjectStore } from "@/store/projectStore";
 import { consolePath } from "@/components/Forge/Console/paths";
 import ForgeLink from "@/components/forge-ui/link";
 import { onboardingPath, projectsPath, settingsPath } from "@/lib/paths";
@@ -181,9 +182,17 @@ const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default
  * it has an app.
  */
 function ProjectCostsPointer() {
-  const { pathname } = useLocation();
-  const search = useSearch({ strict: false }) as Record<string, unknown>;
-  const shell = useShellProject(pathname, search);
+  // The shell's last pick, else the current project's app: no route or catalog read, so Settings renders anywhere.
+  const pick = useShellLastPick((state) => state.key);
+  const current = useProjectStore((state) => state.currentProject);
+  const pickRef = pick && pick !== ALL_PROJECTS_PICK && pick !== SEVERAL_PROJECTS_PICK ? refOfKey(pick) : null;
+  const app =
+    pickRef?.kind === "app"
+      ? pickRef.name
+      : current && (!pickRef || pickRef.id === current.id)
+        ? current.forge_project_name?.trim() || null
+        : null;
+  const shell = { app, name: app };
   const href = shell.app ? consolePath(shell.app, { kind: "usage" }) : null;
   return (
     <p className="-mt-3 text-sm text-muted-foreground" data-testid="billing-project-costs-pointer">

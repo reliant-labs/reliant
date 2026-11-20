@@ -114,7 +114,7 @@ const RED_NOW = {
   requests: 3_950_000, errors: 20_100, p95: 180,
 }
 const RED_BEFORE = { requests: 3_610_000, errors: 17_300, p95: 196 }
-function queryPanel(req: Record<string, unknown>) {
+export function queryPanel(req: Record<string, unknown>) {
   const panel = (req.panel ?? {}) as { id?: string; kind?: string }
   if (!String(panel.id ?? '').startsWith('observability-home-')) return {}
   const range = ((req.scope ?? {}) as { timeRange?: { start?: string; end?: string } }).timeRange

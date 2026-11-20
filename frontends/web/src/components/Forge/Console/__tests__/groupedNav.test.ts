@@ -29,10 +29,11 @@ describe("buildGroupedConsoleNav", () => {
     const { items, footer } = nav({ productAnalytics: HUB });
     expect(items.map((item) => [item.label, (item.children ?? []).map((child) => child.label).join(",")])).toEqual([
       ["Overview", ""],
+      ["Services", ""],
       ["Issues", "Errors,Alerts"],
       ["Performance", "Traces,RPC explorer"],
       ["Sessions", ""],
-      ["Product analytics", ""],
+      ["Product analytics", "Insights,Events & metrics"],
       ["Releases", ""],
       ["Data", ""],
       ["Users", ""],
@@ -40,6 +41,7 @@ describe("buildGroupedConsoleNav", () => {
       ["Environments", "prod"],
       ["Secrets", ""],
       ["Domains", ""],
+      ["Usage", ""],
     ]);
     expect(footer.map((item) => item.label)).toEqual(["Activity"]);
   });
@@ -52,9 +54,9 @@ describe("buildGroupedConsoleNav", () => {
     for (const view of OBS_NAV_VIEWS) expect([...grouped].some((href) => href.includes(`/observability/${view}`))).toBe(true);
   });
 
-  it("has no Product analytics row without a hub, and lights it on any of the hub's tabs", () => {
-    expect(nav().items.map((item) => item.label)).not.toContain("Product analytics");
-    expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "acquisition" } }).items)).toEqual(["Product analytics"]);
+  it("has no Insights row without a hub, and lights Insights on any of the hub's tabs", () => {
+    expect(nav().items.find((item) => item.label === "Product analytics")!.children!.map((child) => child.label)).toEqual(["Events & metrics"]);
+    expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "acquisition" } }).items)).toEqual(["Insights"]);
     // Any other dashboard lights Dashboards, under More tools.
     expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "api" } }).items)).toEqual(["Dashboards"]);
   });
@@ -94,7 +96,7 @@ describe("groupedCrumbs", () => {
   it("puts a view under its group, a hub tab under Product analytics, and a dashboard under More tools", () => {
     expect(groupedCrumbs({ kind: "obs-view", view: "errors" }, [])).toEqual([{ label: "Issues" }, { label: "Errors" }]);
     expect(groupedCrumbs({ kind: "obs-view", view: "sessions" }, [])).toEqual([{ label: "Sessions" }]);
-    expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Product analytics" }, { label: "Users" }]);
+    expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Product analytics" }, { label: "Insights" }, { label: "Users" }]);
     expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "api" }, [{ label: "Observability" }, { label: "Dashboards", href: "/d" }, { label: "api" }])).toEqual([
       { label: "More tools" },
       { label: "Dashboards", href: "/d" },
