@@ -139,6 +139,13 @@ const USER_MESSAGE_EXPANDED_CLASS = "max-h-[50vh] overflow-y-auto";
 const MOBILE_PROSE_TYPE_CLASS = "text-ui leading-[1.6] [--chat-prose-leading:1.6]";
 const DESKTOP_PROSE_TYPE_CLASS = "text-copy";
 
+/**
+ * The answer's reading measure. The transcript column grows with the window
+ * (up to `--chat-column`); running text keeps ~80ch inside it so a line
+ * stays readable, while code blocks, tables and images use the whole column.
+ */
+const PROSE_MEASURE_CLASS = "[&_:is(p,ul,ol,blockquote,h1,h2,h3,h4,h5,h6)]:max-w-[80ch]";
+
 /** A 28px ghost icon button: the actions row's copy and branch. */
 const ACTION_ICON_BUTTON_CLASS =
   "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -691,7 +698,7 @@ function ChatMessageComponent({
               isUser={false}
               isStreaming={isStreaming}
               worktreeId={chatWorktreeId}
-              className={cn(isMobile ? MOBILE_PROSE_TYPE_CLASS : DESKTOP_PROSE_TYPE_CLASS, "w-full")}
+              className={cn(isMobile ? MOBILE_PROSE_TYPE_CLASS : DESKTOP_PROSE_TYPE_CLASS, PROSE_MEASURE_CLASS, "w-full")}
             />
           </div>
         )}
@@ -971,7 +978,9 @@ function ChatMessageComponent({
             // max-w-full on the narrowest column: a cross-axis item of an
             // items-end column sizes to its content, which a long URL makes
             // as wide as the URL; capped, the text wraps inside the bubble.
-            isMobile ? "max-w-[90%] select-text" : "max-w-[85%]",
+            // 70% on desktop: the column is wide now, and a bubble across
+            // most of it stops reading as the person's side of the talk.
+            isMobile ? "max-w-[90%] select-text" : "max-w-[70%]",
           )}
         >
           <div
