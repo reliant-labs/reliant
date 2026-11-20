@@ -61,8 +61,14 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   <Card title="Test AI agent workflows with scenarios before you ship" icon="workflow" href="/guides/workflows/test-workflows-with-scenarios">
     Test every path of an AI agent workflow before it runs for real: mock agents and commands in scenarios, run them locally, and read the mismatch when one fails.
   </Card>
+  <Card title="Give your AI agents a new tool with an MCP server" icon="workflow" href="/guides/workflows/give-agents-tools-mcp-server">
+    Add an MCP server to a Reliant project, hand its tools to agents through a preset, and use that preset in a workflow node that calls the new tool.
+  </Card>
   <Card title="Lint AI workflows that run when nobody is watching" icon="workflow" href="/guides/workflows/lint-unattended-workflows">
     Find the steps in an AI agent workflow that hang, loop forever or fail silently when it runs unattended: run reliant workflow lint, then fix each finding.
+  </Card>
+  <Card title="Pause, steer and resume a running AI agent workflow" icon="workflow" href="/guides/workflows/pause-and-steer-a-run">
+    Pause a running agent workflow from the terminal, change its mode or send it new instructions, then resume it from the same point and check how it ended.
   </Card>
   <Card title="Run an AI agent on a schedule with cron" icon="workflow" href="/guides/workflows/run-an-agent-on-a-schedule">
     Run an AI agent on a cron schedule: create a schedule trigger with reliant trigger create, or declare one in a workflow, then check each firing and its run.
@@ -81,6 +87,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   </Card>
   <Card title="Call any API from a workflow without exposing the key" icon="workflow" href="/guides/workflows/call-api-without-exposing-key">
     Call an API that needs a key from a Reliant workflow while no step, model or log ever holds the value: store it, declare it, allow the workflow, and run it.
+  </Card>
+  <Card title="Run one workflow when another finishes or fails" icon="workflow" href="/guides/workflows/chain-workflows-on-finish">
+    Chain Reliant workflows with a workflow_event trigger: start a follow-up run whenever another workflow's run fails, finishes or waits for a person.
   </Card>
 </CardGroup>
 
