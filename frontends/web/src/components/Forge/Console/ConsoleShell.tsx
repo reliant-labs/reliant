@@ -55,6 +55,7 @@ import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
   ANALYTICS_TAB_LABELS,
+  AUTH_TAB_LABELS,
   consolePath,
   OBS_NAV_LABELS,
   OBS_NAV_VIEWS,
@@ -278,6 +279,8 @@ export function consoleCrumbs(
       return [{ label: "Security" }, { label: "Vulnerabilities", href: href({ kind: "vulnerabilities" }) }, { label: page.advisory }];
     case "sboms":
       return [{ label: "Security" }, { label: "SBOMs" }];
+    case "auth":
+      return [{ label: "Auth", href: href({ kind: "auth" }) }, { label: AUTH_TAB_LABELS[page.tab ?? "users"] }];
   }
 }
 

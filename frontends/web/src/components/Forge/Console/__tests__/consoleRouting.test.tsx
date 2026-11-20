@@ -221,7 +221,7 @@ function renderAt(initialEntry: string, { inShell = false }: { inShell?: boolean
     dashboard: probe("dashboard"),
     storage: probe("storage"),
     data: probe("data"),
-    users: probe("users"),
+    auth: probe("auth"),
     vulnerabilities: probe("vulnerabilities"),
     vulnerability: probe("vulnerability"),
     sboms: probe("sboms"),

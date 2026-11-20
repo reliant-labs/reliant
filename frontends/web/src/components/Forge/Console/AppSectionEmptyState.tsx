@@ -35,7 +35,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
     case "data":
       return { title: "Data", shows: PAGE_SUBTITLES.data };
     case "users":
-      return { title: "Users", shows: "Who can sign in to your app, and when they last did" };
+    case "auth":
+      return { title: "Auth", shows: "Who can sign in to your app, and how" };
     case "storage":
       return { title: "Storage", shows: "The files your app keeps in its buckets" };
     case "environments":

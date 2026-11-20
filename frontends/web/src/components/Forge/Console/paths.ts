@@ -17,9 +17,9 @@
  *   /forge/p/:project/data                    Data: the scoped environment's databases, read-only
  *                                             (`db`, `table`, `f`, `sort`, `cols`, `page`, `size`, `row`:
  *                                             Data/dataUrl-model.ts)
- *   /forge/p/:project/users                   Users: who can sign in to the scoped environment
- *                                             (its managed identity), `user` and `q` as the
- *                                             environment page's Identity tab takes them
+ *   /forge/p/:project/auth[/:tab]             Auth (U6d): users (who can sign in to the scoped environment,
+ *                                             `user` and `q` as before) · sign-in (how the app signs people in)
+ *   /forge/p/:project/users                   → auth (the old Users page; redirected, search kept)
  *   /forge/p/:project/environments            Environments (Configure)
  *   /forge/p/:project/environments/:env       one environment, as a configured object
  *   /forge/p/:project/secrets                 Secrets
@@ -198,8 +198,18 @@ export type ConsolePage =
   | { kind: "vulnerability"; advisory: string }
   /** Security › SBOMs: each release artifact's SBOM and its scan (Security/SbomsPage.tsx). */
   | { kind: "sboms" }
+  /** Auth (U6d): who can sign in, and how (Users/AuthPage.tsx). Omitted tab: users. */
+  | { kind: "auth"; tab?: AuthTab }
   /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
   | { kind: "extension"; id: string; segment: string };
+
+/** Auth's tabs (U6d): the people (the old Users page, the default) and how they sign in. */
+export const AUTH_TABS = ["users", "sign-in"] as const;
+export type AuthTab = (typeof AUTH_TABS)[number];
+export const AUTH_TAB_LABELS: Record<AuthTab, string> = { users: "Users", "sign-in": "Sign-in" };
+export function isAuthTab(value: string | undefined): value is AuthTab {
+  return (AUTH_TABS as readonly string[]).includes(value ?? "");
+}
 
 /** The Live state dashboard's segment under Dashboards: one segment, so it never meets `dashboards/$kind/$key`. */
 export const LIVE_STATE_SEGMENT = "live-state";
@@ -282,7 +292,10 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
     case "data":
       return `${base}/data`;
     case "users":
-      return `${base}/users`;
+      // The old Users page is Auth's first tab now (U6d); its route only redirects.
+      return `${base}/auth`;
+    case "auth":
+      return !page.tab || page.tab === AUTH_TABS[0] ? `${base}/auth` : `${base}/auth/${page.tab}`;
     case "environments":
       return `${base}/environments`;
     case "environment":
@@ -332,6 +345,14 @@ export const liveStatePath = (app: string, ctx?: PathContext) => consolePath(app
 export const speedInsightsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "speed-insights" }, ctx);
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
+/**
+ * Security (U6d nav contract): `vulnerabilities` or `sboms`, a thin wrapper
+ * over #3085's pages (SECURITY_SEGMENT / SECURITY_PAGES above).
+ */
+export type SecurityView = keyof typeof SECURITY_PAGES;
+export const securityPath = (app: string, view: SecurityView = "vulnerabilities", ctx?: PathContext) => consolePath(app, { kind: view }, ctx);
+/** Auth (U6d): `users` (the old Users page; the default) or `sign-in`. */
+export const authPath = (app: string, tab?: AuthTab, ctx?: PathContext) => consolePath(app, { kind: "auth", tab }, ctx);
 export const projectUsagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "usage" }, ctx);
 
 function safeDecode(segment: string): string {
@@ -372,6 +393,9 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "services":
         if (!sub) return { kind: "services" };
         return dashKind ? null : { kind: "service", name: safeDecode(sub) };
+      case "auth":
+        if (!sub) return { kind: "auth" };
+        return isAuthTab(sub) && !dashKind ? { kind: "auth", tab: sub } : null;
       case "analytics":
         if (!sub) return { kind: "analytics" };
         return isAnalyticsTab(sub) && !dashKind ? { kind: "analytics", tab: sub } : null;
