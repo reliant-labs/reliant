@@ -21,6 +21,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/repo"
 	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
@@ -84,6 +85,7 @@ func newWorkflowValidateCmd() *cobra.Command {
 		triggerSender   string
 		activationParam string
 		ownerGitHubID   string
+		onlyTrigger     string
 		base            string
 	)
 
@@ -97,10 +99,14 @@ input/output type verification, and cross-workflow contract validation.
 If a specific file path is given, validates that file only. Otherwise,
 validates all *.yaml files in the workflow directory.
 
-With --trigger-payload, each declared trigger is also run against that sample
-event: its filter, its inputs mapping and its prompt are evaluated the way a
-real firing would, and anything that fails (or that the integration's declared
-payload rules out) is reported as an error. For an integration trigger the
+With --trigger-payload, each declared trigger the sample can belong to is also
+run against that sample event: its filter, its inputs mapping and its prompt
+are evaluated the way a real firing would, and anything that fails (or that the
+integration's declared payload rules out) is reported as an error. Each
+trigger's outcome is printed (matched, with the inputs it maps; filtered out;
+failed; or not run). An integration trigger that does not listen for the
+sample's "event" (or "integration") is not run against it; --trigger <name>
+runs the sample against that one trigger only. For an integration trigger the
 payload is merged over a sample generated from the event's declared payload, so
 give only the fields your expressions read. The JSON may be a file: @event.json.
 --activation-params supplies trigger.activation.params, as an activation of the workflow
@@ -119,10 +125,14 @@ broke in its owner's Inbox.
 Each project workflow is also linted (reliant workflow lint --rules lists the
 rules): a lint error fails validation, a lint warning is reported.
 
+Each workflow's "No machine" line says whether it can run with No machine, by
+the rule the server applies when you start it in a chat with no machine or
+enable a trigger with none (--json: no_machine).
+
 Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sample, err := triggerSampleFromFlags(triggerPayload, triggerSender, activationParam, ownerGitHubID)
+			sample, err := triggerSampleFromFlags(triggerPayload, triggerSender, activationParam, ownerGitHubID, onlyTrigger)
 			if err != nil {
 				return err
 			}
@@ -133,6 +143,7 @@ Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 	cmd.Flags().StringVar(&triggerSender, "trigger-sender", "", "Sample trigger.sender (JSON: kind, id, display_name, verified), used with --trigger-payload")
 	cmd.Flags().StringVar(&activationParam, "activation-params", "", "Sample trigger.activation.params (JSON or @file.json), used with --trigger-payload")
 	cmd.Flags().StringVar(&ownerGitHubID, "owner-github-id", "", "Sample trigger.activation.owner.github_id (a string), used with --trigger-payload")
+	cmd.Flags().StringVar(&onlyTrigger, "trigger", "", "Run --trigger-payload against this declared trigger only")
 	cmd.Flags().StringVar(&base, "base", "", "Git revision the workflows are changing from: also report trigger changes that would break existing activations")
 
 	cmd.Flags().StringVar(&workflowDir, "dir", ".reliant/workflows", "Directory containing workflow YAML files")
@@ -566,6 +577,11 @@ type validateResult struct {
 	// existing activations cannot follow (activationBreaks). Warnings, kept
 	// apart so they are always printed.
 	ActivationBreaks []string `json:"activation_breaks,omitempty"`
+	// NoMachine says whether the workflow can run with No machine.
+	NoMachine *noMachineReport `json:"no_machine,omitempty"`
+	// TriggerRuns is what each declared trigger did with --trigger-payload's
+	// sample event (matched, filtered out, failed, or skipped and why).
+	TriggerRuns []triggerDryRun `json:"trigger_runs,omitempty"`
 	// Lint is what `reliant workflow lint` finds in a project workflow; an
 	// error-severity finding makes the result invalid.
 	Lint  []lint.Finding `json:"lint,omitempty"`
@@ -932,8 +948,46 @@ func validateWorkflowYAML(data []byte, file string, addressProblem error, layout
 		}
 	}
 
+	result.NoMachine = noMachineOf(wf, projectWorkflowLoader(layout.Workflows))
+
 	result.Valid = len(result.Errors) == 0
 	return result
+}
+
+// noMachineReport is whether a workflow can run with No machine, by the rules
+// the server applies: a chat with no machine refuses a workflow with a node
+// that needs one (Hard), and a trigger with no machine also refuses one whose
+// agents' tool lists reach a machine tool (Tools), since an unattended run
+// that quietly lost tools has nobody watching. A trigger's params can change
+// a tools-typed input; this reads the inputs' defaults.
+type noMachineReport struct {
+	// Chat is true when a chat with No machine can start it.
+	Chat bool `json:"chat"`
+	// Trigger is true when a trigger with No machine can run it.
+	Trigger bool `json:"trigger"`
+	// Needs are the reasons a machine is needed, hard ones first.
+	Needs []string `json:"needs,omitempty"`
+}
+
+func noMachineOf(wf *reliantv1.Workflow, loader runtime.WorkflowLoader) *noMachineReport {
+	req := runtime.MachineRequirements(wf, nil, runtime.WorkflowRefLoader(loader), tools.PreflightConfig())
+	return &noMachineReport{
+		Chat:    len(req.Hard) == 0,
+		Trigger: req.None(),
+		Needs:   append(append([]string(nil), req.Hard...), req.Tools...),
+	}
+}
+
+// String is the report as one line.
+func (r *noMachineReport) String() string {
+	switch {
+	case r.Trigger:
+		return "runs with no machine, in a chat or from a trigger"
+	case r.Chat:
+		return "a chat with no machine runs it without the agent tools that need one; a trigger needs a machine: " + strings.Join(r.Needs, "; ")
+	default:
+		return "needs a machine: " + strings.Join(r.Needs, "; ")
+	}
 }
 
 func printCompactValidateResult(r validateResult) {
@@ -943,8 +997,8 @@ func printCompactValidateResult(r validateResult) {
 	}
 
 	warningIndicator := ""
-	if len(r.Warnings) > 0 {
-		warningIndicator = fmt.Sprintf(" (%d warnings)", len(r.Warnings))
+	if n := len(r.Warnings) + lintWarnings(r.Lint); n > 0 {
+		warningIndicator = fmt.Sprintf(" (%d warnings)", n)
 	}
 
 	if r.Name == "" {
@@ -958,10 +1012,29 @@ func printCompactValidateResult(r validateResult) {
 			fmt.Printf("      Error: %s\n", e)
 		}
 	}
+	for _, w := range r.Warnings {
+		fmt.Printf("      Warning: %s\n", w)
+	}
 	for _, b := range r.ActivationBreaks {
 		fmt.Printf("      Breaks activations: %s\n", b)
 	}
+	if r.NoMachine != nil {
+		fmt.Printf("      No machine: %s\n", r.NoMachine)
+	}
+	printTriggerRuns("      ", r.TriggerRuns)
 	printLintFindings("      ", r.Lint)
+}
+
+// lintWarnings counts the findings that warn rather than fail, which the
+// warning counts include beside the validator's own warnings.
+func lintWarnings(findings []lint.Finding) int {
+	n := 0
+	for _, f := range findings {
+		if f.Severity != lint.SeverityError {
+			n++
+		}
+	}
+	return n
 }
 
 func printVerboseValidateResult(r validateResult) {
@@ -993,6 +1066,13 @@ func printVerboseValidateResult(r validateResult) {
 		for _, b := range r.ActivationBreaks {
 			fmt.Printf("  - %s\n", b)
 		}
+	}
+	if r.NoMachine != nil {
+		fmt.Printf("No machine: %s\n", r.NoMachine)
+	}
+	if len(r.TriggerRuns) > 0 {
+		fmt.Println("Triggers against the sample:")
+		printTriggerRuns("  ", r.TriggerRuns)
 	}
 	if len(r.Lint) > 0 {
 		fmt.Println("Lint:")
@@ -1270,7 +1350,7 @@ func printValidateSummary(results []validateResult) {
 		} else {
 			invalid++
 		}
-		totalWarnings += len(r.Warnings) + len(r.ActivationBreaks)
+		totalWarnings += len(r.Warnings) + len(r.ActivationBreaks) + lintWarnings(r.Lint)
 		breaks += len(r.ActivationBreaks)
 	}
 

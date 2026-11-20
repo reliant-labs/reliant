@@ -143,6 +143,13 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		}
 	}
 
+	// A trigger that names no workflow runs its owner's default one. Name it
+	// here, as the launcher would, so everything below reads a real workflow:
+	// the empty name resolved to an error that went back to Temporal, and the
+	// fire retried until it gave up and recorded nothing (north-star AW-18).
+	// Only this fire's copy is named; the row still follows the default.
+	trigger = withDefaultWorkflow(ctx, f.launcher, trigger)
+
 	// A pool-bound trigger reads everything below from its pool's agreed
 	// catalog, the one its run is placed on.
 	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
@@ -238,7 +245,12 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	}
 	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
-		return nil, err
+		if retryableRead(err) || resuming {
+			return nil, err
+		}
+		// A workflow that does not resolve fails every retry the same way:
+		// record it rather than let the fire retry out with no trace.
+		return f.failPermanently(ctx, rec, fmt.Sprintf("workflow %q cannot be resolved: %v", trigger.Workflow, err), err)
 	}
 	limits, capped, err := capacityLimits(ctx, f.pools, trigger, policy)
 	if err != nil {
@@ -643,6 +655,18 @@ func (f *Firer) recordOutcome(
 
 // failPermanently records a failed event and ends the fire without retries:
 // the trigger can never launch as written.
+// withDefaultWorkflow is t with its workflow named: t itself when it names
+// one, else a copy naming the workflow launcher would run (the owner's
+// default setting, else the system default).
+func withDefaultWorkflow(ctx context.Context, launcher Launcher, t *core.Trigger) *core.Trigger {
+	if t == nil || t.Workflow != "" || launcher == nil {
+		return t
+	}
+	named := *t
+	named.Workflow = launcher.ResolveDefaultWorkflow(ctx, t.UserID, "")
+	return &named
+}
+
 func (f *Firer) failPermanently(ctx context.Context, rec fireRecord, detail string, cause error) (*FireOutput, error) {
 	if _, err := f.recordOutcome(ctx, rec, core.TriggerEventFailed, detail); err != nil {
 		return nil, err

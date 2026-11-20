@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -169,4 +170,50 @@ func TestActivationApprovalSingleCardHasNoBatch(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 	require.Equal(t, "call", created["tool_call_id"])
 	require.NotContains(t, created, "batch_id")
+}
+
+// A preview that cannot finish is retried a bounded number of times, then the
+// call is refused and the turn goes on: it never holds the agent's loop. A
+// history recorded before the bound retried it without end, and replays so.
+func TestActivationPreviewIsBounded(t *testing.T) {
+	for _, scenario := range []struct {
+		name     string
+		recorded bool
+		attempts int
+	}{{name: "bounded", attempts: activationPreviewAttempts}, {name: "recorded before the bound", recorded: true, attempts: 10}} {
+		t.Run(scenario.name, func(t *testing.T) {
+			var suite temporaltest.WorkflowTestSuite
+			env := suite.NewTestWorkflowEnvironment()
+			if scenario.recorded {
+				env.OnGetVersion(activationPreviewBoundedChangeID, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+			}
+			attempts := 0
+			env.RegisterActivityWithOptions(func(context.Context, types.AutomationApprovalInput) (types.AutomationApprovalPreview, error) {
+				attempts++
+				// The unbounded policy would retry forever; succeed at the
+				// tenth so the recorded history's test ends.
+				if attempts < 10 {
+					return types.AutomationApprovalPreview{}, errors.New("preview outran its timeout")
+				}
+				return types.AutomationApprovalPreview{NoApproval: true}, nil
+			}, activity.RegisterOptions{Name: "AutomationApprovalPreview"})
+			var executed types.RuntimeContext
+			env.RegisterActivityWithOptions(func(_ context.Context, in types.ActivityInput) (map[string]interface{}, error) {
+				executed = in.Runtime
+				return map[string]interface{}{}, nil
+			}, activity.RegisterOptions{Name: "ExecuteTools"})
+			env.ExecuteWorkflow(func(ctx workflow.Context) error {
+				ac := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{StartToCloseTimeout: time.Minute})
+				node := &pb.Node{Args: &pb.Node_ExecuteTools{ExecuteTools: &pb.ExecuteToolsArgs{Capabilities: &pb.ToolCapabilities{Offered: []string{names.ToolUpdateTriggerActivation}}, ResolvedToolCalls: []*pb.ToolCallMsg{{Id: "call", Name: names.ToolUpdateTriggerActivation, Input: `{"trigger_id":"t"}`}}}}}
+				return executeWithActivationApprovals(ctx, ac, types.RuntimeContext{ChatID: "chat", Thread: "thread"}, node, false).Get(ctx, nil)
+			})
+			require.NoError(t, env.GetWorkflowError())
+			require.Equal(t, scenario.attempts, attempts)
+			if scenario.recorded {
+				require.Empty(t, executed.ActivationRefusals)
+				return
+			}
+			require.Equal(t, "Could not validate the activation for approval; nothing changed.", executed.ActivationRefusals["call"])
+		})
+	}
 }
