@@ -17,18 +17,19 @@
  *       /releases, /releases/$version
  *       /observability/$view
  *       /observability/dashboards, /observability/dashboards/$kind/$key
- *       /storage                            the storage browser (the scope's buckets)
- *       /data                               the data browser (the scope's databases)
+ *       /storage                            the storage browser (the scope's buckets; buckets only, U6e)
+ *       /data                               the database's home and the data browser (U6e)
  *       /auth, /auth/$tab                   Auth: who can sign in to the scope, and how (U6d)
  *       /users                              → /auth (the old Users page), search kept
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
- *       /services, /services/$name          everything the app runs, live; one of them
+ *       /services, /services/$name          everything the app runs, live (`view=charts`); one of them
+ *                                           (a database's name → /data, client-side: ServiceDetail)
  *       /usage                              what the app's hosting costs this month
  *       /events                             Product analytics › Events & metrics
  *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
  *       /speed-insights                     web vitals per page (U6c)
- *       /observability/dashboards/live-state the built-in Live state dashboard (U6c)
+ *       /observability/dashboards/live-state → /services?view=charts (the retired Live state dashboard, U6e)
  *       /security/vulnerabilities           Security: the findings of the scope's releases
  *       /security/vulnerabilities/$advisory one advisory across the project
  *       /security/sboms                     each release artifact's SBOM and scan
@@ -53,6 +54,7 @@
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
 import { memberOnly } from './lib/routeOrg'
+import { withSearch } from './lib/paths'
 
 import { isAnalyticsTab, isAuthTab, isObsNavView, LIVE_STATE_SEGMENT, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
@@ -120,8 +122,6 @@ export interface ForgeConsoleComponents {
   analytics: RouteComponent
   /** Speed insights (U6c): web vitals per page. */
   speedInsights: RouteComponent
-  /** The built-in Live state dashboard (U6c). */
-  liveState: RouteComponent
   /** Security › Vulnerabilities: the findings of the scope's releases. */
   vulnerabilities: RouteComponent
   /** One advisory in the project. */
@@ -408,12 +408,17 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleServicesSearchSchema,
     component: components.speedInsights,
   })
-  // Static and one segment deeper than observability/$view: wins over it, and never meets dashboards/$kind/$key.
+  // The retired Live state dashboard (U6e): Services' charts view shows what it did. Static and one
+  // segment deeper than observability/$view, so it wins over it and never meets dashboards/$kind/$key.
+  // The search (env, range) is kept.
   const liveStateRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: `observability/dashboards/${LIVE_STATE_SEGMENT}` as 'observability/dashboards/live-state',
     validateSearch: forgeConsoleServicesSearchSchema,
-    component: components.liveState,
+    beforeLoad: memberOnly(({ location }) => {
+      const pathname = location.pathname.replace(new RegExp(`/observability/dashboards/${LIVE_STATE_SEGMENT}/?$`), '/services')
+      throw redirect({ href: withSearch(pathname, { ...(location.search as Record<string, unknown>), view: 'charts' }), replace: true })
+    }),
   })
   // Security (components/Forge/Security). The section has no page of its
   // own: its first page is where /security lands.

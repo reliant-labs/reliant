@@ -17,11 +17,15 @@
  *               one charted (the picked one, else the first).
  *   deploys     the environment's recent promotions.
  *
- * A database or a static site has a page of its own shape (below).
+ * A static site has a page of its own shape (below). A database's page is
+ * Data, the database's home (U6e, owner: "the DB page from Services and
+ * Data should be the same place"): /services/<database> redirects there,
+ * keeping the environment.
  */
 
-import { useMemo, type ReactNode } from "react";
-import { ArrowRight, Database, ExternalLink, ScrollText, Waypoints } from "lucide-react";
+import { useEffect, useMemo, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { ArrowRight, ExternalLink, ScrollText, Waypoints } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
@@ -57,7 +61,10 @@ export function ServiceDetail({ name, search }: { name: string; search: Services
   const { env, envs, hosted, listed } = data;
   const databases = databasesOf(hosted, name);
   const sites = sitesOf(hosted, name);
-  if (databases.length > 0) return <DatabaseDetail name={name} entries={databases} />;
+  const isWorkload = (listed.data?.workloads ?? []).some((w) => w.workload === name);
+  if (databases.length > 0 && !isWorkload) return <DatabaseRedirect entries={databases} />;
+  // Not a workload: wait for GetStatus, which says whether it is the database or a site.
+  if (!isWorkload && data.hostedLoading) return <div className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Loading" />;
   if (sites.length > 0) return <SiteDetail name={name} entries={sites} />;
   // The environment: the scope's; on All, the first (prod leads) that runs it.
   const runsIn = (candidate: StripEnv) => (listed.data?.workloads ?? []).some((w) => w.workload === name && w.envName === candidate.name);
@@ -528,41 +535,20 @@ function RecentDeploys({ env, name }: { env: StripEnv; name: string }) {
 
 // ── The database and the site ──────────────────────────────────────────────
 
-function DatabaseDetail({ name, entries }: { name: string; entries: { envName: string; deployment: { verdict?: string; verdict_reason?: string } }[] }) {
-  const { href } = useForgeConsole();
-  return (
-    <Page testId="console-service-database">
-      <Header title={name} meta={<span className="inline-flex items-center gap-1.5"><Database className="size-3.5" aria-hidden="true" /> Managed Postgres</span>} />
-      <div className="flex flex-wrap items-center gap-x-4 text-ui">
-        <IconLink href={href({ kind: "data" })} icon={<ArrowRight className="size-3.5" />}>
-          Tables
-        </IconLink>
-      </div>
-      <Section title="Environments" testId="database-envs">
-        <ul className="divide-y divide-border-subtle rounded-xl border border-border bg-surface">
-          {entries.map(({ envName, deployment }) => {
-            const verdict = verdictStatus(deployment);
-            return (
-              <li key={envName} className="flex items-center gap-3 px-3 py-2.5 text-ui" data-testid={`database-env-${envName}`}>
-                <Tag>{envName}</Tag>
-                <Status tone={verdict.tone} label={verdict.label === "Live" ? "Provisioned" : verdict.label} />
-                <span className="text-meta text-ink-muted">{deployment.verdict_reason || "The deploy created it and keeps it in step with the release."}</span>
-                <Link href={href({ kind: "data" }, { env: envName })} className="no-color ml-auto text-meta text-ink-muted hover:text-ink">
-                  Tables →
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </Section>
-      <Section title="Status and backups" testId="database-coming-soon">
-        <div className="rounded-xl border border-dashed border-border px-4 py-5 text-ui text-ink-muted" data-testid="database-coming-soon-note">
-          <span className="font-medium text-ink">Coming soon:</span> database status and backups aren&apos;t reported yet. Size, connections, CPU and memory, and the
-          last backup will show here once the platform reports them.
-        </div>
-      </Section>
-    </Page>
-  );
+/**
+ * /services/<database> → Data (U6e): the database's home is Data, with its
+ * status, backups, metrics and tables. The environment is kept: the scope's
+ * when the database runs there, else the one it runs in (prod first).
+ */
+function DatabaseRedirect({ entries }: { entries: { envName: string }[] }) {
+  const { env, href } = useForgeConsole();
+  const navigate = useNavigate();
+  const target = entries.find((entry) => entry.envName === env)?.envName ?? entries.find((entry) => entry.envName === "prod")?.envName ?? entries[0]?.envName;
+  const to = href({ kind: "data" }, target ? { env: target } : {});
+  useEffect(() => {
+    void navigate({ href: to, replace: true });
+  }, [navigate, to]);
+  return <div className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Opening Data" data-testid="console-service-database-redirect" />;
 }
 
 function SiteDetail({ name, entries }: { name: string; entries: { envName: string; deployment: { url?: string; hostname?: string; verdict?: string } }[] }) {

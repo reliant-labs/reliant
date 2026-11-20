@@ -3,7 +3,7 @@
 /**
  * AN APP'S LIVE STATE, as one model (U6c, owner 2026-11-20): what every
  * place that shows "how is my stuff running" reads, so the Services tab, the
- * Overview's live-state strip and the built-in Live state dashboard always
+ * Overview's live-state strip and Services' charts view always
  * agree. Pure, so the merge is tested on its own (liveStateModel.test.ts);
  * the reads are useAppLiveState.ts.
  *

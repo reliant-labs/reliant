@@ -237,7 +237,6 @@ function renderAt(initialEntry: string, { inShell = false }: { inShell?: boolean
     events: probe("events"),
     analytics: probe("analytics"),
     speedInsights: probe("speed-insights"),
-    liveState: probe("live-state"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
@@ -476,6 +475,12 @@ describe("the environment scope", () => {
 
     const redirected = renderAt("/forge/p/alpha/users?env=e2e&user=u-1");
     await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
+  });
+
+  it("sends the retired Live state dashboard to Services' charts view with its search (U6e)", async () => {
+    const redirected = renderAt("/forge/p/alpha/observability/dashboards/live-state?env=e2e&range=7d");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "services");
+    await landsOn(redirected, "/forge/p/alpha/services", { env: "e2e", range: "7d", view: "charts" });
   });
 
   it("routes Security › SBOMs", async () => {

@@ -13,6 +13,11 @@
  *
  * The browser itself (DataBrowser) is free of the console; this page only
  * resolves the scope to one recorded environment and binds the URL.
+ *
+ * U6e: Data is the DATABASE's home — each managed Postgres in scope leads
+ * the page (DatabaseHome: deploy status, and live status, backups and
+ * metrics as far as the platform reports them), then its tables. Storage is
+ * buckets only; /services/<database> redirects here.
  */
 
 import { useCallback, useMemo, type ReactNode } from "react";
@@ -29,6 +34,7 @@ import { useForgeConsole } from "../Console/consoleContext";
 import { useConsoleNavExtras } from "../Console/consoleNavExtras";
 import { ENV_ALL } from "../Console/envScope";
 import { CloudNotice } from "../SourceNotices";
+import { DatabaseHome } from "./DatabaseHome";
 import { DataBrowser } from "./DataBrowser";
 import { SaveBrowseView } from "./SaveBrowseView";
 import { DataNote } from "./DataStates";
@@ -85,6 +91,7 @@ export function DataPage() {
     return (
       <Frame>
         <CloudNotice availability={availability} detail={roster.live.data?.detail} />
+        <DatabaseHome />
         <DataNote
           testId="data-choose-env"
           icon={<Layers className="h-4 w-4" />}
@@ -95,7 +102,7 @@ export function DataPage() {
             </Button>
           ))}
         >
-          <p>Each environment has databases of its own. Pick one here or in the top bar; every link you share keeps it.</p>
+          <p>Each environment has databases of its own. Pick one here or in the top bar to browse its tables; every link you share keeps it.</p>
         </DataNote>
       </Frame>
     );
@@ -131,6 +138,8 @@ export function DataPage() {
 
   return (
     <Frame>
+      <DatabaseHome />
+      <h2 className="-mb-2 text-section text-ink">Tables</h2>
       <SaveBrowseView key={`save/${scoped.live.id}`} search={search} environmentId={scoped.live.id} />
       <DataBrowser key={scoped.live.id} env={{ id: scoped.live.id, name: scoped.name }} search={search} onNavigate={onNavigate} href={dataHref} />
     </Frame>

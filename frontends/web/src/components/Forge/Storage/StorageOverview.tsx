@@ -1,27 +1,23 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * Storage's lists (U6c): the managed Postgres databases, every environment's
- * buckets, and the same across several projects. The bucket browser itself
- * is StorageBrowser; these are the ways into it.
+ * Storage's lists (U6c): every environment's buckets, and the same across
+ * several projects. The bucket browser itself is StorageBrowser; these are
+ * the ways into it. Storage is object storage only (U6e, owner: "data and
+ * storage got mixed up"): the managed Postgres databases live on Data.
  */
 
 import { type ReactNode } from "react";
-import { Database, HardDrive } from "lucide-react";
+import { HardDrive } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
-import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
 import { useApps } from "@/hooks/apps-queries";
-import { useCloudEnvStatus } from "@/hooks/forge-queries";
 import { withSearch } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 
-import { useForgeConsole } from "../Console/consoleContext";
 import { consolePath } from "../Console/paths";
 import { ProjectFilter, useOnlyFilter, type SeveralApp } from "../Console/severalProjects";
-import { DATABASE_STATUS_NOTE } from "../LiveState/liveStateModel";
-import { useAppLiveState } from "../LiveState/useAppLiveState";
 import type { StorageBucket } from "@/services/controlPlane/storageBrowser/storageBrowserApi";
 import { useBrowsableBuckets } from "./useStorageBrowser";
 
@@ -120,53 +116,9 @@ export function EnvBucketRows({ envId, envName, href, project }: { envId: string
   );
 }
 
-function DatabasesSection({ children }: { children: ReactNode }) {
-  return (
-    <section className="space-y-2" data-testid="storage-databases">
-      <h2 className="flex items-center gap-2 text-section text-ink">
-        <Database className="size-4 text-ink-muted" aria-hidden="true" />
-        Databases
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-/** The app's managed Postgres databases (GetStatus, through the live state): status, and where to look at each. */
-export function ProjectDatabases() {
-  const { forgeProject, env, href } = useForgeConsole();
-  const live = useAppLiveState(forgeProject, env, "24h");
-  const databases = live.rows.filter((row) => row.type === "database");
-  if (live.envsLoading || live.hostedLoading) return null;
-  return (
-    <DatabasesSection>
-      {databases.length === 0 ? (
-        <EmptyRow>No managed Postgres in this scope. A forge.Postgres in the app&apos;s deploy config gets one per environment.</EmptyRow>
-      ) : (
-        <ul className="divide-y divide-border-subtle rounded-xl border border-border bg-surface">
-          {databases.map((row) => (
-            <li key={row.key} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-ui" data-testid={`storage-database-${row.envName}-${row.name}`}>
-              <Link href={href({ kind: "service", name: row.name }, { env: row.envName })} className="no-color font-medium text-ink hover:underline">
-                {row.name}
-              </Link>
-              <span className="text-meta text-ink-muted">Managed Postgres</span>
-              <Tag>{row.envName}</Tag>
-              <span className="text-meta text-ink-muted">{row.statusNote ?? row.status}</span>
-              <span className="flex-1" />
-              <Link href={href({ kind: "data" }, { env: row.envName })} className="no-color text-ink-muted hover:text-ink hover:underline">
-                Browse tables
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </DatabasesSection>
-  );
-}
-
 // ── Several projects ────────────────────────────────────────────────────────
 
-/** Storage across the shell's projects: every project's databases and buckets in one list, a Project column, `?only=`. */
+/** Storage across the shell's projects: every project's buckets in one list, a Project column, `?only=`. */
 export function StorageAcrossProjects({ apps }: { apps: readonly SeveralApp[] }) {
   const { only, shown, setOnly } = useOnlyFilter(apps);
   const summaries = useApps();
@@ -176,35 +128,15 @@ export function StorageAcrossProjects({ apps }: { apps: readonly SeveralApp[] })
     <div className="min-w-0 space-y-6" data-testid="console-storage" data-mode="several">
       <div>
         <h1 className="text-section text-ink">Storage</h1>
-        <p className="mt-1 text-ui text-ink-muted">Buckets and managed databases across {only ? "one project" : `${apps.length} projects`}.</p>
+        <p className="mt-1 text-ui text-ink-muted">Buckets across {only ? "one project" : `${apps.length} projects`}. Databases are on Data.</p>
       </div>
       <ProjectFilter apps={apps} only={only} onChange={setOnly} />
-      <DatabasesSection>
+      <BucketsSection>
         {summaries.loading ? (
           <div className="h-16 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" />
         ) : !anyEnv ? (
           <EmptyRow>None of these projects is deployed yet.</EmptyRow>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-border bg-surface">
-            <table className="w-full min-w-[40rem] border-collapse">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className={TH}>Project</th>
-                  <th className={TH}>Database</th>
-                  <th className={TH}>Environment</th>
-                  <th className={TH}>Status</th>
-                  <th className={TH} />
-                </tr>
-              </thead>
-              <tbody>
-                {shown.flatMap((candidate) => envsOf(candidate.app).map((env) => <EnvDatabaseRows key={`${candidate.app}/${env.id}`} project={candidate} envId={env.id} envName={env.name} />))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </DatabasesSection>
-      <BucketsSection>
-        {!summaries.loading && anyEnv && (
           <BucketTable showProject>
             {shown.flatMap((candidate) =>
               envsOf(candidate.app).map((env) => (
@@ -221,35 +153,5 @@ export function StorageAcrossProjects({ apps }: { apps: readonly SeveralApp[] })
         )}
       </BucketsSection>
     </div>
-  );
-}
-
-function EnvDatabaseRows({ project, envId, envName }: { project: SeveralApp; envId: string; envName: string }) {
-  const status = useCloudEnvStatus(envId);
-  const databases = (status.data?.workloads ?? []).filter((w) => w.tier === "database" && w.name);
-  return (
-    <>
-      {databases.map((db) => (
-        <tr key={db.name} className="border-b border-border-subtle last:border-b-0 hover:bg-ink/5">
-          <td className={cn(TD, "font-medium text-ink")}>{project.name}</td>
-          <td className={TD}>
-            <Link href={withSearch(consolePath(project.app, { kind: "service", name: db.name! }), { env: envName })} className="no-color font-medium text-ink hover:underline">
-              {db.name}
-            </Link>
-          </td>
-          <td className={TD}>
-            <Tag>{envName}</Tag>
-          </td>
-          <td className={cn(TD, "text-ink-muted")}>
-            {db.verdict === "degraded" ? <Status tone="danger" label="Degraded" /> : DATABASE_STATUS_NOTE}
-          </td>
-          <td className={cn(TD, "text-right")}>
-            <Link href={withSearch(consolePath(project.app, { kind: "data" }), { env: envName })} className="no-color text-ink-muted hover:text-ink hover:underline">
-              Browse tables
-            </Link>
-          </td>
-        </tr>
-      ))}
-    </>
   );
 }

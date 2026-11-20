@@ -32,7 +32,6 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   events: lazyRoute(() => import('./components/Forge/Analytics/EventsMetricsPage'), 'EventsMetricsPage'),
   analytics: lazyRoute(() => import('./components/Forge/Analytics/AnalyticsPage'), 'AnalyticsPage'),
   speedInsights: lazyRoute(() => import('./components/Forge/Analytics/SpeedInsightsPage'), 'SpeedInsightsPage'),
-  liveState: lazyRoute(() => import('./components/Forge/LiveState/LiveStateDashboard'), 'LiveStateDashboardPage'),
   vulnerabilities: lazyRoute(() => import('./components/Forge/Security/VulnerabilitiesPage'), 'VulnerabilitiesPage'),
   vulnerability: lazyRoute(() => import('./components/Forge/Security/VulnerabilityPage'), 'VulnerabilityPage'),
   sboms: lazyRoute(() => import('./components/Forge/Security/SbomsPage'), 'SbomsPage'),
