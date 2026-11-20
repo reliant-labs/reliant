@@ -78,7 +78,7 @@ func (s *Service) ListPlans(...)
 
 The reason is required, and the audit echoes it back in `acknowledged_rpcs` so a reviewer reads it. There is no lint flag for this check. It is part of the audit.
 
-On its own, the category is a warning. A fresh scaffold is unscoped by construction, so failing it would fail every new project. The gate arms when you declare where a table's owner lives, by marking the column `forge:owner`. Declare it as `// forge:owner` on the proto field before you scaffold the entity, and forge writes `COMMENT ON COLUMN … IS 'forge:owner'` into the migration and scaffolds CRUD shims that resolve the claims, add the owner predicate to Get, List, Update and Delete, and stamp the column from the caller on Create and Update. It leaves one marked expression for you: how a caller's claims map onto the owner value. Declared later, the shims already exist, so `forge project audit` prints each wrapper for you to paste. From then on, an authenticated CRUD RPC over that table whose handler never reads the caller is an error, and `forge project audit` fails. The gate arms per table, so an owned `orders` table doesn't fail an unscoped RPC over a global `products` catalog. Forge never injects a `WHERE` clause at runtime: the scoping is code in your repository that you can read and change. {/* defer:/guides/forge/scope-rows-to-owner */}Scope rows to their owner{/* /defer */} and {/* defer:/guides/forge/find-endpoints-missing-auth-checks */}Find endpoints missing auth checks{/* /defer */} walk through both steps.
+On its own, the category is a warning. A fresh scaffold is unscoped by construction, so failing it would fail every new project. The gate arms when you declare where a table's owner lives, by marking the column `forge:owner`. Declare it as `// forge:owner` on the proto field before you scaffold the entity, and forge writes `COMMENT ON COLUMN … IS 'forge:owner'` into the migration and scaffolds CRUD shims that resolve the claims, add the owner predicate to Get, List, Update and Delete, and stamp the column from the caller on Create and Update. It leaves one marked expression for you: how a caller's claims map onto the owner value. Declared later, the shims already exist, so `forge project audit` prints each wrapper for you to paste. From then on, an authenticated CRUD RPC over that table whose handler never reads the caller is an error, and `forge project audit` fails. The gate arms per table, so an owned `orders` table doesn't fail an unscoped RPC over a global `products` catalog. Forge never injects a `WHERE` clause at runtime: the scoping is code in your repository that you can read and change. [Scope rows to their owner](/guides/forge/scope-rows-to-owner) and [Find endpoints missing auth checks](/guides/forge/find-endpoints-missing-auth-checks) walk through both steps.
 
 ### 3. One listener, one audience
 
@@ -225,8 +225,12 @@ Find the secret-scanning hook in a new API project:
 ## Guides
 
 <CardGroup cols={2}>
-{/* defer-card:/guides/forge/find-endpoints-missing-auth-checks ICA8Q2FyZCB0aXRsZT0iRmluZCBlbmRwb2ludHMgbWlzc2luZyBhdXRoIGNoZWNrcyIgaWNvbj0idXNlci1zaGllbGQiIGhyZWY9Ii9ndWlkZXMvZm9yZ2UvZmluZC1lbmRwb2ludHMtbWlzc2luZy1hdXRoLWNoZWNrcyI+CiAgICBSZWFkIHRoZSB1bnNjb3BlZC1hdXRoIGF1ZGl0LCBmaXggZWFjaCBSUEMgb3IgYWNrbm93bGVkZ2UgaXQgd2l0aCBhIHJlYXNvbi4KICA8L0NhcmQ+ */}
-{/* defer-card:/guides/forge/scope-rows-to-owner ICA8Q2FyZCB0aXRsZT0iU2NvcGUgcm93cyB0byB0aGVpciBvd25lciIgaWNvbj0idXNlcnMiIGhyZWY9Ii9ndWlkZXMvZm9yZ2Uvc2NvcGUtcm93cy10by1vd25lciI+CiAgICBEZWNsYXJlIGEgYGZvcmdlOm93bmVyYCBjb2x1bW4gYW5kIGZpbHRlciBldmVyeSBxdWVyeSBieSB0aGUgY2FsbGVyLgogIDwvQ2FyZD4= */}
+  <Card title="Find endpoints missing auth checks" icon="user-shield" href="/guides/forge/find-endpoints-missing-auth-checks">
+    Read the unscoped-auth audit, fix each RPC or acknowledge it with a reason.
+  </Card>
+  <Card title="Scope rows to their owner" icon="users" href="/guides/forge/scope-rows-to-owner">
+    Declare a `forge:owner` column and filter every query by the caller.
+  </Card>
 {/* defer-card:/guides/forge/add-sign-in-passkeys ICA8Q2FyZCB0aXRsZT0iQWRkIHNpZ24taW4gd2l0aCBwYXNza2V5cyIgaWNvbj0ia2V5IiBocmVmPSIvZ3VpZGVzL2ZvcmdlL2FkZC1zaWduLWluLXBhc3NrZXlzIj4KICAgIFBhc3NrZXlzLCBtYWdpYyBsaW5rcyBvciBzb2NpYWwgbG9naW4sIGFuZCB0aGUgUlBDcyBhbmQgcGFnZXMgdGhhdCBzdGF5IHB1YmxpYy4KICA8L0NhcmQ+ */}
   <Card title="Let agents query production data" icon="database" href="/guides/forge/let-agents-query-production-data">
     Read-only, audited queries through a role that can't see secret columns.
