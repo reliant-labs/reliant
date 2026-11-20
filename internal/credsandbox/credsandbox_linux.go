@@ -756,6 +756,24 @@ func mountOverlay(dir, work string) error {
 		}
 	}
 	opts := "lowerdir=" + dir + ",upperdir=" + upper + ",workdir=" + wd + ",userxattr"
+	// volatile: what the command writes here is discarded when it exits, so
+	// nothing is gained by syncing it. Without it, tearing the namespace down
+	// unmounts each overlay with a syncfs of the whole UPPER filesystem —
+	// every dirty page every other process on that disk has written — and the
+	// command's init sits in D state until it finishes. On a busy build
+	// machine that took longer than the command's timeout, so a command that
+	// had finished came back exit 124 (TL-21). A kernel without volatile
+	// (before 5.10) refuses the option; it then gets the plain mount, on a
+	// work directory of its own, since a refused volatile mount may have left
+	// the marker a plain mount refuses (work/incompat/volatile).
+	if err := unix.Mount("overlay", dir, "overlay", 0, opts+",volatile"); err == nil {
+		return nil
+	}
+	plainWD := filepath.Join(work, "wp")
+	if err := os.MkdirAll(plainWD, 0o700); err != nil {
+		return err
+	}
+	opts = "lowerdir=" + dir + ",upperdir=" + upper + ",workdir=" + plainWD + ",userxattr"
 	if err := unix.Mount("overlay", dir, "overlay", 0, opts); err != nil {
 		return fmt.Errorf("overlay on %s: %w", dir, err)
 	}
