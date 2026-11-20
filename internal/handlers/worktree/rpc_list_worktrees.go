@@ -2,13 +2,13 @@ package worktree
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -178,18 +178,18 @@ const defaultListWorktreesPageSize = 100
 // The token is an offset into a stable (main first, last_active, id) ordering.
 // It is opaque to clients so the ordering can move to a keyset later.
 func encodeWorktreePageToken(offset int) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset)))
+	return orm.EncodeCursor(strconv.Itoa(offset))
 }
 
 func decodeWorktreePageToken(token string) (int, error) {
 	if token == "" {
 		return 0, nil
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(token)
+	raw, err := orm.DecodeCursor(token)
 	if err != nil {
 		return 0, err
 	}
-	offset, err := strconv.Atoi(string(raw))
+	offset, err := strconv.Atoi(raw)
 	if err != nil || offset < 0 {
 		return 0, fmt.Errorf("invalid offset")
 	}

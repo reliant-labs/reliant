@@ -1032,7 +1032,15 @@ type StreamChatUpdatesRequest struct {
 	// How finished tool calls' bodies are sent in the snapshot and in replayed
 	// updates. Live updates are always sent in full. Unset is
 	// TOOL_BODY_MODE_FULL.
-	ToolBodies    *v1.ToolBodyMode `protobuf:"varint,4,opt,name=tool_bodies,json=toolBodies,proto3,enum=reliant.v1.ToolBodyMode,oneof" json:"tool_bodies,omitempty"`
+	ToolBodies *v1.ToolBodyMode `protobuf:"varint,4,opt,name=tool_bodies,json=toolBodies,proto3,enum=reliant.v1.ToolBodyMode,oneof" json:"tool_bodies,omitempty"`
+	// Leave ChatSyncSnapshot.total unset (0) instead of counting the chat's
+	// messages. Nothing needs the total: paging is by has_more and oldest_seq.
+	// The count walks every message the chat has, spawns included, so on a
+	// chat of a million messages it took longer than the rest of the snapshot.
+	// Every first-party client sets this; unset keeps the exact total for
+	// clients that read it. A server older than this field ignores it and
+	// counts as before.
+	SkipTotal     bool `protobuf:"varint,5,opt,name=skip_total,json=skipTotal,proto3" json:"skip_total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1093,6 +1101,13 @@ func (x *StreamChatUpdatesRequest) GetToolBodies() v1.ToolBodyMode {
 		return *x.ToolBodies
 	}
 	return v1.ToolBodyMode(0)
+}
+
+func (x *StreamChatUpdatesRequest) GetSkipTotal() bool {
+	if x != nil {
+		return x.SkipTotal
+	}
+	return false
 }
 
 // ChatStreamEvent is one frame of a chat's detail stream.
@@ -1284,9 +1299,13 @@ type ChatSyncSnapshot struct {
 	Messages       []*v1.Message          `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`                                    // Assembled messages with content blocks
 	OtherUpdates   []*ChatUpdateData      `protobuf:"bytes,2,rep,name=other_updates,json=otherUpdates,proto3" json:"other_updates,omitempty"`        // Non-message updates (approvals, threads, etc.)
 	LatestSequence int64                  `protobuf:"varint,3,opt,name=latest_sequence,json=latestSequence,proto3" json:"latest_sequence,omitempty"` // Latest sequence number for tracking
-	Total          int32                  `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`                                         // Total message count
-	HasMore        bool                   `protobuf:"varint,5,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`                      // Whether there are more messages to load
-	OldestSeq      int64                  `protobuf:"varint,6,opt,name=oldest_seq,json=oldestSeq,proto3" json:"oldest_seq,omitempty"`                // Seq of oldest message (for pagination)
+	// Deprecated: set only when requested (StreamChatUpdatesRequest.skip_total
+	// unset); page with has_more and oldest_seq instead. The number of messages
+	// in the chat, never fewer than the snapshot holds. 0 when the request set
+	// skip_total.
+	Total     int32 `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`
+	HasMore   bool  `protobuf:"varint,5,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`       // Whether there are more messages to load
+	OldestSeq int64 `protobuf:"varint,6,opt,name=oldest_seq,json=oldestSeq,proto3" json:"oldest_seq,omitempty"` // Seq of oldest message (for pagination)
 	// Context usage for compaction indicator
 	ThreadTokenCount    int64 `protobuf:"varint,7,opt,name=thread_token_count,json=threadTokenCount,proto3" json:"thread_token_count,omitempty"`        // Sum of output_tokens in current context
 	CompactionThreshold int64 `protobuf:"varint,8,opt,name=compaction_threshold,json=compactionThreshold,proto3" json:"compaction_threshold,omitempty"` // Threshold at which compaction triggers (default 20000)
@@ -2345,14 +2364,16 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\aupdates\x18\x01 \x01(\v2\x1a.reliant.v1.OrgUpdateBatchH\x00R\aupdates\x126\n" +
 	"\tcaught_up\x18\x02 \x01(\v2\x17.reliant.v1.OrgCaughtUpH\x00R\bcaughtUp\x125\n" +
 	"\theartbeat\x18\x03 \x01(\v2\x15.reliant.v1.HeartbeatH\x00R\theartbeatB\a\n" +
-	"\x05event\"\xd3\x01\n" +
+	"\x05event\"\xf2\x01\n" +
 	"\x18StreamChatUpdatesRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
 	"\tsince_seq\x18\x02 \x01(\x03R\bsinceSeq\x12\"\n" +
 	"\n" +
 	"project_id\x18\x03 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12>\n" +
 	"\vtool_bodies\x18\x04 \x01(\x0e2\x18.reliant.v1.ToolBodyModeH\x01R\n" +
-	"toolBodies\x88\x01\x01B\r\n" +
+	"toolBodies\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"skip_total\x18\x05 \x01(\bR\tskipTotalB\r\n" +
 	"\v_project_idB\x0e\n" +
 	"\f_tool_bodies\"\xc1\x02\n" +
 	"\x0fChatStreamEvent\x12:\n" +

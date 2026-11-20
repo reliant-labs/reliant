@@ -6884,6 +6884,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListChatsResponse": [
@@ -7493,6 +7498,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "StartChatResponse": [
@@ -7969,6 +7979,11 @@
             },
             {
               "name": "shared_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "app_name",
               "kind": "string",
               "optional": true
             }
@@ -8555,6 +8570,11 @@
             },
             {
               "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "app_name",
               "kind": "string",
               "optional": true
             }
@@ -9305,6 +9325,11 @@
             },
             {
               "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "app_name",
               "kind": "string",
               "optional": true
             }
@@ -35792,6 +35817,11 @@
               "Name": "offset",
               "ProtoType": "int32",
               "IsOptional": false
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListSharedChatsResponse": [
@@ -36043,6 +36073,11 @@
               "name": "shared_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "app_name",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ChatSelection": [
@@ -36094,6 +36129,11 @@
               "validate": {
                 "gte": "0"
               }
+            },
+            {
+              "name": "app_name",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListSharedChatsResponse": [
@@ -36684,6 +36724,11 @@
               "Name": "tool_bodies",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "skip_total",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "StreamOrgUpdatesRequest": [
@@ -37253,6 +37298,10 @@
               "kind": "enum",
               "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
+            },
+            {
+              "name": "skip_total",
+              "kind": "bool"
             }
           ],
           "reliant.v1.StreamOrgUpdatesRequest": [
@@ -47127,6 +47176,11 @@
             },
             {
               "name": "author_email",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
+            },
+            {
+              "name": "force_with_lease",
               "kind": "message",
               "type_name": "reliant.v1.CelString"
             }

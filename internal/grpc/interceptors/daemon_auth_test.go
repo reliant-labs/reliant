@@ -69,6 +69,9 @@ func TestDaemonAuthInterceptorUnboundToken(t *testing.T) {
 	require.Equal(t, "user-123", userID)
 	// An unbound token names no daemon.
 	require.Equal(t, "", auth.GetDaemonIDFromContext(ctx))
+	// It names the org it acts in (the memory authority's org is the user's
+	// own): the connected event records a self-paired machine there.
+	require.Equal(t, "user-123", auth.GetCredentialOrgFromContext(ctx))
 }
 
 func TestDaemonAuthInterceptorRejectsWrongScope(t *testing.T) {

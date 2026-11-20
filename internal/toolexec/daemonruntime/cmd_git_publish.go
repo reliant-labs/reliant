@@ -26,6 +26,11 @@ func init() {
 	RegisterCommand(gitpublish.CommandPush, handleGitPublish)
 }
 
+// daemonFeatures are the capabilities this daemon adds to its registration
+// beyond its tool names: behaviour of a command the server must not assume of
+// an older daemon, which would silently ignore the request field it needs.
+var daemonFeatures = []string{gitpublish.CapabilityForceWithLease}
+
 // A git_publish node is two daemon commands so the credential exists for as
 // short a time as it can.
 //
@@ -35,7 +40,10 @@ func init() {
 // What the push never does, by construction:
 //
 //   - force: the refspec is <sha>:refs/heads/<branch> with no "+" and no
-//     --force, so a remote that has moved on is refused, not overwritten;
+//     --force, so a remote that has moved on is refused, not overwritten. The
+//     one exception is a lease the node names (force_with_lease): then the
+//     push carries --force-with-lease=refs/heads/<branch>:<sha>, which the
+//     remote applies only if the branch is still at that exact commit;
 //   - put the credential in an environment variable, an argument or a file: it
 //     arrives in the command payload and is handed to the one git process over
 //     a pipe it inherits as file descriptor 3, which a credential helper reads;
@@ -357,6 +365,10 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 	if len(req.ExpectSHA) < 7 {
 		return refuse("no commit to push was named")
 	}
+	lease := req.ForceWithLease
+	if lease != "" && !gitpublish.ValidLeaseSHA(lease) {
+		return refuse("force_with_lease must be the full sha of the commit the branch must still be at, got %q: nothing was pushed", lease)
+	}
 
 	env := isolatedGitEnv()
 	head, err := revParse(ctx, req.Worktree, env, "HEAD")
@@ -378,10 +390,15 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 		return refuse("could not stage the credential for the push")
 	}
 	defer r.Close()
+	ref := "refs/heads/" + req.Branch
 	args := append(privateGitCredentialArgs(u.Host, ""),
-		"push", "--no-verify", "--no-recurse-submodules", "--porcelain",
-		req.RemoteURL, req.ExpectSHA+":refs/heads/"+req.Branch,
-	)
+		"push", "--no-verify", "--no-recurse-submodules", "--porcelain")
+	if lease != "" {
+		// The remote compares and swaps: the branch is replaced only if it is
+		// still at lease. Still no "+" on the refspec and no --force.
+		args = append(args, "--force-with-lease="+ref+":"+lease)
+	}
+	args = append(args, req.RemoteURL, req.ExpectSHA+":"+ref)
 	res, err := pubRunGit(ctx, req.Worktree, env, "", false, []*os.File{r}, args...)
 	if err != nil {
 		return refuse("could not run git: %v", err)
@@ -389,7 +406,16 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 	out := scrub(res.combined(), token)
 
 	if res.exit != 0 {
-		return json.Marshal(gitpublish.PushResponse{Refusal: classifyPushFailure(out), NonFastForward: nonFastForward(out)})
+		if lease != "" && staleLease(out) {
+			// The branch is not where the run built on. Read where it is, so
+			// the refusal names both commits.
+			actual, found := remoteBranchHead(ctx, req.Worktree, env, u.Host, req.RemoteURL, ref, token)
+			return json.Marshal(gitpublish.PushResponse{
+				Refusal:      leaseRefusal(req.Branch, lease, actual, found),
+				LeaseChecked: true, LeaseRefused: true, RemoteSHA: actual,
+			})
+		}
+		return json.Marshal(gitpublish.PushResponse{Refusal: classifyPushFailure(out), NonFastForward: nonFastForward(out), LeaseChecked: lease != ""})
 	}
 	// --porcelain prints one "<flag>\t<from>:<to>\t<summary>" line per ref:
 	// '=' is up to date; ' ' (fast-forward), '*' (new) and '+' are updates.
@@ -400,13 +426,56 @@ func handleGitPublish(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 	if !pushed {
-		return json.Marshal(gitpublish.PushResponse{})
+		return json.Marshal(gitpublish.PushResponse{LeaseChecked: lease != ""})
 	}
 	// Record what was published, so the next prepare of this checkout finds
 	// nothing new. Best effort: a missing tracking ref only makes a repeat
 	// publish push the same commit again, which the remote reports as up to date.
 	_, _ = pubRunGit(ctx, req.Worktree, env, "", false, nil, "update-ref", publishTrackingNamespace+req.Branch, req.ExpectSHA)
-	return json.Marshal(gitpublish.PushResponse{Pushed: true})
+	return json.Marshal(gitpublish.PushResponse{Pushed: true, LeaseChecked: lease != ""})
+}
+
+// staleLease reports whether git refused the push because the lease did not
+// hold: the remote branch is not at the expected commit (or does not exist).
+func staleLease(out string) bool {
+	return strings.Contains(strings.ToLower(out), "stale info")
+}
+
+func leaseRefusal(branch, lease, actual string, found bool) string {
+	var at string
+	switch {
+	case actual != "":
+		at = "is at " + actual
+	case found:
+		at = "has moved (its head could not be read back)"
+	default:
+		at = "does not exist on the remote"
+	}
+	return fmt.Sprintf("the lease did not hold: %s was expected at %s but %s; nothing was pushed", branch, lease, at)
+}
+
+// remoteBranchHead reads ref's head on the remote after a refused lease, with
+// a second, equally private hand-off of the same credential (the first pipe
+// was spent by the push). found is false only when the remote answered and
+// has no such branch; a read that fails returns ("", true).
+func remoteBranchHead(ctx context.Context, dir string, env []string, host, remoteURL, ref, token string) (sha string, found bool) {
+	r, err := credentialPipe(token)
+	if err != nil {
+		return "", true
+	}
+	defer r.Close()
+	args := append(privateGitCredentialArgs(host, ""), "ls-remote", remoteURL, ref)
+	res, err := pubRunGit(ctx, dir, env, "", false, []*os.File{r}, args...)
+	if err != nil || res.exit != 0 {
+		return "", true
+	}
+	for _, line := range strings.Split(res.stdout, "\n") {
+		oid, name, ok := strings.Cut(strings.TrimSpace(line), "\t")
+		if ok && name == ref && gitpublish.ValidLeaseSHA(oid) {
+			return oid, true
+		}
+	}
+	return "", false
 }
 
 // dangerousKey returns the first configured key in the checkout that could

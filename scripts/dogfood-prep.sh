@@ -31,11 +31,14 @@ DOGFOOD_ELECTRON_DAEMON_DATA_DIR="${DOGFOOD_ELECTRON_DAEMON_DATA_DIR:-$RELIANT_D
 DOGFOOD_DAEMON_DATA_DIR="${DOGFOOD_DAEMON_DATA_DIR:-}"
 DOGFOOD_DAEMON_DATA_DIR_SOURCE="explicit"
 BIN="$(go env GOPATH)/bin"
+# The forge control-plane pins, run from its checkout: forge on PATH at that
+# pin, else `reliant forge`, else `go run …@<pin>` (scripts/forge.sh).
+FORGE_SH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/forge.sh"
 
 control_plane_port() {
   local base="$1"
   if [ -d "$CONTROL_PLANE_DIR" ]; then
-    (cd "$CONTROL_PLANE_DIR" && forge env devstack port "$base" 2>/dev/null) || printf '%s\n' "$base"
+    (cd "$CONTROL_PLANE_DIR" && "$FORGE_SH" env devstack port "$base" 2>/dev/null) || printf '%s\n' "$base"
   else
     printf '%s\n' "$base"
   fi
@@ -263,7 +266,7 @@ select_dogfood_daemon_data_dir
 echo
 echo "── env ──────────────────────────────────────────────────────────────────"
 if [ -d "$CONTROL_PLANE_DIR" ]; then
-  env_out="$(cd "$CONTROL_PLANE_DIR" && forge env status "$DOGFOOD_ENV" 2>&1)" || true
+  env_out="$(cd "$CONTROL_PLANE_DIR" && "$FORGE_SH" env status "$DOGFOOD_ENV" 2>&1)" || true
   printf '%s\n' "$env_out"
 
   # GATE on it, do not merely print it. `forge env status` is a REPORT: it exits
@@ -286,7 +289,7 @@ if [ -d "$CONTROL_PLANE_DIR" ]; then
     echo
     echo "✗ a host service is DOWN — the run would sit PENDING forever:" >&2
     printf '%s\n' "$down" | sed 's/^/    /' >&2
-    echo "  Fix: (cd $CONTROL_PLANE_DIR && forge env up $DOGFOOD_ENV)" >&2
+    echo "  Fix: (cd $CONTROL_PLANE_DIR && $FORGE_SH env up $DOGFOOD_ENV)" >&2
     exit 1
   fi
   echo "✅ every host service reports up"
