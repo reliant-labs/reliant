@@ -83,9 +83,7 @@ import {
   attentionItems,
   formatAge,
   jobRows,
-  JOB_STATUS,
   previewsCell,
-  replicasText,
   serviceRows,
   stripCell,
   OVERVIEW_RANGE,
@@ -98,10 +96,11 @@ import {
 } from "./workloadModel";
 import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
+import { LiveStateStrip } from "../LiveState/LiveStateStrip";
 import { JobTimeline } from "./JobTimeline";
 import { ServiceCards } from "./ServiceCards";
 import { UsersCard } from "./UsersCard";
-import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL, type OverviewRow } from "./overviewRows";
+import { filterRows, overviewRows, rowKindsOf, ROW_KIND_LABEL } from "./overviewRows";
 import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
 export interface OverviewSearch {
@@ -169,6 +168,8 @@ export interface OverviewHomeProps {
    * and the Overview keeps a compact strip of the services linking there.
    */
   summary?: OverviewSummaryLinks;
+  /** The project's chats (U6c, the merged landing): waiting on the person, then the latest. In the rail, above the releases. */
+  chats?: ReactNode;
 }
 
 export interface OverviewSummaryLinks {
@@ -198,6 +199,7 @@ export function OverviewHome({
   domains,
   domainsHref = "",
   summary,
+  chats,
 }: OverviewHomeProps) {
   const range = search.range ?? OVERVIEW_RANGE;
   const org = useObservabilityOrg();
@@ -335,6 +337,7 @@ export function OverviewHome({
       <div className="space-y-4" data-testid="overview" data-state={unread ? "unread" : "empty"}>
         {header}
         {deploys}
+        {chats}
         {envsUnread ? (
           <DeployStatusUnread state={envsUnread} testId="overview-unread" />
         ) : (
@@ -398,6 +401,7 @@ export function OverviewHome({
         </div>
         {/* What changed, then who uses the app. */}
         <aside className="min-w-0 space-y-10" aria-label="Recent changes" data-testid="overview-rail">
+          {chats}
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
           {!unrecorded && !extras.led && <UsersCard scope={kpiScope} project={project} range={range} usersHref={hrefs.users} dashboardHref={hrefs.dashboard} />}
         </aside>
@@ -407,7 +411,8 @@ export function OverviewHome({
         notSetUp ? (
           <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
         ) : (
-          <ServicesStrip rows={rows} loading={loading && !workloadsFailed} showEnv={all} links={summary} />
+          // The live state (U6c): the same hook the Services tab and the Live state dashboard read.
+          <LiveStateStrip app={project} env={env} range={range} links={summary} />
         )
       ) : notSetUp ? (
         <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
@@ -557,45 +562,6 @@ export function OverviewHome({
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * The summary Overview's services: one chip per service or job — its status
- * dot, its name, ready/desired — each opening its Services page. The full
- * table (requests, CPU, memory, releases) is the Services page's.
- */
-function ServicesStrip({ rows, loading, showEnv, links }: { rows: OverviewRow[]; loading: boolean; showEnv: boolean; links: OverviewSummaryLinks }) {
-  const shown = rows.filter((row) => row.type !== "process");
-  return (
-    <Section title="Services" meta={loading ? undefined : `${shown.length}`} actions={<RailLink href={links.services}>All services</RailLink>} testId="overview-services-strip">
-      {loading ? (
-        <div className="h-12 animate-pulse rounded-lg bg-ink/5 motion-reduce:animate-none" aria-label="Loading services" />
-      ) : shown.length === 0 ? (
-        <p className="text-ui text-ink-muted">Nothing has reported yet. Services appear once Reliant sees their pods.</p>
-      ) : (
-        <ul className="flex flex-wrap gap-2">
-          {shown.map((row) => {
-            const ready = row.type === "service" ? replicasText(row.service) : row.type === "job" ? JOB_STATUS[row.job.latest.result].label : "";
-            return (
-              <li key={row.key}>
-                <Link
-                  href={links.service(row.name, row.envName)}
-                  className="no-color inline-flex h-9 items-center gap-2 rounded-md border border-border bg-surface px-3 text-ui text-ink hover:bg-ink/5"
-                  title={`${row.name}: ${row.status}`}
-                  data-testid={`overview-strip-${row.key}`}
-                >
-                  <Status tone={row.tone} label={row.status} hideLabel />
-                  <span className="font-medium">{row.name}</span>
-                  {showEnv && row.envName && <span className="text-meta text-ink-muted">{row.envName}</span>}
-                  {ready && <span className="text-meta tabular-nums text-ink-muted">{ready}</span>}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Section>
   );
 }
 

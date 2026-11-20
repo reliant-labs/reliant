@@ -47,8 +47,9 @@ import { shortVersion } from "../Releases/releaseModel";
 import { formatAge, KIND_LABEL, OVERVIEW_RANGE } from "../Workloads/workloadModel";
 import { HealthStatus } from "../Workloads/workloadParts";
 import type { StripEnv } from "../Workloads/workloadModel";
+import { useWorkloadUsage } from "../LiveState/useAppLiveState";
 import { useServicesData, type ServicesSearch } from "./useServicesData";
-import { containerFigures, customMetrics, databasesOf, metricPanel, sitesOf, sumSeries, verdictStatus } from "./servicesModel";
+import { containerFigures, customMetrics, databasesOf, metricPanel, sitesOf, verdictStatus } from "./servicesModel";
 
 export function ServiceDetail({ name, search }: { name: string; search: ServicesSearch }) {
   const range = search.range ?? OVERVIEW_RANGE;
@@ -94,9 +95,11 @@ function WorkloadServiceDetail({
 }) {
   const { forgeProject, href } = useForgeConsole();
   const scope = useMemo<ObsScope | null>(() => (orgId ? { orgId, projectId: forgeProject, envIds: [env.id], filters: [] } : null), [orgId, forgeProject, env.id]);
+  // The live state's per-workload read (LiveState/useAppLiveState.ts): the same entry the Overview's strip and the Live state dashboard chart.
   const detail = useWorkload(scope, range, name);
+  const usage = useWorkloadUsage(scope, range, name, env.id);
   const summary = detail.data?.workloads.find((w) => w.envId === env.id) ?? listedSummary;
-  const pods = summary?.pods ?? [];
+  const pods = usage.pods.length ? usage.pods : (summary?.pods ?? []);
   const containers = containerFigures(summary?.containers ?? []);
   const obs = (view: "logs" | "traces", extra: Record<string, unknown> = {}) => href({ kind: "obs-view", view }, { env: env.name, service: name, range, ...extra });
 
@@ -144,7 +147,7 @@ function WorkloadServiceDetail({
       </nav>
       {summary?.healthReason && summary.health !== "healthy" && <p className="text-ui text-ink">{summary.healthReason}</p>}
 
-      <RedCharts scope={scope} range={range} name={name} cpu={detail.data ? sumSeries(detail.data.series.filter((s) => s.envId === env.id && s.metric === "cpu_usage")) : null} memory={detail.data ? sumSeries(detail.data.series.filter((s) => s.envId === env.id && s.metric === "memory_working_set")) : null} cpuNow={sum(containers.map((c) => c.cpu))} memNow={sum(containers.map((c) => c.memory))} loadingUsage={detail.isLoading} />
+      <RedCharts scope={scope} range={range} name={name} cpu={usage.cpu} memory={usage.memory} cpuNow={sum(containers.map((c) => c.cpu))} memNow={sum(containers.map((c) => c.memory))} loadingUsage={usage.loading} />
 
       <Section title="Instances" meta={pods.length ? `${pods.length} in the ${RANGE_LABELS[range].toLowerCase()}` : undefined} testId="service-instances">
         {detail.isLoading ? (

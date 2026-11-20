@@ -29,6 +29,9 @@
  *   /forge/p/:project/services/:name          one of them, across the environments in scope
  *   /forge/p/:project/usage                   Usage: what the app's hosting costs this month
  *   /forge/p/:project/events                  Product analytics › Events & metrics
+ *   /forge/p/:project/analytics[/:tab]        Analytics: the built-in Product analytics dashboards as
+ *                                             tabs (overview · users · product · acquisition) + events
+ *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -166,8 +169,53 @@ export type ConsolePage =
   | { kind: "usage" }
   /** Product analytics › Events & metrics: the app's custom product events and OTel metrics. */
   | { kind: "events" }
+  /**
+   * Analytics (U6c): the built-in Product analytics dashboards as tabs, plus
+   * Events & metrics (Analytics/AnalyticsPage.tsx). The tab is a path
+   * segment; omitted, the first (Product overview).
+   */
+  | { kind: "analytics"; tab?: AnalyticsTab }
+  /** Speed insights (U6c): web vitals per page, from the browser runtime's RUM spans (Analytics/SpeedInsightsPage.tsx). */
+  | { kind: "speed-insights" }
   /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
   | { kind: "extension"; id: string; segment: string };
+
+/** The Analytics page's tabs, in order: forge's four built-in Product analytics dashboards, then Events & metrics. */
+export const ANALYTICS_TABS = ["overview", "users", "product", "acquisition", "events"] as const;
+export type AnalyticsTab = (typeof ANALYTICS_TABS)[number];
+
+export const ANALYTICS_TAB_LABELS: Record<AnalyticsTab, string> = {
+  overview: "Product overview",
+  users: "Users",
+  product: "Product",
+  acquisition: "Acquisition",
+  events: "Events & metrics",
+};
+
+export function isAnalyticsTab(value: string | undefined): value is AnalyticsTab {
+  return (ANALYTICS_TABS as readonly string[]).includes(value ?? "");
+}
+
+/**
+ * What a link may name (U6c path-builder contract): every ConsolePage, plus
+ * the names the nav configs use for pages that are an Observability view
+ * underneath — `dashboards` (the top-level Dashboards page) and `metrics`
+ * (the metrics explorer). Both resolve to the obs-view page they are, so
+ * consolePageOf reads them back as that page.
+ */
+export type ConsoleTarget = ConsolePage | { kind: "dashboards" } | { kind: "metrics" };
+
+/** The page a target names. */
+export function pageOfTarget(target: ConsoleTarget): ConsolePage {
+  switch (target.kind) {
+    case "dashboards":
+      return { kind: "obs-view", view: "dashboards" };
+    case "metrics":
+      return { kind: "obs-view", view: "metrics" };
+    default:
+      return target;
+  }
+}
 
 /**
  * One app's console. Its org form (flag `web.org_routes` on) is
@@ -178,9 +226,10 @@ export function consoleBase(project: string, ctx?: PathContext): string {
   return withOrg(`${FORGE_ROOT}/p/${encodeURIComponent(project)}`, ctx);
 }
 
-/** The path of `page` in `project`. */
-export function consolePath(project: string, page: ConsolePage, ctx?: PathContext): string {
+/** The path of `target` in `project`. */
+export function consolePath(project: string, target: ConsoleTarget, ctx?: PathContext): string {
   const base = consoleBase(project, ctx);
+  const page = pageOfTarget(target);
   switch (page.kind) {
     case "overview":
       return base;
@@ -218,10 +267,29 @@ export function consolePath(project: string, page: ConsolePage, ctx?: PathContex
       return `${base}/usage`;
     case "events":
       return `${base}/events`;
+    case "analytics":
+      return !page.tab || page.tab === ANALYTICS_TABS[0] ? `${base}/analytics` : `${base}/analytics/${page.tab}`;
+    case "speed-insights":
+      return `${base}/speed-insights`;
     case "extension":
       return `${base}/${encodeURIComponent(page.segment)}`;
   }
 }
+
+// ── Named builders (U6c contract: the nav configs import these) ─────────────
+
+/** The project's landing page: Home and Overview, merged. */
+export const overviewPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "overview" }, ctx);
+export const servicesPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "services" }, ctx);
+/** Storage: buckets and the managed Postgres databases. */
+export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "storage" }, ctx);
+/** Dashboards: built-in and custom, the one place they are listed. */
+export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "dashboards" }, ctx);
+export const analyticsPath = (app: string, tab?: AnalyticsTab, ctx?: PathContext) => consolePath(app, { kind: "analytics", tab }, ctx);
+export const speedInsightsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "speed-insights" }, ctx);
+export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
+export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
+export const projectUsagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "usage" }, ctx);
 
 function safeDecode(segment: string): string {
   try {
@@ -260,6 +328,9 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "services":
         if (!sub) return { kind: "services" };
         return dashKind ? null : { kind: "service", name: safeDecode(sub) };
+      case "analytics":
+        if (!sub) return { kind: "analytics" };
+        return isAnalyticsTab(sub) && !dashKind ? { kind: "analytics", tab: sub } : null;
       case "storage":
       case "data":
       case "users":
@@ -268,6 +339,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "activity":
       case "usage":
       case "events":
+      case "speed-insights":
         return sub ? null : { kind: section };
       default: {
         // A page registered in the nav, while it is registered.
