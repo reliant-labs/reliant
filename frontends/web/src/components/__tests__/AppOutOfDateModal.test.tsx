@@ -67,15 +67,21 @@ describe("AppOutOfDateModal", () => {
       expect(order).toEqual(["flush", "reload"]);
     });
 
-    it("keeps the desktop prompt up while it starts the update", () => {
+    it("keeps the desktop prompt up and hands the update to the forced updater", async () => {
+      const forceUpdate = vi.fn(async () => ({ outcome: "installing" as const }));
       const checkForUpdates = vi.fn(async () => ({}));
-      (window as unknown as { electronAPI: ElectronLike }).electronAPI = { checkForUpdates };
+      (window as unknown as { electronAPI: ElectronLike & { forceUpdate: typeof forceUpdate } }).electronAPI = {
+        checkForUpdates,
+        forceUpdate,
+      };
       const onClose = vi.fn();
       render(<AppOutOfDateModal isOpen onClose={onClose} data={forced} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Update now" }));
 
-      expect(checkForUpdates).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(forceUpdate).toHaveBeenCalledWith("1.9.0"));
+      expect(checkForUpdates).not.toHaveBeenCalled();
+      expect(navigate).not.toHaveBeenCalled();
       expect(onClose).not.toHaveBeenCalled();
     });
   });
