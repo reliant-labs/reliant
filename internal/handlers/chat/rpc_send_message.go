@@ -423,7 +423,7 @@ func (s *Service) SendMessage(
 			case db.Paused():
 				// Which of the run's threads the message is for, decided
 				// before anything is written (run_recipient.go).
-				recipient, err := s.resolveRunRecipient(ctx, chat, workflowID, existingWorkflow.Thread, req.Msg.GetTargetThread())
+				recipient, err := s.resolveRunRecipient(ctx, chat, workflowID, existingWorkflow.Thread, req.Msg.GetTargetThread(), existingWorkflow)
 				if err != nil {
 					return nil, err
 				}
@@ -543,7 +543,7 @@ func (s *Service) SendMessage(
 
 				// Which of the run's threads the message is for, decided
 				// before anything is written or queued (run_recipient.go).
-				recipient, err := s.resolveRunRecipient(ctx, chat, workflowID, existingWorkflow.Thread, req.Msg.GetTargetThread())
+				recipient, err := s.resolveRunRecipient(ctx, chat, workflowID, existingWorkflow.Thread, req.Msg.GetTargetThread(), existingWorkflow)
 				if err != nil {
 					return nil, err
 				}

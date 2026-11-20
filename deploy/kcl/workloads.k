@@ -175,3 +175,23 @@ daemon_gateway = fw.Workload {
 } | _pod | config_gen.root_of("gateway")
 
 ALL: [fw.Workload] = [migrate, api_server, temporal_worker, daemon_gateway]
+
+# ── What reliant builds and ships, but never runs ───────────────────────────
+#
+# Artifacts, not processes: each is `kind = "tool"` on `forge.BuildOnly`, so
+# no env runs it and `ALL` above (what control-plane binds) does not name it.
+# An env builds one only when it lists it.
+
+# The Delve image: Dockerfile.debug, the server binary built without
+# optimisations (-gcflags=all=-N -l) and run under a headless dlv
+# (scripts/dlv-entrypoint.sh), for attaching a debugger to a reliant role in a
+# cluster. A developer's tool, never a release artifact: no `image`, so it is
+# a local image that nothing pushes. dev/main.k binds it only under
+# `-D debug_image=true`, because `forge env up dev` builds every build-only
+# workload it binds and dev needs no docker.
+debug_image = fw.Workload {
+    name = "reliant-debug-image"
+    kind = "tool"
+    runtime = forge.BuildOnly {}
+    build = forge.DockerBuild {dockerfile = "Dockerfile.debug"}
+}

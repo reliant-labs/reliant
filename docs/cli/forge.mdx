@@ -47,7 +47,7 @@ Forge's own hints name the command the way you ran it (`reliant forge scaffold`,
 
 ## Signed in as you
 
-Hosted Forge commands such as `env deploy`, `secret`, `domain`, `cloud` and `release` need a credential for Reliant's control plane. Under `reliant forge` there is no `forge login`: Forge asks Reliant for a short-lived token made from your [CLI login](/cli/sign-in). The token lasts at most an hour and carries only the deploy, secret and domain permissions your login holds. Shells your agents run on a daemon get the same arrangement through the daemon's credential. [Forge sign-in](/features/forge-sign-in) explains the exchange.
+Hosted Forge commands such as `env deploy`, `secret`, `domain`, `cloud` and `release` need a credential for Reliant's control plane. Under `reliant forge` there is no `forge login`: Forge asks Reliant for a short-lived token made from your [CLI login](/cli/sign-in). The token lasts at most an hour and carries only the deploy, secret and domain permissions your login holds. Shells your agents run on a daemon get the same arrangement through the daemon's credential. [Forge sign-in](/forge/sign-in) explains the exchange.
 
 `reliant forge cloud status <env>` shows where an environment deploys to and which credential a command would use. It never prints the token. On a computer that is not signed in, it says so and names the fix:
 
@@ -105,7 +105,7 @@ A pin to a released version (such as `v0.1.40`) is handled a little more lenient
 
 ## Related topics
 
-- [Deploy & host with Forge](/features/deploy-and-host)
-- [Forge sign-in](/features/forge-sign-in)
+- [Deploy & host with Forge](/forge/overview)
+- [Forge sign-in](/forge/sign-in)
 - [Sign in and tokens](/cli/sign-in)
 - [CLI reference: `reliant forge`](/reference/cli#reliant-forge)

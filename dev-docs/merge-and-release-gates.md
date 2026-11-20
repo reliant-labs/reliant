@@ -656,8 +656,11 @@ group (Reliant bug 67d80734). So `task ci:merge` runs the same lint as its
 
 `scripts/check-compat.sh` (the `proto` and `migsafety` phases, only when the
 group's diff touches proto or a migration) fails a `buf breaking` change or a
-`forge:breaks-rollback` migration unless the owner applied `breaking:approved` /
-`migration:breaks-rollback-approved` to the PR. With `--queue` it judges only
+`forge:breaks-rollback` migration unless the owner accepted it with
+`breaking:approved` / `migration:breaks-rollback-approved` on the PR: the label's
+last `labeled` event must name the owner (`reliant-01`) or the Reliant bot
+(`reliant-labs[bot]`) applying it on the owner's instruction (owner decision,
+2026-11-19; `COMPAT_OWNERS` overrides the list). With `--queue` it judges only
 the entry's own change: HEAD against its sole parent, which must descend from
 the group's base. That rests on one assumption about GitHub: a squash-merge
 queue builds each entry's `gh-readonly-queue/main/pr-<n>-<sha>` head as ONE
