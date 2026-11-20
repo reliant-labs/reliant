@@ -2,6 +2,7 @@
 package lint
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -44,6 +45,8 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 					fmt.Sprintf("branch on nodes.%s.exit_code (an edge case, or a condition downstream)", id))
 			}
 			c.checkFetch(path, n, cmd)
+		case model.NodeTypeAskQuestion:
+			c.checkAskQuestionType(path, n)
 		case model.NodeTypeAction:
 			c.checkApprovalDecider(path, n)
 			if !g.onFailure && !c.reads.reads(id, "is_error") {
@@ -493,4 +496,25 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// checkAskQuestionType: the app and `reliant workflow answer` read an
+// ask_question's metadata as a question card only when it says
+// "type": "ask_user"; without it the gate shows no options and nothing can
+// answer it, while validate and scenarios pass. Only metadata written as a
+// literal JSON object is judged: an expression's value does not exist yet.
+func (c *checker) checkAskQuestionType(path string, n *reliantv1.Node) {
+	raw := strings.TrimSpace(model.CelStringRaw(n.GetAskQuestion().GetMetadata()))
+	if raw == "" {
+		return
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		return
+	}
+	if t, _ := meta["type"].(string); t == "ask_user" {
+		return
+	}
+	c.add(RuleAskQuestionType, path, `metadata has no "type": "ask_user", so the app shows the question with no options and `+"`reliant workflow answer`"+` cannot answer it`,
+		`add "type": "ask_user" to the metadata JSON, beside "questions"`)
 }
