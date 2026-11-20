@@ -76,7 +76,7 @@ describe("FreeTierView", () => {
   });
 
   it("previews the move with a dry run, then moves only on confirmation", async () => {
-    const onMove = vi.fn(async (dryRun: boolean) => (dryRun ? preview() : preview({ moved: true })));
+    const onMove = vi.fn(async (dryRun: boolean) => (dryRun ? preview({ cooldownApplies: false }) : preview({ cooldownApplies: false, moved: true })));
     render(<FreeTierView orgName="Acme" status={notHere} onMove={onMove} />);
     expect(screen.getByText("Your free allowance is held by Old Co.")).toBeInTheDocument();
 
@@ -86,7 +86,7 @@ describe("FreeTierView", () => {
     expect(confirm).toHaveTextContent("These sites stop being served free:");
     expect(confirm).toHaveTextContent("old-site");
     expect(confirm).toHaveTextContent("marketing · prod");
-    expect(screen.getByTestId("free-tier-move-cooldown")).toHaveTextContent("You can move it again after 2026-12-20.");
+    expect(screen.getByTestId("free-tier-move-cooldown-note")).toBeInTheDocument();
 
     fireEvent.click(within(confirm).getByRole("button", { name: "Move allowance" }));
     expect(await screen.findByTestId("free-tier-moved")).toHaveTextContent("Moved.");
@@ -94,25 +94,58 @@ describe("FreeTierView", () => {
     expect(onMove).toHaveBeenCalledTimes(2);
   });
 
-  it("states no cooldown when none applies, and cancel sends nothing", async () => {
-    const onMove = vi.fn(async () => preview({ stoppingSites: [], cooldownApplies: false, nextMoveAllowedAt: undefined }));
+  it("blocks the move on cooldown_applies, and cancel sends nothing", async () => {
+    const onMove = vi.fn(async () => preview({ cooldownApplies: true }));
     render(<FreeTierView orgName="Acme" status={notHere} onMove={onMove} />);
     fireEvent.click(screen.getByTestId("free-tier-move"));
     const confirm = await screen.findByTestId("free-tier-move-confirm");
-    expect(confirm).toHaveTextContent("No sites stop being served free.");
-    expect(screen.queryByTestId("free-tier-move-cooldown")).not.toBeInTheDocument();
+    expect(screen.getByTestId("free-tier-move-cooldown")).toHaveTextContent("You can move it after 2026-12-20.");
+    expect(within(confirm).getByRole("button", { name: "Move allowance" })).toBeDisabled();
     fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByTestId("free-tier-move-confirm")).not.toBeInTheDocument();
     expect(onMove).toHaveBeenCalledExactlyOnceWith(true);
   });
 
-  it("explains the cooldown when the server refuses a move", async () => {
-    const onMove = vi.fn(async () => {
-      throw new ConnectError("cooldown", Code.FailedPrecondition);
-    });
-    render(<FreeTierView orgName="Acme" status={{ ...notHere, nextMoveAllowedAt: ts("2026-12-01T00:00:00Z") }} onMove={onMove} />);
+  it("never treats next_move_allowed_at alone as blocked: an exempt move stays allowed", async () => {
+    const onMove = vi.fn(async () => preview({ cooldownApplies: false, nextMoveAllowedAt: ts("2026-12-20T00:00:00Z") }));
+    render(<FreeTierView orgName="Acme" status={notHere} onMove={onMove} />);
     fireEvent.click(screen.getByTestId("free-tier-move"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("You moved it recently; you can move it again after 2026-12-01");
+    const confirm = await screen.findByTestId("free-tier-move-confirm");
+    expect(screen.queryByTestId("free-tier-move-cooldown")).not.toBeInTheDocument();
+    expect(within(confirm).getByRole("button", { name: "Move allowance" })).toBeEnabled();
+  });
+
+  it("says the org already holds it when the dry run names the same org", async () => {
+    const onMove = vi.fn(async () => preview({ fromOrgId: "org-a", toOrgId: "org-a", stoppingSites: [], cooldownApplies: false }));
+    render(<FreeTierView orgName="Acme" status={notHere} onMove={onMove} />);
+    fireEvent.click(screen.getByTestId("free-tier-move"));
+    expect(await screen.findByTestId("free-tier-already")).toHaveTextContent("Acme already holds your free static hosting allowance");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("treats moved=false on a real move as already designated, not a failure", async () => {
+    const onMove = vi.fn(async () => preview({ cooldownApplies: false, moved: false }));
+    render(<FreeTierView orgName="Acme" status={notHere} onMove={onMove} />);
+    fireEvent.click(screen.getByTestId("free-tier-move"));
+    fireEvent.click(within(await screen.findByTestId("free-tier-move-confirm")).getByRole("button", { name: "Move allowance" }));
+    expect(await screen.findByTestId("free-tier-already")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["not_org_member", Code.PermissionDenied, "permission denied", "You're not a member of Acme"],
+    ["free_hosting_founder_only", Code.PermissionDenied, "permission denied", "Only the founder who owns the free allowance can move it"],
+    ["free_hosting_target_billed", Code.FailedPrecondition, "target billed", "Acme already pays for app hosting"],
+    ["free_hosting_move_cooldown", Code.FailedPrecondition, "free hosting moved recently; next move allowed at 2026-12-01T00:00:00Z", "You can move it again after 2026-12-01"],
+  ])("explains the %s refusal", async (reason, code, message, expected) => {
+    const onMove = vi.fn(async (dryRun: boolean) => {
+      if (dryRun) return preview({ cooldownApplies: false });
+      throw new ConnectError(message, code, new Headers({ "x-forge-error-reason": reason }));
+    });
+    render(<FreeTierView orgName="Acme" status={notHere} onMove={onMove} />);
+    fireEvent.click(screen.getByTestId("free-tier-move"));
+    fireEvent.click(within(await screen.findByTestId("free-tier-move-confirm")).getByRole("button", { name: "Move allowance" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(expected);
   });
 
   it("says moving isn't available when the RPC is unserved", async () => {

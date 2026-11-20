@@ -113,7 +113,7 @@ export interface FreeHostingStatus {
 }
 
 /** A site named by the designation move: the org and project it belongs to. */
-export interface DesignationSite {
+export interface FreeHostingMoveSite {
   deploymentId: string;
   orgId: string;
   project: string;
@@ -126,11 +126,22 @@ export interface MoveFreeHostingDesignationResponse {
   fromOrgId: string;
   toOrgId: string;
   /** Sites that stop being served free when the designation leaves their org. */
-  stoppingSites: DesignationSite[];
-  servedSites: DesignationSite[];
-  unservedSites: DesignationSite[];
+  stoppingSites: FreeHostingMoveSite[];
+  servedSites: FreeHostingMoveSite[];
+  unservedSites: FreeHostingMoveSite[];
+  /**
+   * The move is blocked by the 30-day cooldown. AUTHORITATIVE: a dry run sets
+   * it instead of failing, and a real move inside it fails with
+   * free_hosting_move_cooldown.
+   */
   cooldownApplies: boolean;
+  /**
+   * When the next move is allowed; unset with no cooldown. It can be set while
+   * this move is exempt (leaving an org that pays for hosting), so it never
+   * decides "blocked" on its own.
+   */
   nextMoveAllowedAt?: Timestamp;
+  /** False on every dry run, and on a real move to the org that already holds it. */
   moved: boolean;
 }
 
@@ -234,8 +245,10 @@ export function useMoveFreeHostingDesignation(orgId: string) {
   return useMutation({
     mutationKey: ["hosting-billing", "move-free-designation", orgId],
     mutationFn: (dryRun: boolean) => pendingOrganizationMethod("moveFreeHostingDesignation")({ orgId, dryRun }),
-    onSuccess: (response) => {
-      if (response.moved) void cache.invalidateQueries({ queryKey: ["hosting-billing", "free-tier"] });
+    onSuccess: (_response, dryRun) => {
+      // A real move that answered moved=false means this org already held it:
+      // the status read is stale either way.
+      if (!dryRun) void cache.invalidateQueries({ queryKey: ["hosting-billing", "free-tier"] });
     },
   });
 }

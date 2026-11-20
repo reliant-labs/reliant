@@ -20,11 +20,11 @@
 
 import { useState } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 import Button from "@/components/forge-ui/button";
 import ProgressBar from "@/components/forge-ui/progress_bar";
 import { day, gb } from "./observabilityBillingModel";
+import { hasErrorReason } from "@/lib/errorReasons";
 import {
   isUnimplemented,
   useFreeHostingStatus,
@@ -196,7 +196,8 @@ type MovePhase =
   | { kind: "previewing" }
   | { kind: "confirm"; preview: MoveFreeHostingDesignationResponse }
   | { kind: "moving"; preview: MoveFreeHostingDesignationResponse }
-  | { kind: "moved" };
+  | { kind: "moved" }
+  | { kind: "already" };
 
 function MoveAllowance({ orgName, status, onMove }: { orgName: string; status: FreeHostingStatus; onMove: FreeTierViewProps["onMove"] }) {
   const [phase, setPhase] = useState<MovePhase>({ kind: "idle" });
@@ -207,10 +208,12 @@ function MoveAllowance({ orgName, status, onMove }: { orgName: string; status: F
     setPhase({ kind: "previewing" });
     try {
       const response = await onMove(true);
-      setPhase({ kind: "confirm", preview: response });
+      // The org asked for already holds it: nothing to move, and no error.
+      if (response.fromOrgId !== "" && response.fromOrgId === response.toOrgId) setPhase({ kind: "already" });
+      else setPhase({ kind: "confirm", preview: response });
     } catch (error) {
       setPhase({ kind: "idle" });
-      setProblem(moveErrorMessage(error, status.nextMoveAllowedAt));
+      setProblem(moveErrorMessage(error, orgName));
     }
   };
 
@@ -219,15 +222,11 @@ function MoveAllowance({ orgName, status, onMove }: { orgName: string; status: F
     setPhase({ kind: "moving", preview: pending });
     try {
       const response = await onMove(false);
-      if (response.moved) {
-        setPhase({ kind: "moved" });
-      } else {
-        setPhase({ kind: "confirm", preview: pending });
-        setProblem("The allowance wasn't moved. Nothing changed; try again.");
-      }
+      // moved=false without an error: this org already holds it.
+      setPhase({ kind: response.moved ? "moved" : "already" });
     } catch (error) {
       setPhase({ kind: "confirm", preview: pending });
-      setProblem(moveErrorMessage(error, status.nextMoveAllowedAt));
+      setProblem(moveErrorMessage(error, orgName));
     }
   };
 
@@ -239,7 +238,18 @@ function MoveAllowance({ orgName, status, onMove }: { orgName: string; status: F
     );
   }
 
+  if (phase.kind === "already") {
+    return (
+      <p role="status" className="text-ui text-foreground" data-testid="free-tier-already">
+        {orgName ? `${orgName} already holds` : "This organization already holds"} your free static hosting allowance. Nothing was moved.
+      </p>
+    );
+  }
+
   const confirming = phase.kind === "confirm" || phase.kind === "moving" ? phase.preview : null;
+  // cooldown_applies is the server's verdict; next_move_allowed_at alone can be
+  // set on a move that is exempt from the cooldown.
+  const blocked = confirming?.cooldownApplies ?? false;
 
   return (
     <div className="space-y-3">
@@ -274,9 +284,14 @@ function MoveAllowance({ orgName, status, onMove }: { orgName: string; status: F
           ) : (
             <p className="text-ui text-muted-foreground">No sites stop being served free.</p>
           )}
-          {confirming.cooldownApplies && (
-            <p className="text-ui text-muted-foreground" data-testid="free-tier-move-cooldown">
-              You can move it again after {day(confirming.nextMoveAllowedAt)}.
+          {blocked ? (
+            <p className="text-ui text-foreground" data-testid="free-tier-move-cooldown">
+              You moved your free allowance in the last 30 days, so it can&apos;t move yet
+              {confirming.nextMoveAllowedAt ? `. You can move it after ${day(confirming.nextMoveAllowedAt)}.` : "."}
+            </p>
+          ) : (
+            <p className="text-meta text-muted-foreground" data-testid="free-tier-move-cooldown-note">
+              The allowance can usually move once every 30 days.
             </p>
           )}
           {problem && (
@@ -290,7 +305,7 @@ function MoveAllowance({ orgName, status, onMove }: { orgName: string; status: F
               variant="primary"
               onClick={() => void confirm(confirming)}
               loading={phase.kind === "moving"}
-              disabled={phase.kind === "moving"}
+              disabled={phase.kind === "moving" || blocked}
             >
               Move allowance
             </Button>
@@ -317,14 +332,31 @@ function MoveAllowance({ orgName, status, onMove }: { orgName: string; status: F
   );
 }
 
-function moveErrorMessage(error: unknown, nextMoveAllowedAt?: Timestamp): string {
+/** The RFC3339 date a free_hosting_move_cooldown refusal names in its message, as YYYY-MM-DD. */
+export function cooldownEndsFrom(message: string): string | null {
+  const match = /\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})/.exec(message);
+  if (!match) return null;
+  const date = new Date(match[0]);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
+/** One sentence per refusal the server names (its reason codes), never its prose. */
+export function moveErrorMessage(error: unknown, orgName: string): string {
+  const target = orgName || "this organization";
+  if (hasErrorReason(error, "not_org_member")) return `You're not a member of ${target}, so your free allowance can't move to it.`;
+  if (hasErrorReason(error, "free_hosting_founder_only"))
+    return "Only the founder who owns the free allowance can move it. Ask them to make this their free hosting organization.";
+  if (hasErrorReason(error, "free_hosting_target_billed"))
+    return `${target} already pays for app hosting, so it doesn't need the free allowance. It stays where it is.`;
+  if (hasErrorReason(error, "free_hosting_move_cooldown")) {
+    const ends = error instanceof ConnectError ? cooldownEndsFrom(error.rawMessage) : null;
+    return ends
+      ? `You moved your free allowance in the last 30 days. You can move it again after ${ends}.`
+      : "You moved your free allowance in the last 30 days. You can move it again once 30 days have passed.";
+  }
   if (error instanceof ConnectError) {
     if (error.code === Code.Unimplemented) return "Moving the allowance isn't available yet.";
-    if (error.code === Code.FailedPrecondition)
-      return nextMoveAllowedAt
-        ? `You moved it recently; you can move it again after ${day(nextMoveAllowedAt)}.`
-        : "You moved it recently; you can move it again once the 30-day cooldown ends.";
-    if (error.code === Code.PermissionDenied) return "Only the founder of these organizations can move the free allowance.";
+    if (error.code === Code.PermissionDenied) return "You don't have permission to move the free allowance.";
   }
   return "The allowance could not be moved. Nothing changed; try again.";
 }
