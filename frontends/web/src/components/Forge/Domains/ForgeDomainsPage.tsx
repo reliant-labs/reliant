@@ -63,9 +63,10 @@ import { AddDomainDialog, type DomainTargetEnv } from "./AddDomainDialog";
 import { DomainDetail } from "./DomainDetail";
 import { DomainStateBadge } from "./DomainStateBadge";
 import { useObsReadOnly } from "../Observability/obsReadOnly";
+import { learnUrl } from "@/lib/learnLinks";
 
 /** Where the tenant-facing explanation of all this lives. */
-export const CUSTOM_DOMAINS_DOCS_URL = "https://docs.reliantlabs.io/features/custom-domains";
+export const CUSTOM_DOMAINS_DOCS_URL = learnUrl("domains");
 
 export function ForgeDomainsPage() {
   // Domains are the ORGANIZATION's, so the top-bar environment scope does not

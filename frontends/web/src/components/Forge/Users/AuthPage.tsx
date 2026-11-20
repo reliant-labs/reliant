@@ -25,9 +25,7 @@ import { cn } from "@/lib/utils";
 import { useForgeConsole } from "../Console/consoleContext";
 import { AUTH_TAB_LABELS, AUTH_TABS, type AuthTab } from "../Console/paths";
 import { ScopedIdentity } from "./UsersPage";
-
-// TODO(U6d): `learnUrl("auth")` from `@/lib/learnLinks` once the CONNECTORS+EMPTY+LEARN branch merges (same slug).
-const learnUrl = (_section: "auth") => "https://docs.reliantlabs.io/forge/sign-in";
+import { learnUrl } from "@/lib/learnLinks";
 
 const SUBTITLE: Record<AuthTab, string> = {
   users: "Who can sign in to this environment's app, through the sign-in service Reliant runs for it",

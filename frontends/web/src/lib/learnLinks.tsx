@@ -66,7 +66,7 @@ const SECTION_NAMES: Record<LearnSection, string> = {
   services: "services",
   data: "data",
   storage: "storage",
-  auth: "sign-in",
+  auth: "auth",
   dashboards: "dashboards",
   observability: "observability",
   "speed-insights": "speed insights",
