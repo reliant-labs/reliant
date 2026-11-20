@@ -57,10 +57,13 @@ func TestActivationRunsTheProjectWorkflowAndShowsWhere(t *testing.T) {
 	require.Len(t, src.GetWarnings(), 1)
 	assert.Contains(t, src.GetWarnings()[0], `your account workflow "triage" has the same name; automations run the project's workflow`)
 
-	// A second machine that has never synced the project: the activation
-	// resolves against the union and says so.
+	// A second machine that holds the project but has never synced its
+	// config: the activation resolves against the union and says so. It must
+	// hold the project: since #2861 a project with a checkout record runs only
+	// on a machine that has one (daemonchoice.Validate).
 	fresh := uuid.NewString()
 	require.NoError(t, env.repo.UpsertDaemon(ctx, &db.Daemon{ID: fresh, UserID: env.userID}))
+	db.HoldProjectOnMachineForTest(t, env.repo, env.projectID, fresh)
 	other := env.create(t, env.activation("nightly", func(d *reliantv1.TriggerDefinition) {
 		d.Name = "nightly on the new machine"
 		d.DaemonId = fresh

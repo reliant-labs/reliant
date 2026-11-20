@@ -142,6 +142,11 @@
       "source": "runtime"
     },
     {
+      "name": "RPC_FORENSICS",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
       "name": "STRIPE_PUBLISHABLE_KEY",
       "type": "string",
       "source": "config"

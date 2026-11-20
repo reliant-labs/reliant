@@ -264,14 +264,10 @@ service WorktreeService {
 
   // Git Write Operations
   rpc StageFiles(StageFilesRequest) returns (StageFilesResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "git index edit through the daemon: the commit that follows is the event, and git records it"}
-    };
+    option (forge.v1.method) = {activity: {none: "git index edit through the daemon: the commit that follows is the event, and git records it"}};
   }
   rpc UnstageFiles(UnstageFilesRequest) returns (UnstageFilesResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "git index edit through the daemon: undoes a stage, and the repository's history never sees it"}
-    };
+    option (forge.v1.method) = {activity: {none: "git index edit through the daemon: undoes a stage, and the repository's history never sees it"}};
   }
   rpc RevertFiles(RevertFilesRequest) returns (RevertFilesResponse) {
     option (forge.v1.method) = {

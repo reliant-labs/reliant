@@ -1104,7 +1104,13 @@ type Chat struct {
 	// out. The client hides the composer and shows whose chat it is.
 	ViewerAccess bool `protobuf:"varint,46,opt,name=viewer_access,json=viewerAccess,proto3" json:"viewer_access,omitempty"`
 	// When the chat was shared (RFC 3339); unset while private.
-	SharedAt      *string `protobuf:"bytes,47,opt,name=shared_at,json=sharedAt,proto3,oneof" json:"shared_at,omitempty"`
+	SharedAt *string `protobuf:"bytes,47,opt,name=shared_at,json=sharedAt,proto3,oneof" json:"shared_at,omitempty"`
+	// The app this chat is about: a forge.yaml `name` in the chat's org, set
+	// when the chat was started from that app (its page, Ask Reliant, an alert;
+	// StartChatRequest.app_name) and never inferred. Fixed for the chat's life;
+	// a branch of the chat carries it. Unset: a chat about no particular app,
+	// which is every chat started from the sidebar.
+	AppName       *string `protobuf:"bytes,48,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1380,6 +1386,13 @@ func (x *Chat) GetViewerAccess() bool {
 func (x *Chat) GetSharedAt() string {
 	if x != nil && x.SharedAt != nil {
 		return *x.SharedAt
+	}
+	return ""
+}
+
+func (x *Chat) GetAppName() string {
+	if x != nil && x.AppName != nil {
+		return *x.AppName
 	}
 	return ""
 }
@@ -2254,7 +2267,16 @@ type StartChatRequest struct {
 	// that belongs to an org belongs to that org: naming another is
 	// FAILED_PRECONDITION. Ignored when chat_id names an existing chat, whose
 	// org never changes.
-	OrgId         *string `protobuf:"bytes,23,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,23,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// The app the new chat is about (Chat.app_name): a forge.yaml `name` in the
+	// chat's org, sent when a chat starts from an app (its page, Ask Reliant,
+	// an alert). The server stores it as given and never infers one. It must
+	// have forge's project-name shape: a letter, then letters, digits, `_` or
+	// `-`, at most 128 characters (INVALID_ARGUMENT otherwise). Whether the org
+	// has an app of that name is not checked: a chat may be about an app that
+	// was never deployed. Ignored when chat_id names an existing chat, whose
+	// tag was fixed when it was created.
+	AppName       *string `protobuf:"bytes,24,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2397,6 +2419,13 @@ func (x *StartChatRequest) GetClientMessageId() string {
 func (x *StartChatRequest) GetOrgId() string {
 	if x != nil && x.OrgId != nil {
 		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *StartChatRequest) GetAppName() string {
+	if x != nil && x.AppName != nil {
+		return *x.AppName
 	}
 	return ""
 }
@@ -2747,7 +2776,13 @@ type ListChatsRequest struct {
 	// live member of (PERMISSION_DENIED otherwise). Chats created before orgs
 	// list under the caller's default org. Unset lists every chat the caller
 	// owns, in any org, as before this field existed.
-	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// List only chats tagged with this app (Chat.app_name): an app's chat
+	// list. Still only the caller's own chats, and still narrowed by
+	// project_id and org_id when they are set; pair it with org_id, since an
+	// app's name is its identity only within one org. A malformed name lists
+	// nothing; an empty one is the same as unset.
+	AppName       *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2799,6 +2834,13 @@ func (x *ListChatsRequest) GetLimit() int32 {
 func (x *ListChatsRequest) GetOrgId() string {
 	if x != nil && x.OrgId != nil {
 		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *ListChatsRequest) GetAppName() string {
+	if x != nil && x.AppName != nil {
+		return *x.AppName
 	}
 	return ""
 }
@@ -7895,7 +7937,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\xfa\r\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\xa7\x0e\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -7944,7 +7986,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"visibility\x18- \x01(\x0e2\x1e.reliant.v1.ResourceVisibilityR\n" +
 	"visibility\x12#\n" +
 	"\rviewer_access\x18. \x01(\bR\fviewerAccess\x12 \n" +
-	"\tshared_at\x18/ \x01(\tH\fR\bsharedAt\x88\x01\x01\x1aB\n" +
+	"\tshared_at\x18/ \x01(\tH\fR\bsharedAt\x88\x01\x01\x12\x1e\n" +
+	"\bapp_name\x180 \x01(\tH\rR\aappName\x88\x01\x01\x1aB\n" +
 	"\x14SelectedPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
@@ -7961,7 +8004,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x15_usage_limit_providerB\t\n" +
 	"\a_org_idB\f\n" +
 	"\n" +
-	"_shared_at\"\xe3\x01\n" +
+	"_shared_atB\v\n" +
+	"\t_app_name\"\xe3\x01\n" +
 	"\rChatSelection\x12#\n" +
 	"\rworkflow_name\x18\x01 \x01(\tR\fworkflowName\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12C\n" +
@@ -8077,7 +8121,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\xd8\a\n" +
+	"\x0e_display_style\"\x85\b\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -8097,7 +8141,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x12\x1c\n" +
 	"\acli_run\x18\x16 \x01(\bH\aR\x06cliRun\x88\x01\x01\x12/\n" +
 	"\x11client_message_id\x18\x15 \x01(\tH\bR\x0fclientMessageId\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\x17 \x01(\tH\tR\x05orgId\x88\x01\x01\x1aY\n" +
+	"\x06org_id\x18\x17 \x01(\tH\tR\x05orgId\x88\x01\x01\x12\x1e\n" +
+	"\bapp_name\x18\x18 \x01(\tH\n" +
+	"R\aappName\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -8116,7 +8162,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\b_cli_runB\x14\n" +
 	"\x12_client_message_idB\t\n" +
-	"\a_org_id\"q\n" +
+	"\a_org_idB\v\n" +
+	"\t_app_name\"q\n" +
 	"\x11StartChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -8159,14 +8206,16 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\x91\x01\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\xbe\x01\n" +
 	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
 	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\x04 \x01(\tH\x01R\x05orgId\x88\x01\x01B\b\n" +
+	"\x06org_id\x18\x04 \x01(\tH\x01R\x05orgId\x88\x01\x01\x12\x1e\n" +
+	"\bapp_name\x18\x05 \x01(\tH\x02R\aappName\x88\x01\x01B\b\n" +
 	"\x06_limitB\t\n" +
-	"\a_org_idJ\x04\b\x03\x10\x04R\fsidebar_only\"\xe5\x01\n" +
+	"\a_org_idB\v\n" +
+	"\t_app_nameJ\x04\b\x03\x10\x04R\fsidebar_only\"\xe5\x01\n" +
 	"\x11ListChatsResponse\x12&\n" +
 	"\x05chats\x18\x01 \x03(\v2\x10.reliant.v1.ChatR\x05chats\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x129\n" +

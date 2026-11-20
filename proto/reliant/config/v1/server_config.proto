@@ -31,11 +31,7 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 message ServerProcessConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
-    subtrees: [
-      {
-        path: ["server"]
-      }
-    ]
+    subtrees: [{path: ["server"]}]
   };
 
   ControlPlaneConfig control_plane = 1;
