@@ -166,6 +166,8 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if !resuming && !manual && !trigger.Enabled {
 		return f.settle(ctx, ev, nil, core.TriggerEventSkipped, pausedDetail(trigger), nil)
 	}
+	// A trigger that names no workflow runs its owner's default (Firer.Fire).
+	trigger = withDefaultWorkflow(ctx, f.launcher, trigger)
 	// A creator who left the trigger's org: the first event to find out
 	// records the failure and pauses the trigger (Firer.Fire).
 	if !resuming {
@@ -240,7 +242,10 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	}
 	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
-		return nil, err
+		if retryableRead(err) || resuming {
+			return nil, err
+		}
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, fmt.Sprintf("workflow %q cannot be resolved: %v", trigger.Workflow, err), err)
 	}
 	limits, capped, err := capacityLimits(ctx, f.pools, trigger, policy)
 	if err != nil {
