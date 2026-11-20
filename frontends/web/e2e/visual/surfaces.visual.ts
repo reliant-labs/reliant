@@ -243,10 +243,9 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByRole('button', { name: 'config.ts' }).first(),
     act: async (page) => {
       await openChatByTitle(page, CHAT_TITLES.tools, TOOLS_LAST_LINE)
-      // Every run is one fold: open the edits' fold, then their group row
-      // ("Edited … and 3 other tools"), then the first edit.
+      // Every run is one fold. The edits are the fold's whole run, so it
+      // opens straight onto their rows: open it, then the first edit.
       await transcript(page).getByRole('button', { name: /^Activity, .*edited/ }).first().click()
-      await transcript(page).getByRole('button', { name: /and \d+ other tools?$/ }).first().click()
       await transcript(page).getByRole('button', { name: /^Toggle tool details for edit/ }).first().click()
       await settle(page)
       await scrollToText(page, 'Three call sites')

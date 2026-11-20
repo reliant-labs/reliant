@@ -60,6 +60,12 @@ export interface MessageSlice {
    * Absent: every call of every listed segment.
    */
   callIds?: readonly string[];
+  /**
+   * `work` only: this slice is its fold's only row and holds no read-only
+   * call, so its calls render as rows of their own, never wrapped in one
+   * group row: the fold is already that group.
+   */
+  ungrouped?: boolean;
 }
 
 /**

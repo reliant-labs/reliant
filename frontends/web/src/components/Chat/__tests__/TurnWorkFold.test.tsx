@@ -7,8 +7,13 @@ import type { TurnWork } from "../thread-views/simplifiedTurns";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 
 vi.mock("../ChatMessage", () => ({
-  ChatMessage: ({ message, slice }: { message: Message; slice?: { role: string; segmentIndexes: number[]; callIds?: string[] } }) => (
-    <div data-testid={`row-${slice?.role}`} data-message={message.id} data-calls={slice?.callIds?.join(",")}>
+  ChatMessage: ({ message, slice }: { message: Message; slice?: { role: string; segmentIndexes: number[]; callIds?: string[]; ungrouped?: boolean } }) => (
+    <div
+      data-testid={`row-${slice?.role}`}
+      data-message={message.id}
+      data-calls={slice?.callIds?.join(",")}
+      data-ungrouped={slice?.ungrouped ? "true" : undefined}
+    >
       {slice?.role}:{message.id}:{slice?.segmentIndexes.join(",")}
     </div>
   ),
@@ -269,5 +274,56 @@ describe("TurnWorkFold", () => {
   it("shows no line counts for a run with no edits", () => {
     render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
     expect(toggle().textContent).not.toMatch(/\+\d+ −\d+/);
+  });
+
+  describe("a run that would open onto one group row", () => {
+    const run = (blocks: Message["contentBlocks"], segmentIndexes = [0]): TurnWork => ({
+      key: "work-m1-0",
+      thread: "chat-1",
+      parts: [{ message: message("m1", "2024-01-01T00:00:00.000Z", blocks), segmentIndexes }],
+    });
+    const edit = (id: string, index: number) => ({ ...toolBlock(id, "edit", { path: `${id}.ts`, old_string: "a", new_string: "b" }), index });
+    const openRows = () => {
+      fireEvent.click(toggle());
+      return screen.getAllByTestId("row-work");
+    };
+
+    it("shows an all-edits run's calls as its rows, with no group around them", () => {
+      render(<TurnWorkFold work={run([edit("e1", 0), edit("e2", 1), edit("e3", 2)] as Message["contentBlocks"])} chatId="chat-1" />);
+      const rows = openRows();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].dataset.ungrouped).toBe("true");
+    });
+
+    it("keeps the group beside a read in the same run", () => {
+      render(
+        <TurnWorkFold
+          work={run([{ ...toolBlock("r1", "view", { path: "a.ts" }), index: 0 }, edit("e1", 1), edit("e2", 2)] as Message["contentBlocks"])}
+          chatId="chat-1"
+        />,
+      );
+      expect(openRows()[0].dataset.ungrouped).toBeUndefined();
+    });
+
+    it("keeps the group beside a thought in the run", () => {
+      const blocks = [
+        { id: "b-t", index: 0, type: ContentBlockType.THINKING, content: "edit both" },
+        edit("e1", 1),
+        edit("e2", 2),
+      ] as Message["contentBlocks"];
+      render(<TurnWorkFold work={run(blocks, [0, 1])} chatId="chat-1" />);
+      expect(openRows()[0].dataset.ungrouped).toBeUndefined();
+    });
+
+    it("keeps the groups when the run spans messages or carries mail", () => {
+      const { unmount } = render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
+      expect(openRows().every((row) => row.dataset.ungrouped === undefined)).toBe(true);
+      unmount();
+
+      const work = run([edit("e1", 0), edit("e2", 1)] as Message["contentBlocks"]);
+      work.events = [{ type: "message", message: message("agent-1", "2024-01-01T00:00:05.000Z", []), afterPart: 1 }];
+      render(<TurnWorkFold work={work} chatId="chat-1" />);
+      expect(openRows()[0].dataset.ungrouped).toBeUndefined();
+    });
   });
 });

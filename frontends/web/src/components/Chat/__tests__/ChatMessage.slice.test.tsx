@@ -375,6 +375,26 @@ describe("ChatMessage tool run grouping (desktop)", () => {
     expect(order()).toEqual(["tool:view", "tool:edit"]);
   });
 
+  it("shows a fold's only run as its rows when the slice is ungrouped, and groups it otherwise", () => {
+    const message = assistant([tool(0, "edit", "call-1"), tool(1, "edit", "call-2"), tool(2, "shell", "call-3")]);
+    const { unmount } = render(
+      <ChatMessage message={message} chatId="chat-1" slice={{ role: "work", segmentIndexes: [0], ungrouped: true }} />,
+    );
+    expect(order()).toEqual(["tool:edit", "tool:edit", "tool:shell"]);
+    unmount();
+
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work", [0])} />);
+    expect(order()).toEqual(["tool-group"]);
+  });
+
+  it("re-renders when a slice becomes ungrouped", () => {
+    const message = assistant([tool(0, "edit", "call-1"), tool(1, "edit", "call-2")]);
+    const { rerender } = render(<ChatMessage message={message} chatId="chat-1" slice={slice("work", [0])} />);
+    expect(order()).toEqual(["tool-group"]);
+    rerender(<ChatMessage message={message} chatId="chat-1" slice={{ role: "work", segmentIndexes: [0], ungrouped: true }} />);
+    expect(order()).toEqual(["tool:edit", "tool:edit"]);
+  });
+
   it("groups the same way in the detailed transcript", () => {
     const message = assistant([
       text(0, "Looking."),

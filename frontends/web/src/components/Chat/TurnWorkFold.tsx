@@ -2,6 +2,7 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react
 import { ListTree, Loader2, XCircle } from "lucide-react";
 import { useCapability, useSurface } from "../../lib/surfaceContext";
 import { getProcessedMessage } from "../../lib/messageProcessor";
+import { isReadOnlyTool } from "../../lib/toolFormatters";
 import { useChat, useToolCallStates, useToolResultsByCallId } from "../../store/chatStoreHooks";
 import { viewerSafeMessage } from "../../lib/viewerResults";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
@@ -42,10 +43,12 @@ type FoldExecution = TurnWorkExecution & {
   result?: TurnWorkExecution["result"] & { elided?: boolean; block_id?: string };
 };
 
-const workSlice = (part: TurnWork["parts"][number]): MessageSlice =>
-  part.callIds
-    ? { segmentIndexes: part.segmentIndexes, role: "work", callIds: part.callIds }
-    : { segmentIndexes: part.segmentIndexes, role: "work" };
+const workSlice = (part: TurnWork["parts"][number], ungrouped: boolean): MessageSlice => ({
+  segmentIndexes: part.segmentIndexes,
+  role: "work",
+  ...(part.callIds ? { callIds: part.callIds } : {}),
+  ...(ungrouped ? { ungrouped } : {}),
+});
 
 /** How long each step stays on the live line before the next replaces it. */
 const STEP_MIN_DWELL_MS = 1200;
@@ -108,6 +111,22 @@ function TurnWorkFoldComponent({
     }
     return out;
   }, [work.parts, toolResultsByCallId, toolCallStates, approvals, isViewer]);
+
+  // A run that is one tools segment of non-read calls (all edits, all
+  // commands) would open onto a single group row ("Edited a.ts and 3 other
+  // tools"): the fold already is that group, so its calls are the rows.
+  // Beside anything else (a read, a thought, a second message, mail) the
+  // group stays.
+  const ungrouped = useMemo(() => {
+    if (work.parts.length !== 1 || (work.events?.length ?? 0) > 0) return false;
+    if (executions.length === 0 || executions.some(({ call }) => isReadOnlyTool(call.name))) return false;
+    const [part] = work.parts;
+    const { segments } = getProcessedMessage(part.message, toolResultsByCallId, approvals);
+    const shown = part.segmentIndexes
+      .map((index) => segments[index])
+      .filter((segment) => segment && !(segment.kind === "text" && segment.text.trim() === ""));
+    return shown.length === 1 && shown[0].kind === "tools";
+  }, [work.parts, work.events, executions, toolResultsByCallId, approvals]);
 
   const summary = useMemo(
     () =>
@@ -263,7 +282,7 @@ function TurnWorkFoldComponent({
             {renderEvents(0)}
             {work.parts.map((part, index) => (
               <Fragment key={`${part.message.id}-work`}>
-                <ChatMessage message={part.message} slice={workSlice(part)} {...common} />
+                <ChatMessage message={part.message} slice={workSlice(part, ungrouped)} {...common} />
                 {renderEvents(index + 1)}
               </Fragment>
             ))}

@@ -181,6 +181,7 @@ interface ChatMessageProps {
 function sameSlice(a: MessageSlice | undefined, b: MessageSlice | undefined): boolean {
   if (a === b) return true;
   if (!a || !b || a.role !== b.role || Boolean(a.chrome) !== Boolean(b.chrome)) return false;
+  if (Boolean(a.ungrouped) !== Boolean(b.ungrouped)) return false;
   return sameList(a.segmentIndexes, b.segmentIndexes) && sameList(a.callIds, b.callIds);
 }
 
@@ -684,12 +685,14 @@ function ChatMessageComponent({
     }
     // The run's read-only calls (2+) read as one "Explored 5 files 3
     // searches" row; its other calls, when the message made more than one,
-    // as one group row. Each group sits where its first call ran; a lone call
-    // is its own quiet row. Rows sit tight: the prose around gets the space.
+    // as one group row — unless that group would be its fold's only row
+    // (`ungrouped`): the fold is already the group. Each group sits where its
+    // first call ran; a lone call is its own quiet row. Rows sit tight: the
+    // prose around gets the space.
     const readOnly = executions.filter((exec) => isReadOnlyTool(exec.call.name));
     const others = executions.filter((exec) => !isReadOnlyTool(exec.call.name));
     const groupReadOnly = readOnly.length > 1;
-    const groupOthers = shouldGroup && others.length > 1;
+    const groupOthers = shouldGroup && others.length > 1 && !slice?.ungrouped;
     const nodes: JSX.Element[] = [];
     executions.forEach((exec, idx) => {
       const readOnlyCall = isReadOnlyTool(exec.call.name);
