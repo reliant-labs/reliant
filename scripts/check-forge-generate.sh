@@ -22,8 +22,9 @@
 #
 # ── Which forge ──────────────────────────────────────────────────────────
 #
-# Exactly forge.yaml's forge_version: `go run .../cmd/forge@<version>`, which
-# the Go build cache keeps linked after the first run. FORGE=<binary> uses a
+# Exactly forge.yaml's forge_version, found by scripts/forge.sh (a forge on PATH
+# that is the pin, `reliant forge`, or `go run .../cmd/forge@<version>`, which
+# the Go build cache keeps linked after the first run). FORGE=<binary> uses a
 # prebuilt one instead (CI caches it), and is refused unless it reports that
 # same version. go.mod must require the same forge, or the forge that lints
 # and the forge that generates are two different programs.
@@ -78,11 +79,11 @@ if [ -n "${FORGE:-}" ]; then
   esac
   forge=("${FORGE}")
 else
-  # GOPRIVATE: a fresh pseudo-version is not on proxy.golang.org yet
-  # (scripts/pin-forge.sh). GOFLAGS is reset to just -trimpath because `go run
-  # pkg@version` refuses a repo-level -mod setting, and an empty one would drop
-  # -trimpath under a toolchain switched by go.mod (see Taskfile.yml's GOFLAGS).
-  forge=(env GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}" GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@${pin}")
+  # scripts/forge.sh runs only the pin: FORGE_BIN, a forge on PATH (or in
+  # .tools/bin) that reports it, `reliant forge` (which hands the command to
+  # the pin or fails), else `go run .../cmd/forge@<pin>` with GOPRIVATE and
+  # GOFLAGS=-trimpath (`go run pkg@version` refuses a repo-level -mod).
+  forge=("${PWD}/scripts/forge.sh")
 fi
 
 # A check must not rewrite the clone's git config (forge's merge driver).

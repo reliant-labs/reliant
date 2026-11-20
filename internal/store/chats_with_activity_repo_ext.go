@@ -104,6 +104,9 @@ func ListChats(ctx context.Context, db orm.Context, f core.ChatFilters) ([]*core
 	if f.Org != nil {
 		opts = append(opts, whereOrg(ChatsWithActivityFieldOrgID, f.Org))
 	}
+	if f.AppName != nil {
+		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldAppName, *f.AppName))
+	}
 	if f.SidebarOnly {
 		// The policy lives in ONE place, the view's list_in_sidebar column.
 		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldListInSidebar, true))
@@ -334,6 +337,7 @@ func chatFromView(row *ChatsWithActivity) *core.Chat {
 		UsageLimitProbing:    row.UsageLimitProbing != nil && *row.UsageLimitProbing,
 		Visibility:           visibilityOf(row.Visibility),
 		SharedAt:             row.SharedAt,
+		AppName:              row.AppName,
 	}
 	if row.WorkingThreads != nil {
 		chat.WorkingThreads = int(*row.WorkingThreads)

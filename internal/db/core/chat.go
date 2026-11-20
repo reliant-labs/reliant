@@ -272,6 +272,12 @@ type Chat struct {
 	Visibility Visibility `json:"visibility,omitempty"`
 	SharedAt   *time.Time `json:"shared_at,omitempty"`
 
+	// AppName is the app the chat is about: a forge.yaml name in the chat's
+	// org, set at creation when the chat was started from that app and never
+	// inferred (chats.app_name). nil: about no particular app. Written only
+	// on insert; a branch copies it.
+	AppName *string `json:"app_name,omitempty"`
+
 	// ProjectDeleted: the chat's project is scheduled for deletion, so the
 	// chat is hidden with it and internal/authz treats it as absent. Set by
 	// the store's by-id reads (store.GetChat, GetChatWithUserCheck); a list
@@ -356,7 +362,9 @@ type ChatFilters struct {
 	ProjectID *string
 	// Org narrows the list to one organization; nil lists every chat UserID
 	// owns, in any org or none (every client before orgs).
-	Org             *OrgScope
+	Org *OrgScope
+	// AppName narrows the list to chats tagged with that app (chats.app_name).
+	AppName         *string
 	State           *ChatState
 	ExcludeArchived bool
 	// SidebarOnly keeps only chats the sidebar lists: the view's

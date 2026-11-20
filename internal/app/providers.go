@@ -27,7 +27,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -405,7 +404,6 @@ type ProcessSettings struct{}
 
 // ProcessSettingsDeps is the config the process-wide settings come from.
 type ProcessSettingsDeps struct {
-	DataDir      string
 	LLM          *configv1.LLMConfig
 	Preview      *configv1.PreviewConfig
 	Integrations *IntegrationSettings
@@ -415,10 +413,6 @@ type ProcessSettingsDeps struct {
 func NewProcessSettings(d ProcessSettingsDeps) (*ProcessSettings, error) {
 	llmSettings := LLMSettings(d.LLM)
 	preview := PreviewSettings(d.Preview)
-	// Activities locate files under the data directory through it.
-	if err := os.Setenv("RELIANT_DATA_DIR", d.DataDir); err != nil {
-		logging.Warn("Failed to set RELIANT_DATA_DIR env var", "error", err)
-	}
 	// The LLM layer's process settings, before anything can call a model.
 	drivers.Configure(llmSettings)
 	tools.ConfigurePreviewURLs(preview)

@@ -298,6 +298,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		Title:        title,
 		ProjectID:    spec.ProjectID,
 		OrgID:        orgID,
+		AppName:      spec.AppName,
 		WorkflowName: &workflowName,
 		State:        db.ChatStateIdle,
 		// Who started it decides whether it is a conversation (the chat

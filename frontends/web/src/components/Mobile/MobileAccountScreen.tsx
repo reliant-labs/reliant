@@ -40,6 +40,7 @@ import {
   MobileScreenBody,
   MobileScreenHeader,
 } from "./MobileChrome";
+import { authPath } from "@/lib/paths";
 
 /**
  * Read the mode from the DOM rather than from settings.
@@ -170,7 +171,7 @@ export function MobileAccountScreen({ onBack }: MobileAccountScreenProps = {}) {
       // does eventually bounce an unauthenticated user, but there is a render
       // gap where MobileShell — now project-less — re-runs its onboarding
       // check and can throw the user at `/onboarding` instead of `/auth`.
-      await navigate({ to: "/auth", search: { redirect: undefined } });
+      await navigate({ to: authPath(), search: { redirect: undefined } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign out");
       setIsSigningOut(false);

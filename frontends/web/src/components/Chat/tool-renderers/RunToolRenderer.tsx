@@ -18,6 +18,7 @@ import { ArrowRight, Bot } from "lucide-react";
 
 import type { ToolContentProps } from "./types";
 import { formatErrorMessage } from "../../../lib/utils";
+import { runPath } from "@/lib/paths";
 
 interface RunToolMetadata {
   run_id?: string;
@@ -75,8 +76,7 @@ function RunToolRendererComponent({ ctx }: ToolContentProps) {
         </span>
         {runId && (
           <Link
-            to="/workflows/runs/$runId"
-            params={{ runId }}
+            to={runPath(runId)}
             className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Open run

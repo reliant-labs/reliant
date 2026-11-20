@@ -156,6 +156,15 @@ export interface ChatStreamOptions extends StreamEnvironment {
    * `bodyElided`, never on the mode asked for.
    */
   toolBodies?: ToolBodies;
+  /**
+   * Ask the server not to count the chat's messages for the snapshot.
+   * `onChatPaginationInfo`'s `total` is then 0; `hasMore` and `oldestSeq`,
+   * which are what paging needs, are unaffected. The count walks the whole
+   * chat, so on a long chat it is the slowest part of opening it. Off by
+   * default, which keeps the exact total. A server that predates the option
+   * ignores it and counts.
+   */
+  skipTotal?: boolean;
 }
 
 export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
@@ -163,6 +172,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   private readonly client: () => StreamingClient;
   private readonly hooks: ChatStreamHooks;
   private readonly toolBodies: ToolBodies | undefined;
+  private readonly skipTotal: boolean;
   private chatId: string | undefined = undefined;
   private lastChatSequence: bigint = 0n;
   // The project the user stream is scoped to. The server forwards, on this
@@ -206,6 +216,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.hooks = options.hooks ?? {};
     this.projectId = options.projectId;
     this.toolBodies = options.toolBodies;
+    this.skipTotal = options.skipTotal ?? false;
     // Idle until the first subscribeToChat: there is nothing to stream yet.
     this.isIntentionallyClosed = true;
   }
@@ -443,6 +454,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
       sinceSeq: this.lastChatSequence,
       projectId: this.projectId,
       toolBodies: toolBodyModeOf(this.toolBodies),
+      skipTotal: this.skipTotal,
     });
     this.log.info("Connecting to chat stream", {
       chatId: this.chatId?.slice(0, 8),

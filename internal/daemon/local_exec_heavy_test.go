@@ -137,7 +137,7 @@ func TestRunCommand_SecondHeavyCommandWaitsForTheSlot(t *testing.T) {
 		t.Fatalf("second command stdout %q", r.res.Stdout)
 	}
 	// The agent reads why its command took long, and who it waited for.
-	if !heavyjob.WaitedFor(r.res.Stderr) || !strings.Contains(r.res.Stderr, "1 of 1 held") {
+	if !heavyjob.WaitedFor(r.res.Stderr) || !strings.Contains(r.res.Stderr, "1 of 1 slots held") {
 		t.Fatalf("second command stderr does not show the wait:\n%s", r.res.Stderr)
 	}
 }

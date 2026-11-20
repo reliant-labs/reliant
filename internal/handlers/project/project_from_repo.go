@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
@@ -99,7 +100,38 @@ func (s *Service) CreateProjectFromRepo(
 	// failure announcement, and it is the only thing that can find this
 	// project's install row again. Settling it here persists nothing — the
 	// row is written only after the control plane accepts the clone.
-	existing, err := s.existingProjectForRepo(ctx, userID, path, cloneURL)
+	// Projects are unique per (org, user, repository and path): the repo is
+	// found again in the org the request acts in, else in the machine's. A
+	// machine holds its own org's projects only, so one of another org is
+	// refused before anything is cloned onto it.
+	scope, err := s.orgScope(ctx, userID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	machine, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	switch {
+	case err != nil && !svcerr.IsNotFound(err):
+		// Never skip the check over a failed read.
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine"))
+	case err != nil:
+		// A machine reliant has not registered yet (it never connected):
+		// no row to read an org from, so it is held to the caller's
+		// default org (machineScope); the control plane decides whose it
+		// is.
+		machine = nil
+	case !authz.CanWriteMachine(ctx, userID, machine):
+		// Another user's machine: NotFound, as ownedMachine answers it.
+		return nil, svcerr.NotFound("machine")
+	}
+	if err := s.requireMachineInOrg(ctx, userID, machine, orgID); err != nil {
+		return nil, err
+	}
+	if scope == nil {
+		if scope, err = s.machineScope(ctx, userID, machine); err != nil {
+			return nil, err
+		}
+	}
+	existing, err := s.existingProjectForRepo(ctx, userID, path, cloneURL, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -188,14 +220,15 @@ func (s *Service) CreateProjectFromRepo(
 // Re-adding a repo the user already has is a normal thing to do — they may be
 // putting it on a SECOND machine — so the add is find-or-create rather than an
 // error. Matching on remote URL first and path second mirrors how the old
-// client chain recovered from AlreadyExists.
+// client chain recovered from AlreadyExists. Both match in scope only (nil:
+// any org): the same repo may be a project in each of the caller's orgs.
 // A found project the caller may no longer act in is refused
 // (reusableProject), never re-added.
-func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string) (*core.Project, error) {
-	if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUser(ctx, cloneURL, userID); err == nil && existing != nil {
+func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string, scope *core.OrgScope) (*core.Project, error) {
+	if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
-	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, userID); err == nil && existing != nil {
+	if existing, err := s.deps.Repo.GetProjectByPathAndUserInScope(ctx, path, userID, scope); err == nil && existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	return nil, nil

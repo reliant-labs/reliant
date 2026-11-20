@@ -38,10 +38,12 @@ func TestPinProjectCatalogPairsWorkflowsAndPresetsFromOneSync(t *testing.T) {
 		pj, err := config.EncodeCatalogJSON([]config.StoredPreset{{Name: "p", RelativePath: ".reliant/presets/p.yaml",
 			YAMLContent: fmt.Sprintf("name: p\ndescription: v%d\n", version)}})
 		require.NoError(t, err)
+		HoldProjectOnMachineForTest(t, repo, projectID, daemonID)
 		_, err = repo.SyncProjectConfigSnapshot(ctx, &ProjectConfigRecord{
 			ProjectID: projectID, DaemonID: daemonID, ProjectWorkflowsJSON: wj, ProjectPresetsJSON: pj,
 			PushedAt: now.Add(time.Duration(version) * time.Second),
-		}, true)
+		}, true, nil)
+
 		require.NoError(t, err)
 	}
 	push(0)

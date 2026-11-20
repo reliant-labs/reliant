@@ -55,14 +55,14 @@ func TestOnlyRunNowLaunchesManualRun(t *testing.T) {
 	launches := regexp.MustCompile(`TriggerEventKindManualRun`)
 	walkGo(t, filepath.Join(root, "internal/handlers"), func(path, src string) {
 		rel := strings.TrimPrefix(path, root+"/")
-		if strings.HasSuffix(rel, "_test.go") || rel == "internal/handlers/chat/chat_run_now.go" {
+		if strings.HasSuffix(rel, "_test.go") || rel == "internal/handlers/chat/rpc_run_now.go" {
 			return
 		}
 		if launches.MatchString(src) {
-			t.Errorf("%s names TriggerEventKindManualRun; only chat_run_now.go may launch it", rel)
+			t.Errorf("%s names TriggerEventKindManualRun; only rpc_run_now.go may launch it", rel)
 		}
 	})
-	src, err := os.ReadFile(filepath.Join(root, "internal/handlers/chat/chat_run_now.go"))
+	src, err := os.ReadFile(filepath.Join(root, "internal/handlers/chat/rpc_run_now.go"))
 	require.NoError(t, err)
 	assert.Contains(t, string(src), "core.TriggerEventKindManualRun")
 }

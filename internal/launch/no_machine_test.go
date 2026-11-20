@@ -174,9 +174,11 @@ nodes:
 	require.NoError(t, err)
 	laptop := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: laptop, UserID: launchTestUserID}))
+	db.HoldProjectOnMachineForTest(t, repo, projectID, laptop)
 	_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: laptop, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC(),
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 	now := time.Now().UTC()
 	triggerID := uuid.NewString()
@@ -253,9 +255,11 @@ func TestLaunchAutomationBuildsInputsFromTheProjectWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	laptop := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: laptop, UserID: launchTestUserID}))
+	db.HoldProjectOnMachineForTest(t, repo, projectID, laptop)
 	_, err = repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: laptop, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC(),
-	}, true)
+	}, true, nil)
+
 	require.NoError(t, err)
 	now := time.Now().UTC()
 	triggerID := uuid.NewString()
