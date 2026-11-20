@@ -47,6 +47,26 @@ func TestRetryer_BackoffLadderWithoutRetryAfter(t *testing.T) {
 	assert.Equal(t, models.MaxRetries, waits[0].MaxAttempts)
 }
 
+// From the sixth attempt the ladder waits MaxBackoff itself, even when it is
+// longer than the doubling has reached; the default jitter adds up to 20%.
+func TestRetryer_BackoffJumpsToMaxBackoffFromTheSixthAttempt(t *testing.T) {
+	r := Retryer{MaxBackoff: 5 * time.Minute, Jitter: func(time.Duration) time.Duration { return 0 }}
+	var got []time.Duration
+	for attempt := 1; attempt <= 7; attempt++ {
+		got = append(got, r.backoff(attempt))
+	}
+	assert.Equal(t, []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 32 * time.Second, 5 * time.Minute, 5 * time.Minute}, got)
+
+	r.Jitter = nil
+	for attempt, base := range map[int]time.Duration{1: 2 * time.Second, 5: 32 * time.Second, 6: 5 * time.Minute} {
+		for range 50 {
+			d := r.backoff(attempt)
+			assert.GreaterOrEqual(t, d, base)
+			assert.LessOrEqual(t, d, base+base/5)
+		}
+	}
+}
+
 func TestRetryer_WaitIsPublishedBeforeItIsSlept(t *testing.T) {
 	var order []string
 	r := Retryer{

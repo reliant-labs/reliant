@@ -13,6 +13,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/shared"
+	"github.com/reliant-labs/forge/pkg/retry"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -372,18 +373,20 @@ func (c *LocalClient) shouldRetry(attempts int, err error) (bool, int64, error) 
 		return false, 0, fmt.Errorf("maximum retry attempts reached: %d retries: %w", models.MaxRetries, err)
 	}
 
-	backoffMs := 2000 * (1 << (attempts - 1))
-	retryMs := backoffMs + int(float64(backoffMs)*0.2)
 	if apierr.Response != nil {
 		if values := apierr.Response.Header.Values("Retry-After"); len(values) > 0 {
 			var seconds int
 			if _, scanErr := fmt.Sscanf(values[0], "%d", &seconds); scanErr == nil {
-				retryMs = seconds * 1000
+				return true, int64(seconds * 1000), nil
 			}
 		}
 	}
-	return true, int64(retryMs), nil
+	return true, retryBackoff.Delay(attempts).Milliseconds(), nil
 }
+
+// retryBackoff is the wait before retry n: 2s doubling, each wait lengthened
+// by a fixed 20% (2.4s, 4.8s, 9.6s, ...), no cap.
+var retryBackoff = retry.Backoff{Initial: 2 * time.Second, Jitter: retry.FixedJitter(0.2)}
 
 // wrapRequestError names the failing hop in terms a user can act on.
 func (c *LocalClient) wrapRequestError(err error) error {

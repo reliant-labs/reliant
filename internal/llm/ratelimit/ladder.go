@@ -4,10 +4,11 @@ package ratelimit
 import (
 	"context"
 	"errors"
-	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/retry"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -157,8 +158,8 @@ func (r Retryer) Run(ctx context.Context, try func(attempt int) (Failure, bool),
 		if ok {
 			return nil
 		}
-		wait, retry, err := r.Decide(attempt, f)
-		if !retry {
+		wait, again, err := r.Decide(attempt, f)
+		if !again {
 			return err
 		}
 		logging.WarnContext(ctx, r.Log+" failed; retrying", "attempt", wait.Attempt, "delay", wait.Delay,
@@ -195,14 +196,17 @@ func (r Retryer) backoff(attempt int) time.Duration {
 	if maxB <= 0 {
 		maxB = DefaultMaxBackoff
 	}
-	d := maxB
-	if attempt < 6 {
-		d = min(maxB, defaultBaseBackoff<<(attempt-1))
+	b := retry.Backoff{Initial: defaultBaseBackoff, Max: maxB, Jitter: retry.UpwardJitter(0.2)}
+	if attempt >= 6 {
+		// From the sixth attempt the ladder waits MaxBackoff itself, even when
+		// MaxBackoff is longer than the doubling has reached (2s<<5 = 64s).
+		b = retry.Backoff{Initial: maxB, Multiplier: 1, Jitter: retry.UpwardJitter(0.2)}
 	}
 	if r.Jitter != nil {
+		d := b.Base(attempt)
 		return d + r.Jitter(d)
 	}
-	return d + time.Duration(rand.Int64N(int64(d/5)+1))
+	return b.Delay(attempt)
 }
 
 // RetryableStatus is the retry set shared by every ladder: timeout, conflict,

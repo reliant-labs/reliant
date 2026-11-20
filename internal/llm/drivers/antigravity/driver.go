@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -515,10 +516,13 @@ func retryDelay(attempt int, resp *http.Response) time.Duration {
 			}
 		}
 	}
-	backoff := 2000 * (1 << (attempt - 1))
-	jitter := int(float64(backoff) * 0.2)
-	return time.Duration(backoff+jitter) * time.Millisecond
+	return retryBackoff.Delay(attempt)
 }
+
+// retryBackoff is the wait before retry n when the server sent no
+// Retry-After: 2s doubling, each wait lengthened by a fixed 20% (2.4s, 4.8s,
+// 9.6s, ...), no cap.
+var retryBackoff = retry.Backoff{Initial: 2 * time.Second, Jitter: retry.FixedJitter(0.2)}
 
 // clientIdentityTransport stamps the fixed Antigravity client identity onto
 // every request, plus a Bearer token when no refreshing transport is installed.

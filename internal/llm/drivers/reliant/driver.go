@@ -26,6 +26,7 @@ import (
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/shared"
 	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -868,10 +869,13 @@ func retryDelayMs(attempts int, apierr *openai.Error) int64 {
 		}
 	}
 
-	backoffMs := 2000 * (1 << (attempts - 1))
-	jitterMs := int(float64(backoffMs) * 0.2)
-	return int64(backoffMs + jitterMs)
+	return retryBackoff.Delay(attempts).Milliseconds()
 }
+
+// retryBackoff is the wait before retry n when the server sent no
+// Retry-After: 2s doubling, each wait lengthened by a fixed 20% (2.4s, 4.8s,
+// 9.6s, ...), no cap.
+var retryBackoff = retry.Backoff{Initial: 2 * time.Second, Jitter: retry.FixedJitter(0.2)}
 
 func reliantRetryExhaustedError(apierr *openai.Error) error {
 	if apierr != nil && apierr.StatusCode == 429 {

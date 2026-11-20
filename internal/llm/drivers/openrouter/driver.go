@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/openai"
@@ -144,23 +145,23 @@ func isRetryableStatus(code int) bool {
 	return code == 429 || code == 500 || code == 502 || code == 503 || code == 529
 }
 
-// retryDelay calculates the delay before the next retry attempt using exponential
-// backoff with 20% jitter. If the response includes a Retry-After header (in seconds),
+// retryBackoff is the wait before retry n: 2s doubling, each wait lengthened
+// by a fixed 20% (2.4s, 4.8s, 9.6s, ...), no cap.
+var retryBackoff = retry.Backoff{Initial: 2 * time.Second, Jitter: retry.FixedJitter(0.2)}
+
+// retryDelay calculates the delay before the next retry attempt from
+// retryBackoff. If the response includes a Retry-After header (in seconds),
 // that value is used instead.
 func retryDelay(attempt int, resp *http.Response) time.Duration {
-	backoffMs := 2000 * (1 << (attempt - 1)) // 2s, 4s, 8s, ...
-	jitterMs := int(float64(backoffMs) * 0.2)
-	delayMs := backoffMs + jitterMs
-
 	if resp != nil {
 		if ra := resp.Header.Get("Retry-After"); ra != "" {
 			if secs, err := strconv.Atoi(ra); err == nil {
-				delayMs = secs * 1000
+				return time.Duration(secs*1000) * time.Millisecond
 			}
 		}
 	}
 
-	return time.Duration(delayMs) * time.Millisecond
+	return retryBackoff.Delay(attempt)
 }
 
 // Name returns the name of the driver

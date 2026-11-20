@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/invopop/jsonschema"
+	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -899,13 +900,12 @@ func (g *GeminiClient) shouldRetry(attempts int, err error) (bool, int64, error)
 		return false, 0, err
 	}
 
-	// Calculate backoff with jitter
-	backoffMs := 2000 * (1 << (attempts - 1))
-	jitterMs := int(float64(backoffMs) * 0.2)
-	retryMs := backoffMs + jitterMs
-
-	return true, int64(retryMs), nil
+	return true, retryBackoff.Delay(attempts).Milliseconds(), nil
 }
+
+// retryBackoff is the wait before retry n: 2s doubling, each wait lengthened
+// by a fixed 20% (2.4s, 4.8s, 9.6s, ...), no cap.
+var retryBackoff = retry.Backoff{Initial: 2 * time.Second, Jitter: retry.FixedJitter(0.2)}
 
 // usage returns token usage from Gemini's response.
 // usage returns token usage from Gemini's response.
