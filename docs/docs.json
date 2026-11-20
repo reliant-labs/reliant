@@ -318,7 +318,8 @@
                 "group": "How it works",
                 "pages": [
                   "deep-dives/how-tool-calls-reach-your-machine",
-                  "deep-dives/daemon-security-model"
+                  "deep-dives/daemon-security-model",
+                  "deep-dives/chats-worktrees-machines"
                 ]
               },
               {
@@ -397,6 +398,19 @@
                 "group": "How it works",
                 "pages": [
                   "deep-dives/how-release-verdicts-work"
+                ]
+              },
+              {
+                "group": "Monitor",
+                "pages": [
+                  "guides/observability/send-opentelemetry-from-any-app"
+                ]
+              },
+              {
+                "group": "Debug",
+                "pages": [
+                  "guides/observability/find-release-that-caused-error",
+                  "guides/observability/debug-production-with-ai-agent"
                 ]
               }
             ]
