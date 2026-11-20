@@ -3,6 +3,8 @@ package llm
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -99,12 +101,71 @@ func NewAnthropicSDKClient(opts ...anthropicopt.RequestOption) anthropicsdk.Clie
 // filling HTTPClient when the caller left it nil. Never set genai's own request
 // timeout here: it covers the whole request including body reads and would kill
 // long, healthy streams.
+//
+// It also closes every gap genai fills from the process environment. Any field
+// the caller leaves empty, genai takes from GOOGLE_API_KEY / GEMINI_API_KEY,
+// GOOGLE_GENAI_USE_VERTEXAI / GOOGLE_GENAI_USE_ENTERPRISE, GOOGLE_CLOUD_PROJECT
+// / GOOGLE_CLOUD_LOCATION / GOOGLE_CLOUD_REGION or GOOGLE_GEMINI_BASE_URL /
+// GOOGLE_VERTEX_BASE_URL, and it has no option to stop. Drivers run on the
+// multi-tenant server roles, where any of those would serve one tenant's
+// request with the operator's credential or send it where the operator's
+// environment points. So the caller must name its backend, a Gemini API client
+// must carry the account's key, a Vertex AI client its project and location,
+// and the endpoint is filled here when the caller has none.
+//
+// The Vertex AI credential is unchanged: with no Credentials genai uses the
+// process's Application Default Credentials, the platform's own Vertex
+// identity, placed by VERTEXAI_PROJECT / VERTEXAI_LOCATION.
 func NewGenAISDKClient(ctx context.Context, cfg *genai.ClientConfig) (*genai.Client, error) {
 	if cfg == nil {
-		cfg = &genai.ClientConfig{}
+		return nil, errGenAIBackendRequired
+	}
+	switch cfg.Backend {
+	case genai.BackendGeminiAPI:
+		if strings.TrimSpace(cfg.APIKey) == "" {
+			return nil, ErrGeminiAPIKeyRequired
+		}
+		if cfg.HTTPOptions.BaseURL == "" {
+			cfg.HTTPOptions.BaseURL = genAIGeminiBaseURL
+		}
+	case genai.BackendVertexAI, genai.BackendEnterprise:
+		if strings.TrimSpace(cfg.Project) == "" || strings.TrimSpace(cfg.Location) == "" {
+			return nil, errVertexPlacementRequired
+		}
+		if cfg.HTTPOptions.BaseURL == "" && cfg.APIKey == "" {
+			cfg.HTTPOptions.BaseURL = genAIVertexBaseURL(cfg.Location)
+		}
+	default:
+		return nil, errGenAIBackendRequired
 	}
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = StreamingHTTPClient()
 	}
 	return genai.NewClient(ctx, cfg)
+}
+
+// ErrGeminiAPIKeyRequired is returned for a Gemini API client with no key of
+// the account's.
+var ErrGeminiAPIKeyRequired = errors.New("gemini api key is required: connect Gemini from Settings")
+
+var (
+	errGenAIBackendRequired    = errors.New("genai client needs an explicit backend (Gemini API or Vertex AI)")
+	errVertexPlacementRequired = errors.New("vertex ai client needs an explicit project and location (VERTEXAI_PROJECT, VERTEXAI_LOCATION)")
+)
+
+// genAIGeminiBaseURL is genai's own Gemini API endpoint, used in place of
+// GOOGLE_GEMINI_BASE_URL.
+const genAIGeminiBaseURL = "https://generativelanguage.googleapis.com/"
+
+// genAIVertexBaseURL is genai's own Vertex AI endpoint for location, used in
+// place of GOOGLE_VERTEX_BASE_URL. It mirrors genai.NewClient's default.
+func genAIVertexBaseURL(location string) string {
+	switch location {
+	case "global":
+		return "https://aiplatform.googleapis.com/"
+	case "us", "eu":
+		return fmt.Sprintf("https://aiplatform.%s.rep.googleapis.com/", location)
+	default:
+		return fmt.Sprintf("https://%s-aiplatform.googleapis.com/", location)
+	}
 }
