@@ -30,6 +30,8 @@ describe("buildGroupedConsoleNav", () => {
     expect(items.map((item) => [item.label, (item.children ?? []).map((child) => child.label).join(",")])).toEqual([
       ["Overview", ""],
       ["Services", ""],
+      ["Storage", ""],
+      ["Dashboards", "Live state"],
       ["Issues", "Errors,Alerts"],
       ["Performance", "Traces,RPC explorer"],
       ["Sessions", ""],
@@ -37,7 +39,7 @@ describe("buildGroupedConsoleNav", () => {
       ["Releases", ""],
       ["Data", ""],
       ["Users", ""],
-      ["More tools", "Dashboards,Logs,Metrics,Profiles,Service graph,Storage"],
+      ["More tools", "Logs,Metrics,Profiles,Service graph"],
       ["Environments", "prod"],
       ["Secrets", ""],
       ["Domains", ""],
@@ -57,7 +59,7 @@ describe("buildGroupedConsoleNav", () => {
   it("has no Insights row without a hub, and lights Insights on any of the hub's tabs", () => {
     expect(nav().items.find((item) => item.label === "Product analytics")!.children!.map((child) => child.label)).toEqual(["Events & metrics"]);
     expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "acquisition" } }).items)).toEqual(["Insights"]);
-    // Any other dashboard lights Dashboards, under More tools.
+    // Any other dashboard lights Dashboards (top-level, the one place).
     expect(lit(nav({ productAnalytics: HUB, page: { kind: "dashboard", dashKind: "release", key: "api" } }).items)).toEqual(["Dashboards"]);
   });
 
@@ -65,7 +67,7 @@ describe("buildGroupedConsoleNav", () => {
     const starred = ["a", "b", "c", "d"].map((key) => ({ title: `Board ${key}`, dashKind: "release" as const, key }));
     const { items } = nav({ starred, page: { kind: "dashboard", dashKind: "release", key: "b" } });
     const dashboards = flat(items).find((item) => item.label === "Dashboards")!;
-    expect(dashboards.children?.map((child) => child.label)).toEqual(["Board a", "Board b", "Board c", "All dashboards"]);
+    expect(dashboards.children?.map((child) => child.label)).toEqual(["Live state", "Board a", "Board b", "Board c", "All dashboards"]);
     expect(lit(items)).toEqual(["Board b"]);
   });
 
@@ -93,12 +95,11 @@ describe("buildGroupedConsoleNav", () => {
 });
 
 describe("groupedCrumbs", () => {
-  it("puts a view under its group, a hub tab under Product analytics, and a dashboard under More tools", () => {
+  it("puts a view under its group, a hub tab under Product analytics, and a dashboard under Dashboards", () => {
     expect(groupedCrumbs({ kind: "obs-view", view: "errors" }, [])).toEqual([{ label: "Issues" }, { label: "Errors" }]);
     expect(groupedCrumbs({ kind: "obs-view", view: "sessions" }, [])).toEqual([{ label: "Sessions" }]);
     expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "users" }, [{ label: "Observability" }, { label: "Users" }], HUB)).toEqual([{ label: "Product analytics" }, { label: "Insights" }, { label: "Users" }]);
     expect(groupedCrumbs({ kind: "dashboard", dashKind: "release", key: "api" }, [{ label: "Observability" }, { label: "Dashboards", href: "/d" }, { label: "api" }])).toEqual([
-      { label: "More tools" },
       { label: "Dashboards", href: "/d" },
       { label: "api" },
     ]);

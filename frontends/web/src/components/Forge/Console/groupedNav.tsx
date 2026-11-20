@@ -128,6 +128,7 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     children: [
       { label: "Live state", href: href({ kind: "live-state" }), active: lit(page.kind === "live-state") },
       ...listed.map((candidate) => ({ label: candidate.title, href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }), active: lit(isOpen(candidate)) })),
+      ...(listed.length ? [{ label: "All dashboards", href: href({ kind: "obs-view", view: "dashboards" }), active: false }] : []),
     ],
   };
   // Profiles hides on a definite empty read, as in the console's own nav, unless it is the open page.
@@ -245,6 +246,9 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
   if (isHubPage(page, productAnalytics)) return [{ label: "Product analytics" }, { label: "Insights" }, ...own.slice(-1)];
-  if (page.kind === "dashboard") return [{ label: "Dashboards" }, ...own.filter((crumb) => crumb.label !== "Observability" && crumb.label !== "Dashboards")];
+  if (page.kind === "dashboard") {
+    const rest = own.filter((crumb) => crumb.label !== "Observability");
+    return rest[0]?.label === "Dashboards" ? rest : [{ label: "Dashboards" }, ...rest];
+  }
   return null;
 }

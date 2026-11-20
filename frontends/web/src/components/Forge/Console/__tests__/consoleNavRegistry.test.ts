@@ -55,9 +55,9 @@ describe("the console nav's registered rows", () => {
     expect(items.indexOf("Experiments")).toBe(items.indexOf("Product analytics") + 1);
     expect(labels({ project: "ledger" })).not.toContain("Experiments");
     unregister();
-    // Dashboards is drawn only for an app with dashboards of its own: the row follows Services instead.
+    // Dashboards is a top-level row for every app (U6c): the row follows it.
     unregister = registerConsoleNavEntry({ id: "experiments", label: "Experiments", segment: "experiments", after: "dashboards" });
     items = labels();
-    expect(items.indexOf("Experiments")).toBe(items.indexOf("Services") + 1);
+    expect(items.indexOf("Experiments")).toBe(items.indexOf("Dashboards") + 1);
   });
 });
