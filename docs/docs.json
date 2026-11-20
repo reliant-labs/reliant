@@ -442,7 +442,9 @@
                   "guides/hosting/preview-environment-every-pull-request",
                   "guides/hosting/custom-domain-https",
                   "guides/hosting/manage-production-secrets",
-                  "guides/hosting/deploy-to-your-own-kubernetes"
+                  "guides/hosting/deploy-to-your-own-kubernetes",
+                  "guides/hosting/keep-helm-fly-cloud-run",
+                  "guides/hosting/stop-hosted-environment"
                 ]
               },
               {
@@ -451,7 +453,8 @@
                   "guides/hosting/promote-release-staging-to-production",
                   "guides/hosting/gate-production-deploy-release-health",
                   "guides/hosting/recover-from-bad-deploy",
-                  "guides/hosting/deploy-from-github-actions"
+                  "guides/hosting/deploy-from-github-actions",
+                  "guides/hosting/detect-config-drift"
                 ]
               },
               {

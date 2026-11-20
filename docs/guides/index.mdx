@@ -304,6 +304,12 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   <Card title="Deploy a Forge app to your own Kubernetes cluster" icon="cloud" href="/guides/hosting/deploy-to-your-own-kubernetes">
     Bind a Forge environment to a Kubernetes cluster you run, deploy a release to it with forge env deploy, and optionally hand delivery to an in-cluster Flux.
   </Card>
+  <Card title="Keep Helm, Fly.io or Cloud Run and still get releases and gates" icon="cloud" href="/guides/hosting/keep-helm-fly-cloud-run">
+    Bind a workload to forge.OnExternal so forge builds, releases and checks it while your own Helm chart, Fly.io app or Cloud Run service keeps deploying it.
+  </Card>
+  <Card title="Stop a hosted environment when you're not using it" icon="cloud" href="/guides/hosting/stop-hosted-environment">
+    Suspend a hosted environment's workloads and database with forge env stop, keep its release and data, and bring it back with forge env start.
+  </Card>
   <Card title="Promote a release from staging to production by digest" icon="cloud" href="/guides/hosting/promote-release-staging-to-production">
     Move the exact release staging runs to production without a rebuild, approve the plan you read by its digest, and see a stale promotion refused.
   </Card>
@@ -315,6 +321,9 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   </Card>
   <Card title="Deploy from GitHub Actions with an API token" icon="cloud" href="/guides/hosting/deploy-from-github-actions">
     Ship every push to main from GitHub Actions: store a scoped deploy token, cut the release and print its plan in one job, then approve that exact plan in the next.
+  </Card>
+  <Card title="Detect drift between declared and live environments" icon="cloud" href="/guides/hosting/detect-config-drift">
+    Check that an environment runs the release it should, and find what your checkout declares but never deployed, with env status, env diff and env verify.
   </Card>
   <Card title="Restore a managed Postgres database to a point in time" icon="cloud" href="/guides/hosting/restore-postgres-point-in-time">
     Undo a bad delete on Reliant hosting: declare a new managed Postgres restored from backups to the moment before it, check the rows, and point your app at it.
