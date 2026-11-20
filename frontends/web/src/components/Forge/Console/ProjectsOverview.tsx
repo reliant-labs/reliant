@@ -1,0 +1,122 @@
+// Copyright (c) 2026 Reliant Labs
+
+/**
+ * Overview while the shell shows several projects (U6b, owner 2026-11-20):
+ * one compact row per project — its health, errors and p95 in prod over the
+ * last 24 hours, its last release — and a way into that project alone. The
+ * one-project Overview is the console's own page; this is the list above it.
+ */
+
+import { useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronRight } from "lucide-react";
+
+import Status from "@/components/forge-ui/status";
+import { useApps } from "@/hooks/apps-queries";
+import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
+import type { HostedVerdict } from "@/services/forge/topology";
+import type { ProjectCatalogRow } from "@/services/projects/catalog";
+
+import { verdictBusy, verdictTone } from "../../Apps/appParts";
+import { ProjectMark } from "../../Layout/ProjectMark";
+import { deployedAppOf, sectionsAppOf, useShellLastPick, useShellSeveral } from "../../Layout/sidebar/shellProject";
+import { formatAgo, formatCount, formatDuration } from "../Observability/format";
+import { redPanel } from "../Observability/Home/homeModel";
+import { consolePath } from "./paths";
+
+const VERDICT_LABEL: Partial<Record<HostedVerdict, string>> = {
+  converged: "Healthy",
+  converging: "Deploying",
+  diverged: "Unhealthy",
+  degraded: "Degraded",
+};
+
+export function ProjectsOverview() {
+  const { mode, rows } = useShellSeveral();
+  return (
+    <div className="mx-auto max-w-[var(--page-max)]" data-testid="projects-overview">
+      <h1 className="text-section text-ink">Overview</h1>
+      <p className="mt-1 text-ui text-ink-muted">
+        {mode === "all" ? "Every project" : `${rows.length} projects`}, in prod over the last 24 hours.
+      </p>
+      <div className="mt-5 overflow-hidden rounded-xl border border-border">
+        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_2rem] items-center gap-4 border-b border-border px-4 py-2 text-meta text-ink-muted">
+          <span>Project</span>
+          <span>Health</span>
+          <span className="text-right">Errors</span>
+          <span className="text-right">p95</span>
+          <span>Last release</span>
+          <span />
+        </div>
+        {rows.map((row) => (
+          <ProjectRow key={row.key} row={row} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProjectRow({ row }: { row: ProjectCatalogRow }) {
+  const navigate = useNavigate();
+  const setLastPick = useShellLastPick((state) => state.set);
+  const deployed = deployedAppOf(row);
+  const app = sectionsAppOf(row) ?? row.name;
+  const { apps } = useApps();
+  const summary = apps.find((candidate) => candidate.name === app);
+  const prod = summary?.envs.find((env) => env.name === "prod") ?? summary?.envs[0];
+  const org = useObservabilityOrg();
+  const scope = useMemo(
+    () => (org.orgId && prod ? { orgId: org.orgId, projectId: app, envIds: [prod.id], filters: [] } : null),
+    [org.orgId, prod, app],
+  );
+  const panel = useMemo(() => redPanel("number"), []);
+  const totals = usePanelQuery(deployed ? scope : null, "24h", panel, []);
+  const value = (label: string) => totals.data?.series.find((series) => series.label === label)?.value ?? null;
+  const errors = value("errors");
+  const p95 = value("p95");
+  const href = consolePath(app, { kind: "overview" });
+  const deployedAt = prod?.deployedAt ? Date.parse(prod.deployedAt) : NaN;
+
+  return (
+    <a
+      href={href}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+        event.preventDefault();
+        // Into this project alone: the shell's one project, on its app's Overview.
+        setLastPick(row.key);
+        void navigate({ href });
+      }}
+      data-testid={`projects-overview-row-${row.key}`}
+      className="no-color grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_2rem] items-center gap-4 border-b border-border-subtle px-4 py-3 text-ui text-ink transition-colors last:border-b-0 hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <ProjectMark name={row.name} />
+        <span className="min-w-0 truncate font-medium">{row.name}</span>
+        {app !== row.name && <span className="min-w-0 truncate text-meta text-ink-muted">{app}</span>}
+      </span>
+      <span className="min-w-0">
+        {!deployed ? (
+          <span className="text-ink-muted">Not deployed</span>
+        ) : prod ? (
+          <Status tone={verdictTone(prod.verdict)} busy={verdictBusy(prod.verdict)} label={VERDICT_LABEL[prod.verdict] ?? "Unknown"} />
+        ) : (
+          <span className="text-ink-muted">No data</span>
+        )}
+      </span>
+      <span className="text-right tabular-nums">{errors === null ? "—" : formatCount(errors)}</span>
+      <span className="text-right tabular-nums">{p95 === null ? "—" : formatDuration(p95)}</span>
+      <span className="min-w-0 truncate">
+        {prod?.release ? (
+          <>
+            <span className="font-mono text-code">{prod.release}</span>
+            {Number.isFinite(deployedAt) && <span className="text-meta text-ink-muted"> · {formatAgo(deployedAt)}</span>}
+          </>
+        ) : (
+          <span className="text-ink-muted">None yet</span>
+        )}
+      </span>
+      <ChevronRight className="size-4 justify-self-end text-ink-muted" aria-hidden="true" />
+    </a>
+  );
+}

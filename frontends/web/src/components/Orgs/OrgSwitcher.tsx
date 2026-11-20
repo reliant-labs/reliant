@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast-manager";
 import type { MyOrg } from "@/services/controlPlane/orgs";
 
-import { SIDEBAR_ORG_TRIGGER, SidebarOrgLabel } from "../Layout/sidebar/primitives";
+import { SIDEBAR_ORG_TRIGGER, ShellBrandMark, SidebarOrgLabel } from "../Layout/sidebar/primitives";
 import { CreateOrganizationDialog } from "./CreateOrganizationDialog";
 
 /**
@@ -122,9 +122,19 @@ function SidebarOrgSwitcher({
         triggerClassName="w-full"
         trigger={(props) =>
           top ? (
-            <button {...props} type="button" data-testid="org-switcher" className={cn(SIDEBAR_ORG_TRIGGER, compact && "gap-1.5 px-1.5")}>
-              <SidebarOrgLabel name={active.name} menu={!compact} nameTestId="org-switcher-name" />
-              {compact && <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+            <button {...props} type="button" data-testid="org-switcher" className={cn(SIDEBAR_ORG_TRIGGER, compact && "w-auto max-w-full flex-none gap-1.5 px-1.5")}>
+              {compact ? (
+                // Sized to the name (a flex-1 name would shrink-wrap to nothing beside the project).
+                <>
+                  <ShellBrandMark />
+                  <span className="min-w-0 truncate font-semibold" data-testid="org-switcher-name">
+                    {active.name}
+                  </span>
+                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </>
+              ) : (
+                <SidebarOrgLabel name={active.name} menu nameTestId="org-switcher-name" />
+              )}
             </button>
           ) : (
             <button

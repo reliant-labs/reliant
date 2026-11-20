@@ -123,8 +123,9 @@ function NavTreeItem({
   testIdPrefix?: string;
 }) {
   const children = item.children ?? [];
-  // A group's rows show only while one of them is the page on screen.
-  const open = children.some(hasActive);
+  // A group's rows show only while one of them is the page on screen, unless
+  // the group asks to stay open (an app's own dashboards: few, and the point).
+  const open = children.some(hasActive) || ("alwaysOpen" in item && item.alwaysOpen === true);
   const href = rowHref(item);
   const testId = testIdPrefix ? `${testIdPrefix}-${item.label.toLowerCase().replace(/\s+/g, "-")}` : undefined;
   const badge = item.badge ?? (open ? undefined : rolledUpBadge(children));

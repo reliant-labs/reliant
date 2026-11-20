@@ -146,7 +146,24 @@ function queryPanel(req: Record<string, unknown>) {
   }
 }
 
+// shopfront's own dashboards: one from its repo, one saved in the org (the
+// project shell lists an app's own dashboards under Overview).
+const customDashboard = (source: 'DASHBOARD_SOURCE_REPO' | 'DASHBOARD_SOURCE_WORKSPACE', key: string, title: string) => ({
+  ref: { source, projectId: 'shopfront', key }, source, title, description: '', readOnly: source === 'DASHBOARD_SOURCE_REPO',
+  starred: false, panelCount: 4, previewPanels: [], tags: [], group: '',
+})
+
 export const consoleFixtures: Fixtures = {
+  'controlplane.v1.DashboardService/ListDashboards': (req) =>
+    req.projectId === 'shopfront'
+      ? {
+          dashboards: [
+            customDashboard('DASHBOARD_SOURCE_REPO', 'checkout-funnel', 'Checkout funnel'),
+            customDashboard('DASHBOARD_SOURCE_WORKSPACE', 'order-latency', 'Order latency'),
+          ],
+          canWrite: true,
+        }
+      : { dashboards: [], canWrite: true },
   'controlplane.v1.ObservabilityService/QueryPanel': queryPanel,
   'controlplane.v1.IssuesService/ListIssues': (req) => {
     const statuses = (req.statuses as string[] | undefined) ?? []

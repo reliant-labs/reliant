@@ -21,7 +21,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, CircleAlert, Database, LayoutDashboard, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, CircleAlert, Database, LayoutDashboard, LayoutGrid, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
@@ -58,7 +58,12 @@ export interface GroupedNavInput extends ConsoleNavInput {
   productAnalytics?: ProductAnalyticsHub;
   /** A host page (one that is not a console page) is open: no console row is the current one. */
   hostPageActive?: boolean;
+  /** The app's own dashboards (its repo's, the org's saved ones): a Dashboards group under Overview. */
+  customDashboards?: readonly ConsoleNavDashboard[];
 }
+
+/** A nav group that shows its rows on every page, not only while one is open (the app's own dashboards). */
+export type OpenNavItem = SidebarNavItem & { alwaysOpen?: boolean };
 
 /** The group each view sits in, for the nav and the breadcrumb ("Issues › Errors"). */
 const GROUP_OF: Partial<Record<ObsNavView, string>> = {
@@ -76,7 +81,7 @@ const GROUP_OF: Partial<Record<ObsNavView, string>> = {
 const isHubPage = (page: ConsolePage, hub: ProductAnalyticsHub | undefined) => !!hub && page.kind === "dashboard" && hub.keys.includes(page.key);
 
 export function buildGroupedConsoleNav(input: GroupedNavInput): { items: SidebarNavItem[]; footer: SidebarNavItem[] } {
-  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, linkTo, productAnalytics, hostPageActive = false } = input;
+  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, linkTo, productAnalytics, hostPageActive = false, customDashboards = [] } = input;
   const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   // On a host page, every console row is a way out, none the current one.
   const lit = (active: boolean) => !hostPageActive && active;
@@ -98,10 +103,12 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
   const nested = starred.slice(0, NAV_STARRED_MAX);
   const openStar = (candidate: ConsoleNavDashboard) => page.kind === "dashboard" && page.dashKind === candidate.dashKind && page.key === candidate.key;
   const onHub = isHubPage(page, productAnalytics);
+  const openCustom = (candidate: ConsoleNavDashboard) => page.kind === "dashboard" && page.dashKind === candidate.dashKind && page.key === candidate.key;
+  const onCustom = customDashboards.some(openCustom);
   const dashboards: SidebarNavItem = {
     ...obs("dashboards"),
     // A dashboard that is neither a hub tab nor a nested star lights Dashboards itself.
-    active: lit(isObs("dashboards") || (page.kind === "dashboard" && !onHub && !nested.some(openStar))),
+    active: lit(isObs("dashboards") || (page.kind === "dashboard" && !onHub && !onCustom && !nested.some(openStar))),
     children: nested.length
       ? [
           ...nested.map((candidate) => ({ label: candidate.title, href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }), active: lit(openStar(candidate)) })),
@@ -112,8 +119,22 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
   // Profiles hides on a definite empty read, as in the console's own nav, unless it is the open page.
   const profiles = optionalViews?.profiles !== false || isObs("profiles");
 
+  const dashboardsGroup: OpenNavItem | null = customDashboards.length
+    ? {
+        label: "Dashboards",
+        icon: icon(LayoutGrid),
+        alwaysOpen: true,
+        children: customDashboards.map((candidate) => ({
+          label: candidate.title,
+          href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }),
+          active: lit(openCustom(candidate)),
+        })),
+      }
+    : null;
+
   const items: SidebarNavItem[] = [
     row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview" || page.kind === "workload"),
+    ...(dashboardsGroup ? [dashboardsGroup] : []),
     {
       label: "Issues",
       icon: icon(CircleAlert),

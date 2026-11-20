@@ -46,9 +46,10 @@ import { ForgeCloseButton } from "../ForgeHeader";
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
-import { useShellLastPick } from "@/components/Layout/sidebar/shellProject";
+import { useShellLastPick, useShellSeveral } from "@/components/Layout/sidebar/shellProject";
 
 import { AppSectionEmptyState } from "./AppSectionEmptyState";
+import { ProjectsOverview } from "./ProjectsOverview";
 import { ConsoleFrame } from "./ConsoleFrame";
 import { ConsoleShell } from "./ConsoleShell";
 import { LedConsoleProvider, type LedConsoleHost } from "./ledConsole";
@@ -180,6 +181,9 @@ export function ConsoleLayout() {
   // it (U6b; every project has the same nav). The shell's project names the
   // code to deploy when no project declares the app yet.
   const shellFocus = useShellLastPick((state) => state.focus);
+  // Several projects in the shell: Overview is one row per project.
+  const several = useShellSeveral();
+  const severalOverview = inShell && several.mode !== null && page.kind === "overview";
   const undeployed = inShell && model.settled && roster.envs.length === 0 && !rosterReadFailed(roster);
   const deployProjectId = projectId ?? (shellFocus && !shellFocus.startsWith("app:") ? shellFocus : null);
   const body = useMemo(
@@ -189,7 +193,13 @@ export function ConsoleLayout() {
           <div className="empty:hidden [&:not(:empty)]:mb-4">
             <ObsQuotaBanner />
           </div>
-          {undeployed ? <AppSectionEmptyState page={page} projectId={deployProjectId} /> : <Outlet />}
+          {severalOverview ? (
+            <ProjectsOverview />
+          ) : undeployed ? (
+            <AppSectionEmptyState page={page} projectId={deployProjectId} />
+          ) : (
+            <Outlet />
+          )}
         </ForgeConsoleContext.Provider>
       ) : (
         <div aria-busy="true" aria-label="Loading" data-testid="forge-console-loading" className="space-y-4">
@@ -197,7 +207,7 @@ export function ConsoleLayout() {
           <SkeletonLoader variant="table-row" count={4} />
         </div>
       ),
-    [listed, value, undeployed, page, deployProjectId]
+    [listed, value, undeployed, page, deployProjectId, severalOverview]
   );
 
   // Inside the one shell the app's sections are rows of its nav: the console

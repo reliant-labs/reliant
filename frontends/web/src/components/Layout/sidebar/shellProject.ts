@@ -28,7 +28,8 @@ import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 
 import { useChat } from "@/hooks/chat-queries";
-import { useChatProjectFilterIds } from "@/hooks/useChatProjectFilter";
+import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
+import { useChatProjectFilterIds, useChatProjectFilterStore } from "@/hooks/useChatProjectFilter";
 import { chatShellRouteOf } from "@/lib/chatRoute";
 import { orgFreePath } from "@/lib/paths/org";
 import {
@@ -149,6 +150,8 @@ export function sectionInAnotherApp(page: ConsolePage): ConsolePage {
 
 /** The last pick's value for "All projects". */
 export const ALL_PROJECTS_PICK = "__all__";
+/** The last pick's value for a choice of several (the chat filter's, remembered in `sidebar.projects`). */
+export const SEVERAL_PROJECTS_PICK = "__several__";
 
 const LAST_PICK_KEY = "shell.currentProject";
 const FOCUS_KEY = "shell.focusProject";
@@ -183,8 +186,9 @@ export const useShellLastPick = create<LastPickState>((set) => ({
   focus: read(FOCUS_KEY),
   set: (key) => {
     write(LAST_PICK_KEY, key);
-    if (key !== ALL_PROJECTS_PICK) write(FOCUS_KEY, key);
-    set((state) => ({ key, focus: key === ALL_PROJECTS_PICK ? state.focus : key }));
+    const project = key !== ALL_PROJECTS_PICK && key !== SEVERAL_PROJECTS_PICK;
+    if (project) write(FOCUS_KEY, key);
+    set((state) => ({ key, focus: project ? key : state.focus }));
   },
   setFocus: (focus) => {
     write(FOCUS_KEY, focus);
@@ -234,6 +238,14 @@ export function useShellProject(pathname: string, search: Record<string, unknown
   const setLastPick = useShellLastPick((state) => state.set);
   const contextProjectId = useProjectStore((state) => state.currentProject?.id ?? null);
   const filterIds = useChatProjectFilterIds();
+  // A choice of several outlives a reload of any page: the filter holds it
+  // only for the tab, the setting for good.
+  const { prefs } = useSidebarProjectPrefs();
+  const rememberedKey = prefs.filter.join(",");
+  useEffect(() => {
+    if (lastPick !== SEVERAL_PROJECTS_PICK || filterIds.length >= 2 || !rememberedKey.includes(",")) return;
+    useChatProjectFilterStore.getState().setMany(rememberedKey.split(","));
+  }, [lastPick, filterIds.length, rememberedKey]);
   const consoleApp = consolePageOf(pathname)?.project ?? null;
 
   const routeRef: ShellProjectRef | null =
@@ -253,7 +265,7 @@ export function useShellProject(pathname: string, search: Record<string, unknown
     // In a choice of several, the focus is the last project picked among them.
     if (mode !== "one" && focus) candidates.push(refOfKey(focus));
     // While a chat's project is being read, the nav keeps the last pick rather than jumping.
-    if (lastPick && lastPick !== ALL_PROJECTS_PICK) candidates.push(refOfKey(lastPick));
+    if (lastPick && lastPick !== ALL_PROJECTS_PICK && lastPick !== SEVERAL_PROJECTS_PICK) candidates.push(refOfKey(lastPick));
     if (mode === "many") candidates.push(...ids.map((id): ShellProjectRef => ({ kind: "project", id })));
     if (contextProjectId) candidates.push({ kind: "project", id: contextProjectId });
     let ref: ShellProjectRef | null = null;
@@ -293,4 +305,25 @@ export function useShellProject(pathname: string, search: Record<string, unknown
   }, [routeRefKey, resolved.key, lastPick, setLastPick, mode, explicit]);
 
   return resolved;
+}
+
+/**
+ * Whether the shell shows several projects, and which (for pages under the
+ * route outlet: an app page's picker, the Overview of several). The same
+ * rule as useShellProject's mode, without the route.
+ */
+export function useShellSeveral(): { mode: "many" | "all" | null; rows: ProjectCatalogRow[] } {
+  const filterIds = useChatProjectFilterIds();
+  const lastPick = useShellLastPick((state) => state.key);
+  const { catalog } = useSelectorCatalog(undefined);
+  const mode = filterIds.length >= 2 ? "many" : lastPick === ALL_PROJECTS_PICK ? "all" : null;
+  const filterKey = filterIds.join(",");
+  const rows = useMemo(() => {
+    if (!mode || !catalog) return [];
+    const ids = filterKey.split(",");
+    return catalog.rows.filter(
+      (row): row is ProjectCatalogRow => row.kind === "project" && (mode === "all" || ids.includes(row.project.id)),
+    );
+  }, [mode, catalog, filterKey]);
+  return { mode, rows };
 }

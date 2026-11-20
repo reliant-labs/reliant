@@ -13,31 +13,27 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 
 import DropdownMenu, { type MenuGroup } from "@/components/forge-ui/dropdown_menu";
-import { useChatProjectFilterIds } from "@/hooks/useChatProjectFilter";
 
 import { consolePath, type ConsolePage } from "../../Forge/Console/paths";
-import { useSelectorCatalog } from "../../Projects/ProjectSelector";
 import { ProjectMark } from "../ProjectMark";
-import { ALL_PROJECTS_PICK, sectionInAnotherApp, sectionsAppOf, useShellLastPick } from "./shellProject";
+import { sectionInAnotherApp, sectionsAppOf, useShellLastPick, useShellSeveral } from "./shellProject";
 
 export function AppPageProjectPicker({ app, page }: { app: string; page: ConsolePage }) {
   const navigate = useNavigate();
-  const filterIds = useChatProjectFilterIds();
-  const lastPick = useShellLastPick((state) => state.key);
   const setFocus = useShellLastPick((state) => state.setFocus);
-  const { catalog } = useSelectorCatalog(undefined);
-  const several = filterIds.length >= 2 ? "many" : lastPick === ALL_PROJECTS_PICK ? "all" : null;
+  const { mode: several, rows } = useShellSeveral();
 
-  const options = useMemo(() => {
-    if (!several || !catalog) return [];
-    return catalog.rows.flatMap((row) => {
-      if (row.kind !== "project" || (several === "many" && !filterIds.includes(row.project.id))) return [];
-      const rowApp = sectionsAppOf(row);
-      return rowApp ? [{ key: row.key, name: row.name, app: rowApp }] : [];
-    });
-  }, [several, catalog, filterIds]);
+  const options = useMemo(
+    () =>
+      rows.flatMap((row) => {
+        const rowApp = sectionsAppOf(row);
+        return rowApp ? [{ key: row.key, name: row.name, app: rowApp }] : [];
+      }),
+    [rows],
+  );
 
-  if (!several || options.length === 0) return null;
+  // Overview of several lists them all (Forge/Console/ProjectsOverview).
+  if (!several || options.length === 0 || page.kind === "overview") return null;
   const current = options.find((option) => option.app === app);
   const groups: MenuGroup[] = [
     {

@@ -116,6 +116,17 @@ export function useConsoleNavModel(project: string, pathname: string, search: { 
       : undefined;
   }, [dashboards.data, project]);
 
+  // The app's own dashboards — from its repo, or saved by people in the org —
+  // not the generated ones, the templates, the built-ins or a hub's tabs.
+  const customDashboards = useMemo<ConsoleNavDashboard[]>(() => {
+    const hubKeys = new Set(productAnalytics?.keys ?? []);
+    return (dashboards.data?.dashboards ?? []).flatMap((d) =>
+      (d.source === "repo" || d.source === "workspace") && !hubKeys.has(d.ref.key) && d.ref.kind !== "template" && d.ref.kind !== "builtin"
+        ? [{ title: displayTitle(d.title, project), dashKind: d.ref.kind, key: d.ref.key }]
+        : [],
+    );
+  }, [dashboards.data, project, productAnalytics]);
+
   // The open dashboard's own scope (the same cached read the page makes): a
   // platform dashboard is not per environment, and the control must not imply it is.
   const openDashboard = useDashboard(
@@ -131,6 +142,7 @@ export function useConsoleNavModel(project: string, pathname: string, search: { 
     envs,
     alertsFiring,
     starred,
+    customDashboards,
     dashboardTitle,
     optionalViews,
     productAnalytics,
