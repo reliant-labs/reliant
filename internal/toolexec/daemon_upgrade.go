@@ -92,6 +92,9 @@ func parseOnlineReply(data []byte) (online bool, updatingUntil time.Time) {
 // RestartRequested, protojson-encoded.
 const RequestRestartCommand = "gateway.request_restart"
 
+// restartNotSupportedCode is a gateway-only refusal on the existing command envelope.
+const restartNotSupportedCode = "RESTART_NOT_SUPPORTED"
+
 // ErrRestartNotSupported is the gateway's answer to RequestRestartCommand for
 // a daemon that did not declare drains_on_restart_request: it predates the
 // drain protocol, and would ignore the request.
@@ -99,9 +102,9 @@ var ErrRestartNotSupported = svcerr.FailedPrecondition(
 	"this machine's daemon predates the drain protocol and cannot be asked to restart; it updates when it next restarts")
 
 // RequestDaemonRestart asks the gateway holding daemonID's stream to send it
-// RestartRequested. It fails when the daemon is not connected, or predates the
-// drain protocol (the error then names ErrRestartNotSupported's text). It
-// does not wait for the drain: the daemon reports its progress on its
+// RestartRequested. It fails when the daemon is not connected, or returns
+// an error matching ErrRestartNotSupported when the daemon predates the
+// drain protocol. It does not wait for the drain: the daemon reports progress on its
 // heartbeat.
 func (r *NATSDaemonRouter) RequestDaemonRestart(ctx context.Context, userID, daemonID string, req *reliantv1.RestartRequested) error {
 	if strings.TrimSpace(daemonID) == "" {
@@ -170,6 +173,9 @@ func (b *NATSToolBridge) respondRequestRestart(ctx context.Context, msg *nats.Ms
 		body := map[string]any{"success": err == nil}
 		if err != nil {
 			body["error_message"] = err.Error()
+			if errors.Is(err, ErrRestartNotSupported) {
+				body["error_code"] = restartNotSupportedCode
+			}
 		}
 		data, _ := json.Marshal(body)
 		_ = msg.Respond(data)

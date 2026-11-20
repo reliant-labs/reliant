@@ -58,6 +58,11 @@ type OrgRead struct {
 // org lock.
 var ErrOrgChanged = svcerr.FailedPrecondition("an organization changed while this was being saved; try again")
 
+// ErrOrgMoveTargetHasProject refuses a project's move to an org where its
+// owner already has a project at the same path, or of the same repository:
+// projects are unique per (org, user, path) and (org, user, remote_url).
+var ErrOrgMoveTargetHasProject = svcerr.FailedPrecondition("the target organization already has a project at this path or of this repository")
+
 // orgReadSQL re-reads one row's org; the table names are fixed, never input.
 var orgReadSQL = map[string]string{
 	"projects":        `SELECT org_id FROM projects WHERE id = ?`,

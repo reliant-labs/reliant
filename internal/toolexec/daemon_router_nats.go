@@ -1344,14 +1344,16 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 		Success      bool   `json:"success"`
 		Payload      []byte `json:"payload"`
 		ErrorMessage string `json:"error_message,omitempty"`
-		// ErrorCode is set only for a transport failure the requester acts
-		// on: ErrorCodeDaemonInterrupted (see NATSToolBridge).
+		// ErrorCode carries failures the requester can classify without matching prose.
 		ErrorCode string `json:"error_code,omitempty"`
 	}
 	if err := json.Unmarshal(msg.Data, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal daemon command response: %w", err)
 	}
 	if !resp.Success {
+		if commandType == RequestRestartCommand && resp.ErrorCode == restartNotSupportedCode {
+			return nil, ErrRestartNotSupported
+		}
 		switch resp.ErrorCode {
 		case ErrorCodeDaemonInterrupted:
 			return nil, fmt.Errorf("daemon command %q failed: %w", commandType, interruption(resp.ErrorMessage))

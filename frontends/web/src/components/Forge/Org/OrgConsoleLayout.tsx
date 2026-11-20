@@ -38,6 +38,7 @@ import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 import { orgPageOf, type OrgPage } from "../Console/paths";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { OrgShell } from "./OrgShell";
+import { appsPath } from "@/lib/paths";
 
 // One preference for both consoles: collapsing the rail in an app keeps it collapsed up here.
 const RAIL_KEY = "forge.console.rail";
@@ -94,7 +95,7 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
         <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
           {/* The forge shell has nothing to close back to: its mark leads home. */}
           {isForgeShell() ? (
-            <a href="/apps" aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5" data-testid="forge-shell-home">
+            <a href={appsPath()} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5" data-testid="forge-shell-home">
               <ForgeMark className="h-6 w-6" />
             </a>
           ) : (

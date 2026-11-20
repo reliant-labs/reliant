@@ -15,6 +15,7 @@ import { cn } from "../../lib/utils";
 import { useCapability } from "../../lib/surfaceContext";
 import { MobileChatSearchTab } from "./MobileChatSearchTab";
 import { MobileFileSearchTab } from "./MobileFileSearchTab";
+import { mobileChatsPath } from "@/lib/paths";
 
 type SearchMode = "chats" | "files";
 
@@ -33,7 +34,7 @@ export function MobileSearchScreen() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex min-h-[56px] shrink-0 items-center gap-2 border-b border-border bg-background px-2">
         <Link
-          to="/m/chats"
+          to={mobileChatsPath()}
           className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
           aria-label="Back"
         >

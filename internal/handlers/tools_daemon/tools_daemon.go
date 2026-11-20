@@ -97,13 +97,31 @@ func (s *outboundStream) abort() {
 
 // daemonConnection represents an active daemon connection
 type daemonConnection struct {
-	userID     string
-	daemonID   string
-	name       string
-	hostname   string
-	platform   string
-	labels     map[string]string
-	daemonType string // "local" or "cloud"
+	userID   string
+	daemonID string
+	// orgID is the org the machine belongs to (machineOrgAtConnect), "" when
+	// not known. It keeps the machine's project checkouts in that org: the
+	// reconcile and the by-path project resolution match only its projects
+	// (its owner's default org's when it is not known:
+	// authz.MachineScopeFor).
+	orgID string
+	// orgUnresolved: the machine's org could not be read at connect (a
+	// control-plane snapshot that could not resolve it, or the registry row
+	// unreadable). Nothing org-sensitive runs on this connection — no
+	// reconcile, no cleanup, no by-path project resolution — until the next
+	// connect resolves it (machineProjectScope).
+	orgUnresolved bool
+	// credentialOrgID is the org the connecting credential acts in
+	// (auth.GetCredentialOrgFromContext), "" for a daemon the gateway
+	// dialed. The connected event names it, so the control plane records a
+	// self-paired machine in the org it was paired in. It is not orgID: on a
+	// first connect no machine row records an org yet.
+	credentialOrgID string
+	name            string
+	hostname        string
+	platform        string
+	labels          map[string]string
+	daemonType      string // "local" or "cloud"
 	// boundCredential: the connection was made with a credential bound to
 	// this daemon id, or dialed in by the gateway for a pod the control
 	// plane named. An unbound credential may never supersede such a

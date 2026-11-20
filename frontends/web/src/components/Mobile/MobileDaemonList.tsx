@@ -34,6 +34,7 @@ import {
 import { machineDisplayName } from "@/lib/machineName";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { AddMachineSheet } from "@/components/Machines/AddMachineSheet";
+import { mobileMachinePath } from "@/lib/paths";
 
 /** Matches the desktop daemon poll so the shared cache entry stays fresh. */
 const POLL_INTERVAL_MS = 5_000;
@@ -83,8 +84,7 @@ function DaemonRow({ daemon, orgName }: { daemon: Daemon; orgName?: string }) {
   return (
     <div className="px-4 pb-2">
       <Link
-        to="/m/daemons/$daemonId"
-        params={{ daemonId: daemon.daemonId }}
+        to={mobileMachinePath(daemon.daemonId)}
         className={cn(MOBILE_ROW, "rounded-lg border-b-0 elevation-1")}
       >
         <MobileRowIcon icon={Server} />

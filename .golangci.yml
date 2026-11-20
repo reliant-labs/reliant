@@ -115,6 +115,13 @@ linters:
           msg: *typed-config
         - pattern: 'os\.Environ'
           msg: *typed-config
+        # The same reads by other spellings: os.ExpandEnv substitutes
+        # $VAR from the process environment, and syscall's are what os's
+        # wrap.
+        - pattern: 'os\.ExpandEnv'
+          msg: *typed-config
+        - pattern: 'syscall\.(Getenv|Environ)'
+          msg: *typed-config
     errcheck:
       # Exclude common deferred close patterns and best-effort operations
       # Note: Internal package methods use //nolint comments instead (exclude-functions doesn't match them reliably)

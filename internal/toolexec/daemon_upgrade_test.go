@@ -31,6 +31,7 @@ type updatingDaemonMgr struct {
 	reportsUpdating bool
 	refused         int
 	restarts        []*reliantv1.RestartRequested
+	restartErr      error
 }
 
 func (m *updatingDaemonMgr) updating() bool {
@@ -68,6 +69,9 @@ func (m *updatingDaemonMgr) SendToolRequestSync(ctx context.Context, userID, dae
 func (m *updatingDaemonMgr) RequestDaemonRestart(_, _ string, req *reliantv1.RestartRequested) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.restartErr != nil {
+		return m.restartErr
+	}
 	m.restarts = append(m.restarts, req)
 	return nil
 }
@@ -192,6 +196,25 @@ func TestRequestDaemonRestart_ReachesTheGatewayHoldingTheDaemon(t *testing.T) {
 	assert.Empty(t, daemon.commandRequests(), "the gateway answers it; the daemon gets RestartRequested, not a command")
 
 	require.Error(t, router.RequestDaemonRestart(context.Background(), reconnectUser, "", req))
+}
+
+func TestRequestDaemonRestart_PreservesUnsupportedDaemonAcrossGateway(t *testing.T) {
+	router, daemon, mgr := updatingTestRouter(t, true)
+	mgr.mu.Lock()
+	mgr.restartErr = fmt.Errorf("gateway refusal: %w", ErrRestartNotSupported)
+	mgr.mu.Unlock()
+
+	err := router.RequestDaemonRestart(context.Background(), reconnectUser, reconnectDaemon, &reliantv1.RestartRequested{RolloutId: "r"})
+	require.ErrorIs(t, err, ErrRestartNotSupported)
+	assert.Empty(t, daemon.commandRequests())
+
+	mgr.mu.Lock()
+	mgr.restartErr = fmt.Errorf("restart delivery failed")
+	mgr.mu.Unlock()
+	err = router.RequestDaemonRestart(context.Background(), reconnectUser, reconnectDaemon, &reliantv1.RestartRequested{RolloutId: "r"})
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, ErrRestartNotSupported)
+	assert.ErrorContains(t, err, "restart delivery failed")
 }
 
 // A gateway that cannot ask (a manager without the method) says so instead

@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -38,8 +39,20 @@ import (
 // each machine's watcher sends only when its own content changes: one
 // machine's clock or recent push must not drop another's catalog.
 //
+// The snapshot is the machine's, of a project it holds: under the project's
+// catalog lock and its row locked FOR SHARE (the order the machine-org
+// cleanup and every observed-checkout write take), it is stored only while
+// the project's org, re-read there, is in scope — the projects the machine
+// may hold (authz.MachineScopeFor; nil: every org's, a deployment with no
+// orgs) — and the machine has a checkout record of it that no user detached.
+// So a snapshot resolved before a detach, a machine-org cleanup or an org
+// move commits never recreates the machine's catalog after it, nor puts its
+// files back in the union. A dropped snapshot is not lost for good: the
+// connect reconcile records a checkout the machine has and asks for its
+// snapshot again.
+//
 // It reports whether the machine's catalog was stored.
-func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectConfigRecord, force bool) (bool, error) {
+func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectConfigRecord, force bool, scope *core.OrgScope) (bool, error) {
 	if record == nil {
 		return false, fmt.Errorf("project config record cannot be nil")
 	}
@@ -65,12 +78,19 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 	// behind another reads the winner's commit after the lock.
 	err = r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		stored = false
-		if err := store.LockProjectCatalog(txCtx, r.ORM(), record.ProjectID); err != nil {
+		// The catalog lock, then the project row FOR SHARE; the org is
+		// re-read under it.
+		inScope, err := r.lockProjectInScope(txCtx, record.ProjectID, scope)
+		if err != nil || !inScope {
 			return err
 		}
-		// A snapshot of a detached pair is dropped here, under the lock the
-		// detach holds: one the caller resolved before a detach committed
-		// must not recreate the machine's catalog afterwards.
+		// A snapshot of a pair with no checkout record, or a detached one, is
+		// dropped here, under the lock every detach (the user's, and the
+		// machine-org cleanup) holds: one the caller resolved before a detach
+		// committed must not recreate the machine's catalog afterwards.
+		if held, err := store.ProjectDaemonExists(txCtx, r.ORM(), record.ProjectID, record.DaemonID); err != nil || !held {
+			return err
+		}
 		if detached, err := store.ProjectDaemonDetached(txCtx, r.ORM(), record.ProjectID, record.DaemonID); err != nil || detached {
 			return err
 		}

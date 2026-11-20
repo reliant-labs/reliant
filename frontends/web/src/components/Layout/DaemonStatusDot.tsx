@@ -7,6 +7,7 @@ import { cn } from "../../lib/utils";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import Tooltip from "../forge-ui/tooltip";
 import { machineDisplayName } from "@/lib/machineName";
+import { machineSettingsPath, settingsPath } from "@/lib/paths";
 
 const RECENT_HEARTBEAT_SECONDS = 60;
 
@@ -73,9 +74,9 @@ export function DaemonStatusDot() {
         aria-label={`${meta.label}. Open machine settings`}
         onClick={() => {
           if (activeDaemon) {
-            void navigate({ to: "/settings/machines/$machineId", params: { machineId: activeDaemon.daemonId } });
+            void navigate({ to: machineSettingsPath(activeDaemon.daemonId) });
           } else {
-            void navigate({ to: "/settings/$section", params: { section: "machines" } });
+            void navigate({ to: settingsPath("machines") });
           }
         }}
         style={{ WebkitAppRegion: "no-drag" } as CSSProperties}

@@ -142,7 +142,7 @@ describe("anchored placement", () => {
   it("opens model preferences on the matching surface", async () => {
     render(<SurfaceProvider surface={embedded ? "mobile" : "desktop"}><ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen initialPage="model" onClose={vi.fn()} inputs={inputs} values={{}} onChange={vi.fn()} /></SurfaceProvider>);
     await userEvent.click(screen.getByRole("button", { name: "Model preferences" }));
-    expect(navigate).toHaveBeenLastCalledWith(embedded ? { to: "/m/settings", search: { section: "ai" } } : { to: "/settings/$section", params: { section: "ai" } });
+    expect(navigate).toHaveBeenLastCalledWith(embedded ? { to: "/m/settings", search: { section: "ai" } } : { to: "/settings/ai" });
   });
 
   it("shows catalog loading and failure rather than silently claiming no models", () => {

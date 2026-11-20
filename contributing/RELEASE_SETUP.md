@@ -11,6 +11,18 @@ Electron app releases are built and published by the [control-plane](https://git
 
 To trigger a release manually, use the `release-electron` workflow dispatch in the control-plane repo.
 
+## The standalone CLI
+
+Every release tag also publishes the `reliant` CLI on its own:
+`reliant_<os>_<arch>.tar.gz` for six platforms, `checksums.txt`, and a keyless
+Sigstore signature (`reliant-release.sigstore.json`). They go on the GitHub
+Release and under `cli/<tag>/` on downloads.reliantlabs.io. The release also
+updates `https://downloads.reliantlabs.io/daemon-channels.json`, the public
+manifest naming each channel's current release. `release.yml`'s `cli-archives`
+and `cli-publish` jobs do this from the binaries the installers bundle. Schema,
+how to verify, and what to check on the first release:
+[`dev-docs/cli-release-artifacts.md`](../dev-docs/cli-release-artifacts.md).
+
 ## Who cuts a release: rc-train
 
 **Nobody cuts reliant by hand.** control-plane's `rc-train` workflow

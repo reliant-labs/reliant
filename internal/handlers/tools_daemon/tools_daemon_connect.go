@@ -171,6 +171,45 @@ func (s *Service) rejectReservedDaemon(ctx context.Context, userID, daemonID str
 	return bootstrap.NewReservedDaemonIDError()
 }
 
+// MachineOrg is what the control plane said about a machine's org when the
+// gateway dials it in (the DAEMON_STATE snapshot's orgId / orgUnresolved): ID
+// "" with Unresolved false is a control plane that named none (or predates
+// the field); Unresolved is one that could not read it.
+type MachineOrg struct {
+	ID         string
+	Unresolved bool
+}
+
+// machineOrgAtConnect is the org of the machine connecting as daemonID: the
+// one the control plane just named (named.ID, recorded on its row), else the
+// one its row already holds from an earlier connect, else "" — logged: the
+// machine is then held to its owner's default org (authz.MachineScopeFor).
+// unresolved is true when the org cannot be told at all: the control plane
+// could not read it and no earlier connect recorded one, or the registry row
+// could not be read. The connection then runs nothing org-sensitive.
+func (s *Service) machineOrgAtConnect(ctx context.Context, userID, daemonID string, named MachineOrg) (org string, unresolved bool) {
+	if named.ID != "" {
+		return named.ID, false
+	}
+	d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	switch {
+	case err != nil && !svcerr.IsNotFound(err):
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" could not read the machine's recorded organization; nothing org-sensitive runs on this connection",
+			"error", err, "userID", userID, "daemonID", daemonID)
+		return "", true
+	case err == nil && d != nil && d.OrgID != nil && *d.OrgID != "":
+		return *d.OrgID, false
+	case named.Unresolved:
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" the control plane could not read the machine's organization; nothing org-sensitive runs on this connection",
+			"userID", userID, "daemonID", daemonID)
+		return "", true
+	}
+	logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" machine has no known organization (its credential or the control plane names none); "+
+		"it holds only its owner's default organization's projects",
+		"userID", userID, "daemonID", daemonID)
+	return "", false
+}
+
 // accountEmail is the email of the account the daemon credential acts as, as
 // the token authority named it when the daemon auth interceptor resolved the
 // credential — "" when it named none. It is told only to that credential's
@@ -270,6 +309,14 @@ func (s *Service) ConnectDaemon(
 		},
 	)
 
+	// The machine's org, as its daemon-bound credential's introspection
+	// named it (control-plane's daemons.org_id). Only a bound credential
+	// speaks for the machine: the bound id is this daemonID (resolveDaemonID).
+	credentialOrg := ""
+	if boundCredential {
+		credentialOrg = auth.GetDaemonOrgIDFromContext(ctx)
+	}
+
 	requestedProjectPaths, err := s.daemonProjectPaths(ctx, daemonID)
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to list project paths"))
@@ -296,6 +343,7 @@ func (s *Service) ConnectDaemon(
 		// Reserves the id for bound credentials; an unbound registration on a
 		// reserved id writes nothing and is refused below.
 		RequiresBoundToken: boundCredential,
+		OrgID:              daemonStringPtrOrNil(credentialOrg),
 	}); err != nil {
 		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
 			return s.rejectForeignDaemon(ctx, userID, daemonID)
@@ -330,26 +378,30 @@ func (s *Service) ConnectDaemon(
 		"hostname", reg.Hostname,
 		"platform", reg.Platform)
 
+	machineOrg, machineOrgUnresolved := s.machineOrgAtConnect(ctx, userID, daemonID, MachineOrg{ID: credentialOrg})
+
 	// Create daemon connection
 	now2 := time.Now().UTC()
 	conn := &daemonConnection{
-		userID:          userID,
-		daemonID:        daemonID,
-		name:            reg.GetName(),
-		hostname:        reg.GetHostname(),
-		platform:        reg.GetPlatform(),
-		labels:          reg.GetLabels(),
-		daemonType:      reg.GetDaemonType(),
-		boundCredential: boundCredential,
-		connectedAt:     now2,
-		lastActivity:    now2,
-		lastReceived:    now2,
-		attachedAt:      now,
-		stream:          &inboundStream{stream: stream, ctx: ctx},
-		attachSource:    db.DaemonAttachmentSourceInbound,
-		network:         daemonNetworkOf(stream.RequestHeader(), stream.Peer().Addr),
-		movesOnDrain:    reg.GetMovesOnDrain(),
-		// Acts on RestartRequested (upgrade.go).
+		userID:                 userID,
+		daemonID:               daemonID,
+		orgID:                  machineOrg,
+		orgUnresolved:          machineOrgUnresolved,
+		name:                   reg.GetName(),
+		hostname:               reg.GetHostname(),
+		platform:               reg.GetPlatform(),
+		credentialOrgID:        auth.GetCredentialOrgFromContext(ctx),
+		labels:                 reg.GetLabels(),
+		daemonType:             reg.GetDaemonType(),
+		boundCredential:        boundCredential,
+		connectedAt:            now2,
+		lastActivity:           now2,
+		lastReceived:           now2,
+		attachedAt:             now,
+		stream:                 &inboundStream{stream: stream, ctx: ctx},
+		attachSource:           db.DaemonAttachmentSourceInbound,
+		network:                daemonNetworkOf(stream.RequestHeader(), stream.Peer().Addr),
+		movesOnDrain:           reg.GetMovesOnDrain(),
 		drainsOnRestartRequest: reg.GetDrainsOnRestartRequest(),
 		build:                  daemonBuildFromRegister(reg),
 		sendCh:                 make(chan *reliantv1.ServerMessage, 256),
@@ -471,6 +523,7 @@ func (s *Service) RegisterOutboundConnection(
 	reg *reliantv1.DaemonRegister,
 	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage],
 	cancel context.CancelFunc,
+	org MachineOrg,
 ) (*OutboundConn, error) {
 	if daemonID == "" || userID == "" {
 		return nil, fmt.Errorf("missing daemonID or userID")
@@ -496,6 +549,8 @@ func (s *Service) RegisterOutboundConnection(
 		// snapshot names, so this identity is as authoritative as a bound
 		// credential and reserves the id the same way.
 		RequiresBoundToken: true,
+		// So is the org the same snapshot names for it.
+		OrgID: daemonStringPtrOrNil(org.ID),
 	}); err != nil {
 		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
 			return nil, s.rejectForeignDaemon(ctx, userID, daemonID)
@@ -521,16 +576,18 @@ func (s *Service) RegisterOutboundConnection(
 			"error", err, "daemonID", daemonID, "userID", userID)
 	}
 
+	outboundOrg, outboundOrgUnresolved := s.machineOrgAtConnect(ctx, userID, daemonID, org)
 	conn := &daemonConnection{
-		userID:          userID,
-		daemonID:        daemonID,
-		name:            reg.GetName(),
-		hostname:        reg.GetHostname(),
-		platform:        reg.GetPlatform(),
-		labels:          reg.GetLabels(),
-		daemonType:      reg.GetDaemonType(),
-		boundCredential: true,
-		// Acts on RestartRequested (upgrade.go).
+		userID:                 userID,
+		daemonID:               daemonID,
+		orgID:                  outboundOrg,
+		orgUnresolved:          outboundOrgUnresolved,
+		name:                   reg.GetName(),
+		hostname:               reg.GetHostname(),
+		platform:               reg.GetPlatform(),
+		labels:                 reg.GetLabels(),
+		daemonType:             reg.GetDaemonType(),
+		boundCredential:        true,
 		drainsOnRestartRequest: reg.GetDrainsOnRestartRequest(),
 		connectedAt:            now,
 		lastActivity:           now,
