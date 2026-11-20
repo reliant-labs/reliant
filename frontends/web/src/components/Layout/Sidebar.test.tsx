@@ -293,7 +293,7 @@ describe("Sidebar selected chat scroll", () => {
     expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/", "/usage", "/settings"]);
   });
 
-  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, AI providers, then the chats full height", () => {
+  it("on a chat page, drills into Agents: New chat, Workflows, Sandboxes, Connectors, then the chats full height", () => {
     sessionStorage.clear();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const onNavigate = vi.fn();
@@ -307,7 +307,8 @@ describe("Sidebar selected chat scroll", () => {
     expect(screen.getByTestId("create-chat-button")).toHaveAttribute("href", "/new");
     expect(screen.getByTestId("nav-workflows")).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByTestId("nav-sandboxes")).toBeInTheDocument();
-    expect(screen.getByTestId("nav-ai-providers")).toHaveAttribute("href", "/settings/ai");
+    // AI providers lives in Settings only (U6e).
+    expect(screen.queryByTestId("nav-ai-providers")).toBeNull();
     expect(screen.getByTestId("sidebar-chats")).toHaveAttribute("data-place", "fill");
     fireEvent.click(screen.getByTestId("nav-back"));
     expect(onNavigate).toHaveBeenCalledTimes(1);

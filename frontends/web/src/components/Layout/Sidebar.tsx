@@ -713,7 +713,10 @@ function SidebarComponent({
   onNavigate,
   onOpenRuns,
 }: SidebarProps) {
-  const go = useCallback((href: string, options?: NavigateOptions) => onNavigate?.(href, options), [onNavigate]);
+  const go = useCallback(
+    (href: string, options?: NavigateOptions) => (options ? onNavigate?.(href, options) : onNavigate?.(href)),
+    [onNavigate],
+  );
   // What the list shows is the project shell's scope (U6b, sidebar/shellProject.ts):
   // one project's chats, several projects' (the chat filter of several,
   // hooks/useChatProjectFilter), or every project's — grouped by project
