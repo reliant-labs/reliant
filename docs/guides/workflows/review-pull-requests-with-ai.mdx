@@ -5,8 +5,6 @@ description: "Get an AI code review on every GitHub pull request: turn on Autopi
 keywords: ["AI code review GitHub", "AI pull request review", "automated code review", "autopilot-pr-review", "reliant trigger activate"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge: not used · S steps run in scratch: yes (reliant workflow validate + lint on internal/workflow/builtin/autopilot-pr-review.yaml: valid, 3 scenario-trigger-uncovered warnings) · G steps run in the Reliant Labs org sandbox: reliant project create (guides-sandbox-autopilot), trigger activate builtin://autopilot-pr-review --no-machine (3 activations), PR reliant-labs/guides-sandbox#1 opened → trigger events "launched" → run reached the reviewer and paused, because the sandbox org has no org AI account and CLI activations are org_only (shown in Troubleshooting); then deactivate/delete, PR closed, branch deleted; all in the sandbox ledger · unverified: the posted review and its labels (review body format and footer taken from autopilot-pr-review.yaml nodes review/decide/post), the re-review label and comment, the app's Set up dialog · scratch: guides-scratch/review-pull-requests-with-ai */}
-
 By the end of this guide every non-draft pull request in the repositories you pick gets one review from an AI reviewer, posted by the Reliant bot: defects and risks, each tied to a `path:line`. It never approves and never merges. A person does both.
 
 This is `autopilot-pr-review`, one of the [Autopilot](/guides/autopilot) built-ins. It declares its own GitHub triggers, so you turn it on rather than write it, and it needs no machine.
@@ -128,8 +126,10 @@ This is `autopilot-pr-review`, one of the [Autopilot](/guides/autopilot) built-i
   <Card title="Turn issues into pull requests" icon="git-pull-request" href="/guides/workflows/github-issues-to-pull-requests">
     Label an issue and the issue worker opens a tested pull request for this review.
   </Card>
-{/* defer-card:/guides/workflows/ai-security-review-pull-requests ICA8Q2FyZCB0aXRsZT0iQWRkIGEgc2VjdXJpdHkgcmV2aWV3IiBpY29uPSJzaGllbGQiIGhyZWY9Ii9ndWlkZXMvd29ya2Zsb3dzL2FpLXNlY3VyaXR5LXJldmlldy1wdWxsLXJlcXVlc3RzIj4KICAgIEEgc2Vjb25kLCByZWFkLW9ubHkgcmV2aWV3ZXIgdGhhdCB0aHJlYXQtbW9kZWxzIGVhY2ggcHVsbCByZXF1ZXN0LgogIDwvQ2FyZD4= */}
-  <Card title="Autopilot reference" icon="robot" href="/guides/autopilot">
+  <Card title="Add a security review" icon="shield" href="/guides/workflows/ai-security-review-pull-requests">
+    A second, read-only reviewer that threat-models each pull request.
+  </Card>
+  <Card title="Autopilot reference" icon="bot" href="/guides/autopilot">
     Every setting, label, lease and cost of the five Autopilot workflows.
   </Card>
   <Card title="Who an automation acts as" icon="user" href="/automations/overview#who-an-automation-acts-as">

@@ -5,8 +5,6 @@ description: "Label a GitHub issue agent:ready and an AI agent writes a failing 
 keywords: ["autonomous issue resolution AI", "AI fix GitHub issues", "AI agent opens pull request", "autopilot-issue-worker", "agent:ready"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge: not used · S steps run in scratch: yes (reliant workflow validate on internal/workflow/builtin/autopilot-issue-worker.yaml with an agent:ready payload, sender, activation params and owner id: valid; lint: 0 errors, 6 warnings) · G steps run in the Reliant Labs org sandbox: reliant project create (guides-sandbox-autopilot, a clone of reliant-labs/guides-sandbox), trigger activate builtin://autopilot-issue-worker --machine (2 activations, gate_command 'go test ./...'), gh label create agent:ready, issue #2 opened and labelled → trigger events recorded the firing as failed, because the sandbox org has no org AI account and CLI activations are org_only (shown in Troubleshooting); then deactivate/delete, issue closed; all in the sandbox ledger · unverified: the agent's work, the branch, the pull request, its labels and the issue comment (taken from autopilot-issue-worker.yaml nodes wt, dir, agent, gate, publish, pr, pr_labels, issue_labels_done, issue_comment_done), the @reliant mention · scratch: guides-scratch/review-pull-requests-with-ai */}
-
 By the end of this guide, labelling a GitHub issue `agent:ready` starts an agent that writes a failing test, fixes the bug, runs your fast checks and opens a pull request that closes the issue. The Reliant bot opens it, so you can approve and merge it yourself.
 
 This is `autopilot-issue-worker`, one of the [Autopilot](/guides/autopilot) built-ins. Its own description says: "Never merges, never approves."
@@ -35,7 +33,7 @@ This is `autopilot-issue-worker`, one of the [Autopilot](/guides/autopilot) buil
 
     ```bash terminal
     reliant trigger activate --workflow builtin://autopilot-issue-worker \
-      --machine ns1023237 --project-id 9859294a-8b3c-419f-a5c4-eb85a022fd65 \
+      --machine build-box --project-id 9859294a-8b3c-419f-a5c4-eb85a022fd65 \
       --param 'repos=["reliant-labs/guides-sandbox"]' \
       --param 'gate_command=go test ./...' \
       --name-prefix "guides-sandbox-autopilot · issue-worker"
@@ -131,8 +129,10 @@ This is `autopilot-issue-worker`, one of the [Autopilot](/guides/autopilot) buil
   <Card title="Review every pull request" icon="git-pull-request" href="/guides/workflows/review-pull-requests-with-ai">
     Have the PR reviewer read what the issue worker opens.
   </Card>
-{/* defer-card:/guides/workflows/agent-addresses-review-comments ICA8Q2FyZCB0aXRsZT0iQW5zd2VyIHJldmlldyBjb21tZW50cyIgaWNvbj0iY29tbWVudHMiIGhyZWY9Ii9ndWlkZXMvd29ya2Zsb3dzL2FnZW50LWFkZHJlc3Nlcy1yZXZpZXctY29tbWVudHMiPgogICAgVGhlIHJldmlldyByZXNwb25kZXIgcHVzaGVzIGZpeGVzIGZvciBmZWVkYmFjayBvbiBgYWdlbnQ6YXV0aG9yZWRgIHB1bGwgcmVxdWVzdHMuCiAgPC9DYXJkPg== */}
-  <Card title="Autopilot reference" icon="robot" href="/guides/autopilot">
+  <Card title="Answer review comments" icon="comments" href="/guides/workflows/agent-addresses-review-comments">
+    The review responder pushes fixes for feedback on `agent:authored` pull requests.
+  </Card>
+  <Card title="Autopilot reference" icon="bot" href="/guides/autopilot">
     Every setting, label, lease and cost of the five Autopilot workflows.
   </Card>
   <Card title="Who an automation acts as" icon="user" href="/automations/overview#who-an-automation-acts-as">

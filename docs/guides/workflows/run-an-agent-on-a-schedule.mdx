@@ -5,8 +5,6 @@ description: "Run an AI agent on a cron schedule: create a schedule trigger with
 keywords: ["scheduled ai agent", "ai agent cron", "cron job ai agent", "reliant trigger create", "schedule trigger", "reliant trigger activate"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · no forge needed · S steps run in scratch: yes (validate, lint on repo-summary.yaml) · account steps: run in the Reliant Labs org on a throwaway project (guides-sandbox-schedule) on a self-hosted machine: trigger create/update/get/list/fire/events, trigger activate, a scheduled firing at 07:32Z that launched run e6a5726f, a 07:41Z scheduled failure that auto-paused the trigger, then deactivate/terminate/delete (trigger list: No triggers); all logged in the sandbox ledger · the sandbox org has no org AI account, so the runs stopped at the funding check (shown in Troubleshooting); no run finished · unverified: a cloud machine waking for a firing (taken from internal/workflow/runtime/activities/handlers/preflight_daemon.go and /machines/cloud; no cloud machine was used) · test crons fired a few minutes after creation; the page shows the weekday 9am form */}
-
 By the end of this guide an agent runs in your repository every weekday at 9am, without you starting it, and you can see each firing and open the run it started. A schedule is a **trigger**. You can create one from the terminal, or declare it in a workflow's YAML so anyone who uses the workflow can turn it on. This guide does both. [Schedules](/automations/schedules) lists every option.
 
 ## Before you begin
@@ -97,7 +95,7 @@ By the end of this guide an agent runs in your repository every weekday at 9am, 
     NAME                                       STATE    HEALTH   SCHEDULE    ...  WORKFLOW      NEXT FIRE             LAST
     guides-sandbox-schedule · weekday-morning  enabled  unknown  32 7 * * *  ...  repo-summary  2026-11-21T07:32:00Z  launched at 2026-11-20T07:32:00Z
     OCCURRED AT           OUTCOME   CHAT                                  DEFINITION
-    2026-11-20T07:32:00Z  launched  e6a5726f-4dd1-50ef-a0f6-f65a1f8c8b3c  machine ovh-build-1 at .reliant/workflows/repo-summary.yaml @ master 13ef0c7, clean ...
+    2026-11-20T07:32:00Z  launched  e6a5726f-4dd1-50ef-a0f6-f65a1f8c8b3c  machine build-box at .reliant/workflows/repo-summary.yaml @ master 13ef0c7, clean ...
     ```
 
     `launched` with a chat ID means the run started. **DEFINITION** records the exact commit of the workflow it ran. Follow the run with `reliant workflow follow <chat-id>`; it is also under **Workflows → Runs** in the app. To test without waiting for 9am, `reliant trigger fire <name>` runs it now.
@@ -140,7 +138,9 @@ By the end of this guide an agent runs in your repository every weekday at 9am, 
   <Card title="First multi-agent workflow" icon="users" href="/guides/workflows/first-multi-agent-workflow">
     Write the workflow a schedule runs: planner, implementer and reviewer.
   </Card>
-{/* defer-card:/guides/workflows/daily-slack-digest ICA8Q2FyZCB0aXRsZT0iRGFpbHkgU2xhY2sgZGlnZXN0IiBpY29uPSJtZXNzYWdlLXNxdWFyZSIgaHJlZj0iL2d1aWRlcy93b3JrZmxvd3MvZGFpbHktc2xhY2stZGlnZXN0Ij4KICAgIFBvc3QgYSBzY2hlZHVsZWQgYWdlbnQncyBzdW1tYXJ5IHRvIGEgU2xhY2sgY2hhbm5lbC4KICA8L0NhcmQ+ */}
+  <Card title="Daily Slack digest" icon="message-square" href="/guides/workflows/daily-slack-digest">
+    Post a scheduled agent's summary to a Slack channel.
+  </Card>
   <Card title="No-machine runs" icon="cloud" href="/automations/no-machine-runs">
     Schedule an agent that needs only the web and your integrations.
   </Card>

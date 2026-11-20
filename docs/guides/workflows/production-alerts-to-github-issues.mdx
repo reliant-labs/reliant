@@ -5,8 +5,6 @@ description: "Get one investigated GitHub issue per new production alert or erro
 keywords: ["AI on-call alert triage", "alerts to GitHub issues", "AI incident triage", "Alertmanager GitHub issue", "autopilot on-call"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1 (project pin) · S steps run in scratch (guides-scratch/production-alerts-to-github-issues): validate + lint of a copy of builtin autopilot-oncall (0 errors, 5 warnings), scenario run of all 22 of its scenarios, and `scenario run --include-builtins` (22/22) · H/G steps: run in the Reliant Labs org sandbox (guides-sandbox-oncall: hosted static site prod v0.7.3-v0.7.5, activation 07cb9eab against reliant-labs/guides-sandbox, receiver shown by `obs receivers list`, three real NewIssue alerts firing in `obs status`); torn down (trigger deleted, env deleted; reliant project left, no delete verb), see the sandbox ledger · unverified: "Check the issue it filed" — no alert reached the activation in 50 minutes (no firing recorded, no issue filed; report 60772dd1), so that step is written from builtin autopilot-oncall.yaml (create/publish node bodies) and its scenarios, not from a live issue */}
-
 By the end of this guide, each new production alert or error becomes one GitHub issue, investigated read-only and written up with a severity, evidence, a suspected cause and a proposed fix. A repeat of the same alert comments on that issue instead of opening another.
 
 There is no alert route or token to set up: on Reliant hosting the on-call trigger is declared `webhook: {source: alerting}`, so turning it on connects it to your organization's alerts ([Webhooks](/automations/webhooks#your-organizations-alerts)).
@@ -169,7 +167,7 @@ There is no alert route or token to set up: on Reliant hosting the on-call trigg
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Autopilot: alerts and errors" icon="robot" href="/guides/autopilot#alerts-and-errors">Deduplication and what the investigator sees.</Card>
+  <Card title="Autopilot: alerts and errors" icon="bot" href="/guides/autopilot#alerts-and-errors">Deduplication and what the investigator sees.</Card>
   <Card title="Go from a production error to a reviewed fix" icon="wrench" href="/guides/workflows/production-error-to-fix">From an on-call issue to a merged fix.</Card>
   <Card title="Dashboards and alerts" icon="bell" href="/hosting/observability/dashboards-and-alerts">Default alert rules and error issues.</Card>
   <Card title="Webhooks" icon="webhook" href="/automations/webhooks">The `source: alerting` trigger, and self-hosted Alertmanager.</Card>

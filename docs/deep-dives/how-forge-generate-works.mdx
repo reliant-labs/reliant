@@ -5,8 +5,6 @@ description: "How forge generate projects your proto and SQL migrations into stu
 keywords: ["forge generate", "Go code generation from proto", "generate ORM from SQL migrations", "Connect RPC codegen", "codegen cache", "generated vs hand-written code"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin; in rc/v1.7.0-rc.5) · L steps run in scratch (guides-scratch/how-forge-generate-works/shop, copied from add-table-crud-api-pages): generate --dry-run, generate --timings, generate twice to "nothing to do", two concurrent generates (lock wait line), db migration new + proto field + generate + git status/diff, a broken migration (rollback output saved as guides-scratch/how-forge-generate-works/generate-failure.log), project shapes --grep, project audit --json, project scaffolded, generate --help / --help-dev · sources: forge docs/concepts.md §1–3; internal/cli/generate.go (help text, withGenerateLock, generateInSlot, rollback journal); internal/cli/generate_pipeline.go (GenStep); internal/cli/generate_cache.go (fixed-point fingerprint, known gaps); internal/cli/lockfile.go; internal/shadowdb/{shadowdb.go,applied.go}; the architecture skill (reliant forge skill load architecture); pinned-commit equivalents checked with git show 0ab7c562e817 */}
-
 **In short**
 
 - You write two inputs: proto files (the API) and SQL migrations (the schema). `forge generate` turns them into the Go and TypeScript stubs, the ORM, the CRUD wiring, React Query hooks, mocks, test helpers, the composition graph and the deploy config, in one ordered run.
@@ -295,9 +293,9 @@ hook     useListProducts                  frontends/web/src/hooks/catalog-servic
 <CardGroup cols={2}>
   <Card title="Build a Go and React app with Connect RPC" icon="rocket" href="/guides/forge/build-go-react-app-connect-rpc">Create a project and run generate for the first time</Card>
   <Card title="Add a database table with a CRUD API and pages" icon="table" href="/guides/forge/add-table-crud-api-pages">One marked message becomes a migration, RPCs, hooks and pages</Card>
-{/* defer-card:/guides/forge/add-custom-rpc ICA8Q2FyZCB0aXRsZT0iQWRkIGEgY3VzdG9tIFJQQyB3aXRoIHR5cGVkIFJlYWN0IGhvb2tzIiBpY29uPSJjb2RlIiBocmVmPSIvZ3VpZGVzL2ZvcmdlL2FkZC1jdXN0b20tcnBjIj5Mb2dpYyBDUlVEIGNhbid0IGV4cHJlc3MsIHdpdGggaXRzIHN0dWIgYW5kIGhvb2sgZ2VuZXJhdGVkPC9DYXJkPg== */}
-{/* defer-card:/guides/forge/rest-and-openapi-from-connect ICA8Q2FyZCB0aXRsZT0iRXhwb3NlIFJFU1QgZW5kcG9pbnRzIGFuZCBhbiBPcGVuQVBJIHNwZWMiIGljb249Imdsb2JlIiBocmVmPSIvZ3VpZGVzL2ZvcmdlL3Jlc3QtYW5kLW9wZW5hcGktZnJvbS1jb25uZWN0Ij5UdXJuIG9uIHRoZSBPcGVuQVBJIHN0ZXAgdGhlIHBsYW4gYWJvdmUgc2tpcHM8L0NhcmQ+ */}
-{/* defer-card:/guides/forge/build-ui-before-backend-mock-mode ICA8Q2FyZCB0aXRsZT0iQnVpbGQgdGhlIFVJIGJlZm9yZSB0aGUgYmFja2VuZCIgaWNvbj0id2luZG93IiBocmVmPSIvZ3VpZGVzL2ZvcmdlL2J1aWxkLXVpLWJlZm9yZS1iYWNrZW5kLW1vY2stbW9kZSI+UnVuIHRoZSBmcm9udGVuZCBvbiB0aGUgZ2VuZXJhdGVkIG1vY2sgZGF0YTwvQ2FyZD4= */}
+  <Card title="Add a custom RPC with typed React hooks" icon="code" href="/guides/forge/add-custom-rpc">Logic CRUD can't express, with its stub and hook generated</Card>
+  <Card title="Expose REST endpoints and an OpenAPI spec" icon="globe" href="/guides/forge/rest-and-openapi-from-connect">Turn on the OpenAPI step the plan above skips</Card>
+  <Card title="Build the UI before the backend" icon="window" href="/guides/forge/build-ui-before-backend-mock-mode">Run the frontend on the generated mock data</Card>
 </CardGroup>
 
 ## Reference

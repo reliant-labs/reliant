@@ -5,8 +5,6 @@ description: "See which Postgres locks, table rewrites and full scans each pendi
 keywords: ["postgres migration lock", "access exclusive lock", "postgres table rewrite", "forge db analyze", "create index concurrently"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.7.0 (project pin v1.6.1-0.20261115024114-0ab7c562e817, the v1.7.0 commit) · L steps run in scratch: yes (db analyze --base HEAD text and --json, lint.rules gating, the fixes, the three-migration NOT NULL, the no-git error) · not run: --target dsn (no snapshot database to point it at) · H steps: none */}
-
 By the end of this guide you will know, for each statement in your pending migrations, which locks it took, whether it rewrote a table, and whether it scanned every row while blocking writes. `reliant forge db analyze` applies the migrations to a disposable Postgres, so you find a table-locking migration on your machine instead of during a deploy.
 
 The [migration lint](/guides/forge/zero-downtime-postgres-migrations) reads SQL text. `db analyze` runs it: each file in its own transaction, the way forge's migrator applies it, then reads what Postgres reports.
@@ -174,7 +172,7 @@ The [migration lint](/guides/forge/zero-downtime-postgres-migrations) reads SQL 
 
 ## Analyze against a copy of real data
 
-For real row counts and timings, use a snapshot you built, such as an anonymized copy of production. Mark it with `ALTER DATABASE <db> SET forge.analyze_target = 'on'`, then run `FORGE_ANALYZE_DATABASE_URL=postgres://... reliant forge db analyze --target dsn`. Forge only reads the target: it migrates a copy and drops it. The role needs `CREATEDB` and ownership of the database, and a non-development environment's declared database is refused. This guide did not run that path.
+For real row counts and timings, use a snapshot you built, such as an anonymized copy of production. Mark it with `ALTER DATABASE <db> SET forge.analyze_target = 'on'`, then run `FORGE_ANALYZE_DATABASE_URL=postgres://... reliant forge db analyze --target dsn`. Forge only reads the target: it migrates a copy and drops it. The role needs `CREATEDB` and ownership of the database, and a non-development environment's declared database is refused.
 
 ## What this does not do
 
@@ -185,7 +183,7 @@ For real row counts and timings, use a snapshot you built, such as an anonymized
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Zero-downtime migrations" icon="code-branch" href="/guides/forge/zero-downtime-postgres-migrations">
+  <Card title="Zero-downtime migrations" icon="git-branch" href="/guides/forge/zero-downtime-postgres-migrations">
     Declare compatibility, expand then contract, and lint each migration.
   </Card>
   <Card title="db analyze reference" icon="terminal" href="/reference/cli#reliant-forge-db-analyze">

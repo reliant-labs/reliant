@@ -328,22 +328,23 @@ that does the editing:
 
 ```yaml
 - id: edit
-  type: workflow
-  ref: builtin://agent
-  args:
-    tools_config:
-      tools:
-        shell: {credentials: none}
+  type: run
+  timeout: 10m
+  credentials: none                                   # this shell never holds a git credential
+  command: cd "{{ nodes.wt.path }}" && go mod tidy
 
 - id: publish
   type: git_publish
+  condition: "nodes.edit.exit_code == 0"
   args:
     worktree: "{{ nodes.wt.path }}"
     repo: "{{ inputs.repo }}"                           # owner/name
     branch: "autopilot/issue-{{ inputs.issue }}"        # or pr_head_of: "{{ inputs.pr }}"
     allow: ["autopilot/*"]                              # optional: the branch must match one
-    message: "{{ nodes.edit.commit_message }}"
+    message: "chore: go mod tidy (#{{ inputs.issue }})"
 ```
+
+An agent that edits the worktree pairs the same way: bind `credentials: none` on its shell tool, as shown under **Shells without credentials** below.
 
 The policy runs on the server before anything reaches your machine. A publish is **refused** (the node
 completes with `refused: true` and a `refusal` that says why; it does not fail) when the branch is the
@@ -393,19 +394,23 @@ helper. Reliant's git credential helper and any other helper are reset, `GIT_TER
 authenticate and returns at once: it never prompts.
 
 ```yaml
-- id: agent
-  type: workflow
-  ref: builtin://agent
+- id: think                           # the call_llm node of an agent loop
+  type: call_llm
   args:
+    model: "{{ inputs.model }}"
     tools_config:
+      preloaded_tools: [view, edit, shell, shell_output, shell_wait]
       tools:
         shell: {credentials: none}      # bound: the model is never shown this parameter
 
 - id: gate
   type: run
+  timeout: 10m
   credentials: none
   command: make test
 ```
+
+The parameter is bound in `tools_config` on a `call_llm` node. `builtin://agent` takes only a list of `tools`, not `tools_config`, so a workflow that binds a tool parameter runs its own agent loop; the guide linked below has a complete one.
 
 On Linux, which every Reliant cloud machine runs, the command also starts in a sandbox: its own user,
 mount and PID namespaces, where the daemon's credential files (`~/.reliant/daemon.json`,

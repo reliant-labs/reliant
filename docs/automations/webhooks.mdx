@@ -14,11 +14,12 @@ triggers:
 
 ## Calling it
 
-When you enable the workflow, the app shows its **Webhook URL** and a token, once. Three ways in; any one is enough:
+When you enable the workflow, the app shows its **Webhook URL** and a token, once. Either way in is enough:
 
 1. **Token in the path:** `POST <your Reliant URL>/hooks/<trigger id>/<token>`. This is for senders that cannot set headers, such as Zapier. Treat the whole URL like the token.
 2. **Bearer token:** `POST <your Reliant URL>/hooks/<trigger id>` with `Authorization: Bearer <token>`.
-3. **Signed body:** if you configure HMAC, a delivery with a valid signature is accepted.
+
+A trigger can also declare HMAC verification, so a delivery with a valid signature is accepted:
 
 ```yaml
 triggers:
@@ -31,7 +32,11 @@ triggers:
         encoding: hex
 ```
 
-The signature is an HMAC of the raw body under a shared secret you set when enabling, so the definition can be shared without it. `header` defaults to `X-Signature-256`, `algorithm` to `sha256` (`sha1` and `sha512` also work), `encoding` to `hex` (or `base64`). Configuring HMAC adds a way in; the token still works.
+The signature is an HMAC of the raw body under a shared secret that is kept out of the definition, so the definition can be shared without it. `header` defaults to `X-Signature-256`, `algorithm` to `sha256` (`sha1` and `sha512` also work), `encoding` to `hex` (or `base64`). Configuring HMAC adds a way in; the token still works.
+
+<Warning>
+The server needs the shared secret when the automation is enabled, and neither the app's Enable dialog nor `reliant trigger` takes one today. Enabling a webhook that declares `hmac` is refused with `webhook_hmac_secret is required to verify signatures`. Use the token instead.
+</Warning>
 
 The token is stored hashed and shown once. If it leaks, **rotate** it from the automation's page: the old token stops working immediately.
 

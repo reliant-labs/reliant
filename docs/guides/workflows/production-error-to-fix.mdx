@@ -5,8 +5,6 @@ description: "Take a production error to a merged, deployed fix: an on-call agen
 keywords: ["AI incident remediation", "production error to pull request", "AI on-call to fix", "autopilot on-call issue worker", "resolve in next release"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1 (embedded; the obs and deploy steps use flags the linked guides ran on project pin v1.6.1-0.20261115024114-0ab7c562e817) · S steps run in scratch: yes (guides-scratch/production-error-to-fix: `reliant workflow scenario run --include-builtins` in an empty dir, exit 0, autopilot-oncall 22/22 and autopilot-issue-worker 23/23 pass; single scenarios with --filter) · H/G steps: not re-run for this page (known-blocked in the Reliant Labs org, see below); the hosted hops (obs issues, obs issue, obs issue resolve --in next, promotion, obs check) are verified in the linked guides' sandbox runs and are linked, not repeated · unverified: "On-call files one GitHub issue" (no alert reached the live activation in the on-call guide's run, report 60772dd1), "The issue worker opens a pull request" (the sandbox org has no org AI account and CLI activations spend only org accounts), the label swap and merging an Autopilot pull request; these steps are written from builtin autopilot-oncall.yaml (create/publish bodies, issue key = issue_id without dashes), autopilot-issue-worker.yaml and their scenarios · merge does not resolve the error issue: control-plane UpdateIssueStatus is reached only from its RPC handler */}
-
 This guide follows one production error to a fix that is reviewed, merged and live, with the error resolved in the release that fixed it. Each hop has its own guide; this page shows how they connect and who acts at each one.
 
 It is two linked [Autopilot](/guides/autopilot) workflows with a person between them. On-call files an investigated, deduplicated GitHub issue. A person decides it should be fixed. The issue worker opens a pull request. A person reviews and merges it, and you ship it.
@@ -132,8 +130,8 @@ It is two linked [Autopilot](/guides/autopilot) workflows with a person between 
 <CardGroup cols={2}>
   <Card title="Alerts to GitHub issues" icon="bell" href="/guides/workflows/production-alerts-to-github-issues">Turn on on-call and see what it files.</Card>
   <Card title="Issues to pull requests" icon="git-pull-request" href="/guides/workflows/github-issues-to-pull-requests">Turn on the issue worker and review its work.</Card>
-  <Card title="Find the culprit release" icon="magnifying-glass" href="/guides/observability/find-release-that-caused-error">Read an error issue and resolve it in a release.</Card>
-  <Card title="Recover from a bad deploy" icon="clock-rotate-left" href="/guides/hosting/recover-from-bad-deploy">Put the last good release back while the fix is written.</Card>
-  <Card title="Agents in production" icon="robot" href="/deep-dives/agents-in-production">How agents operate production safely, and what they never do.</Card>
-  <Card title="Release verdicts" icon="scale-balanced" href="/deep-dives/how-release-verdicts-work">How a release is judged PASS, FAIL or INCONCLUSIVE.</Card>
+  <Card title="Find the culprit release" icon="search" href="/guides/observability/find-release-that-caused-error">Read an error issue and resolve it in a release.</Card>
+  <Card title="Recover from a bad deploy" icon="history" href="/guides/hosting/recover-from-bad-deploy">Put the last good release back while the fix is written.</Card>
+  <Card title="Agents in production" icon="bot" href="/deep-dives/agents-in-production">How agents operate production safely, and what they never do.</Card>
+  <Card title="Release verdicts" icon="scale" href="/deep-dives/how-release-verdicts-work">How a release is judged PASS, FAIL or INCONCLUSIVE.</Card>
 </CardGroup>

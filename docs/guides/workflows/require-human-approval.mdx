@@ -5,8 +5,6 @@ description: "Pause an agent workflow until a person approves. Gate the change o
 keywords: ["human in the loop AI agent", "AI agent approval", "workflow approval step", "human approval gate", "ask_question"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge: not used · S steps run in scratch: yes (validate, lint incl. approval-decider bad→clean, 6 scenarios: approved, denied, timeout, unattended, 2× ask_question; YAML blocks pass TestDocsWorkflowExamplesValidate) · live steps run in Reliant Labs org sandbox (project guides-sandbox-approval via --project-path; runs ended, project has no delete verb): run → approval gate → approved by a signed-in person in the app → apply agent edited NOTES.md; 3m timeout → undecided/FAILURE; CLI-login decision refused 403 scope_missing; ask_question answered with `reliant workflow answer --select` → fix agent ran · unverified: a live Deny (scenario only), the Inbox screen, the Slack/SMS notification (needs a real Slack or Twilio connection; YAML validated only) · scratch: guides-scratch/require-human-approval */}
-
 By the end of this guide you will have a workflow where an agent proposes a change, the run stops until a person approves it, and only an approved change is applied. Denied, timed-out and unattended runs change nothing. You will also add a question with options, for when yes or no is not enough.
 
 An approval is a workflow node, so you can test every branch with scenarios before anyone waits on a real run.
@@ -276,8 +274,8 @@ Declaring `permissions: [approvals:decide]`, suppressing a lint finding, or requ
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Write your first multi-agent workflow" icon="diagram-project" href="/guides/workflows/first-multi-agent-workflow">Planner, implementer and reviewer agents in one workflow.</Card>
-  <Card title="Testing workflows" icon="vial" href="/workflows/testing">Scenarios, mocked activities and expectations.</Card>
-  <Card title="Workflow control" icon="sliders" href="/workflows/workflow-control">Pause, resume and steer a run.</Card>
+  <Card title="Write your first multi-agent workflow" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">Planner, implementer and reviewer agents in one workflow.</Card>
+  <Card title="Testing workflows" icon="test-tube" href="/workflows/testing">Scenarios, mocked activities and expectations.</Card>
+  <Card title="Workflow control" icon="sliders-horizontal" href="/workflows/workflow-control">Pause, resume and steer a run.</Card>
   <Card title="Node reference" icon="book" href="/reference/nodes">Every field of `approval` and `ask_question`.</Card>
 </CardGroup>
