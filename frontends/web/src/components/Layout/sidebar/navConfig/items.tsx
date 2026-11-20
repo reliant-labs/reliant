@@ -16,7 +16,6 @@ import {
   ArrowUpRight,
   BarChart3,
   Boxes,
-  CircleAlert,
   Inbox,
   Plug,
   ShieldCheck,
@@ -29,10 +28,10 @@ import {
   LayoutDashboard,
   LayoutGrid,
   Layers,
+  Rocket,
   Receipt,
   Server,
   Settings,
-  Sparkles,
   Tag,
   UserRound,
   Workflow,
@@ -49,6 +48,7 @@ import { settingsNavGroups } from "../../../Settings/SettingsNavigation";
 import { isAt, isAtOrBelow } from "../navLocation";
 import { isChatPage } from "../shellProject";
 import { BrandMark } from "../../../icons/BrandMark";
+import { obsOverviewPath } from "./pendingPaths";
 import type { NavArea, NavCtx, NavGroup, NavHeading, NavItem, NavRow, NavSlot } from "./types";
 
 const icon = (Icon: typeof Activity): ReactNode => <Icon className="size-4" aria-hidden="true" />;
@@ -95,7 +95,39 @@ export const services = consoleRow("services", "Services", { kind: "services" },
 export const storage = consoleRow("storage", "Storage", { kind: "storage" }, icon(HardDrive), ["storage"]);
 export const data = consoleRow("data", "Data", { kind: "data" }, icon(Database), ["data"]);
 export const releases = consoleRow("releases", "Releases", { kind: "releases" }, icon(Tag), ["releases", "release"]);
-export const environments = consoleRow("environments", "Environments", { kind: "environments" }, icon(Layers), ["environments", "environment"]);
+
+/** The Environments page's previews view (`?show=previews`), a URL of its own. */
+const showsPreviews = (ctx: NavCtx) => ctx.search.show === "previews";
+const isPreviewEnv = (ctx: NavCtx) =>
+  ctx.page?.kind === "environment" && (ctx.console?.envs ?? []).some((env) => env.preview && env.name === (ctx.page as { env: string }).env);
+
+export const environments: NavRow = {
+  ...consoleRow("environments", "Environments", { kind: "environments" }, icon(Layers), ["environments", "environment"]),
+  match: (ctx) => (ctx.page?.kind === "environments" && !showsPreviews(ctx)) || (ctx.page?.kind === "environment" && !isPreviewEnv(ctx)),
+};
+
+export const previews: NavRow = {
+  kind: "row",
+  id: "previews",
+  label: "Previews",
+  href: (ctx) => (ctx.app ? withSearch(consolePath(ctx.app, { kind: "environments" }), { env: ctx.console?.env, show: "previews" }) : undefined),
+  match: (ctx) => (ctx.page?.kind === "environments" && showsPreviews(ctx)) || isPreviewEnv(ctx),
+  available: hasApp,
+};
+
+/**
+ * Deployments ▾ (U6e, Vercel's word): Releases and Environments merged — the
+ * releases list, the long-lived environments, the previews. Promote and
+ * roll back stay on those pages.
+ */
+export const deploymentsGroup: NavGroup = {
+  kind: "group",
+  id: "deployments",
+  label: "Deployments",
+  icon: icon(Rocket),
+  available: hasApp,
+  children: [releases, environments, previews],
+};
 export const secrets = consoleRow("secrets", "Secrets", { kind: "secrets" }, icon(KeyRound), ["secrets"]);
 export const domains = consoleRow("domains", "Domains", { kind: "domains" }, icon(Globe), ["domains"]);
 /**
@@ -120,7 +152,7 @@ export const activity = consoleRow("activity", "Activity", { kind: "activity" },
 /** What this project's hosting costs (the org's is Usage & billing, in the footer). */
 export const projectUsage = consoleRow("project-usage", "Usage", { kind: "usage" }, icon(Receipt), ["usage"]);
 
-/** Configure ▾: the project's settings-like pages, and its Activity. */
+/** Configure ▾: Secrets, Domains, Usage, Activity (Environments moved to Deployments, U6e). */
 export const configureGroup: NavGroup = {
   kind: "group",
   id: "configure",
@@ -128,7 +160,7 @@ export const configureGroup: NavGroup = {
   icon: icon(Wrench),
   available: hasApp,
   // Activity (the audit log) stays its last row (owner): no page loses its nav entry.
-  children: [environments, secrets, domains, projectUsage, activity],
+  children: [secrets, domains, projectUsage, activity],
 };
 
 // ── Security (new, U6d) ─────────────────────────────────────────────────────
@@ -190,7 +222,6 @@ export const dashboards: NavGroup = {
         isUnlistedDashboard(c) ||
         (c.orgPage?.kind === "obs-view" && c.orgPage.view === "dashboards"),
     },
-    { kind: "row", id: "dashboards-live-state", label: "Live state", href: consoleHref({ kind: "live-state" }), match: pageIs("live-state"), available: hasApp },
     ...(ctx.console?.customDashboards ?? []).map(
       (dashboard): NavRow => ({
         kind: "row",
@@ -245,31 +276,48 @@ export const observabilityRows: readonly NavItem[] = [
 ];
 export const sessionsRow = obsRow("sessions");
 
-/** Performance & issues ▾, an accordion inside the Observability drill-in (U6d): Errors, Alerts, Traces, Speed insights, Sessions. */
-export const performanceGroup: NavGroup = {
-  kind: "group",
-  id: "performance",
-  label: "Performance & issues",
-  icon: icon(CircleAlert),
-  children: [obsRow("errors"), alertsRow, obsRow("traces"), speedInsights, sessionsRow],
+/** "Performance & issues", a divider in the drill-in (U6e): its rows always show. */
+export const performanceRows: readonly NavItem[] = [
+  heading("performance-heading", "Performance & issues"),
+  obsRow("errors"),
+  alertsRow,
+  obsRow("traces"),
+  speedInsights,
+  sessionsRow,
+];
+
+/** The Observability Overview: golden signals, top errors, slowest endpoints, firing alerts (OVERVIEW agent's page). */
+const isObsOverview = (ctx: NavCtx) =>
+  (!!ctx.app && isAt(ctx.pathname, obsOverviewPath(ctx.app))) || ctx.orgPage?.kind === "observability";
+
+export const obsOverview: NavRow = {
+  kind: "row",
+  id: "obs-overview",
+  label: "Overview",
+  href: (ctx) =>
+    ctx.mode !== "one" ? orgPath({ kind: "observability" }) : ctx.app ? withSearch(obsOverviewPath(ctx.app), { env: ctx.console?.env }) : undefined,
+  match: isObsOverview,
+  available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
 };
 
-/** The routes that are Observability: every view but Dashboards (top-level), Speed insights, and the org-wide pages. */
+/** The routes that are Observability: its Overview, every view but Dashboards (top-level), Speed insights, and the org-wide pages. */
 export const isObservabilityRoute = (ctx: NavCtx): boolean =>
+  isObsOverview(ctx) ||
   (ctx.page?.kind === "obs-view" && ctx.page.view !== "dashboards") ||
   ctx.page?.kind === "speed-insights" ||
   ctx.orgPage?.kind === "observability" ||
   (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view !== "dashboards");
 
-/** Observability › — one of the two drill-ins. */
+/** Observability › — one of the two drill-ins; drilling in lands on its Overview. */
 export const observabilityArea: NavArea = {
   kind: "area",
   id: "observability",
   label: "Observability",
   icon: icon(Gauge),
   match: isObservabilityRoute,
+  href: obsOverview.href,
   available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
-  children: [...observabilityRows, performanceGroup],
+  children: [obsOverview, ...observabilityRows, ...performanceRows],
 };
 
 // ── Analytics ───────────────────────────────────────────────────────────────
@@ -355,14 +403,6 @@ export const sandboxes: NavRow = {
   match: (ctx) => isAtOrBelow(ctx.pathname, sandboxesPath()),
 };
 
-export const aiProviders: NavRow = {
-  kind: "row",
-  id: "ai-providers",
-  label: "AI providers",
-  icon: icon(Sparkles),
-  external: true,
-  href: () => settingsPath("ai"),
-};
 
 /** Connectors: integrations and MCP servers on one page (owner, U6d). */
 export const connectors: NavRow = {
@@ -379,7 +419,8 @@ export const isAgentsRoute = (ctx: NavCtx): boolean =>
   isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, sandboxesPath()) || connectors.match!(ctx);
 
 /** Agents' rows; the chat list last, so in the drill-in it takes the rest of the column. */
-const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, connectors, aiProviders, slot("chat-list")];
+// AI providers left Agents (U6e, owner): it lives in Settings only.
+const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, connectors, slot("chat-list")];
 
 /** Agents › — one of the two drill-ins; its mark is Reliant's, to set it apart. */
 export const agentsArea: NavArea = {
