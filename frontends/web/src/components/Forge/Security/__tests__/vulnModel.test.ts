@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 import { forgeConsoleVulnerabilitiesSearchSchema } from "@/routeSchemas";
 import type { EnvVulnSummary, ScanState } from "@/services/controlPlane/vulnerabilities/types";
 
-import { activeFilterCount, filtersOf, fixLabel, formatEpss, pickVulnSearch, sbomSourceLabel, scopeTrust, untrustedEnvs } from "../vulnModel";
+import type { ArtifactSbom } from "@/services/controlPlane/vulnerabilities/types";
+
+import { activeFilterCount, filtersOf, fixLabel, formatEpss, pickVulnSearch, releaseTrust, sbomSourceLabel, scopeTrust, untrustedEnvs } from "../vulnModel";
 
 const env = (name: string, scanState: ScanState, overrides: Partial<EnvVulnSummary> = {}): EnvVulnSummary => ({
   environmentId: `env-${name}`,
@@ -40,7 +42,43 @@ describe("scope trust: unknown is never clean", () => {
     expect(scopeTrust([env("prod", "scanned"), env("staging", "pending")])).toBe("partial");
     expect(scopeTrust([env("prod", "failed", { lastScannedMs: 5 })])).toBe("partial");
     expect(scopeTrust([env("prod", "no-sbom", { coverage: { artifacts: 3, withSbom: 2, scanned: 2 } })])).toBe("partial");
+    // "scanned" with coverage short of every artifact, or over a stale database, is not a clean bill.
+    expect(scopeTrust([env("prod", "scanned", { coverage: { artifacts: 3, withSbom: 3, scanned: 2 } })])).toBe("partial");
+    expect(scopeTrust([env("prod", "scanned", { coverage: { artifacts: 0, withSbom: 0, scanned: 0 }, lastScannedMs: 1 })])).toBe("partial");
+    expect(scopeTrust([env("prod", "scanned")], true)).toBe("partial");
     expect(untrustedEnvs([env("prod", "scanned"), env("staging", "stale"), env("dev", "none")]).map((e) => e.environmentName)).toEqual(["staging"]);
+  });
+});
+
+describe("release trust: an empty release is clean only when its read vouches for it", () => {
+  const artifact = (overrides: Partial<ArtifactSbom> = {}): ArtifactSbom => ({
+    artifactName: "api",
+    sbomDigest: "sha256:ab",
+    format: "cyclonedx-json@1.6",
+    generator: "syft",
+    source: "image",
+    referrer: "",
+    componentCount: 3,
+    scanState: "scanned",
+    lastScannedMs: 1,
+    scanError: "",
+    ...overrides,
+  });
+  const current = { stale: false };
+
+  it("waits for a missing read, and reports a failed one", () => {
+    expect(releaseTrust(undefined)).toBe("loading");
+    expect(releaseTrust({ isLoading: true })).toBe("loading");
+    expect(releaseTrust({ isLoading: false, isError: true })).toBe("error");
+    expect(releaseTrust({ isLoading: false, isError: false })).toBe("unknown");
+  });
+
+  it("is unknown for no artifacts, an unscanned one, one without an SBOM or a stale database", () => {
+    expect(releaseTrust({ isLoading: false, data: { artifacts: [], database: current } })).toBe("unknown");
+    expect(releaseTrust({ isLoading: false, data: { artifacts: [artifact(), artifact({ scanState: "pending" })], database: current } })).toBe("unknown");
+    expect(releaseTrust({ isLoading: false, data: { artifacts: [artifact({ sbomDigest: "", scanState: "scanned" })], database: current } })).toBe("unknown");
+    expect(releaseTrust({ isLoading: false, data: { artifacts: [artifact()], database: { stale: true } } })).toBe("unknown");
+    expect(releaseTrust({ isLoading: false, data: { artifacts: [artifact(), artifact({ artifactName: "web" })], database: current } })).toBe("trusted");
   });
 });
 

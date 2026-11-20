@@ -10,6 +10,7 @@
  */
 
 import type {
+  ArtifactSbom,
   EnvVulnSummary,
   FixState,
   MinSeverity,
@@ -171,10 +172,48 @@ function hasFindings(env: EnvVulnSummary): boolean {
   return env.scanState === "scanned" || env.scanState === "stale" || (env.scanState === "failed" && env.lastScannedMs !== null) || env.coverage.scanned > 0;
 }
 
-export function scopeTrust(envs: readonly EnvVulnSummary[]): ScopeTrust {
+/** Every artifact of the environment's release has an SBOM whose newest scan succeeded against a current database. */
+function fullyScanned(env: EnvVulnSummary): boolean {
+  const { artifacts, withSbom, scanned } = env.coverage;
+  return env.scanState === "scanned" && artifacts > 0 && withSbom === artifacts && scanned === artifacts;
+}
+
+/**
+ * `databaseStale`: the database the newest scans used is past its freshness
+ * bound (VulnSummary.database.stale). A stale database never vouches for a
+ * clean bill, whatever the per-environment states say.
+ */
+export function scopeTrust(envs: readonly EnvVulnSummary[], databaseStale = false): ScopeTrust {
   const deployed = deployedEnvs(envs);
   if (deployed.length === 0 || !deployed.some(hasFindings)) return "not-scanned-yet";
-  return deployed.every((env) => env.scanState === "scanned") ? "trusted" : "partial";
+  return !databaseStale && deployed.every(fullyScanned) ? "trusted" : "partial";
+}
+
+/**
+ * Whether ONE release's empty findings may be called clean, from its
+ * GetReleaseVulnerabilities read:
+ *
+ *   loading  the read has not answered: say nothing yet
+ *   error    the read failed: its error, never a verdict
+ *   unknown  it answered, but not every artifact is vouched for — no
+ *            artifacts at all (a release that describes nothing), one without
+ *            an SBOM, one not (yet, or successfully) scanned, or a stale
+ *            database
+ *   trusted  a non-empty artifact list, every one scanned against a current database
+ */
+export type ReleaseTrust = "loading" | "error" | "unknown" | "trusted";
+
+export function releaseTrust(read: {
+  isLoading?: boolean;
+  isError?: boolean;
+  data?: { artifacts: readonly ArtifactSbom[]; database: { stale: boolean } | null } | undefined;
+} | undefined): ReleaseTrust {
+  if (!read) return "loading";
+  if (read.isError) return "error";
+  if (!read.data) return read.isLoading === false ? "unknown" : "loading";
+  const { artifacts, database } = read.data;
+  if (artifacts.length === 0 || database?.stale) return "unknown";
+  return artifacts.every((a) => a.sbomDigest !== "" && a.scanState === "scanned") ? "trusted" : "unknown";
 }
 
 /** The environments in scope whose findings fall short, each to be explained. */

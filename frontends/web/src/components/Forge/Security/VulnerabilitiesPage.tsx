@@ -41,12 +41,14 @@ import {
   fixLabel,
   formatEpss,
   pickVulnSearch,
+  releaseTrust,
   scopeTrust,
   sbomSourceLabel,
   SEVERITY_LABEL,
   SEVERITY_TONE,
   totalFindings,
   untrustedEnvs,
+  type ReleaseTrust,
   type VulnSearch,
 } from "./vulnModel";
 
@@ -113,7 +115,7 @@ export function VulnerabilitiesView({ scope, search, onSearch, advisoryHref, sbo
 function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref }: VulnerabilitiesViewProps & { summary: VulnSummary }) {
   const envs = summary.environments;
   const deployed = deployedEnvs(envs);
-  const trust = scopeTrust(envs);
+  const trust = scopeTrust(envs, summary.database?.stale ?? false);
   const filtered = activeFilterCount(search) > 0;
   const envName = useMemo(() => new Map(envs.map((env) => [env.environmentId, env.environmentName])), [envs]);
 
@@ -131,7 +133,8 @@ function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref }:
     for (const read of releaseReads) for (const artifact of read.data?.artifacts ?? []) if (artifact.source) map.set(artifact.artifactName, artifact.source);
     return map;
   }, [releaseReads]);
-  const artifactsOf = (version: string) => releaseReads[releases.findIndex((r) => r.version === version)]?.data?.artifacts;
+  const readOf = (version: string) => releaseReads[releases.findIndex((r) => r.version === version)];
+  const artifactsOf = (version: string) => readOf(version)?.data?.artifacts;
 
   const nothingScanned = trust === "not-scanned-yet" && !filtered;
   const list = useVulnerabilities(scope.project, nothingScanned ? null : filtersOf(scope.environmentId, search));
@@ -151,8 +154,11 @@ function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref }:
     );
   }
 
-  // A release named in the URL is trusted when its every artifact is scanned against a current database.
-  const releaseTrusted = search.release ? !!artifactsOf(search.release)?.every((a) => a.scanState === "scanned") : trust === "trusted";
+  // An empty answer is clean only when what it covers is vouched for: the scope's summary, or — for a
+  // release named in the URL — a successful read of that release with every one of its artifacts
+  // scanned against a current database. Anything else is loading, an error or unknown; never clean.
+  const namedRelease = search.release ? readOf(search.release) : undefined;
+  const emptyVerdict: ReleaseTrust = search.release ? releaseTrust(namedRelease) : trust === "trusted" ? "trusted" : "unknown";
 
   return (
     <div className="space-y-3">
@@ -179,11 +185,30 @@ function Findings({ scope, summary, search, onSearch, advisoryHref, sbomsHref }:
           >
             <p>Other findings may exist in scope. Exempt findings are hidden unless you show them.</p>
           </StateFrame>
-        ) : releaseTrusted ? (
-          <VulnNoneKnown database={list.data?.pages[0]?.database ?? summary.database} envs={deployed} />
+        ) : emptyVerdict === "trusted" ? (
+          <VulnNoneKnown
+            database={list.data?.pages[0]?.database ?? summary.database}
+            envs={deployed}
+            subject={search.release ? `release ${search.release}` : undefined}
+          />
+        ) : emptyVerdict === "loading" ? (
+          <Card padding="none">
+            <ObsLoadingRows testId="vuln-release-loading" />
+          </Card>
+        ) : emptyVerdict === "error" ? (
+          <VulnError
+            error={namedRelease?.error ?? null}
+            subject={`release ${search.release}`}
+            onRetry={() => void namedRelease?.refetch()}
+            retrying={namedRelease?.isFetching}
+            testId="vuln-release-error"
+          />
         ) : (
           <StateFrame testId="vuln-none-in-scanned" icon={null} title="Nothing found in what was scanned">
-            <p>Some of what runs in scope is not fully scanned (see above), so this is not a clean bill: its vulnerabilities are unknown.</p>
+            <p>
+              {search.release ? `Not every artifact of release ${search.release} has an SBOM scanned against a current database` : "Some of what runs in scope is not fully scanned"}, so this
+              is not a clean bill: its vulnerabilities are unknown.
+            </p>
           </StateFrame>
         )
       ) : (

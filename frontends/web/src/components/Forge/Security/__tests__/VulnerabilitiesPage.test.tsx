@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { FIXTURE_ENVS, FIXTURE_SCAN_ERROR, fixtureVulnerabilityApi } from "../fixtures";
 import { renderVulnerabilities } from "./securityTestUtils";
@@ -162,6 +163,51 @@ describe("Vulnerabilities: unknown is never clean", () => {
     api.listVulnerabilities = async () => ({ findings: [], nextPageToken: "", database: null });
     renderVulnerabilities(api);
     expect(await screen.findByTestId("vuln-none-in-scanned")).toHaveTextContent("not a clean bill");
+    expect(screen.queryByTestId("vuln-none-known")).not.toBeInTheDocument();
+  });
+});
+
+describe("Vulnerabilities: a release named in the URL", () => {
+  // An empty list for the release: what the page then says depends on the release read alone.
+  const emptyList = (api: ReturnType<typeof fixtureVulnerabilityApi>) => {
+    api.listVulnerabilities = async () => ({ findings: [], nextPageToken: "", database: null });
+    return api;
+  };
+  const release = { release: FIXTURE_ENVS.prod.release };
+
+  it("is clean only after a successful read whose every artifact was scanned", async () => {
+    renderVulnerabilities(emptyList(fixtureVulnerabilityApi("clean")), { search: release });
+    expect(await screen.findByTestId("vuln-none-known")).toHaveTextContent("Every artifact of release v1.4.0 has an SBOM");
+  });
+
+  it("says nothing while the release read has not answered", async () => {
+    const api = emptyList(fixtureVulnerabilityApi("clean"));
+    api.getReleaseVulnerabilities = () => new Promise(() => undefined);
+    renderVulnerabilities(api, { search: release });
+    expect(await screen.findByTestId("vuln-release-loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("vuln-none-known")).not.toBeInTheDocument();
+  });
+
+  it("is unknown when the release answers with no artifacts", async () => {
+    const api = emptyList(fixtureVulnerabilityApi("clean"));
+    const real = api.getReleaseVulnerabilities;
+    api.getReleaseVulnerabilities = async (req, opts) => ({ ...(await real(req, opts)), artifacts: [], coverage: { artifacts: 0, withSbom: 0, scanned: 0 } });
+    renderVulnerabilities(api, { search: release });
+    expect(await screen.findByTestId("vuln-none-in-scanned")).toHaveTextContent("Not every artifact of release v1.4.0");
+    expect(screen.queryByTestId("vuln-none-known")).not.toBeInTheDocument();
+  });
+
+  it("shows the error when the release read fails", async () => {
+    const api = emptyList(fixtureVulnerabilityApi("clean"));
+    api.getReleaseVulnerabilities = () => Promise.reject(new ConnectError("missing vuln:read for this environment", Code.PermissionDenied));
+    renderVulnerabilities(api, { search: release });
+    expect(await screen.findByTestId("vuln-release-error-denied")).toBeInTheDocument();
+    expect(screen.queryByTestId("vuln-none-known")).not.toBeInTheDocument();
+  });
+
+  it("is unknown when an artifact of the release was not scanned", async () => {
+    renderVulnerabilities(emptyList(fixtureVulnerabilityApi("partial")), { search: { release: FIXTURE_ENVS.staging.release } });
+    expect(await screen.findByTestId("vuln-none-in-scanned")).toBeInTheDocument();
     expect(screen.queryByTestId("vuln-none-known")).not.toBeInTheDocument();
   });
 });

@@ -145,13 +145,14 @@ export function VulnNotScannedYet({ envs, children }: { envs: readonly EnvVulnSu
 }
 
 /** Scanned, all of it, against a current database, and nothing found. The only "clean" sentence on these pages. */
-export function VulnNoneKnown({ database, envs }: { database: VulnDatabase | null; envs: readonly EnvVulnSummary[] }) {
+export function VulnNoneKnown({ database, envs, subject }: { database: VulnDatabase | null; envs: readonly EnvVulnSummary[]; subject?: string }) {
   const now = Date.now();
   const deployed = envs.filter((env) => env.releaseId);
+  const what = subject ?? (deployed.map((env) => `${env.environmentName}'s ${env.releaseVersion}`).join(" and ") || "the releases in scope");
   return (
     <StateFrame testId="vuln-none-known" icon={<ShieldCheck className="h-4 w-4" />} title="No known vulnerabilities">
       <p>
-        Every artifact of {deployed.map((env) => `${env.environmentName}'s ${env.releaseVersion}`).join(" and ") || "the releases in scope"} has an SBOM, and its newest scan found
+        Every artifact of {what} has an SBOM, and its newest scan found
         nothing{database?.builtAtMs ? `, against a vulnerability database built ${formatAgo(database.builtAtMs, now)}` : ""}.
       </p>
       <p>Known means published: the daily rescan picks up advisories as they appear.</p>
