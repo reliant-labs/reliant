@@ -304,6 +304,8 @@
                   "guides/workflows/first-multi-agent-workflow",
                   "guides/workflows/run-tests-until-they-pass",
                   "guides/workflows/require-human-approval",
+                  "guides/workflows/parallel-agents-git-worktrees",
+                  "guides/workflows/delegate-to-sub-agents",
                   "guides/workflows/test-workflows-with-scenarios",
                   "guides/workflows/lint-unattended-workflows"
                 ]
