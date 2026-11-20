@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -166,4 +167,39 @@ func TestUpdateTask_ConcurrentClaimsHaveOneWinner(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, won, "exactly one sibling holds the task")
+}
+
+// errThreadStore fails every thread read, as a database outage does.
+type errThreadStore struct{ taskScopeStore }
+
+func (errThreadStore) GetThread(context.Context, string) (*db.Thread, error) {
+	return nil, errors.New("connection reset")
+}
+
+// A thread read that fails is an error, never a verdict: scoping does not
+// call a task foreign because the ancestry could not be read (review B1).
+func TestScopeTaskForThread_ReadFailureIsAnError(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+	_, err := (&CreatePlanTool{repo: repo}).Execute(createTestContext(t, chatID), CreatePlanParams{
+		Title: "P", Description: "d", Complexity: "simple", Tasks: []TaskInput{{Title: "T"}},
+	})
+	require.NoError(t, err)
+	plan, err := repo.GetPlanByThreadID(context.Background(), chatID)
+	require.NoError(t, err)
+	tasks, err := repo.ListTasksByPlan(context.Background(), plan.ID)
+	require.NoError(t, err)
+
+	child := spawnChildThread(t, repo, chatID, chatID)
+	scope, _, err := scopeTaskForThread(context.Background(), errThreadStore{repo}, child, tasks[0])
+	require.Error(t, err, "a failed ancestry read must surface")
+	assert.Equal(t, taskPlanForeign, scope)
+
+	scope, owner, err := scopeTaskForThread(context.Background(), repo, child, tasks[0])
+	require.NoError(t, err)
+	assert.Equal(t, taskPlanInherited, scope)
+	assert.Equal(t, chatID, owner)
 }

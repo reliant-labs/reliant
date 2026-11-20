@@ -152,8 +152,14 @@ func scopeTaskForThread(ctx context.Context, repo taskScopeStore, threadID strin
 	currentID := threadID
 	for hop := 0; hop < maxPlanAncestorWalk; hop++ {
 		thread, threadErr := repo.GetThread(ctx, currentID)
-		if threadErr != nil || thread == nil || thread.ParentThreadID == nil || *thread.ParentThreadID == "" {
-			// An unreadable or parentless thread ends the chain: what the
+		if threadErr != nil && !svcerr.IsNotFound(threadErr) {
+			// A failed read is not an answer: returned, so the write fails
+			// (and a transaction retries) rather than being refused as if
+			// the task were someone else's.
+			return taskPlanForeign, "", threadErr
+		}
+		if thread == nil || thread.ParentThreadID == nil || *thread.ParentThreadID == "" {
+			// A missing or parentless thread ends the chain: what the
 			// caller cannot prove is its own is foreign (fail closed).
 			return taskPlanForeign, "", nil
 		}
