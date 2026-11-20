@@ -68,12 +68,20 @@ func pinnedShippedSkills(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Sk
 	return e.loadList(pf, baseDir)
 }
 
+// pinnedCatalogCacheName is the name forgepin keeps the pinned forge's
+// catalog under, on disk across restarts. It names the format: every entry
+// carries its body. Earlier releases kept `skill list --json` (metadata only,
+// from a pin that predates --with-bodies) under "skills-list.json"; reading
+// that file now would list skills whose bodies cannot load, and nothing would
+// ever replace it. A new name leaves the old file unread.
+const pinnedCatalogCacheName = "skills-list.v2.json"
+
 // loadList reads the pinned forge's catalog once. e.mu is held.
 func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]forgecli.Skill, error) {
 	if e.list != nil {
 		return e.list, nil
 	}
-	raw, err := pinnedForge.Output(pf, baseDir, "skills-list.json",
+	raw, err := pinnedForge.Output(pf, baseDir, pinnedCatalogCacheName,
 		[]string{"skill", "list", "--json", "--with-bodies"})
 	if err != nil {
 		return nil, err

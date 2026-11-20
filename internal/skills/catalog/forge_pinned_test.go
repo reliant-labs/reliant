@@ -3,6 +3,8 @@ package catalog
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"os"
@@ -28,12 +30,15 @@ type fakePinnedForge struct {
 	resolves   int
 	// restart stands in for a new process: fresh memory, the same disk cache.
 	restart func()
+	// cache is forgepin's disk cache directory.
+	cache string
 }
 
 func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 	t.Helper()
 	prev := pinnedForge
 	cache := t.TempDir()
+	f.cache = cache
 	t.Cleanup(func() {
 		pinnedForge = prev
 		clearPinnedCatalog()
@@ -128,6 +133,39 @@ func TestPinnedProject_SkillsComeFromThePinnedForge(t *testing.T) {
 	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs, "the pinned forge was asked again for what it already said")
 	// One resolution per process: the restart asked again.
 	assert.Equal(t, 2, f.resolves, "which forge the project pins was resolved more than once per process")
+}
+
+// A disk cache an earlier release wrote, of `skill list --json` with no
+// bodies, under the old name, is not read: the catalog is asked for again,
+// with bodies, and every listed skill loads.
+func TestPinnedProject_MetadataOnlyCacheFromAnEarlierReleaseIsNotRead(t *testing.T) {
+	isolateHome(t)
+	f := &fakePinnedForge{}
+	useFakePinnedForge(t, f)
+	dir := pinnedProject(t)
+
+	sum := sha256.Sum256([]byte("pin:v1.0.4")) // forgepin's per-pin directory
+	old := filepath.Join(f.cache, hex.EncodeToString(sum[:12]))
+	require.NoError(t, os.MkdirAll(old, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(old, "skills-list.json"), []byte(`[
+  {"path": "forge", "name": "forge", "description": "v1.0.4 start here", "scope": "forge"},
+  {"path": "only-in-v104", "name": "only-in-v104", "description": "a skill only the pin ships", "scope": "forge"}
+]`), 0o644))
+
+	defs := paths(discoverForgeSkills(dir, "", false))
+	require.Contains(t, defs, "forge/only-in-v104")
+	loaded, err := loadForgeDefinition(defs["forge/only-in-v104"])
+	require.NoError(t, err, "a skill listed by the old metadata-only cache cannot load its body")
+	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
+	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs)
+
+	// And the catalog it fetched is what the next process reads.
+	f.restart()
+	defs = paths(discoverForgeSkills(dir, "", false))
+	loaded, err = loadForgeDefinition(defs["forge/only-in-v104"])
+	require.NoError(t, err)
+	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
+	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs, "the refreshed catalog was not kept on disk")
 }
 
 // With no pin (or the pin is the embedded forge), nothing changes.
