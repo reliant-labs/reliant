@@ -5,8 +5,6 @@ description: "Make each signed-in user see and change only their own rows: decla
 keywords: ["multi-tenant row level access go", "row level authorization", "scope query to current user", "prevent idor", "forge:owner", "middleware.GetUser"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L steps run in scratch: yes (guides-scratch/auth-scoping/shop, a copy of add-table-crud-api-pages/shop: Order entity with forge:owner, scaffold, migration read, owner mapping, project audit --json, GetOrder unscoped → audit exit 1 with remediation, task test:short TestOrder_OwnerScoping + TestReview_OnlyAuthorWrites, db migration new + forge:owner on reviews.author_id, generate, pasted write wrappers, acknowledged reads, audit ok, lint --conventions incl. a divergent owner source, full lint --quiet: 29 linters passed) · H steps: none · not run: curl with dev IdP tokens (the two-user test calls the handlers with two sets of claims instead) */}
-
 You will make an `orders` table where each signed-in user sees and changes only their own rows, then retrofit the same rule onto a table that already exists. The filter is ordinary Go in your handler file. Forge scaffolds it and checks that it stays there, but never injects a `WHERE` clause at runtime.
 
 [The security model](/deep-dives/security-model#2-you-write-the-access-rules-and-the-audit-finds-the-gaps) explains why the rule is code you own.

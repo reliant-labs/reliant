@@ -26,7 +26,7 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   </Card>
 </CardGroup>
 
-{/* guides: agents-and-workflows — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+{/* guides: agents-and-workflows */}
 <CardGroup cols={2}>
   <Card title="Review every pull request with an AI agent" icon="workflow" href="/guides/workflows/review-pull-requests-with-ai">
     Get an AI code review on every GitHub pull request: turn on Autopilot PR review for your repositories, then read, skip or re-run the review the bot posts.
@@ -109,7 +109,7 @@ Put agents to work on your repository: run the built-in workflows, write your ow
 
 Choose where agents run: your own computer, a server or a Reliant cloud machine, connected by a daemon. The [machines overview](/machines/overview) is the reference.
 
-{/* guides: machines-and-daemons — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+{/* guides: machines-and-daemons */}
 <CardGroup cols={2}>
   <Card title="Connect your computer to Reliant to run AI agents on it" icon="server" href="/guides/machines/connect-computer-as-machine">
     Run AI agents in a repo on your own computer: start the Reliant daemon, approve its pairing code in the app, and check that its stream is connected.
@@ -165,7 +165,7 @@ Choose where agents run: your own computer, a server or a Reliant cloud machine,
 
 Build a Go and React app with Forge: start a project, add features from the schema and the API, and keep it tested and secure. The [Forge overview](/forge/overview) is the reference.
 
-{/* guides: forge — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+{/* guides: forge */}
 <CardGroup cols={2}>
   <Card title="Build a Go and React app with Connect RPC and Postgres" icon="hammer" href="/guides/forge/build-go-react-app-connect-rpc">
     Create a Go Connect RPC service, a Postgres table and a React frontend with Forge, then run the whole stack on your machine with no account.
@@ -242,7 +242,7 @@ Build a Go and React app with Forge: start a project, add features from the sche
 
 Deploy what you build to Reliant hosting, release it safely across environments, and manage its data and users. The [hosting overview](/hosting/overview) is the reference.
 
-{/* guides: hosting — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+{/* guides: hosting */}
 <CardGroup cols={2}>
   <Card title="Deploy a Go API with managed Postgres to Reliant hosting" icon="cloud" href="/guides/hosting/deploy-go-api-managed-postgres">
     Ship a Forge Go API, its migrations and a managed Postgres to production as one release, then prove it healthy with forge obs check.
@@ -283,7 +283,7 @@ Deploy what you build to Reliant hosting, release it safely across environments,
 
 See how a release behaves in production and find what broke when it does not. The [observability page](/hosting/observability) is the reference.
 
-{/* guides: observability — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+{/* guides: observability */}
 <CardGroup cols={2}>
   <Card title="Send OpenTelemetry from any app to Reliant" icon="activity" href="/guides/observability/send-opentelemetry-from-any-app">
     Send traces, logs and metrics from an app in any language to Reliant's hosted OpenTelemetry backend: mint a token with forge obs init and set the variables.
@@ -316,25 +316,3 @@ See how a release behaves in production and find what broke when it does not. Th
   </Card>
 </CardGroup>
 {/* /guides: observability */}
-
-{/*
-Rules for guide writers (plan §2). Every guide and deep dive in this tab follows them.
-
-1. Run every L/LD/S step in ~/.reliant/scratch/<chat>/guides/<slug>/, never in a repo checkout, and paste real output.
-   H steps run only in the owner's sandbox. Otherwise write the step from --help and mark it "H steps: not run" in the
-   verification comment at the top of the page.
-2. Every command and flag traces to --help (inside a project pinned to the stated forge), to a file path, or to
-   benefits.yaml claim: text.
-3. Use <Steps>, <Note>, <Warning>, <Tip>, <AccordionGroup> and <CardGroup> only. Code fences carry a filename or terminal.
-4. Links are root-relative and use the /hosting/... paths. Never link /forge/hosting or /forge/observability/*.
-5. Use plain, second-person house style. No marketing adjectives and no third-party internals (ClickStack, OpenBao, CNPG).
-6. A writer touches only docs/guides/<pillar>/<slug>.mdx and docs/images/guides/<slug>/*. Never docs.json, llms.txt,
-   index.mdx, a reference page or another guide.
-
-Deep-dive rules (in addition to rules 2-5):
-- Sources are code paths and design docs (control-plane docs/norm-*.md, forge docs/concepts.md). Never quote internal
-  package names as product surface; name them only where a reader can observe them.
-- Diagrams: mermaid in the page, drawn with the diagrams skill's discipline (one shared lane order, no coordinate drift).
-- Every deep dive has a "Limits and what it does not do" section: the honesty rules live there.
-- A deep-dive writer touches only docs/deep-dives/<slug>.mdx, or the one existing page its row says to upgrade.
-*/}

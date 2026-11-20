@@ -5,8 +5,6 @@ description: "How Forge keeps a Postgres schema change from breaking the release
 keywords: ["postgres migration safety", "zero downtime schema migration", "migration lock timeout", "roll forward migrations", "rollback floor", "read-only database role"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.7.0 (scratch project pin v1.6.1-0.20261115024114-0ab7c562e817, the v1.7.0 commit); sources read at forge v1.8.0 (0e50dd7b9) · L steps run in scratch (guides-scratch/safe-migrations/shop): db migration new, lint --migration-safety, lint --db-grants, generate, db analyze --base HEAD, env render prod --list, env floor --help · H steps: not run (env floor show/check need a hosted env) · sources: forge docs/concepts.md §2 and "Migrations in deployed environments"; pkg/migratekit/{locktimeout.go,ahead.go,grants.go,compat/compat.go,compat/timeouts.go}; pkg/dbgrants/dbgrants.go; internal/codegen/readonly_grants.go; internal/linter/migrationlint/compat_declaration.go; internal/cli/{db_analyze.go,release_migrations.go,release_floor_declarations.go}; pkg/release/migrations.go; kcl/workload.k; scaffolded deploy/kcl/workloads.k; control-plane internal/operators/workload/controller.go (reconcileGatingJob); docs forge/linting/rules-migrations, forge/deploy/release-gates, hosting/managed-postgres, forge/concepts/two-sources-of-truth */}
-
 **In short**
 
 - Your migrations are the schema. Forge applies them to a real Postgres and generates the ORM and the read-only role's grants from what Postgres reports.

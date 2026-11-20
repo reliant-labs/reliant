@@ -5,8 +5,6 @@ description: "Write table-driven Go tests that call your Connect handlers agains
 keywords: ["Go integration test postgres", "test go api postgres without docker", "embedded postgres go test", "table driven tests go connect", "generated mocks go", "forge pkg tdd"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L steps run in scratch: yes (guides-scratch/test-real-postgres/shop, copied from add-table-crud-api-pages: scaffold package pricing, forge generate, the two test files below, task test:short -- ./internal/... twice (second cached), -v run, the FK case's error text, an unset mock's error text, DOCKER_HOST pointed at nothing, task test -- on both packages) · H steps: none · forge lint on the copy reports forge-graph-unreachable + unused newPricing for the unwired package (shown as a Note) · sources: forge pkg/tdd/{rpc.go,contract.go}, the generated internal/handlers/catalog/{helpers_gen_test.go,factories_gen_test.go,handlers_crud_test.go}, internal/pricing/{contract.go,mock_gen.go,contract_test.go}, Taskfile.yml test and test:short, deep-dives/how-forge-tests-work */}
-
 By the end of this guide you have two kinds of test in a Forge Go API: table-driven tests that call your RPC handlers against a real Postgres, and a unit test of business logic that runs on a generated mock. Both run in the fast tier, with nothing to install and no Docker.
 
 Forge projects its database code from your migrations, so the honest test runs those migrations on Postgres. The test harness boots one embedded Postgres per machine and gives each test its own database ([how Forge tests work](/deep-dives/how-forge-tests-work)).

@@ -5,8 +5,6 @@ description: "Run two AI coding agents at once, each in its own git worktree and
 keywords: ["parallel ai agents git worktrees", "parallel coding agents", "git worktree ai agent", "create_worktree", "join node", "spawn worktree", "best of three"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · no forge needed · S steps run in scratch (guides-scratch/parallel-agents/guides-sandbox-parallel): reliant workflow validate (incl. the save_message error in Troubleshooting), lint, scenario run · account steps: run in the Reliant Labs org on the throwaway project guides-sandbox-parallel — workflow run 401f7605… (two-approaches, outcome success, 67s; first attempt refused "no machine has synced", known 868fe140) and chat run 1ac97c15… (builtin agent: worktree tool + spawn with worktree, both branches committed); git worktree list / diff captured from the scratch repo; all four workspaces archived (ArchiveWorktree, the app's Archive action) then removed with git worktree remove -f -f and git branch -D; the project record has no CLI delete verb and is in the sandbox ledger · the reviewer's verdict text was read from the run's messages (no CLI verb shows it; the app's Runs view does) · unverified: none */}
-
 By the end of this guide you have a workflow that gives two coding agents the same task at the same time, each in its own git worktree on its own branch. A `join` waits for both, and a reviewer agent reads both checkouts and picks one.
 
 Two agents in one checkout overwrite each other's files. In two workspaces they edit, test and commit without touching each other or your main checkout.

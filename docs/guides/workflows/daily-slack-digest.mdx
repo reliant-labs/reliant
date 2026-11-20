@@ -5,8 +5,6 @@ description: "Post an AI-written digest of yesterday's merged pull requests to a
 keywords: ["ai slack digest", "daily slack summary", "slack digest bot", "scheduled slack message ai", "no-machine automation", "slack/message.post@1", "github pull request digest"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · no forge needed · S steps run in scratch (guides-scratch/daily-slack-digest): validate, lint (0 warnings), scenario run (merged_prs_are_posted, quiet_day_skips_the_agent, bot_not_in_channel; Slack and GitHub actions mocked), workflow eval of the `since` and digest-data expressions · Slack steps: not run — posting to a real Slack workspace is outward-facing and was not approved, and no Slack connection was made — unverified: "Invite the bot and find the channel ID", "Enable it with no machine", "Verify the first digest" (written from automations/no-machine-runs, integrations/slack, internal/integrations/catalog/slack/manifest.yaml, `reliant trigger activate --help`, internal/launch/workflows.go for the needs-a-machine refusal) */}
-
 By the end of this guide a workflow posts a short digest of the pull requests merged in a repository to a Slack channel every weekday at 9am. A GitHub search finds the pull requests, an agent writes the summary, and the Slack integration posts it. None of those steps touches files or a shell, so the workflow runs as a [no-machine run](/automations/no-machine-runs): it fires on Reliant's servers even when your laptop is shut.
 
 ## Before you begin

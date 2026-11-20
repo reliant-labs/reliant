@@ -5,8 +5,6 @@ description: "Run one CI gate on your machine and in GitHub Actions that fails a
 keywords: ["Go CI quality gate", "github actions go lint test", "forge ci gate", "task ci", "verify generated code", "forge lint quiet", "pull request checks"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L steps run in scratch (guides-scratch/ci-gate/shop, a copy of add-table-crud-api-pages/shop): ci gate --list, task ci (twice), ci gate checks with a tracing error present, extra check with [forge, lint] (fails: no forge on PATH) and [task, lint], lint --quiet clean and failing, lint --tracing --fix, ci verify-generated on a hand-edited _gen.go file and on a proto edit without generate, doctor Payload Limits also on a fresh forge-main scaffold · G step: run in reliant-labs/guides-sandbox PR #3 (branch guides/ci-gate), PR closed and branch deleted · reports: c5411412 (Payload Limits false positive), 15a542f0 (buf format on scaffolded proto) */}
-
 By the end of this guide, every pull request runs the same gate you run locally: lint, build, tests, vulnerability and license scans, and a check that generated code matches its inputs. The gate prints one table, and any failed or skipped row fails the pull request. Forge writes the GitHub workflows, but each job only calls a `task` target, so `task ci` on your machine gives the same answer as CI.
 
 ## Before you begin

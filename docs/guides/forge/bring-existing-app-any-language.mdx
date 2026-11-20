@@ -5,8 +5,6 @@ description: "Adopt an Express, Django or Rails app where it stands: Forge reads
 keywords: ["deploy Dockerfile app", "deploy existing app", "docker compose to production", "adopt existing app", "forge project new --kind app"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L/LD steps run in scratch: yes (guides-scratch/bring-existing-app-any-language/notes-api-final: project new --in-place --kind app --dry-run, adopt, git status, docker build, env render prod, lint, env up dev, curl, env down dev) · H steps: run in Reliant Labs org sandbox (guides-sandbox-adopt: secret set, env deploy staging --yes, curl, obs workloads, obs check --wait, env delete staging --yes; torn down) — unverified: obs init (refused from an agent's machine credential; needs a person), release record (refused: record_only_releases_disabled on Reliant cloud) */}
-
 You will take an existing Express API, with a Dockerfile and a `docker-compose.yml` that runs Postgres, and give it dev, staging and prod environments on [Reliant hosting](/hosting/overview) with a managed Postgres. No app file changes: Forge reads the Dockerfile and compose file and writes its declarations beside them.
 
 The same works for Django, Rails, Spring or Go, because Forge deploys the image your Dockerfile builds and never compiles your code. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) describes the tiers after this one.

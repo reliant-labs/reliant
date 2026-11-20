@@ -5,8 +5,6 @@ description: "Give each pull request its own hosted copy of your app on its own 
 keywords: ["preview environments per PR", "pull request preview environment", "forge env preview", "ephemeral environments", "review apps", "forge env gc"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin; preview verbs need forge v1.5.0+) · L steps run in scratch: yes (guides-scratch/preview/guides-sandbox-preview: env new preview --from prod, env new --check, env preview name/create, env list, gc --dry-run/--json; workflow YAML checked with actionlint v1.7.7) · H steps: run in Reliant Labs org sandbox (project guides-sandbox-preview: preview-pr-42 deployed twice, curled, deleted with env preview delete; preview-gc-demo deployed with --ttl 8m and deleted by the platform after expiry, then env gc --yes; all torn down, hosted project + release images remain, no delete verb) · unverified: the GitHub Actions run itself. There is no OIDC or short-lived credential path for Actions, so no long-lived token was stored as a repo secret; the YAML was linted only. The automation token scopes are taken from forge/deploy/releases-and-promotion */}
-
 By the end of this guide every pull request gets its own hosted copy of your app, with its own URL, its own database and an expiry date. Reviewers open the change running, and the copy is deleted when the pull request closes or its time runs out.
 
 A preview is an ordinary forge environment with an expiry marker, so `env deploy` and `env status` work on it unchanged. [Preview environments](/hosting/preview-environments) is the reference for every flag.
@@ -187,7 +185,7 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
     [preview] deleted preview-pr-42
     ```
 
-    In our run the URL returned `404` about 90 seconds later.
+    The URL returned `404` about 90 seconds later.
   </Step>
 
   <Step title="Collect previews that expired">

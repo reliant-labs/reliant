@@ -5,8 +5,6 @@ description: "Build an AI Slack bot: when someone mentions it, an agent research
 keywords: ["ai slack bot", "slack bot agent", "slack app_mention workflow", "reply in slack thread", "slack/message.reply@1", "no-machine automation", "slack ai assistant"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · no forge needed · S steps run in scratch (guides-scratch/slack-bot-agent): validate (also with --trigger-payload), lint (0 warnings after one lint:allow), scenario run (mention_gets_an_answer_in_thread, mention_in_a_thread_stays_in_it, reply_refused; every Slack action and the agent mocked), workflow eval of the thread_ts mapping against the app_mention sample payload, the sample-payload thread_ts gotcha reproduced (scenario failed until thread_ts: "" was set) · Slack steps: not run — connecting Slack and posting in a real workspace is outward-facing and was not approved — unverified: "Invite the bot to a channel", "Enable it with no machine", "Mention the bot and verify the reply" (written from integrations/slack, internal/integrations/catalog/slack/manifest.yaml (app_mentioned trigger, message.reply, reaction.add), automations/no-machine-runs and `reliant trigger activate --help`) */}
-
 By the end of this guide, mentioning the Reliant bot in a Slack channel starts an agent that researches the question on the web and answers in the thread under the mention. The Slack integration delivers the mention as a trigger event, and the reply is a Slack action. The agent has only web tools, so the workflow is a [no-machine run](/automations/no-machine-runs) and answers even when your computer is off.
 
 ## Before you begin

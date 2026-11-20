@@ -5,8 +5,6 @@ description: "Find the Go function burning your CPU: turn on continuous profilin
 keywords: ["continuous profiling Go", "CPU hotspot", "Go flamegraph", "pprof", "forge obs profile", "trace-linked profiles"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · LD steps run in scratch: yes (guides-scratch/perf/guides-sandbox-perf: FingerprintCatalog hashing loop, env up dev, curl loop, obs profile --list, obs profile --service api --type cpu -o, go tool pprof -top and -top -cum, obs query dev --sql over otel_profiles, obs profile --trace, env down dev) · H steps: run in Reliant Labs org sandbox (guides-sandbox-perf/prod: signals.profiles = True + FORGE_PROFILES_CPU_INTERVAL=30s, env build v7.7.1, env deploy --yes, 7-minute curl loop; hosted profile confirmed through ObservabilityService/GetFlamegraph: cpu, 176 stacks, 12.29s; env delete prod --yes, torn down) · unverified: the Apps Profiles page itself (no browser on the machine; its data call was checked) · `obs profile --env prod` does not export hosted profiles (it reads the local stack; report e0157aa0) */}
-
 A trace can tell you an RPC spent its time in your own code. A CPU profile tells you which function. Every Go service Forge builds profiles itself in-process and ships the samples beside its traces, so you get a flamegraph without attaching a profiler, and each sample is tagged with the request it ran for.
 
 This guide finds a hashing loop that dominates an API's CPU, on a local stack and in production. [Continuous profiling](/hosting/observability/profiling) is the reference: cadence, sample types, retention.
@@ -54,7 +52,7 @@ The app here has an RPC, `FingerprintCatalog`, that calls `stretchFingerprint`, 
   <Step title="Read a hosted profile in Apps">
     Open **Apps**, pick the project and environment, and choose **Profiles** under Observability. It draws a flamegraph of one service's CPU, memory or goroutines over the range you pick, with the heaviest functions beside it, and opening it from a trace narrows it to that trace.
 
-    In this run the production `api` held 12.3s of sampled CPU over 30 minutes in 176 stacks. `stretchFingerprint` was on the stack for 69.5% of it, and the SHA-256 block function alone (`sha256.blockAVX2`) was 54.9%.
+    Here, the production `api` held 12.3s of sampled CPU over 30 minutes in 176 stacks. `stretchFingerprint` was on the stack for 69.5% of it, and the SHA-256 block function alone (`sha256.blockAVX2`) was 54.9%.
   </Step>
   <Step title="Export a local profile for pprof">
     `forge obs profile` exports what the local stack collected:

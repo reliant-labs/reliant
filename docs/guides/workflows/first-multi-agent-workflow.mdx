@@ -5,8 +5,6 @@ description: "Build a multi-agent coding workflow in YAML: a planner, an impleme
 keywords: ["multi-agent coding workflow", "multi-agent workflow yaml", "ai code review loop", "planner implementer reviewer agents", "reliant workflow run"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · no forge needed · L/S steps run in scratch: yes (validate, lint, scenario run, plus a deliberate edge cycle for Troubleshooting) · account step: run in the Reliant Labs org on a throwaway project (guides-sandbox-multi-agent, run 414eee72…, outcome success); the project itself has no CLI delete verb and is recorded in the sandbox ledger · unverified: none. The real run approved on round 1, so the send-back path is shown by scenario, not by a live run */}
-
 By the end of this guide you have one workflow file in which three agents share a task: a planner writes the plan, an implementer builds it, and a reviewer approves the change or sends it back with feedback. You check it on your own machine without signing in, then run it against a real repository.
 
 The handoffs are declared in the file, not left to a prompt. The reviewer answers through a JSON schema, and the workflow routes on that answer with CEL.

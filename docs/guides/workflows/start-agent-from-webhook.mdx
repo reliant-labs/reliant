@@ -5,8 +5,6 @@ description: "Start an AI agent run whenever your CI or any tool POSTs to a URL:
 keywords: ["webhook ai agent", "trigger ai agent from webhook", "webhook trigger", "start agent from ci", "trigger.payload", "reliant trigger activate"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · no forge needed · S steps run in scratch (guides-scratch/webhook-http/guides-sandbox-webhook): validate, validate --trigger-payload (matching and rejected samples), lint, scenario run · account steps: run in the Reliant Labs org on a throwaway project (guides-sandbox-webhook) on a self-hosted machine: trigger activate (webhook), curl deliveries (202 pending, 202 duplicate on a repeated Idempotency-Key, 202 skipped by the filter, 404 wrong token, 404 old token after rotation, 404 signed body with no secret, 409 while disabled, 405 GET, 413 over 1 MiB), trigger events, run a608a0cd (record ok, then call_llm stopped at the funding check: the sandbox org has no org AI account), trigger disable/enable/delete; all in the sandbox ledger · the CLI does not print the token (report 4fcfbc1d), so the token used came from the Rotate token RPC the app calls · unverified: the app's Enable dialog and Rotate token button themselves (taken from frontends/web/src/components/Automations/dialog/WebhookCredentialPanel.tsx and /automations/overview) · signed (HMAC) webhooks could not be enabled (report 67e663e5) · identical bodies sent without an idempotency header were recorded as two events (report 8ab3ea77) */}
-
 By the end of this guide your CI can start an agent with one HTTP request: when a deploy fails, it POSTs to a URL, and an agent reads the recent changes and says what probably broke. The URL belongs to a **webhook trigger** declared in the workflow. [Webhooks](/automations/webhooks) is the reference for every option this guide uses.
 
 ## Before you begin
@@ -153,7 +151,7 @@ By the end of this guide your CI can start an agent with one HTTP request: when 
 - **The response is not the run's result.** The sender gets `202` as soon as the delivery is recorded. Read the outcome in the run, or have the workflow report it, for example with a Slack step.
 - **In an organization, runs spend only the organization's AI accounts** (`Unattended funding: org_only`). Without one that can run the model, the run stops at its first agent step.
 - **A machine that is off can't run it.** A suspended [cloud machine](/machines/cloud) is woken; your own laptop or server must be online.
-- **Send your own idempotency key.** In our test against the hosted API, two identical bodies sent without one were recorded as two events and would have started two runs.
+- **Send your own idempotency key.** Two identical bodies sent without one were recorded as two events and would have started two runs.
 
 ## Troubleshooting
 

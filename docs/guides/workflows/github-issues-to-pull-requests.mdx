@@ -5,8 +5,6 @@ description: "Label a GitHub issue agent:ready and an AI agent writes a failing 
 keywords: ["autonomous issue resolution AI", "AI fix GitHub issues", "AI agent opens pull request", "autopilot-issue-worker", "agent:ready"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge: not used · S steps run in scratch: yes (reliant workflow validate on internal/workflow/builtin/autopilot-issue-worker.yaml with an agent:ready payload, sender, activation params and owner id: valid; lint: 0 errors, 6 warnings) · G steps run in the Reliant Labs org sandbox: reliant project create (guides-sandbox-autopilot, a clone of reliant-labs/guides-sandbox), trigger activate builtin://autopilot-issue-worker --machine (2 activations, gate_command 'go test ./...'), gh label create agent:ready, issue #2 opened and labelled → trigger events recorded the firing as failed, because the sandbox org has no org AI account and CLI activations are org_only (shown in Troubleshooting); then deactivate/delete, issue closed; all in the sandbox ledger · unverified: the agent's work, the branch, the pull request, its labels and the issue comment (taken from autopilot-issue-worker.yaml nodes wt, dir, agent, gate, publish, pr, pr_labels, issue_labels_done, issue_comment_done), the @reliant mention · scratch: guides-scratch/review-pull-requests-with-ai */}
-
 By the end of this guide, labelling a GitHub issue `agent:ready` starts an agent that writes a failing test, fixes the bug, runs your fast checks and opens a pull request that closes the issue. The Reliant bot opens it, so you can approve and merge it yourself.
 
 This is `autopilot-issue-worker`, one of the [Autopilot](/guides/autopilot) built-ins. Its own description says: "Never merges, never approves."

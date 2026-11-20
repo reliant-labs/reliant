@@ -5,8 +5,6 @@ description: "Test every path of an AI agent workflow before it runs for real: m
 keywords: ["test AI agents", "test ai agent workflow", "workflow scenario testing", "mock llm calls in tests", "reliant workflow scenario run", "agent workflow unit tests"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · no forge needed · S steps run in scratch (guides-scratch/test-workflows): validate, lint (scenario-none, scenario-terminal-uncovered, scenario-trigger-uncovered shown by removing scenarios), scenario run (all, by path, --filter, --verbose, --json, --fail-fast), scenario list, a scenario written first that failed against the workflow and passed after the fix, unknown-node errors for Troubleshooting · no account steps: scenarios never touch a server · warnings scenario run does not print: report eff2b9d4 */}
-
 By the end of this guide a scenario covers your workflow's success path, its failure path and one edge case, and one command checks them all in seconds, with no tokens spent and no command run.
 
 A scenario runs your workflow on the real workflow engine, in memory. Only the activities are mocked: agent results, command output and integration calls come from the scenario file. Edges, CEL conditions, loops, messages and `on_failure` run as they would in production ([How workflows run](/deep-dives/how-workflows-run)).

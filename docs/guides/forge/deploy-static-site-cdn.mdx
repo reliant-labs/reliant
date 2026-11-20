@@ -5,8 +5,6 @@ description: "Put a Vite or Next.js static site on Reliant's free static hosting
 keywords: ["free static site hosting", "deploy vite app", "deploy next.js static export", "static site cdn", "host a landing page", "forge env deploy"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L steps run in scratch: yes (guides-scratch/deploy-static-site-cdn: project new --kind site --frontend-kind vite-spa and nextjs, lint --static-export clean and with a [slug] route, npm run build, env render prod --list) · H steps: run in Reliant Labs org sandbox (guides-sandbox-static: env build prod --release v0.4.2, env deploy prod v0.4.2 --yes, curl headers, env status prod, obs check prod --wait --json → exit 2 no_request_telemetry, env deploy staging v0.4.2 --yes, env delete staging/prod --yes, curl 404; torn down; project shown as my-site in output, hostnames and digests are the real ones; hosted project record and release images left in place, no delete verb) — unverified: the second-site exit 7 (the org has app hosting billing, so staging deployed); --release v0.1.0 was refused (CutRelease 404, another project in the org had cut v0.1.0) so the run used v0.4.2 */}
-
 By the end of this guide you will have a Vite single-page app live on a generated `*.sites.reliantlabs.dev` hostname, served from [Reliant hosting](/hosting/overview)'s static hosting and CDN, with a recorded release you can deploy again or promote. The same steps work for a Next.js static export.
 
 A static site is a complete Forge project with no backend. Reliant owns the bucket, the CDN and the hostname, and one static site per person is free, across the organizations you own that have no hosting plan.

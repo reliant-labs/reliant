@@ -5,8 +5,6 @@ description: "Run an AI agent on a cron schedule: create a schedule trigger with
 keywords: ["scheduled ai agent", "ai agent cron", "cron job ai agent", "reliant trigger create", "schedule trigger", "reliant trigger activate"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · no forge needed · S steps run in scratch: yes (validate, lint on repo-summary.yaml) · account steps: run in the Reliant Labs org on a throwaway project (guides-sandbox-schedule) on a self-hosted machine: trigger create/update/get/list/fire/events, trigger activate, a scheduled firing at 07:32Z that launched run e6a5726f, a 07:41Z scheduled failure that auto-paused the trigger, then deactivate/terminate/delete (trigger list: No triggers); all logged in the sandbox ledger · the sandbox org has no org AI account, so the runs stopped at the funding check (shown in Troubleshooting); no run finished · unverified: a cloud machine waking for a firing (taken from internal/workflow/runtime/activities/handlers/preflight_daemon.go and /machines/cloud; no cloud machine was used) · test crons fired a few minutes after creation; the page shows the weekday 9am form */}
-
 By the end of this guide an agent runs in your repository every weekday at 9am, without you starting it, and you can see each firing and open the run it started. A schedule is a **trigger**. You can create one from the terminal, or declare it in a workflow's YAML so anyone who uses the workflow can turn it on. This guide does both. [Schedules](/automations/schedules) lists every option.
 
 ## Before you begin

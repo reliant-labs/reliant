@@ -5,8 +5,6 @@ description: "Fail CI on vulnerable Go and npm dependencies with govulncheck and
 keywords: ["govulncheck npm audit CI", "go vulnerability scanning", "npm audit high severity", "vulnerability exemption expiry", "trivy image scan github actions", "forge ci vuln-scan"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L steps run in scratch (guides-scratch/ci-gate/shop, a copy of add-table-crud-api-pages/shop): ci vuln-scan with no govulncheck on PATH (refuses), --go with gopkg.in/yaml.v2 v2.2.2 pinned and called (3 findings) then upgraded (pass), --npm on the scaffold's real zod finding, exemption accepted, expired (fails), missing expires (fails), stale scaffold exemption reported; task ci rows vuln-go/vuln-npm; docker build + Trivy (aquasec/trivy:latest image --severity HIGH,CRITICAL) on the project image, image removed after · H/G steps: none (the PR run of the same project is in gate-prs-forge-lint-tests) · report fc1d2c05 (alpine:3.21 base EOL) */}
-
 By the end of this guide, a pull request fails when your Go code calls a known-vulnerable function or a frontend depends on a package with a high or critical advisory. When an advisory has no fix and cannot reach your code, you accept that one advisory in `forge.yaml` with a reason and an expiry date, and the gate fails again on that date.
 
 `reliant forge ci vuln-scan` runs govulncheck over every Go module in the project and `npm audit` in every frontend, then makes the pass or fail decision itself, so it can honor reviewed exemptions that neither scanner supports on its own.

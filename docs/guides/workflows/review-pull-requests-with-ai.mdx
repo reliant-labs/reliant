@@ -5,8 +5,6 @@ description: "Get an AI code review on every GitHub pull request: turn on Autopi
 keywords: ["AI code review GitHub", "AI pull request review", "automated code review", "autopilot-pr-review", "reliant trigger activate"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge: not used · S steps run in scratch: yes (reliant workflow validate + lint on internal/workflow/builtin/autopilot-pr-review.yaml: valid, 3 scenario-trigger-uncovered warnings) · G steps run in the Reliant Labs org sandbox: reliant project create (guides-sandbox-autopilot), trigger activate builtin://autopilot-pr-review --no-machine (3 activations), PR reliant-labs/guides-sandbox#1 opened → trigger events "launched" → run reached the reviewer and paused, because the sandbox org has no org AI account and CLI activations are org_only (shown in Troubleshooting); then deactivate/delete, PR closed, branch deleted; all in the sandbox ledger · unverified: the posted review and its labels (review body format and footer taken from autopilot-pr-review.yaml nodes review/decide/post), the re-review label and comment, the app's Set up dialog · scratch: guides-scratch/review-pull-requests-with-ai */}
-
 By the end of this guide every non-draft pull request in the repositories you pick gets one review from an AI reviewer, posted by the Reliant bot: defects and risks, each tied to a `path:line`. It never approves and never merges. A person does both.
 
 This is `autopilot-pr-review`, one of the [Autopilot](/guides/autopilot) built-ins. It declares its own GitHub triggers, so you turn it on rather than write it, and it needs no machine.

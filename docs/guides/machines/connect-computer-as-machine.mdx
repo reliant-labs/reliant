@@ -5,8 +5,6 @@ description: "Run AI agents in a repo on your own computer: start the Reliant da
 keywords: ["run AI agent on my computer", "reliant daemon start", "connect computer to reliant", "pair machine device code", "AI coding agent local machine", "reliant daemon status"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · L steps run in scratch: yes (guides-scratch/machines-connect, scratch HOME, never this machine's own daemon): reliant daemon start (real pairing prompt captured; left unapproved, it exited with the real "code expired" error), daemon status before approval and from the wrong directory, daemon stop, daemon ls · sources: reliant daemon start --help, internal/cliauth/device.go (expired/declined messages), cmd/reliant/cmd/daemon.go (registerDaemon) · H steps: none · unverified: approving the code in the app and the connected `daemon status` output (approval needs a person in the app; the connected first line is quoted from cmd/reliant/cmd/daemon.go and cli/run-a-machine) */}
-
 By the end of this guide your computer is a Reliant machine: an agent in one of your chats can read files and run commands in a repository on it. The desktop app already does this for you. Follow this guide when you use the browser, or when the computer is one you reach over SSH.
 
 The `reliant daemon` process makes it work. It dials out to Reliant and holds one stream open, so your computer needs no open inbound port ([how a tool call reaches your machine](/deep-dives/how-tool-calls-reach-your-machine)).

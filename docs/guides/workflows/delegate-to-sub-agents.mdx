@@ -5,8 +5,6 @@ description: "Have one agent split a task across parallel AI sub-agents: a share
 keywords: ["ai sub-agents parallel", "delegate to sub-agents", "spawn sub-agent", "parallel ai agents", "multi-agent orchestration", "spawn_send", "spawn_status", "spawn_stop"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · no forge needed · run in the Reliant Labs org on the throwaway project guides-sandbox-parallel (scratch: guides-scratch/parallel-agents): chat run b7a75115… (builtin agent started with --input-file caps 4/8: create_plan, notes/brief.md, 2 researcher spawns in one turn, sub-agent update_task, spawn_status wait returning early, combined answer; completed 81s) and a one-line probe run 3651534e… · tool calls and answers read from the run's messages (the app shows them; no CLI verb does) · observed from inside a live run: this page's writer is a depth-2 sub-agent of a docs orchestrator (its tool list, its list_tasks header) · refusal texts quoted from internal/workflow/runtime/spawn_limits.go (spawnCapRefusal) and internal/llm/tools/capabilities.go (spawnDepthRefusal, no-spawn-presets message) · not observed live: a cap refusal, spawn_stop, spawn_send from a parent · unverified: none of the steps shown */}
-
 By the end of this guide one agent has split a task, started a sub-agent per piece in parallel, and combined their reports, and you know how to watch, steer and stop them.
 
 Each sub-agent reads in a thread of its own and returns a summary, so the parent's context holds the summary, not the reading ([how this works](/deep-dives/sub-agents-and-threads)).
@@ -127,7 +125,7 @@ Each sub-agent reads in a thread of its own and returns a summary, so the parent
 
 ## What you see from inside a sub-agent
 
-This page was written by a sub-agent two levels below a docs run's main agent. Its tool list has `spawn_send`, to report to its parent, and no `spawn`, `spawn_status` or `spawn_stop`, because it is at the depth limit. Its `list_tasks` returns the main agent's plan, past the orchestrator in between, which made none:
+A sub-agent two levels below the main agent shows this. Its tool list has `spawn_send`, to report to its parent, and no `spawn`, `spawn_status` or `spawn_stop`, because it is at the depth limit. Its `list_tasks` returns the main agent's plan, past the orchestrator in between, which made none:
 
 ```text
 This plan belongs to an ancestor thread (1ea43ece-9763-5119-b2a2-e23dc8a2de6b) — you are reading the board you were spawned from.

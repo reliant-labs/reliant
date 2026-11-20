@@ -5,8 +5,6 @@ description: "List every signed-in RPC whose handler never reads the caller, the
 keywords: ["idor detection", "bola detection", "broken object level authorization", "missing authorization check api", "forge project audit unscoped_auth", "forge:auth-unscoped-ok"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L steps run in scratch: yes (guides-scratch/auth-scoping/shop-audit, a copy of add-table-crud-api-pages/shop: project audit and audit --json before/after, requireAdmin helper, forge:auth-unscoped-ok on GetProduct/ListProducts, a bare marker with no reason (ignored), task test:short -run 'TestProduct_|TestCRUD_Product', lint --graph) · H steps: none · not run: curl against env up dev (the 401 for a missing token is shown in /deep-dives/security-model) */}
-
 A forge API turns away every request without a valid credential, but a valid credential only proves the caller is signed in. Any signed-in user can call a handler that never asks who they are, which is how one customer ends up reading another's orders (IDOR, or BOLA in the OWASP API list). This guide finds those handlers and closes each one.
 
 Forge can find them because it knows which RPCs require sign-in, from the proto, and can read the Go handler that serves each one. [The security model](/deep-dives/security-model#2-you-write-the-access-rules-and-the-audit-finds-the-gaps) explains the design.

@@ -5,8 +5,6 @@ description: "How forge builds a release once and promotes it by digest: plans a
 keywords: ["release promotion", "build once deploy many", "deploy approval", "promote staging to production", "rollback floor", "deployment ledger", "deploy by digest"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1 (scratch project pin v1.6.1-0.20261115024114-0ab7c562e817); sources read at forge v1.8.0 (0e50dd7b9) · run: env render prod --list, env build --help, env floor --help (L); hosted cycle in the Reliant Labs org sandbox (guides-sandbox-releases, prod env deleted): env build prod --release v0.0.1/v0.0.2, env deploy --plan-only, --approve <digest>, a stale --approve (exit 3), --yes, env status, env releases list, env floor set/show/check, a below-floor deploy (exit 1), --offline-ledger on a hosted env (refused) · not run: --from (needs a second hosted env), health gate, exit 7 · sources: forge internal/cli/{deploy.go,deploy_confirm.go,deploy_autoversion.go,offline_ledger.go,hosted_cache.go,env_floor.go,ledger_cmd.go,release_record.go}, internal/ledgerfile/doc.go, kcl/schema.k (HealthGate, RequiredGates, ApprovalHook, DeliveryPolicy), docs forge/deploy/release-gates, hosting/overview */}
-
 **In short**
 
 - A deploy ships a **release**: an immutable record of one build, holding the digest of every image and static bundle, the commit and tree it came from, and the rendered objects the environment runs. It is built once, and every environment that takes it runs the same bytes.
