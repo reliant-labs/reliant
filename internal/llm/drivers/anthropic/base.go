@@ -75,6 +75,12 @@ func (b *baseClient) retryer() ratelimit.Retryer {
 }
 
 func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *baseClient {
+	// The endpoint comes from opts, never from ANTHROPIC_BASE_URL in the
+	// process environment (llm.NewAnthropicSDKClient turns that off). It goes
+	// first, so a driver's own WithBaseURL (Copilot's host) still wins.
+	if opts.BaseURL != "" {
+		clientOptions = append([]option.RequestOption{option.WithBaseURL(opts.BaseURL)}, clientOptions...)
+	}
 	// Support validate (short timeout for validation requests)
 	if opts.MaxTokens < 10 {
 		clientOptions = append(clientOptions, option.WithRequestTimeout(10*time.Second))

@@ -66,6 +66,14 @@ this stack runs no container, so there is no local ClickStack, and the
 processes get no OTLP endpoint (as before this was declared).
 `forge env status dev` says which was decided. Opt out with
 `forge env up dev --telemetry=local` or FORGE_DEV_TELEMETRY=local.
+
+DEBUG IMAGE. Dockerfile.debug, the server binary under a headless Delve, for
+attaching a debugger to a reliant role in a container (`forge debug connect`
+to its :2345; a host role here takes `forge debug start --attach <pid>`
+instead). Not bound unless asked, so `forge env up dev` never builds it;
+build it with docker:
+
+    forge env build dev -D debug_image=true --docker --target reliant-debug-image
 """
 
 import forge
@@ -88,6 +96,13 @@ _host = lambda air: str, listen: [int] -> forge.OnHost {
         listen_ports = listen
     }
 }
+
+# ── The Delve image (opt-in) ─────────────────────────────────────────────────
+# Off by default: `forge env up dev` builds every build-only workload it binds,
+# and this stack needs no docker. `-D debug_image=true` binds workloads.k's
+# `reliant-debug-image` (KCL reads only true/True as true: `=1` is false); see
+# DEBUG IMAGE above.
+_debug_image = option("debug_image", type="bool", default=False, help="Bind the Delve image (Dockerfile.debug) as a build-only workload: true to build it with `forge env build dev --docker --target reliant-debug-image` (default false)")
 
 # ── Env ──────────────────────────────────────────────────────────────────────
 # Each workload's env, layered last-wins: the typed config its root reaches
@@ -123,16 +138,15 @@ _web = forge.Frontend {
     dev_runner = "pnpm"
     port = ports.web
     runtime = forge.OnHost {}
+    # The dev SERVER's environment, not the bundle's: vite.config.ts reads
+    # these from process.env. What the browser reads is runtime config
+    # (config.k, reliant_web_config), served as config.js.
     env_vars = [
         # Vite proxies /reliant.v1.*, /health and the terminal WebSocket here.
         forge.EnvVar {name = "VITE_API_URL", value = "http://localhost:${ports.api}"}
-        # What the onboarding's `reliant daemon start` command dials.
-        forge.EnvVar {name = "VITE_GATEWAY_URL", value = "http://localhost:${ports.gateway}"}
-        forge.EnvVar {name = "VITE_DISABLE_TLS", value = "true"}
-        forge.EnvVar {name = "VITE_APP_URL", value = _web_origin}
-        # VITE_CONTROL_PLANE_API_URL is deliberately unset: the web app's one
-        # control-plane gate (src/services/controlPlane/config.ts) then takes
-        # its self-hosted path.
+        # VITE_CONTROL_PLANE_API_URL is deliberately unset: the dev server then
+        # proxies no control-plane routes, and the web app's one control-plane
+        # gate (src/services/controlPlane/config.ts) takes its self-hosted path.
     ]
 }
 
@@ -203,7 +217,7 @@ _bundle = forge.Bundle {
             ]
         }
     }
-    workloads = [_migrate, _api, _worker, _gateway]
+    workloads = [_migrate, _api, _worker, _gateway] + ([wl.debug_image] if _debug_image else [])
     frontends = [_web]
     infra = [
         forge.HostInfra {

@@ -180,8 +180,7 @@ ALL: [fw.Workload] = [migrate, api_server, temporal_worker, daemon_gateway]
 #
 # Artifacts, not processes: each is `kind = "tool"` on `forge.BuildOnly`, so
 # no env runs it and `ALL` above (what control-plane binds) does not name it.
-# deploy/kcl/release/main.k binds them, and `forge env build release` builds
-# them; an env that does not list one never builds it.
+# An env builds one only when it lists it.
 
 # The production server image: the root Dockerfile, which compiles
 # ./cmd/reliant in a glibc builder and packages it on debian (the one image
@@ -221,4 +220,18 @@ server_image = fw.Workload {
     kind = "tool"
     runtime = forge.BuildOnly {}
     build = server_image_build({})
+}
+
+# The Delve image: Dockerfile.debug, the server binary built without
+# optimisations (-gcflags=all=-N -l) and run under a headless dlv
+# (scripts/dlv-entrypoint.sh), for attaching a debugger to a reliant role in a
+# cluster. A developer's tool, never a release artifact: no `image`, so it is
+# a local image that nothing pushes. dev/main.k binds it only under
+# `-D debug_image=true`, because `forge env up dev` builds every build-only
+# workload it binds and dev needs no docker.
+debug_image = fw.Workload {
+    name = "reliant-debug-image"
+    kind = "tool"
+    runtime = forge.BuildOnly {}
+    build = forge.DockerBuild {dockerfile = "Dockerfile.debug"}
 }

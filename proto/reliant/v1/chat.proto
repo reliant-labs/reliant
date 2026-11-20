@@ -1130,12 +1130,25 @@ message ListArchivedChatsRequest {
   // orgs list under the caller's default org. Unset lists every archived chat
   // the caller owns, in any org, as before this field existed.
   optional string org_id = 1;
+  // Page size: at most this many chats, clamped to 200. Unset (or 0) with no
+  // page_token lists every archived chat in one response, as before paging
+  // existed; a page_token without a page size gets pages of 50. New clients
+  // always set it: a heavy account archives tens of thousands of chats.
+  optional int32 page_size = 2;
+  // Continues a previous response's next_page_token. Opaque. Pages are
+  // ordered most recently updated first, keyset on (updated time, id), so a
+  // chat archived mid-pagination can neither repeat nor be skipped.
+  optional string page_token = 3;
 }
 
 // ListArchivedChatsResponse returns archived chats with worktree info
 message ListArchivedChatsResponse {
   repeated ArchivedChat chats = 1;
+  // Number of chats in this response (this page, when paged).
   int32 total = 2;
+  // Set when more archived chats follow; pass it as page_token. Empty on the
+  // last page, and always empty for an unpaged request.
+  string next_page_token = 3;
 }
 
 // SendMessageRequest sends messages to a chat
