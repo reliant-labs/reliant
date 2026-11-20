@@ -238,8 +238,8 @@ export function StatusBandColumn({
     );
   }
   return (
-    <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8" data-testid={testId}>
-      <div className="mx-auto max-w-[1200px]">
+    <div className="flex-shrink-0 px-4 sm:px-6" data-testid={testId}>
+      <div className="mx-auto max-w-[var(--chat-column)]">
         <div className={cn(bandClassName, className)}>{children}</div>
       </div>
     </div>
@@ -457,11 +457,11 @@ function StatusLines({
   return (
     // Same gutters and column as the composer it belongs to.
     <div
-      className="flex-shrink-0 px-4 sm:px-6 lg:px-8"
+      className="flex-shrink-0 px-4 sm:px-6"
       data-testid="composer-status-slot"
       data-line-count={lines.length}
     >
-      <div className="mx-auto flex max-w-[1200px] flex-col" role="status" aria-live="polite">
+      <div className="mx-auto flex max-w-[var(--chat-column)] flex-col" role="status" aria-live="polite">
         {lines.map((line) =>
           line.chips.length > 1 ? (
             <div key={line.chips.map((c) => c.id).join("+")} className="flex min-w-0 gap-2">

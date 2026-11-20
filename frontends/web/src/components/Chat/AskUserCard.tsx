@@ -41,7 +41,6 @@ import { memo, useId, useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, MessageCircleQuestion, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { answerQuestion, useAsyncQuestions, type QuestionInfo } from "@/hooks/question-queries";
-import { CardInset } from "../forge-ui/card";
 import { cn } from "@/lib/utils";
 import { QuestionPrompt, type QuestionAnswer } from "./QuestionPrompt";
 import {
@@ -151,7 +150,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
           </li>
         ))
       ) : (
-        <li className="text-sm text-muted-foreground">
+        <li className="text-ui text-muted-foreground">
           {input === undefined ? "Writing the question…" : "The question's text could not be read."}
         </li>
       )}
@@ -187,7 +186,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
         data-testid="ask-user-card"
         data-mode={mode}
         data-collapsed="true"
-        className="my-1.5 rounded-lg border border-border bg-card"
+        className="min-w-0"
       >
         <button
           type="button"
@@ -195,8 +194,9 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
           onClick={() => setExpanded(true)}
           data-testid="ask-user-summary"
           className={cn(
-            "flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm",
-            "transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            // Answered, the question is a quiet row like a tool call's.
+            "-mx-1.5 flex min-h-7 w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 text-left text-ui touch:min-h-[44px]",
+            "text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
           <span className="flex-shrink-0 [&>svg]:mt-0">{icon}</span>
@@ -228,7 +228,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
             </span>
           </span>
           <ChevronRight
-            className="h-4 w-4 flex-shrink-0 text-muted-foreground"
+            className="size-3.5 flex-shrink-0 opacity-70"
             aria-hidden="true"
           />
         </button>
@@ -240,9 +240,9 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
     <>
       {icon}
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{heading.title}</p>
+        <p className="text-ui font-medium text-foreground">{heading.title}</p>
         <p
-          className="mt-0.5 text-xs text-muted-foreground"
+          className="mt-0.5 text-meta text-muted-foreground"
           data-testid="ask-user-status"
         >
           {heading.status}
@@ -258,7 +258,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
       data-collapsed={resolved ? "false" : undefined}
       // break-words: a question or answer is agent-written text, and an
       // unbroken URL or path in it ran past the card instead of wrapping.
-      className="my-1.5 rounded-lg border border-border bg-card px-3 py-2.5 break-words"
+      className="rounded-xl border border-border bg-background p-4 break-words sm:p-5"
     >
       {resolved ? (
         // The open settled card: its header closes it again.
@@ -267,7 +267,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
           aria-expanded={true}
           aria-controls={bodyId}
           onClick={() => setExpanded(false)}
-          className="-mx-1 flex min-h-[44px] w-[calc(100%+0.5rem)] items-start gap-2.5 rounded-md px-1 text-left hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="-mx-1 flex min-h-[44px] w-[calc(100%+0.5rem)] items-start gap-2.5 rounded-md px-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {header}
           <ChevronDown
@@ -283,15 +283,15 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
         {withdrawnReason ? (
           questionList(
             "ask-user-withdrawn",
-            "text-sm text-muted-foreground line-through",
+            "text-ui text-muted-foreground line-through",
           )
         ) : resolved ? (
-          <ul className="mt-2 space-y-1.5" data-testid="ask-user-answers">
+          <ul className="mt-3 space-y-1.5" data-testid="ask-user-answers">
             {(answers.length > 0
               ? answers
               : [{ question: "", answer: "No answer given." }]
             ).map((line, i) => (
-              <li key={i} className="text-sm">
+              <li key={i} className="text-ui">
                 {line.question && (
                   <span className="text-muted-foreground">
                     {line.question}{" "}
@@ -302,18 +302,18 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
             ))}
           </ul>
         ) : mode === "async" && items ? (
-          <CardInset padding="none" className="mt-2">
+          <div className="mt-3">
             <QuestionPrompt
               key={attempt}
               inline
               questions={items}
               onSubmit={(a) => void onSubmit(a)}
             />
-          </CardInset>
+          </div>
         ) : (
           // No form here: the row has not arrived (posting), the composer holds
           // it (waiting), or nothing is left to answer (asked).
-          questionList("ask-user-questions", "text-sm text-foreground")
+          questionList("ask-user-questions", "text-ui text-foreground")
         )}
       </div>
     </div>

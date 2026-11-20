@@ -601,7 +601,7 @@ function SecretDetail({
 
       {row.declaredBy.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
+          <h3 className="text-2xs font-medium text-ink-muted">
             Declared by
           </h3>
           <ul className="space-y-1">
@@ -646,7 +646,7 @@ function SecretDetail({
         </p>
       ) : (
       <section className="space-y-2">
-        <h3 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
+        <h3 className="text-2xs font-medium text-ink-muted">
           Version history
         </h3>
         <SecretVersionHistory

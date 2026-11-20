@@ -1,6 +1,5 @@
-import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
-import { cn } from "../../lib/utils";
+import { Fragment, memo, useCallback, useEffect, useMemo, useState } from "react";
+import { ListTree, Loader2, XCircle } from "lucide-react";
 import { useCapability, useSurface } from "../../lib/surfaceContext";
 import { getProcessedMessage } from "../../lib/messageProcessor";
 import { useChat, useToolCallStates, useToolResultsByCallId } from "../../store/chatStoreHooks";
@@ -8,7 +7,7 @@ import { viewerSafeMessage } from "../../lib/viewerResults";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { findWorkflowById } from "../../lib/workflowTree";
 import { workflowLifecycleToDisplayStatus } from "./ToolExecution";
-import { ChatMessage, type ChatTimelineVariant } from "./ChatMessage";
+import { ChatMessage } from "./ChatMessage";
 import {
   formatTurnWorkHeadline,
   formatTurnWorkElapsed,
@@ -17,6 +16,7 @@ import {
   type TurnWorkExecution,
 } from "./turnWorkSummary";
 import { BranchFromMessageButton, MessageTimestamp } from "./MessageChrome";
+import { QuietRow } from "./QuietRow";
 import type { MessageSlice, TurnWork } from "./thread-views/simplifiedTurns";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useMinimumDwell } from "./useMinimumDwell";
@@ -31,7 +31,8 @@ interface TurnWorkFoldProps {
   /** The turn is still being worked on: the header shows live text and ticks. */
   isStreaming?: boolean;
   onSelectThread?: (threadId: string | null) => void;
-  timelineVariant?: ChatTimelineVariant;
+  /** The most steps shown as rows of their own; more read as one summary row. */
+  inlineStepsMax?: number;
 }
 
 const NO_APPROVALS: Approval[] = [];
@@ -46,6 +47,12 @@ const workSlice = (part: TurnWork["parts"][number]): MessageSlice =>
   part.callIds
     ? { segmentIndexes: part.segmentIndexes, role: "work", callIds: part.callIds }
     : { segmentIndexes: part.segmentIndexes, role: "work" };
+
+/**
+ * The most steps (tool calls and agent mail) a run shows as rows of their
+ * own. A longer run reads as one summary row that opens onto them.
+ */
+export const INLINE_STEPS_MAX = 5;
 
 /** How long each step stays on the live line before the next replaces it. */
 const STEP_MIN_DWELL_MS = 1200;
@@ -62,11 +69,10 @@ function TurnWorkFoldComponent({
   approvals = NO_APPROVALS,
   isStreaming = false,
   onSelectThread,
-  timelineVariant,
+  inlineStepsMax = INLINE_STEPS_MAX,
 }: TurnWorkFoldProps) {
   const surface = useSurface();
   const canBranch = useCapability("chatBranching");
-  const panelId = useId();
   const live = isStreaming;
 
   const toolResultsByCallId = useToolResultsByCallId(chatId || "");
@@ -176,28 +182,33 @@ function TurnWorkFoldComponent({
     ? `${summary.failed} ${summary.failed === 1 ? "failed step" : "failed steps"}`
     : "";
 
-  // A row's chrome, like a message's: when the run ended, and branching from
-  // its last assistant message. Not on the phone, which shows a message's
-  // chrome in its actions sheet and cannot branch.
+  // Branching from the run's last assistant message. Not on the phone, which
+  // shows a message's chrome in its actions sheet and cannot branch.
   const showChrome = surface !== "mobile";
-  const endAt = !live && endMs !== null ? new Date(endMs).toISOString() : undefined;
   const branchFrom = canBranch ? work.parts[work.parts.length - 1]?.message : undefined;
 
-  // Collapsed by default, even while live: the header carries the live state.
+  // A short run is its steps, each a quiet row of its own, in place. A long
+  // one is a single summary row ("Read 6 files · ran 4 commands") that opens
+  // onto the same rows.
+  const steps = executions.length + (work.events?.length ?? 0);
+  const inline = steps <= inlineStepsMax;
+  const endAt = !live && endMs !== null ? new Date(endMs).toISOString() : undefined;
+
+  // Collapsed by default, even while live: the summary carries the live state.
   const [expanded, setExpanded] = useState(false);
   const toggle = useCallback(() => setExpanded((open) => !open), []);
 
-  // Opening the fold reads the bodies its rows were sent without (a stub
+  // Opening the summary reads the bodies its rows were sent without (a stub
   // read) in one batch, so the rows that render expanded do not each start a
   // request and the ones the user opens next are already here.
   const elidedIds = useMemo(() => elidedBlockIdsOf(executions), [executions]);
   const elidedKey = elidedIds.join(",");
   useEffect(() => {
-    if (!expanded || !chatId || elidedKey === "") return;
+    if (inline || !expanded || !chatId || elidedKey === "") return;
     prefetchContentBlockBodies(chatId, elidedKey.split(","));
-  }, [expanded, chatId, elidedKey]);
+  }, [inline, expanded, chatId, elidedKey]);
 
-  const common = { chatId, approvals, isStreaming, onSelectThread, timelineVariant };
+  const common = { chatId, approvals, isStreaming, onSelectThread };
   const renderEvents = (afterPart: number) => (work.events ?? [])
     .filter((event) => event.afterPart === afterPart)
     .map(({ message }) => isAgentMessage(message) ? (
@@ -205,84 +216,94 @@ function TurnWorkFoldComponent({
     ) : (
       <SystemNotificationMessage key={message.id} message={message} />
     ));
+  const rows = (
+    <>
+      {renderEvents(0)}
+      {work.parts.map((part, index) => (
+        <Fragment key={`${part.message.id}-work`}>
+          <ChatMessage message={part.message} slice={workSlice(part)} {...common} />
+          {renderEvents(index + 1)}
+        </Fragment>
+      ))}
+    </>
+  );
+  const branchButton = showChrome && branchFrom ? (
+    // Revealed with the run, like a message's actions; inert while hidden so
+    // it never swallows a click it does not show.
+    <BranchFromMessageButton
+      chatId={chatId}
+      messageId={branchFrom.id}
+      className="pointer-events-none shrink-0 opacity-0 transition-opacity group-hover/fold:pointer-events-auto group-hover/fold:opacity-100 group-focus-within/fold:pointer-events-auto group-focus-within/fold:opacity-100"
+    />
+  ) : null;
+
+  if (inline) {
+    return (
+      <div
+        className="group/fold relative my-2 flex flex-col gap-0.5"
+        data-testid="turn-work-fold"
+        data-form="rows"
+        data-live={live ? "true" : "false"}
+      >
+        {rows}
+        {branchButton && <div className="absolute -right-7 top-0.5">{branchButton}</div>}
+      </div>
+    );
+  }
 
   return (
-    <div className="my-1" data-testid="turn-work-fold" data-live={live ? "true" : "false"}>
-      <div className="group/fold-header flex items-center gap-1">
-        <button
-          type="button"
-          className={cn(
-            "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-[44px]",
-            surface !== "desktop" && "min-h-[44px]",
-          )}
-          onClick={toggle}
-          aria-label={[headline, counts, failedLabel].filter(Boolean).join(", ")}
-          aria-expanded={expanded}
-          aria-controls={panelId}
-        >
-          <span className="flex min-w-0 items-center gap-1.5">
-            {expanded ? (
-              <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            )}
-            {live && (
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary motion-safe:animate-pulse" aria-hidden="true" />
-            )}
-            {/* One truncating line: the headline wins, the counts give way. */}
-            <span className="truncate" title={counts ? `${headline} · ${counts}` : undefined}>
-              <span className="font-medium">{headline}</span>
-              {counts && <span className="text-muted-foreground/70"> · {counts}</span>}
-            </span>
-            {failedLabel && (
-              <span className="inline-flex shrink-0 items-center gap-1">
-                <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                {failedLabel}
+    <div className="group/fold my-2" data-testid="turn-work-fold" data-form="summary" data-live={live ? "true" : "false"}>
+      <QuietRow
+        icon={
+          live ? (
+            <Loader2 className="size-3.5 animate-spin text-primary-ink" />
+          ) : summary.failed > 0 ? (
+            <XCircle className="size-4 text-destructive-ink" />
+          ) : (
+            <ListTree className="size-4" />
+          )
+        }
+        expanded={expanded}
+        onToggle={toggle}
+        ariaLabel={[headline, counts, failedLabel].filter(Boolean).join(", ")}
+        trailing={
+          <>
+            {elapsed !== null && (
+              <span role="timer" aria-live="off" aria-label="Activity elapsed time" className="text-meta tabular-nums">
+                {elapsed}
               </span>
             )}
-          </span>
-          {elapsed !== null && (
-            <span
-              role="timer"
-              aria-live="off"
-              aria-label="Activity elapsed time"
-              className="ml-auto shrink-0 tabular-nums"
-            >
-              {elapsed}
-            </span>
-          )}
-        </button>
-        {showChrome && endAt && <MessageTimestamp at={endAt} className="shrink-0 px-1" />}
-        {showChrome && branchFrom && (
-          // Revealed with the header, like a message's hover toolbar; inert
-          // while hidden so it never swallows a click it does not show.
-          <BranchFromMessageButton
-            chatId={chatId}
-            messageId={branchFrom.id}
-            className="pointer-events-none shrink-0 opacity-0 transition-opacity group-hover/fold-header:pointer-events-auto group-hover/fold-header:opacity-100 group-focus-within/fold-header:pointer-events-auto group-focus-within/fold-header:opacity-100"
-          />
-        )}
-      </div>
-
-      {expanded && (
-        <div id={panelId} className="mt-1 space-y-1 pl-3" data-testid="turn-work-body">
-          {summary.failed > 0 && (
-            <p className="px-1.5 py-1 text-xs text-muted-foreground">
-              {summary.failed} {summary.failed === 1 ? "step failed" : "steps failed"}. Expand the steps below to inspect their errors.
-            </p>
-          )}
-          {renderEvents(0)}
-          {work.parts.map((part, index) => (
-            <Fragment key={`${part.message.id}-work`}>
-              <ChatMessage message={part.message} slice={workSlice(part)} {...common} />
-              {renderEvents(index + 1)}
-            </Fragment>
-          ))}
-        </div>
-      )}
+            {showChrome && endAt && (
+              <MessageTimestamp
+                at={endAt}
+                className="shrink-0 opacity-0 transition-opacity group-hover/fold:opacity-100 group-focus-within/fold:opacity-100"
+              />
+            )}
+            {branchButton}
+          </>
+        }
+        detailTestId="turn-work-body"
+        detail={
+          <div className="flex flex-col gap-0.5">
+            {summary.failed > 0 && (
+              <p className="pb-1 text-ui text-muted-foreground">
+                {summary.failed} {summary.failed === 1 ? "step failed" : "steps failed"}. Expand the steps below to inspect their errors.
+              </p>
+            )}
+            {rows}
+          </div>
+        }
+      >
+        {/* One truncating line: the headline wins, the counts give way. */}
+        <span className="truncate" title={counts ? `${headline} · ${counts}` : undefined}>
+          <span>{headline}</span>
+          {counts && <span className="text-muted-foreground/70"> · {counts}</span>}
+        </span>
+        {failedLabel && <span className="shrink-0 text-destructive-ink">{failedLabel}</span>}
+      </QuietRow>
       {/* Nothing of the run renders outside the body: what must stay on
-          screen (a question, an approval, a generated image, a deploy) is a
-          timeline row of its own, at its place between folds. */}
+          screen (a question, an approval, a generated image, a deploy, a
+          sub-agent) is a timeline row of its own, at its place between runs. */}
     </div>
   );
 }

@@ -439,7 +439,7 @@ function LogList({
     <Card padding="none" className="overflow-hidden" data-testid="obs-logs-table">
       <div
         aria-hidden="true"
-        className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-muted max-md:hidden")}
+        className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium text-ink-muted max-md:hidden")}
       >
         <span />
         {table.getHeaderGroups()[0]?.headers.map((header) => (
@@ -560,7 +560,7 @@ const SEVERITY_CLASS: Record<Severity, string> = {
 
 export function SeverityLabel({ severity, text }: { severity: Severity; text?: string }) {
   return (
-    <span className={cn("uppercase", SEVERITY_CLASS[severity])} title={text && text.toLowerCase() !== severity ? text : undefined}>
+    <span className={cn("", SEVERITY_CLASS[severity])} title={text && text.toLowerCase() !== severity ? text : undefined}>
       {severity === "unknown" ? text || "—" : severity}
     </span>
   );

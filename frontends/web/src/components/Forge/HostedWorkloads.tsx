@@ -64,8 +64,8 @@ export function VerdictChip({
     <Tooltip content={detail}>
       <span
         className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-ink",
-          style.container
+          // An icon and a word, never a filled chip: the hue lives on the icon alone.
+          "inline-flex shrink-0 items-center gap-1.5 text-meta font-medium text-ink"
         )}
         data-verdict={verdict}
         data-certainty={certainty}
@@ -73,7 +73,7 @@ export function VerdictChip({
         data-testid={testId}
       >
         <Icon
-          className={cn("h-3 w-3 shrink-0", style.foreground, busy && "animate-spin motion-reduce:animate-none")}
+          className={cn("h-3.5 w-3.5 shrink-0", style.foreground, busy && "animate-spin motion-reduce:animate-none")}
           aria-hidden="true"
         />
         {label}

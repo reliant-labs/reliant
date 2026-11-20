@@ -1,30 +1,33 @@
 /**
- * ToolExecutionV2 - Refactored tool execution component
- * 
- * Changes from original:
- * - Content extends full width to outer border (no inner padding creating double borders)
- * - Expand/collapse integrated into bottom of card (no separate button)
- * - Per-tool-type renderers for cleaner code
- * - Simpler, cleaner UI with less visual noise
+ * One tool call in the transcript.
+ *
+ * Almost always a quiet one-line row (QuietRow): the tool's icon, a sans verb
+ * and its target in mono — "Read src/cart/totals.ts", "Edited totals.ts
+ * +4 −1" — collapsed by default, opened inline to show its input and output.
+ * A spinner while it runs, a destructive mark when it failed; no card, no
+ * stripe, no tint.
+ *
+ * Two calls are cards instead, because they are not records of work: a call
+ * waiting on the user's approval (one primary action, Approve), and a spawned
+ * sub-agent (its name, its state, and its thread).
  */
 
 import Tooltip from "../forge-ui/tooltip";
 import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import {
-  ChevronDown,
   ChevronRight,
-  CheckCircle,
   AlertCircle,
-  Clock,
+  Bot,
+  ExternalLink,
   Shield,
-  X,
   Loader2,
   Square,
   XCircle,
   Play,
-  Zap,
   Maximize2,
 } from "lucide-react";
+import { QuietRow } from "./QuietRow";
+import { editDiffStat, toolRowIcon } from "./toolRowParts";
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
@@ -299,7 +302,6 @@ interface ToolExecutionProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
-  density?: "compact" | "card" | "minimal";
 }
 
 
@@ -315,7 +317,6 @@ function ToolExecutionComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
-  density = "compact",
 }: ToolExecutionProps) {
   // A viewer of another member's shared chat never sees a tool's result,
   // however it arrived (the server elides them; this does not rely on it):
@@ -676,130 +677,66 @@ function ToolExecutionComponent({
     return filePaths;
   };
 
-  // Format tool call display
+  // The row's line: a sans verb, then the target in mono (a path, a command,
+  // a pattern). A tool with no plain-words verb leads with its name.
   const formatToolCallDisplay = (rawName: string, input: Record<string, unknown> | string | undefined): React.ReactNode => {
     // Strip MCP prefix for display: mcp__reliant__spawn -> spawn
     const name = rawName.startsWith('mcp__')
       ? rawName.split('__').pop() || rawName
       : rawName;
-    // A tool with a plain-words verb reads as an action ("Edited totals.ts"),
-    // not a function call; the name is in the tooltip and the inspector.
     const verb = actionVerb;
-    const open = verb ? null : <span className="text-muted-foreground">(</span>;
-    const close = verb ? null : <span className="text-muted-foreground">)</span>;
-    const lead = <span className="text-foreground font-medium" title={verb ? name : undefined}>{verb ?? name}</span>;
-
-    // Task tools show task title
-    if (isTaskToolFlag && taskTitle) {
-      return taskTitle;
-    }
+    const lead = <span className="shrink-0" title={verb ? name : undefined}>{verb ?? name}</span>;
 
     // The arguments have not streamed in yet. Formatting nothing yields an
     // empty argument list, which reads as "called with no arguments" rather
     // than "still arriving" — so name the state instead of faking the shape.
     if (input === undefined) {
       return (
-        <span className="inline-flex items-center gap-1">
+        <>
           {lead}
-          <span className="text-muted-foreground italic">preparing…</span>
-        </span>
+          <span className="italic">preparing…</span>
+        </>
       );
     }
 
     const formatted = formatToolParams(rawName, input as ToolInput, { inputSize: toolCall.inputSize });
     if (formatted) {
-      // File paths with links
-      if (formatted.structured?.filePaths && formatted.structured.filePaths.length > 0) {
-        const filePaths = formatted.structured.filePaths;
-        if (isViewOnlyToolFlag && filePaths.length === 1) {
-          return (
-            <span className="inline-flex items-center gap-1">
-              {lead}
-              {open}
-              <FileLink path={filePaths[0]} inline showIcon={false} worktreeId={chatWorktreeId}>
-                {formatted.summary}
-              </FileLink>
-              {close}
-            </span>
-          );
-        }
+      const filePaths = formatted.structured?.filePaths ?? [];
+      if (filePaths.length > 0) {
         return (
-          <span className="inline-flex items-center gap-1 flex-wrap">
+          <>
             {lead}
-            {open}
-            {filePaths.slice(0, 3).map((fp, idx) => (
-              <span key={`${fp}-${idx}`} className="inline-flex items-center">
-                <FileLink path={fp} inline showIcon={false} worktreeId={chatWorktreeId} />
-                {idx < Math.min(filePaths.length - 1, 2) && <span>,</span>}
-              </span>
-            ))}
-            {filePaths.length > 3 && (
-              <span className="text-muted-foreground">+{filePaths.length - 3} more</span>
-            )}
-            {close}
-          </span>
+            <span className="min-w-0 truncate">
+              {filePaths.slice(0, 3).map((fp, idx) => (
+                <span key={`${fp}-${idx}`}>
+                  <FileLink path={fp} inline prose showIcon={false} worktreeId={chatWorktreeId} className="font-mono text-code">
+                    {isViewOnlyToolFlag && filePaths.length === 1 ? formatted.summary : undefined}
+                  </FileLink>
+                  {idx < Math.min(filePaths.length - 1, 2) && <span>, </span>}
+                </span>
+              ))}
+              {filePaths.length > 3 && <span> +{filePaths.length - 3} more</span>}
+            </span>
+          </>
         );
       }
+      // A shell call's model-written description is already an action
+      // ("Run cart tests"): it leads on its own, in sans, without a second verb.
+      if (verb && typeof formatted.structured?.description === "string") {
+        return <span className="truncate" title={name}>{formatted.summary}</span>;
+      }
       return (
-        // A shell call's model-written description is already an action
-        // ("Run cart tests"): it leads on its own, without a second verb.
-        verb && typeof formatted.structured?.description === "string" ? (
-          <span className="text-foreground font-medium" title={name}>{formatted.summary}</span>
-        ) : (
-        <span className="inline-flex items-center gap-1">
+        <>
           {lead}
-          {verb ? (
-            formatted.summary && <span className="text-muted-foreground">{formatted.summary}</span>
-          ) : (
-            <span className="text-muted-foreground">({formatted.summary})</span>
-          )}
-        </span>
-        )
+          {formatted.summary && <span className="min-w-0 truncate font-mono text-code">{formatted.summary}</span>}
+        </>
       );
     }
 
-    return (
-      <span className="inline-flex items-center">
-        {lead}
-        {!verb && <span className="text-muted-foreground">()</span>}
-      </span>
-    );
+    return lead;
   };
 
-  // Get status icon
-  const getStatusIcon = () => {
-    if (toolResult?.is_error && toolResult?.content?.includes("blocked")) {
-      return <Shield className="w-3.5 h-3.5 text-warning-ink" />;
-    }
-    if (isCancelled) return <X className="w-3.5 h-3.5 text-destructive" />;
-    if (isCancelling) return <Square className="w-3.5 h-3.5 text-warning-ink animate-pulse" />;
-    if (hasFailed) {
-      return spawnChildWorkflowId
-        ? <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />
-        : <XCircle className="w-3.5 h-3.5 text-destructive" />;
-    }
-    if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary-ink" />;
-    if (isCompleted) {
-      if (isTaskToolFlag && taskTargetStatus) {
-        const statusIcons: Record<string, React.ReactNode> = {
-          completed: <CheckCircle className="w-3.5 h-3.5 text-success-ink" />,
-          in_progress: <Loader2 className="w-3.5 h-3.5 text-info" />,
-          failed: <XCircle className="w-3.5 h-3.5 text-destructive" />,
-          blocked: <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />,
-        };
-        return statusIcons[taskTargetStatus] || <CheckCircle className="w-3.5 h-3.5 text-muted-foreground" />;
-      }
-      return <CheckCircle className="w-3.5 h-3.5 text-success-ink" />;
-    }
-    if (needsApproval) return <Shield className="w-3.5 h-3.5 text-info" />;
-    if (isDenied) return <X className="w-3.5 h-3.5 text-destructive" />;
-    if (isExecuting) return <Loader2 className="w-3.5 h-3.5 text-primary-ink animate-spin" />;
-    if (isPreparing) return <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />;
-    if (isRequested) return <Clock className="w-3.5 h-3.5 text-info" />;
-    return <Clock className="w-3.5 h-3.5 text-muted-foreground" />;
-  };
-
-  // Get status text
+  // Get status text: what a state is called, for the row and for assistive tech.
   const getStatusText = () => {
     if (isCancelled) return "Cancelled";
     if (isCancelling) return "Cancelling...";
@@ -815,7 +752,8 @@ function ToolExecutionComponent({
     if (isBackgrounded) return "Background";
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
-        return taskTargetStatus.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const words = taskTargetStatus.split('_').join(' ');
+        return words.charAt(0).toUpperCase() + words.slice(1);
       }
       return "Completed";
     }
@@ -827,32 +765,48 @@ function ToolExecutionComponent({
     return "Pending";
   };
 
+  // The row's leading mark: the tool's icon at rest and when done; a spinner
+  // while it runs; a destructive mark when it failed.
+  const ToolIcon = toolRowIcon(toolCall.name);
+  const isLive = isExecuting || isPreparing || isCancelling;
+  const statusMark = (() => {
+    if (isBlocked) return <Shield className="size-4 text-warning-ink" />;
+    if (hasFailed) {
+      return spawnChildWorkflowId
+        ? <AlertCircle className="size-4 text-warning-ink" />
+        : <XCircle className="size-4 text-destructive-ink" />;
+    }
+    if (isLive) return <Loader2 className={cn("size-3.5 animate-spin", isExecuting ? "text-primary-ink" : "text-muted-foreground")} />;
+    if (isBackgrounded) return <Play className="size-3.5 text-primary-ink" />;
+    return <ToolIcon className="size-4" />;
+  })();
+
+  // Success and live work need no word — the icon and the spinner carry them —
+  // so a long run is not a column of identical labels. Every other state is
+  // named, quietly, after the line.
+  const statusText = getStatusText();
+  const quietStatus = (isCompleted && !hasFailed) || isLive;
+  const statusWord = (
+    <span
+      className={cn(
+        quietStatus ? "sr-only" : "text-meta",
+        !quietStatus && (hasFailed && !isBlocked && !spawnChildWorkflowId ? "text-destructive-ink" : "text-muted-foreground"),
+      )}
+    >
+      {statusText}
+    </span>
+  );
+
   // Determine if expandable. Even compact/read-only/view-only tools need an inspector for input/output.
   const hasInput = toolCall.input !== undefined;
   const hasResult = !!toolResult;
   const hasContent = hasInput || hasResult;
   const isExpandable = hasContent && (!isTaskToolFlag || !!taskDescription || hasResult);
   const hasFileOpenAffordance = isViewOnlyToolFlag && extractFilePaths(toolCall.input).length > 0;
-
-  // Left border color strip for status indication. Success is the overwhelming
-  // majority of calls, so it stays faint — a transcript of solid green bars
-  // reads as decoration and drowns out the states that actually want attention.
-  // Warnings and in-flight work keep full strength.
-  const leftBorderColor = isCancelled
-    ? "border-l-2 border-l-muted-foreground/40"
-    : isBlocked || (hasFailed && spawnChildWorkflowId)
-    ? "border-l-2 border-l-warning"
-    : hasFailed || toolResult?.is_error
-    ? "border-l-2 border-l-destructive"
-    : isCompleted || toolResult
-    ? "border-l-2 border-l-success/30"
-    : isExecuting
-    ? "border-l-2 border-l-primary"
-    : isPreparing || isCancelling
-    ? "border-l-2 border-l-warning"
-    : needsApproval
-    ? "border-l-2 border-l-warning"
-    : "border-l-2 border-l-border/50";
+  const diffStat = useMemo(
+    () => editDiffStat(toolCall.name, toolCall.input, toolCall.inputElided),
+    [toolCall.name, toolCall.input, toolCall.inputElided],
+  );
 
   // Build render context for content area
   const renderContext: ToolRenderContext = {
@@ -890,28 +844,6 @@ function ToolExecutionComponent({
       <ToolBodyPlaceholder bytes={bodies.bytes} />
     );
 
-  // Expanding is an act of attention, so the open card is drawn more strongly
-  // than the collapsed rows around it: brighter border, real elevation. Idle
-  // collapsed rows recede.
-  const rootClassName = cn(
-    "overflow-hidden transition-colors",
-    isExpanded ? "border border-border shadow-md" : "border border-border/30 shadow-sm",
-    density === "card" ? "rounded-xl bg-card" : density === "minimal" ? "rounded-md bg-transparent shadow-none" : "rounded-md",
-    leftBorderColor
-  );
-  const headerClassName = cn(
-    "flex items-center justify-between",
-    isExpanded ? "bg-muted/50" : "bg-muted/20",
-    density === "card" ? "px-3 py-2" : density === "minimal" ? "px-2 py-0.5" : "px-2 py-1",
-    isExpandable && "cursor-pointer hover:bg-muted/50",
-    // The whole row is the expand toggle: a finger needs the row 44px tall.
-    "touch:min-h-[44px]"
-  );
-  const contentClassName = cn(
-    "border-t border-border/30 overflow-hidden overflow-y-auto bg-muted/15 py-1",
-    density === "card" ? "max-h-[720px]" : "max-h-[600px]"
-  );
-
   const openPrimaryFile = (e: React.MouseEvent) => {
     e.stopPropagation();
     const filePaths = extractFilePaths(toolCall.input);
@@ -941,243 +873,279 @@ function ToolExecutionComponent({
     openFile(parsed, classification.targetWorktreeId || chatWorktreeId);
   };
 
-  // Task tool special rendering
-  if (isTaskToolFlag) {
-    const displayTitle = taskTitle || (toolNameLower === 'add_task' ? 'Adding task...' : 'Updating task...');
-    const currentTaskStatus = storedTask?.status || taskTargetStatus || 'pending';
-    const hasExpandedContent = isExpandable;
+  const onToggleRow = () => {
+    setUserHasToggled(true);
+    toggleExpanded();
+  };
 
-    const statusStyles: Record<string, { icon: typeof CheckCircle; color: string }> = {
-      pending: { icon: Clock, color: "text-muted-foreground" },
-      in_progress: { icon: Zap, color: "text-primary-ink" },
-      completed: { icon: CheckCircle, color: "text-success-ink" },
-      failed: { icon: XCircle, color: "text-destructive-ink" },
-      blocked: { icon: AlertCircle, color: "text-warning-ink" },
-    };
-    const style = statusStyles[currentTaskStatus] || statusStyles.pending;
-
-    return (
-      <div className={rootClassName}>
-        {/* Header */}
-        <div
-          className={cn(headerClassName, "gap-2")}
-          onClick={() => hasExpandedContent && toggleExpanded()} role={hasExpandedContent ? "button" : undefined} tabIndex={hasExpandedContent ? 0 : undefined} onKeyDown={(e) => hasExpandedContent && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggleExpanded())} aria-expanded={hasExpandedContent ? isExpanded : undefined} aria-label={hasExpandedContent ? `Toggle task details for ${displayTitle}` : undefined}
-        >
-          <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-            {isPreparing ? (
-              <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
-            ) : isExecuting ? (
-              <Loader2 className="w-3.5 h-3.5 text-primary-ink animate-spin" />
-            ) : hasFailed ? (
-              <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />
-            ) : (
-              <style.icon className={cn("w-3.5 h-3.5", style.color)} />
+  // The open row's detail: the renderer's view of the input and output, with
+  // the full-output affordance for a preview.
+  const detail = (
+    <div className="max-h-[600px] overflow-y-auto overflow-x-hidden">
+      {isTaskToolFlag && taskDescription && (
+        <p className="pb-2 text-ui text-muted-foreground">{taskDescription}</p>
+      )}
+      {renderToolContent(
+        isTaskToolFlag ? (
+          <GenericToolRenderer ctx={renderContext} />
+        ) : (
+          <>
+            <ToolContentArea ctx={renderContext} />
+            {showTruncatedNotice && (
+              <TruncatedOutputNotice
+                originalSize={contentResult?.original_size}
+                isLoading={fullResult.isFetching}
+                error={fullResult.error ?? undefined}
+                onShowFull={() => {
+                  if (wantFullResult) void fullResult.refetch();
+                  else setWantFullResult(true);
+                }}
+              />
             )}
-          </span>
-          
-          <span className="shrink-0 text-xs text-muted-foreground font-mono">task()</span>
-          <span className="min-w-0 flex-1 text-xs font-medium truncate">{displayTitle}</span>
-          
-          {hasExpandedContent && (
-            isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-          )}
-        </div>
+          </>
+        ),
+      )}
+    </div>
+  );
 
-        {/* Expanded content */}
-        {isExpanded && hasExpandedContent && (
-          <div className={contentClassName}>
-            {taskDescription && (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                <p>{taskDescription}</p>
+  const canOpenThread =
+    (isSpawnToolFlag || toolBaseName === "spawn_status" || toolBaseName === "spawn_send") && !!spawnThreadId && !!onSelectThread;
+
+  // Hover-revealed on a pointer; always there on touch, which has no hover.
+  const ROW_ACTION_CLASS =
+    "touch-target inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const revealOnHover = "opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100 touch:opacity-100";
+
+  const rowTrailing = (
+    <>
+      {diffStat && (
+        <span className="text-meta tabular-nums" aria-label={`${diffStat.added} lines added, ${diffStat.removed} removed`}>
+          <span className="text-success-ink">+{diffStat.added}</span>{" "}
+          <span className="text-destructive-ink">−{diffStat.removed}</span>
+        </span>
+      )}
+      {statusWord}
+      {durationLabel && (
+        <span className={cn("text-meta tabular-nums text-muted-foreground", revealOnHover)} title={`Took ${durationLabel}`}>
+          {durationLabel}
+        </span>
+      )}
+      {hasFileOpenAffordance && (
+        <Tooltip content="Open file" side="bottom" delay={300} triggerClassName="inline-flex">
+          <button onClick={openPrimaryFile} className={cn(ROW_ACTION_CLASS, revealOnHover)} aria-label="Open file" type="button">
+            <ExternalLink className="size-3.5" />
+          </button>
+        </Tooltip>
+      )}
+      {canOpenThread && !isSpawnToolFlag && (
+        <Tooltip content="Open full thread view" side="bottom" delay={300} triggerClassName="inline-flex">
+          <button
+            onClick={(e) => { e.stopPropagation(); onSelectThread?.(spawnThreadId ?? null); }}
+            className={cn(ROW_ACTION_CLASS, revealOnHover)}
+            aria-label="Open full thread view"
+            type="button"
+          >
+            <Maximize2 className="size-3.5" />
+          </button>
+        </Tooltip>
+      )}
+      {isExecuting && !isCancelling && !isSpawnToolFlag && onConvertToBackground && (
+        <Tooltip content="Push to background" side="bottom" delay={300} triggerClassName="inline-flex">
+          <button
+            onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
+            className={ROW_ACTION_CLASS}
+            aria-label="Push tool execution to background"
+            type="button"
+          >
+            <Play className="size-3.5" />
+          </button>
+        </Tooltip>
+      )}
+      {(isExecuting || isCancelling) && onCancel && (
+        <Tooltip content="Cancel" side="bottom" delay={300} triggerClassName="inline-flex">
+          <button
+            onClick={(e) => { e.stopPropagation(); onCancel(toolCall.id); }}
+            className={ROW_ACTION_CLASS}
+            aria-label="Cancel tool execution"
+            disabled={isCancelling}
+            type="button"
+          >
+            <Square className={cn("size-3", isCancelling && "animate-pulse")} />
+          </button>
+        </Tooltip>
+      )}
+    </>
+  );
+
+  const rowLine = isTaskToolFlag ? (
+    <>
+      <span className="shrink-0">{toolNameLower === "add_task" ? "Task" : "Updated task"}</span>
+      <span className="min-w-0 truncate text-foreground/80">
+        {taskTitle || (toolNameLower === 'add_task' ? 'Adding task...' : 'Updating task...')}
+      </span>
+    </>
+  ) : (
+    formatToolCallDisplay(toolCall.name, headerInput)
+  );
+
+  // A call waiting on the user is a decision, not a record of work: it is one
+  // of the transcript's few cards, with its one primary action.
+  if (shouldShowApprovalUI && approval) {
+    const proposal = chatId ? asConnectionProposal(approval) : null;
+    return (
+      <div className="rounded-xl border border-border p-4 sm:p-5" data-testid="tool-approval-card">
+        <div className="flex items-center gap-2 text-ui font-medium text-foreground">
+          <Shield className="size-4 shrink-0 text-warning-ink" aria-hidden="true" />
+          <span>Approval required</span>
+        </div>
+        <div className="mt-1 flex min-w-0 items-center gap-2 text-ui text-muted-foreground">
+          {rowLine}
+        </div>
+        {proposal ? (
+          <div className="mt-4">
+            <ConnectionProposalCard
+              approval={proposal}
+              onConnected={(connectionId) => approveMutation.mutate({ requestId: approval.id, connectionId })}
+              onDecline={(notCompleted) => denyMutation.mutate(proposalDenial(approval.id, notCompleted))}
+            />
+          </div>
+        ) : (
+          <>
+            {showRichContent && toolCall.input && (
+              <div className="mt-3 max-h-[320px] overflow-y-auto overflow-x-hidden rounded-lg border border-border-subtle">
+                {renderToolContent(<ToolContentArea ctx={renderContext} />)}
               </div>
             )}
-            {renderToolContent(<GenericToolRenderer ctx={renderContext} />)}
-          </div>
+            <div className={cn("mt-4 flex gap-2", surface !== "desktop" && "flex-col")}>
+              <button
+                type="button"
+                onClick={handleApprove}
+                aria-label="Approve tool execution"
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-ui font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  surface === "desktop" ? "h-9" : "min-h-[44px]",
+                )}
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                onClick={handleDeny}
+                aria-label="Deny tool execution"
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5 rounded-lg px-4 text-ui font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  surface === "desktop" ? "h-9" : "min-h-[44px]",
+                )}
+              >
+                Deny
+              </button>
+            </div>
+          </>
         )}
       </div>
     );
   }
 
-  // Standard tool rendering
-  return (
-    <div className={rootClassName}>
-      {/* Header row */}
-      <div
-        className={headerClassName}
-        onClick={() => {
-          if (isExpandable) {
-            setUserHasToggled(true);
-            toggleExpanded();
-          }
-        }}
-        role={isExpandable ? "button" : undefined}
-        tabIndex={isExpandable ? 0 : undefined}
-        onKeyDown={(e) => {
-          if (isExpandable && (e.key === "Enter" || e.key === " ")) {
-            e.preventDefault();
-            setUserHasToggled(true);
-            toggleExpanded();
-          }
-        }}
-        aria-expanded={isExpandable ? isExpanded : undefined}
-        aria-label={isExpandable ? `Toggle tool details for ${toolCall.name}` : undefined}
-      >
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-              {getStatusIcon()}
-            </span>
-            <span className="min-w-0 text-xs truncate">
-              {formatToolCallDisplay(toolCall.name, headerInput)}
-            </span>
-            {/* Success needs no word — the check carries it — so a long run
-                is not a column of identical "Completed" pills. Every other
-                state is named, and a finished call says how long it took. */}
-            {isCompleted && !hasFailed && !isTaskToolFlag ? (
-              <span className="sr-only">{getStatusText()}</span>
-            ) : (
-              <span className={cn(
-                "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
-                isBlocked || (hasFailed && spawnChildWorkflowId) ? "bg-warning/10 text-warning-ink"
-                  : hasFailed ? "bg-destructive/10 text-destructive-ink"
-                  : isCancelled ? "bg-muted text-muted-foreground"
-                  : isCompleted ? "bg-muted text-muted-foreground"
-                  : needsApproval ? "bg-warning/10 text-warning-ink"
-                  : isExecuting ? "bg-primary/10 text-primary-ink"
-                  : "bg-muted text-muted-foreground"
-              )}>
-                {getStatusText()}
-              </span>
-            )}
-            {durationLabel && (
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground" title={`Took ${durationLabel}`}>
-                {durationLabel}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            {hasFileOpenAffordance && (
-              <Tooltip content="Open file" side="bottom" delay={300} triggerClassName="inline-flex">
-<button
-                onClick={openPrimaryFile}
-                className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary-ink transition-colors hover:bg-primary/10"
-                aria-label="Open file"
-                type="button"
-              >
-                Open
-              </button>
-</Tooltip>
-            )}
-            {(isSpawnToolFlag || toolBaseName === "spawn_status" || toolBaseName === "spawn_send") && spawnThreadId && onSelectThread && (
-              <Tooltip content="Open full thread view" side="bottom" delay={300} triggerClassName="inline-flex">
-<button
-                onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
-                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
-              >
-                <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-</Tooltip>
-            )}
-            {isExecuting && !isCancelling && !isSpawnToolFlag && onConvertToBackground && (
-              <Tooltip content="Push to background" side="bottom" delay={300} triggerClassName="inline-flex">
-<button
-                onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
-                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
-              >
-                <Play className="w-3.5 h-3.5 text-info" />
-              </button>
-</Tooltip>
-            )}
-            {(isExecuting || isCancelling) && onCancel && (
-              <Tooltip content="Cancel" side="bottom" delay={300} triggerClassName="inline-flex">
-<button
-                onClick={(e) => { e.stopPropagation(); onCancel(toolCall.id); }}
-                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"
-                disabled={isCancelling}
-              >
-                <Square className={cn("w-3.5 h-3.5", isCancelling ? "text-warning-ink animate-pulse" : "text-destructive")} />
-              </button>
-</Tooltip>
-            )}
-            {isExpandable && (
-              isExpanded 
-                ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-                : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
-            )}
-          </div>
-        </div>
-
-        {/* Approval UI — this is the decision screen mobile approvals exist
-            for, so Approve/Deny get real touch targets there instead of the
-            desktop's compact row. */}
-        {shouldShowApprovalUI && approval && chatId && asConnectionProposal(approval) && (
-          <div className="px-2 py-2 border-t border-border">
-            <ConnectionProposalCard
-              approval={asConnectionProposal(approval)!}
-              onConnected={(connectionId) => approveMutation.mutate({ requestId: approval.id, connectionId })}
-              onDecline={(notCompleted) => denyMutation.mutate(proposalDenial(approval.id, notCompleted))}
-            />
-          </div>
-        )}
-        {shouldShowApprovalUI && !(approval && chatId && asConnectionProposal(approval)) && (
-          <div className="px-2 py-2 border-t border-warning/20 bg-warning/5">
-            {showRichContent && toolCall.input && renderToolContent(<ToolContentArea ctx={renderContext} />)}
-            <p className="text-xs font-medium text-warning-ink mb-1.5">Approval required</p>
-            <div className={cn("flex gap-2", surface !== "desktop" && "flex-col")}>
-              <button
-                onClick={handleApprove} aria-label="Approve tool execution"
-                className={cn(
-                  "flex items-center justify-center gap-1.5 rounded font-medium bg-success hover:bg-success/90 text-success-foreground",
-                  surface === "desktop" ? "px-3 py-1.5 text-xs" : "min-h-[44px] px-3 text-sm"
-                )}
-              >
-                <CheckCircle className="w-3.5 h-3.5" /> Approve
-              </button>
-              <button
-                onClick={handleDeny} aria-label="Deny tool execution"
-                className={cn(
-                  "flex items-center justify-center gap-1.5 rounded font-medium bg-destructive hover:bg-destructive/90 text-destructive-foreground",
-                  surface === "desktop" ? "px-3 py-1.5 text-xs" : "min-h-[44px] px-3 text-sm"
-                )}
-              >
-                <XCircle className="w-3.5 h-3.5" /> Deny
-              </button>
+  // A sub-agent is the third card: who it is, whether it is still working,
+  // and the one way in — its thread. Its live progress opens beneath.
+  if (isSpawnToolFlag && !isInputPreparing) {
+    const formatted = formatToolParams(toolCall.name, headerInput as ToolInput);
+    const agentTitle = spawnTitleFromInput(headerInput) || formatted?.summary || "Sub-agent";
+    const agentState = hasFailed
+      ? { label: statusText === "Failed" ? "Failed" : "Stopped", dot: "bg-warning" }
+      : isCancelled
+        ? { label: "Cancelled", dot: "bg-muted-foreground" }
+        : isCancelling
+          ? { label: "Stopping…", dot: "bg-warning motion-safe:animate-pulse" }
+          : isCompleted
+            ? { label: "Done", dot: "bg-success" }
+            : isDenied
+              ? { label: "Denied", dot: "bg-muted-foreground" }
+              : { label: "Working", dot: "bg-primary motion-safe:animate-pulse" };
+    // Stopping a running sub-agent is the card's secondary action, beside
+    // its thread: the same control (and accessible name) as a tool row's.
+    const canCancel = (isExecuting || isCancelling) && !!onCancel;
+    return (
+      <div className="rounded-xl border border-border p-4 sm:p-5" data-testid="sub-agent-card">
+        <div className="flex min-w-0 items-center gap-3">
+          <Bot className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-ui font-medium text-foreground">{agentTitle}</div>
+            <div className="flex items-center gap-1.5 text-meta text-muted-foreground">
+              <span className={cn("size-1.5 rounded-full", agentState.dot)} aria-hidden="true" />
+              <span>{actionVerb ?? "Sub-agent"}</span>
+              <span aria-hidden="true">·</span>
+              <span>{agentState.label}</span>
+              {statusText !== agentState.label && <span className="sr-only">{statusText}</span>}
             </div>
           </div>
-        )}
-
-        {/* Denial reason */}
-        {approval?.status === ApprovalStatus.DENIED && approval.denialReason && (
-          <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-xs text-destructive-ink">
-            Denied: {approval.denialReason}
+          {canCancel && (
+            <Tooltip content="Stop sub-agent" side="bottom" delay={300} triggerClassName="inline-flex">
+              <button
+                type="button"
+                onClick={() => onCancel?.(toolCall.id)}
+                aria-label="Cancel tool execution"
+                disabled={isCancelling}
+                className="touch-target inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                <Square className={cn("size-3", isCancelling && "animate-pulse")} aria-hidden="true" />
+              </button>
+            </Tooltip>
+          )}
+          {canOpenThread && (
+            <button
+              type="button"
+              onClick={() => onSelectThread?.(spawnThreadId ?? null)}
+              aria-label="Open full thread view"
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-3 text-ui font-medium text-foreground transition-colors hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Open thread
+            </button>
+          )}
+        </div>
+        {isExpandable && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={onToggleRow}
+              aria-expanded={isExpanded}
+              aria-label={`Toggle tool details for ${toolCall.name}`}
+              className="inline-flex items-center gap-1 rounded-md text-ui text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ChevronRight className={cn("size-3.5 transition-transform", isExpanded && "rotate-90")} aria-hidden="true" />
+              {isExpanded ? "Hide progress" : "Show progress"}
+            </button>
+            {isExpanded && <div className="mt-2">{detail}</div>}
           </div>
         )}
-
-        {/* Content area - only shown when expanded */}
-        {isExpandable && !shouldShowApprovalUI && isExpanded && (
-          <div className={contentClassName}>
-            {renderToolContent(
-              <>
-                <ToolContentArea ctx={renderContext} />
-                {showTruncatedNotice && (
-                  <TruncatedOutputNotice
-                    originalSize={contentResult?.original_size}
-                    isLoading={fullResult.isFetching}
-                    error={fullResult.error ?? undefined}
-                    onShowFull={() => {
-                      if (wantFullResult) void fullResult.refetch();
-                      else setWantFullResult(true);
-                    }}
-                  />
-                )}
-              </>,
-            )}
-          </div>
+        {isDenied && approval?.denialReason && (
+          <p className="mt-3 pl-7 text-meta text-destructive-ink">Denied: {approval.denialReason}</p>
         )}
-
-        {/* The deploy's outcome stays visible collapsed: the live URL is what the user asked for. */}
-        {shellDeploy && !shouldShowApprovalUI && <DeployedAppCard deploy={shellDeploy} />}
       </div>
+    );
+  }
+
+  return (
+    <div data-testid="tool-row">
+      <QuietRow
+        icon={statusMark}
+        expanded={isExpandable && isExpanded}
+        onToggle={isExpandable ? onToggleRow : undefined}
+        ariaLabel={`Toggle tool details for ${toolCall.name}`}
+        trailing={rowTrailing}
+        detail={isExpandable ? detail : undefined}
+      >
+        {rowLine}
+      </QuietRow>
+
+      {/* Denial reason */}
+      {approval?.status === ApprovalStatus.DENIED && approval.denialReason && (
+        <p className="ml-6 text-meta text-destructive-ink">Denied: {approval.denialReason}</p>
+      )}
+
+      {/* The deploy's outcome stays visible collapsed: the live URL is what the user asked for. */}
+      {shellDeploy && <div className="mt-2"><DeployedAppCard deploy={shellDeploy} /></div>}
+    </div>
   );
 }
 

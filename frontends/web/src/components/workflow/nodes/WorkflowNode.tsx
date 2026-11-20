@@ -85,7 +85,7 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
             <Bot className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold uppercase tracking-wide text-purple-600">AGENT</div>
+            <div className="text-xs font-bold text-purple-600">AGENT</div>
             <div className="font-semibold text-foreground text-sm leading-tight truncate">{label}</div>
           </div>
           {/* Expand button for inline workflows */}

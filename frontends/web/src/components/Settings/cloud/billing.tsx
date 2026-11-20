@@ -525,7 +525,7 @@ function SectionHeading({
 }) {
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="text-xs font-semibold text-muted-foreground">
         {title}
       </h3>
       <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
@@ -1369,9 +1369,9 @@ function PlansTab() {
 // question — "what did I spend and when" — and splitting them made the user
 // check two tabs to reconcile one number.
 //
-// Invoices go ABOVE the daily chart rather than below it: a receipt is looked
-// up by intent, usage is browsed. Putting the dense table under a dense chart
-// would make the deliberate lookup the thing you scroll past.
+// The period's machine usage leads, as one headline figure against its
+// allowance. Invoices come next, ABOVE the observability chart rather than
+// below it: a receipt is looked up by intent, usage is browsed.
 
 function UsageAndInvoicesTab() {
   // Deployment usage sits beside compute usage because they answer the same
@@ -1386,20 +1386,20 @@ function UsageAndInvoicesTab() {
   const obsOrg = useObservabilityOrg();
 
   return (
-    <div className="flex flex-col gap-8">
+    // The period's machine usage leads, as the tab's one headline number;
+    // the hosting agreement and the receipts follow, then the other products.
+    <div className="flex flex-col gap-12">
+      <UsagePanel />
       <UsageBillingPanel />
       <InvoicesPanel />
-      <div className="border-t border-border pt-6">
-        <UsagePanel />
-      </div>
       {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
-      <div id="observability" className="border-t border-border pt-6" data-testid="billing-observability-usage">
+      <div id="observability" className="border-t border-border pt-10" data-testid="billing-observability-usage">
         <div id="billing-observability-usage">
           <UsageView orgId={obsOrg.orgId} />
         </div>
       </div>
       {deployUsage.available && (
-        <div className="border-t border-border pt-6">
+        <div className="border-t border-border pt-10">
           <DeployUsageSection
             summary={deployUsage.summary}
             isLoading={deployUsage.isLoading}
@@ -1432,10 +1432,10 @@ function InvoicesPanel() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
+        <h3 className="text-section text-foreground">
           Invoices
         </h3>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-ui text-muted-foreground">
           View and download your past invoices.
         </p>
       </div>
@@ -1517,13 +1517,18 @@ function UsagePanel() {
   const summary = exactUsageDisplay(data ?? undefined, hoursReference(plansQ.data?.daemonPricing, hoursSizes(allowedSizes), data ?? undefined));
   const measured = measuredMachineUsage(data ?? undefined) && !!summary;
 
+  const used = Math.min(1, Math.max(0, summary?.fraction ?? 0));
+  const over = summary?.capacity.state === "overage" || summary?.capacity.state === "spent";
+
   return (
-    <div className="flex flex-col gap-4">
-      <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
-        Machine usage and allowance
-      </h3>
-      {data && <p className="text-sm text-muted-foreground">{usageWindowLabel(data)} Hours are counted on your plan's machine size.</p>}
-      {data?.billingHoldReason && <p role="status" className="text-sm text-muted-foreground">{friendlyUsageHold(data.billingHoldReason)}</p>}
+    <section className="flex flex-col gap-6" aria-labelledby="billing-machine-usage">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 id="billing-machine-usage" className="text-section text-foreground">
+          Machine usage and allowance
+        </h3>
+        {data && <p className="text-meta text-muted-foreground">{usageWindowLabel(data)} Hours are counted on your plan&apos;s machine size.</p>}
+      </div>
+      {data?.billingHoldReason && <p role="status" className="text-ui text-muted-foreground">{friendlyUsageHold(data.billingHoldReason)}</p>}
 
       {usageQ.error && (
         <ErrorBanner
@@ -1541,30 +1546,52 @@ function UsagePanel() {
         />
       ) : !measured ? (
         // Withheld by SAYING so: a zero here would read as "ran nothing".
-        <p className="text-sm text-muted-foreground">
+        <p className="text-ui text-muted-foreground">
           Usage is unavailable right now.
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <UsageStat label="Included this month" value={summary?.includedLabel ?? "Unavailable"} />
-            <UsageStat label="Used" value={summary?.usedLabel ?? "Unavailable"} />
-            <UsageStat label="Extra hours so far" value={measuredWindowCost(data) ?? "Unavailable"} />
+          {/* The headline: hours used this period, against the plan's allowance. */}
+          <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6" data-testid="billing-usage-headline">
+            <div className="min-w-0 flex-1 basis-72">
+              <p className="text-ui font-medium text-foreground">Used this period</p>
+              <p className="mt-1 text-figure tabular-nums text-foreground">{summary?.usedLabel ?? "Unavailable"}</p>
+              {summary?.fraction != null && (
+                <div className="mt-3 max-w-md">
+                  <div
+                    className="h-1.5 overflow-hidden rounded-full bg-border"
+                    role="meter"
+                    aria-label="Allowance used"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(used * 100)}
+                  >
+                    <div className={over ? "h-full rounded-full bg-warning" : "h-full rounded-full bg-primary"} style={{ width: `${used * 100}%` }} />
+                  </div>
+                  <p className="mt-1.5 text-meta tabular-nums text-muted-foreground">
+                    {summary.usedOfIncludedLabel ?? `${Math.round(used * 100)}% of the allowance`}
+                  </p>
+                </div>
+              )}
+            </div>
+            <dl className="flex flex-wrap gap-x-10 gap-y-5">
+              <UsageStat label="Included this month" value={summary?.includedLabel ?? "Unavailable"} />
+              <UsageStat label="Extra hours so far" value={measuredWindowCost(data) ?? "Unavailable"} />
+              {/* Coupon grant is deliberately apart from the period figures:
+                  included/used/overage all reset with the billing period, while
+                  a redeemed grant is a one-time bucket that carries over. */}
+              {summary?.hasGrant && (
+                <UsageStat
+                  label="Coupon hours remaining"
+                  value={summary.grantLabel ?? "Unavailable"}
+                  hint="One-time machine hours from a redeemed coupon. They don't renew, and they're used after your plan's hours, before any extra hours are billed."
+                />
+              )}
+            </dl>
           </div>
 
-          {/* Coupon grant is deliberately outside the four period stats above:
-              included/used/overage all reset with the billing period, while a
-              redeemed grant is a one-time bucket that carries over. */}
-          {summary?.hasGrant && (
-            <UsageStat
-              label="Coupon hours remaining"
-              value={summary.grantLabel ?? "Unavailable"}
-              hint="One-time machine hours from a redeemed coupon. They don't renew, and they're used after your plan's hours, before any extra hours are billed."
-            />
-          )}
-
           <div>
-            <h4 className="mb-2 text-sm font-semibold text-foreground">
+            <h4 className="mb-3 text-ui font-medium text-foreground">
               By machine size
             </h4>
             {data.bySize.length === 0 ? (
@@ -1606,10 +1633,11 @@ function UsagePanel() {
           </div>
         </>
       )}
-    </div>
+    </section>
   );
 }
 
+/** A secondary figure beside the headline: unboxed, a caption over a smaller number. */
 function UsageStat({
   label,
   value,
@@ -1620,16 +1648,9 @@ function UsageStat({
   hint?: string;
 }) {
   return (
-    <Card>
-      <CardContent>
-        {/* Stat caption, deliberately a rung below a section label: it must not
-            compete with the figure under it. See ui/card.tsx. */}
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
-        {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-      </CardContent>
-    </Card>
+    <div className="min-w-0" title={hint}>
+      <dt className="text-meta text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-2xl font-semibold tabular-nums text-foreground">{value}</dd>
+    </div>
   );
 }

@@ -632,7 +632,7 @@ function Gauge({ value, unit, min = 0, max, thresholds, label, token = CHART_PAL
         />
         <span className={cn("absolute inset-x-0 bottom-0 text-center text-xl font-semibold tabular-nums", gradeInk(value, thresholds))}>{formatValue(value, unit)}</span>
       </div>
-      <div className="mt-0.5 flex justify-between text-2xs tabular-nums text-ink-muted" aria-hidden="true">
+      <div className="mt-0.5 flex justify-between text-meta tabular-nums text-ink-muted" aria-hidden="true">
         <span>{formatValue(min, unit)}</span>
         <span>{formatValue(top, unit)}</span>
       </div>

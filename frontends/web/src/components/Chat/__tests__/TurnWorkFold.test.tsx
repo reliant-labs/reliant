@@ -90,7 +90,7 @@ function makeWork(): TurnWork {
 /** The fold's disclosure: the header's first button. */
 const toggle = () => screen.getAllByRole("button")[0];
 
-describe("TurnWorkFold", () => {
+describe("TurnWorkFold, a long run: one summary row", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
     branchChat.mockReset();
@@ -98,7 +98,7 @@ describe("TurnWorkFold", () => {
   afterEach(() => vi.useRealTimers());
 
   it("is collapsed by default, with the done headline and its counts, and nothing of the run outside it", () => {
-    render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
+    render(<TurnWorkFold inlineStepsMax={0} work={makeWork()} chatId="chat-1" />);
     const button = toggle();
     expect(button.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText("Activity")).toBeTruthy();
@@ -110,7 +110,7 @@ describe("TurnWorkFold", () => {
 
   it("carries a message row's chrome: the run's end time and a branch from its last message", () => {
     vi.setSystemTime(new Date("2024-01-01T00:06:00.000Z"));
-    render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
+    render(<TurnWorkFold inlineStepsMax={0} work={makeWork()} chatId="chat-1" />);
     const time = screen.getByTestId("turn-work-fold").querySelector("time");
     expect(time?.getAttribute("dateTime")).toBe("2024-01-01T00:01:12.000Z");
     expect(time?.textContent).toBe("4 minutes ago");
@@ -124,14 +124,14 @@ describe("TurnWorkFold", () => {
   it("leaves the chrome off the phone, and the time off a live run", () => {
     const { unmount } = render(
       <SurfaceProvider surface="mobile">
-        <TurnWorkFold work={makeWork()} chatId="chat-1" />
+        <TurnWorkFold inlineStepsMax={0} work={makeWork()} chatId="chat-1" />
       </SurfaceProvider>,
     );
     expect(screen.getByTestId("turn-work-fold").querySelector("time")).toBeNull();
     expect(screen.queryByRole("button", { name: "Branch from message" })).toBeNull();
     unmount();
 
-    render(<TurnWorkFold work={makeWork()} chatId="chat-1" isStreaming />);
+    render(<TurnWorkFold inlineStepsMax={0} work={makeWork()} chatId="chat-1" isStreaming />);
     expect(screen.getByTestId("turn-work-fold").querySelector("time")).toBeNull();
   });
 
@@ -141,7 +141,7 @@ describe("TurnWorkFold", () => {
       { type: "message", message: message("agent-1", "2024-01-01T00:00:15.000Z", []), afterPart: 1 },
       { type: "message", message: message("agent-2", "2024-01-01T00:00:16.000Z", []), afterPart: 1 },
     ];
-    render(<TurnWorkFold work={work} chatId="chat-1" />);
+    render(<TurnWorkFold inlineStepsMax={0} work={work} chatId="chat-1" />);
     expect(toggle().textContent).toContain("1 command · 2 agent messages");
   });
 
@@ -155,14 +155,14 @@ describe("TurnWorkFold", () => {
         { type: "message", message: message("agent-2", "2024-01-01T00:00:50.000Z", []), afterPart: 0 },
       ],
     };
-    render(<TurnWorkFold work={work} chatId="chat-1" />);
+    render(<TurnWorkFold inlineStepsMax={0} work={work} chatId="chat-1" />);
     expect(toggle().textContent).toContain("Activity · 2 agent messages");
     expect(screen.getByRole("timer").textContent).toBe("0:45");
     expect(screen.queryByRole("button", { name: "Branch from message" })).toBeNull();
   });
 
   it("toggles the work rows open and closed", () => {
-    render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
+    render(<TurnWorkFold inlineStepsMax={0} work={makeWork()} chatId="chat-1" />);
     const button = toggle();
     fireEvent.click(button);
     expect(button.getAttribute("aria-expanded")).toBe("true");
@@ -179,6 +179,7 @@ describe("TurnWorkFold", () => {
     ] as Message["contentBlocks"]);
     render(
       <TurnWorkFold
+        inlineStepsMax={0}
         work={{ key: "work-m1-0", thread: "chat-1", parts: [{ message: m1, segmentIndexes: [0], callIds: ["c1"] }] }}
         chatId="chat-1"
       />,
@@ -192,7 +193,7 @@ describe("TurnWorkFold", () => {
   it("keeps failures explained and inspectable in the disclosure", () => {
     const work = makeWork();
     work.parts[0].message.contentBlocks[0].toolCallStatus = ToolCallStatus.FAILED;
-    render(<TurnWorkFold work={work} />);
+    render(<TurnWorkFold inlineStepsMax={0} work={work} />);
     expect(toggle().textContent).toContain("1 failed step");
     expect(toggle().getAttribute("aria-label")).toBe("Activity, 1 file read · 1 command, 1 failed step");
     fireEvent.click(toggle());
@@ -206,7 +207,7 @@ describe("TurnWorkFold", () => {
       { type: "message", message: message("agent-update", "2024-01-01T00:00:15.000Z", []), afterPart: 1 },
       { type: "message", message: message("system-done", "2024-01-01T01:02:03.000Z", []), afterPart: 2 },
     ];
-    render(<TurnWorkFold work={work} />);
+    render(<TurnWorkFold inlineStepsMax={0} work={work} />);
     expect(screen.queryByTestId("agent-event")).toBeNull();
     expect(screen.queryByTestId("system-event")).toBeNull();
     expect(screen.getByRole("timer").textContent).toBe("1:02:03");
@@ -221,7 +222,7 @@ describe("TurnWorkFold", () => {
 
   it("shows live text while streaming, collapsed, and ticks only then", () => {
     vi.setSystemTime(new Date("2024-01-01T00:00:30.000Z"));
-    const { rerender } = render(<TurnWorkFold work={makeWork()} chatId="chat-1" isStreaming />);
+    const { rerender } = render(<TurnWorkFold inlineStepsMax={0} work={makeWork()} chatId="chat-1" isStreaming />);
     const button = toggle();
     expect(button.getAttribute("aria-expanded")).toBe("false");
     expect(button.textContent).not.toContain("Working…");
@@ -236,11 +237,40 @@ describe("TurnWorkFold", () => {
     act(() => vi.advanceTimersByTime(3000));
     expect(timer.textContent).toBe("0:34");
 
-    rerender(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
+    rerender(<TurnWorkFold inlineStepsMax={0} work={makeWork()} chatId="chat-1" />);
     expect(screen.getByText("Activity")).toBeTruthy();
     expect(timer.textContent).toBe("1:12");
     act(() => vi.advanceTimersByTime(5000));
     expect(timer.textContent).toBe("1:12");
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("TurnWorkFold, a short run: its steps as rows", () => {
+  it("shows each step in place, with no summary row to open", () => {
+    render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
+    const fold = screen.getByTestId("turn-work-fold");
+    expect(fold.dataset.form).toBe("rows");
+    expect(screen.getAllByTestId("row-work")).toHaveLength(2);
+    expect(screen.queryByText("Activity")).toBeNull();
+    expect(screen.queryByRole("timer")).toBeNull();
+    // Branching from the run's last message stays one hover away.
+    fireEvent.click(screen.getByRole("button", { name: "Branch from message" }));
+    fireEvent.click(screen.getByRole("button", { name: "Branch in place" }));
+    expect(branchChat).toHaveBeenCalledWith("chat-1", "m2");
+  });
+
+  it("interleaves agent mail with the steps, in order", () => {
+    const work = makeWork();
+    work.events = [{ type: "message", message: message("agent-update", "2024-01-01T00:00:15.000Z", []), afterPart: 1 }];
+    render(<TurnWorkFold work={work} chatId="chat-1" />);
+    const rows = screen.getByTestId("turn-work-fold").querySelectorAll("[data-testid]");
+    expect(Array.from(rows, (row) => row.getAttribute("data-testid"))).toEqual(["row-work", "agent-event", "row-work"]);
+  });
+
+  it("becomes a summary row once the run is longer than the limit", () => {
+    render(<TurnWorkFold work={makeWork()} chatId="chat-1" inlineStepsMax={1} />);
+    expect(screen.getByTestId("turn-work-fold").dataset.form).toBe("summary");
+    expect(screen.queryAllByTestId("row-work")).toHaveLength(0);
   });
 });

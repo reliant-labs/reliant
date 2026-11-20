@@ -54,7 +54,7 @@ export function CloneTargetPicker({
 
   return (
     <fieldset className="mb-4" data-testid="clone-target-picker">
-      <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Clone onto</legend>
+      <legend className="mb-2 text-xs font-semibold text-muted-foreground">Clone onto</legend>
       <div className="space-y-1.5" role="radiogroup" aria-label="Machine to clone onto">
         {options.map(({ daemon, immediate }) => {
           const isSelected = daemon.daemonId === selectedDaemonId;
