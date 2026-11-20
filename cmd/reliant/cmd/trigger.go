@@ -400,7 +400,8 @@ func newTriggerGetCmd() *cobra.Command {
 			if err != nil {
 				return conn.annotate(triggerLookupError(args[0], err))
 			}
-			printTriggerDetail(cmd.OutOrStdout(), trigger)
+			label := describeTriggerConnection(cmd.Context(), newConnectionServiceClient(conn), trigger)
+			printTriggerDetailWith(cmd.OutOrStdout(), trigger, label)
 			return nil
 		},
 	}
@@ -784,13 +785,26 @@ func printTriggerTable(out io.Writer, list []*reliantv1.Trigger) {
 }
 
 func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
+	printTriggerDetailWith(out, t, "")
+}
+
+// printTriggerDetailWith is printTriggerDetail with the connection described
+// as connection says (describeTriggerConnection); "" describes it from the
+// trigger alone.
+func printTriggerDetailWith(out io.Writer, t *reliantv1.Trigger, connection string) {
 	if t == nil {
 		return
+	}
+	if connection == "" {
+		connection = triggerConnectionLabel(t, nil)
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "Name:\t%s\n", t.GetName())
 	fmt.Fprintf(w, "ID:\t%s\n", t.GetId())
 	fmt.Fprintf(w, "State:\t%s\n", triggerStateLabel(t))
+	if reason := pausedReasonLabel(t); reason != "" {
+		fmt.Fprintf(w, "Paused by Reliant:\t%s\n", reason)
+	}
 	fmt.Fprintf(w, "Health:\t%s\n", triggerHealthLabel(t))
 	if detail := t.GetHealth().GetLastFailureDetail(); detail != "" {
 		fmt.Fprintf(w, "Health detail:\t%s\n", detail)
@@ -802,6 +816,9 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	fmt.Fprintf(w, "Daemon:\t%s\n", orDash(t.GetDaemonId()))
 	fmt.Fprintf(w, "Workflow:\t%s\n", orDash(t.GetWorkflow()))
 	fmt.Fprintf(w, "Acting as:\t%s\n", actingIdentityLabel(t.GetActingIdentity()))
+	if connection != "" {
+		fmt.Fprintf(w, "Connection:\t%s\n", connection)
+	}
 	if org := t.GetOrgId(); org != "" {
 		fmt.Fprintf(w, "Organization:\t%s\n", org)
 		fmt.Fprintf(w, "Unattended funding:\t%s\n", unattendedFundingLabel(t.GetUnattendedFunding()))

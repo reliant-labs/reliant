@@ -487,6 +487,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
+| [`reliant integrations`](#reliant-integrations) | Show the integration connections your steps and automations act through |
+| [`reliant integrations list`](#reliant-integrations-list) | List your integration connections |
 | [`reliant machine`](#reliant-machine) | List, start, stop, resize, rename and label your machines, and manage machine pools |
 | [`reliant machine label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
@@ -21357,6 +21359,62 @@ reliant github token [flags]
 | `--json` | `bool` | - | Print the token with who it speaks as, its repository and its expiry |
 | `--permission` | `stringArray` | `[]` | Narrow the bot token: name=level, name one of issues, pull_requests, contents, actions, checks and level read or write; repeatable (default: issues, pull_requests and contents at write) |
 | `--repo` | `string` | - | The one repository the bot token is scoped to, as owner/name (required with --as app) |
+
+---
+
+## reliant integrations
+
+Show the integration connections your steps and automations act through
+
+Shows your integration connections: the accounts at GitHub, Slack, Gmail and
+the rest that integration steps and integration triggers act through.
+
+Connecting or removing an account is done in the Reliant app (web or desktop):
+Settings → Integrations. An automation names the connection it listens
+through with `reliant trigger activate --connection <integration>=<id>`, and
+`reliant trigger get` shows the one it uses.
+
+```
+reliant integrations
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-integrations-list) | List your integration connections |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant integrations list
+
+List your integration connections
+
+Lists your integration connections: the integration, the account each acts as,
+its status, whether it is that integration's default, and its id.
+
+The default connection is the one an integration trigger listens through when
+its activation names none. With --org it also lists that organization's own
+connections (its Slack bot, its API keys), which its members may use by id.
+
+```
+reliant integrations list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--integration` | `string` | - | Only this integration's connections (e.g. github) |
+| `--json` | `bool` | - | Print JSON |
+| `--org` | `string` | - | Also list this organization's own connections |
 
 ---
 

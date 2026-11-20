@@ -24,6 +24,7 @@ message CLIConfig {
       {path: ["auth"]},
       {path: ["daemon"]},
       {path: ["github"]},
+      {path: ["integrations"]},
       {path: ["machine"]},
       {path: ["project"]},
       {path: ["providers"]},

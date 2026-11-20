@@ -102,8 +102,8 @@ Reliant server components.`,
 
 	// Register subcommand groups. The end-user groups carry CLIConfig.
 	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
-	machineCmd, githubCmd, providersCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd()
-	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd)
+	machineCmd, githubCmd, providersCmd, integrationsCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd(), newIntegrationsCmd()
+	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, integrationsCmd)
 	for _, c := range rootCommands(deps) {
 		root.AddCommand(c)
 	}
@@ -115,6 +115,7 @@ Reliant server components.`,
 	root.AddCommand(machineCmd)
 	root.AddCommand(githubCmd)
 	root.AddCommand(providersCmd)
+	root.AddCommand(integrationsCmd)
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())
