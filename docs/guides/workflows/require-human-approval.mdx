@@ -247,29 +247,11 @@ An approval is a workflow node, so you can test every branch with scenarios befo
   </Step>
 </Steps>
 
-## When a workflow should decide approvals itself
+## Keep the decision with a person
 
-A workflow that calls `ApprovalService/Approve` or `Deny` could approve its own gates. Lint flags it as [`approval-decider`](/workflows/lint#approval-decider):
+Do not add a workflow step that calls `ApprovalService/Approve` or `Deny` to satisfy a human approval gate. If lint reports [`approval-decider`](/workflows/lint#approval-decider), remove the decision step and have a person decide in the app instead.
 
-```text
-Lint warning: [approval-decider] approve: this step calls Reliant's ApprovalService to approve or deny, so the workflow can decide approvals, including its own run's, with the token it holds
-```
-
-If that is what you intend, declare `permissions: [approvals:decide]`. Hosted credentials that can decide approvals are refused for a step without the declaration. Then allow the finding, giving your reason, on that key:
-
-```yaml .reliant/workflows/auto-approver.yaml
-# lint:allow approval-decider — the staging deploy bot approves its own staging gates; reviewed by the team lead
-permissions: [approvals:decide]
-```
-
-The token it uses needs the `approvals:decide` scope granted explicitly ([SDK scopes](/sdk/overview)). Your CLI login does not have it:
-
-```text
-HTTP/2 403
-x-forge-error-reason: scope_missing
-x-forge-error-scopes: approvals:decide
-{"code":"permission_denied","message":"this credential lacks the approvals:decide scope"}
-```
+Declaring `permissions: [approvals:decide]`, suppressing a lint finding, or requesting a token scope does not authorize automation to decide a human approval. The server refuses decisions made with software-held credentials ([who can decide an approval](/automations/overview#who-can-decide-an-approval)). That reference also explains the shared-key limitation of self-hosted `AUTH_MODE=apikey` deployments; a shared key is not proof of a human decision.
 
 ## What this does not do
 
@@ -287,7 +269,7 @@ x-forge-error-scopes: approvals:decide
     The approval's declared outputs are `approval_id`, `status`, `action_taken` and `data` ([nodes reference](/reference/nodes#approval)). Route on `status`.
   </Accordion>
   <Accordion title="permission_denied: this credential lacks the approvals:decide scope">
-    A CLI login or a `reliant:api` token cannot decide approvals. Decide in the app, or use a token granted `approvals:decide` that is not bound to a machine.
+    Do not try another workflow-held token or add a scope to bypass the gate. Open the approval in the Reliant app and have a signed-in person choose **Approve** or **Deny** ([who can decide an approval](/automations/overview#who-can-decide-an-approval)).
   </Accordion>
 </AccordionGroup>
 
