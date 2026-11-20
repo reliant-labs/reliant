@@ -14,6 +14,7 @@ import {
   speedPanel,
   vitalScore,
   vitalsRows,
+  VITAL_INFO,
   VITALS,
   type Vital,
   type VitalStat,
@@ -32,18 +33,50 @@ describe("speedInsightsModel", () => {
     expect(chartMetricOf("nope")).toBe("score");
   });
 
-  it("scores a vital from its split: good in full, needs improvement half, poor not at all", () => {
-    expect(vitalScore(stat(80, 10, 10))).toBe(85);
-    expect(vitalScore(stat(0, 0, 0))).toBeNull();
+  it("scores each vital on its log-normal curve: the good threshold 90, the poor threshold 50", () => {
+    for (const v of VITALS) {
+      const { good, poor } = VITAL_INFO[v];
+      expect(vitalScore(v, stat(1, 0, 0, good))).toBe(90);
+      expect(vitalScore(v, stat(1, 0, 0, poor))).toBe(50);
+    }
+    expect([vitalScore("lcp", stat(1, 0, 0, 2500)), vitalScore("inp", stat(1, 0, 0, 200)), vitalScore("cls", stat(1, 0, 0, 0.1)), vitalScore("fcp", stat(1, 0, 0, 1800))]).toEqual([90, 90, 90, 90]);
+    expect([vitalScore("lcp", stat(1, 0, 0, 4000)), vitalScore("inp", stat(1, 0, 0, 500)), vitalScore("cls", stat(1, 0, 0, 0.25)), vitalScore("fcp", stat(1, 0, 0, 3000))]).toEqual([50, 50, 50, 50]);
+    // A continuous curve, not a bucket: just under good is a little over 90, and a zero is perfect.
+    const under = vitalScore("lcp", stat(1, 0, 0, 2400)) ?? 0;
+    expect(under).toBeGreaterThan(90);
+    expect(under).toBeLessThan(95);
+    expect(vitalScore("cls", stat(1, 0, 0, 0))).toBe(100);
+    expect(vitalScore("lcp", stat(1, 0, 0, 60_000))).toBeLessThan(1);
+    expect(vitalScore("lcp", stat(0, 0, 0, null))).toBeNull();
+  });
+
+  it("scores the selected percentile, so P75 and P95 score differently", () => {
+    const at = (k: "good" | "poor") => Object.fromEntries(VITALS.map((v) => [v, stat(100, 0, 0, VITAL_INFO[v][k])])) as Record<Vital, VitalStat>;
+    // The same samples: every vital at its good threshold at P75, at its poor one at P95.
+    const p75 = realExperienceScore(at("good"));
+    const p95 = realExperienceScore(at("poor"));
+    expect(p75).toBe(90);
+    expect(p95).toBe(50);
+    expect(p75).not.toBe(p95);
+    expect(speedPanel("summary", "desktop", "p75", "7d").sql).toContain("quantileIf(0.75)");
+    expect(speedPanel("summary", "desktop", "p95", "7d").sql).toContain("quantileIf(0.95)");
   });
 
   it("weights LCP 30, INP 30, CLS 25, FCP 15 and leaves TTFB out", () => {
-    const vitals = { ...all(stat(100, 0, 0)), lcp: stat(0, 0, 100), ttfb: stat(0, 0, 100) };
-    expect(realExperienceScore(vitals)).toBe(70);
-    // A vital with no sample drops out and the rest are reweighted.
-    expect(realExperienceScore({ ...all(stat(100, 0, 0)), inp: stat(0, 0, 0) })).toBe(100);
-    expect(realExperienceScore(all(stat(0, 0, 0)))).toBeNull();
-    expect([rateScore(95), rateScore(89), rateScore(49)]).toEqual(["good", "ni", "poor"]);
+    const good = (v: Vital) => stat(1, 0, 0, VITAL_INFO[v].good);
+    const poor = (v: Vital) => stat(1, 0, 0, VITAL_INFO[v].poor);
+    const vitals = { lcp: poor("lcp"), inp: good("inp"), cls: good("cls"), fcp: good("fcp"), ttfb: stat(0, 0, 1, 60_000) };
+    // (30 × 50 + 30 × 90 + 25 × 90 + 15 × 90) / 100
+    expect(realExperienceScore(vitals)).toBe(78);
+    // (30 × 50 + 30 × 90 + 25 × 100 + 15 × 50) / 100 = 74.5
+    expect(realExperienceScore({ ...vitals, cls: stat(1, 0, 0, 0), fcp: poor("fcp") })).toBe(75);
+    // A vital with no sample drops out and the rest are reweighted: (30 × 50 + 25 × 90 + 15 × 90) / 70.
+    expect(realExperienceScore({ ...vitals, inp: stat(0, 0, 0, null) })).toBe(73);
+    expect(realExperienceScore(all(stat(0, 0, 0, null)))).toBeNull();
+  });
+
+  it("rates the score 90–100 great, 50–89 needs improvement, 0–49 poor", () => {
+    expect([rateScore(100), rateScore(90), rateScore(89), rateScore(50), rateScore(49), rateScore(0), rateScore(null)]).toEqual(["good", "good", "ni", "ni", "poor", "poor", null]);
   });
 
   it("reads a vital with no sample as no value, not 0 ms", () => {
@@ -57,7 +90,7 @@ describe("speedInsightsModel", () => {
 
   it("lists routes worst score first", () => {
     const row = (page: string, s: VitalStat, views = 1) => ({ page, t: null, views, vitals: all(s) });
-    const sorted = routesByScore([row("/a", stat(100, 0, 0)), row("/b", stat(0, 0, 0)), row("/c", stat(0, 0, 10))]);
+    const sorted = routesByScore([row("/a", stat(100, 0, 0, 1)), row("/b", stat(0, 0, 0, null)), row("/c", stat(0, 0, 10, 60_000))]);
     expect(sorted.map((r) => r.page)).toEqual(["/c", "/a", "/b"]);
   });
 

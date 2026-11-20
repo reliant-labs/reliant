@@ -193,8 +193,9 @@ export function SpeedInsightsPage() {
           </div>
           <RoutesTable rows={vitalsRows(routes.data)} pct={pct} loading={routes.isLoading} failed={!!routes.error && !routes.data} />
           <p className="text-meta text-ink-muted" data-testid="speed-insights-formula">
-            The Real Experience Score weights each vital&apos;s share of good samples (needs improvement counts half): LCP {SCORE_WEIGHTS.lcp}%, INP {SCORE_WEIGHTS.inp}%, CLS{" "}
-            {SCORE_WEIGHTS.cls}%, FCP {SCORE_WEIGHTS.fcp}%. TTFB is shown and not scored. Good / needs improvement / poor follow web.dev&apos;s thresholds; 90 and above is great.
+            The Real Experience Score scores each vital at {pct.toUpperCase()} on a log-normal curve (its good threshold scores 90, its poor threshold 50), then weights them: LCP{" "}
+            {SCORE_WEIGHTS.lcp}%, INP {SCORE_WEIGHTS.inp}%, CLS {SCORE_WEIGHTS.cls}%, FCP {SCORE_WEIGHTS.fcp}%. TTFB is shown and not scored. Good / needs improvement / poor follow
+            web.dev&apos;s thresholds; 90 and above is great.
           </p>
         </>
       )}

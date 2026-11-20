@@ -19,19 +19,28 @@
  *
  * THE REAL EXPERIENCE SCORE (realExperienceScore below), 0–100:
  *
- *   metric score  = 100 × (good + ½ × needs improvement) / samples
- *                   (good counts in full, needs improvement half, poor not at
- *                   all; good / poor follow web.dev's thresholds, VITAL_INFO)
+ *   metric score  = 100 × getLogNormalScore(curve, the vital at the selected
+ *                   percentile), Lighthouse's log-normal curve: the vital's
+ *                   good threshold scores 90 and its poor threshold 50
+ *                   (VITAL_INFO: LCP 2500 / 4000 ms, INP 200 / 500 ms,
+ *                   CLS 0.1 / 0.25, FCP 1800 / 3000 ms)
  *   RES           = Σ weight × metric score / Σ weight, over the scored
  *                   vitals that have samples
  *   weights       LCP 30 · INP 30 · CLS 25 · FCP 15 (TTFB is shown, and not
  *                 scored), Vercel's weighting of the Lighthouse vitals
  *   rating        90–100 great, 50–89 needs improvement, 0–49 poor
  *
- * Vercel scores each sample on Lighthouse's log-normal curve; we score the
- * three web.dev buckets instead, which needs only the counts ClickHouse
- * already returns and moves the same way. The score does not depend on the
- * percentile shown: it reads every sample, not one percentile of them.
+ * So the score follows the percentile shown (P75 by default): P95 scores the
+ * slower tail, and the score drops with it.
+ *
+ * Vercel publishes the weights, the bands and each vital's "90 ~ 50"
+ * thresholds, and says each vital is scored on a log-normal curve, but not the
+ * curve's parameters. Reading those thresholds as the curve's two control
+ * points (Lighthouse's p10 → 0.90 and median → 0.50) is our inference:
+ *   https://vercel.com/docs/speed-insights/metrics
+ *   https://vercel.com/docs/speed-insights/migrating-from-legacy (Updated Scoring Criteria)
+ *   https://developer.chrome.com/docs/lighthouse/performance/performance-scoring
+ * The curve is Lighthouse's lib/statistics.js getLogNormalScore.
  */
 
 import type { StatusTone } from "@/components/forge-ui/status";
@@ -44,7 +53,11 @@ export type Vital = "lcp" | "inp" | "cls" | "fcp" | "ttfb";
 /** In card order: the three Core Web Vitals, then the two loading ones. */
 export const VITALS: readonly Vital[] = ["lcp", "inp", "cls", "fcp", "ttfb"];
 
-/** web.dev's thresholds: good at or under the first, poor over the second. CLS is unitless; the rest milliseconds. */
+/**
+ * web.dev's thresholds: good at or under the first, poor over the second. CLS
+ * is unitless; the rest milliseconds. They are also the score curve's control
+ * points: a vital at `good` scores 90, at `poor` 50 (header).
+ */
 export const VITAL_INFO: Record<Vital, { short: string; label: string; about: string; good: number; poor: number; unit: "ms" | "score" }> = {
   lcp: { short: "LCP", label: "Largest Contentful Paint", about: "When the main content has loaded", good: 2500, poor: 4000, unit: "ms" },
   inp: { short: "INP", label: "Interaction to Next Paint", about: "How quickly the page responds to a tap or click", good: 200, poor: 500, unit: "ms" },
@@ -210,10 +223,39 @@ export function vitalsRows(result: PanelResult | undefined): VitalsRow[] {
   });
 }
 
-/** One vital's score, 0–100 (header); null with no sample. */
-export function vitalScore(stat: VitalStat): number | null {
-  const n = samplesOf(stat);
-  return n > 0 ? (100 * (stat.good + 0.5 * stat.ni)) / n : null;
+/** The error function, Abramowitz & Stegun 7.1.26 (|error| < 1.5e-7), as Lighthouse's lib/statistics.js. */
+function erf(x: number): number {
+  const sign = Math.sign(x);
+  const ax = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * ax);
+  const y = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  return sign * (1 - y * Math.exp(-ax * ax));
+}
+
+/** erfc⁻¹(0.2): puts the p10 control point at a score of 0.9. */
+const INVERSE_ERFC_ONE_FIFTH = 0.9061938024368232;
+
+/**
+ * Lighthouse's getLogNormalScore: 0–1 for `value` on the log-normal curve that
+ * scores `p10` 0.9 and `median` 0.5. Like Lighthouse, it clamps the result into
+ * the value's band, so the approximate erf cannot move a value across 0.9 or 0.5.
+ */
+export function getLogNormalScore({ p10, median }: { p10: number; median: number }, value: number): number {
+  if (value <= 0) return 1;
+  const xLogRatio = Math.log(Math.max(Number.MIN_VALUE, value / median));
+  const p10LogRatio = -Math.log(Math.max(Number.MIN_VALUE, p10 / median));
+  const standardizedX = (xLogRatio * INVERSE_ERFC_ONE_FIFTH) / p10LogRatio;
+  const complementaryPercentile = (1 - erf(standardizedX)) / 2;
+  if (value <= p10) return Math.max(0.9, Math.min(1, complementaryPercentile));
+  if (value <= median) return Math.max(0.5, Math.min(0.8999999999999999, complementaryPercentile));
+  return Math.max(0, Math.min(0.49999999999999994, complementaryPercentile));
+}
+
+/** One vital's score, 0–100: its value at the selected percentile on its curve (header); null with no sample. */
+export function vitalScore(vital: Vital, stat: VitalStat): number | null {
+  if (stat.value === null || !Number.isFinite(stat.value)) return null;
+  const { good, poor } = VITAL_INFO[vital];
+  return 100 * getLogNormalScore({ p10: good, median: poor }, stat.value);
 }
 
 /** The Real Experience Score, 0–100 and rounded (header); null when no scored vital has a sample. */
@@ -221,7 +263,7 @@ export function realExperienceScore(vitals: Record<Vital, VitalStat>): number | 
   let weight = 0;
   let sum = 0;
   for (const v of VITALS) {
-    const score = vitalScore(vitals[v]);
+    const score = vitalScore(v, vitals[v]);
     if (score === null || SCORE_WEIGHTS[v] === 0) continue;
     weight += SCORE_WEIGHTS[v];
     sum += SCORE_WEIGHTS[v] * score;
