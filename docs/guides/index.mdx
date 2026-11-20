@@ -37,6 +37,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   <Card title="Turn production alerts into GitHub issues with an on-call agent" icon="workflow" href="/guides/workflows/production-alerts-to-github-issues">
     Get one investigated GitHub issue per new production alert or error: turn on Autopilot on-call, which deduplicates, reads the code and writes up a likely cause.
   </Card>
+  <Card title="Go from a production error to a reviewed fix" icon="workflow" href="/guides/workflows/production-error-to-fix">
+    Take a production error to a merged, deployed fix: an on-call agent files an investigated issue, you approve it, and an agent opens a pull request you review.
+  </Card>
   <Card title="Write your first multi-agent workflow in YAML" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
     Build a multi-agent coding workflow in YAML: a planner, an implementer and a reviewer that sends work back, checked locally, then run on your machine.
   </Card>
@@ -56,6 +59,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
 <CardGroup cols={2}>
   <Card title="How Reliant workflows run: nodes, edges, CEL, durable execution" icon="book-open" href="/deep-dives/how-workflows-run">
     How a Reliant workflow runs: nodes as steps, CEL edges that choose the next one, loops and joins, approvals that wait idle, and runs that survive restarts.
+  </Card>
+  <Card title="How sub-agents and threads isolate context" icon="book-open" href="/deep-dives/sub-agents-and-threads">
+    How Reliant sub-agents keep their own threads: two levels of nesting, concurrency caps, a shared plan, queued messages, and worktrees for parallel edits.
   </Card>
 </CardGroup>
 {/* /guides: agents-and-workflows */}
@@ -141,6 +147,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   </Card>
   <Card title="How Forge keeps Postgres migrations safe" icon="book-open" href="/deep-dives/safe-migrations">
     How Forge keeps a Postgres schema change from breaking the release still serving: declared compatibility, lint, measured locks, gated rollouts and rollback floors.
+  </Card>
+  <Card title="How Forge tests work: real Postgres, generated tests and mocks" icon="book-open" href="/deep-dives/how-forge-tests-work">
+    How Forge tests a Go API against a real embedded Postgres with no Docker, which tests and mocks it generates, and why skipped tests never count as passing.
   </Card>
   <Card title="Reliant security model: fail-closed auth, scoped tokens, secrets" icon="book-open" href="/deep-dives/security-model">
     How a forge API refuses unauthenticated calls, finds RPCs that never check the caller, keeps errors and secrets out of responses, and scopes every token.

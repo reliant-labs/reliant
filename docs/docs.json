@@ -284,7 +284,8 @@
               {
                 "group": "How it works",
                 "pages": [
-                  "deep-dives/how-workflows-run"
+                  "deep-dives/how-workflows-run",
+                  "deep-dives/sub-agents-and-threads"
                 ]
               },
               {
@@ -292,7 +293,8 @@
                 "pages": [
                   "guides/workflows/review-pull-requests-with-ai",
                   "guides/workflows/github-issues-to-pull-requests",
-                  "guides/workflows/production-alerts-to-github-issues"
+                  "guides/workflows/production-alerts-to-github-issues",
+                  "guides/workflows/production-error-to-fix"
                 ]
               },
               {
@@ -344,6 +346,7 @@
                 "pages": [
                   "deep-dives/how-forge-generate-works",
                   "deep-dives/safe-migrations",
+                  "deep-dives/how-forge-tests-work",
                   "deep-dives/security-model"
                 ]
               },
