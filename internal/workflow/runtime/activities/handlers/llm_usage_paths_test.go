@@ -388,8 +388,8 @@ func TestUsageMeter_FailureIsRecordedAsClassOnly(t *testing.T) {
 //   - handlers/llm_usage_record.go: usageMeter, the seam every other request
 //     goes through.
 //   - handlers/context_overflow_recovery.go: the chat turn's resends after a
-//     context-window refusal, part of CallLLM's stream; each refused request
-//     reaches CallLLM's ledger as a retry event (recordDriverRetries).
+//     context-window refusal, made on CallLLM's stream loop; each refused
+//     request is recorded as a retried one (recordDriverRetries).
 //   - handlers/llm_probe.go and tools/reliant-dev: an operator's probe of a
 //     model, run from the dev CLI and never as part of a user's usage.
 func TestModelRequestsGoThroughTheUsageLedger(t *testing.T) {

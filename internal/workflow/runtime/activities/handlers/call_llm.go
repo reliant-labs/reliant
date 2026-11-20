@@ -1831,7 +1831,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Snapshot before the trim, so a request the provider refuses as too long
 	// can be resent trimmed further (contextOverflowRecovery).
 	overflowRecovery := newContextOverflowRecovery(chat.ID, resolved.ProviderDriver, resolvedModelID, history, systemPrompts, availableTools, ceiling)
-	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling)
+	history = overflowRecovery.sending(prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling))
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
 	activity.GetLogger(ctx).Debug("[CallLLM] Starting stream",
@@ -1927,7 +1927,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	llmCallStart := time.Now()
 	streamState.retries = newDriverRetries()
 	liveness := llm.NewStreamLiveness()
-	eventChan := overflowRecovery.stream(llm.WithStreamLiveness(streamCtx, liveness), driver, history)
+	eventChan := driver.StreamResponse(llm.WithStreamLiveness(streamCtx, liveness), systemPrompts, history, availableTools)
 	var streamErr error
 	streamInterrupted := false
 	// driverErrored is set when the driver itself reported the failure, as
@@ -1994,7 +1994,13 @@ streamLoop:
 					break streamLoop
 				}
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
-					streamErr = err
+					// A request refused as too long is resent smaller.
+					next, failed := overflowRecovery.resend(llm.WithStreamLiveness(streamCtx, liveness), driver, eventChan, err, streamState)
+					if next != nil {
+						eventChan = next
+						continue
+					}
+					streamErr = failed
 					driverErrored = true
 					break streamLoop
 				}
@@ -2132,7 +2138,13 @@ streamLoop:
 
 			// Process event through handler methods
 			if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
-				streamErr = err
+				// A request refused as too long is resent smaller.
+				next, failed := overflowRecovery.resend(llm.WithStreamLiveness(streamCtx, liveness), driver, eventChan, err, streamState)
+				if next != nil {
+					eventChan = next
+					continue
+				}
+				streamErr = failed
 				driverErrored = true
 				break streamLoop
 			}
@@ -3177,10 +3189,7 @@ func (a *CallLLMActivity) processStreamEvent(ctx context.Context, chatID string,
 		if state.retries != nil && event.Retry != nil {
 			state.retries.observe(*event.Retry)
 		}
-		// A resend after a context-window refusal takes no wait, so nothing is parked.
-		if event.Retry == nil || event.Retry.Reason != contextOverflowRetryReason {
-			a.recordProviderBackoff(ctx, chatID, thread, event.Retry, state)
-		}
+		a.recordProviderBackoff(ctx, chatID, thread, event.Retry, state)
 		return nil
 	}
 	a.releaseProviderBackoff(ctx, thread, state)

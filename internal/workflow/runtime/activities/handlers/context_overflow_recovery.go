@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
@@ -50,7 +49,7 @@ const overflowCountsMargin = 0.9
 // rather than paying for a refusal each time.
 //
 // A request is resent only when the refusal came before any output was
-// relayed (a resend would duplicate what the user already watched stream),
+// streamed (a resend would duplicate what the user already watched stream),
 // and only when the trim actually made it smaller; otherwise the turn fails
 // with an explanation that wraps drivererrors.ErrContextOverflow, which the
 // runtime classifies as terminal.
@@ -62,11 +61,17 @@ type contextOverflowRecovery struct {
 	systemPrompts []string
 	tools         []tools.Tool
 	ceiling       int64
+
+	// prepared is the request as first sent, sent the last one sent, and
+	// resends how many smaller requests followed it.
+	prepared []message.Message
+	sent     []message.Message
+	resends  int
 }
 
 // newContextOverflowRecovery snapshots history BEFORE prepareHistoryForLLM
 // trims it in place, so every resend trims the original rather than stacking
-// trims on trims.
+// trims on trims. Hand it the prepared request with sending.
 func newContextOverflowRecovery(chatID, provider, model string, history []message.Message, systemPrompts []string, availableTools []tools.Tool, ceiling int64) *contextOverflowRecovery {
 	return &contextOverflowRecovery{
 		chatID:        chatID,
@@ -81,6 +86,13 @@ func newContextOverflowRecovery(chatID, provider, model string, history []messag
 
 // cloneMessagesForTrim copies the messages and their Parts slices: trimming
 // replaces parts in place, and the snapshot must not see it.
+// sending records the request as first sent, the one a refusal is measured
+// against.
+func (r *contextOverflowRecovery) sending(prepared []message.Message) []message.Message {
+	r.prepared = prepared
+	return prepared
+}
+
 func cloneMessagesForTrim(history []message.Message) []message.Message {
 	out := make([]message.Message, len(history))
 	for i, m := range history {
@@ -90,96 +102,75 @@ func cloneMessagesForTrim(history []message.Message) []message.Message {
 	return out
 }
 
-// stream sends history (already prepared for the request) and relays the
-// driver's events, resending smaller after a context-window refusal.
-func (r *contextOverflowRecovery) stream(ctx context.Context, driver llm.Driver, history []message.Message) <-chan llm.DriverEvent {
-	out := make(chan llm.DriverEvent)
-	go func() {
-		defer close(out)
-		sent := history
-		for resend := 0; ; resend++ {
-			relayed := relayUntilOverflow(ctx, driver.StreamResponse(ctx, r.systemPrompts, sent, r.tools), out)
-			refusal := relayed.refusal
-			if refusal == nil || !relayed.delivered {
-				return
-			}
-			next, targetTokens := r.shrink(resend, refusal, sent)
-			if next == nil {
-				deliverRelayedEvent(ctx, out, llm.DriverEvent{Type: llm.EventError, Error: r.exhausted(refusal, resend)})
-				return
-			}
-			// The refused request is a request the provider answered: report
-			// it the way a driver reports a request it retries, so CallLLM's
-			// usage ledger records it (recordDriverRetries). There is no wait,
-			// so no backoff marker is written for it.
-			if !deliverRelayedEvent(ctx, out, llm.DriverEvent{Type: llm.EventRetryWait, Retry: &llm.RetryWait{
-				Attempt:     resend + 1,
-				MaxAttempts: len(contextOverflowShrink) + 1,
-				StatusCode:  drivererrors.StatusFromText(refusal.Error()),
-				Reason:      contextOverflowRetryReason,
-				Usage:       relayed.billed,
-			}}) {
-				return
-			}
-			logging.WarnContext(ctx, "[CallLLM] Provider refused the request as larger than the context window; resending with tool output trimmed further",
-				"chatID", r.chatID,
-				"provider", r.provider,
-				"model", r.model,
-				"resend", resend+1,
-				"maxResends", len(contextOverflowShrink),
-				"targetTokens", targetTokens,
-				"error", refusal)
-			sent = next
-		}
-	}()
-	return out
-}
-
-// contextOverflowRetryReason is the RetryWait.Reason of a request resent
-// after a context-window refusal.
+// contextOverflowRetryReason is the RetryWait.Reason a refused request is
+// recorded under in the usage ledger.
 const contextOverflowRetryReason = "context_overflow"
 
-// relayOutcome is how one driver stream's relay ended.
-type relayOutcome struct {
-	// refusal is the context-window refusal that ended the stream before any
-	// output, or nil.
-	refusal error
-	// billed is the usage the provider reported for the refused request, if
-	// the driver sent any (llm.EndStreamWithError sends it after the error).
-	billed *llm.TokenUsage
-	// delivered is false when the consumer stopped receiving.
-	delivered bool
-}
+// resend is called with the error that ended the stream refused. When err is
+// a context-window refusal of a request that produced no output, and a
+// smaller request can be made, it records the refused request as a retried one
+// (the usage ledger's row for it), starts the smaller request and returns its
+// stream. Otherwise it returns a nil stream and the error the turn fails with:
+// err itself, or, for an overflow nothing more can be done about, an
+// explanation wrapping it.
+//
+// It runs on CallLLM's stream loop, in place of the driver call, so the turn's
+// events are read straight from the driver as before: there is no relay hop
+// between them, which matters because CallLLM drains events already produced
+// when the turn is cancelled.
+func (r *contextOverflowRecovery) resend(ctx context.Context, driver llm.Driver, refused <-chan llm.DriverEvent, err error, state *streamProcessingState) (<-chan llm.DriverEvent, error) {
+	if !drivererrors.IsContextOverflow(err) {
+		return nil, err
+	}
+	refusal := markedOverflow(err)
+	if producedOutput(state) {
+		// The user watched that output stream in; a resend would repeat it.
+		return nil, refusal
+	}
+	if r.sent == nil {
+		r.sent = r.prepared
+	}
+	next, targetTokens := r.shrink(r.resends, refusal, r.sent)
+	if next == nil {
+		return nil, r.exhausted(refusal, r.resends)
+	}
+	r.resends++
 
-// relayUntilOverflow forwards in's events to out until in closes. A
-// context-window refusal that arrives before any output is not forwarded: it
-// is returned instead (relayOutcome).
-func relayUntilOverflow(ctx context.Context, in <-chan llm.DriverEvent, out chan<- llm.DriverEvent) relayOutcome {
-	produced := false
-	for ev := range in {
-		if ev.Type == llm.EventError && !produced && drivererrors.IsContextOverflow(ev.Error) {
-			// A driver closes its stream right after its error.
-			var billed *llm.TokenUsage
-			for rest := range in {
-				if rest.Type == llm.EventComplete && rest.Response != nil {
-					billed = llm.FailedAttemptUsage(rest.Response.Usage)
-				}
-			}
-			return relayOutcome{refusal: markedOverflow(ev.Error), billed: billed, delivered: true}
-		}
-		if ev.Type != llm.EventRetryWait && ev.Type != llm.EventWarning {
-			produced = true
-		}
-		if !deliverRelayedEvent(ctx, out, ev) {
-			// Let the driver finish and release its stream.
-			go func() {
-				for range in { //nolint:revive // draining
-				}
-			}()
-			return relayOutcome{}
+	// A driver closes its stream right after its error, after reporting what
+	// the provider billed for the refused request, if anything
+	// (llm.EndStreamWithError).
+	var billed *llm.TokenUsage
+	for ev := range refused {
+		if ev.Type == llm.EventComplete && ev.Response != nil {
+			billed = llm.FailedAttemptUsage(ev.Response.Usage)
 		}
 	}
-	return relayOutcome{delivered: true}
+	if state.retries != nil {
+		state.retries.observe(llm.RetryWait{
+			Attempt:     r.resends,
+			MaxAttempts: len(contextOverflowShrink) + 1,
+			StatusCode:  drivererrors.StatusFromText(refusal.Error()),
+			Reason:      contextOverflowRetryReason,
+			Usage:       billed,
+		})
+	}
+	logging.WarnContext(ctx, "[CallLLM] Provider refused the request as larger than the context window; resending with tool output trimmed further",
+		"chatID", r.chatID,
+		"provider", r.provider,
+		"model", r.model,
+		"resend", r.resends,
+		"maxResends", len(contextOverflowShrink),
+		"targetTokens", targetTokens,
+		"error", refusal)
+	r.sent = next
+	return driver.StreamResponse(ctx, r.systemPrompts, next, r.tools), nil
+}
+
+// producedOutput reports whether the stream has delivered anything the user
+// sees: a content, thinking or tool block, or text.
+func producedOutput(state *streamProcessingState) bool {
+	return (state.blockStates != nil && state.blockStates.position > 0) ||
+		len(state.textParts) > 0 || len(state.thinkingParts) > 0 || len(state.toolCalls) > 0
 }
 
 // markedOverflow gives a refusal recognised by its text (one that did not pass
@@ -255,26 +246,4 @@ func providerLabel(provider string) string {
 		return "the provider"
 	}
 	return provider
-}
-
-// relayConsumerGrace is how long a send waits for a receiver once ctx is
-// done before the consumer is treated as gone. CallLLM keeps reading events
-// already produced after it cancels, so a done ctx alone is not a gone
-// consumer (the same rule as the drivers' own relay). A var only for tests.
-var relayConsumerGrace = 5 * time.Second
-
-func deliverRelayedEvent(ctx context.Context, out chan<- llm.DriverEvent, ev llm.DriverEvent) bool {
-	select {
-	case out <- ev:
-		return true
-	case <-ctx.Done():
-	}
-	grace := time.NewTimer(relayConsumerGrace)
-	defer grace.Stop()
-	select {
-	case out <- ev:
-		return true
-	case <-grace.C:
-		return false
-	}
 }

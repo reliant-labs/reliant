@@ -84,22 +84,33 @@ func historyWithToolOutput(toolChars int) []message.Message {
 	}
 }
 
-// drain collects a stream's events.
-func drain(ch <-chan llm.DriverEvent) (events []llm.DriverEvent, err error) {
-	for ev := range ch {
-		events = append(events, ev)
-		if ev.Type == llm.EventError {
-			err = ev.Error
-		}
-	}
-	return events, err
-}
-
-// startRecovery prepares history the way call_llm does and streams it.
-func startRecovery(driver llm.Driver, history []message.Message) <-chan llm.DriverEvent {
+// runRecovery prepares history and streams it the way CallLLM's stream loop
+// does: on an error it asks the recovery for a resend, and reads the new
+// stream in place of the old one.
+func runRecovery(driver llm.Driver, history []message.Message) (events []llm.DriverEvent, retried int, err error) {
+	ctx := context.Background()
 	recovery := newContextOverflowRecovery("chat", "anthropic", "claude-test", history, nil, nil, 0)
-	prepared := prepareHistoryForLLM("chat", history, nil, nil, 0)
-	return recovery.stream(context.Background(), driver, prepared)
+	prepared := recovery.sending(prepareHistoryForLLM("chat", history, nil, nil, 0))
+	state := &streamProcessingState{blockStates: NewBlockStreamState(), retries: newDriverRetries()}
+	ch := driver.StreamResponse(ctx, nil, prepared, nil)
+	for {
+		ev, ok := <-ch
+		if !ok {
+			return events, len(state.retries.list), nil
+		}
+		if ev.Type == llm.EventError {
+			next, failed := recovery.resend(ctx, driver, ch, ev.Error, state)
+			if next == nil {
+				return events, len(state.retries.list), failed
+			}
+			ch = next
+			continue
+		}
+		if ev.Type == llm.EventContentDelta {
+			state.textParts = append(state.textParts, ev.Content)
+		}
+		events = append(events, ev)
+	}
 }
 
 func TestContextOverflowRecovery_ResendsSmallerUntilItFits(t *testing.T) {
@@ -109,8 +120,9 @@ func TestContextOverflowRecovery_ResendsSmallerUntilItFits(t *testing.T) {
 	// Fits only once the request is trimmed past the first step.
 	driver := &windowLimitedDriver{fits: 450_000}
 
-	events, err := drain(startRecovery(driver, history))
+	events, retried, err := runRecovery(driver, history)
 	require.NoError(t, err, "the refusals must not reach the consumer: a smaller request fit")
+	assert.Equal(t, 2, retried, "each refused request is a retried request in the usage ledger")
 
 	sent := driver.requests()
 	require.Len(t, sent, 3, "refused untrimmed, refused at the first step, answered at the second: %v", sent)
@@ -133,10 +145,10 @@ func TestContextOverflowRecovery_ResendsSmallerUntilItFits(t *testing.T) {
 func TestContextOverflowRecovery_StepsTrimTheOriginal(t *testing.T) {
 	t.Parallel()
 	stopAtFirst := &windowLimitedDriver{fits: 520_000}
-	_, err := drain(startRecovery(stopAtFirst, historyWithToolOutput(600_000)))
+	_, _, err := runRecovery(stopAtFirst, historyWithToolOutput(600_000))
 	require.NoError(t, err)
 	stopAtSecond := &windowLimitedDriver{fits: 450_000}
-	_, err = drain(startRecovery(stopAtSecond, historyWithToolOutput(600_000)))
+	_, _, err = runRecovery(stopAtSecond, historyWithToolOutput(600_000))
 	require.NoError(t, err)
 
 	require.Len(t, stopAtFirst.requests(), 2)
@@ -148,10 +160,11 @@ func TestContextOverflowRecovery_GivesUpAfterTheCap(t *testing.T) {
 	t.Parallel()
 	driver := &windowLimitedDriver{fits: 1_000}
 
-	_, err := drain(startRecovery(driver, historyWithToolOutput(600_000)))
+	_, retried, err := runRecovery(driver, historyWithToolOutput(600_000))
 	require.Error(t, err)
 
 	assert.Len(t, driver.requests(), 1+len(contextOverflowShrink), "one request plus one per step, then stop")
+	assert.Equal(t, len(contextOverflowShrink), retried, "the last refusal is the turn's error, not a retry")
 	assert.ErrorIs(t, err, drivererrors.ErrContextOverflow, "the runtime classifies it as a terminal overflow by identity")
 	assert.Contains(t, err.Error(), "the conversation is too long for claude-test")
 	assert.Contains(t, err.Error(), "after resending it 3 time(s) with tool output trimmed")
@@ -166,7 +179,7 @@ func TestContextOverflowRecovery_NothingToTrimFailsAtOnce(t *testing.T) {
 	driver := &windowLimitedDriver{fits: -1} // refuses everything
 	history := []message.Message{{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: strings.Repeat("x", 100_000)}}}}
 
-	_, err := drain(startRecovery(driver, history))
+	_, _, err := runRecovery(driver, history)
 	require.Error(t, err)
 	assert.Len(t, driver.requests(), 1)
 	assert.ErrorIs(t, err, drivererrors.ErrContextOverflow)
@@ -185,7 +198,7 @@ func TestContextOverflowRecovery_OtherErrorsPassThrough(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			driver := &windowLimitedDriver{fits: 1_000, refusal: refusal}
-			_, err := drain(startRecovery(driver, historyWithToolOutput(600_000)))
+			_, _, err := runRecovery(driver, historyWithToolOutput(600_000))
 			assert.Equal(t, refusal, err, "forwarded as the driver sent it")
 			assert.Len(t, driver.requests(), 1)
 		})
@@ -212,10 +225,11 @@ func (d *outputThenOverflowDriver) StreamResponse(context.Context, []string, []m
 func TestContextOverflowRecovery_NeverResendsAfterOutput(t *testing.T) {
 	t.Parallel()
 	driver := &outputThenOverflowDriver{}
-	events, err := drain(startRecovery(driver, historyWithToolOutput(600_000)))
+	events, _, err := runRecovery(driver, historyWithToolOutput(600_000))
 	require.Error(t, err)
 	assert.Equal(t, 1, driver.calls)
-	assert.Equal(t, overflowRefusalText, err.Error(), "forwarded as the driver sent it")
+	assert.Equal(t, overflowRefusalText, err.Error(), "the provider's error, unchanged")
+	assert.ErrorIs(t, err, drivererrors.ErrContextOverflow, "and still recognisable as an overflow")
 	assert.Equal(t, "partial", events[0].Content)
 }
 
