@@ -118,6 +118,7 @@ Reliant server components.`,
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())
+	root.AddCommand(newChatCmd())
 
 	// Commands whose files register themselves (registerCommand): `db`.
 	for _, f := range registeredCommands {

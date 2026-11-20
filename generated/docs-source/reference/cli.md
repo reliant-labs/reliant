@@ -27,6 +27,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant auth token create`](#reliant-auth-token-create) | Create a new API token |
 | [`reliant auth token list`](#reliant-auth-token-list) | List API tokens (metadata only, never secrets) |
 | [`reliant auth token revoke`](#reliant-auth-token-revoke) | Revoke an API token by name or ID |
+| [`reliant chat`](#reliant-chat) | List your chats, and see or change the machine a chat runs on |
+| [`reliant chat list`](#reliant-chat-list) | List your chats with the machine each runs on |
+| [`reliant chat set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
+| [`reliant chat show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
 | [`reliant daemon`](#reliant-daemon) | Manage the local tools daemon |
 | [`reliant daemon logs`](#reliant-daemon-logs) | Tail daemon logs |
 | [`reliant daemon ls`](#reliant-daemon-ls) | List every daemon instance on this machine |
@@ -824,6 +828,89 @@ Revoke an API token by name or ID
 ```
 reliant auth token revoke <name-or-id>
 ```
+
+---
+
+## reliant chat
+
+List your chats, and see or change the machine a chat runs on
+
+List your chats, show one, and move a chat to another of your machines.
+
+A chat runs its tools on one machine: the one picked in the chat header, else
+your default machine. A chat in a branch workspace stays on the machine that
+holds the workspace's checkout; moving it elsewhere is refused.
+
+```
+reliant chat
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-chat-list) | List your chats with the machine each runs on |
+| [`set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
+| [`show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
+
+---
+
+### reliant chat list
+
+List your chats with the machine each runs on
+
+```
+reliant chat list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--archived` | `bool` | - | Include archived chats |
+| `--json` | `bool` | - | Print the chats as JSON |
+| `--limit` | `int32` | `0` | Most chats to list (default: the server's) |
+| `--project` | `string` | - | List only this project's chats (a project id; default: every project) |
+
+---
+
+### reliant chat set-machine
+
+Run a chat's tools on another of your machines
+
+Pins a chat to one of your machines, named by id or by name, as the machine
+picker in the chat header does. Its next turn runs there. --clear removes the
+pin, so the chat follows your default machine again.
+
+The machine must be yours and, when the project tracks where it is installed,
+have the project. A chat in a branch workspace cannot leave the machine that
+holds its checkout.
+
+```
+reliant chat set-machine <chat-id> [machine] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--clear` | `bool` | - | Remove the chat's machine pin, so it follows your default machine |
+
+---
+
+### reliant chat show
+
+Show one chat: its project, workspace and machine
+
+```
+reliant chat show <chat-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the chat as JSON |
 
 ---
 
