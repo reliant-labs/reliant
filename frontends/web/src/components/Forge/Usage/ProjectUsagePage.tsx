@@ -15,6 +15,7 @@
 
 import { useMemo, type ReactNode } from "react";
 
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Tag from "@/components/forge-ui/tag";
@@ -27,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { useForgeConsole } from "../Console/consoleContext";
 import { Header, Page } from "../Console/consolePageFrame";
 import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { formatPercent } from "../Observability/format";
 
@@ -129,7 +131,10 @@ export function ProjectUsagePage() {
             </div>
             <div className="px-2 pb-3 pt-2">
               {days.length < 2 ? (
-                <p className="px-2 py-8 text-center text-meta text-ink-muted">No hosted usage recorded this month yet.</p>
+                <div className="flex flex-col items-center gap-3 px-2 py-8" data-testid="usage-none">
+                  <p className="text-center text-meta text-ink-muted">No hosted usage recorded this month yet.</p>
+                  <ProjectEmptyCtaRow deploy={<DeployWithAgentButton env={null} />} learn="usage" className="justify-center" testId="usage-empty-cta" />
+                </div>
               ) : (
                 <UPlotChart height={200} timestamps={days} series={categories} unit="" label={`Daily cost of ${forgeProject} by category`} bars area="stacked" />
               )}

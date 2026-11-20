@@ -48,6 +48,7 @@ const FORWARDED = new Set([
   "/apps",
   "/sites",
   "/usage",
+  "/connectors",
   "/projects",
   "/workflows",
   "/workflows/library",

@@ -444,6 +444,7 @@ export function MachinesSection() {
           <div>
             <SettingsPageHeader
               title="Agent sandboxes"
+              learn="sandboxes"
               description="Where your agents run: cloud sandboxes Reliant manages, and computers of yours you connect."
             />
             {!cloud && (

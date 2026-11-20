@@ -226,6 +226,18 @@ export function settingsPath(section?: SettingsSection): string {
   return section ? `/settings/${section}` : "/settings";
 }
 
+/** The Connectors page's tabs: the integrations agents act through, and MCP servers. */
+export type ConnectorsTab = "integrations" | "mcp";
+
+/**
+ * Connectors (components/Connectors/ConnectorsPage.tsx, U6d): the
+ * integrations and the MCP servers agents use, one page with a tab each
+ * (`?tab=mcp`; absent: Integrations). The Agents area's Connectors row.
+ */
+export function connectorsPath(tab?: ConnectorsTab, ctx?: PathContext): string {
+  return withSearch(withOrg("/connectors", ctx), { tab: tab === "integrations" ? undefined : tab });
+}
+
 /**
  * Agent sandboxes: the machines page, Settings › Agent sandboxes (the UI's
  * name for machines; the section id, routes and APIs keep "machines").

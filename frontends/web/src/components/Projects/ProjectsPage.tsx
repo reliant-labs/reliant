@@ -41,7 +41,7 @@ const FILTERS: { id: ProjectsFilter; label: string }[] = [
 
 export function ProjectsPage() {
   return (
-    <AreaShell areaPath={projectsPath()} areaLabel="Projects" areaNoun="projects">
+    <AreaShell areaPath={projectsPath()} areaLabel="Projects" areaNoun="projects" learn="overview">
       <ProjectsBody />
     </AreaShell>
   );

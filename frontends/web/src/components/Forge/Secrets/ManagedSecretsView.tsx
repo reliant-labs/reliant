@@ -47,6 +47,8 @@
 import { useMemo } from "react";
 import { AlertTriangle, ArrowLeft, ExternalLink, KeyRound, Lock, LockOpen, Plus } from "lucide-react";
 
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
+
 /**
  * The tenant-facing secrets documentation. Declared here, beside its one use,
  * rather than in a shared constants module: it is a fact about this surface,
@@ -318,6 +320,7 @@ function StoreHeader({
           Add secret
         </button>
       )}
+      <ProjectEmptyCtaRow deploy="chat" learn="secrets" className="justify-center" testId="secrets-empty-cta" />
     </div>
   );
 }

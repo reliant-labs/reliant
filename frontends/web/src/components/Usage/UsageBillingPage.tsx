@@ -92,7 +92,7 @@ const LINK = "no-color text-primary-ink hover:underline";
 /** The route's page (routes.tsx): the view in the app's area chrome. */
 export function UsageBillingPage() {
   return (
-    <AreaShell areaPath={usageBillingPath()} areaLabel="Usage & billing" areaNoun="usage and billing">
+    <AreaShell areaPath={usageBillingPath()} areaLabel="Usage & billing" areaNoun="usage and billing" learn="usage-billing">
       <UsageBillingView />
     </AreaShell>
   );

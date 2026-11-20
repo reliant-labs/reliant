@@ -21,6 +21,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, Check, Copy } from "lucide-react";
 
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
+import type { LearnSection } from "@/lib/learnLinks";
+
 /** The docs this frame links to, so one URL is spelled once. */
 export const DOCS = {
   observability: "https://docs.reliantlabs.io/forge/observability",
@@ -48,7 +51,7 @@ export interface GettingStartedProps {
   children?: ReactNode;
   /**
    * The primary way through: an action that hands the work to an agent
-   * ("Deploy with an agent", AskReliant). It leads; the steps follow as the
+   * ("Ask an agent to deploy this with forge", AskReliant). It leads; the steps follow as the
    * way to do it by hand.
    */
   agent?: ReactNode;
@@ -56,10 +59,17 @@ export interface GettingStartedProps {
   docs?: { href: string; label: string };
   /** Buttons that act in place (clear a filter, widen the window). */
   actions?: ReactNode;
+  /**
+   * The project shell's other ways forward beside `agent` (U6d,
+   * EmptyState/ProjectEmptyCta.tsx): Migrate an existing app to forge, and the
+   * section's Learn link (default: the console page's). On whenever `agent`
+   * is set; false turns it off.
+   */
+  projectCta?: { learn?: LearnSection | false } | false;
   testId: string;
 }
 
-export function GettingStarted({ icon, title, about, children, agent, steps = [], docs, actions, testId }: GettingStartedProps) {
+export function GettingStarted({ icon, title, about, children, agent, steps = [], docs, actions, projectCta = {}, testId }: GettingStartedProps) {
   return (
     // A designed empty state, not a dashed box: an icon tile, what goes here, and the one way to start.
     <div role="status" data-testid={testId} className="flex items-start gap-4 py-6">
@@ -72,11 +82,14 @@ export function GettingStarted({ icon, title, about, children, agent, steps = []
           <p data-testid={`${testId}-about`}>{about}</p>
           {children}
         </div>
-        {agent && (
-          <div className="flex flex-wrap items-center gap-2 pt-1" data-testid={`${testId}-agent`}>
-            {agent}
-          </div>
-        )}
+        {agent &&
+          (projectCta ? (
+            <ProjectEmptyCtaRow deploy={agent} learn={projectCta.learn} className="pt-1" testId={`${testId}-agent`} />
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 pt-1" data-testid={`${testId}-agent`}>
+              {agent}
+            </div>
+          ))}
         {agent && steps.length > 0 && <p className="pt-1 text-meta text-ink-muted">Or do it yourself, from the project&apos;s checkout:</p>}
         {steps.length > 0 && (
           <ol className="max-w-2xl space-y-3 pt-1 text-ui text-ink-muted" aria-label={agent ? "Do it yourself" : "Get started"} data-testid={`${testId}-steps`}>
