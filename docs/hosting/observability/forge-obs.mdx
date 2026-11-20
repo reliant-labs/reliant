@@ -1,9 +1,9 @@
 ---
 title: "Querying with forge obs"
-description: "Ask a running forge environment what happened from the command line: forge obs check judges a deploy with exit codes 0, 1, 2 and 8, and status, issue, trace, logs and db query find the cause"
+description: "Use forge obs to judge a deploy (exit codes 0, 1, 2 and 8), then find the cause with status, issue, trace, logs and db query, locally or on Reliant hosting."
 ---
 
-Everything the [boundaries record](/forge/observability/signals) is also readable without leaving the terminal. `forge obs` asks an environment's telemetry a question and prints the answer as a table for you or, with `--json`, as one document a script or an agent can parse. The same verbs work against your local stack in development and against a hosted environment, because both go through one query compiler. A query that works locally means the same thing against production.
+Everything the [boundaries record](/hosting/observability/signals) is also readable without leaving the terminal. `forge obs` asks an environment's telemetry a question and prints the answer as a table for you or, with `--json`, as one document a script or an agent can parse. The same verbs work against your local stack in development and against a hosted environment, because both go through one query compiler. A query that works locally means the same thing against production.
 
 After you change something, four questions decide what you do next, and each has a command:
 
@@ -152,7 +152,7 @@ status for dev is partial: some evidence could not be read (see unread and warni
 
 ### Incidents
 
-An issue is one distinct bug, not one log line; how issues are fingerprinted and what states they move through is in [Hosted dashboards, alerts and issues](/forge/observability/dashboards-and-alerts#how-errors-are-grouped).
+An issue is one distinct bug, not one log line; how issues are fingerprinted and what states they move through is in [Hosted dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts#how-errors-are-grouped).
 
 A dead database fails every caller, and each caller is its own call site and so its own issue. `forge obs issues` marks issues that share a cause and first fired within ten minutes of each other as one incident and collapses them under the first, so an outage shows up as one row. The others still exist with their own counts, and `--expand-incidents` lists them.
 
@@ -185,4 +185,4 @@ A CI token reads telemetry with the `obs:read` scope (`forge cloud token create 
 
 ## Related topics
 
-[Why this helps an agent](/forge/observability/agents) shows these commands in an agent's loop. [Hosted dashboards, alerts and issues](/forge/observability/dashboards-and-alerts) describes the built-in alerts that feed `status` and `check`. [Environments & deploys](/forge/environments-and-deploys) covers promotion, which is what `check` judges.
+[Why this helps an agent](/hosting/observability/agents) shows these commands in an agent's loop. [Hosted dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts) describes the built-in alerts that feed `status` and `check`. [Environments & deploys](/forge/environments-and-deploys) covers promotion, which is what `check` judges.

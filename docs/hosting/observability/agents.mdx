@@ -1,7 +1,7 @@
 ---
 title: "Forge MCP server: deploy from Claude Code, Cursor, Codex"
 sidebarTitle: "Why this helps an agent"
-description: "Run forge as an MCP server (forge mcp) so Claude Code, Cursor or Codex can deploy your app, lint, generate and read telemetry, with skills, exit codes and per-worktree environments"
+description: "Run forge as an MCP server (forge mcp) so Claude Code, Cursor or Codex can deploy your app, lint, generate and read telemetry, with skills and exit codes."
 ---
 
 Most of what makes an agent good at fixing software is not the model. It is whether the agent can see the same things you would look at: the error the user hit, the trace behind it, whether the last deploy made things worse. A codebase with no logs on disk, no trace IDs and no machine-readable verdicts forces the agent to guess, and an agent that guesses writes plausible fixes for the wrong problem.
@@ -20,7 +20,7 @@ In development a scaffolded frontend writes the browser's console, every uncaugh
 grep '\[browser:error\]' .forge/logs/dev/*.log
 ```
 
-The case that makes this matter is an uncaught `TypeError`. It makes no `console` call anywhere in your code, so searching the source for it finds nothing, and the agent has no browser to open. The stack trace is nevertheless sitting in `.forge/logs/dev/frontend_web.log`. The agent can read what the user saw without a screenshot, a copy-pasted error or a headless browser. The details and caveats are in [Where the telemetry goes](/forge/observability/where-it-goes#browser-console-in-the-log-directory).
+The case that makes this matter is an uncaught `TypeError`. It makes no `console` call anywhere in your code, so searching the source for it finds nothing, and the agent has no browser to open. The stack trace is nevertheless sitting in `.forge/logs/dev/frontend_web.log`. The agent can read what the user saw without a screenshot, a copy-pasted error or a headless browser. The details and caveats are in [Where the telemetry goes](/hosting/observability/where-it-goes#browser-console-in-the-log-directory).
 
 The same idea extends past the browser. A backend log line written with a request's context carries a `trace_id`, a failed browser request carries the trace ID of the server span that handled it, and `forge obs trace <id>` prints that trace as a tree with the failing span and its logs expanded. The agent follows IDs from the symptom to the cause rather than searching for them.
 
@@ -35,7 +35,7 @@ An agent cannot interpret a progress bar, and it will happily interpret a senten
 | 2 | Forge could not look | Report "not proven", never "passed"; fix what blocked the look |
 | 8 | The wait ran out while it was still progressing | Check again later; do not redeploy |
 
-The one that does the most work is 2. A check that cannot tell whether a release is good is not a pass, and a tool that quietly returns success in that case teaches an agent that green means nothing. Forge's check exits 2 when there is too little traffic to judge or the telemetry query failed, and the JSON document says which, with a complete command to run next. [Querying with forge obs](/forge/observability/forge-obs#the-exit-codes) has the full contract.
+The one that does the most work is 2. A check that cannot tell whether a release is good is not a pass, and a tool that quietly returns success in that case teaches an agent that green means nothing. Forge's check exits 2 when there is too little traffic to judge or the telemetry query failed, and the JSON document says which, with a complete command to run next. [Querying with forge obs](/hosting/observability/forge-obs#the-exit-codes) has the full contract.
 
 ## It checks after every deploy
 
@@ -201,4 +201,4 @@ Reliant also ships this loop for the errors themselves. [Autopilot's on-call wor
 
 ## Related topics
 
-[Querying with forge obs](/forge/observability/forge-obs) is the reference for the commands above. [What every boundary records](/forge/observability/signals) explains where the data comes from. [Forge quick start](/forge/overview) shows the same commands as a person would run them.
+[Querying with forge obs](/hosting/observability/forge-obs) is the reference for the commands above. [What every boundary records](/hosting/observability/signals) explains where the data comes from. [Forge quick start](/forge/overview) shows the same commands as a person would run them.

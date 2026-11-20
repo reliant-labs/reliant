@@ -75,7 +75,7 @@ A `daemon:` makes the workflow need a machine. It cannot run as a [no-machine ru
 | idle | Connected, not recently active |
 | disconnected | Not connected. A cloud machine in this state is woken when something needs it |
 
-A running daemon sends a heartbeat every 15 seconds and is treated as gone after 30 seconds without one.
+A running daemon and the gateway exchange a heartbeat every 15 seconds. A daemon that stops cleanly shows as disconnected at once; one that vanishes without saying so (a crash, a dropped network) is treated as gone after 90 seconds without a heartbeat, six missed in a row.
 
 ## Related topics
 

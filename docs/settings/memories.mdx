@@ -1,6 +1,7 @@
 ---
-title: "Memories & Context"
-description: "Configure persistent context files that inform every conversation"
+title: "Memory files: persistent context with reliant.md"
+sidebarTitle: "Memories & Context"
+description: "Reliant memory files: reliant.md and reliant.local.md give every chat project, personal and global context. File locations, loading order and what to commit."
 ---
 
 Memories are markdown files that provide persistent context to every conversation in a project. They're automatically loaded and included in the system prompt, giving the AI assistant relevant background about your codebase, conventions, and preferences.
@@ -30,7 +31,7 @@ Because it is an ordinary project file, it is yours to change: edit it, trim it,
 
 ## What Reliant can do
 
-Separately from your memory files, Reliant gives every conversation, in every project, a short routing guide. A chat agent only knows what is in front of it, and without this guide it tends to answer "run it on a cron job" or "deploy it to Vercel" when Reliant has a built-in way to do the same thing. The guide tells the agent which Reliant feature fits which kind of request: something that should run on its own (on a schedule, from a webhook, or when a GitHub, Gmail, Slack or Twilio event arrives) is a [workflow with a trigger](/automations/overview); an agent that acts on outside services uses [integrations](/integrations/overview); work that needs a person's approval pauses the run; and anything that will be deployed is a [forge](/features/deploy-and-host) project. That includes a frontend with no backend (a landing page, a marketing or docs site, a single-page app or a PWA) as much as a backend, workers, cron jobs, Kubernetes operators, a CLI or a mobile app. It also tells the agent to propose the Reliant option and say what it commits you to, to use any tool or platform you named yourself, and to check the Reliant docs before recommending outside infrastructure.
+Separately from your memory files, Reliant gives every conversation, in every project, a short routing guide. A chat agent only knows what is in front of it, and without this guide it tends to answer "run it on a cron job" or "deploy it to Vercel" when Reliant has a built-in way to do the same thing. The guide tells the agent which Reliant feature fits which kind of request: something that should run on its own (on a schedule, from a webhook, or when a GitHub, Gmail, Slack or Twilio event arrives) is a [workflow with a trigger](/automations/overview); an agent that acts on outside services uses [integrations](/integrations/overview); work that needs a person's approval pauses the run; and anything that will be deployed is a [forge](/forge/overview) project. That includes a frontend with no backend (a landing page, a marketing or docs site, a single-page app or a PWA) as much as a backend, workers, cron jobs, Kubernetes operators, a CLI or a mobile app. It also tells the agent to propose the Reliant option and say what it commits you to, to use any tool or platform you named yourself, and to check the Reliant docs before recommending outside infrastructure.
 
 The guide comes with Reliant rather than living in a file, so every project gets the current version, including projects created before it existed. Your own memory still has the last word: if your team has standards that differ ("we deploy everything to our own cluster"), say so in `reliant.md` and the agent follows it.
 
