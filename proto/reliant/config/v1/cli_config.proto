@@ -26,6 +26,7 @@ message CLIConfig {
       {path: ["daemon"]},
       {path: ["github"]},
       {path: ["machine"]},
+      {path: ["models"]},
       {path: ["project"]},
       {path: ["providers"]},
       {path: ["trigger"]},

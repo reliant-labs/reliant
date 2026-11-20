@@ -35,7 +35,9 @@ Reliant's servers make every model call, so they reach a local model through a m
   <Step title="Let your machine find it">
     The daemon checks `localhost` on ports 11434 (Ollama), 1234 (LM Studio), 8080 (llama.cpp) and 8000 (vLLM) when it connects and every minute after, and publishes the chat models it finds. Open **Settings → AI providers → Local & custom** to see them, with each model's context size and whether it supports tools.
 
-    A server on another port or host isn't detected. Add it there: **Add endpoint** for an address your machine reaches, or **Add custom endpoint** for a server on the public internet (**Reliant cloud**) or on your LAN or VPN (**Through one of my machines**).
+    From a terminal, `reliant models list --local` prints the same models with their ids and the machine serving each, and `reliant models endpoint list` shows each server a machine found, or why it couldn't reach one.
+
+    A server on another port or host isn't detected. Add it there: **Add endpoint** for an address your machine reaches (or `reliant models endpoint add http://gpu-box.lan:8000/v1 --machine <machine>`), or **Add custom endpoint** for a server on the public internet (**Reliant cloud**) or on your LAN or VPN (**Through one of my machines**).
 
     <Note>
     Settings flags a model whose context is under 64K, and calls one under 16K too small for agent work. For Ollama, raise it with `OLLAMA_CONTEXT_LENGTH` or the app's **Context length** setting, then click **Test connection**.
