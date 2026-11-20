@@ -28,7 +28,7 @@ func TestDispatch_LocalCodecFailuresAreInternalAndRedacted(t *testing.T) {
 	t.Run("request does not marshal", func(t *testing.T) {
 		err := New(Deps{Sender: fakeSender{}}).Dispatch(context.Background(), "u", "fs.list", make(chan int), nil, 1000)
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 		assert.Equal(t, "marshal fs.list request failed", svcerr.ToConnectV2(err).Message())
 		assert.NotNil(t, svcerr.Cause(err), "the marshal error is the logged cause")
 	})
@@ -36,7 +36,7 @@ func TestDispatch_LocalCodecFailuresAreInternalAndRedacted(t *testing.T) {
 		var resp struct{ N int }
 		err := New(Deps{Sender: fakeSender{reply: []byte(`{"N":"secret-payload"}`)}}).Dispatch(context.Background(), "u", "fs.list", struct{}{}, &resp, 1000)
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 		assert.Equal(t, "unmarshal fs.list response failed", svcerr.ToConnectV2(err).Message())
 		assert.NotNil(t, svcerr.Cause(err), "the unmarshal error is the logged cause")
 	})
