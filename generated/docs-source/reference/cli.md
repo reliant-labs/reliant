@@ -22646,7 +22646,7 @@ reliant workflow run <workflow-name> [flags]
 | `--exit-on-gate` | `bool` | - | Stop and exit 3 as soon as a question/approval gate opens (for scripted supervision) |
 | `--follow`, `-f` | `bool` | - | Follow the execution and stream NDJSON lifecycle events |
 | `--hook` | `stringArray` | `[]` | Exec hook 'on=<event> cmd=<shell>' (repeatable); event is one of node_started|node_completed|node_failed|workflow_completed|workflow_failed|question|approval|any |
-| `--input`, `-i` | `stringArray` | `[]` | Workflow input as key=value (repeatable) |
+| `--input`, `-i` | `stringArray` | `[]` | Workflow input as key=value (repeatable; read as the type the workflow declares for it) |
 | `--input-file` | `string` | - | JSON file containing workflow inputs |
 | `--interval` | `duration` | `2s` | Poll interval |
 | `--message`, `-m` | `string` | - | First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default) |

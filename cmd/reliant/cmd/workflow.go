@@ -27,6 +27,7 @@ import (
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/lint"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
@@ -383,17 +384,24 @@ format, exit codes, and --hook).`,
 				return fmt.Errorf("a project is required — pass --project-id or --project-path")
 			}
 
+			workflowRef := normalizeRunWorkflowRef(workflowName)
+
 			// Build input map: --input flags then --input-file overlay.
+			// Each value is read as the type the workflow declares for it,
+			// as `workflow validate --input` reads it: asap=true is a boolean
+			// for a boolean input (the server never parses text into one),
+			// and test_command=false stays text for a string input.
+			var declared map[string]*reliantv1.Input
+			if len(inputs) > 0 {
+				declared = runInputDeclarations(cmd.Context(), reliantv1connect.NewWorkflowServiceClient(conn.httpClient(), conn.ServerURL), resolvedProjectID, workflowRef)
+			}
 			inputMap := make(map[string]interface{})
 			for _, kv := range inputs {
 				parts := strings.SplitN(kv, "=", 2)
 				if len(parts) != 2 {
 					return fmt.Errorf("invalid input format %q — expected key=value", kv)
 				}
-				// Read as `workflow validate --input` reads it: asap=true is
-				// a boolean and every=10 a number, which a boolean or number
-				// input requires (the server never parses text into one).
-				inputMap[parts[0]] = parseCLIInputValue(parts[1])
+				inputMap[parts[0]] = parseTypedCLIInputValue(parts[1], declared[parts[0]])
 			}
 			if inputFile != "" {
 				data, err := os.ReadFile(inputFile)
@@ -414,7 +422,6 @@ format, exit codes, and --hook).`,
 				return err
 			}
 
-			workflowRef := normalizeRunWorkflowRef(workflowName)
 			runMessage, messageGiven := resolveRunMessage(workflowName, message, inputMap)
 			createReq := &reliantv1.StartChatRequest{
 				ProjectId: resolvedProjectID,
@@ -474,7 +481,7 @@ format, exit codes, and --hook).`,
 		},
 	}
 
-	cmd.Flags().StringArrayVarP(&inputs, "input", "i", nil, "Workflow input as key=value (repeatable)")
+	cmd.Flags().StringArrayVarP(&inputs, "input", "i", nil, "Workflow input as key=value (repeatable; read as the type the workflow declares for it)")
 	cmd.Flags().StringVar(&inputFile, "input-file", "", "JSON file containing workflow inputs")
 	cmd.Flags().StringVarP(&message, "message", "m", "", "First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default)")
 	cmd.Flags().StringVar(&title, "title", "", "Title for the run (default: \"<workflow> · <first line of the message>\")")
@@ -1055,7 +1062,7 @@ func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir str
 
 	// Optional input binding validation.
 	if len(inputs) > 0 || inputFile != "" {
-		inputMap, ierr := buildCLIInputMap(inputs, inputFile)
+		inputMap, ierr := buildCLIInputMap(inputs, inputFile, wf.GetInputs())
 		if ierr != nil {
 			return ierr
 		}
@@ -1135,9 +1142,10 @@ func buildCLIPresetLoader(presetDir string) validation.PresetLoader {
 	}
 }
 
-// buildCLIInputMap merges --input key=value pairs and --input-file JSON into a
+// buildCLIInputMap merges --input key=value pairs (each read as the type
+// declared names for it) and --input-file JSON into a
 // single map, parsing values that look like JSON literals.
-func buildCLIInputMap(inputs []string, inputFile string) (map[string]interface{}, error) {
+func buildCLIInputMap(inputs []string, inputFile string, declared map[string]*reliantv1.Input) (map[string]interface{}, error) {
 	inputMap := make(map[string]interface{})
 
 	if inputFile != "" {
@@ -1155,10 +1163,68 @@ func buildCLIInputMap(inputs []string, inputFile string) (map[string]interface{}
 		if len(parts) != 2 {
 			return nil, fmt.Errorf("invalid input format %q \u2014 expected key=value", kv)
 		}
-		inputMap[parts[0]] = parseCLIInputValue(parts[1])
+		inputMap[parts[0]] = parseTypedCLIInputValue(parts[1], declared[parts[0]])
 	}
 
 	return inputMap, nil
+}
+
+// runInputDeclarations is the inputs the workflow `workflow run` starts
+// declares, so its --input values are read as those types. Best effort: when
+// the server cannot say (an older server, a workflow it cannot read), a
+// builtin is read from this binary, and anything else gets nil, which reads
+// each value on its own (parseCLIInputValue) as before.
+func runInputDeclarations(ctx context.Context, client reliantv1connect.WorkflowServiceClient, projectID, ref string) map[string]*reliantv1.Input {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	resp, err := client.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{ProjectId: projectID, Name: ref}))
+	if err == nil && resp.Msg.GetWorkflow() != nil {
+		return resp.Msg.GetWorkflow().GetInputs()
+	}
+	if name, ok := strings.CutPrefix(ref, "builtin://"); ok {
+		if data, rerr := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml"); rerr == nil {
+			if wf, perr := wfyaml.ParseWorkflow(data); perr == nil {
+				return wf.GetInputs()
+			}
+		}
+	}
+	return nil
+}
+
+// parseTypedCLIInputValue reads a --input value as the type the workflow
+// declares for that input. Text inputs keep the text as typed (false, 10 and
+// null are text there, and a quoted "0123" is still unquoted); a boolean,
+// integer or number input reads the value as one. Any other type, an input the
+// workflow does not declare, or a value that does not spell its type falls
+// back to parseCLIInputValue, so the server's type check names the mismatch.
+func parseTypedCLIInputValue(raw string, input *reliantv1.Input) interface{} {
+	if input == nil || model.IsIntegrationInput(input) {
+		return parseCLIInputValue(raw)
+	}
+	trimmed := strings.TrimSpace(raw)
+	switch model.GetInputType(input) {
+	case "string", "message", "enum":
+		if input.GetEnumInput().GetMulti() {
+			break
+		}
+		if s, ok := parseCLIInputValue(raw).(string); ok {
+			return s
+		}
+		return raw
+	case "boolean":
+		if b, err := strconv.ParseBool(trimmed); err == nil && (strings.EqualFold(trimmed, "true") || strings.EqualFold(trimmed, "false")) {
+			return b
+		}
+	case "integer":
+		if i, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
+			return i
+		}
+	case "number":
+		if f, err := strconv.ParseFloat(trimmed, 64); err == nil {
+			return f
+		}
+	}
+	return parseCLIInputValue(raw)
 }
 
 // parseCLIInputValue reads a --input value: a JSON literal (true, 10, 0.5,
