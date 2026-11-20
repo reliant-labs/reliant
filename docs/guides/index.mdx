@@ -31,6 +31,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   <Card title="Write your first multi-agent workflow in YAML" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
     Build a multi-agent coding workflow in YAML: a planner, an implementer and a reviewer that sends work back, checked locally, then run on your machine.
   </Card>
+  <Card title="Loop an AI agent until your tests pass" icon="workflow" href="/guides/workflows/run-tests-until-they-pass">
+    Have an AI agent fix code, run your test command and try again until the tests pass, with a cap on attempts so a run that cannot succeed stops on its own.
+  </Card>
   <Card title="Require human approval before an AI agent acts" icon="workflow" href="/guides/workflows/require-human-approval">
     Pause an agent workflow until a person approves. Gate the change on an approval node, handle approve, deny and timeout, and ask questions mid-run.
   </Card>
@@ -56,6 +59,9 @@ Choose where agents run: your own computer, a server or a Reliant cloud machine,
 <CardGroup cols={2}>
   <Card title="How a tool call reaches your machine" icon="book-open" href="/deep-dives/how-tool-calls-reach-your-machine">
     How an agent's tool call travels from the cloud worker through NATS and the gateway to the daemon on your machine, and what happens when the link drops.
+  </Card>
+  <Card title="How the Reliant daemon keeps credentials on your machine" icon="book-open" href="/deep-dives/daemon-security-model">
+    How a machine proves who it is to Reliant, what an agent's commands can reach on it, what credentials: none hides, and what leaves the machine.
   </Card>
 </CardGroup>
 {/* /guides: machines-and-daemons */}
@@ -83,6 +89,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
 **How it works**
 
 <CardGroup cols={2}>
+  <Card title="How forge generate turns proto and SQL into a whole app" icon="book-open" href="/deep-dives/how-forge-generate-works">
+    How forge generate projects your proto and SQL migrations into stubs, ORM, handlers, hooks and mocks, and why reruns, parallel runs and failed runs stay safe.
+  </Card>
   <Card title="How Forge keeps Postgres migrations safe" icon="book-open" href="/deep-dives/safe-migrations">
     How Forge keeps a Postgres schema change from breaking the release still serving: declared compatibility, lint, measured locks, gated rollouts and rollback floors.
   </Card>

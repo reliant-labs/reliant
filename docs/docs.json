@@ -291,6 +291,7 @@
                 "group": "Build workflows",
                 "pages": [
                   "guides/workflows/first-multi-agent-workflow",
+                  "guides/workflows/run-tests-until-they-pass",
                   "guides/workflows/require-human-approval"
                 ]
               }
@@ -302,7 +303,8 @@
               {
                 "group": "How it works",
                 "pages": [
-                  "deep-dives/how-tool-calls-reach-your-machine"
+                  "deep-dives/how-tool-calls-reach-your-machine",
+                  "deep-dives/daemon-security-model"
                 ]
               }
             ]
@@ -313,6 +315,7 @@
               {
                 "group": "How it works",
                 "pages": [
+                  "deep-dives/how-forge-generate-works",
                   "deep-dives/safe-migrations"
                 ]
               },

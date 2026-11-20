@@ -106,7 +106,7 @@ The agent does not decide when it is done. A `run` node executes your test comma
   </Step>
 
   <Step title="Check the cap with lint">
-    `while` has two halves. `outputs.exit_code != 0` ends the loop when the tests pass, and `iter.iteration < inputs.max_attempts` ends it when they never do. Lint refuses to let the second half go missing. With it removed:
+    `while` has two halves. `outputs.exit_code != 0` ends the loop when the tests pass, and `iter.iteration < inputs.max_attempts` ends it when they never do. Lint warns when the second half is missing. With it removed:
 
     ```bash terminal
     reliant workflow lint
@@ -216,7 +216,7 @@ The agent does not decide when it is done. A `run` node executes your test comma
 
 ## What bounds the cost
 
-- **The attempt cap.** At most `max_attempts` agent rounds run, and the input's `max: 5` stops a caller from raising it past five.
+- **The attempt cap.** At most `max_attempts` agent rounds run. The input's `max: 5` refuses a higher value before the run starts: `input 'max_attempts' must be <= 5`.
 - **The exit condition.** The loop stops at the first green round, so a fix that works on round 1 costs one round.
 - **The test timeout.** A hung test command stops after `timeout: 5m`, instead of running for the 30-day default.
 
