@@ -63,35 +63,37 @@ var chatClients = func(cmd *cobra.Command) (chatClient, machineLister, *connecti
 
 func newChatListCmd() *cobra.Command {
 	var (
-		projectID       string
-		limit           int32
-		jsonOutput      bool
-		includeArchived bool
+		projectID  string
+		limit      int32
+		jsonOutput bool
 	)
 	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls"},
-		Short:   "List your chats with the machine each runs on",
+		Short:   "List your chats (not archived ones) with the machine each runs on",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			chats, machines, conn, err := chatClients(cmd)
 			if err != nil {
 				return err
 			}
-			req := &reliantv1.ListChatsRequest{ProjectId: projectID}
-			if limit > 0 {
-				req.Limit = proto.Int32(limit)
+			// ListChats is the sidebar's list: archived chats are never in
+			// it, it has no cursor, and it returns the most recent chats up to
+			// the limit (the server's default is chatListDefaultLimit). A full
+			// page may not be every chat, so the command says so rather than
+			// presenting it as complete.
+			want := limit
+			if want <= 0 {
+				want = chatListDefaultLimit
 			}
+			req := &reliantv1.ListChatsRequest{ProjectId: projectID, Limit: proto.Int32(want)}
 			resp, err := chats.ListChats(cmd.Context(), connect.NewRequest(req))
 			if err != nil {
 				return conn.annotate(fmt.Errorf("listing chats: %w", err))
 			}
-			list := make([]*reliantv1.Chat, 0, len(resp.Msg.GetChats()))
-			for _, c := range resp.Msg.GetChats() {
-				if !includeArchived && c.GetState() == reliantv1.ChatState_CHAT_STATE_ARCHIVED {
-					continue
-				}
-				list = append(list, c)
+			list := resp.Msg.GetChats()
+			if len(list) >= int(want) {
+				fmt.Fprintf(cmd.ErrOrStderr(), "Showing the %d most recently active chats; there may be more: pass --limit to list more.\n", len(list))
 			}
 			if jsonOutput {
 				return writeChatsJSON(cmd.OutOrStdout(), list)
@@ -100,11 +102,14 @@ func newChatListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&projectID, "project", "", "List only this project's chats (a project id; default: every project)")
-	cmd.Flags().Int32Var(&limit, "limit", 0, "Most chats to list (default: the server's)")
-	cmd.Flags().BoolVar(&includeArchived, "archived", false, "Include archived chats")
+	cmd.Flags().Int32Var(&limit, "limit", chatListDefaultLimit, "Most chats to list, most recently active first")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Print the chats as JSON")
 	return cmd
 }
+
+// chatListDefaultLimit is how many chats `reliant chat list` asks for by
+// default: the server's own default page.
+const chatListDefaultLimit = 100
 
 func newChatShowCmd() *cobra.Command {
 	var jsonOutput bool

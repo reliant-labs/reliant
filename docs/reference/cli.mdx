@@ -28,7 +28,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant auth token list`](#reliant-auth-token-list) | List API tokens (metadata only, never secrets) |
 | [`reliant auth token revoke`](#reliant-auth-token-revoke) | Revoke an API token by name or ID |
 | [`reliant chat`](#reliant-chat) | List your chats, and see or change the machine a chat runs on |
-| [`reliant chat list`](#reliant-chat-list) | List your chats with the machine each runs on |
+| [`reliant chat list`](#reliant-chat-list) | List your chats (not archived ones) with the machine each runs on |
 | [`reliant chat set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
 | [`reliant chat show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
 | [`reliant daemon`](#reliant-daemon) | Manage the local tools daemon |
@@ -849,7 +849,7 @@ reliant chat
 
 | Command | Description |
 |---------|-------------|
-| [`list`](#reliant-chat-list) | List your chats with the machine each runs on |
+| [`list`](#reliant-chat-list) | List your chats (not archived ones) with the machine each runs on |
 | [`set-machine`](#reliant-chat-set-machine) | Run a chat's tools on another of your machines |
 | [`show`](#reliant-chat-show) | Show one chat: its project, workspace and machine |
 
@@ -864,7 +864,7 @@ reliant chat
 
 ### reliant chat list
 
-List your chats with the machine each runs on
+List your chats (not archived ones) with the machine each runs on
 
 ```
 reliant chat list [flags]
@@ -874,9 +874,8 @@ reliant chat list [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--archived` | `bool` | - | Include archived chats |
 | `--json` | `bool` | - | Print the chats as JSON |
-| `--limit` | `int32` | `0` | Most chats to list (default: the server's) |
+| `--limit` | `int32` | `100` | Most chats to list, most recently active first |
 | `--project` | `string` | - | List only this project's chats (a project id; default: every project) |
 
 ---

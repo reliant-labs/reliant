@@ -93,14 +93,24 @@ func TestChatCommands(t *testing.T) {
 	assert.Contains(t, out, "build-box (d-build)", "the machine is named, with its id")
 	assert.Contains(t, out, "(default machine)", "an unpinned chat follows the default machine")
 	assert.Contains(t, out, "feat/x", "a branch chat shows its workspace's branch")
-	assert.NotContains(t, out, "c3", "archived chats are hidden by default")
+	assert.NotContains(t, out, "may be more", "a short page is the whole list")
 
-	out, err = runChat(t, "list", "--archived", "--json")
+	// A full page may not be every chat: the command says so (on stderr,
+	// which runChat captures with stdout).
+	out, err = runChat(t, "list", "--limit", "3")
 	require.NoError(t, err)
+	assert.Contains(t, out, "there may be more")
+
+	cmd := newChatCmd()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"list", "--json"})
+	require.NoError(t, cmd.Execute())
 	var listed struct {
 		Chats []map[string]any `json:"chats"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(out), &listed))
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &listed))
 	assert.Len(t, listed.Chats, 3)
 	assert.Equal(t, "d-build", listed.Chats[0]["active_daemon_id"])
 
