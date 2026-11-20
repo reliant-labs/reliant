@@ -145,10 +145,11 @@ Pause workflow execution for user approval
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `approval_id` | string | - |
-| `status` | string | - |
-| `action_taken` | string | - |
-| `data` | object | - |
+| `approval_id` | string | Id of the approval request this step raised |
+| `status` | string | approved, denied, or timeout |
+| `action_taken` | string | The action button the approver clicked, when the approval offered actions |
+| `data` | object | Deprecated: never set, always empty |
+| `denial_reason` | string | Why the approver denied the request, when they gave a reason; absent otherwise |
 
 ---
 

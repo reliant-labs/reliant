@@ -7108,11 +7108,18 @@ func (x *CompactOutput) GetSkippedReason() string {
 
 // ApprovalOutput is the output from the approval activity.
 type ApprovalOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ApprovalId    string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
-	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`                              // "approved", "denied", or "timeout"
-	ActionTaken   string                 `protobuf:"bytes,3,opt,name=action_taken,json=actionTaken,proto3" json:"action_taken,omitempty"` // Action button that was clicked
-	Data          *structpb.Struct       `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ApprovalId  string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
+	Status      string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`                              // "approved", "denied", or "timeout"
+	ActionTaken string                 `protobuf:"bytes,3,opt,name=action_taken,json=actionTaken,proto3" json:"action_taken,omitempty"` // Action button that was clicked
+	// Never set by the approval step. Kept, deprecated, so a workflow that
+	// references it still validates (TL-15).
+	//
+	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
+	Data *structpb.Struct `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	// Why the approver denied the request, when they gave a reason. Absent for
+	// an approval, a timeout, or a denial with no reason.
+	DenialReason  string `protobuf:"bytes,5,opt,name=denial_reason,json=denialReason,proto3" json:"denial_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7168,11 +7175,19 @@ func (x *ApprovalOutput) GetActionTaken() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 func (x *ApprovalOutput) GetData() *structpb.Struct {
 	if x != nil {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *ApprovalOutput) GetDenialReason() string {
+	if x != nil {
+		return x.DenialReason
+	}
+	return ""
 }
 
 // SaveMessageOutput is the output from the save_message activity.
@@ -9816,13 +9831,19 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"error_code\x18\b \x01(\tR\terrorCode\"k\n" +
 	"\rCompactOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12%\n" +
-	"\x0eskipped_reason\x18\x02 \x01(\tR\rskippedReason\"\x99\x01\n" +
-	"\x0eApprovalOutput\x12\x1f\n" +
-	"\vapproval_id\x18\x01 \x01(\tR\n" +
-	"approvalId\x12\x16\n" +
-	"\x06status\x18\x02 \x01(\tR\x06status\x12!\n" +
-	"\faction_taken\x18\x03 \x01(\tR\vactionTaken\x12+\n" +
-	"\x04data\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x04data\"\xc8\x02\n" +
+	"\x0eskipped_reason\x18\x02 \x01(\tR\rskippedReason\"\xe9\x03\n" +
+	"\x0eApprovalOutput\x12R\n" +
+	"\vapproval_id\x18\x01 \x01(\tB1\x82\xb5\x18-\n" +
+	"+Id of the approval request this step raisedR\n" +
+	"approvalId\x12:\n" +
+	"\x06status\x18\x02 \x01(\tB\"\x82\xb5\x18\x1e\n" +
+	"\x1capproved, denied, or timeoutR\x06status\x12r\n" +
+	"\faction_taken\x18\x03 \x01(\tBO\x82\xb5\x18K\n" +
+	"IThe action button the approver clicked, when the approval offered actionsR\vactionTaken\x12X\n" +
+	"\x04data\x18\x04 \x01(\v2\x17.google.protobuf.StructB+\x82\xb5\x18%\n" +
+	"#Deprecated: never set, always empty\x18\x01R\x04data\x12y\n" +
+	"\rdenial_reason\x18\x05 \x01(\tBT\x82\xb5\x18P\n" +
+	"NWhy the approver denied the request, when they gave a reason; absent otherwiseR\fdenialReason\"\xc8\x02\n" +
 	"\x11SaveMessageOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12\x1d\n" +
 	"\n" +

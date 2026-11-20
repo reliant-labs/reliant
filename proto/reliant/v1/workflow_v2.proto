@@ -2046,10 +2046,18 @@ message CompactOutput {
 
 // ApprovalOutput is the output from the approval activity.
 message ApprovalOutput {
-  string approval_id = 1;
-  string status = 2; // "approved", "denied", or "timeout"
-  string action_taken = 3; // Action button that was clicked
-  google.protobuf.Struct data = 4;
+  string approval_id = 1 [(reliant) = {description: "Id of the approval request this step raised"}];
+  string status = 2 [(reliant) = {description: "approved, denied, or timeout"}]; // "approved", "denied", or "timeout"
+  string action_taken = 3 [(reliant) = {description: "The action button the approver clicked, when the approval offered actions"}]; // Action button that was clicked
+  // Never set by the approval step. Kept, deprecated, so a workflow that
+  // references it still validates (TL-15).
+  google.protobuf.Struct data = 4 [
+    deprecated = true,
+    (reliant) = {description: "Deprecated: never set, always empty"}
+  ];
+  // Why the approver denied the request, when they gave a reason. Absent for
+  // an approval, a timeout, or a denial with no reason.
+  string denial_reason = 5 [(reliant) = {description: "Why the approver denied the request, when they gave a reason; absent otherwise"}];
 }
 
 // SaveMessageOutput is the output from the save_message activity.
