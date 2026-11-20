@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { HostingBudgetEditor, parseBudgetCents } from "../HostingBudgetEditor";
+import { HostingBudgetEditor } from "../HostingBudgetEditor";
+import { validateHostingBudget } from "../hostingBudget";
 
 const mocks = vi.hoisted(() => ({ client: {} as Record<string, unknown> }));
 vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => mocks.client }));
@@ -29,13 +30,15 @@ beforeEach(() => {
   };
 });
 
-describe("parseBudgetCents", () => {
-  it("accepts positive dollars with at most two decimals", () => {
-    expect(parseBudgetCents("12.34")).toBe(1234n);
-    expect(parseBudgetCents(" 20 ")).toBe(2000n);
-    expect(parseBudgetCents("0")).toBeNull();
-    expect(parseBudgetCents("1.234")).toBeNull();
-    expect(parseBudgetCents("12x")).toBeNull();
+describe("validateHostingBudget", () => {
+  it("accepts positive dollars with at most two decimals, up to $10,000 inclusive", () => {
+    expect(validateHostingBudget("12.34").cents).toBe(1234n);
+    expect(validateHostingBudget(" 20 ").cents).toBe(2000n);
+    expect(validateHostingBudget("10000.00").cents).toBe(1_000_000n);
+    expect(validateHostingBudget("10000.01").error).toMatch(/\$10,000 or less/);
+    expect(validateHostingBudget("0").error).toMatch(/above \$0/);
+    expect(validateHostingBudget("1.234").error).toMatch(/two decimal places/);
+    expect(validateHostingBudget("12x").error).toMatch(/positive dollar amount/);
   });
 });
 
@@ -70,6 +73,24 @@ describe("HostingBudgetEditor", () => {
       }),
     );
     expect(await screen.findByText(/Budget set to \$120.00 a month/)).toBeInTheDocument();
+  });
+
+  it("keeps a larger stored budget readable but requires edits to be $10,000 or less", async () => {
+    mount({ budgetCents: 1_000_001n });
+    expect(screen.getByText("$10,000.01")).toBeInTheDocument();
+    await screen.findByTestId("hosting-budget-history");
+    fireEvent.click(screen.getByTestId("hosting-budget-change"));
+    const input = screen.getByLabelText(/New monthly budget/);
+    expect(input).toHaveValue("10000.01");
+    expect(input).toHaveAccessibleDescription(/\$10,000 per month/);
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/\$10,000 or less/);
+    expect(mocks.client.setUsageBillingBudget).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: "10000.00" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save budget" }));
+    await waitFor(() => expect(mocks.client.setUsageBillingBudget).toHaveBeenCalledWith(expect.objectContaining({ infraBudgetCents: 1_000_000n })));
   });
 
   it("warns that lowering below this month's spend pauses deploys at once", async () => {

@@ -31,16 +31,7 @@ import {
   useUsageBillingBudgetVersions,
   type UsageBillingBudgetVersion,
 } from "./hostingBillingQueries";
-
-const DOLLARS = /^\d+(\.\d{1,2})?$/;
-
-/** Dollars typed by a person → cents, or null when it is not a positive amount. */
-export function parseBudgetCents(value: string): bigint | null {
-  const trimmed = value.trim();
-  if (!DOLLARS.test(trimmed)) return null;
-  const cents = Math.round(Number(trimmed) * 100);
-  return Number.isSafeInteger(cents) && cents > 0 ? BigInt(cents) : null;
-}
+import { HOSTING_BUDGET_MAX_LABEL, hostingBudgetInputValue, validateHostingBudget } from "./hostingBudget";
 
 export interface HostingBudgetEditorProps {
   orgId: string;
@@ -69,11 +60,11 @@ export function HostingBudgetEditor({ orgId, budgetCents, policyVersion, canMana
   );
   const current = history.find((v) => v.current) ?? history[0];
   const unserved = isUnimplemented(versions.error);
-  const draftCents = parseBudgetCents(draft);
-  const pausesNow = draftCents !== null && spentCents != null && Number(draftCents) <= spentCents;
+  const { cents: draftCents, error: draftError } = validateHostingBudget(draft);
+  const pausesNow = draftCents !== undefined && spentCents != null && Number(draftCents) <= spentCents;
 
   const start = () => {
-    setDraft((Number(budgetCents) / 100).toFixed(2));
+    setDraft(hostingBudgetInputValue(budgetCents));
     setAccepted(false);
     setMessage(null);
     setProblem(null);
@@ -81,7 +72,7 @@ export function HostingBudgetEditor({ orgId, budgetCents, policyVersion, canMana
   };
 
   const submit = () => {
-    if (draftCents === null) return setProblem("Enter a monthly budget above $0, with at most two decimal places.");
+    if (draftError !== undefined) return setProblem(draftError);
     if (!accepted) return setProblem("Agree to the usage billing policy to change the budget.");
     if (!policyVersion) return setProblem("The usage billing policy could not be verified. Reload and try again.");
     setProblem(null);
@@ -142,7 +133,10 @@ export function HostingBudgetEditor({ orgId, budgetCents, policyVersion, canMana
             <label htmlFor={fieldId} className="block text-ui font-medium text-foreground">
               New monthly budget (USD)
             </label>
-            <Input id={fieldId} inputMode="decimal" value={draft} onChange={(e) => setDraft(e.target.value)} invalid={draft !== "" && draftCents === null} />
+            <Input id={fieldId} inputMode="decimal" value={draft} onChange={(e) => setDraft(e.target.value)} invalid={draft !== "" && draftError !== undefined} aria-describedby={`${fieldId}-help`} />
+            <p id={`${fieldId}-help`} className="text-ui text-muted-foreground">
+              Self-serve maximum for budget changes: {HOSTING_BUDGET_MAX_LABEL} per month.
+            </p>
           </div>
           {pausesNow && (
             <p className="text-meta text-warning-ink" data-testid="hosting-budget-pauses-now">
