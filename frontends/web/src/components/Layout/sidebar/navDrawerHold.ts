@@ -13,8 +13,13 @@
 let holdUntil = 0;
 
 /** Keep any open nav drawer open through the navigation about to start (a redirect included). */
-export function holdNavDrawerOpen(ms = 2000): void {
+export function holdNavDrawerOpen(ms = 5000): void {
   holdUntil = Date.now() + ms;
+}
+
+/** A destination was tapped: nothing holds a drawer open any more. */
+export function releaseNavDrawerHold(): void {
+  holdUntil = 0;
 }
 
 /** Whether a navigation now was started by a drill-in, so the drawer stays open. */

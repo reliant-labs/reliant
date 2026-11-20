@@ -104,6 +104,7 @@ describe("groupedCrumbs", () => {
       { label: "api" },
     ]);
     expect(groupedCrumbs({ kind: "releases" }, [{ label: "Releases" }])).toEqual([{ label: "Deployments" }, { label: "Releases" }]);
+    expect(groupedCrumbs({ kind: "services" }, [{ label: "Services" }])).toEqual([{ label: "Deployments" }, { label: "Services" }]);
     expect(groupedCrumbs({ kind: "secrets" }, [{ label: "Secrets" }])).toBeNull();
   });
 });

@@ -30,7 +30,7 @@ import { MobileOrgSwitcher } from "./MobileOrgSwitcher";
 import { mobileProjectsPath } from "@/lib/paths";
 import { MobileHybridNav } from "../Layout/sidebar/MobileHybridNav";
 import type { NavigateOptions } from "../Layout/sidebar/NavRenderer";
-import { holdNavDrawerOpen, navDrawerHeld } from "../Layout/sidebar/navDrawerHold";
+import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../Layout/sidebar/navDrawerHold";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -130,7 +130,10 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   const onNavigate = useCallback(
     (href: string, options?: NavigateOptions) => {
       if (options?.drill) holdNavDrawerOpen();
-      else onClose();
+      else {
+        releaseNavDrawerHold();
+        onClose();
+      }
       void navigate({ href });
     },
     [navigate, onClose],

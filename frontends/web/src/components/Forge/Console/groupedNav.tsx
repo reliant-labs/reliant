@@ -249,8 +249,16 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
   if (isHubPage(page, productAnalytics)) return [{ label: "Analytics" }, ...own.slice(-1)];
-  // Releases and Environments sit in the shell nav's Deployments ▾ (U6e).
-  if (page.kind === "releases" || page.kind === "release" || page.kind === "environments" || page.kind === "environment") {
+  // Services, Releases and Environments sit in the shell nav's Deployments ▾ (U6e).
+  if (
+    page.kind === "services" ||
+    page.kind === "service" ||
+    page.kind === "workload" ||
+    page.kind === "releases" ||
+    page.kind === "release" ||
+    page.kind === "environments" ||
+    page.kind === "environment"
+  ) {
     return own[0]?.label === "Deployments" ? own : [{ label: "Deployments" }, ...own];
   }
   if (page.kind === "dashboard") {

@@ -115,9 +115,9 @@ export const previews: NavRow = {
 };
 
 /**
- * Deployments ▾ (U6e, Vercel's word): Releases and Environments merged — the
- * releases list, the long-lived environments, the previews. Promote and
- * roll back stay on those pages.
+ * Deployments ▾ (U6e, Vercel's word; owner): what runs and how it got there —
+ * Services first, then the releases list, the long-lived environments, the
+ * previews. Promote and roll back stay on those pages.
  */
 export const deploymentsGroup: NavGroup = {
   kind: "group",
@@ -125,7 +125,7 @@ export const deploymentsGroup: NavGroup = {
   label: "Deployments",
   icon: icon(Rocket),
   available: hasApp,
-  children: [releases, environments, previews],
+  children: [services, releases, environments, previews],
 };
 export const secrets = consoleRow("secrets", "Secrets", { kind: "secrets" }, icon(KeyRound), ["secrets"]);
 export const domains = consoleRow("domains", "Domains", { kind: "domains" }, icon(Globe), ["domains"]);

@@ -5,9 +5,8 @@
  *
  *   Find · switcher (the shell draws them above)
  *   Overview · Inbox (count) · Agents › ·
- *   Services ·
  *   Dashboards ▾ · Observability › · Analytics ▾ ·
- *   Deployments ▾ (Releases, Environments, Previews) ·
+ *   Deployments ▾ (Services, Releases, Environments, Previews) ·
  *   Data · Storage · Auth ·
  *   Security ▾ · Configure ▾ (Secrets, Domains, Usage, Activity)
  *   footer: Usage & billing · Settings
@@ -32,7 +31,6 @@ import {
   observabilityArea,
   overview,
   securityGroup,
-  services,
   settingsSections,
   storage,
 } from "./items";
@@ -43,7 +41,6 @@ export const hybridNav: NavConfig = {
     overview,
     inbox,
     agentsArea,
-    services,
     dashboards,
     observabilityArea,
     analyticsGroup,

@@ -42,7 +42,6 @@ describe("the hybrid nav's shape", () => {
       "overview",
       "slot-inbox",
       "agents",
-      "services",
       "dashboards",
       "observability",
       "analytics",
@@ -77,17 +76,27 @@ describe("the hybrid nav's shape", () => {
     expect(flattenIds([configure], ctx)).toEqual(["configure", "secrets", "domains", "project-usage", "activity"]);
   });
 
-  it("merges Releases and Environments into Deployments, with Previews a URL of its own", () => {
+  it("merges Services, Releases and Environments into Deployments, with Previews a URL of its own", () => {
     const ctx = ctxAt(inboxPath());
     const deployments = hybridNav.items.find((item) => item.id === "deployments")!;
     expect(deployments.kind).toBe("group");
-    expect(flattenIds([deployments], ctx)).toEqual(["deployments", "releases", "environments", "previews"]);
+    expect(flattenIds([deployments], ctx)).toEqual(["deployments", "services", "releases", "environments", "previews"]);
     const previews = childrenOf(deployments, ctx).find((item) => item.id === "previews")!;
     expect(hrefOf(previews, ctx)).toBe(`${consolePath("shopfront", { kind: "environments" })}?show=previews`);
     // The previews view lights Previews, not Environments.
     const onPreviews = ctxAt(`${consolePath("shopfront", { kind: "environments" })}?show=previews`);
     expect(isCurrent(previews, onPreviews)).toBe(true);
     expect(isCurrent(childrenOf(deployments, onPreviews).find((item) => item.id === "environments")!, onPreviews)).toBe(false);
+  });
+
+  it.each([
+    consolePath("shopfront", { kind: "services" }),
+    consolePath("shopfront", { kind: "service", name: "api" }),
+    `${consolePath("shopfront", { kind: "services" })}?view=charts`,
+  ])("opens Deployments and lights Services on %s", (href) => {
+    renderAt(href);
+    expect(screen.getByTestId("nav-deployments")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("nav-services")).toHaveAttribute("aria-current", "page");
   });
 
   it("lists no Live state row under Dashboards (Services is the one live view)", () => {

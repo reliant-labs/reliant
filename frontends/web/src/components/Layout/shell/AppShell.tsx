@@ -46,7 +46,7 @@ import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 import { ResizableSidebar } from "../ResizableSidebar";
 import type { NavigateOptions } from "../sidebar/NavRenderer";
-import { holdNavDrawerOpen, navDrawerHeld } from "../sidebar/navDrawerHold";
+import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../sidebar/navDrawerHold";
 import { ShellFrameContext, shellFrameScope, toggleShellNav, useNavDrawer, useShellFrame, type ShellFrame } from "./shellFrame";
 
 // The nav and its chat list load with the first shell page, not with the
@@ -76,8 +76,12 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
 
   // A drawer closes when a row in it opens a page (unless the row drilled into
   // Agents or Observability: navDrawerHold), and when the window widens.
+  // A drill that crossed from the phone's own screens (Mobile/MobileNavDrawer)
+  // onto a shell page opens this drawer on the area's rows instead.
   useEffect(() => {
-    if (!navDrawerHeld()) setDrawerOpen(false);
+    setDrawerOpen(navDrawerHeld() && narrow);
+    // `narrow` is read, not watched: widening closes the drawer below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname, setDrawerOpen]);
   useEffect(() => setDrawerOpen(false), [narrow, setDrawerOpen]);
   useEffect(() => {
@@ -157,7 +161,10 @@ function ShellNav() {
   const onNavigate = useCallback(
     (href: string, options?: NavigateOptions) => {
       if (options?.drill) holdNavDrawerOpen();
-      else useNavDrawer.getState().setOpen(false);
+      else {
+        releaseNavDrawerHold();
+        useNavDrawer.getState().setOpen(false);
+      }
       void navigate({ href });
     },
     [navigate],
