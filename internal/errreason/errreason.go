@@ -38,7 +38,7 @@ const (
 	// RunNoListeningAgent: input to a live run in which no agent is running
 	// right now (a workflow between its agent steps). FailedPrecondition;
 	// nothing was queued. SignalRun reports it as delivered=false with this
-	// value in NotDeliveredHeader instead.
+	// value in not_delivered_reason (and NotDeliveredHeader) instead.
 	RunNoListeningAgent = "run_no_listening_agent"
 	// RunRecipientAmbiguous: input to a run with several agents running in
 	// parallel that names none of them. FailedPrecondition; the message lists
@@ -75,4 +75,9 @@ const (
 // NotDeliveredHeader is the response header SignalRun sets, beside
 // delivered=false, to say why a live run did not take the message: one of the
 // reasons above (RunNoListeningAgent). Absent for a run that was not live.
+//
+// New readers use SignalRunResponse.not_delivered_reason, which carries the
+// same value; the header is deprecated for them. SignalRun keeps setting it
+// for clients that predate the field, and a reader falls back to it only
+// against a server that sends no field.
 const NotDeliveredHeader = "X-Reliant-Not-Delivered-Reason"

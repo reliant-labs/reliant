@@ -30493,6 +30493,11 @@
               "Name": "message_ids",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "not_delivered_reason",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ],
           "StartRunRequest": [
@@ -30986,6 +30991,10 @@
               "name": "message_ids",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "not_delivered_reason",
+              "kind": "string"
             }
           ],
           "reliant.v1.StartRunRequest": [
