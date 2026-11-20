@@ -35,8 +35,17 @@ import { OVERVIEW_RANGE } from "../Workloads/workloadModel";
 import { ServiceDetail } from "./ServiceDetail";
 import type { ServicesRow } from "./servicesModel";
 import { useServicesData, type ServicesSearch } from "./useServicesData";
+import { ProjectFilter, useOnlyFilter, useSeveralApps, type SeveralApp } from "../Console/severalProjects";
+import { consolePath, withSearch } from "../Console/paths";
+import { useAppLiveState } from "../LiveState/useAppLiveState";
 
 export function ServicesPage() {
+  const several = useSeveralApps();
+  if (several) return <ServicesAcrossProjects apps={several.apps} />;
+  return <ProjectServicesPage />;
+}
+
+function ProjectServicesPage() {
   const { forgeProject, href } = useForgeConsole();
   const search = useSearch({ strict: false }) as ServicesSearch;
   const range = search.range ?? OVERVIEW_RANGE;
@@ -93,6 +102,7 @@ export function ServicesTable({
   showEnv,
   hrefOf,
   releaseHref,
+  project,
 }: {
   rows: ServicesRow[];
   loading: boolean;
@@ -100,20 +110,33 @@ export function ServicesTable({
   showEnv: boolean;
   hrefOf: (row: ServicesRow) => string;
   releaseHref: (version: string) => string;
+  /** Several projects (U6c): the Project column's value; the table's head and body come from ServicesAcrossProjects. */
+  project?: string;
 }) {
+  if (project !== undefined) return <ServicesRows rows={rows} redLoading={redLoading} showEnv={showEnv} hrefOf={hrefOf} releaseHref={releaseHref} project={project} />;
   if (loading && rows.length === 0) {
     return <div className="h-48 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Loading services" />;
   }
   if (rows.length === 0) {
     return <p className="rounded-xl border border-dashed border-border px-4 py-6 text-ui text-ink-muted">Nothing has reported in this scope yet. Workloads appear once Reliant sees their pods.</p>;
   }
-  const dash = <span className="text-ink-muted">—</span>;
-  const figure = (value: ReactNode, pending: boolean) => (pending ? <span className="inline-block h-3 w-10 animate-pulse rounded bg-ink/5" /> : value);
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-surface" data-testid="services-table">
       <table className="w-full min-w-[60rem] border-collapse">
+        <ServicesHead />
+        <tbody>
+          <ServicesRows rows={rows} redLoading={redLoading} showEnv={showEnv} hrefOf={hrefOf} releaseHref={releaseHref} />
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function ServicesHead({ project = false }: { project?: boolean }) {
+  return (
         <thead>
           <tr className="border-b border-border">
+            {project && <th className={TH}>Project</th>}
             <th className={TH}>Name</th>
             <th className={TH}>Status</th>
             <th className={cn(TH, "text-right")}>Ready</th>
@@ -129,11 +152,33 @@ export function ServicesTable({
             <th className={TH}>Release</th>
           </tr>
         </thead>
-        <tbody>
+  );
+}
+
+function ServicesRows({
+  rows,
+  redLoading,
+  showEnv,
+  hrefOf,
+  releaseHref,
+  project,
+}: {
+  rows: ServicesRow[];
+  redLoading: boolean;
+  showEnv: boolean;
+  hrefOf: (row: ServicesRow) => string;
+  releaseHref: (version: string) => string;
+  project?: string;
+}) {
+  const dash = <span className="text-ink-muted">—</span>;
+  const figure = (value: ReactNode, pending: boolean) => (pending ? <span className="inline-block h-3 w-10 animate-pulse rounded bg-ink/5" /> : value);
+  return (
+    <>
           {rows.map((row) => {
             const health = row.type === "workload" ? row.health : undefined;
             return (
               <tr key={row.key} className="border-b border-border-subtle last:border-b-0 hover:bg-ink/5" data-testid={`services-row-${row.name}`} data-type={row.type}>
+                {project !== undefined && <td className={cn(TD, "font-medium text-ink")}>{project}</td>}
                 <td className={cn(TD, "max-w-0 min-w-56")}>
                   <div className="flex min-w-0 items-center gap-2">
                     <Link href={hrefOf(row)} className="no-color truncate font-medium text-ink hover:underline">
@@ -154,7 +199,8 @@ export function ServicesTable({
                   )}
                 </td>
                 <td className={TD}>
-                  <Status tone={row.tone} label={row.status} />
+                  {/* The live state's note for a status nobody reports yet (the managed database). */}
+                  {"statusNote" in row && typeof row.statusNote === "string" ? <span className="text-ink-muted">{row.statusNote}</span> : <Status tone={row.tone} label={row.status} />}
                 </td>
                 <td className={cn(TD, "text-right", row.type === "workload" && row.short && "text-warning-ink")}>{row.type === "workload" ? row.ready : dash}</td>
                 <td className={cn(TD, "text-right")} title={row.type === "workload" ? perContainer(row, "cpu") : undefined}>
@@ -181,9 +227,7 @@ export function ServicesTable({
               </tr>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+    </>
   );
 }
 
@@ -197,4 +241,62 @@ export function ServicePage() {
   const { name = "" } = useParams({ strict: false }) as { name?: string };
   const search = useSearch({ strict: false }) as ServicesSearch;
   return <ServiceDetail key={name} name={name} search={search} />;
+}
+
+// ── Several projects (U6c) ──────────────────────────────────────────────────
+
+/** Services across the shell's projects: one table, a Project column, `?only=`; each project's rows from its live state. */
+function ServicesAcrossProjects({ apps }: { apps: readonly SeveralApp[] }) {
+  const { only, shown, setOnly } = useOnlyFilter(apps);
+  return (
+    <Page testId="console-services">
+      <Header title="Services" subtitle={PAGE_SUBTITLES.services} meta={<span>{only ? "One project" : `${apps.length} projects`}, every environment</span>} />
+      <ProjectFilter apps={apps} only={only} onChange={setOnly} />
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface" data-testid="services-table" data-mode="several">
+        <table className="w-full min-w-[64rem] border-collapse">
+          <ServicesHead project />
+          <tbody>
+            {shown.map((candidate) => (
+              <ProjectServiceRows key={candidate.key} project={candidate} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Page>
+  );
+}
+
+function ProjectServiceRows({ project }: { project: SeveralApp }) {
+  const live = useAppLiveState(project.app, ENV_ALL, OVERVIEW_RANGE);
+  if (live.envsLoading || (live.listed.isLoading && !live.listed.data)) {
+    return (
+      <tr className="border-b border-border-subtle">
+        <td className={cn(TD, "font-medium text-ink")}>{project.name}</td>
+        <td colSpan={9} className={TD}>
+          <span className="inline-block h-3 w-48 animate-pulse rounded bg-ink/5" aria-label={`Loading ${project.name}`} />
+        </td>
+      </tr>
+    );
+  }
+  if (live.rows.length === 0) {
+    return (
+      <tr className="border-b border-border-subtle">
+        <td className={cn(TD, "font-medium text-ink")}>{project.name}</td>
+        <td colSpan={9} className={cn(TD, "text-ink-muted")}>
+          {live.envs.length === 0 ? "Not deployed yet." : "Nothing has reported in the window."}
+        </td>
+      </tr>
+    );
+  }
+  return (
+    <ServicesTable
+      rows={live.rows}
+      loading={false}
+      redLoading={live.red.isLoading}
+      showEnv
+      project={project.name}
+      hrefOf={(row) => withSearch(consolePath(project.app, { kind: "service", name: row.name }), { env: row.envName })}
+      releaseHref={(version) => consolePath(project.app, { kind: "release", version })}
+    />
+  );
 }

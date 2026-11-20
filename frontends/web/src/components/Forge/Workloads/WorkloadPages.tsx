@@ -24,7 +24,7 @@ import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { useShellFrame } from "@/components/Layout/shell/shellFrame";
 
-import { useForgeConsole } from "../Console/consoleContext";
+import { rosterReadFailed, useForgeConsole } from "../Console/consoleContext";
 import { deployStatusUnread } from "../Console/DeployStatusUnread";
 import { ENV_ALL } from "../Console/envScope";
 import { consolePath, withSearch } from "../Console/paths";
@@ -38,6 +38,11 @@ import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewRollba
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch, type WorkloadRollback } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
 import { useObsReadOnly } from "../Observability/obsReadOnly";
+import { ProjectsOverview } from "../Console/ProjectsOverview";
+import { rowForRef, useShellSeveral } from "../../Layout/sidebar/shellProject";
+import { ProjectChats } from "../../Projects/ProjectChats";
+import { NoAppLanding } from "../../Projects/ProjectHomePage";
+import { useSelectorCatalog } from "../../Projects/ProjectSelector";
 
 /** The roster's recorded, deployed environments as the Overview's strip needs them: prod first, previews last. */
 export function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
@@ -163,8 +168,27 @@ export function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading
   return { hosted, loading };
 }
 
+/**
+ * The project's landing page (U6c: Home and Overview merged into ONE
+ * "Overview"). Several projects in the shell: one row per project
+ * (ProjectsOverview). Nothing deployed: the project's chats and the way to
+ * deploy it (NoAppLanding). Otherwise the summary — health, what needs
+ * attention, the live state, recent releases — with the project's chats.
+ */
 export function OverviewPage() {
-  const { forgeProject, env, roster, href } = useForgeConsole();
+  const { mode: several } = useShellSeveral();
+  const { roster, projectId, forgeProject } = useForgeConsole();
+  const { catalog } = useSelectorCatalog(undefined);
+  if (several) return <ProjectsOverview />;
+  if (!roster.isLoading && !roster.resolvingName && roster.envs.length === 0 && !rosterReadFailed(roster)) {
+    const row = projectId ? rowForRef(catalog, { kind: "project", id: projectId }) : undefined;
+    return <NoAppLanding projectId={projectId} name={row?.name ?? forgeProject} app={forgeProject} />;
+  }
+  return <ProjectOverviewPage />;
+}
+
+function ProjectOverviewPage() {
+  const { forgeProject, env, roster, href, projectId } = useForgeConsole();
   // In the project shell the Overview is the summary; the full tables are Services' (U6b round 3).
   const { inShell } = useShellFrame();
   const navigate = useNavigate();
@@ -209,6 +233,7 @@ export function OverviewPage() {
         hostedLoading={hostedLoading}
         domains={domains.data}
         domainsHref={href({ kind: "domains" })}
+        chats={projectId ? <ProjectChats projectId={projectId} name={forgeProject} /> : undefined}
         summary={
           inShell
             ? { services: href({ kind: "services" }), service: (name, envName) => href({ kind: "service", name }, env === ENV_ALL && envName ? { env: envName } : {}) }

@@ -47,8 +47,9 @@ import { shortVersion } from "../Releases/releaseModel";
 import { formatAge, KIND_LABEL, OVERVIEW_RANGE } from "../Workloads/workloadModel";
 import { HealthStatus } from "../Workloads/workloadParts";
 import type { StripEnv } from "../Workloads/workloadModel";
+import { useWorkloadUsage } from "../LiveState/useAppLiveState";
 import { useServicesData, type ServicesSearch } from "./useServicesData";
-import { containerFigures, customMetrics, databasesOf, metricPanel, sitesOf, sumSeries, verdictStatus } from "./servicesModel";
+import { containerFigures, customMetrics, databasesOf, metricPanel, sitesOf, verdictStatus } from "./servicesModel";
 
 export function ServiceDetail({ name, search }: { name: string; search: ServicesSearch }) {
   const range = search.range ?? OVERVIEW_RANGE;
@@ -94,9 +95,11 @@ function WorkloadServiceDetail({
 }) {
   const { forgeProject, href } = useForgeConsole();
   const scope = useMemo<ObsScope | null>(() => (orgId ? { orgId, projectId: forgeProject, envIds: [env.id], filters: [] } : null), [orgId, forgeProject, env.id]);
+  // The live state's per-workload read (LiveState/useAppLiveState.ts): the same entry the Overview's strip and the Live state dashboard chart.
   const detail = useWorkload(scope, range, name);
+  const usage = useWorkloadUsage(scope, range, name, env.id);
   const summary = detail.data?.workloads.find((w) => w.envId === env.id) ?? listedSummary;
-  const pods = summary?.pods ?? [];
+  const pods = usage.pods.length ? usage.pods : (summary?.pods ?? []);
   const containers = containerFigures(summary?.containers ?? []);
   const obs = (view: "logs" | "traces", extra: Record<string, unknown> = {}) => href({ kind: "obs-view", view }, { env: env.name, service: name, range, ...extra });
 
@@ -144,7 +147,7 @@ function WorkloadServiceDetail({
       </nav>
       {summary?.healthReason && summary.health !== "healthy" && <p className="text-ui text-ink">{summary.healthReason}</p>}
 
-      <RedCharts scope={scope} range={range} name={name} cpu={detail.data ? sumSeries(detail.data.series.filter((s) => s.envId === env.id && s.metric === "cpu_usage")) : null} memory={detail.data ? sumSeries(detail.data.series.filter((s) => s.envId === env.id && s.metric === "memory_working_set")) : null} cpuNow={sum(containers.map((c) => c.cpu))} memNow={sum(containers.map((c) => c.memory))} loadingUsage={detail.isLoading} />
+      <RedCharts scope={scope} range={range} name={name} cpu={usage.cpu} memory={usage.memory} cpuNow={sum(containers.map((c) => c.cpu))} memNow={sum(containers.map((c) => c.memory))} loadingUsage={usage.loading} />
 
       <Section title="Instances" meta={pods.length ? `${pods.length} in the ${RANGE_LABELS[range].toLowerCase()}` : undefined} testId="service-instances">
         {detail.isLoading ? (
@@ -251,7 +254,7 @@ function Line({ timestamps, values, unit, label, tone }: { timestamps: number[];
   return <UPlotChart height={110} timestamps={timestamps} series={[{ label, values, tone }]} unit={unit} label={label} legend={false} />;
 }
 
-function RedCharts({
+export function RedCharts({
   scope,
   range,
   name,
@@ -260,7 +263,10 @@ function RedCharts({
   cpuNow,
   memNow,
   loadingUsage,
+  instances,
 }: {
+  /** The Live state dashboard's sixth card: ready of desired, and the instances seen in the window. */
+  instances?: { ready: string; pods: readonly WorkloadPod[] };
   scope: ObsScope | null;
   range: RangePreset;
   name: string;
@@ -293,6 +299,19 @@ function RedCharts({
   const window = RANGE_LABELS[range].toLowerCase();
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="service-charts">
+      {instances && (
+        <MetricCard title="Instances" figure={instances.ready} detail={`ready · ${instances.pods.length} seen in the ${window}`} loading={loadingUsage} empty={instances.pods.length === 0 ? "No instance reported in the window." : null} testId="service-chart-instances">
+          <ul className="h-[110px] space-y-1 overflow-y-auto px-2 text-meta">
+            {instances.pods.map((pod) => (
+              <li key={pod.name} className="flex items-center gap-2">
+                <Status tone={POD_STATE[pod.state].tone} label={POD_STATE[pod.state].label} hideLabel />
+                <span className="min-w-0 flex-1 truncate font-mono text-ink">{pod.name}</span>
+                {pod.restarts > 0 && <span className="shrink-0 tabular-nums text-warning-ink">{pod.restarts} restarts</span>}
+              </li>
+            ))}
+          </ul>
+        </MetricCard>
+      )}
       <MetricCard title="Requests" figure={totalRequests === null ? "—" : formatCount(totalRequests)} detail={window} loading={totals.isLoading} empty={noTraffic} testId="service-chart-requests">
         <Line timestamps={timestamps} values={requests} unit="count" label={`Requests to ${name}`} />
       </MetricCard>

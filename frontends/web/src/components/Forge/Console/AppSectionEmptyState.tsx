@@ -54,6 +54,12 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Usage", shows: PAGE_SUBTITLES.usage };
     case "events":
       return { title: "Events & metrics", shows: PAGE_SUBTITLES.events };
+    case "analytics":
+      return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
+    case "live-state":
+      return { title: "Live state", shows: "Every service's instances, CPU, memory, requests, latency and errors" };
+    case "speed-insights":
+      return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
     case "extension": {
       const label = consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment;
       return { title: label, shows: `${label} for your app` };

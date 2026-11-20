@@ -12,6 +12,7 @@ import { ChevronRight } from "lucide-react";
 
 import Status from "@/components/forge-ui/status";
 import { useApps } from "@/hooks/apps-queries";
+import { useProjectCost } from "@/hooks/organization-usage-queries";
 import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
 import type { HostedVerdict } from "@/services/forge/topology";
 import type { ProjectCatalogRow } from "@/services/projects/catalog";
@@ -35,17 +36,18 @@ export function ProjectsOverview() {
   if (!mode) return null;
   return (
     <div className="mx-auto max-w-[var(--page-max)]" data-testid="projects-overview">
-      <h1 className="text-section text-ink">Home</h1>
+      <h1 className="text-section text-ink">Overview</h1>
       <p className="mt-1 text-ui text-ink-muted">
-        {mode === "all" ? "Every project" : `${rows.length} projects`}, in prod over the last 24 hours.
+        {mode === "all" ? "Every project" : `${rows.length} projects`}, in prod over the last 24 hours; cost is this month to date.
       </p>
       <div className="mt-5 overflow-hidden rounded-xl border border-border">
-        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_2rem] items-center gap-4 border-b border-border px-4 py-2 text-meta text-ink-muted">
+        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)_2rem] items-center gap-4 border-b border-border px-4 py-2 text-meta text-ink-muted">
           <span>Project</span>
           <span>Health</span>
           <span className="text-right">Errors</span>
           <span className="text-right">p95</span>
           <span>Last release</span>
+          <span className="text-right">Cost</span>
           <span />
         </div>
         {rows.map((row) => (
@@ -88,6 +90,11 @@ function ProjectRow({ row }: { row: ProjectCatalogRow }) {
   const { prod, errors, p95 } = useAppHealth(app, !!deployed);
   const href = consolePath(app, { kind: "overview" });
   const deployedAt = prod?.deployedAt ? Date.parse(prod.deployedAt) : NaN;
+  // GetProjectCost (U6c): hosted compute, database storage and CDN, month to date.
+  const org = useObservabilityOrg();
+  const cost = useProjectCost(deployed ? org.orgId : null, deployed ? app : null);
+  const mtd = cost.data?.monthToDate?.usdNanos;
+  const costText = mtd === undefined ? "—" : `$${(Number(mtd) / 1e9).toFixed(2)}`;
 
   return (
     <a
@@ -100,7 +107,7 @@ function ProjectRow({ row }: { row: ProjectCatalogRow }) {
         void navigate({ href });
       }}
       data-testid={`projects-overview-row-${row.key}`}
-      className="no-color grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_2rem] items-center gap-4 border-b border-border-subtle px-4 py-3 text-ui text-ink transition-colors last:border-b-0 hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className="no-color grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,1fr)_2rem] items-center gap-4 border-b border-border-subtle px-4 py-3 text-ui text-ink transition-colors last:border-b-0 hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
       <span className="flex min-w-0 items-center gap-2">
         <ProjectMark name={row.name} />
@@ -128,6 +135,7 @@ function ProjectRow({ row }: { row: ProjectCatalogRow }) {
           <span className="text-ink-muted">None yet</span>
         )}
       </span>
+      <span className="text-right tabular-nums">{costText}</span>
       <ChevronRight className="size-4 justify-self-end text-ink-muted" aria-hidden="true" />
     </a>
   );

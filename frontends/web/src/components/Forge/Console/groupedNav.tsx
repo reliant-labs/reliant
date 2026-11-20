@@ -51,6 +51,9 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   services: "Everything your app runs, live: status, instances, CPU, memory and requests",
   usage: "What your app's hosting costs this month, per environment",
   events: "The product events and metrics your app sends",
+  analytics: "Who your users are, what they do, and where they come from",
+  "speed-insights": "How fast each page loads and responds for real visitors",
+  storage: "Your app's buckets and its managed Postgres databases",
 };
 
 /** The Product analytics hub: the dashboard its row opens, and every dashboard key that is one of its tabs. */

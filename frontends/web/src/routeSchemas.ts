@@ -655,11 +655,13 @@ export const forgeConsoleStorageSearchSchema = z.object({
   prefix: storageTextParam.refine(isSendableKey).optional().catch(undefined),
   object: storageTextParam.refine((key) => key.length > 0 && isSendableKey(key)).optional().catch(undefined),
   token: storageTextParam.refine((token) => token.length <= MAX_TOKEN_LENGTH).optional().catch(undefined),
+  // Several projects in the shell (U6c): the in-page project filter (Console/severalProjects.tsx).
+  only: z.string().optional().catch(undefined),
 });
 
 /** Every StorageSearch key has a schema entry and vice versa. */
 export type _StorageSchemaCoversSearch = AssertNoDrift<Exclude<keyof StorageSearch, keyof z.output<typeof forgeConsoleStorageSearchSchema>>>;
-export type _StorageSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleStorageSearchSchema>, "env">, keyof StorageSearch>>;
+export type _StorageSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleStorageSearchSchema>, "env" | "only">, keyof StorageSearch>>;
 /**
  * Data (components/Forge/Data): the scope, and the browser's view — which
  * database, which table, its filters, sort, visible columns, the first row
@@ -794,6 +796,8 @@ export const forgeConsoleServicesSearchSchema = z.object({
   env: envScopeParam,
   range: z.enum(RANGE_PRESETS).optional().catch(undefined),
   metric: textParam,
+  // Several projects in the shell (U6c): the in-page project filter (Console/severalProjects.tsx).
+  only: z.string().optional().catch(undefined),
 });
 
 /**
@@ -801,6 +805,15 @@ export const forgeConsoleServicesSearchSchema = z.object({
  * explorers' vocabulary, as on the Observability pages). The environment is
  * in the path; `env` is still carried so the way back keeps the scope.
  */
+/**
+ * Analytics (U6c): the scope, plus what the open tab carries — a built-in
+ * dashboard's window (`range`), or Events & metrics' own (none).
+ */
+export const forgeConsoleAnalyticsSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+});
+
 export const forgeConsoleWorkloadSearchSchema = z.object({
   env: envScopeParam,
   tab: z.enum(WORKLOAD_TABS).optional().catch(undefined),
@@ -822,6 +835,8 @@ export const forgeConsoleDashboardsSearchSchema = z.object({
   group: z.enum(DASHBOARD_GROUPS).optional().catch(undefined),
   source: z.enum(["release", "workspace"]).optional().catch(undefined),
   owner: z.string().optional().catch(undefined),
+  // Several projects in the shell (U6c): which apps' dashboards the org-wide list shows.
+  apps: z.array(z.string()).optional().catch(undefined),
 });
 
 /**

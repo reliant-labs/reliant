@@ -54,6 +54,7 @@ import { useConsoleNavExtras } from "./consoleNavExtras";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import {
+  ANALYTICS_TAB_LABELS,
   consolePath,
   OBS_NAV_LABELS,
   OBS_NAV_VIEWS,
@@ -263,6 +264,12 @@ export function consoleCrumbs(
       return [{ label: "Usage" }];
     case "events":
       return [{ label: "Product analytics" }, { label: "Events & metrics" }];
+    case "analytics":
+      return [{ label: "Analytics", href: href({ kind: "analytics" }) }, { label: ANALYTICS_TAB_LABELS[page.tab ?? "overview"] }];
+    case "speed-insights":
+      return [{ label: "Observability" }, { label: "Speed insights" }];
+    case "live-state":
+      return [{ label: "Dashboards", href: href({ kind: "obs-view", view: "dashboards" }) }, { label: "Live state" }];
     case "extension":
       return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
   }

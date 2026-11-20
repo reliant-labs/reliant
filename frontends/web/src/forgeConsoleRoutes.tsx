@@ -25,6 +25,9 @@
  *       /services, /services/$name          everything the app runs, live; one of them
  *       /usage                              what the app's hosting costs this month
  *       /events                             Product analytics › Events & metrics
+ *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
+ *       /speed-insights                     web vitals per page (U6c)
+ *       /observability/dashboards/live-state the built-in Live state dashboard (U6c)
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -46,9 +49,10 @@ import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tans
 
 import { memberOnly } from './lib/routeOrg'
 
-import { isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
+import { isAnalyticsTab, isObsNavView, LIVE_STATE_SEGMENT, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
+  forgeConsoleAnalyticsSearchSchema,
   forgeConsoleDashboardSearchSchema,
   forgeConsoleDashboardsSearchSchema,
   forgeConsoleDataSearchSchema,
@@ -102,6 +106,12 @@ export interface ForgeConsoleComponents {
   usage: RouteComponent
   /** Product analytics › Events & metrics. */
   events: RouteComponent
+  /** Analytics (U6c): the built-in Product analytics dashboards as tabs, plus Events & metrics. */
+  analytics: RouteComponent
+  /** Speed insights (U6c): web vitals per page. */
+  speedInsights: RouteComponent
+  /** The built-in Live state dashboard (U6c). */
+  liveState: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
@@ -338,6 +348,36 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleSearchSchema,
     component: components.events,
   })
+  const analyticsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'analytics',
+    validateSearch: forgeConsoleAnalyticsSearchSchema,
+    component: components.analytics,
+  })
+  // A tab that is not one (a hand-edited URL) lands on the first.
+  const analyticsTabRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'analytics/$tab',
+    validateSearch: forgeConsoleAnalyticsSearchSchema,
+    beforeLoad: memberOnly(({ params, location }) => {
+      if (isAnalyticsTab(params.tab)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    }),
+    component: components.analytics,
+  })
+  const speedInsightsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'speed-insights',
+    validateSearch: forgeConsoleServicesSearchSchema,
+    component: components.speedInsights,
+  })
+  // Static and one segment deeper than observability/$view: wins over it, and never meets dashboards/$kind/$key.
+  const liveStateRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: `observability/dashboards/${LIVE_STATE_SEGMENT}` as 'observability/dashboards/live-state',
+    validateSearch: forgeConsoleServicesSearchSchema,
+    component: components.liveState,
+  })
   // The retired "Project settings": it held only the organization's usage,
   // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
@@ -380,6 +420,10 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       serviceRoute,
       usageRoute,
       eventsRoute,
+      analyticsRoute,
+      analyticsTabRoute,
+      speedInsightsRoute,
+      liveStateRoute,
     ]),
   ])
 }

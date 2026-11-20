@@ -11,13 +11,19 @@
  *
  * The browser itself (StorageBrowser) is free of the console; this page only
  * resolves the scope to one recorded environment and binds the URL.
+ *
+ * U6c (owner: "not seeing storage buckets"): Storage is a top-level
+ * destination for everything the app keeps — its buckets AND its managed
+ * Postgres databases (each a link to its Services page and to Data). With
+ * every environment in scope it lists each environment's buckets instead of
+ * asking for one; with several projects in the shell, one list across them
+ * with a Project column and an in-page project filter (`?only=`).
  */
 
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { HardDrive, Layers } from "lucide-react";
+import { HardDrive } from "lucide-react";
 
-import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
@@ -29,18 +35,28 @@ import { CloudNotice } from "../SourceNotices";
 import { StorageBrowser } from "./StorageBrowser";
 import { StorageNote } from "./StorageStates";
 import { pickStorageSearch, type StorageSearch } from "./storageUrl-model";
+import { BucketsSection, BucketTable, EmptyRow, EnvBucketRows, ProjectDatabases, StorageAcrossProjects } from "./StorageOverview";
+import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { useSeveralApps } from "../Console/severalProjects";
 
-function Frame({ children }: { children: ReactNode }) {
+function Frame({ children, databases = true }: { children: ReactNode; databases?: boolean }) {
   return (
-    <div className="min-w-0 space-y-4" data-testid="console-storage">
-      <PageHeader density="compact" title="Storage" className="mb-0" />
+    <div className="min-w-0 space-y-6" data-testid="console-storage">
+      <PageHeader density="compact" title="Storage" subtitle={PAGE_SUBTITLES.storage} className="mb-0" />
+      {databases && <ProjectDatabases />}
       {children}
     </div>
   );
 }
 
 export function StoragePage() {
-  const { env, roster, setEnv, href } = useForgeConsole();
+  const several = useSeveralApps();
+  if (several) return <StorageAcrossProjects apps={several.apps} />;
+  return <ProjectStoragePage />;
+}
+
+function ProjectStoragePage() {
+  const { env, roster, href } = useForgeConsole();
   const raw = useSearch({ strict: false }) as Record<string, unknown>;
   const search = useMemo(() => pickStorageSearch(raw), [raw]);
   const navigate = useNavigate();
@@ -74,18 +90,18 @@ export function StoragePage() {
     return (
       <Frame>
         <CloudNotice availability={availability} detail={roster.live.data?.detail} />
-        <StorageNote
-          testId="storage-choose-env"
-          icon={<Layers className="h-4 w-4" />}
-          title="Choose an environment"
-          actions={recorded.map((candidate) => (
-            <Button key={candidate.name} variant="outline" size="sm" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0" onClick={() => setEnv(candidate.name)} data-testid={`storage-env-${candidate.name}`}>
-              {candidate.name}
-            </Button>
-          ))}
-        >
-          <p>Each environment has buckets of its own. Pick one here or in the top bar; every link you share keeps it.</p>
-        </StorageNote>
+        <BucketsSection>
+          {recorded.length === 0 ? (
+            <EmptyRow>No environment is deployed yet, so there are no buckets to list.</EmptyRow>
+          ) : (
+            <BucketTable showProject={false}>
+              {recorded.map((candidate) => (
+                <EnvBucketRows key={candidate.name} envId={candidate.live!.id} envName={candidate.name} href={(bucket) => href({ kind: "storage" }, { env: candidate.name, bucket })} />
+              ))}
+            </BucketTable>
+          )}
+          <p className="text-meta text-ink-muted">Each environment has buckets of its own: open one to browse its files, or pick an environment in the top bar.</p>
+        </BucketsSection>
       </Frame>
     );
   }
@@ -117,6 +133,7 @@ export function StoragePage() {
 
   return (
     <Frame>
+      <h2 className="-mb-2 text-section text-ink">Buckets</h2>
       <StorageBrowser key={scoped.live.id} env={{ id: scoped.live.id, name: scoped.name }} search={search} onNavigate={onNavigate} href={storageHref} />
     </Frame>
   );
