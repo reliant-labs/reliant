@@ -48,9 +48,6 @@ const spawnCall = (id: string, childWorkflowId: string) => ({
   status: "completed" as const, // the dispatch itself is "completed" under async spawn
 });
 
-// The running pill is styled `text-primary-ink`, the completed pill `text-success-ink/60`
-// (see ToolExecutionGroup.tsx summary render) — the color class is what
-// distinguishes which bucket a count landed in, since both render "1".
 /** The group row's count for a state ("1 running"), or undefined when it shows none. */
 function stateCount(container: HTMLElement, state: "running" | "done"): string | undefined {
   const match = (container.textContent ?? "").match(new RegExp(`(\\d+) ${state}`));

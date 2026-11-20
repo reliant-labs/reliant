@@ -27,7 +27,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import { QuietRow } from "./QuietRow";
-import { editDiffStat, toolRowIcon } from "./toolRowParts";
+import { editDiffStat, toolRowIcon, type DiffStat } from "./toolRowParts";
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
@@ -201,6 +201,16 @@ function spawnTitleFromInput(input: ToolCallInput): string | undefined {
   const obj = inputObject(input);
   if (!obj) return undefined;
   return nonGenericStringField(obj.title) || nonGenericStringField(obj.preset);
+}
+
+/** An edit's (or a run of edits') line counts: `+4 −1`. */
+export function DiffStatText({ stat }: { stat: DiffStat }) {
+  return (
+    <span className="shrink-0 text-meta tabular-nums" aria-label={`${stat.added} lines added, ${stat.removed} removed`}>
+      <span className="text-success-ink">+{stat.added}</span>{" "}
+      <span className="text-destructive-ink">−{stat.removed}</span>
+    </span>
+  );
 }
 
 /** Maps the durable proto status onto the component's display status vocabulary. */
@@ -918,12 +928,7 @@ function ToolExecutionComponent({
 
   const rowTrailing = (
     <>
-      {diffStat && (
-        <span className="text-meta tabular-nums" aria-label={`${diffStat.added} lines added, ${diffStat.removed} removed`}>
-          <span className="text-success-ink">+{diffStat.added}</span>{" "}
-          <span className="text-destructive-ink">−{diffStat.removed}</span>
-        </span>
-      )}
+      {diffStat && <DiffStatText stat={diffStat} />}
       {statusWord}
       {durationLabel && (
         <span className={cn("text-meta tabular-nums text-muted-foreground", revealOnHover)} title={`Took ${durationLabel}`}>

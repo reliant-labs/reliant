@@ -102,11 +102,11 @@ describe("a fold opened from a stub read", () => {
   });
 
   it("says the same in its header as from the full transcript, and fetches nothing", async () => {
-    const full = render(<TurnWorkFold inlineStepsMax={0} work={work(false)} chatId="chat-1" />);
+    const full = render(<TurnWorkFold work={work(false)} chatId="chat-1" />);
     const fullLabel = screen.getAllByRole("button")[0].getAttribute("aria-label");
     full.unmount();
 
-    render(<TurnWorkFold inlineStepsMax={0} work={work(true)} chatId="chat-1" />);
+    render(<TurnWorkFold work={work(true)} chatId="chat-1" />);
     expect(screen.getAllByRole("button")[0].getAttribute("aria-label")).toBe(fullLabel);
     expect(fullLabel).toContain("1 file edited");
     await new Promise((r) => setTimeout(r, 80));
@@ -114,7 +114,7 @@ describe("a fold opened from a stub read", () => {
   });
 
   it("reads every elided body of its rows in one batch when opened", async () => {
-    render(<TurnWorkFold inlineStepsMax={0} work={work(true)} chatId="chat-1" />);
+    render(<TurnWorkFold work={work(true)} chatId="chat-1" />);
     fireEvent.click(screen.getAllByRole("button")[0]);
 
     await waitFor(() => expect(getContentBlockBodies).toHaveBeenCalledTimes(1));

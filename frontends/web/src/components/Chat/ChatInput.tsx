@@ -1942,7 +1942,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       >
         {/* The conversation column: the composer is as wide as the
             transcript it writes into, with the same gutter. */}
-        <div className="px-4 sm:px-6">
+        <div className="px-[var(--chat-gutter)]">
           <div className="mx-auto max-w-[var(--chat-column)]">
             {/* px, not rem, for the card's inset and the band around it: the
                 one-line card is 44px controls + 1px border + 3px padding = 52
