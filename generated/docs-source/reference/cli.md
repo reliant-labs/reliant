@@ -23169,11 +23169,19 @@ commits only its reflog reached) into a local ref of the repository,
 refs/reliant/reclaimed/<key>/<time>, and checks that ref against the files
 immediately before deleting them.
 
-A clean worktree whose HEAD is on a remote is reclaimed after a day idle.
-One with work only it holds is never reclaimed: after about five days idle
-it is proposed in the report, for a person to free by hand.
+By default it only reports (RELIANT_WORKTREE_RECLAIM=dry-run): it classifies
+every worktree and records what it would reclaim, but captures and deletes
+nothing. Switched on, it reclaims a clean worktree whose HEAD is on a remote
+after a day idle (RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE). One with work only it
+holds is never reclaimed: after about five days idle it is proposed in the
+report, for a person to free by hand.
 
-RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only) or on.
+RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only, the
+default) or on. Every mode rides the storage reaper's schedule, which runs on
+managed machines, and on your own computer only with
+RELIANT_STORAGE_REAPER=on. In off and dry-run that schedule also runs the
+older worktree reap, which removes unlocked, clean, pushed worktrees idle for
+a day without capturing them first.
 
 ```
 reliant worktree
