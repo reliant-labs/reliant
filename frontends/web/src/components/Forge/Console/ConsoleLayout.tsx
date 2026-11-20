@@ -191,7 +191,8 @@ export function ConsoleLayout() {
           <div className="empty:hidden [&:not(:empty)]:mb-4">
             <ObsQuotaBanner />
           </div>
-          {undeployed ? <AppSectionEmptyState page={page} projectId={deployProjectId} /> : <Outlet />}
+          {/* The Overview is the landing: with nothing deployed it shows the chats and the way to deploy (WorkloadPages OverviewPage). */}
+          {undeployed && page.kind !== "overview" ? <AppSectionEmptyState page={page} projectId={deployProjectId} /> : <Outlet />}
         </ForgeConsoleContext.Provider>
       ) : (
         <div aria-busy="true" aria-label="Loading" data-testid="forge-console-loading" className="space-y-4">

@@ -46,7 +46,8 @@ export const EVENTS_PANEL: Panel = {
 const TH = "h-9 px-3 text-left text-meta font-medium text-ink-muted whitespace-nowrap";
 const TD = "h-11 px-3 text-ui tabular-nums whitespace-nowrap";
 
-export function EventsMetricsPage() {
+/** `embedded`: a tab of the Analytics page (U6c), which carries the page title. */
+export function EventsMetricsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { forgeProject, env, roster } = useForgeConsole();
   const org = useObservabilityOrg();
   const envId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
@@ -75,7 +76,7 @@ export function EventsMetricsPage() {
 
   return (
     <Page testId="console-events">
-      <Header title="Events & metrics" subtitle={PAGE_SUBTITLES.events} />
+      {!embedded && <Header title="Events & metrics" subtitle={PAGE_SUBTITLES.events} />}
 
       <section className="space-y-3" data-testid="events-list">
         <h2 className="text-section text-ink">

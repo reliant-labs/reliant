@@ -52,7 +52,10 @@ import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/Dashb
 import { ActivityPage } from "../Console/ActivityPage";
 import { ServicePage, ServicesPage } from "../Services/ServicesPages";
 import { ProjectUsagePage } from "../Usage/ProjectUsagePage";
+import { AnalyticsPage } from "../Analytics/AnalyticsPage";
 import { EventsMetricsPage } from "../Analytics/EventsMetricsPage";
+import { SpeedInsightsPage } from "../Analytics/SpeedInsightsPage";
+import { LiveStateDashboardPage } from "../LiveState/LiveStateDashboard";
 import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
@@ -454,6 +457,9 @@ function buildRouter(path: string) {
     service: ServicePage,
     usage: ProjectUsagePage,
     events: EventsMetricsPage,
+    analytics: AnalyticsPage,
+    speedInsights: SpeedInsightsPage,
+    liveState: LiveStateDashboardPage,
     orgLayout: OrgConsoleLayout,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
