@@ -325,6 +325,7 @@
                   "guides/workflows/slack-bot-agent",
                   "guides/workflows/start-agent-from-webhook",
                   "guides/workflows/call-api-without-exposing-key",
+                  "guides/workflows/run-workflow-from-github-actions",
                   "guides/workflows/chain-workflows-on-finish"
                 ]
               }
@@ -447,7 +448,8 @@
                 "pages": [
                   "guides/hosting/promote-release-staging-to-production",
                   "guides/hosting/gate-production-deploy-release-health",
-                  "guides/hosting/recover-from-bad-deploy"
+                  "guides/hosting/recover-from-bad-deploy",
+                  "guides/hosting/deploy-from-github-actions"
                 ]
               },
               {
