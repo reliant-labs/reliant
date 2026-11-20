@@ -217,6 +217,7 @@ function renderAt(initialEntry: string, { inShell = false }: { inShell?: boolean
     releases: probe("releases"),
     release: probe("release"),
     observabilityView: probe("observability-view"),
+    obsOverview: probe("obs-overview"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
     storage: probe("storage"),
@@ -393,9 +394,10 @@ describe("redirects from the retired URLs", () => {
     await landsOn(router, "/forge/p/alpha/observability/dashboards", { env: "e2e" });
   });
 
-  it("lands the retired Observability home on the Overview, which carries its strip", async () => {
+  it("opens Observability's own Overview at /observability (U6e)", async () => {
     const router = renderAt("/forge/p/alpha/observability?env=e2e");
-    await landsOn(router, "/forge/p/alpha", { env: "e2e" });
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "obs-overview");
+    await landsOn(router, "/forge/p/alpha/observability", { env: "e2e" });
   });
 
   it("lands the retired Monitoring settings on Alerts, where routing and silences live", async () => {

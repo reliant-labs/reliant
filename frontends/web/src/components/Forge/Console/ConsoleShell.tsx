@@ -233,6 +233,8 @@ export function consoleCrumbs(
       return [{ label: "Releases" }];
     case "release":
       return [{ label: "Releases", href: href({ kind: "releases" }) }, { label: shortVersion(page.version) }];
+    case "obs-overview":
+      return [{ label: "Observability" }, { label: "Overview" }];
     case "obs-view":
       return [{ label: "Observability", href: href({ kind: "obs-view", view: OBS_NAV_VIEWS[0] }) }, { label: OBS_NAV_LABELS[page.view] }];
     case "dashboard":

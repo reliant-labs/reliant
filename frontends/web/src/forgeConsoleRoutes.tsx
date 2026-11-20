@@ -91,6 +91,8 @@ export interface ForgeConsoleComponents {
   releases: RouteComponent
   release: RouteComponent
   observabilityView: RouteComponent
+  /** Observability's Overview (U6e): /observability. */
+  obsOverview: RouteComponent
   /** Observability › Dashboards, and one dashboard. */
   dashboards: RouteComponent
   dashboard: RouteComponent
@@ -240,12 +242,13 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   })
   // The retired Observability home: its health strip, services and recent
   // releases were the Overview's, so the Overview is where it lands.
+  // Observability's Overview (U6e): where drilling into Observability lands.
+  // It was a redirect to the project Overview; the view URLs below are unchanged.
   const observabilityRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'observability',
-    beforeLoad: memberOnly(({ location }) => {
-      throw redirect({ href: `${location.pathname.replace(/\/observability\/?$/, '')}${location.searchStr}`, replace: true })
-    }),
+    validateSearch: forgeConsoleOverviewSearchSchema,
+    component: components.obsOverview,
   })
   // A view that is not a nav entry (a hand-edited URL) lands on the first
   // view rather than an empty page.
