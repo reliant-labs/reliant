@@ -12,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -74,11 +73,11 @@ func syncs(kind core.TriggerKind) bool {
 // is drift that SyncAll repairs.
 func (s *Service) CreateTrigger(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateTriggerRequest],
-) (*connect.Response[reliantv1.CreateTriggerResponse], error) {
+	req *reliantv1.CreateTriggerRequest,
+) (*reliantv1.CreateTriggerResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	def := req.Msg.Trigger
+	def := req.Trigger
 	if def == nil {
 		return nil, svcerr.InvalidArgument("trigger is required")
 	}
@@ -95,7 +94,7 @@ func (s *Service) CreateTrigger(
 	if err != nil {
 		return nil, triggerDBError("get project", err)
 	}
-	if trigger.OrgID, err = s.triggerOrg(ctx, userID, req.Msg.GetOrgId(), project); err != nil {
+	if trigger.OrgID, err = s.triggerOrg(ctx, userID, req.GetOrgId(), project); err != nil {
 		return nil, err
 	}
 	if trigger.UnattendedFunding, err = s.unattendedFundingFor(ctx, userID, trigger.OrgID, def.UnattendedFunding, nil); err != nil {
@@ -164,11 +163,11 @@ func (s *Service) CreateTrigger(
 		s.ensureGrants(ctx, trigger)
 	}
 
-	return connect.NewResponse(&reliantv1.CreateTriggerResponse{
+	return &reliantv1.CreateTriggerResponse{
 		Trigger:        s.render(ctx, trigger),
 		Webhook:        cred,
 		FundingWarning: s.fundingWarning(ctx, trigger),
-	}), nil
+	}, nil
 }
 
 // sync converges the trigger's schedule when its kind has one. A schedule
@@ -188,9 +187,9 @@ func (s *Service) sync(ctx context.Context, kind core.TriggerKind, id string) er
 // GetTrigger returns one trigger with its read-only projections.
 func (s *Service) GetTrigger(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetTriggerRequest],
-) (*connect.Response[reliantv1.GetTriggerResponse], error) {
-	trigger, err := s.ownedTrigger(ctx, req.Msg.Id)
+	req *reliantv1.GetTriggerRequest,
+) (*reliantv1.GetTriggerResponse, error) {
+	trigger, err := s.ownedTrigger(ctx, req.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -202,23 +201,23 @@ func (s *Service) GetTrigger(
 	for _, c := range changes {
 		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339), Approval: c.Approval, CapabilitiesAdded: c.CapabilitiesAdded, CapabilitiesRemoved: c.CapabilitiesRemoved})
 	}
-	return connect.NewResponse(&reliantv1.GetTriggerResponse{Trigger: out}), nil
+	return &reliantv1.GetTriggerResponse{Trigger: out}, nil
 }
 
 // ListTriggers returns the caller's triggers.
 func (s *Service) ListTriggers(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListTriggersRequest],
-) (*connect.Response[reliantv1.ListTriggersResponse], error) {
+	req *reliantv1.ListTriggersRequest,
+) (*reliantv1.ListTriggersResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// The filter carries the caller's id, so this can never return another
 	// user's triggers regardless of what project id was asked for.
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
-	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId, Org: scope}
+	filters := core.TriggerFilters{UserID: userID, ProjectID: req.ProjectId, Org: scope}
 	stored, err := s.deps.Repo.ListTriggers(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
@@ -255,21 +254,21 @@ func (s *Service) ListTriggers(
 	for _, t := range stored {
 		out = append(out, s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], workflows, resolver))
 	}
-	return connect.NewResponse(&reliantv1.ListTriggersResponse{Triggers: out}), nil
+	return &reliantv1.ListTriggersResponse{Triggers: out}, nil
 }
 
 // UpdateTrigger replaces the definition and reconverges the schedule. The id,
 // owner and kind are not updatable.
 func (s *Service) UpdateTrigger(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateTriggerRequest],
-) (*connect.Response[reliantv1.UpdateTriggerResponse], error) {
-	existing, err := s.ownedTrigger(ctx, req.Msg.Id)
+	req *reliantv1.UpdateTriggerRequest,
+) (*reliantv1.UpdateTriggerResponse, error) {
+	existing, err := s.ownedTrigger(ctx, req.Id)
 	if err != nil {
 		return nil, err
 	}
 
-	def := req.Msg.Trigger
+	def := req.Trigger
 	if def == nil {
 		return nil, svcerr.InvalidArgument("trigger is required")
 	}
@@ -361,18 +360,18 @@ func (s *Service) UpdateTrigger(
 	if existing.DaemonID != updated.DaemonID || !updated.Enabled {
 		s.grants.releaseIfUnused(ctx, existing.UserID, existing.DaemonID)
 	}
-	return connect.NewResponse(&reliantv1.UpdateTriggerResponse{
+	return &reliantv1.UpdateTriggerResponse{
 		Trigger:        s.render(ctx, updated),
 		FundingWarning: s.fundingWarning(ctx, updated),
-	}), nil
+	}, nil
 }
 
 // DeleteTrigger removes the trigger and its schedule.
 func (s *Service) DeleteTrigger(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteTriggerRequest],
-) (*connect.Response[reliantv1.DeleteTriggerResponse], error) {
-	trigger, err := s.ownedTrigger(ctx, req.Msg.Id)
+	req *reliantv1.DeleteTriggerRequest,
+) (*reliantv1.DeleteTriggerResponse, error) {
+	trigger, err := s.ownedTrigger(ctx, req.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -392,22 +391,22 @@ func (s *Service) DeleteTrigger(
 		s.retireAlerting(ctx, trigger.ID)
 	}
 	s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
-	return connect.NewResponse(&reliantv1.DeleteTriggerResponse{}), nil
+	return &reliantv1.DeleteTriggerResponse{}, nil
 }
 
 // SetTriggerEnabled pauses or resumes a trigger.
 func (s *Service) SetTriggerEnabled(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SetTriggerEnabledRequest],
-) (*connect.Response[reliantv1.SetTriggerEnabledResponse], error) {
-	trigger, err := s.ownedTrigger(ctx, req.Msg.Id)
+	req *reliantv1.SetTriggerEnabledRequest,
+) (*reliantv1.SetTriggerEnabledResponse, error) {
+	trigger, err := s.ownedTrigger(ctx, req.Id)
 	if err != nil {
 		return nil, err
 	}
 	if trigger.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
 		return nil, svcerr.Unavailable("the schedule backend is unavailable")
 	}
-	if req.Msg.Enabled {
+	if req.Enabled {
 		if err := s.requireProjectWritable(ctx, trigger); err != nil {
 			return nil, err
 		}
@@ -424,10 +423,10 @@ func (s *Service) SetTriggerEnabled(
 		}
 	}
 
-	if err := s.deps.Repo.SetTriggerEnabled(ctx, trigger.ID, req.Msg.Enabled); err != nil {
+	if err := s.deps.Repo.SetTriggerEnabled(ctx, trigger.ID, req.Enabled); err != nil {
 		return nil, triggerDBError("set trigger enabled", err)
 	}
-	trigger.Enabled = req.Msg.Enabled
+	trigger.Enabled = req.Enabled
 	// A person pausing or resuming it is the reason now (the write cleared
 	// paused_reason too).
 	trigger.PausedReason = ""
@@ -457,19 +456,19 @@ func (s *Service) SetTriggerEnabled(
 	} else {
 		s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
 	}
-	return connect.NewResponse(&reliantv1.SetTriggerEnabledResponse{
+	return &reliantv1.SetTriggerEnabledResponse{
 		Trigger:        s.render(ctx, trigger),
 		FundingWarning: s.fundingWarning(ctx, trigger),
-	}), nil
+	}, nil
 }
 
 // FireTrigger runs a trigger now. The firing is asynchronous: this returns the
 // fire workflow id, and the outcome shows up in ListTriggerEvents.
 func (s *Service) FireTrigger(
 	ctx context.Context,
-	req *connect.Request[reliantv1.FireTriggerRequest],
-) (*connect.Response[reliantv1.FireTriggerResponse], error) {
-	trigger, err := s.ownedTrigger(ctx, req.Msg.Id)
+	req *reliantv1.FireTriggerRequest,
+) (*reliantv1.FireTriggerResponse, error) {
+	trigger, err := s.ownedTrigger(ctx, req.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +482,7 @@ func (s *Service) FireTrigger(
 		if err != nil {
 			return nil, err
 		}
-		return connect.NewResponse(&reliantv1.FireTriggerResponse{FireWorkflowId: fireID}), nil
+		return &reliantv1.FireTriggerResponse{FireWorkflowId: fireID}, nil
 	}
 	if s.deps.Fires == nil {
 		return nil, svcerr.Unavailable("the schedule backend is unavailable")
@@ -493,7 +492,7 @@ func (s *Service) FireTrigger(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Unavailable("start fire failed"))
 	}
-	return connect.NewResponse(&reliantv1.FireTriggerResponse{FireWorkflowId: fireID}), nil
+	return &reliantv1.FireTriggerResponse{FireWorkflowId: fireID}, nil
 }
 
 // GetLaunchEvent returns the event that launched a chat. Ownership is the
@@ -506,13 +505,13 @@ func (s *Service) FireTrigger(
 // Spec), so owner-only access is the whole boundary.
 func (s *Service) GetLaunchEvent(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetLaunchEventRequest],
-) (*connect.Response[reliantv1.GetLaunchEventResponse], error) {
+	req *reliantv1.GetLaunchEventRequest,
+) (*reliantv1.GetLaunchEventResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, triggerDBError("get chat", err)
 	}
@@ -522,33 +521,33 @@ func (s *Service) GetLaunchEvent(
 	ev, err := s.deps.Repo.GetTriggerEventByChatID(ctx, chat.ID)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerEventNotFound) {
-			return connect.NewResponse(&reliantv1.GetLaunchEventResponse{}), nil
+			return &reliantv1.GetLaunchEventResponse{}, nil
 		}
 		return nil, triggerDBError("get launch event", err)
 	}
 	if !authz.CanReadTriggerEvent(ctx, userID, ev) {
-		return connect.NewResponse(&reliantv1.GetLaunchEventResponse{}), nil
+		return &reliantv1.GetLaunchEventResponse{}, nil
 	}
 	out, err := triggers.EventToProto(ev)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("render launch event"))
 	}
-	return connect.NewResponse(&reliantv1.GetLaunchEventResponse{Event: out}), nil
+	return &reliantv1.GetLaunchEventResponse{Event: out}, nil
 }
 
 // ListTriggerEvents returns a trigger's firings, newest first.
 func (s *Service) ListTriggerEvents(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListTriggerEventsRequest],
-) (*connect.Response[reliantv1.ListTriggerEventsResponse], error) {
+	req *reliantv1.ListTriggerEventsRequest,
+) (*reliantv1.ListTriggerEventsResponse, error) {
 	// Resolve ownership through the TRIGGER, not the events: the event rows
 	// carry a user id, but checking the trigger is what makes "a trigger id
 	// you do not own is NotFound" true.
-	if _, err := s.ownedTrigger(ctx, req.Msg.TriggerId); err != nil {
+	if _, err := s.ownedTrigger(ctx, req.TriggerId); err != nil {
 		return nil, err
 	}
 
-	limit := int(req.Msg.Limit)
+	limit := int(req.Limit)
 	switch {
 	case limit <= 0:
 		limit = defaultTriggerEventLimit
@@ -558,18 +557,18 @@ func (s *Service) ListTriggerEvents(
 
 	filters := core.TriggerEventFilters{
 		UserID:    auth.MustGetUserID(ctx),
-		TriggerID: req.Msg.TriggerId,
+		TriggerID: req.TriggerId,
 		Limit:     limit,
 	}
-	for _, o := range req.Msg.Outcomes {
+	for _, o := range req.Outcomes {
 		outcome, ok := triggerOutcomeFromProto(o)
 		if !ok {
 			return nil, svcerr.InvalidArgument("outcomes: unspecified outcome")
 		}
 		filters.Outcomes = append(filters.Outcomes, outcome)
 	}
-	if req.Msg.PageToken != nil && *req.Msg.PageToken != "" {
-		cursor, err := decodeTriggerEventCursor(*req.Msg.PageToken)
+	if req.PageToken != nil && *req.PageToken != "" {
+		cursor, err := decodeTriggerEventCursor(*req.PageToken)
 		if err != nil {
 			return nil, svcerr.InvalidArgument("invalid page_token")
 		}
@@ -594,7 +593,7 @@ func (s *Service) ListTriggerEvents(
 		last := stored[len(stored)-1].Event
 		resp.NextPageToken = encodeTriggerEventCursor(core.TriggerEventCursor{OccurredAt: last.OccurredAt, ID: last.ID})
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // The page token is the last firing's (occurred_at, id), base64url-encoded and

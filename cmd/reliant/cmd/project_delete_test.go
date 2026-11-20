@@ -5,13 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,43 +34,43 @@ type fakeDeleteClient struct {
 	scheduled []*reliantv1.Project
 }
 
-func (f *fakeDeleteClient) ListDeletedProjects(_ context.Context, req *connect.Request[reliantv1.ListDeletedProjectsRequest]) (*connect.Response[reliantv1.ListDeletedProjectsResponse], error) {
+func (f *fakeDeleteClient) ListDeletedProjects(_ context.Context, req *reliantv1.ListDeletedProjectsRequest) (*reliantv1.ListDeletedProjectsResponse, error) {
 	if f.deleteAfter == "" {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+		return nil, connect.NewError(connect.CodeUnimplemented, "unimplemented")
 	}
 	var out []*reliantv1.Project
 	for _, p := range f.scheduled {
-		if p.PurgeStartedAt == nil || req.Msg.GetIncludePurging() {
+		if p.PurgeStartedAt == nil || req.GetIncludePurging() {
 			out = append(out, p)
 		}
 	}
-	return connect.NewResponse(&reliantv1.ListDeletedProjectsResponse{Projects: out}), nil
+	return &reliantv1.ListDeletedProjectsResponse{Projects: out}, nil
 }
 
-func (f *fakeDeleteClient) ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error) {
-	return connect.NewResponse(&reliantv1.ListProjectsResponse{Projects: f.projects}), nil
+func (f *fakeDeleteClient) ListProjects(context.Context, *reliantv1.ListProjectsRequest) (*reliantv1.ListProjectsResponse, error) {
+	return &reliantv1.ListProjectsResponse{Projects: f.projects}, nil
 }
 
-func (f *fakeDeleteClient) DeleteProject(_ context.Context, req *connect.Request[reliantv1.DeleteProjectRequest]) (*connect.Response[reliantv1.DeleteProjectResponse], error) {
+func (f *fakeDeleteClient) DeleteProject(_ context.Context, req *reliantv1.DeleteProjectRequest) (*reliantv1.DeleteProjectResponse, error) {
 	if f.deleteErr != nil {
 		return nil, f.deleteErr
 	}
-	f.deleted = append(f.deleted, req.Msg.GetProjectId())
-	f.fromMachine = append(f.fromMachine, req.Msg.GetRemoveFromMachines())
+	f.deleted = append(f.deleted, req.GetProjectId())
+	f.fromMachine = append(f.fromMachine, req.GetRemoveFromMachines())
 	resp := &reliantv1.DeleteProjectResponse{Success: true}
 	if f.deleteAfter != "" {
 		resp.DeleteAfter = &f.deleteAfter
 		resp.MachineRemovals = f.removals
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
-func (f *fakeDeleteClient) PurgeProjectNow(_ context.Context, req *connect.Request[reliantv1.PurgeProjectNowRequest]) (*connect.Response[reliantv1.PurgeProjectNowResponse], error) {
+func (f *fakeDeleteClient) PurgeProjectNow(_ context.Context, req *reliantv1.PurgeProjectNowRequest) (*reliantv1.PurgeProjectNowResponse, error) {
 	if f.deleteAfter == "" {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("unimplemented"))
+		return nil, connect.NewError(connect.CodeUnimplemented, "unimplemented")
 	}
-	f.purged = append(f.purged, req.Msg.GetProjectId()+" as "+req.Msg.GetConfirmName())
-	return connect.NewResponse(&reliantv1.PurgeProjectNowResponse{MachineRemovals: f.removals}), nil
+	f.purged = append(f.purged, req.GetProjectId()+" as "+req.GetConfirmName())
+	return &reliantv1.PurgeProjectNowResponse{MachineRemovals: f.removals}, nil
 }
 
 func TestProjectDeleteWithARestoreWindow(t *testing.T) {
@@ -168,13 +167,13 @@ type fakeRestoreClient struct {
 	restored []string
 }
 
-func (f *fakeRestoreClient) ListDeletedProjects(context.Context, *connect.Request[reliantv1.ListDeletedProjectsRequest]) (*connect.Response[reliantv1.ListDeletedProjectsResponse], error) {
-	return connect.NewResponse(&reliantv1.ListDeletedProjectsResponse{Projects: f.deleted}), nil
+func (f *fakeRestoreClient) ListDeletedProjects(context.Context, *reliantv1.ListDeletedProjectsRequest) (*reliantv1.ListDeletedProjectsResponse, error) {
+	return &reliantv1.ListDeletedProjectsResponse{Projects: f.deleted}, nil
 }
 
-func (f *fakeRestoreClient) RestoreProject(_ context.Context, req *connect.Request[reliantv1.RestoreProjectRequest]) (*connect.Response[reliantv1.RestoreProjectResponse], error) {
-	f.restored = append(f.restored, req.Msg.GetProjectId())
-	return connect.NewResponse(&reliantv1.RestoreProjectResponse{TriggersResumed: 2}), nil
+func (f *fakeRestoreClient) RestoreProject(_ context.Context, req *reliantv1.RestoreProjectRequest) (*reliantv1.RestoreProjectResponse, error) {
+	f.restored = append(f.restored, req.GetProjectId())
+	return &reliantv1.RestoreProjectResponse{TriggersResumed: 2}, nil
 }
 
 func TestProjectRestore(t *testing.T) {
@@ -290,7 +289,7 @@ func TestProjectDelete(t *testing.T) {
 
 	t.Run("a delete that stops part way says to run it again", func(t *testing.T) {
 		f := deleteFixture()
-		f.deleteErr = connect.NewError(connect.CodeDeadlineExceeded, errors.New("deadline exceeded"))
+		f.deleteErr = connect.NewError(connect.CodeDeadlineExceeded, "deadline exceeded")
 		_, err := runDelete(f, "", true, false, "p1")
 		require.ErrorContains(t, err, "run the command again to resume")
 	})

@@ -4,7 +4,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -76,13 +75,13 @@ func TestAgentActivationValidationAuditAndMachineBinding(t *testing.T) {
 	env.setApprovalMode(t, nil, automationpolicy.ApprovalAlways)
 	resume, err := env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolEnableTrigger, p)
 	require.NoError(t, err)
-	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&pb.SetTriggerEnabledRequest{Id: created.ID, Enabled: false}))
+	_, err = env.svc.SetTriggerEnabled(env.ctx, &pb.SetTriggerEnabledRequest{Id: created.ID, Enabled: false})
 	require.NoError(t, err)
 	_, err = env.svc.ManageActivation(ctx, env.userID, tools.ToolEnableTrigger, p, resume.Hash)
 	require.ErrorContains(t, err, "changed after approval")
-	detail, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&pb.GetTriggerRequest{Id: created.ID}))
+	detail, err := env.svc.GetTrigger(env.ctx, &pb.GetTriggerRequest{Id: created.ID})
 	require.NoError(t, err)
-	require.Len(t, detail.Msg.Trigger.Changes, 4)
+	require.Len(t, detail.Trigger.Changes, 4)
 }
 
 func TestAgentActivationAppValidationParity(t *testing.T) {
@@ -99,7 +98,7 @@ func TestAgentActivationAppValidationParity(t *testing.T) {
 			require.NoError(t, e)
 			def.Params[k] = value
 		}
-		_, appErr := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&pb.CreateTriggerRequest{Trigger: def}))
+		_, appErr := env.svc.CreateTrigger(env.ctx, &pb.CreateTriggerRequest{Trigger: def})
 		if appErr != nil {
 			require.Error(t, agentErr)
 			require.Equal(t, appErr.Error(), agentErr.Error())

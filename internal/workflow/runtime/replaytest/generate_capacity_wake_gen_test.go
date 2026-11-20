@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -54,8 +53,8 @@ func TestGenerateFixture_CapacityWakeResumesStoppedAgent(t *testing.T) {
 		// Turn 3: the parent reads the failure; capacity returns meanwhile.
 		Turn{Text: "The sub-agent ran out of credit.", During: func() {
 			restored.Store(true)
-			resp, err := h.ChatSvc.RetryUsageLimitWait(h.Ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: <-chatIDs}))
-			if err == nil && !resp.Msg.Woken {
+			resp, err := h.ChatSvc.RetryUsageLimitWait(h.Ctx, &reliantv1.RetryUsageLimitWaitRequest{ChatId: <-chatIDs})
+			if err == nil && !resp.Woken {
 				err = fmt.Errorf("RetryUsageLimitWait did not wake the run")
 			}
 			woke <- err

@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
@@ -39,7 +41,7 @@ type silentGateway struct {
 	reliantv1connect.UnimplementedToolsDaemonServiceHandler
 }
 
-func (g *silentGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (g *silentGateway) ConnectDaemon(ctx context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	if _, err := stream.Receive(); err != nil {
 		return err
 	}
@@ -60,7 +62,9 @@ func startSilentGateway(t *testing.T) (client *daemonClient, dataDir string) {
 	t.Helper()
 
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(&silentGateway{}))
+	server := connect.NewServer()
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, &silentGateway{})
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()
@@ -151,7 +155,9 @@ func TestCancelledSessionReportsCancellationNotAStreamFault(t *testing.T) {
 // too much, and turning a genuine disconnect into a silent stop.
 func TestStreamLossWithoutCancelIsStillAnError(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(&hangUpGateway{}))
+	server := connect.NewServer()
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, &hangUpGateway{})
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()

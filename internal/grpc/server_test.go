@@ -6,48 +6,44 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"reflect"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
 )
 
-type testNamedInterceptor struct{}
-
-func (i *testNamedInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return next(ctx, req)
-	}
-}
-func (i *testNamedInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-func (i *testNamedInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		return next(ctx, conn)
-	}
-}
-
 // userChainInterceptors is the API listener's chain (NewUserChain) with auth
 // passed through, for tests that serve a handler behind it.
-func userChainInterceptors(t *testing.T) []connect.Interceptor {
+func userChainInterceptors(t *testing.T) []connect.ServerInterceptor {
 	t.Helper()
-	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
+	chain, err := NewUserChain(UserChainDeps{Auth: passAuth})
 	require.NoError(t, err)
-	return chain.Interceptors()
+	return chain.ServerInterceptors()
 }
+
+// funcName names the function an interceptor is: a v2 interceptor is a func,
+// which has no type of its own to tell one from another, but every
+// interceptor a constructor returns is a closure named after it. The
+// closure's own suffix (".func1", or ".1" for a copy the compiler inlined
+// elsewhere) is dropped, so two closures of one constructor compare equal.
+func funcName(f any) string {
+	name := runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+	return closureSuffix.ReplaceAllString(name, "")
+}
+
+var closureSuffix = regexp.MustCompile(`(\.func\d+|\.\d+)+$`)
 
 // The API listener's chain, outermost first: forge's layers (the trace span,
 // profile labels, the traceresponse header, the request span that carries the
@@ -58,36 +54,23 @@ func userChainInterceptors(t *testing.T) []connect.Interceptor {
 // activity stream, its stream drain, and svcerr's interceptor innermost. There is no error reporter: a failed RPC reaches
 // Sentry once, as forge's "rpc failed" log line.
 func TestUserChainOrder(t *testing.T) {
-	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
+	chain, err := NewUserChain(UserChainDeps{Auth: passAuth})
 	require.NoError(t, err)
 	require.Equal(t, serverkit.AudienceUser, chain.Audience())
 
-	got := chain.Interceptors()
+	got := chain.ServerInterceptors()
 	// 17 since forge #2068 (via #2065): observe.Chain installs the resumed
 	// sign-in heartbeat (auth_signed_in{kind=resumed}) right after auth and
 	// its identity span, ahead of the domain whitelist.
 	require.Len(t, got, 17)
-	require.IsType(t, interceptors.RequestScope(nil), got[0], "the trace span opens outermost, inside a request scope")
-	require.IsType(t, serverkit.Deadline{}, got[9], "the deadline wraps authentication")
-	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[13], "the domain whitelist reads the user auth stashed")
-	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[15]),
+	require.Equal(t, funcName(interceptors.RequestScope(passAuth)), funcName(got[0]), "the trace span opens outermost, inside a request scope")
+	require.Equal(t, funcName(serverkit.Deadline{}.InterceptorV2()), funcName(got[9]), "the deadline wraps authentication")
+	require.Equal(t, funcName(passAuth), funcName(got[10]), "the authenticator runs inside the deadline")
+	require.Equal(t, funcName((&interceptors.DomainWhitelistInterceptor{}).Intercept), funcName(got[13]), "the domain whitelist reads the user auth stashed")
+	require.Equal(t, funcName(serverkit.StreamDrainInterceptorV2()), funcName(got[15]),
 		"the stream drain sits outside svcerr, so it judges the code the client receives")
-	require.Equal(t, reflect.TypeOf(svcerr.Interceptor()), reflect.TypeOf(got[16]),
+	require.Equal(t, funcName(svcerr.InterceptorV2()), funcName(got[16]),
 		"svcerr is innermost, so logging records the status the client received")
-}
-
-// userChainDeadline is the Deadline slot NewUserChain configured.
-func userChainDeadline(t *testing.T) serverkit.Deadline {
-	t.Helper()
-	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
-	require.NoError(t, err)
-	for _, ic := range chain.Interceptors() {
-		if d, ok := ic.(serverkit.Deadline); ok {
-			return d
-		}
-	}
-	t.Fatal("the user chain has no Deadline slot")
-	return serverkit.Deadline{}
 }
 
 // The user chain's budgets are reliant's, not forge's defaults: 10s for an
@@ -95,7 +78,7 @@ func userChainDeadline(t *testing.T) serverkit.Deadline {
 // merged with the forge daemon commands' dispatch budgets, and reliant's
 // slow-RPC reporter.
 func TestUserChainDeadlineIsReliants(t *testing.T) {
-	d := userChainDeadline(t)
+	d := userChainDeadline()
 	require.Equal(t, interceptors.UnaryTimeout, d.Unary)
 	require.Equal(t, 10*time.Second, d.Unary)
 	require.NotNil(t, d.OnSlow, "slow RPCs report as [SlowRPC] and reliant_grpc_slow_rpc_total")
@@ -109,7 +92,7 @@ func TestUserChainDeadlineIsReliants(t *testing.T) {
 // the user chain's table must name a unary rpc, or be 0 (no deadline). It
 // must also name an rpc that exists: serverkit only checks a key's shape.
 func TestUserChainDeadlineTableNamesUnaryRPCs(t *testing.T) {
-	for procedure, budget := range userChainDeadline(t).Procedures {
+	for procedure, budget := range userChainDeadline().Procedures {
 		name := protoreflect.FullName(strings.ReplaceAll(strings.TrimPrefix(procedure, "/"), "/", "."))
 		desc, err := protoregistry.GlobalFiles.FindDescriptorByName(name)
 		require.NoError(t, err, "%s names no rpc", procedure)
@@ -127,21 +110,15 @@ func TestUserChainDeadlineTableNamesUnaryRPCs(t *testing.T) {
 // budget only when the caller sent none).
 func TestUserChainBudgetIsACeilingOverTheCallersDeadline(t *testing.T) {
 	given := make(chan time.Duration, 1)
-	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
-	require.NoError(t, err)
-	handler := connect.NewUnaryHandler(echoProcedure, func(ctx context.Context, _ *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
+	url := serveUnary(t, echoProcedure, func(ctx context.Context) error {
 		deadline, _ := ctx.Deadline()
 		given <- time.Until(deadline)
-		return connect.NewResponse(&emptypb.Empty{}), nil
-	}, chain.HandlerOptions()...)
-	server := httptest.NewServer(handler)
-	t.Cleanup(server.Close)
+		return nil
+	}, userChainInterceptors(t)...)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, server.URL+echoProcedure)
-	_, err = client.CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
-	require.NoError(t, err)
+	require.NoError(t, callUnary(ctx, http.DefaultClient, url, echoProcedure))
 	require.LessOrEqual(t, <-given, interceptors.UnaryTimeout)
 }
 
@@ -151,24 +128,17 @@ func TestUserChainBudgetIsACeilingOverTheCallersDeadline(t *testing.T) {
 // why NewUserChain puts the timeout in the Auth slot.
 func TestUserChainBoundsAuthenticationByTheRPCDeadline(t *testing.T) {
 	var authHadDeadline bool
-	auth := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+	auth := func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 			_, authHadDeadline = ctx.Deadline()
-			return next(ctx, req)
+			return next(ctx, spec, stream)
 		}
-	})
+	}
 	chain, err := NewUserChain(UserChainDeps{Auth: auth})
 	require.NoError(t, err)
 
-	handler := connect.NewUnaryHandler(echoProcedure, func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-		return connect.NewResponse(&emptypb.Empty{}), nil
-	}, chain.HandlerOptions()...)
-	server := httptest.NewServer(handler)
-	t.Cleanup(server.Close)
-
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, server.URL+echoProcedure)
-	_, err = client.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{}))
-	require.NoError(t, err)
+	url := serveUnary(t, echoProcedure, func(context.Context) error { return nil }, chain.ServerInterceptors()...)
+	require.NoError(t, callUnary(context.Background(), http.DefaultClient, url, echoProcedure))
 	require.True(t, authHadDeadline, "authentication must run inside the RPC's deadline")
 }
 
@@ -184,20 +154,14 @@ func TestUserChainWireCodes(t *testing.T) {
 		wantMsg  string
 	}{
 		"bare svcerr":     {svcerr.PermissionDenied("admins only"), connect.CodePermissionDenied, "admins only"},
-		"connect error":   {connect.NewError(connect.CodeFailedPrecondition, errors.New("chat has not started; call StartChat")), connect.CodeFailedPrecondition, "chat has not started; call StartChat"},
-		"wrapped connect": {fmt.Errorf("send: %w", connect.NewError(connect.CodeNotFound, errors.New("chat not found"))), connect.CodeNotFound, "chat not found"},
+		"connect error":   {connect.NewError(connect.CodeFailedPrecondition, "chat has not started; call StartChat"), connect.CodeFailedPrecondition, "chat has not started; call StartChat"},
+		"wrapped connect": {fmt.Errorf("send: %w", connect.NewError(connect.CodeNotFound, "chat not found")), connect.CodeNotFound, "chat not found"},
 		"unrecognised":    {errors.New(`pq: relation "chats" does not exist`), connect.CodeInternal, svcerr.InternalMessage},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			handler := connect.NewUnaryHandler(echoProcedure, func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-				return nil, tc.err
-			}, connect.WithInterceptors(userChainInterceptors(t)...))
-			server := httptest.NewServer(handler)
-			t.Cleanup(server.Close)
-
-			client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, server.URL+echoProcedure)
-			_, err := client.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+			url := serveUnary(t, echoProcedure, func(context.Context) error { return tc.err }, userChainInterceptors(t)...)
+			err := callUnary(context.Background(), http.DefaultClient, url, echoProcedure)
 			var ce *connect.Error
 			require.ErrorAs(t, err, &ce)
 			require.Equal(t, tc.wantCode, ce.Code())

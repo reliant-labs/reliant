@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -59,15 +58,15 @@ const ReasonProjectScheduledForDeletion = "project_scheduled_for_deletion"
 // DeleteProject schedules the project's deletion (see the top of this file).
 func (s *Service) DeleteProject(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteProjectRequest],
-) (*connect.Response[reliantv1.DeleteProjectResponse], error) {
+	req *reliantv1.DeleteProjectRequest,
+) (*reliantv1.DeleteProjectResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	project, authority, err := s.deletableProject(ctx, userID, req.Msg.GetProjectId(), "delete")
+	project, authority, err := s.deletableProject(ctx, userID, req.GetProjectId(), "delete")
 	if err != nil {
 		return nil, err
 	}
 	var checkouts []*core.ProjectDaemon
-	if req.Msg.GetRemoveFromMachines() {
+	if req.GetRemoveFromMachines() {
 		if authority != authz.ProjectDeleteOwner {
 			return nil, errMachinesAreTheOwners
 		}
@@ -97,10 +96,10 @@ func (s *Service) DeleteProject(
 		Message:     fmt.Sprintf("Project scheduled for deletion on %s; restore it until then", deletion.DeleteAfter.UTC().Format("2006-01-02 15:04 MST")),
 		DeleteAfter: &when,
 	}
-	if req.Msg.GetRemoveFromMachines() {
+	if req.GetRemoveFromMachines() {
 		resp.MachineRemovals = s.removeFromMachines(ctx, userID, project, checkouts)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // errMachinesAreTheOwners refuses an org admin's request to remove a
@@ -200,7 +199,7 @@ func (s *Service) removeFromMachines(ctx context.Context, userID string, project
 				if svcerr.IsUnavailable(err) {
 					r.Status = reliantv1.ProjectMachineRemovalStatus_PROJECT_MACHINE_REMOVAL_STATUS_OFFLINE
 				}
-				r.Message = svcerr.ToConnect(err).Message()
+				r.Message = svcerr.ToConnectV2(err).Message()
 				logging.InfoContext(ctx, "[project] a deleted project's checkout stays on a machine", "project_id", project.ID,
 					"daemon_id", pd.DaemonID, "status", r.Status.String(), "error", err)
 			}

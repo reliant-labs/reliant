@@ -3,20 +3,14 @@ package tools_daemon
 
 import (
 	"context"
-	"crypto/tls"
-	"net"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
-	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -36,48 +30,40 @@ import (
 // ("" for an unbound login token), asserting assertedID. It returns the stream
 // once the gateway acknowledged the registration, or the refusal. An accepted
 // stream stays open until the test ends.
-func connectAs(t *testing.T, svc *Service, userID, boundID, assertedID string) (*connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], error) {
+func connectAs(t *testing.T, svc *Service, userID, boundID, assertedID string) (reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream, error) {
 	t.Helper()
 	return connectRegistering(t, svc, userID, boundID,
 		&reliantv1.DaemonRegister{DaemonId: assertedID, Hostname: "h-" + userID, Platform: "linux", DaemonType: "local"})
 }
 
 // connectRegistering is connectAs with the whole registration message.
-func connectRegistering(t *testing.T, svc *Service, userID, boundID string, reg *reliantv1.DaemonRegister) (*connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], error) {
+func connectRegistering(t *testing.T, svc *Service, userID, boundID string, reg *reliantv1.DaemonRegister) (reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream, error) {
 	t.Helper()
-	routes := http.NewServeMux()
-	svc.Register(routes, connect.WithInterceptors(svcerr.Interceptor()))
-	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get("X-Test-User"))
-		if bound := r.Header.Get("X-Test-Bound-Daemon"); bound != "" {
-			// What the daemon auth interceptor puts on ctx for a daemon-bound rlat_.
-			ctx = context.WithValue(ctx, auth.DaemonIDContextKey, bound)
-		}
-		routes.ServeHTTP(w, r.WithContext(ctx))
-	}))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.Start()
-	t.Cleanup(srv.Close)
-
-	cl := &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, network, addr)
-		},
-	}}
+	client := daemonServer(t, svc, true, func(next http.Handler) http.Handler {
+		return withTestUser(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
+			if bound := r.Header.Get("X-Test-Bound-Daemon"); bound != "" {
+				// What the daemon auth interceptor puts on ctx for a daemon-bound rlat_.
+				ctx = context.WithValue(ctx, auth.DaemonIDContextKey, bound)
+			}
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}))
+	})
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	stream := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC()).ConnectDaemon(ctx)
-	stream.RequestHeader().Set("X-Test-User", userID)
+	var headers []string
 	if boundID != "" {
-		stream.RequestHeader().Set("X-Test-Bound-Daemon", boundID)
+		headers = append(headers, "X-Test-Bound-Daemon", boundID)
 	}
-	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
+	stream, err := client.ConnectDaemon(asTestUser(ctx, userID, headers...))
+	if err != nil {
+		return reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream{}, err
+	}
+	t.Cleanup(func() { _ = stream.CloseSend(); _ = stream.Close() })
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{Register: reg}}))
 	msg, err := stream.Receive()
 	if err != nil {
-		return nil, err
+		return reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream{}, err
 	}
 	require.NotNil(t, msg.GetRegistrationAck(), "first server message must be the registration ack")
 	return stream, nil
@@ -93,7 +79,7 @@ func requireReserved(t *testing.T, repo *db.Repo, daemonID string, want bool) {
 func requireReservedRefusal(t *testing.T, err error) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	require.True(t, bootstrap.IsReservedDaemonIDError(err),
 		"the refusal must carry the reserved-id reason, so the daemon never reads it as a bad credential: %v", err)
 	require.False(t, bootstrap.IsForeignDaemonIDError(err), "the caller owns this daemon; it is not foreign")
@@ -272,7 +258,7 @@ type parkedPodHandler struct {
 	reliantv1connect.UnimplementedToolsDaemonServiceHandler
 }
 
-func (parkedPodHandler) ConnectGateway(ctx context.Context, _ *connect.BidiStream[reliantv1.ServerMessage, reliantv1.DaemonMessage]) error {
+func (parkedPodHandler) ConnectGateway(ctx context.Context, _ reliantv1connect.ToolsDaemonServiceConnectGatewayServerStream) error {
 	<-ctx.Done()
 	return nil
 }
@@ -304,23 +290,15 @@ func dialInPodRegistering(t *testing.T, svc *Service, userID, daemonID string, r
 // names for the pod.
 func dialInPodRegisteringOfOrg(t *testing.T, svc *Service, userID, daemonID string, reg *reliantv1.DaemonRegister, org MachineOrg) *OutboundConn {
 	t.Helper()
-	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(parkedPodHandler{}))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.Start()
-	t.Cleanup(srv.Close)
-	cl := &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, network, addr)
-		},
-	}}
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, parkedPodHandler{})
+	client := serveDaemonH2C(t, server, false, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	stream := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC()).ConnectGateway(ctx)
+	stream, err := client.ConnectGateway(ctx)
+	require.NoError(t, err)
 	require.NoError(t, stream.Send(&reliantv1.ServerMessage{Message: &reliantv1.ServerMessage_Hello{Hello: &reliantv1.GatewayHello{}}}))
-	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
+	t.Cleanup(func() { _ = stream.CloseSend(); _ = stream.Close() })
 
 	regCtx, regCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer regCancel()

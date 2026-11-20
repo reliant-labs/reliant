@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,15 +50,15 @@ func TestProjectOnDaemonCommandsArePinnedToThatDaemon(t *testing.T) {
 	ctx := project.AuthedContext(t)
 	calls := map[string]func(*project.Service) error{
 		"git.pull": func(s *project.Service) error {
-			_, err := s.PullProjectOnDaemon(ctx, connect.NewRequest(&pb.PullProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+			_, err := s.PullProjectOnDaemon(ctx, &pb.PullProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 			return err
 		},
 		"git.remove": func(s *project.Service) error {
-			_, err := s.RemoveProjectFromDaemon(ctx, connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+			_, err := s.RemoveProjectFromDaemon(ctx, &pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 			return err
 		},
 		"git.reclone": func(s *project.Service) error {
-			_, err := s.RecloneProjectOnDaemon(ctx, connect.NewRequest(&pb.RecloneProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+			_, err := s.RecloneProjectOnDaemon(ctx, &pb.RecloneProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 			return err
 		},
 	}
@@ -85,17 +86,17 @@ func TestGetProjectChanges_NoCheckoutAnywhere(t *testing.T) {
 	router := newPinnedRecorder()
 
 	_, err := newService(t, store, router).GetProjectChanges(project.AuthedContext(t),
-		connect.NewRequest(&pb.GetProjectChangesRequest{ProjectId: "p-1"}))
+		&pb.GetProjectChangesRequest{ProjectId: "p-1"})
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	msg := svcerr.ToConnect(err).Message()
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.Contains(t, msg, "clone it onto a machine")
 	assert.NotContains(t, msg, creatorPath)
 	assert.Empty(t, router.commands)
 	var found bool
-	for _, d := range svcerr.ToConnect(err).Details() {
-		if v, verr := d.Value(); verr == nil {
+	for _, d := range svcerr.ToConnectV2(err).Details() {
+		if v, verr := connectproto.UnmarshalErrorDetail(d); verr == nil {
 			if m, ok := v.(*pb.ProjectCheckoutMissing); ok {
 				found = true
 				assert.Equal(t, pb.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT, m.State)
@@ -110,7 +111,7 @@ func TestGitCommandsGoToTheCheckoutsMachine(t *testing.T) {
 	t.Parallel()
 	router := newPinnedRecorder()
 	_, err := newService(t, ownedProjectRepo(t), router).GetProjectGitInfo(project.AuthedContext(t),
-		connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1"}))
+		&pb.GetProjectGitInfoRequest{ProjectId: "p-1"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"daemon-1"}, router.daemons)
 	assert.Equal(t, []string{"/work"}, router.paths)
@@ -139,7 +140,7 @@ func TestRemoveProjectFromDaemon_KeepsTheRowUntilTheRemoveRan(t *testing.T) {
 			router := newPinnedRecorder()
 			router.fakeDaemon = answer
 			_, err := newService(t, store, router).RemoveProjectFromDaemon(ctx,
-				connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+				&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 			require.Error(t, err)
 			assert.Zero(t, deleted, "the row outlives a remove that did not run")
 		})

@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -17,26 +16,26 @@ import (
 // holds for the provider is that account: created is false and nothing changes.
 func (s *Service) AddOrgProviderAPIKey(
 	ctx context.Context,
-	req *connect.Request[pb.AddOrgProviderAPIKeyRequest],
-) (*connect.Response[pb.AddOrgProviderAPIKeyResponse], error) {
-	orgID, err := requireOrgID(req.Msg.GetOrgId())
+	req *pb.AddOrgProviderAPIKeyRequest,
+) (*pb.AddOrgProviderAPIKeyResponse, error) {
+	orgID, err := requireOrgID(req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
-	provider := strings.TrimSpace(req.Msg.GetProvider())
+	provider := strings.TrimSpace(req.GetProvider())
 	if !apiKeyProviders[provider] {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("provider " + provider + " does not take an API key"))
 	}
-	apiKey := strings.TrimSpace(req.Msg.GetApiKey())
+	apiKey := strings.TrimSpace(req.GetApiKey())
 	if apiKey == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("api_key is required"))
 	}
-	name, err := label(req.Msg.GetLabel())
+	name, err := label(req.GetLabel())
 	if err != nil {
 		return nil, err
 	}
 	access := core.OrgAccessMembers
-	if a := req.Msg.GetAccess(); a != pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_UNSPECIFIED {
+	if a := req.GetAccess(); a != pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_UNSPECIFIED {
 		var ok bool
 		if access, ok = accessToCore(a); !ok {
 			return nil, svcerr.Wrap(svcerr.InvalidArgument("unknown access"))
@@ -83,5 +82,5 @@ func (s *Service) AddOrgProviderAPIKey(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.AddOrgProviderAPIKeyResponse{Account: out, Created: created}), nil
+	return &pb.AddOrgProviderAPIKeyResponse{Account: out, Created: created}, nil
 }

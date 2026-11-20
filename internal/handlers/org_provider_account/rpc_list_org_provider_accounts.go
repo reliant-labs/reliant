@@ -3,7 +3,6 @@ package org_provider_account
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -14,9 +13,9 @@ import (
 // to an owner or admin (read fresh), narrowed to provider, label and status for a member.
 func (s *Service) ListOrgProviderAccounts(
 	ctx context.Context,
-	req *connect.Request[pb.ListOrgProviderAccountsRequest],
-) (*connect.Response[pb.ListOrgProviderAccountsResponse], error) {
-	orgID, err := requireOrgID(req.Msg.GetOrgId())
+	req *pb.ListOrgProviderAccountsRequest,
+) (*pb.ListOrgProviderAccountsResponse, error) {
+	orgID, err := requireOrgID(req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -32,9 +31,9 @@ func (s *Service) ListOrgProviderAccounts(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.ListOrgProviderAccountsResponse{
+	return &pb.ListOrgProviderAccountsResponse{
 		Accounts:      v.protoAll(accounts, ""),
 		CallerIsAdmin: isAdmin,
 		AddingEnabled: s.addingEnabled(),
-	}), nil
+	}, nil
 }

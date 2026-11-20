@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -220,11 +220,11 @@ func (f *placementFixture) createWorktree(t *testing.T, req *reliantv1.CreateWor
 	req.ProjectId = f.projectID
 	req.Name = "placed-" + uuid.NewString()[:8]
 	req.Branch = req.Name
-	resp, err := f.svc.CreateWorktree(f.ctx, connect.NewRequest(req))
+	resp, err := f.svc.CreateWorktree(f.ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return awaitWorktreeStatus(t, f.repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), nil
+	return awaitWorktreeStatus(t, f.repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), nil
 }
 
 // assertPlacedOn checks the row records daemonID as its owner AND that every
@@ -357,8 +357,8 @@ func TestCreateWorktree_NoInstallsRecordedIsRefusedWithTheWayOut(t *testing.T) {
 
 	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "create a workspace from it")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "create a workspace from it")
 	assert.True(t, projectcheckout.IsMissing(err))
 	assert.Empty(t, f.router.daemonsFor("worktree.create"))
 	rows, err := f.repo.ListWorktrees(context.Background(), db.WorktreeFilters{ProjectID: &f.projectID})
@@ -377,7 +377,7 @@ func TestCreateWorktree_RejectsAnotherUsersChat(t *testing.T) {
 
 	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &foreignChatID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.Empty(t, f.router.daemonsFor("worktree.create"), "nothing may be created for a rejected request")
 }
 
@@ -391,14 +391,14 @@ func TestImportWorktree_PlacesOnChatMachine(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hand-made")
 	f.router.discoverPath = path
 
-	resp, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
+	resp, err := f.svc.ImportWorktree(f.ctx, &reliantv1.ImportWorktreeRequest{
 		Path:      path,
 		ProjectId: f.projectID,
 		ChatId:    &chatID,
-	}))
+	})
 	require.NoError(t, err)
 
-	stored, err := f.repo.GetWorktree(context.Background(), resp.Msg.Worktree.Id)
+	stored, err := f.repo.GetWorktree(context.Background(), resp.Worktree.Id)
 	require.NoError(t, err)
 	require.NotNil(t, stored.DaemonID)
 	assert.Equal(t, "daemon-b", *stored.DaemonID)
@@ -417,9 +417,9 @@ func TestWorktreeGitOps_RouteToOwningDaemon(t *testing.T) {
 	f := newPlacementFixture(t)
 	owned := f.worktree(t, "daemon-b")
 
-	_, err := f.svc.GetWorktreeGitStatus(f.ctx, connect.NewRequest(&reliantv1.GetWorktreeGitStatusRequest{
+	_, err := f.svc.GetWorktreeGitStatus(f.ctx, &reliantv1.GetWorktreeGitStatusRequest{
 		WorktreeId: owned.ID,
-	}))
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"daemon-b"}, f.router.daemonsFor("worktree.validate_path"))
@@ -435,9 +435,9 @@ func TestWorktreeGitOps_UnownedWorktreeUsesDefault(t *testing.T) {
 	f := newPlacementFixture(t)
 	unowned := f.worktree(t, "")
 
-	_, err := f.svc.GetWorktreeGitStatus(f.ctx, connect.NewRequest(&reliantv1.GetWorktreeGitStatusRequest{
+	_, err := f.svc.GetWorktreeGitStatus(f.ctx, &reliantv1.GetWorktreeGitStatusRequest{
 		WorktreeId: unowned.ID,
-	}))
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{placementDefaultDaemon}, f.router.daemonsFor("worktree.git_status"))

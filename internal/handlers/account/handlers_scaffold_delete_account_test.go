@@ -3,9 +3,10 @@ package account_test
 import (
 	"context"
 	"database/sql"
+	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -29,25 +30,25 @@ func TestDeleteAccount_Generated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	withAccessToken := connect.NewRequest(&pb.DeleteAccountRequest{ConfirmEmail: "owner@example.com"})
-	withAccessToken.Header().Set("Authorization", "Bearer "+minted.Plaintext)
+	withAccessToken := http.Header{"Authorization": {"Bearer " + minted.Plaintext}}
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteAccountRequest, pb.DeleteAccountResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DeleteAccountRequest, pb.DeleteAccountResponse]{
 		{
 			Name:    "no caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.DeleteAccountRequest{ConfirmEmail: "owner@example.com"}),
+			Req:     &pb.DeleteAccountRequest{ConfirmEmail: "owner@example.com"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "an access token cannot delete its owner's account",
-			Req:     withAccessToken,
+			Req:     &pb.DeleteAccountRequest{ConfirmEmail: "owner@example.com"},
+			Header:  withAccessToken,
 			Ctx:     account.AuthedContext(t, testkit.WithEmail("owner@example.com")),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "confirmation must match the caller's email",
-			Req:     connect.NewRequest(&pb.DeleteAccountRequest{ConfirmEmail: "someone@else.com"}),
+			Req:     &pb.DeleteAccountRequest{ConfirmEmail: "someone@else.com"},
 			Ctx:     account.AuthedContext(t, testkit.WithEmail("owner@example.com")),
 			WantErr: connect.CodeInvalidArgument,
 		},

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -40,10 +40,10 @@ func TestDeleteProject_Generated(t *testing.T) {
 	now := time.Date(2026, time.January, 5, 12, 0, 0, 0, time.UTC)
 	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Now: func() time.Time { return now }}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteProjectRequest, pb.DeleteProjectResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DeleteProjectRequest, pb.DeleteProjectResponse]{
 		{
 			Name:    "a project the caller does not own is not found, and not deleted",
-			Req:     connect.NewRequest(&pb.DeleteProjectRequest{ProjectId: "p-2"}),
+			Req:     &pb.DeleteProjectRequest{ProjectId: "p-2"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
@@ -51,20 +51,20 @@ func TestDeleteProject_Generated(t *testing.T) {
 			// An old client calls DeleteProject and gets the scheduled
 			// delete, still answered as a success.
 			Name: "the caller's project is scheduled for deletion, restorable for the window",
-			Req:  connect.NewRequest(&pb.DeleteProjectRequest{ProjectId: "p-1"}),
+			Req:  &pb.DeleteProjectRequest{ProjectId: "p-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.DeleteProjectResponse]) {
-				if !resp.Msg.GetSuccess() {
+			Check: func(t *testing.T, resp *pb.DeleteProjectResponse) {
+				if !resp.GetSuccess() {
 					t.Fatal("success = false")
 				}
 				if len(*scheduled) != 1 || (*scheduled)[0] != "p-1 by test-user" {
 					t.Fatalf("scheduled = %v, want only p-1 by test-user", *scheduled)
 				}
-				if want := now.Add(core.ProjectDeleteWindow).Format(time.RFC3339); resp.Msg.GetDeleteAfter() != want {
-					t.Fatalf("delete_after = %q, want one window from now, %q", resp.Msg.GetDeleteAfter(), want)
+				if want := now.Add(core.ProjectDeleteWindow).Format(time.RFC3339); resp.GetDeleteAfter() != want {
+					t.Fatalf("delete_after = %q, want one window from now, %q", resp.GetDeleteAfter(), want)
 				}
-				if len(resp.Msg.GetMachineRemovals()) != 0 {
-					t.Fatalf("machine removals %v without remove_from_machines", resp.Msg.GetMachineRemovals())
+				if len(resp.GetMachineRemovals()) != 0 {
+					t.Fatalf("machine removals %v without remove_from_machines", resp.GetMachineRemovals())
 				}
 			},
 		},
@@ -114,7 +114,7 @@ func TestDeleteProjectRemovesTheCodeFromMachinesOnlyWhenAsked(t *testing.T) {
 	var removes []string
 	router := machinesAnswering(func(daemonID, commandType string, payload []byte) ([]byte, error) {
 		if daemonID == "offline" {
-			return nil, connect.NewError(connect.CodeUnavailable, errors.New("no daemon connected for user"))
+			return nil, connect.NewError(connect.CodeUnavailable, "no daemon connected for user")
 		}
 		switch commandType {
 		case "git.remove":
@@ -129,7 +129,7 @@ func TestDeleteProjectRemovesTheCodeFromMachinesOnlyWhenAsked(t *testing.T) {
 	})
 	svc := newService(t, store, router)
 
-	resp, err := svc.DeleteProject(project.AuthedContext(t), connect.NewRequest(&pb.DeleteProjectRequest{ProjectId: "p-1", RemoveFromMachines: true}))
+	resp, err := svc.DeleteProject(project.AuthedContext(t), &pb.DeleteProjectRequest{ProjectId: "p-1", RemoveFromMachines: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestDeleteProjectRemovesTheCodeFromMachinesOnlyWhenAsked(t *testing.T) {
 		t.Fatalf("scheduled = %v, want the delete scheduled whatever the machines answer", *scheduled)
 	}
 	got := map[string]pb.ProjectMachineRemovalStatus{}
-	for _, r := range resp.Msg.GetMachineRemovals() {
+	for _, r := range resp.GetMachineRemovals() {
 		got[r.GetDaemonId()] = r.GetStatus()
 	}
 	want := map[string]pb.ProjectMachineRemovalStatus{
@@ -157,7 +157,7 @@ func TestDeleteProjectRemovesTheCodeFromMachinesOnlyWhenAsked(t *testing.T) {
 
 	// Without the opt-in, nothing on any machine is touched (D20).
 	removes = nil
-	if _, err := svc.DeleteProject(project.AuthedContext(t), connect.NewRequest(&pb.DeleteProjectRequest{ProjectId: "p-1"})); err != nil {
+	if _, err := svc.DeleteProject(project.AuthedContext(t), &pb.DeleteProjectRequest{ProjectId: "p-1"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(removes) != 0 {

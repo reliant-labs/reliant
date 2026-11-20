@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -16,20 +15,20 @@ import (
 // ListConnectorActivity returns the audit log.
 func (s *Service) ListConnectorActivity(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListConnectorActivityRequest],
-) (*connect.Response[reliantv1.ListConnectorActivityResponse], error) {
+	req *reliantv1.ListConnectorActivityRequest,
+) (*reliantv1.ListConnectorActivityResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
 
-	limit := int(req.Msg.GetLimit())
+	limit := int(req.GetLimit())
 
 	var (
 		records []*connectorgrant.AuditRecord
 		err     error
 	)
-	if grantID := strings.TrimSpace(req.Msg.GetGrantId()); grantID != "" {
+	if grantID := strings.TrimSpace(req.GetGrantId()); grantID != "" {
 		records, err = s.deps.Grants.ListAuditByGrant(ctx, userID, grantID, limit)
 	} else {
 		records, err = s.deps.Grants.ListAuditByUser(ctx, userID, limit)
@@ -54,5 +53,5 @@ func (s *Service) ListConnectorActivity(
 			CreatedAt:    r.CreatedAt.UTC().Format(time.RFC3339),
 		})
 	}
-	return connect.NewResponse(&reliantv1.ListConnectorActivityResponse{Activity: out}), nil
+	return &reliantv1.ListConnectorActivityResponse{Activity: out}, nil
 }

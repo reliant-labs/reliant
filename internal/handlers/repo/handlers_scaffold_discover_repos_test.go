@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -18,16 +18,16 @@ func TestDiscoverRepos_Generated(t *testing.T) {
 
 	// Without a daemon router nothing can scan the filesystem.
 	unrouted := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: ownedProjectRepo(t)}))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DiscoverReposRequest, pb.DiscoverReposResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DiscoverReposRequest, pb.DiscoverReposResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.DiscoverReposRequest{ProjectId: "p-2"}),
+			Req:     &pb.DiscoverReposRequest{ProjectId: "p-2"},
 			Ctx:     repo.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "without a daemon router the scan is unavailable",
-			Req:     connect.NewRequest(&pb.DiscoverReposRequest{ProjectId: "p-1"}),
+			Req:     &pb.DiscoverReposRequest{ProjectId: "p-1"},
 			Ctx:     repo.AuthedContext(t),
 			WantErr: connect.CodeUnavailable,
 		},
@@ -46,16 +46,16 @@ func TestDiscoverRepos_Generated(t *testing.T) {
 			return []byte(`{"discovered":[{"relative_path":"svc","name":"svc"}]}`), nil
 		}),
 	}))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DiscoverReposRequest, pb.DiscoverReposResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DiscoverReposRequest, pb.DiscoverReposResponse]{
 		{
 			Name: "the daemon's findings are returned, not persisted",
-			Req:  connect.NewRequest(&pb.DiscoverReposRequest{ProjectId: "p-1"}),
+			Req:  &pb.DiscoverReposRequest{ProjectId: "p-1"},
 			Ctx:  repo.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.DiscoverReposResponse]) {
+			Check: func(t *testing.T, resp *pb.DiscoverReposResponse) {
 				if scanned != "repo.discover /work" {
 					t.Fatalf("daemon command = %q, want repo.discover /work", scanned)
 				}
-				if got := resp.Msg.GetDiscovered(); len(got) != 1 || got[0].GetRelativePath() != "svc" || got[0].GetId() != "" {
+				if got := resp.GetDiscovered(); len(got) != 1 || got[0].GetRelativePath() != "svc" || got[0].GetId() != "" {
 					t.Fatalf("discovered = %v, want svc with no id", got)
 				}
 			},

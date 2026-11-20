@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -89,7 +89,7 @@ func TestByKeyMissIsClassifiedNotFound(t *testing.T) {
 			if !svcerr.IsNotFound(err) {
 				t.Fatalf("miss err = %v, want a svcerr NotFound", err)
 			}
-			wire := svcerr.ToConnect(err)
+			wire := svcerr.ToConnectV2(err)
 			if wire.Code() != connect.CodeNotFound {
 				t.Errorf("wire code = %v, want %v", wire.Code(), connect.CodeNotFound)
 			}

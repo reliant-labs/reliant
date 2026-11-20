@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -26,32 +26,32 @@ func TestSetWorkflowVisibility_Generated(t *testing.T) {
 	}
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SetWorkflowVisibilityRequest, pb.SetWorkflowVisibilityResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.SetWorkflowVisibilityRequest, pb.SetWorkflowVisibilityResponse]{
 		{
 			Name:    "a project is required",
-			Req:     connect.NewRequest(&pb.SetWorkflowVisibilityRequest{Slug: "mine", IsHidden: true}),
+			Req:     &pb.SetWorkflowVisibilityRequest{Slug: "mine", IsHidden: true},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a slug is required",
-			Req:     connect.NewRequest(&pb.SetWorkflowVisibilityRequest{ProjectId: "p-1", IsHidden: true}),
+			Req:     &pb.SetWorkflowVisibilityRequest{ProjectId: "p-1", IsHidden: true},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a workflow the caller does not have is not found",
-			Req:     connect.NewRequest(&pb.SetWorkflowVisibilityRequest{ProjectId: "p-1", Slug: "theirs", IsHidden: true}),
+			Req:     &pb.SetWorkflowVisibilityRequest{ProjectId: "p-1", Slug: "theirs", IsHidden: true},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the caller's workflow is hidden",
-			Req:  connect.NewRequest(&pb.SetWorkflowVisibilityRequest{ProjectId: "p-1", Slug: "mine", IsHidden: true}),
+			Req:  &pb.SetWorkflowVisibilityRequest{ProjectId: "p-1", Slug: "mine", IsHidden: true},
 			Ctx:  workflow.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.SetWorkflowVisibilityResponse]) {
-				if !resp.Msg.GetSuccess() || !resp.Msg.GetWorkflow().GetIsHidden() {
-					t.Fatalf("response = %v, want the workflow hidden", resp.Msg)
+			Check: func(t *testing.T, resp *pb.SetWorkflowVisibilityResponse) {
+				if !resp.GetSuccess() || !resp.GetWorkflow().GetIsHidden() {
+					t.Fatalf("response = %v, want the workflow hidden", resp)
 				}
 				calls := store.Calls("SetWorkflowDraftHidden")
 				if len(calls) != 1 || calls[0].Args[1] != "wf-mine" || calls[0].Args[2] != true {

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/serviceerror"
@@ -17,7 +17,7 @@ func TestStaleWorkflowSignalErrorIsAPrecondition(t *testing.T) {
 	t.Parallel()
 
 	stale := staleWorkflowSignalError(serviceerror.NewNotFound("workflow execution already completed"))
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(stale))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(stale))
 	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(stale))
 
 	assert.Nil(t, staleWorkflowSignalError(errors.New("context deadline exceeded")),

@@ -8,16 +8,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -118,45 +119,37 @@ type failingAPI struct {
 
 func newFailingAPI(t *testing.T, fail map[string]error) failingAPI {
 	t.Helper()
-	opts := connect.WithInterceptors(userChainInterceptors(t)...)
-	mux := http.NewServeMux()
+	server := connect.NewServer(userChainInterceptors(t)...)
 	for procedure, err := range fail {
+		spec := unarySpec(procedure)
 		if procedure == watchFilesProcedure {
-			mux.Handle(procedure, connect.NewServerStreamHandler(procedure,
-				func(context.Context, *connect.Request[emptypb.Empty], *connect.ServerStream[emptypb.Empty]) error {
-					return err
-				}, opts))
-			continue
+			spec.StreamType = connect.StreamTypeServer
 		}
-		mux.Handle(procedure, connect.NewUnaryHandler(procedure,
-			func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-				return nil, err
-			}, opts))
+		server.Register(connect.Method{Spec: spec, Handler: func(context.Context, connect.Spec, connect.ServerStream) error {
+			return err
+		}})
 	}
-	server := httptest.NewServer(mux)
-	t.Cleanup(server.Close)
-	return failingAPI{url: server.URL}
+	return failingAPI{url: mount(t, server)}
 }
 
 // call makes one unary call, with requestID as its correlation header, and
 // returns the code the client received.
 func (a failingAPI) call(t *testing.T, procedure, requestID string) connect.Code {
 	t.Helper()
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, a.url+procedure)
-	req := connect.NewRequest(&emptypb.Empty{})
-	req.Header().Set("X-Request-Id", requestID)
-	_, err := client.CallUnary(context.Background(), req)
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("X-Request-Id", requestID)
+	err := callUnary(ctx, http.DefaultClient, a.url, procedure)
 	require.Error(t, err)
-	return svcerr.Code(err)
+	return svcerr.CodeV2(err)
 }
 
 // daemonFault is a daemon command that reached the machine and failed there:
 // a real fault, which the fs proxy answers Internal. id varies per request,
 // as the subject and paths in real daemon errors do.
 func daemonFault(id string) error {
-	return connect.NewError(connect.CodeInternal, fmt.Errorf(
-		"daemon command fs.get_tree (subject reliant.daemon.%s.command) via NATS failed: %w",
-		id, errors.New("decode tree: unexpected EOF")))
+	cause := fmt.Errorf("daemon command fs.get_tree (subject reliant.daemon.%s.command) via NATS failed: %w",
+		id, errors.New("decode tree: unexpected EOF"))
+	return connect.NewError(connect.CodeInternal, cause.Error()).WithCause(cause)
 }
 
 func TestFailedRPCIsOneErrorRecordNamingItsProcedure(t *testing.T) {
@@ -190,12 +183,21 @@ func TestFailedStreamIsOneErrorRecord(t *testing.T) {
 	lines := installProcessLogging(t)
 	api := newFailingAPI(t, map[string]error{watchFilesProcedure: daemonFault("2aab1465-0d3c-4b8e-9b1e-5f0c1d2e3f40")})
 
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, api.url+watchFilesProcedure)
-	stream, err := client.CallServerStream(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+	stream, err := rpcclient.New(http.DefaultClient, api.url, nil).CallServerStream(context.Background(),
+		connect.Spec{StreamType: connect.StreamTypeServer, Procedure: watchFilesProcedure}, &emptypb.Empty{})
 	require.NoError(t, err)
-	for stream.Receive() {
+	var streamErr error
+	for {
+		err := stream.Receive(&emptypb.Empty{})
+		if err != nil {
+			streamErr = err
+			break
+		}
 	}
-	require.Equal(t, connect.CodeInternal, svcerr.Code(stream.Err()))
+	if errors.Is(streamErr, io.EOF) {
+		streamErr = nil
+	}
+	require.Equal(t, connect.CodeInternal, svcerr.CodeV2(streamErr))
 	require.NoError(t, stream.Close())
 
 	errs := lines.errors()
@@ -209,9 +211,9 @@ func TestFailedStreamIsOneErrorRecord(t *testing.T) {
 // forge writes at WARN, so it is never an issue.
 func TestDaemonTimeoutRPCIsNotAnErrorRecord(t *testing.T) {
 	lines := installProcessLogging(t)
-	timeout := connect.NewError(connect.CodeDeadlineExceeded, fmt.Errorf(
-		"daemon command fs.get_tree (subject reliant.daemon.2aab1465.command) via NATS failed: %w: %w",
-		toolexec.ErrDaemonTimeout, context.DeadlineExceeded))
+	cause := fmt.Errorf("daemon command fs.get_tree (subject reliant.daemon.2aab1465.command) via NATS failed: %w: %w",
+		toolexec.ErrDaemonTimeout, context.DeadlineExceeded)
+	timeout := connect.NewError(connect.CodeDeadlineExceeded, cause.Error()).WithCause(cause)
 	api := newFailingAPI(t, map[string]error{
 		getFileTreeProcedure: timeout,
 		sendMessageProcedure: daemonFault("2aab1465-0d3c-4b8e-9b1e-5f0c1d2e3f40"),
@@ -239,7 +241,7 @@ func TestBenignWorkflowFailureRPCIsLoggedAtUserLevel(t *testing.T) {
 	benign := temporal.NewApplicationErrorWithOptions("AI provider usage limit reached", "ProviderUsageLimit",
 		temporal.ApplicationErrorOptions{NonRetryable: true, Category: temporal.ApplicationErrorCategoryBenign})
 	api := newFailingAPI(t, map[string]error{
-		sendMessageProcedure: connect.NewError(connect.CodeInternal, fmt.Errorf("start chat: %w", benign)),
+		sendMessageProcedure: connect.NewError(connect.CodeInternal, "start chat: "+benign.Error()).WithCause(fmt.Errorf("start chat: %w", benign)),
 		getFileTreeProcedure: daemonFault("2aab1465-0d3c-4b8e-9b1e-5f0c1d2e3f40"),
 	})
 

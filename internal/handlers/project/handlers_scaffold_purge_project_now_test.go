@@ -8,7 +8,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -33,24 +33,24 @@ func TestPurgeProjectNow_Generated(t *testing.T) {
 	}
 	svc := newService(t, store, nil)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.PurgeProjectNowRequest, pb.PurgeProjectNowResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.PurgeProjectNowRequest, pb.PurgeProjectNowResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.PurgeProjectNowRequest{ProjectId: "p-2", ConfirmName: "proj"}),
+			Req:     &pb.PurgeProjectNowRequest{ProjectId: "p-2", ConfirmName: "proj"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "without the project's name nothing is deleted",
-			Req:     connect.NewRequest(&pb.PurgeProjectNowRequest{ProjectId: "p-1", ConfirmName: "pro"}),
+			Req:     &pb.PurgeProjectNowRequest{ProjectId: "p-1", ConfirmName: "pro"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "the owner naming it claims it, and its batches run after the response",
-			Req:  connect.NewRequest(&pb.PurgeProjectNowRequest{ProjectId: "p-1", ConfirmName: "proj"}),
+			Req:  &pb.PurgeProjectNowRequest{ProjectId: "p-1", ConfirmName: "proj"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, _ *connect.Response[pb.PurgeProjectNowResponse]) {
+			Check: func(t *testing.T, _ *pb.PurgeProjectNowResponse) {
 				if len(claimed) != 1 || claimed[0] != "p-1 by test-user" {
 					t.Fatalf("claimed = %v, want p-1 by test-user", claimed)
 				}

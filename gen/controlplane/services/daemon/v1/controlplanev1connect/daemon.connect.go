@@ -11,83 +11,162 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// DaemonServiceName is the fully-qualified name of the DaemonService service.
 	DaemonServiceName = "controlplane.v1.DaemonService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DaemonServiceCreateDaemonProcedure is the fully-qualified name of the DaemonService's
-	// CreateDaemon RPC.
+	// DaemonServiceCreateDaemonProcedure is the procedure name of the DaemonService's CreateDaemon RPC.
 	DaemonServiceCreateDaemonProcedure = "/controlplane.v1.DaemonService/CreateDaemon"
-	// DaemonServiceGetDaemonProcedure is the fully-qualified name of the DaemonService's GetDaemon RPC.
+	// DaemonServiceGetDaemonProcedure is the procedure name of the DaemonService's GetDaemon RPC.
 	DaemonServiceGetDaemonProcedure = "/controlplane.v1.DaemonService/GetDaemon"
-	// DaemonServiceListDaemonsProcedure is the fully-qualified name of the DaemonService's ListDaemons
-	// RPC.
+	// DaemonServiceListDaemonsProcedure is the procedure name of the DaemonService's ListDaemons RPC.
 	DaemonServiceListDaemonsProcedure = "/controlplane.v1.DaemonService/ListDaemons"
-	// DaemonServiceUpdateDaemonProcedure is the fully-qualified name of the DaemonService's
-	// UpdateDaemon RPC.
+	// DaemonServiceUpdateDaemonProcedure is the procedure name of the DaemonService's UpdateDaemon RPC.
 	DaemonServiceUpdateDaemonProcedure = "/controlplane.v1.DaemonService/UpdateDaemon"
-	// DaemonServiceDeleteDaemonProcedure is the fully-qualified name of the DaemonService's
-	// DeleteDaemon RPC.
+	// DaemonServiceDeleteDaemonProcedure is the procedure name of the DaemonService's DeleteDaemon RPC.
 	DaemonServiceDeleteDaemonProcedure = "/controlplane.v1.DaemonService/DeleteDaemon"
-	// DaemonServiceSuspendDaemonProcedure is the fully-qualified name of the DaemonService's
-	// SuspendDaemon RPC.
+	// DaemonServiceSuspendDaemonProcedure is the procedure name of the DaemonService's SuspendDaemon
+	// RPC.
 	DaemonServiceSuspendDaemonProcedure = "/controlplane.v1.DaemonService/SuspendDaemon"
-	// DaemonServiceResumeDaemonProcedure is the fully-qualified name of the DaemonService's
-	// ResumeDaemon RPC.
+	// DaemonServiceResumeDaemonProcedure is the procedure name of the DaemonService's ResumeDaemon RPC.
 	DaemonServiceResumeDaemonProcedure = "/controlplane.v1.DaemonService/ResumeDaemon"
-	// DaemonServiceResizeDaemonProcedure is the fully-qualified name of the DaemonService's
-	// ResizeDaemon RPC.
+	// DaemonServiceResizeDaemonProcedure is the procedure name of the DaemonService's ResizeDaemon RPC.
 	DaemonServiceResizeDaemonProcedure = "/controlplane.v1.DaemonService/ResizeDaemon"
-	// DaemonServiceGrowDaemonDiskProcedure is the fully-qualified name of the DaemonService's
-	// GrowDaemonDisk RPC.
+	// DaemonServiceGrowDaemonDiskProcedure is the procedure name of the DaemonService's GrowDaemonDisk
+	// RPC.
 	DaemonServiceGrowDaemonDiskProcedure = "/controlplane.v1.DaemonService/GrowDaemonDisk"
-	// DaemonServiceSetPortAccessProcedure is the fully-qualified name of the DaemonService's
-	// SetPortAccess RPC.
+	// DaemonServiceSetPortAccessProcedure is the procedure name of the DaemonService's SetPortAccess
+	// RPC.
 	DaemonServiceSetPortAccessProcedure = "/controlplane.v1.DaemonService/SetPortAccess"
-	// DaemonServiceRemovePortAccessProcedure is the fully-qualified name of the DaemonService's
+	// DaemonServiceRemovePortAccessProcedure is the procedure name of the DaemonService's
 	// RemovePortAccess RPC.
 	DaemonServiceRemovePortAccessProcedure = "/controlplane.v1.DaemonService/RemovePortAccess"
-	// DaemonServiceListPortAccessRulesProcedure is the fully-qualified name of the DaemonService's
+	// DaemonServiceListPortAccessRulesProcedure is the procedure name of the DaemonService's
 	// ListPortAccessRules RPC.
 	DaemonServiceListPortAccessRulesProcedure = "/controlplane.v1.DaemonService/ListPortAccessRules"
-	// DaemonServiceSetDefaultPortAccessProcedure is the fully-qualified name of the DaemonService's
+	// DaemonServiceSetDefaultPortAccessProcedure is the procedure name of the DaemonService's
 	// SetDefaultPortAccess RPC.
 	DaemonServiceSetDefaultPortAccessProcedure = "/controlplane.v1.DaemonService/SetDefaultPortAccess"
 )
 
+var (
+	daemonServiceCreateDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("CreateDaemon"),
+			Procedure:  DaemonServiceCreateDaemonProcedure,
+		}
+	})
+	daemonServiceGetDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("GetDaemon"),
+			Procedure:  DaemonServiceGetDaemonProcedure,
+		}
+	})
+	daemonServiceListDaemonsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("ListDaemons"),
+			Procedure:  DaemonServiceListDaemonsProcedure,
+		}
+	})
+	daemonServiceUpdateDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("UpdateDaemon"),
+			Procedure:  DaemonServiceUpdateDaemonProcedure,
+		}
+	})
+	daemonServiceDeleteDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("DeleteDaemon"),
+			Procedure:  DaemonServiceDeleteDaemonProcedure,
+		}
+	})
+	daemonServiceSuspendDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("SuspendDaemon"),
+			Procedure:  DaemonServiceSuspendDaemonProcedure,
+		}
+	})
+	daemonServiceResumeDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("ResumeDaemon"),
+			Procedure:  DaemonServiceResumeDaemonProcedure,
+		}
+	})
+	daemonServiceResizeDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("ResizeDaemon"),
+			Procedure:  DaemonServiceResizeDaemonProcedure,
+		}
+	})
+	daemonServiceGrowDaemonDiskSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("GrowDaemonDisk"),
+			Procedure:  DaemonServiceGrowDaemonDiskProcedure,
+		}
+	})
+	daemonServiceSetPortAccessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("SetPortAccess"),
+			Procedure:  DaemonServiceSetPortAccessProcedure,
+		}
+	})
+	daemonServiceRemovePortAccessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("RemovePortAccess"),
+			Procedure:  DaemonServiceRemovePortAccessProcedure,
+		}
+	})
+	daemonServiceListPortAccessRulesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("ListPortAccessRules"),
+			Procedure:  DaemonServiceListPortAccessRulesProcedure,
+		}
+	})
+	daemonServiceSetDefaultPortAccessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods().ByName("SetDefaultPortAccess"),
+			Procedure:  DaemonServiceSetDefaultPortAccessProcedure,
+		}
+	})
+)
+
 // DaemonServiceClient is a client for the controlplane.v1.DaemonService service.
 type DaemonServiceClient interface {
-	CreateDaemon(context.Context, *connect.Request[v1.CreateDaemonRequest]) (*connect.Response[v1.CreateDaemonResponse], error)
-	GetDaemon(context.Context, *connect.Request[v1.GetDaemonRequest]) (*connect.Response[v1.GetDaemonResponse], error)
-	ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error)
-	UpdateDaemon(context.Context, *connect.Request[v1.UpdateDaemonRequest]) (*connect.Response[v1.UpdateDaemonResponse], error)
-	DeleteDaemon(context.Context, *connect.Request[v1.DeleteDaemonRequest]) (*connect.Response[v1.DeleteDaemonResponse], error)
-	SuspendDaemon(context.Context, *connect.Request[v1.SuspendDaemonRequest]) (*connect.Response[v1.SuspendDaemonResponse], error)
-	ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error)
+	CreateDaemon(context.Context, *v1.CreateDaemonRequest) (*v1.CreateDaemonResponse, error)
+	GetDaemon(context.Context, *v1.GetDaemonRequest) (*v1.GetDaemonResponse, error)
+	ListDaemons(context.Context, *v1.ListDaemonsRequest) (*v1.ListDaemonsResponse, error)
+	UpdateDaemon(context.Context, *v1.UpdateDaemonRequest) (*v1.UpdateDaemonResponse, error)
+	DeleteDaemon(context.Context, *v1.DeleteDaemonRequest) (*v1.DeleteDaemonResponse, error)
+	SuspendDaemon(context.Context, *v1.SuspendDaemonRequest) (*v1.SuspendDaemonResponse, error)
+	ResumeDaemon(context.Context, *v1.ResumeDaemonRequest) (*v1.ResumeDaemonResponse, error)
 	// ResizeDaemon changes a MANAGED daemon's machine size — the one path that
 	// does. The daemon must be SUSPENDED (FailedPrecondition otherwise): like
 	// changing a cloud VM's instance type, the new size takes effect when the
@@ -100,7 +179,7 @@ type DaemonServiceClient interface {
 	// the following resume would have produced. Resizing to the current size
 	// is a successful no-op. Disks only grow: a downsize keeps the larger disk,
 	// which is billed at its bound capacity.
-	ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error)
+	ResizeDaemon(context.Context, *v1.ResizeDaemonRequest) (*v1.ResizeDaemonResponse, error)
 	// GrowDaemonDisk grows a MANAGED daemon's one disk to storage_gib. Disk
 	// above the org's pooled allowance is billed as storage. Disks only grow: a smaller target is InvalidArgument, the current
 	// size is a successful no-op. Running or suspended: the cloud disk grows at
@@ -110,201 +189,33 @@ type DaemonServiceClient interface {
 	// reason daemon_storage_denied, when the target exceeds it or the plan sets
 	// none) and by the same funding ladder as create and resume. Design:
 	// docs/design/workspace-disk-resize.md.
-	GrowDaemonDisk(context.Context, *connect.Request[v1.GrowDaemonDiskRequest]) (*connect.Response[v1.GrowDaemonDiskResponse], error)
-	SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error)
-	RemovePortAccess(context.Context, *connect.Request[v1.RemovePortAccessRequest]) (*connect.Response[v1.RemovePortAccessResponse], error)
-	ListPortAccessRules(context.Context, *connect.Request[v1.ListPortAccessRulesRequest]) (*connect.Response[v1.ListPortAccessRulesResponse], error)
+	GrowDaemonDisk(context.Context, *v1.GrowDaemonDiskRequest) (*v1.GrowDaemonDiskResponse, error)
+	SetPortAccess(context.Context, *v1.SetPortAccessRequest) (*v1.SetPortAccessResponse, error)
+	RemovePortAccess(context.Context, *v1.RemovePortAccessRequest) (*v1.RemovePortAccessResponse, error)
+	ListPortAccessRules(context.Context, *v1.ListPortAccessRulesRequest) (*v1.ListPortAccessRulesResponse, error)
 	// SetDefaultPortAccess sets the workspace-level default port-access mode
 	// (Daemon.default_port_access) — the policy the preview proxy applies to
 	// ports that have no explicit PortAccessRule. Only the daemon owner may call
 	// it. Only AUTHENTICATED and PUBLIC are valid; a PUBLIC default makes every
 	// unruled listening port world-reachable by URL.
-	SetDefaultPortAccess(context.Context, *connect.Request[v1.SetDefaultPortAccessRequest]) (*connect.Response[v1.SetDefaultPortAccessResponse], error)
+	SetDefaultPortAccess(context.Context, *v1.SetDefaultPortAccessRequest) (*v1.SetDefaultPortAccessResponse, error)
 }
 
-// NewDaemonServiceClient constructs a client for the controlplane.v1.DaemonService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DaemonServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	daemonServiceMethods := v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods()
-	return &daemonServiceClient{
-		createDaemon: connect.NewClient[v1.CreateDaemonRequest, v1.CreateDaemonResponse](
-			httpClient,
-			baseURL+DaemonServiceCreateDaemonProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("CreateDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		getDaemon: connect.NewClient[v1.GetDaemonRequest, v1.GetDaemonResponse](
-			httpClient,
-			baseURL+DaemonServiceGetDaemonProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("GetDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		listDaemons: connect.NewClient[v1.ListDaemonsRequest, v1.ListDaemonsResponse](
-			httpClient,
-			baseURL+DaemonServiceListDaemonsProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("ListDaemons")),
-			connect.WithClientOptions(opts...),
-		),
-		updateDaemon: connect.NewClient[v1.UpdateDaemonRequest, v1.UpdateDaemonResponse](
-			httpClient,
-			baseURL+DaemonServiceUpdateDaemonProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("UpdateDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteDaemon: connect.NewClient[v1.DeleteDaemonRequest, v1.DeleteDaemonResponse](
-			httpClient,
-			baseURL+DaemonServiceDeleteDaemonProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("DeleteDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		suspendDaemon: connect.NewClient[v1.SuspendDaemonRequest, v1.SuspendDaemonResponse](
-			httpClient,
-			baseURL+DaemonServiceSuspendDaemonProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("SuspendDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		resumeDaemon: connect.NewClient[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse](
-			httpClient,
-			baseURL+DaemonServiceResumeDaemonProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("ResumeDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		resizeDaemon: connect.NewClient[v1.ResizeDaemonRequest, v1.ResizeDaemonResponse](
-			httpClient,
-			baseURL+DaemonServiceResizeDaemonProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("ResizeDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		growDaemonDisk: connect.NewClient[v1.GrowDaemonDiskRequest, v1.GrowDaemonDiskResponse](
-			httpClient,
-			baseURL+DaemonServiceGrowDaemonDiskProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("GrowDaemonDisk")),
-			connect.WithClientOptions(opts...),
-		),
-		setPortAccess: connect.NewClient[v1.SetPortAccessRequest, v1.SetPortAccessResponse](
-			httpClient,
-			baseURL+DaemonServiceSetPortAccessProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("SetPortAccess")),
-			connect.WithClientOptions(opts...),
-		),
-		removePortAccess: connect.NewClient[v1.RemovePortAccessRequest, v1.RemovePortAccessResponse](
-			httpClient,
-			baseURL+DaemonServiceRemovePortAccessProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("RemovePortAccess")),
-			connect.WithClientOptions(opts...),
-		),
-		listPortAccessRules: connect.NewClient[v1.ListPortAccessRulesRequest, v1.ListPortAccessRulesResponse](
-			httpClient,
-			baseURL+DaemonServiceListPortAccessRulesProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("ListPortAccessRules")),
-			connect.WithClientOptions(opts...),
-		),
-		setDefaultPortAccess: connect.NewClient[v1.SetDefaultPortAccessRequest, v1.SetDefaultPortAccessResponse](
-			httpClient,
-			baseURL+DaemonServiceSetDefaultPortAccessProcedure,
-			connect.WithSchema(daemonServiceMethods.ByName("SetDefaultPortAccess")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// daemonServiceClient implements DaemonServiceClient.
-type daemonServiceClient struct {
-	createDaemon         *connect.Client[v1.CreateDaemonRequest, v1.CreateDaemonResponse]
-	getDaemon            *connect.Client[v1.GetDaemonRequest, v1.GetDaemonResponse]
-	listDaemons          *connect.Client[v1.ListDaemonsRequest, v1.ListDaemonsResponse]
-	updateDaemon         *connect.Client[v1.UpdateDaemonRequest, v1.UpdateDaemonResponse]
-	deleteDaemon         *connect.Client[v1.DeleteDaemonRequest, v1.DeleteDaemonResponse]
-	suspendDaemon        *connect.Client[v1.SuspendDaemonRequest, v1.SuspendDaemonResponse]
-	resumeDaemon         *connect.Client[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse]
-	resizeDaemon         *connect.Client[v1.ResizeDaemonRequest, v1.ResizeDaemonResponse]
-	growDaemonDisk       *connect.Client[v1.GrowDaemonDiskRequest, v1.GrowDaemonDiskResponse]
-	setPortAccess        *connect.Client[v1.SetPortAccessRequest, v1.SetPortAccessResponse]
-	removePortAccess     *connect.Client[v1.RemovePortAccessRequest, v1.RemovePortAccessResponse]
-	listPortAccessRules  *connect.Client[v1.ListPortAccessRulesRequest, v1.ListPortAccessRulesResponse]
-	setDefaultPortAccess *connect.Client[v1.SetDefaultPortAccessRequest, v1.SetDefaultPortAccessResponse]
-}
-
-// CreateDaemon calls controlplane.v1.DaemonService.CreateDaemon.
-func (c *daemonServiceClient) CreateDaemon(ctx context.Context, req *connect.Request[v1.CreateDaemonRequest]) (*connect.Response[v1.CreateDaemonResponse], error) {
-	return c.createDaemon.CallUnary(ctx, req)
-}
-
-// GetDaemon calls controlplane.v1.DaemonService.GetDaemon.
-func (c *daemonServiceClient) GetDaemon(ctx context.Context, req *connect.Request[v1.GetDaemonRequest]) (*connect.Response[v1.GetDaemonResponse], error) {
-	return c.getDaemon.CallUnary(ctx, req)
-}
-
-// ListDaemons calls controlplane.v1.DaemonService.ListDaemons.
-func (c *daemonServiceClient) ListDaemons(ctx context.Context, req *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error) {
-	return c.listDaemons.CallUnary(ctx, req)
-}
-
-// UpdateDaemon calls controlplane.v1.DaemonService.UpdateDaemon.
-func (c *daemonServiceClient) UpdateDaemon(ctx context.Context, req *connect.Request[v1.UpdateDaemonRequest]) (*connect.Response[v1.UpdateDaemonResponse], error) {
-	return c.updateDaemon.CallUnary(ctx, req)
-}
-
-// DeleteDaemon calls controlplane.v1.DaemonService.DeleteDaemon.
-func (c *daemonServiceClient) DeleteDaemon(ctx context.Context, req *connect.Request[v1.DeleteDaemonRequest]) (*connect.Response[v1.DeleteDaemonResponse], error) {
-	return c.deleteDaemon.CallUnary(ctx, req)
-}
-
-// SuspendDaemon calls controlplane.v1.DaemonService.SuspendDaemon.
-func (c *daemonServiceClient) SuspendDaemon(ctx context.Context, req *connect.Request[v1.SuspendDaemonRequest]) (*connect.Response[v1.SuspendDaemonResponse], error) {
-	return c.suspendDaemon.CallUnary(ctx, req)
-}
-
-// ResumeDaemon calls controlplane.v1.DaemonService.ResumeDaemon.
-func (c *daemonServiceClient) ResumeDaemon(ctx context.Context, req *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error) {
-	return c.resumeDaemon.CallUnary(ctx, req)
-}
-
-// ResizeDaemon calls controlplane.v1.DaemonService.ResizeDaemon.
-func (c *daemonServiceClient) ResizeDaemon(ctx context.Context, req *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error) {
-	return c.resizeDaemon.CallUnary(ctx, req)
-}
-
-// GrowDaemonDisk calls controlplane.v1.DaemonService.GrowDaemonDisk.
-func (c *daemonServiceClient) GrowDaemonDisk(ctx context.Context, req *connect.Request[v1.GrowDaemonDiskRequest]) (*connect.Response[v1.GrowDaemonDiskResponse], error) {
-	return c.growDaemonDisk.CallUnary(ctx, req)
-}
-
-// SetPortAccess calls controlplane.v1.DaemonService.SetPortAccess.
-func (c *daemonServiceClient) SetPortAccess(ctx context.Context, req *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error) {
-	return c.setPortAccess.CallUnary(ctx, req)
-}
-
-// RemovePortAccess calls controlplane.v1.DaemonService.RemovePortAccess.
-func (c *daemonServiceClient) RemovePortAccess(ctx context.Context, req *connect.Request[v1.RemovePortAccessRequest]) (*connect.Response[v1.RemovePortAccessResponse], error) {
-	return c.removePortAccess.CallUnary(ctx, req)
-}
-
-// ListPortAccessRules calls controlplane.v1.DaemonService.ListPortAccessRules.
-func (c *daemonServiceClient) ListPortAccessRules(ctx context.Context, req *connect.Request[v1.ListPortAccessRulesRequest]) (*connect.Response[v1.ListPortAccessRulesResponse], error) {
-	return c.listPortAccessRules.CallUnary(ctx, req)
-}
-
-// SetDefaultPortAccess calls controlplane.v1.DaemonService.SetDefaultPortAccess.
-func (c *daemonServiceClient) SetDefaultPortAccess(ctx context.Context, req *connect.Request[v1.SetDefaultPortAccessRequest]) (*connect.Response[v1.SetDefaultPortAccessResponse], error) {
-	return c.setDefaultPortAccess.CallUnary(ctx, req)
+// NewDaemonServiceClient constructs a client for the controlplane.v1.DaemonService service.
+// Multiple service clients may share a single connect.Client.
+func NewDaemonServiceClient(client *connect.Client) DaemonServiceClient {
+	return &daemonServiceClient{client: client}
 }
 
 // DaemonServiceHandler is an implementation of the controlplane.v1.DaemonService service.
 type DaemonServiceHandler interface {
-	CreateDaemon(context.Context, *connect.Request[v1.CreateDaemonRequest]) (*connect.Response[v1.CreateDaemonResponse], error)
-	GetDaemon(context.Context, *connect.Request[v1.GetDaemonRequest]) (*connect.Response[v1.GetDaemonResponse], error)
-	ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error)
-	UpdateDaemon(context.Context, *connect.Request[v1.UpdateDaemonRequest]) (*connect.Response[v1.UpdateDaemonResponse], error)
-	DeleteDaemon(context.Context, *connect.Request[v1.DeleteDaemonRequest]) (*connect.Response[v1.DeleteDaemonResponse], error)
-	SuspendDaemon(context.Context, *connect.Request[v1.SuspendDaemonRequest]) (*connect.Response[v1.SuspendDaemonResponse], error)
-	ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error)
+	CreateDaemon(context.Context, *v1.CreateDaemonRequest) (*v1.CreateDaemonResponse, error)
+	GetDaemon(context.Context, *v1.GetDaemonRequest) (*v1.GetDaemonResponse, error)
+	ListDaemons(context.Context, *v1.ListDaemonsRequest) (*v1.ListDaemonsResponse, error)
+	UpdateDaemon(context.Context, *v1.UpdateDaemonRequest) (*v1.UpdateDaemonResponse, error)
+	DeleteDaemon(context.Context, *v1.DeleteDaemonRequest) (*v1.DeleteDaemonResponse, error)
+	SuspendDaemon(context.Context, *v1.SuspendDaemonRequest) (*v1.SuspendDaemonResponse, error)
+	ResumeDaemon(context.Context, *v1.ResumeDaemonRequest) (*v1.ResumeDaemonResponse, error)
 	// ResizeDaemon changes a MANAGED daemon's machine size — the one path that
 	// does. The daemon must be SUSPENDED (FailedPrecondition otherwise): like
 	// changing a cloud VM's instance type, the new size takes effect when the
@@ -317,7 +228,7 @@ type DaemonServiceHandler interface {
 	// the following resume would have produced. Resizing to the current size
 	// is a successful no-op. Disks only grow: a downsize keeps the larger disk,
 	// which is billed at its bound capacity.
-	ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error)
+	ResizeDaemon(context.Context, *v1.ResizeDaemonRequest) (*v1.ResizeDaemonResponse, error)
 	// GrowDaemonDisk grows a MANAGED daemon's one disk to storage_gib. Disk
 	// above the org's pooled allowance is billed as storage. Disks only grow: a smaller target is InvalidArgument, the current
 	// size is a successful no-op. Running or suspended: the cloud disk grows at
@@ -327,188 +238,356 @@ type DaemonServiceHandler interface {
 	// reason daemon_storage_denied, when the target exceeds it or the plan sets
 	// none) and by the same funding ladder as create and resume. Design:
 	// docs/design/workspace-disk-resize.md.
-	GrowDaemonDisk(context.Context, *connect.Request[v1.GrowDaemonDiskRequest]) (*connect.Response[v1.GrowDaemonDiskResponse], error)
-	SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error)
-	RemovePortAccess(context.Context, *connect.Request[v1.RemovePortAccessRequest]) (*connect.Response[v1.RemovePortAccessResponse], error)
-	ListPortAccessRules(context.Context, *connect.Request[v1.ListPortAccessRulesRequest]) (*connect.Response[v1.ListPortAccessRulesResponse], error)
+	GrowDaemonDisk(context.Context, *v1.GrowDaemonDiskRequest) (*v1.GrowDaemonDiskResponse, error)
+	SetPortAccess(context.Context, *v1.SetPortAccessRequest) (*v1.SetPortAccessResponse, error)
+	RemovePortAccess(context.Context, *v1.RemovePortAccessRequest) (*v1.RemovePortAccessResponse, error)
+	ListPortAccessRules(context.Context, *v1.ListPortAccessRulesRequest) (*v1.ListPortAccessRulesResponse, error)
 	// SetDefaultPortAccess sets the workspace-level default port-access mode
 	// (Daemon.default_port_access) — the policy the preview proxy applies to
 	// ports that have no explicit PortAccessRule. Only the daemon owner may call
 	// it. Only AUTHENTICATED and PUBLIC are valid; a PUBLIC default makes every
 	// unruled listening port world-reachable by URL.
-	SetDefaultPortAccess(context.Context, *connect.Request[v1.SetDefaultPortAccessRequest]) (*connect.Response[v1.SetDefaultPortAccessResponse], error)
+	SetDefaultPortAccess(context.Context, *v1.SetDefaultPortAccessRequest) (*v1.SetDefaultPortAccessResponse, error)
 }
 
-// NewDaemonServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewDaemonServiceHandler(svc DaemonServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	daemonServiceMethods := v1.File_services_daemon_v1_daemon_proto.Services().ByName("DaemonService").Methods()
-	daemonServiceCreateDaemonHandler := connect.NewUnaryHandler(
-		DaemonServiceCreateDaemonProcedure,
-		svc.CreateDaemon,
-		connect.WithSchema(daemonServiceMethods.ByName("CreateDaemon")),
-		connect.WithHandlerOptions(opts...),
+// RegisterDaemonServiceHandler registers svc as the controlplane.v1.DaemonService implementation on
+// server.
+func RegisterDaemonServiceHandler(server *connect.Server, svc DaemonServiceHandler) {
+	adapter := daemonServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: daemonServiceCreateDaemonSpec(), Handler: adapter.createDaemon},
+		connect.Method{Spec: daemonServiceGetDaemonSpec(), Handler: adapter.getDaemon},
+		connect.Method{Spec: daemonServiceListDaemonsSpec(), Handler: adapter.listDaemons},
+		connect.Method{Spec: daemonServiceUpdateDaemonSpec(), Handler: adapter.updateDaemon},
+		connect.Method{Spec: daemonServiceDeleteDaemonSpec(), Handler: adapter.deleteDaemon},
+		connect.Method{Spec: daemonServiceSuspendDaemonSpec(), Handler: adapter.suspendDaemon},
+		connect.Method{Spec: daemonServiceResumeDaemonSpec(), Handler: adapter.resumeDaemon},
+		connect.Method{Spec: daemonServiceResizeDaemonSpec(), Handler: adapter.resizeDaemon},
+		connect.Method{Spec: daemonServiceGrowDaemonDiskSpec(), Handler: adapter.growDaemonDisk},
+		connect.Method{Spec: daemonServiceSetPortAccessSpec(), Handler: adapter.setPortAccess},
+		connect.Method{Spec: daemonServiceRemovePortAccessSpec(), Handler: adapter.removePortAccess},
+		connect.Method{Spec: daemonServiceListPortAccessRulesSpec(), Handler: adapter.listPortAccessRules},
+		connect.Method{Spec: daemonServiceSetDefaultPortAccessSpec(), Handler: adapter.setDefaultPortAccess},
 	)
-	daemonServiceGetDaemonHandler := connect.NewUnaryHandler(
-		DaemonServiceGetDaemonProcedure,
-		svc.GetDaemon,
-		connect.WithSchema(daemonServiceMethods.ByName("GetDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceListDaemonsHandler := connect.NewUnaryHandler(
-		DaemonServiceListDaemonsProcedure,
-		svc.ListDaemons,
-		connect.WithSchema(daemonServiceMethods.ByName("ListDaemons")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceUpdateDaemonHandler := connect.NewUnaryHandler(
-		DaemonServiceUpdateDaemonProcedure,
-		svc.UpdateDaemon,
-		connect.WithSchema(daemonServiceMethods.ByName("UpdateDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceDeleteDaemonHandler := connect.NewUnaryHandler(
-		DaemonServiceDeleteDaemonProcedure,
-		svc.DeleteDaemon,
-		connect.WithSchema(daemonServiceMethods.ByName("DeleteDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceSuspendDaemonHandler := connect.NewUnaryHandler(
-		DaemonServiceSuspendDaemonProcedure,
-		svc.SuspendDaemon,
-		connect.WithSchema(daemonServiceMethods.ByName("SuspendDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceResumeDaemonHandler := connect.NewUnaryHandler(
-		DaemonServiceResumeDaemonProcedure,
-		svc.ResumeDaemon,
-		connect.WithSchema(daemonServiceMethods.ByName("ResumeDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceResizeDaemonHandler := connect.NewUnaryHandler(
-		DaemonServiceResizeDaemonProcedure,
-		svc.ResizeDaemon,
-		connect.WithSchema(daemonServiceMethods.ByName("ResizeDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceGrowDaemonDiskHandler := connect.NewUnaryHandler(
-		DaemonServiceGrowDaemonDiskProcedure,
-		svc.GrowDaemonDisk,
-		connect.WithSchema(daemonServiceMethods.ByName("GrowDaemonDisk")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceSetPortAccessHandler := connect.NewUnaryHandler(
-		DaemonServiceSetPortAccessProcedure,
-		svc.SetPortAccess,
-		connect.WithSchema(daemonServiceMethods.ByName("SetPortAccess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceRemovePortAccessHandler := connect.NewUnaryHandler(
-		DaemonServiceRemovePortAccessProcedure,
-		svc.RemovePortAccess,
-		connect.WithSchema(daemonServiceMethods.ByName("RemovePortAccess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceListPortAccessRulesHandler := connect.NewUnaryHandler(
-		DaemonServiceListPortAccessRulesProcedure,
-		svc.ListPortAccessRules,
-		connect.WithSchema(daemonServiceMethods.ByName("ListPortAccessRules")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonServiceSetDefaultPortAccessHandler := connect.NewUnaryHandler(
-		DaemonServiceSetDefaultPortAccessProcedure,
-		svc.SetDefaultPortAccess,
-		connect.WithSchema(daemonServiceMethods.ByName("SetDefaultPortAccess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.DaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case DaemonServiceCreateDaemonProcedure:
-			daemonServiceCreateDaemonHandler.ServeHTTP(w, r)
-		case DaemonServiceGetDaemonProcedure:
-			daemonServiceGetDaemonHandler.ServeHTTP(w, r)
-		case DaemonServiceListDaemonsProcedure:
-			daemonServiceListDaemonsHandler.ServeHTTP(w, r)
-		case DaemonServiceUpdateDaemonProcedure:
-			daemonServiceUpdateDaemonHandler.ServeHTTP(w, r)
-		case DaemonServiceDeleteDaemonProcedure:
-			daemonServiceDeleteDaemonHandler.ServeHTTP(w, r)
-		case DaemonServiceSuspendDaemonProcedure:
-			daemonServiceSuspendDaemonHandler.ServeHTTP(w, r)
-		case DaemonServiceResumeDaemonProcedure:
-			daemonServiceResumeDaemonHandler.ServeHTTP(w, r)
-		case DaemonServiceResizeDaemonProcedure:
-			daemonServiceResizeDaemonHandler.ServeHTTP(w, r)
-		case DaemonServiceGrowDaemonDiskProcedure:
-			daemonServiceGrowDaemonDiskHandler.ServeHTTP(w, r)
-		case DaemonServiceSetPortAccessProcedure:
-			daemonServiceSetPortAccessHandler.ServeHTTP(w, r)
-		case DaemonServiceRemovePortAccessProcedure:
-			daemonServiceRemovePortAccessHandler.ServeHTTP(w, r)
-		case DaemonServiceListPortAccessRulesProcedure:
-			daemonServiceListPortAccessRulesHandler.ServeHTTP(w, r)
-		case DaemonServiceSetDefaultPortAccessProcedure:
-			daemonServiceSetDefaultPortAccessHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedDaemonServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDaemonServiceHandler struct{}
 
-func (UnimplementedDaemonServiceHandler) CreateDaemon(context.Context, *connect.Request[v1.CreateDaemonRequest]) (*connect.Response[v1.CreateDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.CreateDaemon is not implemented"))
+func (UnimplementedDaemonServiceHandler) CreateDaemon(context.Context, *v1.CreateDaemonRequest) (*v1.CreateDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.CreateDaemon is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) GetDaemon(context.Context, *connect.Request[v1.GetDaemonRequest]) (*connect.Response[v1.GetDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.GetDaemon is not implemented"))
+func (UnimplementedDaemonServiceHandler) GetDaemon(context.Context, *v1.GetDaemonRequest) (*v1.GetDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.GetDaemon is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.ListDaemons is not implemented"))
+func (UnimplementedDaemonServiceHandler) ListDaemons(context.Context, *v1.ListDaemonsRequest) (*v1.ListDaemonsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.ListDaemons is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) UpdateDaemon(context.Context, *connect.Request[v1.UpdateDaemonRequest]) (*connect.Response[v1.UpdateDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.UpdateDaemon is not implemented"))
+func (UnimplementedDaemonServiceHandler) UpdateDaemon(context.Context, *v1.UpdateDaemonRequest) (*v1.UpdateDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.UpdateDaemon is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) DeleteDaemon(context.Context, *connect.Request[v1.DeleteDaemonRequest]) (*connect.Response[v1.DeleteDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.DeleteDaemon is not implemented"))
+func (UnimplementedDaemonServiceHandler) DeleteDaemon(context.Context, *v1.DeleteDaemonRequest) (*v1.DeleteDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.DeleteDaemon is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) SuspendDaemon(context.Context, *connect.Request[v1.SuspendDaemonRequest]) (*connect.Response[v1.SuspendDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.SuspendDaemon is not implemented"))
+func (UnimplementedDaemonServiceHandler) SuspendDaemon(context.Context, *v1.SuspendDaemonRequest) (*v1.SuspendDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.SuspendDaemon is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.ResumeDaemon is not implemented"))
+func (UnimplementedDaemonServiceHandler) ResumeDaemon(context.Context, *v1.ResumeDaemonRequest) (*v1.ResumeDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.ResumeDaemon is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.ResizeDaemon is not implemented"))
+func (UnimplementedDaemonServiceHandler) ResizeDaemon(context.Context, *v1.ResizeDaemonRequest) (*v1.ResizeDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.ResizeDaemon is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) GrowDaemonDisk(context.Context, *connect.Request[v1.GrowDaemonDiskRequest]) (*connect.Response[v1.GrowDaemonDiskResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.GrowDaemonDisk is not implemented"))
+func (UnimplementedDaemonServiceHandler) GrowDaemonDisk(context.Context, *v1.GrowDaemonDiskRequest) (*v1.GrowDaemonDiskResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.GrowDaemonDisk is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.SetPortAccess is not implemented"))
+func (UnimplementedDaemonServiceHandler) SetPortAccess(context.Context, *v1.SetPortAccessRequest) (*v1.SetPortAccessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.SetPortAccess is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) RemovePortAccess(context.Context, *connect.Request[v1.RemovePortAccessRequest]) (*connect.Response[v1.RemovePortAccessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.RemovePortAccess is not implemented"))
+func (UnimplementedDaemonServiceHandler) RemovePortAccess(context.Context, *v1.RemovePortAccessRequest) (*v1.RemovePortAccessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.RemovePortAccess is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) ListPortAccessRules(context.Context, *connect.Request[v1.ListPortAccessRulesRequest]) (*connect.Response[v1.ListPortAccessRulesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.ListPortAccessRules is not implemented"))
+func (UnimplementedDaemonServiceHandler) ListPortAccessRules(context.Context, *v1.ListPortAccessRulesRequest) (*v1.ListPortAccessRulesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.ListPortAccessRules is not implemented")
 }
 
-func (UnimplementedDaemonServiceHandler) SetDefaultPortAccess(context.Context, *connect.Request[v1.SetDefaultPortAccessRequest]) (*connect.Response[v1.SetDefaultPortAccessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.SetDefaultPortAccess is not implemented"))
+func (UnimplementedDaemonServiceHandler) SetDefaultPortAccess(context.Context, *v1.SetDefaultPortAccessRequest) (*v1.SetDefaultPortAccessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DaemonService.SetDefaultPortAccess is not implemented")
+}
+
+type daemonServiceClient struct {
+	client *connect.Client
+}
+
+func (c *daemonServiceClient) CreateDaemon(ctx context.Context, req *v1.CreateDaemonRequest) (*v1.CreateDaemonResponse, error) {
+	var res v1.CreateDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonServiceCreateDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) GetDaemon(ctx context.Context, req *v1.GetDaemonRequest) (*v1.GetDaemonResponse, error) {
+	var res v1.GetDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonServiceGetDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) ListDaemons(ctx context.Context, req *v1.ListDaemonsRequest) (*v1.ListDaemonsResponse, error) {
+	var res v1.ListDaemonsResponse
+	if err := c.client.CallUnary(ctx, daemonServiceListDaemonsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) UpdateDaemon(ctx context.Context, req *v1.UpdateDaemonRequest) (*v1.UpdateDaemonResponse, error) {
+	var res v1.UpdateDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonServiceUpdateDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) DeleteDaemon(ctx context.Context, req *v1.DeleteDaemonRequest) (*v1.DeleteDaemonResponse, error) {
+	var res v1.DeleteDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonServiceDeleteDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) SuspendDaemon(ctx context.Context, req *v1.SuspendDaemonRequest) (*v1.SuspendDaemonResponse, error) {
+	var res v1.SuspendDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonServiceSuspendDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) ResumeDaemon(ctx context.Context, req *v1.ResumeDaemonRequest) (*v1.ResumeDaemonResponse, error) {
+	var res v1.ResumeDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonServiceResumeDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) ResizeDaemon(ctx context.Context, req *v1.ResizeDaemonRequest) (*v1.ResizeDaemonResponse, error) {
+	var res v1.ResizeDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonServiceResizeDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) GrowDaemonDisk(ctx context.Context, req *v1.GrowDaemonDiskRequest) (*v1.GrowDaemonDiskResponse, error) {
+	var res v1.GrowDaemonDiskResponse
+	if err := c.client.CallUnary(ctx, daemonServiceGrowDaemonDiskSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) SetPortAccess(ctx context.Context, req *v1.SetPortAccessRequest) (*v1.SetPortAccessResponse, error) {
+	var res v1.SetPortAccessResponse
+	if err := c.client.CallUnary(ctx, daemonServiceSetPortAccessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) RemovePortAccess(ctx context.Context, req *v1.RemovePortAccessRequest) (*v1.RemovePortAccessResponse, error) {
+	var res v1.RemovePortAccessResponse
+	if err := c.client.CallUnary(ctx, daemonServiceRemovePortAccessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) ListPortAccessRules(ctx context.Context, req *v1.ListPortAccessRulesRequest) (*v1.ListPortAccessRulesResponse, error) {
+	var res v1.ListPortAccessRulesResponse
+	if err := c.client.CallUnary(ctx, daemonServiceListPortAccessRulesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonServiceClient) SetDefaultPortAccess(ctx context.Context, req *v1.SetDefaultPortAccessRequest) (*v1.SetDefaultPortAccessResponse, error) {
+	var res v1.SetDefaultPortAccessResponse
+	if err := c.client.CallUnary(ctx, daemonServiceSetDefaultPortAccessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type daemonServiceHandler struct{ svc DaemonServiceHandler }
+
+func (h daemonServiceHandler) createDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) getDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) listDaemons(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDaemonsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDaemons(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) updateDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) deleteDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) suspendDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SuspendDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SuspendDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) resumeDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResumeDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResumeDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) resizeDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResizeDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResizeDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) growDaemonDisk(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GrowDaemonDiskRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GrowDaemonDisk(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) setPortAccess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetPortAccessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetPortAccess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) removePortAccess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RemovePortAccessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RemovePortAccess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) listPortAccessRules(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPortAccessRulesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPortAccessRules(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonServiceHandler) setDefaultPortAccess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetDefaultPortAccessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetDefaultPortAccess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

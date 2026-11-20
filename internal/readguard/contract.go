@@ -35,25 +35,22 @@ package readguard
 import (
 	"time"
 
-	"connectrpc.com/connect"
-	"google.golang.org/protobuf/proto"
+	"connectrpc.com/connect/v2"
 )
 
-// Service is the guard: a connect.Interceptor, mounted as a handler option on
-// the services whose reads Deps names. Streams pass through it untouched.
+// Service is the guard: a connect server interceptor, mounted
+// (mountkit.WithInterceptorsV2(guard.Intercept)) on the services whose reads
+// Deps names. Streams, and every procedure Deps does not name, pass through it
+// untouched.
 type Service interface {
-	WrapUnary(next connect.UnaryFunc) connect.UnaryFunc
-	WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc
-	WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc
+	// Intercept is the guard as a connect.ServerInterceptor.
+	Intercept(next connect.ServerFunc) connect.ServerFunc
 }
 
 // Procedure is a unary read the guard shares and bounds. Read builds one.
 type Procedure interface {
-	// Name is the procedure's full name, as a request's Spec().Procedure has it.
+	// Name is the procedure's full name, as a call's Spec.Procedure has it.
 	Name() string
-	// Respond wraps msg, a copy of the shared response message, for one more
-	// caller.
-	Respond(msg proto.Message) connect.AnyResponse
 }
 
 // Deps is what the guard guards and how hard.

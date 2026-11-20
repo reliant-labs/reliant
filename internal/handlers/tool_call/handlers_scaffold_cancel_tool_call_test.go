@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,26 +20,26 @@ func TestCancelToolCall_Generated(t *testing.T) {
 	t.Parallel()
 
 	svc := tool_call.NewTestToolCall(t)
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CancelToolCallRequest, pb.CancelToolCallResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CancelToolCallRequest, pb.CancelToolCallResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
-			Req:     connect.NewRequest(&pb.CancelToolCallRequest{ToolCallId: "call-1"}),
+			Req:     &pb.CancelToolCallRequest{ToolCallId: "call-1"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "tool_call_id is required",
-			Req:     connect.NewRequest(&pb.CancelToolCallRequest{}),
+			Req:     &pb.CancelToolCallRequest{},
 			Ctx:     tool_call.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 	}, svc.CancelToolCall)
 
 	missing := tool_call.NewTestToolCall(t, tool_call.WithToolCallDeps(tool_call.Deps{Repo: unknownToolCallRepo{}}))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CancelToolCallRequest, pb.CancelToolCallResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CancelToolCallRequest, pb.CancelToolCallResponse]{
 		{
 			Name:    "unknown tool call is not found",
-			Req:     connect.NewRequest(&pb.CancelToolCallRequest{ToolCallId: "call-1"}),
+			Req:     &pb.CancelToolCallRequest{ToolCallId: "call-1"},
 			Ctx:     tool_call.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

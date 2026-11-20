@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -26,31 +26,31 @@ func TestDeleteWorkflow_Generated(t *testing.T) {
 	store.RunTxFunc = func(ctx context.Context, _ orm.TxPolicy, f func(context.Context) error) error { return f(ctx) }
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteWorkflowRequest, pb.DeleteWorkflowResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DeleteWorkflowRequest, pb.DeleteWorkflowResponse]{
 		{
 			Name:    "a project is required",
-			Req:     connect.NewRequest(&pb.DeleteWorkflowRequest{Name: "My Flow"}),
+			Req:     &pb.DeleteWorkflowRequest{Name: "My Flow"},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a name is required",
-			Req:     connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1"}),
+			Req:     &pb.DeleteWorkflowRequest{ProjectId: "p-1"},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a workflow the caller does not have is not found",
-			Req:     connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: "Someone Else's"}),
+			Req:     &pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: "Someone Else's"},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the caller's workflow is deleted by the slug of its name",
-			Req:  connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: "My Flow"}),
+			Req:  &pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: "My Flow"},
 			Ctx:  workflow.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.DeleteWorkflowResponse]) {
-				if !resp.Msg.GetSuccess() {
+			Check: func(t *testing.T, resp *pb.DeleteWorkflowResponse) {
+				if !resp.GetSuccess() {
 					t.Fatalf("success = false, want true")
 				}
 				calls := store.Calls("DeleteWorkflowDraftBySlug")

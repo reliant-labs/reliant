@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -66,7 +65,7 @@ func (s *Service) resolveAsyncQuestion(
 	chat *db.Chat,
 	question *db.Question,
 	responseData string,
-) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
+) (*reliantv1.ResolveQuestionResponse, error) {
 	answer := formatAsyncAnswer(question.Metadata, responseData)
 
 	// An answer with nothing in it (a bare "Continue") tells the agent
@@ -108,7 +107,7 @@ func (s *Service) resolveAsyncQuestion(
 		logging.WarnContext(ctx, "[Question] Failed to announce an answered async question to the inbox", "error", err)
 	}
 
-	return connect.NewResponse(&reliantv1.ResolveQuestionResponse{Success: true}), nil
+	return &reliantv1.ResolveQuestionResponse{Success: true}, nil
 }
 
 // deliverAsyncAnswer sends answer to the thread that asked, or — when that
@@ -136,20 +135,20 @@ func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, questio
 	if asker != mainThread {
 		body := asyncAnswerBody(question.ID, answer)
 		id := asyncAnswerMessageID(question.ID, asker, body)
-		resp, err := s.deps.Messages.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		resp, err := s.deps.Messages.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 			ChatId:          chat.ID,
 			ThreadId:        asker,
 			Message:         body,
 			ClientMessageId: &id,
-		}))
+		})
 		if err != nil {
 			return err
 		}
-		if resp.Msg.GetSuccess() {
+		if resp.GetSuccess() {
 			return nil
 		}
 		logging.InfoContext(ctx, "The agent that asked an async question cannot take its answer; delivering it to the main thread",
-			"questionID", question.ID, "chatID", chat.ID, "threadID", asker, "refusal", resp.Msg.GetMessage())
+			"questionID", question.ID, "chatID", chat.ID, "threadID", asker, "refusal", resp.GetMessage())
 		body = asyncAnswerForwardedBody(question.ID, asker, answer)
 		return s.sendToMainThread(ctx, chat, question.ID, body)
 	}
@@ -201,14 +200,14 @@ func (s *Service) queueBehindBlockingQuestion(ctx context.Context, chat *db.Chat
 // message, the composer's way.
 func (s *Service) sendToMainThread(ctx context.Context, chat *db.Chat, questionID, body string) error {
 	id := asyncAnswerMessageID(questionID, chat.MainThreadID(), body)
-	_, err := s.deps.Messages.SendMessage(ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+	_, err := s.deps.Messages.SendMessage(ctx, &reliantv1.SendMessageRequest{
 		ChatId: chat.ID,
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
 			Content: body,
 		}},
 		ClientMessageId: &id,
-	}))
+	})
 	return err
 }
 

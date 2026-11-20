@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -54,12 +54,12 @@ func TestFileSystemProxy_CreateDirectory_RoutesMkdirToDaemon(t *testing.T) {
 	svc := newProxy(t, router, nil)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	resp, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{
+	resp, err := svc.CreateDirectory(ctx, &reliantv1.CreateDirectoryRequest{
 		Path: "/home/workspace/projects/new-folder",
-	}))
+	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	assert.Equal(t, "/home/workspace/projects/new-folder", resp.Msg.Path)
+	assert.Equal(t, "/home/workspace/projects/new-folder", resp.Path)
 
 	assert.Equal(t, "fs.mkdir", router.lastCommandType)
 	var sent map[string]string
@@ -95,7 +95,7 @@ func TestFileSystemProxy_MachineStateIsNotAnInternalError(t *testing.T) {
 	}{
 		{
 			name:   "not connected: NATS had no responder",
-			err:    connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
+			err:    connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser).Error()).WithCause(svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
 			want:   connect.CodeUnavailable,
 			marker: true,
 		},
@@ -128,11 +128,11 @@ func TestFileSystemProxy_MachineStateIsNotAnInternalError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := newProxy(t, &failingFSDaemonRouter{err: tc.err}, nil)
 			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-			_, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{
+			_, err := svc.CreateDirectory(ctx, &reliantv1.CreateDirectoryRequest{
 				Path: "/home/workspace/projects/new-folder",
-			}))
+			})
 			require.Error(t, err)
-			assert.Equal(t, tc.want, svcerr.Code(err), "error: %v", err)
+			assert.Equal(t, tc.want, svcerr.CodeV2(err), "error: %v", err)
 			if tc.marker {
 				assert.Contains(t, err.Error(), "no daemon connected")
 			}
@@ -148,9 +148,9 @@ func TestFileSystemProxy_CreateDirectory_RejectsEmptyAndRelativePaths(t *testing
 	// `C:proj` is drive-relative and `\proj` driveless: neither is absolute on
 	// any machine, so widening the check for Windows daemons must not admit them.
 	for _, path := range []string{"", "relative/path", `C:proj`, `\proj`} {
-		_, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{Path: path}))
+		_, err := svc.CreateDirectory(ctx, &reliantv1.CreateDirectoryRequest{Path: path})
 		require.Error(t, err, "path %q must be refused", path)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "path %q", path)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "path %q", path)
 	}
 	// No command should have been forwarded to the daemon.
 	assert.Empty(t, router.lastCommandType)
@@ -160,11 +160,11 @@ func TestFileSystemProxy_CreateDirectory_RequiresAuth(t *testing.T) {
 	router := &recordingFSDaemonRouter{}
 	svc := newProxy(t, router, nil)
 
-	_, err := svc.CreateDirectory(context.Background(), connect.NewRequest(&reliantv1.CreateDirectoryRequest{
+	_, err := svc.CreateDirectory(context.Background(), &reliantv1.CreateDirectoryRequest{
 		Path: "/home/workspace/projects/new-folder",
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 }
 
 // fsTreeStubRouter returns a canned fs.get_tree response and records the payload
@@ -197,11 +197,11 @@ func TestFileSystemProxy_GetFileTree_PrefixesPathsAndForwardsDepth(t *testing.T)
 	svc := newProxy(t, router, repo)
 	ctx := fsProxyContext()
 
-	resp, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{
+	resp, err := svc.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{
 		ProjectId: projectID,
 		Path:      "pkg",
 		Depth:     1,
-	}))
+	})
 	require.NoError(t, err)
 
 	var sent map[string]any
@@ -211,7 +211,7 @@ func TestFileSystemProxy_GetFileTree_PrefixesPathsAndForwardsDepth(t *testing.T)
 		"the daemon must receive an absolute, workspace-resolved path")
 
 	byName := map[string]*reliantv1.FileNode{}
-	for _, f := range resp.Msg.Files {
+	for _, f := range resp.Files {
 		byName[f.Name] = f
 	}
 
@@ -240,14 +240,14 @@ func TestFileSystemProxy_GetFileTree_RootNotPrefixed(t *testing.T) {
 		router := &fsTreeStubRouter{respJSON: []byte(daemonTree)}
 		svc := newProxy(t, router, repo)
 
-		resp, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+		resp, err := svc.GetFileTree(fsProxyContext(), &reliantv1.GetFileTreeRequest{
 			ProjectId: projectID,
 			Path:      requested,
 			Depth:     2,
-		}))
+		})
 		require.NoError(t, err)
-		require.Len(t, resp.Msg.Files, 1)
-		assert.Equal(t, "pkg", resp.Msg.Files[0].Path, "root-level paths must be left unchanged")
+		require.Len(t, resp.Files, 1)
+		assert.Equal(t, "pkg", resp.Files[0].Path, "root-level paths must be left unchanged")
 
 		var sent map[string]any
 		require.NoError(t, json.Unmarshal(router.lastPayload, &sent))
@@ -332,12 +332,12 @@ func TestFileSystemProxy_RefusesPathsThatEscapeTheWorkspace(t *testing.T) {
 			router := &fsTreeStubRouter{respJSON: []byte(`{"nodes":[]}`)}
 			svc := newProxy(t, router, repo)
 
-			_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+			_, err := svc.GetFileTree(fsProxyContext(), &reliantv1.GetFileTreeRequest{
 				ProjectId: projectID,
 				Path:      tc.path,
-			}))
+			})
 			require.Error(t, err, "path %q escaped the workspace", tc.path)
-			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err),
+			assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err),
 				"an escape is a refusal, not a missing file")
 			assert.Nil(t, router.lastPayload, "a refused path must never reach the daemon")
 		})
@@ -354,43 +354,43 @@ func TestFileSystemProxy_EveryPathRPCIsConfined(t *testing.T) {
 
 	calls := map[string]func(context.Context, *Service) error{
 		"GetFileTree": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: escape}))
+			_, err := s.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: escape})
 			return err
 		},
 		"GetFileContent": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFileContent(ctx, connect.NewRequest(&reliantv1.GetFileContentRequest{ProjectId: projectID, Path: escape}))
+			_, err := s.GetFileContent(ctx, &reliantv1.GetFileContentRequest{ProjectId: projectID, Path: escape})
 			return err
 		},
 		"SaveFileContent": func(ctx context.Context, s *Service) error {
-			_, err := s.SaveFileContent(ctx, connect.NewRequest(&reliantv1.SaveFileContentRequest{ProjectId: projectID, Path: escape, Content: "pwned"}))
+			_, err := s.SaveFileContent(ctx, &reliantv1.SaveFileContentRequest{ProjectId: projectID, Path: escape, Content: "pwned"})
 			return err
 		},
 		"GetFileMetadata": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFileMetadata(ctx, connect.NewRequest(&reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: escape}))
+			_, err := s.GetFileMetadata(ctx, &reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: escape})
 			return err
 		},
 		"GetFilePreviewInfo": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFilePreviewInfo(ctx, connect.NewRequest(&reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: escape}))
+			_, err := s.GetFilePreviewInfo(ctx, &reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: escape})
 			return err
 		},
 		"CreateFileOrFolder": func(ctx context.Context, s *Service) error {
-			_, err := s.CreateFileOrFolder(ctx, connect.NewRequest(&reliantv1.CreateFileOrFolderRequest{ProjectId: projectID, Path: escape}))
+			_, err := s.CreateFileOrFolder(ctx, &reliantv1.CreateFileOrFolderRequest{ProjectId: projectID, Path: escape})
 			return err
 		},
 		"DeleteFileOrFolder": func(ctx context.Context, s *Service) error {
-			_, err := s.DeleteFileOrFolder(ctx, connect.NewRequest(&reliantv1.DeleteFileOrFolderRequest{ProjectId: projectID, Path: escape}))
+			_, err := s.DeleteFileOrFolder(ctx, &reliantv1.DeleteFileOrFolderRequest{ProjectId: projectID, Path: escape})
 			return err
 		},
 		"SearchFiles": func(ctx context.Context, s *Service) error {
-			_, err := s.SearchFiles(ctx, connect.NewRequest(&reliantv1.SearchFilesRequest{ProjectId: projectID, Query: "secret", Path: &escapePtr}))
+			_, err := s.SearchFiles(ctx, &reliantv1.SearchFilesRequest{ProjectId: projectID, Query: "secret", Path: &escapePtr})
 			return err
 		},
 		"CopyFile source": func(ctx context.Context, s *Service) error {
-			_, err := s.CopyFile(ctx, connect.NewRequest(&reliantv1.CopyFileRequest{ProjectId: projectID, SourcePath: escape, DestinationPath: "copy.txt"}))
+			_, err := s.CopyFile(ctx, &reliantv1.CopyFileRequest{ProjectId: projectID, SourcePath: escape, DestinationPath: "copy.txt"})
 			return err
 		},
 		"CopyFile destination": func(ctx context.Context, s *Service) error {
-			_, err := s.CopyFile(ctx, connect.NewRequest(&reliantv1.CopyFileRequest{ProjectId: projectID, SourcePath: "README.md", DestinationPath: escape}))
+			_, err := s.CopyFile(ctx, &reliantv1.CopyFileRequest{ProjectId: projectID, SourcePath: "README.md", DestinationPath: escape})
 			return err
 		},
 	}
@@ -402,7 +402,7 @@ func TestFileSystemProxy_EveryPathRPCIsConfined(t *testing.T) {
 
 			err := call(fsProxyContext(), svc)
 			require.Error(t, err, "%s forwarded an escaping path", name)
-			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+			assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 			assert.Nil(t, router.lastPayload, "%s reached the daemon with a refused path", name)
 		})
 	}
@@ -418,19 +418,19 @@ func TestFileSystemProxy_ViewerRPCsOpenAbsolutePathsOutsideTheWorkspace(t *testi
 
 	viewers := map[string]func(context.Context, *Service) error{
 		"GetFileContent": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFileContent(ctx, connect.NewRequest(&reliantv1.GetFileContentRequest{ProjectId: projectID, Path: outside}))
+			_, err := s.GetFileContent(ctx, &reliantv1.GetFileContentRequest{ProjectId: projectID, Path: outside})
 			return err
 		},
 		"GetFileMetadata": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFileMetadata(ctx, connect.NewRequest(&reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: outside}))
+			_, err := s.GetFileMetadata(ctx, &reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: outside})
 			return err
 		},
 		"GetFilePreviewInfo": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFilePreviewInfo(ctx, connect.NewRequest(&reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: outside}))
+			_, err := s.GetFilePreviewInfo(ctx, &reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: outside})
 			return err
 		},
 		"GetFilePreview": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFilePreview(ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{ProjectId: projectID, Path: outside}))
+			_, err := s.GetFilePreview(ctx, &reliantv1.GetFilePreviewRequest{ProjectId: projectID, Path: outside})
 			return err
 		},
 	}
@@ -442,7 +442,7 @@ func TestFileSystemProxy_ViewerRPCsOpenAbsolutePathsOutsideTheWorkspace(t *testi
 			// The stub's empty reply may still fail the rpc (no such file,
 			// not previewable); what matters is that it was not refused.
 			err := call(fsProxyContext(), svc)
-			assert.NotEqual(t, connect.CodePermissionDenied, svcerr.Code(err), "%s refused a viewable path: %v", name, err)
+			assert.NotEqual(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "%s refused a viewable path: %v", name, err)
 			require.NotNil(t, router.lastPayload, "%s never reached the daemon", name)
 			var sent struct {
 				Path string `json:"path"`
@@ -454,15 +454,15 @@ func TestFileSystemProxy_ViewerRPCsOpenAbsolutePathsOutsideTheWorkspace(t *testi
 
 	confined := map[string]func(context.Context, *Service) error{
 		"GetFileTree": func(ctx context.Context, s *Service) error {
-			_, err := s.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: outside}))
+			_, err := s.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: outside})
 			return err
 		},
 		"SaveFileContent": func(ctx context.Context, s *Service) error {
-			_, err := s.SaveFileContent(ctx, connect.NewRequest(&reliantv1.SaveFileContentRequest{ProjectId: projectID, Path: outside, Content: "x"}))
+			_, err := s.SaveFileContent(ctx, &reliantv1.SaveFileContentRequest{ProjectId: projectID, Path: outside, Content: "x"})
 			return err
 		},
 		"DeleteFileOrFolder": func(ctx context.Context, s *Service) error {
-			_, err := s.DeleteFileOrFolder(ctx, connect.NewRequest(&reliantv1.DeleteFileOrFolderRequest{ProjectId: projectID, Path: outside}))
+			_, err := s.DeleteFileOrFolder(ctx, &reliantv1.DeleteFileOrFolderRequest{ProjectId: projectID, Path: outside})
 			return err
 		},
 	}
@@ -473,7 +473,7 @@ func TestFileSystemProxy_ViewerRPCsOpenAbsolutePathsOutsideTheWorkspace(t *testi
 
 			err := call(fsProxyContext(), svc)
 			require.Error(t, err, "%s forwarded a path outside the workspace", name)
-			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+			assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 			assert.Nil(t, router.lastPayload, "%s reached the daemon with a refused path", name)
 		})
 	}
@@ -502,10 +502,10 @@ func TestFileSystemProxy_SendsOnlyAbsolutePathsToTheDaemon(t *testing.T) {
 		router := &fsTreeStubRouter{respJSON: []byte(`{"nodes":[]}`)}
 		svc := newProxy(t, router, repo)
 
-		_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+		_, err := svc.GetFileTree(fsProxyContext(), &reliantv1.GetFileTreeRequest{
 			ProjectId: projectID,
 			Path:      tc.requested,
-		}))
+		})
 		require.NoError(t, err, "path %q", tc.requested)
 
 		var sent map[string]any
@@ -528,11 +528,11 @@ func TestFileSystemProxy_RefusesRequestWithoutAWorkspace(t *testing.T) {
 		// must happen before any DB call.
 		svc := newProxy(t, router, nil)
 
-		_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+		_, err := svc.GetFileTree(fsProxyContext(), &reliantv1.GetFileTreeRequest{
 			Path: "/",
-		}))
+		})
 		require.Error(t, err, "a request naming no workspace must not reach the daemon")
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 		assert.Nil(t, router.lastPayload)
 	})
 
@@ -550,12 +550,12 @@ func TestFileSystemProxy_RefusesRequestWithoutAWorkspace(t *testing.T) {
 		router := &fsTreeStubRouter{respJSON: []byte(`{"nodes":[]}`)}
 		svc := newProxy(t, router, repo)
 
-		_, err = svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+		_, err = svc.GetFileTree(fsProxyContext(), &reliantv1.GetFileTreeRequest{
 			ProjectId: projectID,
 			Path:      "/",
-		}))
+		})
 		require.Error(t, err, "a project with no workspace path must not be forwarded unscoped")
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 		assert.Nil(t, router.lastPayload)
 	})
 }
@@ -569,11 +569,11 @@ func TestFileSystemProxy_ReplaceInFilesAlwaysBoundsItsWalk(t *testing.T) {
 	router := &fsTreeStubRouter{respJSON: []byte(`{"files_changed":0}`)}
 	svc := newProxy(t, router, repo)
 
-	_, err := svc.ReplaceInFiles(fsProxyContext(), connect.NewRequest(&reliantv1.ReplaceInFilesRequest{
+	_, err := svc.ReplaceInFiles(fsProxyContext(), &reliantv1.ReplaceInFilesRequest{
 		ProjectId:   projectID,
 		SearchText:  "a",
 		ReplaceText: "b",
-	}))
+	})
 	require.NoError(t, err)
 
 	var sent struct {
@@ -586,7 +586,7 @@ func TestFileSystemProxy_ReplaceInFilesAlwaysBoundsItsWalk(t *testing.T) {
 	unscoped := &fsTreeStubRouter{respJSON: []byte(`{"files_changed":0}`)}
 	_, err = newProxy(t, unscoped, nil).ReplaceInFiles(
 		fsProxyContext(),
-		connect.NewRequest(&reliantv1.ReplaceInFilesRequest{SearchText: "a", ReplaceText: "b"}))
+		&reliantv1.ReplaceInFilesRequest{SearchText: "a", ReplaceText: "b"})
 	require.Error(t, err)
 	assert.Nil(t, unscoped.lastPayload)
 }

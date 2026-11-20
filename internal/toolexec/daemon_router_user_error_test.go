@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
@@ -28,7 +28,7 @@ func TestDaemonResolutionErrorsAreUserErrors(t *testing.T) {
 		"suspended":         fmt.Errorf("the machine for this request is suspended and will wake when you next message it: %w", ErrDaemonPending),
 		"no machine":        fmt.Errorf("%w: no machine is connected to your account yet", ErrNoDaemon),
 		"not connected":     notConnected,
-		"wrapped by router": connect.NewError(connect.CodeUnavailable, fmt.Errorf("resolving daemon for command: %w", ErrDaemonPending)),
+		"wrapped by router": connect.NewError(connect.CodeUnavailable, fmt.Errorf("resolving daemon for command: %w", ErrDaemonPending).Error()).WithCause(fmt.Errorf("resolving daemon for command: %w", ErrDaemonPending)),
 	} {
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err), name)
 	}
@@ -40,7 +40,7 @@ func TestDaemonResolutionErrorsAreUserErrors(t *testing.T) {
 	assert.Equal(t, "unavailable: no daemon connected for user", notConnected.Error())
 	var wire *connect.Error
 	require.ErrorAs(t, notConnected, &wire)
-	assert.Equal(t, errreason.DaemonNotConnected, wire.Meta().Get(svcerr.ReasonHeader), "the reason rides the *connect.Error itself")
+	assert.Equal(t, errreason.DaemonNotConnected, svcerr.MetaOf(wire).Get(svcerr.ReasonHeader), "the reason rides the *connect.Error itself (in its cause)")
 	assert.True(t, daemonoffline.IsError(notConnected), "the daemon-offline marker must survive")
 	assert.Contains(t, ErrDaemonPending.Error(), daemonoffline.ErrorSubstring)
 
@@ -49,7 +49,7 @@ func TestDaemonResolutionErrorsAreUserErrors(t *testing.T) {
 	timeout := daemonRequestError("daemon command fs.get_tree", nats.ErrTimeout)
 	require.Error(t, timeout)
 	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(timeout))
-	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(timeout))
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(timeout))
 	assert.True(t, IsDaemonTimeout(timeout))
 	assert.True(t, errors.Is(timeout, nats.ErrTimeout))
 	assert.False(t, daemonoffline.IsError(timeout), "a slow machine is not an offline one")
@@ -62,7 +62,7 @@ func TestDaemonResolutionErrorsAreUserErrors(t *testing.T) {
 	// Any other transport failure is neither.
 	closed := daemonRequestError("daemon command fs.get_tree", nats.ErrConnectionClosed)
 	assert.False(t, IsDaemonTimeout(closed))
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(closed))
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(closed))
 }
 
 // The daemon refusing a credential store is its policy working, not a server

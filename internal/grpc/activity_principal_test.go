@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,6 +20,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 func TestPrincipalReadsReliantsAuthContext(t *testing.T) {
@@ -41,11 +42,11 @@ type updatePresetOK struct {
 	reliantv1connect.UnimplementedPresetServiceHandler
 }
 
-func (updatePresetOK) UpdatePreset(context.Context, *connect.Request[reliantv1.UpdatePresetRequest]) (*connect.Response[reliantv1.UpdatePresetResponse], error) {
-	return connect.NewResponse(&reliantv1.UpdatePresetResponse{
+func (updatePresetOK) UpdatePreset(context.Context, *reliantv1.UpdatePresetRequest) (*reliantv1.UpdatePresetResponse, error) {
+	return &reliantv1.UpdatePresetResponse{
 		Success: true,
 		Preset:  &reliantv1.PresetInfo{Id: "preset-7", Name: "careful"},
-	}), nil
+	}, nil
 }
 
 // activityEvents serves a PresetService through the API listener's real
@@ -59,20 +60,20 @@ func activityEvents(t *testing.T, svc reliantv1connect.PresetServiceHandler) (re
 	)
 	logger := slog.New(slog.NewJSONHandler(lockedWriter{mu: &mu, w: &logs}, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	asUser := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			return next(auth.WithUser(ctx, "user-42", "user", "grace@example.com"), req)
+	asUser := func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(auth.WithUser(ctx, "user-42", "user", "grace@example.com"), spec, stream)
 		}
-	})
+	}
 	chain, err := NewUserChain(UserChainDeps{Auth: asUser, Logger: logger})
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewPresetServiceHandler(svc, chain.HandlerOptions()...))
+	chain.NewMux(mux).Register(func(server *connect.Server) { reliantv1connect.RegisterPresetServiceHandler(server, svc) })
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	return reliantv1connect.NewPresetServiceClient(srv.Client(), srv.URL), func() []map[string]any {
+	return reliantv1connect.NewPresetServiceClient(rpcclient.New(srv.Client(), srv.URL, nil)), func() []map[string]any {
 		mu.Lock()
 		defer mu.Unlock()
 		var events []map[string]any
@@ -106,7 +107,7 @@ func (l lockedWriter) Write(p []byte) (int, error) {
 func TestUserChainActivityEventNamesTheRealUser(t *testing.T) {
 	client, events := activityEvents(t, updatePresetOK{})
 
-	_, err := client.UpdatePreset(context.Background(), connect.NewRequest(&reliantv1.UpdatePresetRequest{ProjectId: "p-1", Name: "careful"}))
+	_, err := client.UpdatePreset(context.Background(), &reliantv1.UpdatePresetRequest{ProjectId: "p-1", Name: "careful"})
 	require.NoError(t, err)
 
 	got := events()

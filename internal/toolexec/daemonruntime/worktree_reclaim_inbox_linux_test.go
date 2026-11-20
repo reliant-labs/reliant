@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -134,12 +133,12 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	listed, err := inboxSvc.ListInbox(userCtx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	listed, err := inboxSvc.ListInbox(userCtx, &reliantv1.ListInboxRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var shown *reliantv1.WorktreeReclaimProposal
-	for _, item := range listed.Msg.Items {
+	for _, item := range listed.Items {
 		if item.Kind != reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM {
 			continue
 		}
@@ -153,7 +152,7 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 		}
 	}
 	if shown == nil {
-		t.Fatalf("no worktree-reclaim item lists %s: %+v", f.root, listed.Msg.Items)
+		t.Fatalf("no worktree-reclaim item lists %s: %+v", f.root, listed.Items)
 	}
 	if shown.Key != f.worktreeID || shown.Fingerprint == "" || shown.Decision != "" {
 		t.Fatalf("shown proposal %+v, want the workspace undecided", shown)
@@ -197,14 +196,14 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decided, err := decider.DecideWorktreeReclaim(userCtx, connect.NewRequest(&reliantv1.DecideWorktreeReclaimRequest{
+	decided, err := decider.DecideWorktreeReclaim(userCtx, &reliantv1.DecideWorktreeReclaimRequest{
 		DaemonId:  daemonID,
 		Decisions: []*reliantv1.WorktreeReclaimDecision{{Key: shown.Key, Fingerprint: shown.Fingerprint, Approve: true}},
-	}))
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res := decided.Msg.Results; len(res) != 1 || !res[0].Recorded || res[0].Removal != "removing" || runs != 1 {
+	if res := decided.Results; len(res) != 1 || !res[0].Recorded || res[0].Removal != "removing" || runs != 1 {
 		t.Fatalf("results %+v after %d runs, want the approval recorded and its removal started once", res, runs)
 	}
 	results, err := worktreereclaim.ApprovalCommandResults(state)

@@ -24,7 +24,7 @@ import (
 
 	userconfig "github.com/reliant-labs/reliant/internal/config"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,11 +101,11 @@ func TestModelEndpointE2E(t *testing.T) {
 	registry, catalogClient := e2eAPI(t, repo, router)
 	var daemonID string
 	require.Eventually(t, func() bool {
-		ds, err := registry.ListDaemons(context.Background(), asUser(e2eUserA, &reliantv1.ListDaemonsRequest{}))
-		if err != nil || len(ds.Msg.GetDaemons()) == 0 || ds.Msg.GetDaemons()[0].GetLocalModels() == nil {
+		ds, err := registry.ListDaemons(asUser(e2eUserA), &reliantv1.ListDaemonsRequest{})
+		if err != nil || len(ds.GetDaemons()) == 0 || ds.GetDaemons()[0].GetLocalModels() == nil {
 			return false
 		}
-		daemonID = ds.Msg.GetDaemons()[0].GetDaemonId()
+		daemonID = ds.GetDaemons()[0].GetDaemonId()
 		return true
 	}, 60*time.Second, 500*time.Millisecond, "daemon never published an inventory")
 
@@ -127,16 +127,16 @@ func TestModelEndpointE2E(t *testing.T) {
 	const viaURL = "http://127.0.0.1:11434/v1"
 	var viaID string
 	t.Run("a_create_via_daemon_authorizes_relay_and_probes_through_it", func(t *testing.T) {
-		resp, err := endpointSvc.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
+		resp, err := endpointSvc.CreateModelEndpoint(epCtx(e2eUserA), &reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{
 				Name: "Laptop Ollama", BaseUrl: viaURL,
 				Route:    reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_VIA_DAEMON,
 				DaemonId: daemonID,
 				Models:   []*reliantv1.ModelEndpointModel{{Name: e2eChatModel, Temperature: ptrF(0.2), ExtraBodyJson: `{"seed": 7}`}},
 			},
-		}))
+		})
 		require.NoError(t, err)
-		ep := resp.Msg.GetEndpoint()
+		ep := resp.GetEndpoint()
 		viaID = ep.GetId()
 		require.Empty(t, ep.GetProbe().GetError(), "probe through the real relay: %v", ep.GetProbe())
 		assert.Equal(t, "ollama", ep.GetProbe().GetKind(), "the daemon's own prober detected the server family")
@@ -152,10 +152,10 @@ func TestModelEndpointE2E(t *testing.T) {
 		assert.Greater(t, qwen.GetContextWindow(), int64(0))
 		t.Logf("probed through relay: kind=%s qwen3 ctx=%d tools=%v thinking=%v", ep.GetProbe().GetKind(), qwen.GetContextWindow(), qwen.GetSupportsTools(), qwen.GetSupportsThinking())
 
-		ds, err := registry.GetDaemon(context.Background(), asUser(e2eUserA, &reliantv1.GetDaemonRequest{DaemonId: daemonID}))
+		ds, err := registry.GetDaemon(asUser(e2eUserA), &reliantv1.GetDaemonRequest{DaemonId: daemonID})
 		require.NoError(t, err)
 		var configured []string
-		for _, e := range ds.Msg.GetDaemon().GetLocalModels().GetEndpoints() {
+		for _, e := range ds.GetDaemon().GetLocalModels().GetEndpoints() {
 			if e.GetSource() == "configured" {
 				configured = append(configured, e.GetBaseUrl())
 			}
@@ -185,10 +185,10 @@ func TestModelEndpointE2E(t *testing.T) {
 		return handlers.ProbeLLMCall(ctx, ps)
 	}
 	t.Run("b_catalog_groups_the_endpoint_under_its_name", func(t *testing.T) {
-		resp, err := catalogClient.ListModels(context.Background(), asUser(e2eUserA, &reliantv1.ListModelsRequest{}))
+		resp, err := catalogClient.ListModels(asUser(e2eUserA), &reliantv1.ListModelsRequest{})
 		require.NoError(t, err)
 		var found *reliantv1.ModelInfo
-		for _, info := range resp.Msg.GetModels() {
+		for _, info := range resp.GetModels() {
 			if info.GetLocal().GetEndpointId() == viaID && info.GetId() == e2eChatModel+"@local" {
 				found = info
 			}
@@ -210,9 +210,9 @@ func TestModelEndpointE2E(t *testing.T) {
 	})
 
 	t.Run("d_another_user_cannot_use_or_see_it", func(t *testing.T) {
-		list, err := endpointSvc.ListModelEndpoints(epCtx(e2eUserB), connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))
+		list, err := endpointSvc.ListModelEndpoints(epCtx(e2eUserB), &reliantv1.ListModelEndpointsRequest{})
 		require.NoError(t, err)
-		assert.Empty(t, list.Msg.GetEndpoints())
+		assert.Empty(t, list.GetEndpoints())
 		r := probe(e2eUserB, handlers.ProbeSpec{
 			ModelID: e2eChatModel + "@local", Providers: []string{"endpoint:" + viaID},
 			History: []message.Message{handlers.ProbeUserMessage("hi")},
@@ -223,14 +223,14 @@ func TestModelEndpointE2E(t *testing.T) {
 
 	// ── 2. DIRECT ─────────────────────────────────────────────────────────
 	t.Run("e_direct_endpoint_hits_ollama_from_the_server_side", func(t *testing.T) {
-		resp, err := endpointSvc.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
+		resp, err := endpointSvc.CreateModelEndpoint(epCtx(e2eUserA), &reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{
 				Name: "Direct Ollama", BaseUrl: e2eOllamaRoot + "/v1",
 				Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT,
 			},
-		}))
+		})
 		require.NoError(t, err)
-		ep := resp.Msg.GetEndpoint()
+		ep := resp.GetEndpoint()
 		require.Empty(t, ep.GetProbe().GetError(), "%v", ep.GetProbe())
 		assert.Equal(t, "ollama", ep.GetProbe().GetKind())
 
@@ -253,25 +253,25 @@ func TestModelEndpointE2E(t *testing.T) {
 			Network: &configv1.NetworkConfig{},
 		})
 		require.NoError(t, err)
-		_, err = hosted.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
+		_, err = hosted.CreateModelEndpoint(epCtx(e2eUserA), &reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Hosted Direct", BaseUrl: e2eOllamaRoot + "/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT},
-		}))
+		})
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	})
 
 	// ── 3. delete revokes the relay authorization ────────────────────────
 	t.Run("g_delete_revokes_the_endpoint_from_the_daemon", func(t *testing.T) {
-		_, err := endpointSvc.DeleteModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.DeleteModelEndpointRequest{Id: viaID}))
+		_, err := endpointSvc.DeleteModelEndpoint(epCtx(e2eUserA), &reliantv1.DeleteModelEndpointRequest{Id: viaID})
 		require.NoError(t, err)
 		// The stored inventory is written just after the refresh reply is
 		// delivered, so wait for it rather than reading once.
 		require.Eventually(t, func() bool {
-			ds, err := registry.GetDaemon(context.Background(), asUser(e2eUserA, &reliantv1.GetDaemonRequest{DaemonId: daemonID}))
+			ds, err := registry.GetDaemon(asUser(e2eUserA), &reliantv1.GetDaemonRequest{DaemonId: daemonID})
 			if err != nil {
 				return false
 			}
-			for _, e := range ds.Msg.GetDaemon().GetLocalModels().GetEndpoints() {
+			for _, e := range ds.GetDaemon().GetLocalModels().GetEndpoints() {
 				if e.GetSource() == "configured" {
 					return false
 				}

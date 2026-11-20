@@ -7,204 +7,249 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BackgroundServiceName is the fully-qualified name of the BackgroundService service.
 	BackgroundServiceName = "reliant.v1.BackgroundService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BackgroundServiceListProcessesProcedure is the fully-qualified name of the BackgroundService's
+	// BackgroundServiceListProcessesProcedure is the procedure name of the BackgroundService's
 	// ListProcesses RPC.
 	BackgroundServiceListProcessesProcedure = "/reliant.v1.BackgroundService/ListProcesses"
-	// BackgroundServiceGetProcessOutputProcedure is the fully-qualified name of the BackgroundService's
+	// BackgroundServiceGetProcessOutputProcedure is the procedure name of the BackgroundService's
 	// GetProcessOutput RPC.
 	BackgroundServiceGetProcessOutputProcedure = "/reliant.v1.BackgroundService/GetProcessOutput"
-	// BackgroundServiceKillProcessProcedure is the fully-qualified name of the BackgroundService's
+	// BackgroundServiceKillProcessProcedure is the procedure name of the BackgroundService's
 	// KillProcess RPC.
 	BackgroundServiceKillProcessProcedure = "/reliant.v1.BackgroundService/KillProcess"
-	// BackgroundServiceStreamProcessOutputProcedure is the fully-qualified name of the
-	// BackgroundService's StreamProcessOutput RPC.
+	// BackgroundServiceStreamProcessOutputProcedure is the procedure name of the BackgroundService's
+	// StreamProcessOutput RPC.
 	BackgroundServiceStreamProcessOutputProcedure = "/reliant.v1.BackgroundService/StreamProcessOutput"
+)
+
+var (
+	backgroundServiceListProcessesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_background_proto.Services().ByName("BackgroundService").Methods().ByName("ListProcesses"),
+			Procedure:  BackgroundServiceListProcessesProcedure,
+		}
+	})
+	backgroundServiceGetProcessOutputSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_background_proto.Services().ByName("BackgroundService").Methods().ByName("GetProcessOutput"),
+			Procedure:  BackgroundServiceGetProcessOutputProcedure,
+		}
+	})
+	backgroundServiceKillProcessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_background_proto.Services().ByName("BackgroundService").Methods().ByName("KillProcess"),
+			Procedure:  BackgroundServiceKillProcessProcedure,
+		}
+	})
+	backgroundServiceStreamProcessOutputSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeServer,
+			Schema:           v1.File_reliant_v1_background_proto.Services().ByName("BackgroundService").Methods().ByName("StreamProcessOutput"),
+			Procedure:        BackgroundServiceStreamProcessOutputProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // BackgroundServiceClient is a client for the reliant.v1.BackgroundService service.
 type BackgroundServiceClient interface {
 	// ListProcesses returns all background processes, optionally filtered
-	ListProcesses(context.Context, *connect.Request[v1.ListBackgroundProcessesRequest]) (*connect.Response[v1.ListBackgroundProcessesResponse], error)
+	ListProcesses(context.Context, *v1.ListBackgroundProcessesRequest) (*v1.ListBackgroundProcessesResponse, error)
 	// GetProcessOutput returns the stdout/stderr output of a process
-	GetProcessOutput(context.Context, *connect.Request[v1.GetProcessOutputRequest]) (*connect.Response[v1.GetProcessOutputResponse], error)
+	GetProcessOutput(context.Context, *v1.GetProcessOutputRequest) (*v1.GetProcessOutputResponse, error)
 	// KillProcess terminates a background process
-	KillProcess(context.Context, *connect.Request[v1.KillProcessRequest]) (*connect.Response[v1.KillProcessResponse], error)
+	KillProcess(context.Context, *v1.KillProcessRequest) (*v1.KillProcessResponse, error)
 	// StreamProcessOutput streams real-time process output (stdout/stderr)
 	// Returns existing output first, then streams new lines as they arrive
-	StreamProcessOutput(context.Context, *connect.Request[v1.StreamProcessOutputRequest]) (*connect.ServerStreamForClient[v1.ProcessOutputEvent], error)
+	StreamProcessOutput(context.Context, *v1.StreamProcessOutputRequest) (BackgroundServiceStreamProcessOutputClientStream, error)
 }
 
-// NewBackgroundServiceClient constructs a client for the reliant.v1.BackgroundService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBackgroundServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BackgroundServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	backgroundServiceMethods := v1.File_reliant_v1_background_proto.Services().ByName("BackgroundService").Methods()
-	return &backgroundServiceClient{
-		listProcesses: connect.NewClient[v1.ListBackgroundProcessesRequest, v1.ListBackgroundProcessesResponse](
-			httpClient,
-			baseURL+BackgroundServiceListProcessesProcedure,
-			connect.WithSchema(backgroundServiceMethods.ByName("ListProcesses")),
-			connect.WithClientOptions(opts...),
-		),
-		getProcessOutput: connect.NewClient[v1.GetProcessOutputRequest, v1.GetProcessOutputResponse](
-			httpClient,
-			baseURL+BackgroundServiceGetProcessOutputProcedure,
-			connect.WithSchema(backgroundServiceMethods.ByName("GetProcessOutput")),
-			connect.WithClientOptions(opts...),
-		),
-		killProcess: connect.NewClient[v1.KillProcessRequest, v1.KillProcessResponse](
-			httpClient,
-			baseURL+BackgroundServiceKillProcessProcedure,
-			connect.WithSchema(backgroundServiceMethods.ByName("KillProcess")),
-			connect.WithClientOptions(opts...),
-		),
-		streamProcessOutput: connect.NewClient[v1.StreamProcessOutputRequest, v1.ProcessOutputEvent](
-			httpClient,
-			baseURL+BackgroundServiceStreamProcessOutputProcedure,
-			connect.WithSchema(backgroundServiceMethods.ByName("StreamProcessOutput")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
+// NewBackgroundServiceClient constructs a client for the reliant.v1.BackgroundService service.
+// Multiple service clients may share a single connect.Client.
+func NewBackgroundServiceClient(client *connect.Client) BackgroundServiceClient {
+	return &backgroundServiceClient{client: client}
+}
+
+// BackgroundServiceStreamProcessOutputClientStream is the client stream for the BackgroundService's
+// StreamProcessOutput RPC.
+type BackgroundServiceStreamProcessOutputClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s BackgroundServiceStreamProcessOutputClientStream) Receive() (*v1.ProcessOutputEvent, error) {
+	var res v1.ProcessOutputEvent
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// backgroundServiceClient implements BackgroundServiceClient.
-type backgroundServiceClient struct {
-	listProcesses       *connect.Client[v1.ListBackgroundProcessesRequest, v1.ListBackgroundProcessesResponse]
-	getProcessOutput    *connect.Client[v1.GetProcessOutputRequest, v1.GetProcessOutputResponse]
-	killProcess         *connect.Client[v1.KillProcessRequest, v1.KillProcessResponse]
-	streamProcessOutput *connect.Client[v1.StreamProcessOutputRequest, v1.ProcessOutputEvent]
-}
-
-// ListProcesses calls reliant.v1.BackgroundService.ListProcesses.
-func (c *backgroundServiceClient) ListProcesses(ctx context.Context, req *connect.Request[v1.ListBackgroundProcessesRequest]) (*connect.Response[v1.ListBackgroundProcessesResponse], error) {
-	return c.listProcesses.CallUnary(ctx, req)
-}
-
-// GetProcessOutput calls reliant.v1.BackgroundService.GetProcessOutput.
-func (c *backgroundServiceClient) GetProcessOutput(ctx context.Context, req *connect.Request[v1.GetProcessOutputRequest]) (*connect.Response[v1.GetProcessOutputResponse], error) {
-	return c.getProcessOutput.CallUnary(ctx, req)
-}
-
-// KillProcess calls reliant.v1.BackgroundService.KillProcess.
-func (c *backgroundServiceClient) KillProcess(ctx context.Context, req *connect.Request[v1.KillProcessRequest]) (*connect.Response[v1.KillProcessResponse], error) {
-	return c.killProcess.CallUnary(ctx, req)
-}
-
-// StreamProcessOutput calls reliant.v1.BackgroundService.StreamProcessOutput.
-func (c *backgroundServiceClient) StreamProcessOutput(ctx context.Context, req *connect.Request[v1.StreamProcessOutputRequest]) (*connect.ServerStreamForClient[v1.ProcessOutputEvent], error) {
-	return c.streamProcessOutput.CallServerStream(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s BackgroundServiceStreamProcessOutputClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // BackgroundServiceHandler is an implementation of the reliant.v1.BackgroundService service.
 type BackgroundServiceHandler interface {
 	// ListProcesses returns all background processes, optionally filtered
-	ListProcesses(context.Context, *connect.Request[v1.ListBackgroundProcessesRequest]) (*connect.Response[v1.ListBackgroundProcessesResponse], error)
+	ListProcesses(context.Context, *v1.ListBackgroundProcessesRequest) (*v1.ListBackgroundProcessesResponse, error)
 	// GetProcessOutput returns the stdout/stderr output of a process
-	GetProcessOutput(context.Context, *connect.Request[v1.GetProcessOutputRequest]) (*connect.Response[v1.GetProcessOutputResponse], error)
+	GetProcessOutput(context.Context, *v1.GetProcessOutputRequest) (*v1.GetProcessOutputResponse, error)
 	// KillProcess terminates a background process
-	KillProcess(context.Context, *connect.Request[v1.KillProcessRequest]) (*connect.Response[v1.KillProcessResponse], error)
+	KillProcess(context.Context, *v1.KillProcessRequest) (*v1.KillProcessResponse, error)
 	// StreamProcessOutput streams real-time process output (stdout/stderr)
 	// Returns existing output first, then streams new lines as they arrive
-	StreamProcessOutput(context.Context, *connect.Request[v1.StreamProcessOutputRequest], *connect.ServerStream[v1.ProcessOutputEvent]) error
+	StreamProcessOutput(context.Context, *v1.StreamProcessOutputRequest, BackgroundServiceStreamProcessOutputServerStream) error
 }
 
-// NewBackgroundServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBackgroundServiceHandler(svc BackgroundServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	backgroundServiceMethods := v1.File_reliant_v1_background_proto.Services().ByName("BackgroundService").Methods()
-	backgroundServiceListProcessesHandler := connect.NewUnaryHandler(
-		BackgroundServiceListProcessesProcedure,
-		svc.ListProcesses,
-		connect.WithSchema(backgroundServiceMethods.ByName("ListProcesses")),
-		connect.WithHandlerOptions(opts...),
+// RegisterBackgroundServiceHandler registers svc as the reliant.v1.BackgroundService implementation
+// on server.
+func RegisterBackgroundServiceHandler(server *connect.Server, svc BackgroundServiceHandler) {
+	adapter := backgroundServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: backgroundServiceListProcessesSpec(), Handler: adapter.listProcesses},
+		connect.Method{Spec: backgroundServiceGetProcessOutputSpec(), Handler: adapter.getProcessOutput},
+		connect.Method{Spec: backgroundServiceKillProcessSpec(), Handler: adapter.killProcess},
+		connect.Method{Spec: backgroundServiceStreamProcessOutputSpec(), Handler: adapter.streamProcessOutput},
 	)
-	backgroundServiceGetProcessOutputHandler := connect.NewUnaryHandler(
-		BackgroundServiceGetProcessOutputProcedure,
-		svc.GetProcessOutput,
-		connect.WithSchema(backgroundServiceMethods.ByName("GetProcessOutput")),
-		connect.WithHandlerOptions(opts...),
-	)
-	backgroundServiceKillProcessHandler := connect.NewUnaryHandler(
-		BackgroundServiceKillProcessProcedure,
-		svc.KillProcess,
-		connect.WithSchema(backgroundServiceMethods.ByName("KillProcess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	backgroundServiceStreamProcessOutputHandler := connect.NewServerStreamHandler(
-		BackgroundServiceStreamProcessOutputProcedure,
-		svc.StreamProcessOutput,
-		connect.WithSchema(backgroundServiceMethods.ByName("StreamProcessOutput")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.BackgroundService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BackgroundServiceListProcessesProcedure:
-			backgroundServiceListProcessesHandler.ServeHTTP(w, r)
-		case BackgroundServiceGetProcessOutputProcedure:
-			backgroundServiceGetProcessOutputHandler.ServeHTTP(w, r)
-		case BackgroundServiceKillProcessProcedure:
-			backgroundServiceKillProcessHandler.ServeHTTP(w, r)
-		case BackgroundServiceStreamProcessOutputProcedure:
-			backgroundServiceStreamProcessOutputHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// BackgroundServiceStreamProcessOutputServerStream is the server stream for the BackgroundService's
+// StreamProcessOutput RPC.
+type BackgroundServiceStreamProcessOutputServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s BackgroundServiceStreamProcessOutputServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s BackgroundServiceStreamProcessOutputServerStream) Send(res *v1.ProcessOutputEvent) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedBackgroundServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBackgroundServiceHandler struct{}
 
-func (UnimplementedBackgroundServiceHandler) ListProcesses(context.Context, *connect.Request[v1.ListBackgroundProcessesRequest]) (*connect.Response[v1.ListBackgroundProcessesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.BackgroundService.ListProcesses is not implemented"))
+func (UnimplementedBackgroundServiceHandler) ListProcesses(context.Context, *v1.ListBackgroundProcessesRequest) (*v1.ListBackgroundProcessesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.BackgroundService.ListProcesses is not implemented")
 }
 
-func (UnimplementedBackgroundServiceHandler) GetProcessOutput(context.Context, *connect.Request[v1.GetProcessOutputRequest]) (*connect.Response[v1.GetProcessOutputResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.BackgroundService.GetProcessOutput is not implemented"))
+func (UnimplementedBackgroundServiceHandler) GetProcessOutput(context.Context, *v1.GetProcessOutputRequest) (*v1.GetProcessOutputResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.BackgroundService.GetProcessOutput is not implemented")
 }
 
-func (UnimplementedBackgroundServiceHandler) KillProcess(context.Context, *connect.Request[v1.KillProcessRequest]) (*connect.Response[v1.KillProcessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.BackgroundService.KillProcess is not implemented"))
+func (UnimplementedBackgroundServiceHandler) KillProcess(context.Context, *v1.KillProcessRequest) (*v1.KillProcessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.BackgroundService.KillProcess is not implemented")
 }
 
-func (UnimplementedBackgroundServiceHandler) StreamProcessOutput(context.Context, *connect.Request[v1.StreamProcessOutputRequest], *connect.ServerStream[v1.ProcessOutputEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.BackgroundService.StreamProcessOutput is not implemented"))
+func (UnimplementedBackgroundServiceHandler) StreamProcessOutput(context.Context, *v1.StreamProcessOutputRequest, BackgroundServiceStreamProcessOutputServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "reliant.v1.BackgroundService.StreamProcessOutput is not implemented")
+}
+
+type backgroundServiceClient struct {
+	client *connect.Client
+}
+
+func (c *backgroundServiceClient) ListProcesses(ctx context.Context, req *v1.ListBackgroundProcessesRequest) (*v1.ListBackgroundProcessesResponse, error) {
+	var res v1.ListBackgroundProcessesResponse
+	if err := c.client.CallUnary(ctx, backgroundServiceListProcessesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backgroundServiceClient) GetProcessOutput(ctx context.Context, req *v1.GetProcessOutputRequest) (*v1.GetProcessOutputResponse, error) {
+	var res v1.GetProcessOutputResponse
+	if err := c.client.CallUnary(ctx, backgroundServiceGetProcessOutputSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backgroundServiceClient) KillProcess(ctx context.Context, req *v1.KillProcessRequest) (*v1.KillProcessResponse, error) {
+	var res v1.KillProcessResponse
+	if err := c.client.CallUnary(ctx, backgroundServiceKillProcessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *backgroundServiceClient) StreamProcessOutput(ctx context.Context, req *v1.StreamProcessOutputRequest) (BackgroundServiceStreamProcessOutputClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, backgroundServiceStreamProcessOutputSpec(), req)
+	if err != nil {
+		return BackgroundServiceStreamProcessOutputClientStream{}, err
+	}
+	return BackgroundServiceStreamProcessOutputClientStream{stream: stream}, nil
+}
+
+type backgroundServiceHandler struct{ svc BackgroundServiceHandler }
+
+func (h backgroundServiceHandler) listProcesses(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBackgroundProcessesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListProcesses(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backgroundServiceHandler) getProcessOutput(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetProcessOutputRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetProcessOutput(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backgroundServiceHandler) killProcess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.KillProcessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.KillProcess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h backgroundServiceHandler) streamProcessOutput(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StreamProcessOutputRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.StreamProcessOutput(ctx, &req, BackgroundServiceStreamProcessOutputServerStream{stream: stream})
 }

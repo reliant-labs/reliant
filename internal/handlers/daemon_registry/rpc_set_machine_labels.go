@@ -3,7 +3,6 @@ package daemon_registry
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -14,13 +13,13 @@ import (
 // SetMachineLabels replaces one of the caller's machines' durable labels.
 func (s *Service) SetMachineLabels(
 	ctx context.Context,
-	req *connect.Request[pb.SetMachineLabelsRequest],
-) (*connect.Response[pb.SetMachineLabelsResponse], error) {
+	req *pb.SetMachineLabelsRequest,
+) (*pb.SetMachineLabelsResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
-	msg := req.Msg
+	msg := req
 	if msg.GetDaemonId() == "" {
 		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
@@ -39,5 +38,5 @@ func (s *Service) SetMachineLabels(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine"))
 	}
-	return connect.NewResponse(&pb.SetMachineLabelsResponse{Daemon: daemonToProto(d, nil)}), nil
+	return &pb.SetMachineLabelsResponse{Daemon: daemonToProto(d, nil)}, nil
 }

@@ -8,7 +8,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -29,29 +29,29 @@ func TestRestoreProject_Generated(t *testing.T) {
 	}
 	svc := newService(t, store, nil)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RestoreProjectRequest, pb.RestoreProjectResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.RestoreProjectRequest, pb.RestoreProjectResponse]{
 		{
 			Name:    "no project_id is refused",
-			Req:     connect.NewRequest(&pb.RestoreProjectRequest{}),
+			Req:     &pb.RestoreProjectRequest{},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a project the caller does not own is not found, and not restored",
-			Req:     connect.NewRequest(&pb.RestoreProjectRequest{ProjectId: "p-2"}),
+			Req:     &pb.RestoreProjectRequest{ProjectId: "p-2"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the owner restores it, and is told how many automations are on again",
-			Req:  connect.NewRequest(&pb.RestoreProjectRequest{ProjectId: "p-1"}),
+			Req:  &pb.RestoreProjectRequest{ProjectId: "p-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.RestoreProjectResponse]) {
+			Check: func(t *testing.T, resp *pb.RestoreProjectResponse) {
 				if len(restored) != 1 || restored[0] != "p-1" {
 					t.Fatalf("restored = %v, want p-1", restored)
 				}
-				if resp.Msg.GetTriggersResumed() != 1 || resp.Msg.GetProject().GetId() != "p-1" {
-					t.Fatalf("response = %v", resp.Msg)
+				if resp.GetTriggersResumed() != 1 || resp.GetProject().GetId() != "p-1" {
+					t.Fatalf("response = %v", resp)
 				}
 			},
 		},

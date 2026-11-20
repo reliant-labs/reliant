@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -26,16 +26,16 @@ func TestStartOAuth_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.StartOAuthRequest, pb.StartOAuthResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.StartOAuthRequest, pb.StartOAuthResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.StartOAuthRequest{IntegrationId: "github"}),
+			Req:     &pb.StartOAuthRequest{IntegrationId: "github"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "an unconfigured OAuth client is a failed precondition",
-			Req:     connect.NewRequest(&pb.StartOAuthRequest{IntegrationId: "github"}),
+			Req:     &pb.StartOAuthRequest{IntegrationId: "github"},
 			Ctx:     connection.AuthedContext(t),
 			WantErr: connect.CodeFailedPrecondition,
 		},

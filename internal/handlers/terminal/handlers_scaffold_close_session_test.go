@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -21,16 +21,16 @@ func TestCloseSession_Generated(t *testing.T) {
 
 	svc := terminal.NewTestTerminal(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CloseTerminalSessionRequest, pb.CloseTerminalSessionResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CloseTerminalSessionRequest, pb.CloseTerminalSessionResponse]{
 		{
 			Name:    "a caller is required",
-			Req:     connect.NewRequest(&pb.CloseTerminalSessionRequest{SessionId: "s1"}),
+			Req:     &pb.CloseTerminalSessionRequest{SessionId: "s1"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "session_id is required",
-			Req:     connect.NewRequest(&pb.CloseTerminalSessionRequest{}),
+			Req:     &pb.CloseTerminalSessionRequest{},
 			Ctx:     terminal.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

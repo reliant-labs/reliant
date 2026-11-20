@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,7 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
@@ -30,19 +33,21 @@ type whoAmIGateway struct {
 	owners map[string]string // token -> user id
 }
 
-func (g *whoAmIGateway) WhoAmI(_ context.Context, req *connect.Request[reliantv1.WhoAmIRequest]) (*connect.Response[reliantv1.WhoAmIResponse], error) {
-	token := strings.TrimPrefix(req.Header().Get("Authorization"), "Bearer ")
+func (g *whoAmIGateway) WhoAmI(ctx context.Context, req *reliantv1.WhoAmIRequest) (*reliantv1.WhoAmIResponse, error) {
+	token := strings.TrimPrefix(serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization"), "Bearer ")
 	owner, ok := g.owners[token]
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid daemon auth token"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "invalid daemon auth token")
 	}
-	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: owner}), nil
+	return &reliantv1.WhoAmIResponse{UserId: owner}, nil
 }
 
 func serveDaemonGateway(t *testing.T, handler reliantv1connect.ToolsDaemonServiceHandler) daemonGateway {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(handler))
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, handler)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()
@@ -157,7 +162,7 @@ func TestDaemonCommandsFollowTheStoredCredentialsAccount(t *testing.T) {
 func TestDaemonStartFailure_ForeignDaemonIDIsNotATokenProblem(t *testing.T) {
 	conn := &connection{ServerURL: "https://api.reliantapi.com", GatewayURL: "https://gateway.reliantapi.com"}
 	foreign := fmt.Errorf("daemon connection failed (not retrying): %w",
-		connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user")))
+		connect.NewError(connect.CodePermissionDenied, "daemon id is owned by another user"))
 
 	for _, useToken := range []bool{true, false} {
 		failure, reRegister := daemonStartFailure(foreign, useToken, conn)
@@ -168,7 +173,7 @@ func TestDaemonStartFailure_ForeignDaemonIDIsNotATokenProblem(t *testing.T) {
 		require.Contains(t, failure.Error(), "owned by another user", "useToken=%v: the real cause must reach the user", useToken)
 	}
 
-	unauthenticated := connect.NewError(connect.CodeUnauthenticated, errors.New("invalid daemon auth token"))
+	unauthenticated := connect.NewError(connect.CodeUnauthenticated, "invalid daemon auth token")
 	failure, reRegister := daemonStartFailure(unauthenticated, true, conn)
 	require.False(t, reRegister)
 	require.Contains(t, failure.Error(), "token rejected", "a refused --token IS a token problem")
@@ -177,7 +182,7 @@ func TestDaemonStartFailure_ForeignDaemonIDIsNotATokenProblem(t *testing.T) {
 	require.True(t, reRegister, "a refused stored credential is re-minted")
 	require.NoError(t, failure)
 
-	unavailable := connect.NewError(connect.CodeUnavailable, errors.New("gateway restarting"))
+	unavailable := connect.NewError(connect.CodeUnavailable, "gateway restarting")
 	failure, reRegister = daemonStartFailure(unavailable, true, conn)
 	require.False(t, reRegister)
 	require.NotContains(t, failure.Error(), "token rejected")

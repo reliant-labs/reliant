@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
@@ -181,12 +181,12 @@ func TestCloseSession_AlreadyClosedIsSuccess(t *testing.T) {
 	svc := NewTestTerminal(t, WithTerminalDeps(Deps{Router: &sessionGoneRouter{}}))
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, terminalTestUserID)
 
-	resp, err := svc.CloseSession(ctx, connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{
+	resp, err := svc.CloseSession(ctx, &reliantv1.CloseTerminalSessionRequest{
 		SessionId: "e0f413d9-94c0-44f2-aa5c-4b9f1ac1d167",
-	}))
+	})
 
 	require.NoError(t, err)
-	require.True(t, resp.Msg.GetSuccess())
+	require.True(t, resp.GetSuccess())
 }
 
 // Any other close failure is still a failure.
@@ -195,10 +195,10 @@ func TestCloseSession_OtherDaemonFailureIsStillAnError(t *testing.T) {
 	svc := NewTestTerminal(t, WithTerminalDeps(Deps{Router: router}))
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, terminalTestUserID)
 
-	_, err := svc.CloseSession(ctx, connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{SessionId: "s1"}))
+	_, err := svc.CloseSession(ctx, &reliantv1.CloseTerminalSessionRequest{SessionId: "s1"})
 
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInternal, svcerr.Code(err))
+	require.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 }
 
 type closeFailsRouter struct {

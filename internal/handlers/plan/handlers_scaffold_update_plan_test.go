@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -26,28 +26,28 @@ func TestUpdatePlan_Generated(t *testing.T) {
 	}
 	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdatePlanRequest, pb.UpdatePlanResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.UpdatePlanRequest, pb.UpdatePlanResponse]{
 		{
 			Name:    "unknown plan is not found",
-			Req:     connect.NewRequest(&pb.UpdatePlanRequest{PlanId: missingID, Title: ptr.Of("Renamed")}),
+			Req:     &pb.UpdatePlanRequest{PlanId: missingID, Title: ptr.Of("Renamed")},
 			Ctx:     plan.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's plan is denied",
-			Req:     connect.NewRequest(&pb.UpdatePlanRequest{PlanId: otherPlanID, Title: ptr.Of("Renamed")}),
+			Req:     &pb.UpdatePlanRequest{PlanId: otherPlanID, Title: ptr.Of("Renamed")},
 			Ctx:     plan.AuthedContext(t),
 			WantErr: connect.CodePermissionDenied,
 		},
 		{
 			Name: "only the fields set change",
-			Req:  connect.NewRequest(&pb.UpdatePlanRequest{PlanId: ownPlanID, Status: ptr.Of(pb.PlanStatus_PLAN_STATUS_COMPLETED)}),
+			Req:  &pb.UpdatePlanRequest{PlanId: ownPlanID, Status: ptr.Of(pb.PlanStatus_PLAN_STATUS_COMPLETED)},
 			Ctx:  plan.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.UpdatePlanResponse]) {
+			Check: func(t *testing.T, resp *pb.UpdatePlanResponse) {
 				require.NotNil(t, updated)
 				require.Equal(t, "Own plan", updated.Title)
-				require.Equal(t, pb.PlanStatus_PLAN_STATUS_COMPLETED, resp.Msg.GetPlan().GetStatus())
-				require.Equal(t, ownChatID, resp.Msg.GetPlan().GetChatId())
+				require.Equal(t, pb.PlanStatus_PLAN_STATUS_COMPLETED, resp.GetPlan().GetStatus())
+				require.Equal(t, ownChatID, resp.GetPlan().GetChatId())
 			},
 		},
 	}, svc.UpdatePlan)

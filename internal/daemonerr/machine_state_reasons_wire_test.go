@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 
@@ -43,9 +43,9 @@ func TestMachineStateKeepsTheReasonOnTheWire(t *testing.T) {
 				"Error":                Error("daemon command fs.list", wrapped),
 				"DispatchConnectError": DispatchConnectError("fs.list", wrapped),
 			} {
-				ce := wirecheck.RoundTrip(t, got)
-				assert.Equal(t, tc.reason, ce.Meta().Get(svcerr.ReasonHeader), spelling)
-				assert.Equal(t, svcerr.ToConnect(got).Message(), ce.Message(), spelling)
+				ce, meta := wirecheck.RoundTripMeta(t, got)
+				assert.Equal(t, tc.reason, meta.Get(svcerr.ReasonHeader), spelling)
+				assert.Equal(t, svcerr.ToConnectV2(got).Message(), ce.Message(), spelling)
 			}
 		})
 	}

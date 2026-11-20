@@ -3,23 +3,16 @@ package tools_daemon
 
 import (
 	"context"
-	"crypto/tls"
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
 
 // A daemon stream's goroutines must be done with it before its owner lets it
@@ -128,29 +121,20 @@ func TestReleaseStreamWaitsForTheSendInFlight(t *testing.T) {
 // parked Receive.
 func TestConnectDaemonRefusesAServerWithoutAbortableBodies(t *testing.T) {
 	svc := newDaemonlessService(t)
-	// Only the listener's edge is missing: svcerr.Interceptor still ends the
-	// chain, as it does every production one, so the refusal keeps its code.
-	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
-	mux := http.NewServeMux()
-	mux.Handle(path, h)
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.Start()
-	t.Cleanup(srv.Close)
-
-	cl := &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, network, addr)
-		},
-	}}
+	// Only the listener's edge is missing: svcerr.InterceptorV2 still ends
+	// the chain, as it does every production one, so the refusal keeps its
+	// code.
+	client := daemonServer(t, svc, false, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC()).ConnectDaemon(ctx)
-	defer func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() }()
+	stream, err := client.ConnectDaemon(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = stream.CloseSend(); _ = stream.Close() }()
 	_ = stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: &reliantv1.DaemonRegister{Hostname: "h", Platform: "linux", DaemonType: "local"},
 	}})
-	_, err := stream.Receive()
-	require.Equal(t, connect.CodeInternal, svcerr.Code(err))
+	_, err = stream.Receive()
+	require.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 }

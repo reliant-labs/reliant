@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
@@ -59,13 +58,13 @@ func dbAttachmentToProto(a *db.Attachment) *reliantv1.AttachmentInfo {
 // UploadAttachment uploads a new binary file attachment (for images and text files)
 func (s *Service) UploadAttachment(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UploadAttachmentRequest],
-) (*connect.Response[reliantv1.UploadAttachmentResponse], error) {
+	req *reliantv1.UploadAttachmentRequest,
+) (*reliantv1.UploadAttachmentResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	filename := req.Msg.Filename
-	content := req.Msg.Content
-	mimeType := req.Msg.MimeType
+	filename := req.Filename
+	content := req.Content
+	mimeType := req.MimeType
 
 	// Validate required fields
 	if filename == "" {
@@ -142,18 +141,18 @@ func (s *Service) UploadAttachment(
 		AttachmentType: string(attachmentType),
 	}
 
-	return connect.NewResponse(&reliantv1.UploadAttachmentResponse{
+	return &reliantv1.UploadAttachmentResponse{
 		Attachment: attachmentInfo,
-	}), nil
+	}, nil
 }
 
 // GetAttachment retrieves an attachment by ID (includes file content)
 func (s *Service) GetAttachment(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetAttachmentRequest],
-) (*connect.Response[reliantv1.GetAttachmentResponse], error) {
+	req *reliantv1.GetAttachmentRequest,
+) (*reliantv1.GetAttachmentResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	attachmentID := req.Msg.AttachmentId
+	attachmentID := req.AttachmentId
 
 	if attachmentID == "" {
 		return nil, svcerr.InvalidArgument("attachment_id is required")
@@ -174,19 +173,19 @@ func (s *Service) GetAttachment(
 
 	attachmentInfo := dbAttachmentToProto(dbAttachment)
 
-	return connect.NewResponse(&reliantv1.GetAttachmentResponse{
+	return &reliantv1.GetAttachmentResponse{
 		Attachment: attachmentInfo,
 		Content:    dbAttachment.Content,
-	}), nil
+	}, nil
 }
 
 // DeleteAttachment removes an attachment by ID
 func (s *Service) DeleteAttachment(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteAttachmentRequest],
-) (*connect.Response[reliantv1.DeleteAttachmentResponse], error) {
+	req *reliantv1.DeleteAttachmentRequest,
+) (*reliantv1.DeleteAttachmentResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	attachmentID := req.Msg.AttachmentId
+	attachmentID := req.AttachmentId
 
 	if attachmentID == "" {
 		return nil, svcerr.InvalidArgument("attachment_id is required")
@@ -210,9 +209,9 @@ func (s *Service) DeleteAttachment(
 
 	logging.DebugContext(ctx, "Attachment deleted via gRPC", "attachmentID", attachmentID, "userID", userID)
 
-	return connect.NewResponse(&reliantv1.DeleteAttachmentResponse{
+	return &reliantv1.DeleteAttachmentResponse{
 		Message: "Attachment deleted successfully",
-	}), nil
+	}, nil
 }
 
 // CreateFileReference creates a reference to a local file (for text files).
@@ -220,13 +219,13 @@ func (s *Service) DeleteAttachment(
 // so the server never needs filesystem access.
 func (s *Service) CreateFileReference(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateFileReferenceRequest],
-) (*connect.Response[reliantv1.CreateFileReferenceResponse], error) {
+	req *reliantv1.CreateFileReferenceRequest,
+) (*reliantv1.CreateFileReferenceResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	filePath := req.Msg.FilePath
-	filename := req.Msg.Filename
-	content := req.Msg.Content
+	filePath := req.FilePath
+	filename := req.Filename
+	content := req.Content
 
 	// Validate required fields
 	if filePath == "" {
@@ -305,7 +304,7 @@ func (s *Service) CreateFileReference(
 		AttachmentType: string(attachment.TypeFileReference),
 	}
 
-	return connect.NewResponse(&reliantv1.CreateFileReferenceResponse{
+	return &reliantv1.CreateFileReferenceResponse{
 		Attachment: attachmentInfo,
-	}), nil
+	}, nil
 }

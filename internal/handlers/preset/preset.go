@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -41,15 +40,15 @@ func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, us
 // Priority: user (database) > project (stored config) > builtin
 func (s *Service) ListPresets(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListPresetsRequest],
-) (*connect.Response[reliantv1.ListPresetsResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.ListPresetsRequest,
+) (*reliantv1.ListPresetsResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
@@ -58,8 +57,8 @@ func (s *Service) ListPresets(
 	var invalidPresets []*reliantv1.InvalidPreset
 
 	// 1. Load builtin + stored project presets from DB
-	loadResult := s.loadAllPresetsFromDB(ctx, req.Msg.ProjectId)
-	logging.DebugContext(ctx, "Loaded presets from DB", "project_id", req.Msg.ProjectId, "valid", len(loadResult.Valid), "invalid", len(loadResult.Invalid))
+	loadResult := s.loadAllPresetsFromDB(ctx, req.ProjectId)
+	logging.DebugContext(ctx, "Loaded presets from DB", "project_id", req.ProjectId, "valid", len(loadResult.Valid), "invalid", len(loadResult.Invalid))
 	for _, p := range loadResult.Valid {
 		logging.DebugContext(ctx, "Preset", "name", p.Name, "source", p.Source)
 		protoPreset, err := presetToProto(p)
@@ -80,7 +79,7 @@ func (s *Service) ListPresets(
 	}
 
 	// 2. Load user presets from database (highest priority, override file-based)
-	dbPresets, err := s.deps.Repo.ListUserPresetsByProject(ctx, userID, req.Msg.ProjectId)
+	dbPresets, err := s.deps.Repo.ListUserPresetsByProject(ctx, userID, req.ProjectId)
 	if err != nil {
 		logging.WarnContext(ctx, "Failed to load user presets from database", "error", err)
 	} else {
@@ -116,49 +115,49 @@ func (s *Service) ListPresets(
 		}
 		p.IsHidden = !visible
 
-		if req.Msg.IncludeHidden || visible {
+		if req.IncludeHidden || visible {
 			protoPresets = append(protoPresets, p)
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.ListPresetsResponse{
+	return &reliantv1.ListPresetsResponse{
 		Presets:        protoPresets,
 		InvalidPresets: invalidPresets,
-	}), nil
+	}, nil
 }
 
 // GetPreset returns a specific preset by name.
 // Priority: user (database) > project (stored config) > builtin
 func (s *Service) GetPreset(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetPresetRequest],
-) (*connect.Response[reliantv1.GetPresetResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.GetPresetRequest,
+) (*reliantv1.GetPresetResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if req.Msg.Name == "" {
+	if req.Name == "" {
 		return nil, svcerr.InvalidArgument("preset name is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
 	// Generate slug from name for database lookup
-	slug := strings.ToLower(strings.ReplaceAll(req.Msg.Name, " ", "-"))
+	slug := strings.ToLower(strings.ReplaceAll(req.Name, " ", "-"))
 
 	// 1. First check database for user preset (highest priority)
 	dbPreset, err := s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	if err == nil && dbPreset != nil {
-		return connect.NewResponse(&reliantv1.GetPresetResponse{
+		return &reliantv1.GetPresetResponse{
 			Preset: dbPresetToProto(dbPreset),
-		}), nil
+		}, nil
 	}
 
 	// 2. Fall back to stored project presets / builtins
-	p, err := s.loadPresetByNameFromDB(ctx, req.Msg.ProjectId, req.Msg.Name)
+	p, err := s.loadPresetByNameFromDB(ctx, req.ProjectId, req.Name)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -168,9 +167,9 @@ func (s *Service) GetPreset(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to convert preset"))
 	}
 
-	return connect.NewResponse(&reliantv1.GetPresetResponse{
+	return &reliantv1.GetPresetResponse{
 		Preset: protoPreset,
-	}), nil
+	}, nil
 }
 
 // ListPresetsForWorkflow returns presets compatible with a specific workflow.
@@ -179,18 +178,18 @@ func (s *Service) GetPreset(
 // workflow/group with tag "agent".
 func (s *Service) ListPresetsForWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListPresetsForWorkflowRequest],
-) (*connect.Response[reliantv1.ListPresetsForWorkflowResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.ListPresetsForWorkflowRequest,
+) (*reliantv1.ListPresetsForWorkflowResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if req.Msg.WorkflowName == "" {
+	if req.WorkflowName == "" {
 		return nil, svcerr.InvalidArgument("workflow_name is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
@@ -213,17 +212,17 @@ func (s *Service) ListPresetsForWorkflow(
 	wg.Add(4)
 	go func() {
 		defer wg.Done()
-		wf, wfErr = s.loadWorkflow(ctx, req.Msg.WorkflowName, req.Msg.ProjectId)
+		wf, wfErr = s.loadWorkflow(ctx, req.WorkflowName, req.ProjectId)
 		if wfErr != nil {
 			return
 		}
 		if tag := wf.GetPresets().GetTag(); tag != "" {
-			dbPresets, dbPresetsErr = s.deps.Repo.ListPresetsByTag(ctx, userID, tag, req.Msg.ProjectId)
+			dbPresets, dbPresetsErr = s.deps.Repo.ListPresetsByTag(ctx, userID, tag, req.ProjectId)
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		loadResult = s.loadAllPresetsFromDB(ctx, req.Msg.ProjectId)
+		loadResult = s.loadAllPresetsFromDB(ctx, req.ProjectId)
 	}()
 	go func() {
 		defer wg.Done()
@@ -305,15 +304,15 @@ func (s *Service) ListPresetsForWorkflow(
 		}
 		p.IsHidden = !visible
 
-		if req.Msg.IncludeHidden || visible {
+		if req.IncludeHidden || visible {
 			protoPresets = append(protoPresets, p)
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.ListPresetsForWorkflowResponse{
+	return &reliantv1.ListPresetsForWorkflowResponse{
 		Presets:        protoPresets,
 		InvalidPresets: invalidPresets,
-	}), nil
+	}, nil
 }
 
 // builtinPreset is one embedded preset file, parsed: exactly one of preset and
@@ -475,96 +474,96 @@ func (s *Service) loadWorkflow(ctx context.Context, workflowRef, projectID strin
 // CreatePreset saves a new user preset to the database.
 func (s *Service) CreatePreset(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreatePresetRequest],
-) (*connect.Response[reliantv1.CreatePresetResponse], error) {
-	if req.Msg.Name == "" {
+	req *reliantv1.CreatePresetRequest,
+) (*reliantv1.CreatePresetResponse, error) {
+	if req.Name == "" {
 		return nil, svcerr.InvalidArgument("preset name is required")
 	}
-	if req.Msg.Tag == "" {
+	if req.Tag == "" {
 		return nil, svcerr.InvalidArgument("preset tag is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
 
 	// Generate slug from name
-	slug := strings.ToLower(strings.ReplaceAll(req.Msg.Name, " ", "-"))
+	slug := strings.ToLower(strings.ReplaceAll(req.Name, " ", "-"))
 
 	// Validate slug (alphanumeric, dashes, underscores only)
 	validSlug := regexp.MustCompile(`^[a-z0-9_-]+$`)
 	if !validSlug.MatchString(slug) {
 		activity.Skip(ctx) // refused: nothing changed, so no "create preset" event
-		return connect.NewResponse(&reliantv1.CreatePresetResponse{
+		return &reliantv1.CreatePresetResponse{
 			Success: false,
 			Error:   "preset name can only contain letters, numbers, dashes, and underscores",
-		}), nil
+		}, nil
 	}
 
 	// Check if preset already exists with this slug
 	// Use project-scoped lookup if project_id is provided, otherwise global
 	var existing *db.Preset
-	if req.Msg.ProjectId != "" {
-		existing, _ = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
+	if req.ProjectId != "" {
+		existing, _ = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.ProjectId)
 	} else {
 		existing, _ = s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	}
 	if existing != nil {
 		activity.Skip(ctx) // refused: nothing changed, so no "create preset" event
-		return connect.NewResponse(&reliantv1.CreatePresetResponse{
+		return &reliantv1.CreatePresetResponse{
 			Success: false,
 			Error:   fmt.Sprintf("preset with slug '%s' already exists", slug),
-		}), nil
+		}, nil
 	}
 
 	// Check against builtin presets
 	builtinPath := "presets/" + slug + ".yaml"
 	if _, err := builtin.BuiltinPresetsFS.ReadFile(builtinPath); err == nil {
 		activity.Skip(ctx) // refused: nothing changed, so no "create preset" event
-		return connect.NewResponse(&reliantv1.CreatePresetResponse{
+		return &reliantv1.CreatePresetResponse{
 			Success: false,
-			Error:   fmt.Sprintf("preset name '%s' conflicts with a built-in preset; please choose a different name", req.Msg.Name),
-		}), nil
+			Error:   fmt.Sprintf("preset name '%s' conflicts with a built-in preset; please choose a different name", req.Name),
+		}, nil
 	}
 
 	// Check against stored project presets - project not found is ok, just skip the check
-	if req.Msg.ProjectId != "" {
-		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if req.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 			return nil, err
 		}
-		presetsJSON, err := s.deps.Repo.GetProjectPresetsJSON(ctx, req.Msg.ProjectId)
+		presetsJSON, err := s.deps.Repo.GetProjectPresetsJSON(ctx, req.ProjectId)
 		if err == nil {
 			storedPresets, err := cfg.ParseStoredPresets(presetsJSON)
 			if err == nil && cfg.FindStoredPresetByName(storedPresets, slug) != nil {
 				activity.Skip(ctx) // refused: nothing changed, so no "create preset" event
-				return connect.NewResponse(&reliantv1.CreatePresetResponse{
+				return &reliantv1.CreatePresetResponse{
 					Success: false,
-					Error:   fmt.Sprintf("preset name '%s' conflicts with a project preset; please choose a different name", req.Msg.Name),
-				}), nil
+					Error:   fmt.Sprintf("preset name '%s' conflicts with a project preset; please choose a different name", req.Name),
+				}, nil
 			}
 		}
 	}
 
 	// Convert proto params to Go map
 	params := make(map[string]interface{})
-	for k, v := range req.Msg.Params {
+	for k, v := range req.Params {
 		params[k] = structValueToGo(v)
 	}
 
 	// Determine project scope (nil = global)
 	var projectID *string
-	if req.Msg.ProjectId != "" {
-		projectID = &req.Msg.ProjectId
+	if req.ProjectId != "" {
+		projectID = &req.ProjectId
 	}
 
 	// Create preset in database
-	description := req.Msg.Description
+	description := req.Description
 	newPreset := &db.Preset{
 		ID:          uuid.New().String(),
 		UserID:      userID,
 		ProjectID:   projectID,
-		Name:        req.Msg.Name,
+		Name:        req.Name,
 		Slug:        slug,
 		Description: &description,
-		Tag:         req.Msg.Tag,
+		Tag:         req.Tag,
 		Params:      params,
 	}
 
@@ -573,12 +572,12 @@ func (s *Service) CreatePreset(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create preset"))
 	}
 
-	logging.InfoContext(ctx, "Created preset", "name", req.Msg.Name, "slug", slug, "user_id", userID)
+	logging.InfoContext(ctx, "Created preset", "name", req.Name, "slug", slug, "user_id", userID)
 
-	return connect.NewResponse(&reliantv1.CreatePresetResponse{
+	return &reliantv1.CreatePresetResponse{
 		Success: true,
 		Preset:  dbPresetToProto(saved),
-	}), nil
+	}, nil
 }
 
 // structValueToGo converts a protobuf Value to a Go interface{}
@@ -674,17 +673,17 @@ func dbPresetToProto(p *db.Preset) *reliantv1.PresetInfo {
 // Builtin presets cannot be edited.
 func (s *Service) UpdatePreset(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdatePresetRequest],
-) (*connect.Response[reliantv1.UpdatePresetResponse], error) {
-	if req.Msg.Name == "" {
+	req *reliantv1.UpdatePresetRequest,
+) (*reliantv1.UpdatePresetResponse, error) {
+	if req.Name == "" {
 		return nil, svcerr.InvalidArgument("preset name/slug is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	slug := strings.ToLower(strings.ReplaceAll(req.Msg.Name, " ", "-"))
+	slug := strings.ToLower(strings.ReplaceAll(req.Name, " ", "-"))
 
-	if req.Msg.ProjectId != "" {
-		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if req.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 			return nil, err
 		}
 	}
@@ -692,26 +691,26 @@ func (s *Service) UpdatePreset(
 	// 1. First check if this is a user preset (database)
 	var dbPreset *db.Preset
 	var err error
-	if req.Msg.ProjectId != "" {
-		dbPreset, err = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
+	if req.ProjectId != "" {
+		dbPreset, err = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.ProjectId)
 	} else {
 		dbPreset, err = s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	}
 
 	if err == nil && dbPreset != nil {
 		// Found in database - update there
-		if req.Msg.NewName != nil && *req.Msg.NewName != "" {
-			dbPreset.Name = *req.Msg.NewName
+		if req.NewName != nil && *req.NewName != "" {
+			dbPreset.Name = *req.NewName
 		}
-		if req.Msg.NewDescription != nil {
-			dbPreset.Description = req.Msg.NewDescription
+		if req.NewDescription != nil {
+			dbPreset.Description = req.NewDescription
 		}
-		if req.Msg.NewTag != nil {
-			dbPreset.Tag = *req.Msg.NewTag
+		if req.NewTag != nil {
+			dbPreset.Tag = *req.NewTag
 		}
-		if len(req.Msg.NewParams) > 0 {
+		if len(req.NewParams) > 0 {
 			params := make(map[string]interface{})
-			for k, v := range req.Msg.NewParams {
+			for k, v := range req.NewParams {
 				params[k] = structValueToGo(v)
 			}
 			dbPreset.Params = params
@@ -723,43 +722,43 @@ func (s *Service) UpdatePreset(
 		}
 
 		logging.InfoContext(ctx, "Updated user preset", "slug", dbPreset.Slug, "name", dbPreset.Name, "user_id", userID)
-		return connect.NewResponse(&reliantv1.UpdatePresetResponse{
+		return &reliantv1.UpdatePresetResponse{
 			Success: true,
 			Preset:  dbPresetToProto(updated),
-		}), nil
+		}, nil
 	}
 
 	// 2. Not in database - check if it's a stored project preset or builtin
-	filePreset, err := s.loadPresetByNameFromDB(ctx, req.Msg.ProjectId, req.Msg.Name)
+	filePreset, err := s.loadPresetByNameFromDB(ctx, req.ProjectId, req.Name)
 	if err != nil {
 		activity.Skip(ctx) // refused: nothing changed, so no "update preset" event
-		return connect.NewResponse(&reliantv1.UpdatePresetResponse{
+		return &reliantv1.UpdatePresetResponse{
 			Success: false,
-			Error:   fmt.Sprintf("preset '%s' not found", req.Msg.Name),
-		}), nil
+			Error:   fmt.Sprintf("preset '%s' not found", req.Name),
+		}, nil
 	}
 
 	// Builtin and project presets cannot be edited directly (they're read-only on the server)
 	if filePreset.Source == "builtin" {
 		activity.Skip(ctx) // refused: nothing changed, so no "update preset" event
-		return connect.NewResponse(&reliantv1.UpdatePresetResponse{
+		return &reliantv1.UpdatePresetResponse{
 			Success: false,
 			Error:   "builtin presets cannot be edited",
-		}), nil
+		}, nil
 	}
 	if filePreset.Source == "project" {
 		activity.Skip(ctx) // refused: nothing changed, so no "update preset" event
-		return connect.NewResponse(&reliantv1.UpdatePresetResponse{
+		return &reliantv1.UpdatePresetResponse{
 			Success: false,
 			Error:   "project presets cannot be edited from the server; edit the YAML file directly",
-		}), nil
+		}, nil
 	}
 
 	activity.Skip(ctx) // refused: nothing changed, so no "update preset" event
-	return connect.NewResponse(&reliantv1.UpdatePresetResponse{
+	return &reliantv1.UpdatePresetResponse{
 		Success: false,
-		Error:   fmt.Sprintf("preset '%s' not found", req.Msg.Name),
-	}), nil
+		Error:   fmt.Sprintf("preset '%s' not found", req.Name),
+	}, nil
 }
 
 // DeletePreset deletes a preset.
@@ -768,25 +767,25 @@ func (s *Service) UpdatePreset(
 // Builtin presets cannot be deleted.
 func (s *Service) DeletePreset(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeletePresetRequest],
-) (*connect.Response[reliantv1.DeletePresetResponse], error) {
-	if req.Msg.Name == "" {
+	req *reliantv1.DeletePresetRequest,
+) (*reliantv1.DeletePresetResponse, error) {
+	if req.Name == "" {
 		return nil, svcerr.InvalidArgument("preset name/slug is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	slug := strings.ToLower(strings.ReplaceAll(req.Msg.Name, " ", "-"))
+	slug := strings.ToLower(strings.ReplaceAll(req.Name, " ", "-"))
 
-	if req.Msg.ProjectId != "" {
-		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if req.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 			return nil, err
 		}
 	}
 
 	// 1. First check if this is a user preset (database)
 	var dbPreset *db.Preset
-	if req.Msg.ProjectId != "" {
-		dbPreset, _ = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.Msg.ProjectId)
+	if req.ProjectId != "" {
+		dbPreset, _ = s.deps.Repo.GetPresetBySlugAndProject(ctx, userID, slug, req.ProjectId)
 	} else {
 		dbPreset, _ = s.deps.Repo.GetPresetBySlug(ctx, userID, slug)
 	}
@@ -797,45 +796,45 @@ func (s *Service) DeletePreset(
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete preset"))
 		}
 		logging.InfoContext(ctx, "Deleted user preset", "slug", slug, "user_id", userID)
-		return connect.NewResponse(&reliantv1.DeletePresetResponse{
+		return &reliantv1.DeletePresetResponse{
 			Success: true,
 			Id:      dbPreset.ID,
-		}), nil
+		}, nil
 	}
 
 	// 2. Not in database - check if it's a stored project preset or builtin
-	filePreset, err := s.loadPresetByNameFromDB(ctx, req.Msg.ProjectId, req.Msg.Name)
+	filePreset, err := s.loadPresetByNameFromDB(ctx, req.ProjectId, req.Name)
 	if err != nil {
 		activity.Skip(ctx) // refused: nothing changed, so no "delete preset" event
-		return connect.NewResponse(&reliantv1.DeletePresetResponse{
+		return &reliantv1.DeletePresetResponse{
 			Success: false,
-			Error:   fmt.Sprintf("preset '%s' not found", req.Msg.Name),
-		}), nil
+			Error:   fmt.Sprintf("preset '%s' not found", req.Name),
+		}, nil
 	}
 
 	// Builtin presets cannot be deleted
 	if filePreset.Source == "builtin" {
 		activity.Skip(ctx) // refused: nothing changed, so no "delete preset" event
-		return connect.NewResponse(&reliantv1.DeletePresetResponse{
+		return &reliantv1.DeletePresetResponse{
 			Success: false,
 			Error:   "builtin presets cannot be deleted",
-		}), nil
+		}, nil
 	}
 
 	// Project presets cannot be deleted from the server (they're synced from filesystem by daemon)
 	if filePreset.Source == "project" {
 		activity.Skip(ctx) // refused: nothing changed, so no "delete preset" event
-		return connect.NewResponse(&reliantv1.DeletePresetResponse{
+		return &reliantv1.DeletePresetResponse{
 			Success: false,
 			Error:   "project presets cannot be deleted from the server; delete the YAML file directly",
-		}), nil
+		}, nil
 	}
 
 	activity.Skip(ctx) // refused: nothing changed, so no "delete preset" event
-	return connect.NewResponse(&reliantv1.DeletePresetResponse{
+	return &reliantv1.DeletePresetResponse{
 		Success: false,
-		Error:   fmt.Sprintf("preset '%s' not found", req.Msg.Name),
-	}), nil
+		Error:   fmt.Sprintf("preset '%s' not found", req.Name),
+	}, nil
 }
 
 // SetDefaultPreset marks a preset as the default for a specific group within a workflow.
@@ -844,34 +843,34 @@ func (s *Service) DeletePreset(
 // Empty string key "" represents top-level/workflow-level inputs.
 func (s *Service) SetDefaultPreset(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SetDefaultPresetRequest],
-) (*connect.Response[reliantv1.SetDefaultPresetResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.SetDefaultPresetRequest,
+) (*reliantv1.SetDefaultPresetResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if req.Msg.WorkflowName == "" {
+	if req.WorkflowName == "" {
 		return nil, svcerr.InvalidArgument("workflow_name is required")
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userIDStr); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userIDStr); err != nil {
 		return nil, err
 	}
 
 	// Get group name (empty string = top-level)
 	groupName := ""
-	if req.Msg.GroupName != nil {
-		groupName = *req.Msg.GroupName
+	if req.GroupName != nil {
+		groupName = *req.GroupName
 	}
 
 	presetName := ""
-	if req.Msg.PresetName != nil {
-		presetName = *req.Msg.PresetName
+	if req.PresetName != nil {
+		presetName = *req.PresetName
 	}
 
 	// Settings key for this workflow's defaults blob
-	settingKey := fmt.Sprintf("preset.defaults.%s", req.Msg.WorkflowName)
+	settingKey := fmt.Sprintf("preset.defaults.%s", req.WorkflowName)
 
 	// Load existing defaults blob
 	defaults := make(map[string]string)
@@ -903,11 +902,11 @@ func (s *Service) SetDefaultPreset(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to set default preset"))
 	}
 
-	logging.InfoContext(ctx, "Set default preset", "workflow", req.Msg.WorkflowName, "group", groupName, "preset", presetName)
+	logging.InfoContext(ctx, "Set default preset", "workflow", req.WorkflowName, "group", groupName, "preset", presetName)
 
-	return connect.NewResponse(&reliantv1.SetDefaultPresetResponse{
+	return &reliantv1.SetDefaultPresetResponse{
 		Success: true,
-	}), nil
+	}, nil
 }
 
 // GetDefaultPreset retrieves all default presets for a workflow.
@@ -916,27 +915,27 @@ func (s *Service) SetDefaultPreset(
 // Merges user settings with system defaults (user settings take precedence).
 func (s *Service) GetDefaultPreset(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetDefaultPresetRequest],
-) (*connect.Response[reliantv1.GetDefaultPresetResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.GetDefaultPresetRequest,
+) (*reliantv1.GetDefaultPresetResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if req.Msg.WorkflowName == "" {
+	if req.WorkflowName == "" {
 		return nil, svcerr.InvalidArgument("workflow_name is required")
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userIDStr); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userIDStr); err != nil {
 		return nil, err
 	}
 
-	defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, req.Msg.WorkflowName, nil,
-		func(ref string) (*reliantv1.Workflow, error) { return s.loadWorkflow(ctx, ref, req.Msg.ProjectId) })
+	defaults := s.resolveDefaultPresets(ctx, userIDStr, req.ProjectId, req.WorkflowName, nil,
+		func(ref string) (*reliantv1.Workflow, error) { return s.loadWorkflow(ctx, ref, req.ProjectId) })
 
-	return connect.NewResponse(&reliantv1.GetDefaultPresetResponse{
+	return &reliantv1.GetDefaultPresetResponse{
 		Presets: defaults,
-	}), nil
+	}, nil
 }
 
 // resolveDefaultPresets computes one workflow's group-to-preset defaults:
@@ -1009,15 +1008,15 @@ func (s *Service) resolveDefaultPresets(
 // query count stays flat as the workflow list grows.
 func (s *Service) GetDefaultPresetsBatch(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetDefaultPresetsBatchRequest],
-) (*connect.Response[reliantv1.GetDefaultPresetsBatchResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.GetDefaultPresetsBatchRequest,
+) (*reliantv1.GetDefaultPresetsBatchResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userIDStr); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userIDStr); err != nil {
 		return nil, err
 	}
 
@@ -1038,7 +1037,7 @@ func (s *Service) GetDefaultPresetsBatch(
 	}()
 	go func() {
 		defer wg.Done()
-		catalog = workflowcatalog.Load(ctx, s.deps.Repo, userIDStr, req.Msg.ProjectId)
+		catalog = workflowcatalog.Load(ctx, s.deps.Repo, userIDStr, req.ProjectId)
 	}()
 	wg.Wait()
 
@@ -1051,7 +1050,7 @@ func (s *Service) GetDefaultPresetsBatch(
 		logging.WarnContext(ctx, "GetDefaultPresetsBatch: failed to load preset default overrides", "error", settingsErr)
 	}
 
-	opts := workflowsource.Options{UserID: userIDStr, ProjectID: req.Msg.ProjectId}
+	opts := workflowsource.Options{UserID: userIDStr, ProjectID: req.ProjectId}
 	load := workflowcatalog.MemoizeRefLoader(workflowcatalog.WithBuiltinCache(func(ref string) (*reliantv1.Workflow, error) {
 		resolved, err := workflowsource.Resolve(ctx, catalog, opts, ref)
 		if err != nil {
@@ -1061,15 +1060,15 @@ func (s *Service) GetDefaultPresetsBatch(
 	}))
 
 	presetsByWorkflow := make(map[string]*reliantv1.WorkflowDefaultPresets)
-	seen := make(map[string]bool, len(req.Msg.WorkflowNames))
+	seen := make(map[string]bool, len(req.WorkflowNames))
 
-	for _, workflowName := range req.Msg.WorkflowNames {
+	for _, workflowName := range req.WorkflowNames {
 		if workflowName == "" || seen[workflowName] {
 			continue
 		}
 		seen[workflowName] = true
 
-		defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, workflowName, userOverrides, load)
+		defaults := s.resolveDefaultPresets(ctx, userIDStr, req.ProjectId, workflowName, userOverrides, load)
 		// Omit empty results so the response mirrors the single RPC's
 		// "no defaults" outcome without inventing an entry for it.
 		if len(defaults) == 0 {
@@ -1078,9 +1077,9 @@ func (s *Service) GetDefaultPresetsBatch(
 		presetsByWorkflow[workflowName] = &reliantv1.WorkflowDefaultPresets{Presets: defaults}
 	}
 
-	return connect.NewResponse(&reliantv1.GetDefaultPresetsBatchResponse{
+	return &reliantv1.GetDefaultPresetsBatchResponse{
 		PresetsByWorkflow: presetsByWorkflow,
-	}), nil
+	}, nil
 }
 
 // upsertSetting creates or updates a setting (similar to SettingsService.upsertSetting)

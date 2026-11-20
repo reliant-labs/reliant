@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/require"
@@ -72,19 +71,19 @@ func TestChatCollections_LeaveOutARemovedMembersOrgChats(t *testing.T) {
 		return out
 	}
 
-	listed, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+	listed, err := service.ListChats(ctx, &reliantv1.ListChatsRequest{ProjectId: projectID})
 	require.NoError(t, err)
-	require.Equal(t, want, ids(listed.Msg.Chats), "ListChats naming no org")
+	require.Equal(t, want, ids(listed.Chats), "ListChats naming no org")
 
-	searched, err := service.SearchChats(ctx, connect.NewRequest(&reliantv1.SearchChatsRequest{Query: "needle", ProjectId: projectID}))
+	searched, err := service.SearchChats(ctx, &reliantv1.SearchChatsRequest{Query: "needle", ProjectId: projectID})
 	require.NoError(t, err)
 	// Search covers archived chats too.
-	require.Equal(t, []string{home, home + "-archived", legacy, legacy + "-archived"}, ids(searched.Msg.Chats), "SearchChats")
+	require.Equal(t, []string{home, home + "-archived", legacy, legacy + "-archived"}, ids(searched.Chats), "SearchChats")
 
-	archived, err := service.ListArchivedChats(ctx, connect.NewRequest(&reliantv1.ListArchivedChatsRequest{}))
+	archived, err := service.ListArchivedChats(ctx, &reliantv1.ListArchivedChatsRequest{})
 	require.NoError(t, err)
 	var archivedIDs []string
-	for _, ac := range archived.Msg.Chats {
+	for _, ac := range archived.Chats {
 		if ac.Chat.ProjectId == projectID {
 			archivedIDs = append(archivedIDs, ac.Chat.Id)
 		}
@@ -128,10 +127,10 @@ func TestListChats_MainWorkspacesFollowTheProjectsAuthz(t *testing.T) {
 	}
 	mains := func(svc *Service, ctx context.Context, projectID string) []string {
 		t.Helper()
-		resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+		resp, err := svc.ListChats(ctx, &reliantv1.ListChatsRequest{ProjectId: projectID})
 		require.NoError(t, err)
 		var out []string
-		for _, w := range resp.Msg.GetMainWorktrees() {
+		for _, w := range resp.GetMainWorktrees() {
 			out = append(out, w.GetProjectId())
 		}
 		sort.Strings(out)

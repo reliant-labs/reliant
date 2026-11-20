@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -45,8 +45,8 @@ func TestMachineRefusalsAreUserErrorsAndDaemonFailuresAreNot(t *testing.T) {
 			"Error":        Error("daemon command fs.get_tree", wrapped),
 		} {
 			t.Run(name+"/"+spelling, func(t *testing.T) {
-				assert.Equal(t, connect.CodeUnavailable, svcerr.Code(got), "the wire code clients retry on")
-				assert.Equal(t, tc.reason, svcerr.ToConnect(got).Meta().Get(svcerr.ReasonHeader))
+				assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(got), "the wire code clients retry on")
+				assert.Equal(t, tc.reason, svcerr.MetaOf(svcerr.ToConnectV2(got)).Get(svcerr.ReasonHeader))
 				assert.Equal(t, svcerr.ClassUser, errclass.Classify(got))
 				assert.Equal(t, slog.LevelInfo, observe.LevelForErrorContext(context.Background(), got))
 			})

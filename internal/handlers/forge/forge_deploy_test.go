@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -187,12 +188,12 @@ func TestForgeService_PlanDeploy_PassesReportThroughVerbatim(t *testing.T) {
 	router := &forgeTestRouter{reply: deployReply(t, report, nil)}
 
 	resp, err := newForgeTestService(router).PlanDeploy(authedCtx(),
-		connect.NewRequest(&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"}))
+		&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"})
 	require.NoError(t, err)
 
 	assert.Equal(t, "forge.deploy_plan", router.lastCommandType,
 		"the preview must dispatch the READ-ONLY daemon command")
-	assert.JSONEq(t, report, resp.Msg.ReportJson,
+	assert.JSONEq(t, report, resp.ReportJson,
 		"forge's document must cross this layer unmodified")
 
 	// The document the caller sees never claims an apply happened.
@@ -203,7 +204,7 @@ func TestForgeService_PlanDeploy_PassesReportThroughVerbatim(t *testing.T) {
 			CurrentContext  string `json:"current_context"`
 		} `json:"guard"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(resp.Msg.ReportJson), &facts))
+	require.NoError(t, json.Unmarshal([]byte(resp.ReportJson), &facts))
 	assert.Equal(t, "dry_run", facts.Mode, "a preview must never report mode apply")
 
 	// The declared context reaches the caller, which is what a confirmation
@@ -230,10 +231,10 @@ func TestForgeService_PlanDeploy_GuardRefuseIsSurfacedAsData(t *testing.T) {
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, true, true, 1, report)}
 
 	resp, err := newForgeTestService(router).PlanDeploy(authedCtx(),
-		connect.NewRequest(&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"}))
+		&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"})
 	require.NoError(t, err, "a guard refusal is the answer, not a transport failure")
 
-	assert.EqualValues(t, 1, resp.Msg.Meta.ExitCode,
+	assert.EqualValues(t, 1, resp.Meta.ExitCode,
 		"forge's exit code must survive as data")
 
 	var facts struct {
@@ -242,7 +243,7 @@ func TestForgeService_PlanDeploy_GuardRefuseIsSurfacedAsData(t *testing.T) {
 			Reason  string `json:"reason"`
 		} `json:"guard"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(resp.Msg.ReportJson), &facts))
+	require.NoError(t, json.Unmarshal([]byte(resp.ReportJson), &facts))
 	assert.Equal(t, "refuse", facts.Guard.Verdict,
 		"the refusal verdict must reach the caller, not be swallowed")
 }
@@ -250,9 +251,9 @@ func TestForgeService_PlanDeploy_GuardRefuseIsSurfacedAsData(t *testing.T) {
 func TestForgeService_PlanDeploy_RequiresEnv(t *testing.T) {
 	router := &forgeTestRouter{}
 	_, err := newForgeTestService(router).PlanDeploy(authedCtx(),
-		connect.NewRequest(&reliantv1.PlanForgeDeployRequest{ProjectId: "p"}))
+		&reliantv1.PlanForgeDeployRequest{ProjectId: "p"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Empty(t, router.lastCommandType, "no daemon call for an invalid request")
 }
 
@@ -283,19 +284,19 @@ func TestForgeService_StartDeploy_RefusesChangedDeclaredContext(t *testing.T) {
 
 	// The caller authorised a deploy to the LOCAL cluster.
 	_, err := newForgeTestService(router).StartDeploy(authedCtx(),
-		connect.NewRequest(authorisedStart("prod", "k3d-control-plane", "v1.5.15")))
+		authorisedStart("prod", "k3d-control-plane", "v1.5.15"))
 
 	require.Error(t, err, "a refusal must FAIL the RPC so an unchecked client fails closed")
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "nothing was applied")
 
 	// The structured detail is what makes this recoverable without a blind retry
 	// against production.
-	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	connectErr := svcerr.ToConnectV2(err) // the wire form svcerr.Interceptor sends
 	require.NotNil(t, connectErr)
 	details := connectErr.Details()
 	require.Len(t, details, 1, "the refusal must travel as a structured detail")
-	msg, detailErr := details[0].Value()
+	msg, detailErr := connectproto.UnmarshalErrorDetail(details[0])
 	require.NoError(t, detailErr)
 	got, ok := msg.(*reliantv1.ForgeDeployRefusal)
 	require.True(t, ok, "detail must be a ForgeDeployRefusal, got %T", msg)
@@ -328,15 +329,15 @@ func TestForgeService_StartDeploy_RefusesChangedBoundRelease(t *testing.T) {
 	}
 
 	_, err := newForgeTestService(router).StartDeploy(authedCtx(),
-		connect.NewRequest(authorisedStart("staging", "vke-staging", "v1.5.15")))
+		authorisedStart("staging", "vke-staging", "v1.5.15"))
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 
-	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	connectErr := svcerr.ToConnectV2(err) // the wire form svcerr.Interceptor sends
 	require.NotNil(t, connectErr)
 	require.Len(t, connectErr.Details(), 1)
-	msg, detailErr := connectErr.Details()[0].Value()
+	msg, detailErr := connectproto.UnmarshalErrorDetail(connectErr.Details()[0])
 	require.NoError(t, detailErr)
 	got := msg.(*reliantv1.ForgeDeployRefusal)
 
@@ -402,15 +403,15 @@ func TestForgeService_StartDeploy_RefusalReasonsAreDistinguishable(t *testing.T)
 					map[string]any{"deploy_refused": tc.refusal}),
 			}
 			_, err := newForgeTestService(router).StartDeploy(authedCtx(),
-				connect.NewRequest(authorisedStart("prod", "gke_prod", "v1.5.15")))
+				authorisedStart("prod", "gke_prod", "v1.5.15"))
 
 			require.Error(t, err, "every refusal must fail the RPC")
-			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 
-			connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+			connectErr := svcerr.ToConnectV2(err) // the wire form svcerr.Interceptor sends
 			require.NotNil(t, connectErr)
 			require.Len(t, connectErr.Details(), 1)
-			msg, detailErr := connectErr.Details()[0].Value()
+			msg, detailErr := connectproto.UnmarshalErrorDetail(connectErr.Details()[0])
 			require.NoError(t, detailErr)
 			got := msg.(*reliantv1.ForgeDeployRefusal)
 
@@ -458,9 +459,9 @@ func TestForgeService_StartDeploy_RequiresConfirmationToken(t *testing.T) {
 	for name, req := range cases {
 		t.Run(name, func(t *testing.T) {
 			router := &forgeTestRouter{}
-			_, err := newForgeTestService(router).StartDeploy(authedCtx(), connect.NewRequest(req))
+			_, err := newForgeTestService(router).StartDeploy(authedCtx(), req)
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 			assert.Empty(t, router.lastCommandType,
 				"an unauthorised request must never reach the daemon")
 		})
@@ -480,16 +481,16 @@ func TestForgeService_StartDeploy_ExpectUnboundIsAnExplicitClaim(t *testing.T) {
 	}
 
 	resp, err := newForgeTestService(router).StartDeploy(authedCtx(),
-		connect.NewRequest(&reliantv1.StartForgeDeployRequest{
+		&reliantv1.StartForgeDeployRequest{
 			ProjectId:               "p",
 			Env:                     "dev",
 			ExpectedDeclaredContext: "k3d-control-plane",
 			ExpectUnbound:           true,
 			ApproveDigest:           testStartDigest,
 			ReleaseVersion:          testStartVersion,
-		}))
+		})
 	require.NoError(t, err)
-	assert.Equal(t, "h1", resp.Msg.Handle)
+	assert.Equal(t, "h1", resp.Handle)
 
 	var sent struct {
 		ExpectedDeclaredContext string `json:"expected_declared_context"`
@@ -520,22 +521,22 @@ func TestForgeService_StartDeploy_ReturnsHandleAndRunning(t *testing.T) {
 	}
 
 	resp, err := newForgeTestService(router).StartDeploy(authedCtx(),
-		connect.NewRequest(authorisedStart("prod", "gke_prod", "v1.5.15")))
+		authorisedStart("prod", "gke_prod", "v1.5.15"))
 	require.NoError(t, err)
 
 	assert.Equal(t, "forge.deploy_start", router.lastCommandType)
-	assert.Equal(t, "deploy-7f3a", resp.Msg.Handle)
-	assert.Equal(t, "prod", resp.Msg.Env)
+	assert.Equal(t, "deploy-7f3a", resp.Handle)
+	assert.Equal(t, "prod", resp.Env)
 	assert.Equal(t, reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_RUNNING,
-		resp.Msg.JobStatus,
+		resp.JobStatus,
 		"a started deploy is RUNNING — an OK response here says a deploy is in flight, "+
 			"never that one succeeded")
-	assert.Equal(t, "2026-07-01T00:25:15Z", resp.Msg.StartedAt)
+	assert.Equal(t, "2026-07-01T00:25:15Z", resp.StartedAt)
 
 	var facts struct {
 		Mode string `json:"mode"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(resp.Msg.ReportJson), &facts))
+	require.NoError(t, json.Unmarshal([]byte(resp.ReportJson), &facts))
 	assert.Equal(t, "dry_run", facts.Mode,
 		"the start reply carries the guard PLAN it was authorised against, not an apply report")
 
@@ -558,13 +559,13 @@ func TestForgeService_StartDeploy_UnsupportedForgeReturnsNoHandle(t *testing.T) 
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, true, false, 1, "")}
 
 	resp, err := newForgeTestService(router).StartDeploy(authedCtx(),
-		connect.NewRequest(authorisedStart("prod", "gke_prod", "v1.5.15")))
+		authorisedStart("prod", "gke_prod", "v1.5.15"))
 	require.NoError(t, err)
 
-	assert.False(t, resp.Msg.Meta.Supported)
-	assert.Empty(t, resp.Msg.Handle, "no handle for a deploy that was never started")
+	assert.False(t, resp.Meta.Supported)
+	assert.Empty(t, resp.Handle, "no handle for a deploy that was never started")
 	assert.Equal(t, reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_UNSPECIFIED,
-		resp.Msg.JobStatus)
+		resp.JobStatus)
 }
 
 // =============================================================================
@@ -582,16 +583,16 @@ func TestForgeService_GetDeployStatus_ReportsRunning(t *testing.T) {
 	}
 
 	resp, err := newForgeTestService(router).GetDeployStatus(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+		&reliantv1.GetForgeDeployStatusRequest{
 			ProjectId: "p", Handle: "deploy-7f3a",
-		}))
+		})
 	require.NoError(t, err)
 
 	assert.Equal(t, "forge.deploy_status", router.lastCommandType)
 	assert.Equal(t, reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_RUNNING,
-		resp.Msg.JobStatus)
-	assert.Empty(t, resp.Msg.ReportJson, "no report exists while the deploy is in flight")
-	assert.Empty(t, resp.Msg.FinishedAt)
+		resp.JobStatus)
+	assert.Empty(t, resp.ReportJson, "no report exists while the deploy is in flight")
+	assert.Empty(t, resp.FinishedAt)
 }
 
 // The finished report crosses verbatim, and the rollout states survive as
@@ -628,19 +629,19 @@ func TestForgeService_GetDeployStatus_RolloutStatesSurviveVerbatim(t *testing.T)
 	}
 
 	resp, err := newForgeTestService(router).GetDeployStatus(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+		&reliantv1.GetForgeDeployStatusRequest{
 			ProjectId: "p", Handle: "deploy-7f3a",
-		}))
+		})
 	require.NoError(t, err)
 
 	// The JOB completed — forge ran and produced a report. That is NOT a claim
 	// the deploy succeeded, and the report says it did not.
 	assert.Equal(t, reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_COMPLETED,
-		resp.Msg.JobStatus,
+		resp.JobStatus,
 		"completed means forge produced a report, never that the deploy worked")
-	assert.EqualValues(t, 1, resp.Msg.Meta.ExitCode)
-	assert.JSONEq(t, report, resp.Msg.ReportJson)
-	assert.Equal(t, "2026-07-01T00:32:07Z", resp.Msg.FinishedAt)
+	assert.EqualValues(t, 1, resp.Meta.ExitCode)
+	assert.JSONEq(t, report, resp.ReportJson)
+	assert.Equal(t, "2026-07-01T00:32:07Z", resp.FinishedAt)
 
 	var doc struct {
 		OK      bool `json:"ok"`
@@ -655,7 +656,7 @@ func TestForgeService_GetDeployStatus_RolloutStatesSurviveVerbatim(t *testing.T)
 			NotWaited int `json:"not_waited"`
 		} `json:"rollout"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(resp.Msg.ReportJson), &doc))
+	require.NoError(t, json.Unmarshal([]byte(resp.ReportJson), &doc))
 	assert.False(t, doc.OK, "ok must survive as false")
 
 	states := map[string]string{}
@@ -694,15 +695,15 @@ func TestForgeService_GetDeployStatus_KilledJobIsUnknown(t *testing.T) {
 	}
 
 	resp, err := newForgeTestService(router).GetDeployStatus(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+		&reliantv1.GetForgeDeployStatusRequest{
 			ProjectId: "p", Handle: "deploy-7f3a",
-		}))
+		})
 	require.NoError(t, err, "an indeterminate outcome is data, not a transport failure")
 
 	assert.Equal(t, reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_UNKNOWN,
-		resp.Msg.JobStatus,
+		resp.JobStatus,
 		"a killed job must be UNKNOWN: neither success nor failure is knowable")
-	assert.Contains(t, resp.Msg.JobStatusDetail, "may or may not",
+	assert.Contains(t, resp.JobStatusDetail, "may or may not",
 		"the detail must not assert an outcome the daemon cannot know")
 }
 
@@ -720,12 +721,12 @@ func TestForgeService_GetDeployStatus_UnknownHandleIsUnknownNotError(t *testing.
 	}
 
 	resp, err := newForgeTestService(router).GetDeployStatus(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+		&reliantv1.GetForgeDeployStatusRequest{
 			ProjectId: "p", Handle: "gone",
-		}))
+		})
 	require.NoError(t, err)
 	assert.Equal(t, reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_UNKNOWN,
-		resp.Msg.JobStatus)
+		resp.JobStatus)
 }
 
 // TestForgeDeployJobStatusMapping is the unit test for the mapper, and the case
@@ -751,9 +752,9 @@ func TestForgeDeployJobStatusMapping(t *testing.T) {
 func TestForgeService_GetDeployStatus_RequiresHandle(t *testing.T) {
 	router := &forgeTestRouter{}
 	_, err := newForgeTestService(router).GetDeployStatus(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{ProjectId: "p"}))
+		&reliantv1.GetForgeDeployStatusRequest{ProjectId: "p"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Empty(t, router.lastCommandType)
 }
 
@@ -771,7 +772,7 @@ func TestForgeService_DeployTimeouts(t *testing.T) {
 				deployPlanDoc("prod", "dry_run", "gke_prod", "k3d", "allow", "v1.5.15"), nil),
 		}
 		_, err := newForgeTestService(router).PlanDeploy(authedCtx(),
-			connect.NewRequest(&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"})
 		require.NoError(t, err)
 		assert.EqualValues(t, forgeDeployPlanTimeoutMs, router.lastTimeoutMs)
 		// The preflight reads the live target, so this is NOT a local-read
@@ -788,7 +789,7 @@ func TestForgeService_DeployTimeouts(t *testing.T) {
 				map[string]any{"handle": "h1", "job_status": "running"}),
 		}
 		_, err := newForgeTestService(router).StartDeploy(authedCtx(),
-			connect.NewRequest(authorisedStart("prod", "gke_prod", "v1.5.15")))
+			authorisedStart("prod", "gke_prod", "v1.5.15"))
 		require.NoError(t, err)
 		assert.EqualValues(t, forgeDeployStartTimeoutMs, router.lastTimeoutMs)
 		assert.GreaterOrEqual(t, forgeDeployStartTimeoutMs, forgeDeployPlanTimeoutMs,
@@ -805,9 +806,9 @@ func TestForgeService_DeployTimeouts(t *testing.T) {
 			reply: deployReply(t, "", map[string]any{"handle": "h1", "job_status": "running"}),
 		}
 		_, err := newForgeTestService(router).GetDeployStatus(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+			&reliantv1.GetForgeDeployStatusRequest{
 				ProjectId: "p", Handle: "h1",
-			}))
+			})
 		require.NoError(t, err)
 		assert.EqualValues(t, forgeDeployStatusTimeoutMs, router.lastTimeoutMs)
 		assert.Less(t, forgeDeployStatusTimeoutMs, forgeDeployStartTimeoutMs,

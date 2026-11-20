@@ -3,7 +3,7 @@ package worktree_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -16,22 +16,22 @@ func TestArchiveWorktree_Generated(t *testing.T) {
 
 	svc := newOwnedWorktreeService(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ArchiveWorktreeRequest, pb.ArchiveWorktreeResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ArchiveWorktreeRequest, pb.ArchiveWorktreeResponse]{
 		{
 			Name:    "a missing worktree_id is invalid",
-			Req:     connect.NewRequest(&pb.ArchiveWorktreeRequest{}),
+			Req:     &pb.ArchiveWorktreeRequest{},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "another user's worktree is not found",
-			Req:     connect.NewRequest(&pb.ArchiveWorktreeRequest{WorktreeId: otherWorktreeID}),
+			Req:     &pb.ArchiveWorktreeRequest{WorktreeId: otherWorktreeID},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "the project's main worktree cannot be archived",
-			Req:     connect.NewRequest(&pb.ArchiveWorktreeRequest{WorktreeId: mainWorktreeID}),
+			Req:     &pb.ArchiveWorktreeRequest{WorktreeId: mainWorktreeID},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeFailedPrecondition,
 		},

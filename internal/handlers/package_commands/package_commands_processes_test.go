@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -216,10 +216,10 @@ func newProcessesService(t *testing.T, router *machineRouter, repo *processesRep
 	return NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo}))
 }
 
-func runBuild(svc *Service, worktreeID string) (*connect.Response[reliantv1.RunPackageCommandResponse], error) {
-	return svc.RunCommand(authedCtx(), connect.NewRequest(&reliantv1.RunPackageCommandRequest{
+func runBuild(svc *Service, worktreeID string) (*reliantv1.RunPackageCommandResponse, error) {
+	return svc.RunCommand(authedCtx(), &reliantv1.RunPackageCommandRequest{
 		WorktreeId: ptr.Of(worktreeID), CommandName: "build", PackageType: reliantv1.PackageType_PACKAGE_TYPE_NPM,
-	}))
+	})
 }
 
 // The reported shape: a workspace on machine B, the user's default
@@ -241,8 +241,8 @@ func TestRunCommand_RunsOnTheWorkspacesMachine(t *testing.T) {
 	assert.Equal(t, "npm run build", started.Command, "the root's build, not a subdirectory's")
 	assert.Equal(t, "/home/workspace/.reliant/worktrees/wt-b", started.WorkingDir)
 	assert.Equal(t, "wt-b", started.WorktreeID, "tagged so the workspace's list finds it")
-	assert.Equal(t, "proc-1", resp.Msg.ProcessId)
-	assert.Equal(t, "daemon-b", resp.Msg.DaemonId)
+	assert.Equal(t, "proc-1", resp.ProcessId)
+	assert.Equal(t, "daemon-b", resp.DaemonId)
 }
 
 func TestRunCommand_UnknownCommandStartsNothing(t *testing.T) {
@@ -251,11 +251,11 @@ func TestRunCommand_UnknownCommandStartsNothing(t *testing.T) {
 	repo.worktree("wt-b", "p1", "daemon-b")
 	svc := newProcessesService(t, router, repo)
 
-	_, err := svc.RunCommand(authedCtx(), connect.NewRequest(&reliantv1.RunPackageCommandRequest{
+	_, err := svc.RunCommand(authedCtx(), &reliantv1.RunPackageCommandRequest{
 		WorktreeId: ptr.Of("wt-b"), CommandName: "deploy", PackageType: reliantv1.PackageType_PACKAGE_TYPE_NPM,
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.Empty(t, router.machinesFor("exec.bg_start"))
 }
 
@@ -267,7 +267,7 @@ func TestRunCommand_AnotherUsersWorkspaceIsNotFound(t *testing.T) {
 
 	_, err := runBuild(svc, "wt-other")
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.Empty(t, router.sent, "nothing is sent for someone else's workspace")
 }
 
@@ -304,7 +304,7 @@ func TestRunCommand_MainCheckoutRunsWhereTheProjectIsInstalled(t *testing.T) {
 
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("pkg.list_commands"), "discovery asks the machine with the project")
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_start"))
-	assert.Equal(t, "daemon-b", resp.Msg.DaemonId, "the concrete machine is carried to the process rpcs")
+	assert.Equal(t, "daemon-b", resp.DaemonId, "the concrete machine is carried to the process rpcs")
 }
 
 // The main checkout beside a chat pinned to B runs on B, whatever the
@@ -328,19 +328,19 @@ func TestRunCommand_MainCheckoutBesideAChatRunsOnTheChatsMachine(t *testing.T) {
 	}
 	svc := NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router, Repo: repo}))
 
-	resp, err := svc.RunCommand(authedCtx(), connect.NewRequest(&reliantv1.RunPackageCommandRequest{
+	resp, err := svc.RunCommand(authedCtx(), &reliantv1.RunPackageCommandRequest{
 		WorktreeId: ptr.Of("wt-main"), ChatId: ptr.Of("chat-b"), CommandName: "build", PackageType: reliantv1.PackageType_PACKAGE_TYPE_NPM,
-	}))
+	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("pkg.list_commands"))
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_start"))
-	assert.Equal(t, "daemon-b", resp.Msg.DaemonId)
+	assert.Equal(t, "daemon-b", resp.DaemonId)
 
-	_, err = svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{
+	_, err = svc.ListCommands(authedCtx(), &reliantv1.ListPackageCommandsRequest{
 		WorktreeId: ptr.Of("wt-main"), ChatId: ptr.Of("chat-other"),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's chat is not found")
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "another user's chat is not found")
 }
 
 // failingInstallsRepo fails the project-install lookup.
@@ -380,12 +380,12 @@ func TestListProcesses_ForAWorkspaceReadsItsMachine(t *testing.T) {
 	repo.worktree("wt-b", "p1", "daemon-b")
 	svc := newProcessesService(t, router, repo)
 
-	resp, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListPackageProcessesRequest{WorktreeId: ptr.Of("wt-b")}))
+	resp, err := svc.ListProcesses(authedCtx(), &reliantv1.ListPackageProcessesRequest{WorktreeId: ptr.Of("wt-b")})
 	require.NoError(t, err)
 
-	require.Len(t, resp.Msg.Processes, 1)
-	assert.Equal(t, "mine", resp.Msg.Processes[0].Id)
-	assert.Equal(t, "daemon-b", resp.Msg.Processes[0].DaemonId, "the process says which machine to ask about it")
+	require.Len(t, resp.Processes, 1)
+	assert.Equal(t, "mine", resp.Processes[0].Id)
+	assert.Equal(t, "daemon-b", resp.Processes[0].DaemonId, "the process says which machine to ask about it")
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_list"))
 }
 
@@ -400,23 +400,23 @@ func TestRunCommand_PathOnlyProcessIsListedAndFound(t *testing.T) {
 	repo.machine(routedDefault, "test-user")
 	svc := newProcessesService(t, router, repo)
 
-	started, err := svc.RunCommand(authedCtx(), connect.NewRequest(&reliantv1.RunPackageCommandRequest{
+	started, err := svc.RunCommand(authedCtx(), &reliantv1.RunPackageCommandRequest{
 		Path: ptr.Of("/home/u/project"), CommandName: "build", PackageType: reliantv1.PackageType_PACKAGE_TYPE_NPM,
-	}))
+	})
 	require.NoError(t, err)
 	var req daemon.RunCommandRequest
 	require.NoError(t, json.Unmarshal(router.payloadOf("exec.bg_start"), &req))
 	assert.True(t, req.PackageCommand, "the process is tagged as a package command")
 	assert.Empty(t, req.WorktreeID)
 
-	listed, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListPackageProcessesRequest{}))
+	listed, err := svc.ListProcesses(authedCtx(), &reliantv1.ListPackageProcessesRequest{})
 	require.NoError(t, err)
-	require.Len(t, listed.Msg.Processes, 1, "the package command is listed, the agent's command is not")
-	assert.Equal(t, started.Msg.ProcessId, listed.Msg.Processes[0].Id)
+	require.Len(t, listed.Processes, 1, "the package command is listed, the agent's command is not")
+	assert.Equal(t, started.ProcessId, listed.Processes[0].Id)
 
-	got, err := svc.GetProcess(authedCtx(), connect.NewRequest(&reliantv1.GetPackageProcessRequest{ProcessId: started.Msg.ProcessId}))
+	got, err := svc.GetProcess(authedCtx(), &reliantv1.GetPackageProcessRequest{ProcessId: started.ProcessId})
 	require.NoError(t, err, "a process just started by path is found")
-	assert.Equal(t, "npm run build", got.Msg.Process.Command)
+	assert.Equal(t, "npm run build", got.Process.Command)
 }
 
 // A list never wakes a machine.
@@ -426,9 +426,9 @@ func TestListProcesses_AsleepWorkspaceMachineListsNothing(t *testing.T) {
 	repo.worktree("wt-b", "p1", "daemon-b")
 	svc := newProcessesService(t, router, repo)
 
-	resp, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListPackageProcessesRequest{WorktreeId: ptr.Of("wt-b")}))
+	resp, err := svc.ListProcesses(authedCtx(), &reliantv1.ListPackageProcessesRequest{WorktreeId: ptr.Of("wt-b")})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.Processes)
+	assert.Empty(t, resp.Processes)
 	assert.Empty(t, router.machinesFor("exec.bg_list"))
 }
 
@@ -448,11 +448,11 @@ func TestListProcesses_EverywhereAsksEachConnectedMachine(t *testing.T) {
 	repo.machine("daemon-foreign", "someone-else")
 	svc := newProcessesService(t, router, repo)
 
-	resp, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListPackageProcessesRequest{}))
+	resp, err := svc.ListProcesses(authedCtx(), &reliantv1.ListPackageProcessesRequest{})
 	require.NoError(t, err)
 
 	byID := map[string]string{}
-	for _, p := range resp.Msg.Processes {
+	for _, p := range resp.Processes {
 		byID[p.Id] = p.DaemonId
 	}
 	assert.Equal(t, map[string]string{"on-a": "daemon-a", "on-b": "daemon-b"}, byID)
@@ -469,16 +469,16 @@ func TestGetProcessLogs_ReadsTheProcessesMachine(t *testing.T) {
 	repo.machine("daemon-b", "test-user")
 	svc := newProcessesService(t, router, repo)
 
-	resp, err := svc.GetProcessLogs(authedCtx(), connect.NewRequest(&reliantv1.GetPackageProcessLogsRequest{
+	resp, err := svc.GetProcessLogs(authedCtx(), &reliantv1.GetPackageProcessLogsRequest{
 		ProcessId: "proc-1", DaemonId: ptr.Of("daemon-b"),
-	}))
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_output"))
-	assert.Equal(t, "building\ndone\n", resp.Msg.Stdout)
-	assert.Equal(t, "warning: x\n", resp.Msg.Stderr)
-	require.Len(t, resp.Msg.Combined, 3)
-	assert.Equal(t, reliantv1.OutputStreamType_OUTPUT_STREAM_TYPE_STDERR, resp.Msg.Combined[1].Type)
+	assert.Equal(t, "building\ndone\n", resp.Stdout)
+	assert.Equal(t, "warning: x\n", resp.Stderr)
+	require.Len(t, resp.Combined, 3)
+	assert.Equal(t, reliantv1.OutputStreamType_OUTPUT_STREAM_TYPE_STDERR, resp.Combined[1].Type)
 }
 
 func TestKillProcess_StopsItOnItsMachine(t *testing.T) {
@@ -488,13 +488,13 @@ func TestKillProcess_StopsItOnItsMachine(t *testing.T) {
 	repo.machine("daemon-foreign", "someone-else")
 	svc := newProcessesService(t, router, repo)
 
-	_, err := svc.KillProcess(authedCtx(), connect.NewRequest(&reliantv1.KillPackageProcessRequest{ProcessId: "proc-1", DaemonId: ptr.Of("daemon-b")}))
+	_, err := svc.KillProcess(authedCtx(), &reliantv1.KillPackageProcessRequest{ProcessId: "proc-1", DaemonId: ptr.Of("daemon-b")})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"daemon-b"}, router.machinesFor("exec.bg_kill"))
 
-	_, err = svc.KillProcess(authedCtx(), connect.NewRequest(&reliantv1.KillPackageProcessRequest{ProcessId: "proc-1", DaemonId: ptr.Of("daemon-foreign")}))
+	_, err = svc.KillProcess(authedCtx(), &reliantv1.KillPackageProcessRequest{ProcessId: "proc-1", DaemonId: ptr.Of("daemon-foreign")})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's machine reads like a missing one")
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "another user's machine reads like a missing one")
 	assert.Len(t, router.machinesFor("exec.bg_kill"), 1, "nothing is sent to it")
 }
 

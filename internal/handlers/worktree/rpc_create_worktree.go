@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -36,57 +35,57 @@ import (
 //     and return an error.
 func (s *Service) CreateWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateWorktreeRequest],
-) (*connect.Response[reliantv1.CreateWorktreeResponse], error) {
+	req *reliantv1.CreateWorktreeRequest,
+) (*reliantv1.CreateWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.Name == "" {
+	if req.Name == "" {
 		return nil, svcerr.InvalidArgument("name is required")
 	}
-	if req.Msg.Branch == "" {
+	if req.Branch == "" {
 		return nil, svcerr.InvalidArgument("branch is required")
 	}
-	if req.Msg.ProjectId == "" {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	// copy_files are exact paths relative to the workspace root. Rejected
 	// HERE, synchronously, so a typo or an escaping path is an error the
 	// caller sees — not a workspace that silently lacks its .env.
-	copyPaths, err := copypath.CleanAll(req.Msg.CopyFiles)
+	copyPaths, err := copypath.CleanAll(req.CopyFiles)
 	if err != nil {
 		// The validator's sentence names the entry and the rule it broke.
 		return nil, svcerr.InvalidArgument(err.Error())
 	}
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	globalBase := ""
-	if req.Msg.BaseBranch != nil {
-		globalBase = *req.Msg.BaseBranch
+	if req.BaseBranch != nil {
+		globalBase = *req.BaseBranch
 	}
 
 	// Resolve a source workspace if specified: copy_files are copied from its
 	// root instead of the live project root.
 	var sourceWorktree *db.Worktree
 	var sourceWorkspace string
-	if req.Msg.SourceWorktreeId != nil && *req.Msg.SourceWorktreeId != "" {
-		if err := s.worktreeBelongsToUser(ctx, *req.Msg.SourceWorktreeId, userID); err != nil {
+	if req.SourceWorktreeId != nil && *req.SourceWorktreeId != "" {
+		if err := s.worktreeBelongsToUser(ctx, *req.SourceWorktreeId, userID); err != nil {
 			if svcerr.IsNotFound(err) {
 				return nil, svcerr.NotFound("source worktree")
 			}
 			return nil, err
 		}
-		sourceWorktree, err = s.deps.Repo.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
+		sourceWorktree, err = s.deps.Repo.GetWorktree(ctx, *req.SourceWorktreeId)
 		if err != nil {
 			logging.WarnContext(ctx, "Source worktree not found, falling back to project paths",
-				"sourceWorktreeId", *req.Msg.SourceWorktreeId, "error", err)
+				"sourceWorktreeId", *req.SourceWorktreeId, "error", err)
 			sourceWorktree = nil
 		} else {
 			sourceWorkspace = sourceWorktree.Path
@@ -101,7 +100,7 @@ func (s *Service) CreateWorktree(
 	// back to (a branch chat's worktree exists on disk only here). Fail fast
 	// if no daemon is reachable — creating a worktree row that points at a
 	// directory on no daemon is worse than a clear up-front error.
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, req.Msg.DaemonId, "create")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.ChatId, sourceWorktree, req.DaemonId, "create")
 	if err != nil {
 		return nil, err
 	}
@@ -131,16 +130,16 @@ func (s *Service) CreateWorktree(
 	// finishes, so a client that loses the response cannot tell "failed" from
 	// "succeeded, reply dropped" — without this the natural retry produces a
 	// second workspace with a second on-disk checkout.
-	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
-		existing, err := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
+	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
+		existing, err := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.IdempotencyKey)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create worktree"))
 		}
 		if existing != nil {
 			activity.Skip(ctx) // a retry of a create already recorded: no second "create" event
-			return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
+			return &reliantv1.CreateWorktreeResponse{
 				Worktree: worktreeToProto(existing),
-			}), nil
+			}, nil
 		}
 	}
 
@@ -154,22 +153,22 @@ func (s *Service) CreateWorktree(
 	// Path is empty until the daemon reports where it landed; the row carries
 	// CREATING so callers render a pending workspace rather than a broken one.
 	var chatID *string
-	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
-		chatID = req.Msg.ChatId
+	if req.ChatId != nil && *req.ChatId != "" {
+		chatID = req.ChatId
 	}
 	var idempotencyKey *string
-	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
-		idempotencyKey = req.Msg.IdempotencyKey
+	if req.IdempotencyKey != nil && *req.IdempotencyKey != "" {
+		idempotencyKey = req.IdempotencyKey
 	}
 	createReq := workspacecreate.Request{
 		Project:        project,
 		Checkout:       target.checkout.Path,
 		Repos:          repos,
-		Name:           req.Msg.Name,
-		Branch:         req.Msg.Branch,
+		Name:           req.Name,
+		Branch:         req.Branch,
 		BaseBranch:     globalBase,
-		BaseBranches:   req.Msg.BaseBranches,
-		Force:          req.Msg.Force,
+		BaseBranches:   req.BaseBranches,
+		Force:          req.Force,
 		CopyPaths:      copyPaths,
 		CopySource:     sourceWorkspace,
 		ChatID:         chatID,
@@ -178,7 +177,7 @@ func (s *Service) CreateWorktree(
 	}
 	worktree, err := workspacecreate.Insert(ctx, s.deps.Repo, worktreeMachine{s: s, userID: userID, target: target.machine}, createReq)
 	if err != nil {
-		return nil, insertWorktreeError(err, req.Msg.Name)
+		return nil, insertWorktreeError(err, req.Name)
 	}
 
 	// Detached from the request context so the work survives the client going
@@ -195,9 +194,9 @@ func (s *Service) CreateWorktree(
 		s.finishWorktreeCreate(bgCtx, userID, target.machine, createReq, &pending)
 	}()
 
-	return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
+	return &reliantv1.CreateWorktreeResponse{
 		Worktree: worktreeToProto(worktree),
-	}), nil
+	}, nil
 }
 
 // insertWorktreeError maps a workspacecreate.Insert failure to its wire error.

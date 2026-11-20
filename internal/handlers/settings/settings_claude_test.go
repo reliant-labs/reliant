@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
@@ -36,9 +35,9 @@ func claudeAccount(needsReauth bool) core.ProviderAccount {
 func claudeStatus(t *testing.T, accounts ...core.ProviderAccount) *reliantv1.ProviderStatus {
 	t.Helper()
 	svc := newTestService(t, Deps{Repo: accountsRepo(accounts)})
-	resp, err := svc.GetProviderStatuses(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
+	resp, err := svc.GetProviderStatuses(newSettingsServiceTestContext(), &reliantv1.GetProviderStatusesRequest{})
 	require.NoError(t, err)
-	return findProviderStatus(t, resp.Msg.Providers, "claude")
+	return findProviderStatus(t, resp.Providers, "claude")
 }
 
 // A Claude account is connected until a refresh proves its session dead: the account's access token
@@ -68,11 +67,11 @@ func TestSettingsService_ValidateProviderAPIKey_ClaudeMatchesConfiguredSemantics
 	validate := func(t *testing.T, accounts ...core.ProviderAccount) *reliantv1.ValidateProviderAPIKeyResponse {
 		t.Helper()
 		svc := newTestService(t, Deps{Repo: accountsRepo(accounts)})
-		resp, err := svc.ValidateProviderAPIKey(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{
+		resp, err := svc.ValidateProviderAPIKey(newSettingsServiceTestContext(), &reliantv1.ValidateProviderAPIKeyRequest{
 			Provider: "claude",
-		}))
+		})
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 
 	msg := validate(t, claudeAccount(false))

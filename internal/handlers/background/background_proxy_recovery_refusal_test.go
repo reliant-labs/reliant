@@ -6,13 +6,14 @@ import (
 	"log/slog"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
@@ -27,6 +28,13 @@ type reportingCommandRouter struct {
 
 func (r *reportingCommandRouter) SendDaemonCommand(_ context.Context, _, commandType string, _ []byte, _ int32) ([]byte, error) {
 	return nil, toolexec.DaemonReportedFailure(commandType, r.text)
+}
+
+// listProcessesSpec is the Spec the RPC edge hands its interceptors for
+// ListProcesses.
+var listProcessesSpec = connect.Spec{
+	Procedure:  reliantv1connect.BackgroundServiceListProcessesProcedure,
+	StreamType: connect.StreamTypeUnary,
 }
 
 // levelRecorder keeps the level of every record logged through it.
@@ -57,15 +65,16 @@ func TestBackgroundProxy_RecoveryRefusalLogsBelowError(t *testing.T) {
 			svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: &reportingCommandRouter{text: tc.text}}))
 			rec := &levelRecorder{}
 			// As internal/grpc/user_chain.go wires the RPC edge.
-			handler := observe.LoggingInterceptor(slog.New(rec), observe.WithErrorClassifier(errclass.Library)).WrapUnary(
-				func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-					return svc.ListProcesses(ctx, req.(*connect.Request[reliantv1.ListBackgroundProcessesRequest]))
+			handler := observe.LoggingInterceptorV2(slog.New(rec), observe.WithErrorClassifier(errclass.Library))(
+				func(ctx context.Context, _ connect.Spec, _ connect.ServerStream) error {
+					_, err := svc.ListProcesses(ctx, &reliantv1.ListBackgroundProcessesRequest{})
+					return err
 				})
 
-			_, err := handler(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
+			err := handler(AuthedContext(t), listProcessesSpec, nil)
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInternal, svcerr.Code(err), "the code the web already handles")
-			assert.Contains(t, svcerr.ToConnect(err).Message(), tc.text, "the daemon's words reach the user")
+			assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err), "the code the web already handles")
+			assert.Contains(t, svcerr.ToConnectV2(err).Message(), tc.text, "the daemon's words reach the user")
 			assert.Equal(t, []slog.Level{tc.wantLevel}, rec.levels)
 		})
 	}

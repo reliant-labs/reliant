@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -47,9 +46,9 @@ func TestActivationRunsTheProjectWorkflowAndShowsWhere(t *testing.T) {
 	got := env.create(t, env.activation("nightly", nil))
 	assert.NotEqual(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN, got.GetHealth().GetStatus(), got.GetHealth().GetLastFailureDetail())
 
-	one, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: got.GetId()}))
+	one, err := env.svc.GetTrigger(env.ctx, &reliantv1.GetTriggerRequest{Id: got.GetId()})
 	require.NoError(t, err)
-	src := one.Msg.GetTrigger().GetDefinitionSource()
+	src := one.GetTrigger().GetDefinitionSource()
 	require.NotNil(t, src)
 	assert.Equal(t, "project", src.GetKind())
 	assert.Equal(t, path, src.GetPath())
@@ -68,9 +67,9 @@ func TestActivationRunsTheProjectWorkflowAndShowsWhere(t *testing.T) {
 		d.Name = "nightly on the new machine"
 		d.DaemonId = fresh
 	}))
-	one, err = env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: other.GetId()}))
+	one, err = env.svc.GetTrigger(env.ctx, &reliantv1.GetTriggerRequest{Id: other.GetId()})
 	require.NoError(t, err)
-	src = one.Msg.GetTrigger().GetDefinitionSource()
+	src = one.GetTrigger().GetDefinitionSource()
 	require.NotNil(t, src)
 	assert.Empty(t, src.GetDaemonId())
 	assert.Contains(t, strings.Join(src.GetWarnings(), "\n"), "has never synced this project")

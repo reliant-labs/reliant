@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -31,20 +31,20 @@ func TestResolveDaemon_Generated(t *testing.T) {
 			},
 		},
 	}))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ResolveDaemonRequest, pb.ResolveDaemonResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ResolveDaemonRequest, pb.ResolveDaemonResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
-			Req:     connect.NewRequest(&pb.ResolveDaemonRequest{DaemonName: "laptop"}),
+			Req:     &pb.ResolveDaemonRequest{DaemonName: "laptop"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name: "no matching daemon answers found=false",
-			Req:  connect.NewRequest(&pb.ResolveDaemonRequest{DaemonName: "laptop"}),
+			Req:  &pb.ResolveDaemonRequest{DaemonName: "laptop"},
 			Ctx:  daemon_registry.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ResolveDaemonResponse]) {
-				if resp.Msg.GetFound() || resp.Msg.GetDaemon() != nil {
-					t.Fatalf("ResolveDaemon = %v, want found=false and no daemon", resp.Msg)
+			Check: func(t *testing.T, resp *pb.ResolveDaemonResponse) {
+				if resp.GetFound() || resp.GetDaemon() != nil {
+					t.Fatalf("ResolveDaemon = %v, want found=false and no daemon", resp)
 				}
 			},
 		},
@@ -69,23 +69,23 @@ func TestResolveDaemon_NoSelectorAnswersTheDefault(t *testing.T) {
 			},
 		},
 	}))
-	resolved := func(want string) func(*testing.T, *connect.Response[pb.ResolveDaemonResponse]) {
-		return func(t *testing.T, resp *connect.Response[pb.ResolveDaemonResponse]) {
-			if !resp.Msg.GetFound() || resp.Msg.GetDaemon().GetDaemonId() != want {
-				t.Fatalf("ResolveDaemon = %v, want %s", resp.Msg, want)
+	resolved := func(want string) func(*testing.T, *pb.ResolveDaemonResponse) {
+		return func(t *testing.T, resp *pb.ResolveDaemonResponse) {
+			if !resp.GetFound() || resp.GetDaemon().GetDaemonId() != want {
+				t.Fatalf("ResolveDaemon = %v, want %s", resp, want)
 			}
 		}
 	}
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ResolveDaemonRequest, pb.ResolveDaemonResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ResolveDaemonRequest, pb.ResolveDaemonResponse]{
 		{
 			Name:  "no selector is the default",
-			Req:   connect.NewRequest(&pb.ResolveDaemonRequest{}),
+			Req:   &pb.ResolveDaemonRequest{},
 			Ctx:   daemon_registry.AuthedContext(t),
 			Check: resolved("default"),
 		},
 		{
 			Name:  "an id selector is its own",
-			Req:   connect.NewRequest(&pb.ResolveDaemonRequest{DaemonId: "cicd"}),
+			Req:   &pb.ResolveDaemonRequest{DaemonId: "cicd"},
 			Ctx:   daemon_registry.AuthedContext(t),
 			Check: resolved("cicd"),
 		},

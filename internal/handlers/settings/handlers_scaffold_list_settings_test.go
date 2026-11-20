@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -30,11 +30,11 @@ func TestListSettings_Generated(t *testing.T) {
 		}
 		svc := newSettingsService(t, repo)
 
-		resp, err := svc.ListSettings(settings.AuthedContext(t), connect.NewRequest(&pb.ListSettingsRequest{}))
+		resp, err := svc.ListSettings(settings.AuthedContext(t), &pb.ListSettingsRequest{})
 		require.NoError(t, err)
 		require.Equal(t, "test-user", askedFor)
-		require.EqualValues(t, 2, resp.Msg.GetTotal())
-		require.Len(t, resp.Msg.GetSettings(), 2)
+		require.EqualValues(t, 2, resp.GetTotal())
+		require.Len(t, resp.GetSettings(), 2)
 	})
 
 	t.Run("a failed read is internal", func(t *testing.T) {
@@ -42,7 +42,7 @@ func TestListSettings_Generated(t *testing.T) {
 		repo.ListSettingsFunc = func(context.Context, string, *string) ([]*db.Setting, error) { return nil, errors.New("db down") }
 		svc := newSettingsService(t, repo)
 
-		_, err := svc.ListSettings(settings.AuthedContext(t), connect.NewRequest(&pb.ListSettingsRequest{}))
-		require.Equal(t, connect.CodeInternal, svcerr.Code(err))
+		_, err := svc.ListSettings(settings.AuthedContext(t), &pb.ListSettingsRequest{})
+		require.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 	})
 }

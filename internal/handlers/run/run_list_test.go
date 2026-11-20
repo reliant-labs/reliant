@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -62,9 +62,9 @@ func (f *runListFixture) seed(t *testing.T, id, workflow string, status db.Workf
 
 func (f *runListFixture) list(t *testing.T, req *reliantv1.ListRunsRequest) *reliantv1.ListRunsResponse {
 	t.Helper()
-	resp, err := f.svc.ListRuns(f.ctx, connect.NewRequest(req))
+	resp, err := f.svc.ListRuns(f.ctx, req)
 	require.NoError(t, err)
-	return resp.Msg
+	return resp
 }
 
 func runIDs(runs []*reliantv1.Run) []string {
@@ -160,15 +160,15 @@ func TestListRuns_CrossCuttingFiltersAndNewFields(t *testing.T) {
 func TestListRuns_RejectsBadInput(t *testing.T) {
 	f := newRunListFixture(t)
 	bad := "not-a-token!!"
-	_, err := f.svc.ListRuns(f.ctx, connect.NewRequest(&reliantv1.ListRunsRequest{PageToken: &bad}))
+	_, err := f.svc.ListRuns(f.ctx, &reliantv1.ListRunsRequest{PageToken: &bad})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 
-	_, err = f.svc.ListRuns(f.ctx, connect.NewRequest(&reliantv1.ListRunsRequest{
+	_, err = f.svc.ListRuns(f.ctx, &reliantv1.ListRunsRequest{
 		DisplayStates: []reliantv1.RunDisplayState{reliantv1.RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED},
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 func TestListRuns_LimitIsCapped(t *testing.T) {
@@ -188,10 +188,10 @@ func TestLastRunPerWorkflowRPC(t *testing.T) {
 	f.seed(t, "a-new", "wf-a", db.Failed(), base.Add(time.Minute))
 	f.seed(t, "b-only", "wf-b", db.Active(), base)
 
-	resp, err := f.svc.LastRunPerWorkflow(f.ctx, connect.NewRequest(&reliantv1.LastRunPerWorkflowRequest{}))
+	resp, err := f.svc.LastRunPerWorkflow(f.ctx, &reliantv1.LastRunPerWorkflowRequest{})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"a-new", "b-only"}, runIDs(resp.Msg.Runs))
-	assert.Equal(t, reliantv1.RunDisplayState_RUN_DISPLAY_STATE_FAILED, resp.Msg.Runs[0].DisplayState)
+	assert.Equal(t, []string{"a-new", "b-only"}, runIDs(resp.Runs))
+	assert.Equal(t, reliantv1.RunDisplayState_RUN_DISPLAY_STATE_FAILED, resp.Runs[0].DisplayState)
 }
 
 func TestRunCursorRoundTrip(t *testing.T) {
@@ -268,10 +268,10 @@ func TestListRuns_ArchivedRunsAreListedOnRequestAndMarked(t *testing.T) {
 	assert.True(t, all[0].Archived)
 	assert.False(t, all[1].Archived)
 
-	last, err := f.svc.LastRunPerWorkflow(f.ctx, connect.NewRequest(&reliantv1.LastRunPerWorkflowRequest{}))
+	last, err := f.svc.LastRunPerWorkflow(f.ctx, &reliantv1.LastRunPerWorkflowRequest{})
 	require.NoError(t, err)
-	require.Equal(t, []string{"archived"}, runIDs(last.Msg.Runs), "an archived run is still the workflow's last run")
-	assert.True(t, last.Msg.Runs[0].Archived)
+	require.Equal(t, []string{"archived"}, runIDs(last.Runs), "an archived run is still the workflow's last run")
+	assert.True(t, last.Runs[0].Archived)
 }
 
 // The run log: a trigger firing that started no run is listed beside the

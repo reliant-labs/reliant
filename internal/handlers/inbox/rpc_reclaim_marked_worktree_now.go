@@ -3,8 +3,6 @@ package inbox
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -12,14 +10,14 @@ import (
 // (Sweeper.ReclaimMarkedNow).
 func (s *Service) ReclaimMarkedWorktreeNow(
 	ctx context.Context,
-	req *connect.Request[pb.ReclaimMarkedWorktreeNowRequest],
-) (*connect.Response[pb.ReclaimMarkedWorktreeNowResponse], error) {
-	userID, err := s.markDecision(ctx, req.Msg.WorktreeId, req.Msg.MarkId)
+	req *pb.ReclaimMarkedWorktreeNowRequest,
+) (*pb.ReclaimMarkedWorktreeNowResponse, error) {
+	userID, err := s.markDecision(ctx, req.WorktreeId, req.MarkId)
 	if err != nil {
 		return nil, err
 	}
-	if err := markDecisionError(s.deps.Sweeper.ReclaimMarkedNow(ctx, s.deps.Repo, userID, req.Msg.WorktreeId, req.Msg.MarkId)); err != nil {
+	if err := markDecisionError(s.deps.Sweeper.ReclaimMarkedNow(ctx, s.deps.Repo, userID, req.WorktreeId, req.MarkId)); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.ReclaimMarkedWorktreeNowResponse{}), nil
+	return &pb.ReclaimMarkedWorktreeNowResponse{}, nil
 }

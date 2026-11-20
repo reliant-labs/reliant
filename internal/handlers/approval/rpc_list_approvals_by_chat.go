@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -60,17 +59,17 @@ func approvalToProto(a *db.Approval) *reliantv1.Approval {
 // ListApprovalsByChat lists all pending approvals for a chat
 func (s *Service) ListApprovalsByChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListApprovalsByChatRequest],
-) (*connect.Response[reliantv1.ListApprovalsByChatResponse], error) {
-	if req.Msg.ChatId == "" {
+	req *reliantv1.ListApprovalsByChatRequest,
+) (*reliantv1.ListApprovalsByChatResponse, error) {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	if err := s.chatBelongsToUser(ctx, req.Msg.ChatId); err != nil {
+	if err := s.chatBelongsToUser(ctx, req.ChatId); err != nil {
 		return nil, err
 	}
 
-	approvals, err := s.deps.Repo.ListPendingApprovalsByChat(ctx, req.Msg.ChatId)
+	approvals, err := s.deps.Repo.ListPendingApprovalsByChat(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list approvals"))
 	}
@@ -80,8 +79,8 @@ func (s *Service) ListApprovalsByChat(
 		protoApprovals[i] = approvalToProto(a)
 	}
 
-	return connect.NewResponse(&reliantv1.ListApprovalsByChatResponse{
+	return &reliantv1.ListApprovalsByChatResponse{
 		Approvals: protoApprovals,
 		Total:     int32(len(protoApprovals)),
-	}), nil
+	}, nil
 }

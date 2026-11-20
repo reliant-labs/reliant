@@ -9,11 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
@@ -67,9 +66,9 @@ type daemonStream interface {
 	abort()
 }
 
-// inboundStream wraps a connect.BidiStream (server-side, inbound daemon connection).
+// inboundStream wraps a ConnectDaemon server stream (server-side, inbound daemon connection).
 type inboundStream struct {
-	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]
+	stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream
 	// ctx is the handler's: the listener served its request with a body
 	// serverkit.AbortReceive can end, which is what abort does.
 	ctx context.Context
@@ -79,11 +78,11 @@ func (s *inboundStream) Send(msg *reliantv1.ServerMessage) error    { return s.s
 func (s *inboundStream) Receive() (*reliantv1.DaemonMessage, error) { return s.stream.Receive() }
 func (s *inboundStream) abort()                                     { serverkit.AbortReceive(s.ctx) }
 
-// outboundStream wraps a connect.BidiStreamForClient (client-side, outbound gateway connection).
+// outboundStream wraps a ConnectGateway client stream (client-side, outbound gateway connection).
 type outboundStream struct {
-	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage]
+	stream reliantv1connect.ToolsDaemonServiceConnectGatewayClientStream
 	// cancel cancels the context the stream was opened with: the way to end
-	// a client-side Receive (CloseResponse must not race one).
+	// a client-side Receive (Close must not race one).
 	cancel context.CancelFunc
 }
 
@@ -570,7 +569,7 @@ func (s *Service) releaseLease(ctx context.Context, conn *daemonConnection) erro
 //
 // CodeAborted ("concurrency conflict") is the daemon's cue to stop rather than
 // redial — see isFatalError in internal/toolexec/daemonruntime.
-var errDaemonSuperseded = svcerr.ToConnect(svcerr.Aborted("daemon identity claimed by another daemon process on the same gateway; " +
+var errDaemonSuperseded = svcerr.ToConnectV2(svcerr.Aborted("daemon identity claimed by another daemon process on the same gateway; " +
 	"this process is superseded and must not reconnect (only one daemon may hold a daemon id)"))
 
 func (c *daemonConnection) closeDone() { c.closeWith(nil) }

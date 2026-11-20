@@ -18,7 +18,6 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/stretchr/testify/assert"
@@ -146,16 +145,16 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 		conn := connectTwilio(userID, account, token)
 		created, err := svc.CreateTrigger(context.WithValue(ctx, auth.UserIDContextKey, userID),
-			connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+			&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 				Name: "answer texts", ProjectId: projectID, DaemonId: daemonID, Workflow: "builtin://agent",
 				Message: "Answer the text.", Params: mockModelTriggerParams(t),
 				Filter: "!trigger.payload.data.body.contains('unsubscribe')",
 				Source: &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{
 					Integration: "twilio", Events: []string{"message.received"}, Match: match,
 				}},
-			}}))
+			}})
 		require.NoError(t, err)
-		trig := created.Msg.GetTrigger()
+		trig := created.GetTrigger()
 		require.Equal(t, conn.ID, trig.GetConnectionId())
 		require.Equal(t, publicURL+"/integrations/twilio/events", trig.GetWebhookUrl(),
 			"the trigger tells its owner what to set as each number's webhook")

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,7 +59,7 @@ func TestStartChatRefusesAWorkspaceOnAnotherMachine(t *testing.T) {
 		r.DaemonId = ptr.Of(machineA)
 	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), `"gpu-box"`, "the refusal names the machine the workspace lives on")
 	assert.Empty(t, e.temporal.inputs, "a refused start launches nothing")
 	assert.Empty(t, e.router.selectors, "a refused start wakes nothing")
@@ -75,7 +75,7 @@ func TestStartChatInAWorkspaceOnItsOwnMachine(t *testing.T) {
 		r.DaemonId = ptr.Of(machineB)
 	})
 	require.NoError(t, err)
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := e.repo.GetChat(e.ctx, resp.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, machineB, *chat.ActiveDaemonID)
@@ -108,7 +108,7 @@ func TestStartChatWithAnotherUsersWorkspaceNamesNoMachine(t *testing.T) {
 		r.DaemonId = ptr.Of(machineA)
 	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.NotContains(t, err.Error(), foreignHost, "another tenant's machine name must never be disclosed")
 	assert.Empty(t, e.temporal.inputs, "a refused start launches nothing")
 }
@@ -130,13 +130,13 @@ func TestSetChatDaemonRefusesMovingAWorkspaceChatOffItsMachine(t *testing.T) {
 
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.WorktreeId = &worktreeOnB })
 	require.NoError(t, err)
-	chatID := resp.Msg.GetChat().GetId()
+	chatID := resp.GetChat().GetId()
 
-	_, err = e.svc.SetChatDaemon(e.ctx, connect.NewRequest(&reliantv1.SetChatDaemonRequest{ChatId: chatID, DaemonId: machineA}))
+	_, err = e.svc.SetChatDaemon(e.ctx, &reliantv1.SetChatDaemonRequest{ChatId: chatID, DaemonId: machineA})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), `"gpu-box"`)
 
-	_, err = e.svc.SetChatDaemon(e.ctx, connect.NewRequest(&reliantv1.SetChatDaemonRequest{ChatId: chatID, DaemonId: machineB}))
+	_, err = e.svc.SetChatDaemon(e.ctx, &reliantv1.SetChatDaemonRequest{ChatId: chatID, DaemonId: machineB})
 	require.NoError(t, err, "its own machine is always allowed")
 }

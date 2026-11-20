@@ -3,7 +3,6 @@ package org_provider_account
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -18,13 +17,13 @@ import (
 // workspace. Matching members' seats to it is routing's (the binding matcher).
 func (s *Service) BindOrgProviderWorkspace(
 	ctx context.Context,
-	req *connect.Request[pb.BindOrgProviderWorkspaceRequest],
-) (*connect.Response[pb.BindOrgProviderWorkspaceResponse], error) {
-	orgID, err := requireOrgID(req.Msg.GetOrgId())
+	req *pb.BindOrgProviderWorkspaceRequest,
+) (*pb.BindOrgProviderWorkspaceResponse, error) {
+	orgID, err := requireOrgID(req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
-	if req.Msg.GetAccountId() == "" {
+	if req.GetAccountId() == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("account_id is required"))
 	}
 	userID, err := admin(ctx, orgID)
@@ -44,7 +43,7 @@ func (s *Service) BindOrgProviderWorkspace(
 	}
 	var seat *core.ProviderAccount
 	for i := range mine {
-		if mine[i].ID == req.Msg.GetAccountId() {
+		if mine[i].ID == req.GetAccountId() {
 			seat = &mine[i]
 			break
 		}
@@ -86,5 +85,5 @@ func (s *Service) BindOrgProviderWorkspace(
 	}
 	s.deps.Logger.InfoContext(ctx, "org provider workspace bound",
 		"org_id", orgID, "provider", w.Provider, "created", created, "seats_matched", seats, "user_id", userID)
-	return connect.NewResponse(&pb.BindOrgProviderWorkspaceResponse{Workspace: workspaceProto(w), Created: created}), nil
+	return &pb.BindOrgProviderWorkspaceResponse{Workspace: workspaceProto(w), Created: created}, nil
 }

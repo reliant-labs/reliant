@@ -43,7 +43,7 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 		// which names fields and inputs, never their values.
 		reason := tools.ActivationRefusalReason(err)
 		if reason == "" {
-			reason = "unclassified " + strings.ToLower(svcerr.Code(err).String()) + " error (logged server-side)"
+			reason = "unclassified " + strings.ToLower(svcerr.CodeV2(err).String()) + " error (logged server-side)"
 		}
 		// Only the names are logged. Unmarshal fills them even when another
 		// field has the wrong type.
@@ -52,7 +52,7 @@ func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.Autom
 		logging.WarnContext(ctx, "Activation approval refused",
 			"tool", in.ToolName, "chat_id", in.ChatID, "tool_call_id", in.ToolCallID,
 			"workflow_ref", names.Workflow, "workflow_trigger", names.WorkflowTrigger, "trigger_id", names.TriggerID,
-			"reason", reason, "code", svcerr.Code(err).String(), "error", err)
+			"reason", reason, "code", svcerr.CodeV2(err).String(), "error", err)
 		subject := "Activation"
 		switch in.ToolName {
 		case tools.ToolManageMachine:

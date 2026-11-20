@@ -10,7 +10,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
-	"connectrpc.com/connect"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
@@ -199,16 +198,20 @@ func TestStreamChatUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing
 	// the test is holding open has been sent.
 	received := make(chan int64, 1)
 	go func() {
-		stream, err := client.StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{
+		stream, err := client.StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{
 			ChatId:   raceTestChatID,
 			SinceSeq: 0,
-		}))
+		})
 		if err != nil {
 			return
 		}
 		defer func() { _ = stream.Close() }()
-		for stream.Receive() {
-			if batch := stream.Msg().GetUpdates(); batch != nil {
+		for {
+			msg, err := stream.Receive()
+			if err != nil {
+				return
+			}
+			if batch := msg.GetUpdates(); batch != nil {
 				for _, u := range batch.Updates {
 					if u.GetEntityId() == "msg-race" {
 						received <- batch.LatestSequence

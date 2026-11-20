@@ -5,18 +5,21 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -65,29 +68,43 @@ func h2cClient() *http.Client {
 
 // openUserStream opens StreamUserUpdates and waits for its first event, so
 // the handler is parked in its event loop when the test proceeds.
-func openUserStream(t *testing.T, baseURL string) *connect.ServerStreamForClient[reliantv1.UserStreamEvent] {
+// userStream is a StreamUserUpdates stream and its call's info (the
+// response trailers, once it ends).
+type userStream struct {
+	reliantv1connect.StreamingServiceStreamUserUpdatesClientStream
+	info *connect.CallInfo
+}
+
+func openUserStream(t *testing.T, baseURL string) userStream {
 	t.Helper()
-	client := reliantv1connect.NewStreamingServiceClient(h2cClient(), baseURL)
-	req := connect.NewRequest(&reliantv1.StreamUserUpdatesRequest{})
-	req.Header().Set("Authorization", "Bearer "+drainTestAPIKey)
+	client := reliantv1connect.NewStreamingServiceClient(rpcclient.New(h2cClient(), baseURL, nil))
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	stream, err := client.StreamUserUpdates(ctx, req)
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+drainTestAPIKey)
+	stream, err := client.StreamUserUpdates(ctx, &reliantv1.StreamUserUpdatesRequest{})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
-	require.True(t, stream.Receive(), "stream ended before its sync event: %v", stream.Err())
-	require.NotNil(t, stream.Msg().GetSync(), "the first event is the sync")
-	return stream
+	first, err := stream.Receive()
+	require.NoError(t, err, "stream ended before its sync event")
+	require.NotNil(t, first.GetSync(), "the first event is the sync")
+	return userStream{StreamingServiceStreamUserUpdatesClientStream: stream, info: info}
 }
 
 // streamEnd reports how a stream ended: the error Receive stopped with (nil
 // for a clean end of stream), or a timeout if it is still open.
-func streamEnd(stream *connect.ServerStreamForClient[reliantv1.UserStreamEvent], within time.Duration) error {
+func streamEnd(stream userStream, within time.Duration) error {
 	ended := make(chan error, 1)
 	go func() {
-		for stream.Receive() {
+		for {
+			if _, err := stream.Receive(); err != nil {
+				if errors.Is(err, io.EOF) {
+					err = nil
+				}
+				ended <- err
+				return
+			}
 		}
-		ended <- stream.Err()
 	}()
 	select {
 	case err := <-ended:
@@ -121,9 +138,9 @@ func TestDrainEndsOpenStreamsAndReturnsPromptly(t *testing.T) {
 	// ended normally"). Not Unavailable, which it treats as the network
 	// under every read on the connection dying. The trailer says the server
 	// ended it, not the watch.
-	for _, stream := range []*connect.ServerStreamForClient[reliantv1.UserStreamEvent]{first, second} {
+	for _, stream := range []userStream{first, second} {
 		require.NoError(t, streamEnd(stream, time.Second), "the stream must end cleanly, not be cut or left open")
-		require.Equal(t, "true", stream.ResponseTrailer().Get(serverkit.DrainedTrailer))
+		require.Equal(t, "true", stream.info.ResponseTrailer().Get(serverkit.DrainedTrailer))
 	}
 }
 

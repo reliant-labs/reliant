@@ -3,7 +3,6 @@ package sharing
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -17,15 +16,15 @@ import (
 // chat in it.
 func (s *Service) SetProjectVisibility(
 	ctx context.Context,
-	req *connect.Request[pb.SetProjectVisibilityRequest],
-) (*connect.Response[pb.SetProjectVisibilityResponse], error) {
+	req *pb.SetProjectVisibilityRequest,
+) (*pb.SetProjectVisibilityResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	to, err := visibilityFrom(req.Msg.GetVisibility())
+	to, err := visibilityFrom(req.GetVisibility())
 	if err != nil {
 		return nil, err
 	}
 	ctx = authz.WithViewerReads(ctx)
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.GetProjectId())
+	project, err := s.deps.Repo.GetProject(ctx, req.GetProjectId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -49,5 +48,5 @@ func (s *Service) SetProjectVisibility(
 			}
 		}
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

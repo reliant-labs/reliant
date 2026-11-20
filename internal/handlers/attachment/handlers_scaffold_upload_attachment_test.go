@@ -3,7 +3,7 @@ package attachment_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -19,28 +19,28 @@ func TestUploadAttachment_Generated(t *testing.T) {
 
 	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{API: &config.ApiServerConfig{MaxUploadSize: 4}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UploadAttachmentRequest, pb.UploadAttachmentResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.UploadAttachmentRequest, pb.UploadAttachmentResponse]{
 		{
 			Name:    "filename is required",
-			Req:     connect.NewRequest(&pb.UploadAttachmentRequest{Content: []byte("abc")}),
+			Req:     &pb.UploadAttachmentRequest{Content: []byte("abc")},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "content is required",
-			Req:     connect.NewRequest(&pb.UploadAttachmentRequest{Filename: "a.png"}),
+			Req:     &pb.UploadAttachmentRequest{Filename: "a.png"},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an unsupported file type is refused",
-			Req:     connect.NewRequest(&pb.UploadAttachmentRequest{Filename: "a.exe", Content: []byte("abc")}),
+			Req:     &pb.UploadAttachmentRequest{Filename: "a.exe", Content: []byte("abc")},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a file over max_upload_size is refused",
-			Req:     connect.NewRequest(&pb.UploadAttachmentRequest{Filename: "a.png", Content: []byte("abcde")}),
+			Req:     &pb.UploadAttachmentRequest{Filename: "a.png", Content: []byte("abcde")},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeResourceExhausted,
 		},

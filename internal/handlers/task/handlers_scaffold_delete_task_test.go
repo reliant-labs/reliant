@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -24,25 +24,25 @@ func TestDeleteTask_Generated(t *testing.T) {
 	}
 	svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteTaskRequest, pb.DeleteTaskResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DeleteTaskRequest, pb.DeleteTaskResponse]{
 		{
 			Name:    "unknown task is not found",
-			Req:     connect.NewRequest(&pb.DeleteTaskRequest{TaskId: missingID}),
+			Req:     &pb.DeleteTaskRequest{TaskId: missingID},
 			Ctx:     task.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's task is denied",
-			Req:     connect.NewRequest(&pb.DeleteTaskRequest{TaskId: otherTaskID}),
+			Req:     &pb.DeleteTaskRequest{TaskId: otherTaskID},
 			Ctx:     task.AuthedContext(t),
 			WantErr: connect.CodePermissionDenied,
 		},
 		{
 			Name: "the caller's task is deleted",
-			Req:  connect.NewRequest(&pb.DeleteTaskRequest{TaskId: ownTaskID}),
+			Req:  &pb.DeleteTaskRequest{TaskId: ownTaskID},
 			Ctx:  task.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.DeleteTaskResponse]) {
-				require.True(t, resp.Msg.GetSuccess())
+			Check: func(t *testing.T, resp *pb.DeleteTaskResponse) {
+				require.True(t, resp.GetSuccess())
 				require.Equal(t, ownTaskID, deleted)
 			},
 		},

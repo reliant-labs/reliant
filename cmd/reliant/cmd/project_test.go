@@ -3,11 +3,10 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
@@ -28,7 +27,7 @@ type fakeProjectClient struct {
 	lastDaemonID *string
 }
 
-func (f *fakeProjectClient) ListProjects(_ context.Context, _ *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error) {
+func (f *fakeProjectClient) ListProjects(_ context.Context, _ *reliantv1.ListProjectsRequest) (*reliantv1.ListProjectsResponse, error) {
 	idx := f.listCalls
 	if idx >= len(f.listPages) {
 		idx = len(f.listPages) - 1
@@ -38,19 +37,19 @@ func (f *fakeProjectClient) ListProjects(_ context.Context, _ *connect.Request[r
 	if idx >= 0 {
 		projects = f.listPages[idx]
 	}
-	return connect.NewResponse(&reliantv1.ListProjectsResponse{Projects: projects}), nil
+	return &reliantv1.ListProjectsResponse{Projects: projects}, nil
 }
 
-func (f *fakeProjectClient) CreateProject(_ context.Context, req *connect.Request[reliantv1.CreateProjectRequest]) (*connect.Response[reliantv1.CreateProjectResponse], error) {
+func (f *fakeProjectClient) CreateProject(_ context.Context, req *reliantv1.CreateProjectRequest) (*reliantv1.CreateProjectResponse, error) {
 	f.createCalls++
-	f.lastCreateOf = req.Msg.GetPath()
-	f.lastDaemonID = req.Msg.DaemonId
+	f.lastCreateOf = req.GetPath()
+	f.lastDaemonID = req.DaemonId
 	if f.createErr != nil {
 		return nil, f.createErr
 	}
-	return connect.NewResponse(&reliantv1.CreateProjectResponse{
-		Project: &reliantv1.Project{Id: f.createdID, Path: req.Msg.GetPath(), Name: req.Msg.GetName()},
-	}), nil
+	return &reliantv1.CreateProjectResponse{
+		Project: &reliantv1.Project{Id: f.createdID, Path: req.GetPath(), Name: req.GetName()},
+	}, nil
 }
 
 func proj(id, path string) *reliantv1.Project {
@@ -70,7 +69,7 @@ func TestResolveProjectID(t *testing.T) {
 				proj("other-id", "/abs/work/somethingelse"),
 				proj("match-id", path),
 			}},
-			createErr: connect.NewError(connect.CodeAlreadyExists, errors.New("a project already exists at this path")),
+			createErr: connect.NewError(connect.CodeAlreadyExists, "a project already exists at this path"),
 		}
 		id, err := resolveProjectID(context.Background(), client, path)
 		if err != nil {
@@ -111,7 +110,7 @@ func TestResolveProjectID(t *testing.T) {
 	t.Run("errors when AlreadyExists cannot be resolved to an id", func(t *testing.T) {
 		client := &fakeProjectClient{
 			listPages: [][]*reliantv1.Project{{}},
-			createErr: connect.NewError(connect.CodeAlreadyExists, errors.New("a project already exists at this path")),
+			createErr: connect.NewError(connect.CodeAlreadyExists, "a project already exists at this path"),
 		}
 		id, err := resolveProjectID(context.Background(), client, path)
 		if err == nil {
@@ -135,9 +134,9 @@ func TestResolveProjectID(t *testing.T) {
 		client := &fakeProjectClient{
 			// The row is present — a path-only lookup would happily match it.
 			listPages: [][]*reliantv1.Project{{proj("stale-id", path)}},
-			createErr: connect.NewError(connect.CodeFailedPrecondition, errors.New(
+			createErr: connect.NewError(connect.CodeFailedPrecondition,
 				"project stale-id is registered at "+path+" but that directory does not exist; "+
-					"restore the directory or delete the project, then retry")),
+					"restore the directory or delete the project, then retry"),
 		}
 		id, err := resolveProjectID(context.Background(), client, path)
 		if err == nil {
@@ -154,7 +153,7 @@ func TestResolveProjectID(t *testing.T) {
 	t.Run("propagates non-AlreadyExists create errors", func(t *testing.T) {
 		client := &fakeProjectClient{
 			listPages: [][]*reliantv1.Project{{}},
-			createErr: connect.NewError(connect.CodePermissionDenied, errors.New("nope")),
+			createErr: connect.NewError(connect.CodePermissionDenied, "nope"),
 		}
 		if _, err := resolveProjectID(context.Background(), client, path); err == nil {
 			t.Fatal("expected error, got nil")

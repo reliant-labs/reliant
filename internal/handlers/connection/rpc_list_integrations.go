@@ -3,15 +3,13 @@ package connection
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/connections"
 )
 
-func (s *Service) ListIntegrations(ctx context.Context, req *connect.Request[reliantv1.ListIntegrationsRequest]) (*connect.Response[reliantv1.ListIntegrationsResponse], error) {
+func (s *Service) ListIntegrations(ctx context.Context, req *reliantv1.ListIntegrationsRequest) (*reliantv1.ListIntegrationsResponse, error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
@@ -20,7 +18,7 @@ func (s *Service) ListIntegrations(ctx context.Context, req *connect.Request[rel
 	// The org's policy only when the request names the org: an old client,
 	// which never does, sees the catalog as before.
 	var policies map[string]connections.IntegrationPolicy
-	if org := req.Msg.GetOrgId(); org != "" {
+	if org := req.GetOrgId(); org != "" {
 		ids := make([]string, 0, len(integrations))
 		for _, i := range integrations {
 			ids = append(ids, i.ID)
@@ -49,5 +47,5 @@ func (s *Service) ListIntegrations(ctx context.Context, req *connect.Request[rel
 		}
 		out = append(out, in)
 	}
-	return connect.NewResponse(&reliantv1.ListIntegrationsResponse{Integrations: out}), nil
+	return &reliantv1.ListIntegrationsResponse{Integrations: out}, nil
 }

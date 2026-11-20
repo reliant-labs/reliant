@@ -36,7 +36,7 @@ type APIListenerDeps struct {
 	Chain *UserChain
 	// Routes are what it serves — the user-audience route set and the
 	// API's plain-HTTP routes (internal/app's NewAPIListener). Required.
-	Routes serverkit.Routes
+	Routes serverkit.RoutesV2
 	// Logger receives the listener's lines and its drain phase; nil is
 	// slog.Default().
 	Logger *slog.Logger
@@ -81,10 +81,10 @@ func NewAPIListener(deps APIListenerDeps) (*APIListener, error) {
 
 	cors := newCORSHandler(deps.CORSAllowedOrigins)
 	l, err := serverkit.NewListener(serverkit.ListenerDeps{
-		Config: cfg,
-		Chain:  deps.Chain.Chain,
-		Routes: deps.Routes,
-		Logger: deps.Logger,
+		Config:   cfg,
+		ChainV2:  deps.Chain.ChainV2,
+		RoutesV2: deps.Routes,
+		Logger:   deps.Logger,
 		Edge: func(h http.Handler) http.Handler {
 			return withMembership(deps.Membership, deps.Policies, cors(securityHeaders(compressBrowserStreams(h))))
 		},

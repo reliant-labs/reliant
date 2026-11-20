@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // A run of a chat in an organization asks before it moves from the
@@ -34,7 +34,7 @@ import (
 // of a chat's question; reliantv1connect.ProviderAccountServiceClient
 // satisfies it.
 type fundingQuestionReader interface {
-	GetPersonalFundingQuestion(context.Context, *connect.Request[reliantv1.GetPersonalFundingQuestionRequest]) (*connect.Response[reliantv1.GetPersonalFundingQuestionResponse], error)
+	GetPersonalFundingQuestion(context.Context, *reliantv1.GetPersonalFundingQuestionRequest) (*reliantv1.GetPersonalFundingQuestionResponse, error)
 }
 
 // fundingPollInterval is how often a follow reads the chat's question.
@@ -76,11 +76,11 @@ func fundingNotice(executionID string, q *reliantv1.PersonalFundingQuestion) str
 func watchFundingQuestion(ctx context.Context, c fundingQuestionReader, executionID string, w io.Writer, interval time.Duration) {
 	var told string
 	check := func() {
-		resp, err := c.GetPersonalFundingQuestion(ctx, connect.NewRequest(&reliantv1.GetPersonalFundingQuestionRequest{ChatId: executionID}))
+		resp, err := c.GetPersonalFundingQuestion(ctx, &reliantv1.GetPersonalFundingQuestionRequest{ChatId: executionID})
 		if err != nil {
 			return
 		}
-		q := resp.Msg.GetQuestion()
+		q := resp.GetQuestion()
 		if q == nil || q.GetState() != reliantv1.PersonalFundingQuestion_STATE_ASKED || q.GetAskedAt() == told {
 			return
 		}
@@ -144,7 +144,7 @@ Exit codes:
 			if err != nil {
 				return err
 			}
-			client := reliantv1connect.NewProviderAccountServiceClient(conn.httpClient(), conn.ServerURL)
+			client := reliantv1connect.NewProviderAccountServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil))
 			open, err := writeFundingQuestion(cmd.Context(), client, args[0], cmd.OutOrStdout(), jsonOut)
 			if err != nil {
 				return conn.annotate(err)
@@ -198,11 +198,11 @@ var (
 // writeFundingQuestion prints the run's question and reports whether it is
 // open (asked and not answered).
 func writeFundingQuestion(ctx context.Context, c fundingQuestionReader, executionID string, w io.Writer, jsonOut bool) (bool, error) {
-	resp, err := c.GetPersonalFundingQuestion(ctx, connect.NewRequest(&reliantv1.GetPersonalFundingQuestionRequest{ChatId: executionID}))
+	resp, err := c.GetPersonalFundingQuestion(ctx, &reliantv1.GetPersonalFundingQuestionRequest{ChatId: executionID})
 	if err != nil {
 		return false, fmt.Errorf("reading the run's question: %w", err)
 	}
-	q := resp.Msg.GetQuestion()
+	q := resp.GetQuestion()
 	open := q != nil && q.GetState() == reliantv1.PersonalFundingQuestion_STATE_ASKED
 	if jsonOut {
 		out := fundingQuestionJSON{ExecutionID: executionID, State: "none"}

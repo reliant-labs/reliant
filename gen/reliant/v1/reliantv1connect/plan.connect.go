@@ -7,297 +7,332 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// PlanServiceName is the fully-qualified name of the PlanService service.
 	PlanServiceName = "reliant.v1.PlanService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// PlanServiceCreatePlanProcedure is the fully-qualified name of the PlanService's CreatePlan RPC.
+	// PlanServiceCreatePlanProcedure is the procedure name of the PlanService's CreatePlan RPC.
 	PlanServiceCreatePlanProcedure = "/reliant.v1.PlanService/CreatePlan"
-	// PlanServiceGetPlanProcedure is the fully-qualified name of the PlanService's GetPlan RPC.
+	// PlanServiceGetPlanProcedure is the procedure name of the PlanService's GetPlan RPC.
 	PlanServiceGetPlanProcedure = "/reliant.v1.PlanService/GetPlan"
-	// PlanServiceGetPlanByChatIdProcedure is the fully-qualified name of the PlanService's
-	// GetPlanByChatId RPC.
-	PlanServiceGetPlanByChatIdProcedure = "/reliant.v1.PlanService/GetPlanByChatId"
-	// PlanServiceUpdatePlanProcedure is the fully-qualified name of the PlanService's UpdatePlan RPC.
-	PlanServiceUpdatePlanProcedure = "/reliant.v1.PlanService/UpdatePlan"
-	// PlanServiceDeletePlanProcedure is the fully-qualified name of the PlanService's DeletePlan RPC.
-	PlanServiceDeletePlanProcedure = "/reliant.v1.PlanService/DeletePlan"
-	// PlanServiceListPlanTasksProcedure is the fully-qualified name of the PlanService's ListPlanTasks
+	// PlanServiceGetPlanByChatIdProcedure is the procedure name of the PlanService's GetPlanByChatId
 	// RPC.
+	PlanServiceGetPlanByChatIdProcedure = "/reliant.v1.PlanService/GetPlanByChatId"
+	// PlanServiceUpdatePlanProcedure is the procedure name of the PlanService's UpdatePlan RPC.
+	PlanServiceUpdatePlanProcedure = "/reliant.v1.PlanService/UpdatePlan"
+	// PlanServiceDeletePlanProcedure is the procedure name of the PlanService's DeletePlan RPC.
+	PlanServiceDeletePlanProcedure = "/reliant.v1.PlanService/DeletePlan"
+	// PlanServiceListPlanTasksProcedure is the procedure name of the PlanService's ListPlanTasks RPC.
 	PlanServiceListPlanTasksProcedure = "/reliant.v1.PlanService/ListPlanTasks"
-	// PlanServiceListPlansByProjectProcedure is the fully-qualified name of the PlanService's
+	// PlanServiceListPlansByProjectProcedure is the procedure name of the PlanService's
 	// ListPlansByProject RPC.
 	PlanServiceListPlansByProjectProcedure = "/reliant.v1.PlanService/ListPlansByProject"
+)
+
+var (
+	planServiceCreatePlanSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods().ByName("CreatePlan"),
+			Procedure:  PlanServiceCreatePlanProcedure,
+		}
+	})
+	planServiceGetPlanSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods().ByName("GetPlan"),
+			Procedure:  PlanServiceGetPlanProcedure,
+		}
+	})
+	planServiceGetPlanByChatIdSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods().ByName("GetPlanByChatId"),
+			Procedure:  PlanServiceGetPlanByChatIdProcedure,
+		}
+	})
+	planServiceUpdatePlanSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods().ByName("UpdatePlan"),
+			Procedure:  PlanServiceUpdatePlanProcedure,
+		}
+	})
+	planServiceDeletePlanSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods().ByName("DeletePlan"),
+			Procedure:  PlanServiceDeletePlanProcedure,
+		}
+	})
+	planServiceListPlanTasksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods().ByName("ListPlanTasks"),
+			Procedure:  PlanServiceListPlanTasksProcedure,
+		}
+	})
+	planServiceListPlansByProjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods().ByName("ListPlansByProject"),
+			Procedure:  PlanServiceListPlansByProjectProcedure,
+		}
+	})
 )
 
 // PlanServiceClient is a client for the reliant.v1.PlanService service.
 type PlanServiceClient interface {
 	// CreatePlan creates a new plan
 	// forge:custom — authorizes the caller through the chat and stores it as the plan's thread
-	CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error)
+	CreatePlan(context.Context, *v1.CreatePlanRequest) (*v1.CreatePlanResponse, error)
 	// GetPlan retrieves a plan by ID
 	// forge:custom — authorizes through the plan's thread and chat, and resolves chat_id from them
-	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
+	GetPlan(context.Context, *v1.GetPlanRequest) (*v1.GetPlanResponse, error)
 	// GetPlanByChatId retrieves a plan by chat ID
-	GetPlanByChatId(context.Context, *connect.Request[v1.GetPlanByChatIdRequest]) (*connect.Response[v1.GetPlanByChatIdResponse], error)
+	GetPlanByChatId(context.Context, *v1.GetPlanByChatIdRequest) (*v1.GetPlanByChatIdResponse, error)
 	// UpdatePlan updates an existing plan
 	// forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
-	UpdatePlan(context.Context, *connect.Request[v1.UpdatePlanRequest]) (*connect.Response[v1.UpdatePlanResponse], error)
+	UpdatePlan(context.Context, *v1.UpdatePlanRequest) (*v1.UpdatePlanResponse, error)
 	// DeletePlan deletes a plan
 	// forge:custom — authorized through the plan's chat, which it notifies to refetch
-	DeletePlan(context.Context, *connect.Request[v1.DeletePlanRequest]) (*connect.Response[v1.DeletePlanResponse], error)
+	DeletePlan(context.Context, *v1.DeletePlanRequest) (*v1.DeletePlanResponse, error)
 	// ListPlanTasks lists all tasks for a plan
-	ListPlanTasks(context.Context, *connect.Request[v1.ListPlanTasksRequest]) (*connect.Response[v1.ListPlanTasksResponse], error)
+	ListPlanTasks(context.Context, *v1.ListPlanTasksRequest) (*v1.ListPlanTasksResponse, error)
 	// ListPlansByProject lists all plans for a project (cross-workflow sharing)
-	ListPlansByProject(context.Context, *connect.Request[v1.ListPlansByProjectRequest]) (*connect.Response[v1.ListPlansByProjectResponse], error)
+	ListPlansByProject(context.Context, *v1.ListPlansByProjectRequest) (*v1.ListPlansByProjectResponse, error)
 }
 
-// NewPlanServiceClient constructs a client for the reliant.v1.PlanService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewPlanServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PlanServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	planServiceMethods := v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods()
-	return &planServiceClient{
-		createPlan: connect.NewClient[v1.CreatePlanRequest, v1.CreatePlanResponse](
-			httpClient,
-			baseURL+PlanServiceCreatePlanProcedure,
-			connect.WithSchema(planServiceMethods.ByName("CreatePlan")),
-			connect.WithClientOptions(opts...),
-		),
-		getPlan: connect.NewClient[v1.GetPlanRequest, v1.GetPlanResponse](
-			httpClient,
-			baseURL+PlanServiceGetPlanProcedure,
-			connect.WithSchema(planServiceMethods.ByName("GetPlan")),
-			connect.WithClientOptions(opts...),
-		),
-		getPlanByChatId: connect.NewClient[v1.GetPlanByChatIdRequest, v1.GetPlanByChatIdResponse](
-			httpClient,
-			baseURL+PlanServiceGetPlanByChatIdProcedure,
-			connect.WithSchema(planServiceMethods.ByName("GetPlanByChatId")),
-			connect.WithClientOptions(opts...),
-		),
-		updatePlan: connect.NewClient[v1.UpdatePlanRequest, v1.UpdatePlanResponse](
-			httpClient,
-			baseURL+PlanServiceUpdatePlanProcedure,
-			connect.WithSchema(planServiceMethods.ByName("UpdatePlan")),
-			connect.WithClientOptions(opts...),
-		),
-		deletePlan: connect.NewClient[v1.DeletePlanRequest, v1.DeletePlanResponse](
-			httpClient,
-			baseURL+PlanServiceDeletePlanProcedure,
-			connect.WithSchema(planServiceMethods.ByName("DeletePlan")),
-			connect.WithClientOptions(opts...),
-		),
-		listPlanTasks: connect.NewClient[v1.ListPlanTasksRequest, v1.ListPlanTasksResponse](
-			httpClient,
-			baseURL+PlanServiceListPlanTasksProcedure,
-			connect.WithSchema(planServiceMethods.ByName("ListPlanTasks")),
-			connect.WithClientOptions(opts...),
-		),
-		listPlansByProject: connect.NewClient[v1.ListPlansByProjectRequest, v1.ListPlansByProjectResponse](
-			httpClient,
-			baseURL+PlanServiceListPlansByProjectProcedure,
-			connect.WithSchema(planServiceMethods.ByName("ListPlansByProject")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// planServiceClient implements PlanServiceClient.
-type planServiceClient struct {
-	createPlan         *connect.Client[v1.CreatePlanRequest, v1.CreatePlanResponse]
-	getPlan            *connect.Client[v1.GetPlanRequest, v1.GetPlanResponse]
-	getPlanByChatId    *connect.Client[v1.GetPlanByChatIdRequest, v1.GetPlanByChatIdResponse]
-	updatePlan         *connect.Client[v1.UpdatePlanRequest, v1.UpdatePlanResponse]
-	deletePlan         *connect.Client[v1.DeletePlanRequest, v1.DeletePlanResponse]
-	listPlanTasks      *connect.Client[v1.ListPlanTasksRequest, v1.ListPlanTasksResponse]
-	listPlansByProject *connect.Client[v1.ListPlansByProjectRequest, v1.ListPlansByProjectResponse]
-}
-
-// CreatePlan calls reliant.v1.PlanService.CreatePlan.
-func (c *planServiceClient) CreatePlan(ctx context.Context, req *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error) {
-	return c.createPlan.CallUnary(ctx, req)
-}
-
-// GetPlan calls reliant.v1.PlanService.GetPlan.
-func (c *planServiceClient) GetPlan(ctx context.Context, req *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error) {
-	return c.getPlan.CallUnary(ctx, req)
-}
-
-// GetPlanByChatId calls reliant.v1.PlanService.GetPlanByChatId.
-func (c *planServiceClient) GetPlanByChatId(ctx context.Context, req *connect.Request[v1.GetPlanByChatIdRequest]) (*connect.Response[v1.GetPlanByChatIdResponse], error) {
-	return c.getPlanByChatId.CallUnary(ctx, req)
-}
-
-// UpdatePlan calls reliant.v1.PlanService.UpdatePlan.
-func (c *planServiceClient) UpdatePlan(ctx context.Context, req *connect.Request[v1.UpdatePlanRequest]) (*connect.Response[v1.UpdatePlanResponse], error) {
-	return c.updatePlan.CallUnary(ctx, req)
-}
-
-// DeletePlan calls reliant.v1.PlanService.DeletePlan.
-func (c *planServiceClient) DeletePlan(ctx context.Context, req *connect.Request[v1.DeletePlanRequest]) (*connect.Response[v1.DeletePlanResponse], error) {
-	return c.deletePlan.CallUnary(ctx, req)
-}
-
-// ListPlanTasks calls reliant.v1.PlanService.ListPlanTasks.
-func (c *planServiceClient) ListPlanTasks(ctx context.Context, req *connect.Request[v1.ListPlanTasksRequest]) (*connect.Response[v1.ListPlanTasksResponse], error) {
-	return c.listPlanTasks.CallUnary(ctx, req)
-}
-
-// ListPlansByProject calls reliant.v1.PlanService.ListPlansByProject.
-func (c *planServiceClient) ListPlansByProject(ctx context.Context, req *connect.Request[v1.ListPlansByProjectRequest]) (*connect.Response[v1.ListPlansByProjectResponse], error) {
-	return c.listPlansByProject.CallUnary(ctx, req)
+// NewPlanServiceClient constructs a client for the reliant.v1.PlanService service. Multiple service
+// clients may share a single connect.Client.
+func NewPlanServiceClient(client *connect.Client) PlanServiceClient {
+	return &planServiceClient{client: client}
 }
 
 // PlanServiceHandler is an implementation of the reliant.v1.PlanService service.
 type PlanServiceHandler interface {
 	// CreatePlan creates a new plan
 	// forge:custom — authorizes the caller through the chat and stores it as the plan's thread
-	CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error)
+	CreatePlan(context.Context, *v1.CreatePlanRequest) (*v1.CreatePlanResponse, error)
 	// GetPlan retrieves a plan by ID
 	// forge:custom — authorizes through the plan's thread and chat, and resolves chat_id from them
-	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
+	GetPlan(context.Context, *v1.GetPlanRequest) (*v1.GetPlanResponse, error)
 	// GetPlanByChatId retrieves a plan by chat ID
-	GetPlanByChatId(context.Context, *connect.Request[v1.GetPlanByChatIdRequest]) (*connect.Response[v1.GetPlanByChatIdResponse], error)
+	GetPlanByChatId(context.Context, *v1.GetPlanByChatIdRequest) (*v1.GetPlanByChatIdResponse, error)
 	// UpdatePlan updates an existing plan
 	// forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
-	UpdatePlan(context.Context, *connect.Request[v1.UpdatePlanRequest]) (*connect.Response[v1.UpdatePlanResponse], error)
+	UpdatePlan(context.Context, *v1.UpdatePlanRequest) (*v1.UpdatePlanResponse, error)
 	// DeletePlan deletes a plan
 	// forge:custom — authorized through the plan's chat, which it notifies to refetch
-	DeletePlan(context.Context, *connect.Request[v1.DeletePlanRequest]) (*connect.Response[v1.DeletePlanResponse], error)
+	DeletePlan(context.Context, *v1.DeletePlanRequest) (*v1.DeletePlanResponse, error)
 	// ListPlanTasks lists all tasks for a plan
-	ListPlanTasks(context.Context, *connect.Request[v1.ListPlanTasksRequest]) (*connect.Response[v1.ListPlanTasksResponse], error)
+	ListPlanTasks(context.Context, *v1.ListPlanTasksRequest) (*v1.ListPlanTasksResponse, error)
 	// ListPlansByProject lists all plans for a project (cross-workflow sharing)
-	ListPlansByProject(context.Context, *connect.Request[v1.ListPlansByProjectRequest]) (*connect.Response[v1.ListPlansByProjectResponse], error)
+	ListPlansByProject(context.Context, *v1.ListPlansByProjectRequest) (*v1.ListPlansByProjectResponse, error)
 }
 
-// NewPlanServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewPlanServiceHandler(svc PlanServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	planServiceMethods := v1.File_reliant_v1_plan_proto.Services().ByName("PlanService").Methods()
-	planServiceCreatePlanHandler := connect.NewUnaryHandler(
-		PlanServiceCreatePlanProcedure,
-		svc.CreatePlan,
-		connect.WithSchema(planServiceMethods.ByName("CreatePlan")),
-		connect.WithHandlerOptions(opts...),
+// RegisterPlanServiceHandler registers svc as the reliant.v1.PlanService implementation on server.
+func RegisterPlanServiceHandler(server *connect.Server, svc PlanServiceHandler) {
+	adapter := planServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: planServiceCreatePlanSpec(), Handler: adapter.createPlan},
+		connect.Method{Spec: planServiceGetPlanSpec(), Handler: adapter.getPlan},
+		connect.Method{Spec: planServiceGetPlanByChatIdSpec(), Handler: adapter.getPlanByChatId},
+		connect.Method{Spec: planServiceUpdatePlanSpec(), Handler: adapter.updatePlan},
+		connect.Method{Spec: planServiceDeletePlanSpec(), Handler: adapter.deletePlan},
+		connect.Method{Spec: planServiceListPlanTasksSpec(), Handler: adapter.listPlanTasks},
+		connect.Method{Spec: planServiceListPlansByProjectSpec(), Handler: adapter.listPlansByProject},
 	)
-	planServiceGetPlanHandler := connect.NewUnaryHandler(
-		PlanServiceGetPlanProcedure,
-		svc.GetPlan,
-		connect.WithSchema(planServiceMethods.ByName("GetPlan")),
-		connect.WithHandlerOptions(opts...),
-	)
-	planServiceGetPlanByChatIdHandler := connect.NewUnaryHandler(
-		PlanServiceGetPlanByChatIdProcedure,
-		svc.GetPlanByChatId,
-		connect.WithSchema(planServiceMethods.ByName("GetPlanByChatId")),
-		connect.WithHandlerOptions(opts...),
-	)
-	planServiceUpdatePlanHandler := connect.NewUnaryHandler(
-		PlanServiceUpdatePlanProcedure,
-		svc.UpdatePlan,
-		connect.WithSchema(planServiceMethods.ByName("UpdatePlan")),
-		connect.WithHandlerOptions(opts...),
-	)
-	planServiceDeletePlanHandler := connect.NewUnaryHandler(
-		PlanServiceDeletePlanProcedure,
-		svc.DeletePlan,
-		connect.WithSchema(planServiceMethods.ByName("DeletePlan")),
-		connect.WithHandlerOptions(opts...),
-	)
-	planServiceListPlanTasksHandler := connect.NewUnaryHandler(
-		PlanServiceListPlanTasksProcedure,
-		svc.ListPlanTasks,
-		connect.WithSchema(planServiceMethods.ByName("ListPlanTasks")),
-		connect.WithHandlerOptions(opts...),
-	)
-	planServiceListPlansByProjectHandler := connect.NewUnaryHandler(
-		PlanServiceListPlansByProjectProcedure,
-		svc.ListPlansByProject,
-		connect.WithSchema(planServiceMethods.ByName("ListPlansByProject")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.PlanService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case PlanServiceCreatePlanProcedure:
-			planServiceCreatePlanHandler.ServeHTTP(w, r)
-		case PlanServiceGetPlanProcedure:
-			planServiceGetPlanHandler.ServeHTTP(w, r)
-		case PlanServiceGetPlanByChatIdProcedure:
-			planServiceGetPlanByChatIdHandler.ServeHTTP(w, r)
-		case PlanServiceUpdatePlanProcedure:
-			planServiceUpdatePlanHandler.ServeHTTP(w, r)
-		case PlanServiceDeletePlanProcedure:
-			planServiceDeletePlanHandler.ServeHTTP(w, r)
-		case PlanServiceListPlanTasksProcedure:
-			planServiceListPlanTasksHandler.ServeHTTP(w, r)
-		case PlanServiceListPlansByProjectProcedure:
-			planServiceListPlansByProjectHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedPlanServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPlanServiceHandler struct{}
 
-func (UnimplementedPlanServiceHandler) CreatePlan(context.Context, *connect.Request[v1.CreatePlanRequest]) (*connect.Response[v1.CreatePlanResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PlanService.CreatePlan is not implemented"))
+func (UnimplementedPlanServiceHandler) CreatePlan(context.Context, *v1.CreatePlanRequest) (*v1.CreatePlanResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PlanService.CreatePlan is not implemented")
 }
 
-func (UnimplementedPlanServiceHandler) GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PlanService.GetPlan is not implemented"))
+func (UnimplementedPlanServiceHandler) GetPlan(context.Context, *v1.GetPlanRequest) (*v1.GetPlanResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PlanService.GetPlan is not implemented")
 }
 
-func (UnimplementedPlanServiceHandler) GetPlanByChatId(context.Context, *connect.Request[v1.GetPlanByChatIdRequest]) (*connect.Response[v1.GetPlanByChatIdResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PlanService.GetPlanByChatId is not implemented"))
+func (UnimplementedPlanServiceHandler) GetPlanByChatId(context.Context, *v1.GetPlanByChatIdRequest) (*v1.GetPlanByChatIdResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PlanService.GetPlanByChatId is not implemented")
 }
 
-func (UnimplementedPlanServiceHandler) UpdatePlan(context.Context, *connect.Request[v1.UpdatePlanRequest]) (*connect.Response[v1.UpdatePlanResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PlanService.UpdatePlan is not implemented"))
+func (UnimplementedPlanServiceHandler) UpdatePlan(context.Context, *v1.UpdatePlanRequest) (*v1.UpdatePlanResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PlanService.UpdatePlan is not implemented")
 }
 
-func (UnimplementedPlanServiceHandler) DeletePlan(context.Context, *connect.Request[v1.DeletePlanRequest]) (*connect.Response[v1.DeletePlanResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PlanService.DeletePlan is not implemented"))
+func (UnimplementedPlanServiceHandler) DeletePlan(context.Context, *v1.DeletePlanRequest) (*v1.DeletePlanResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PlanService.DeletePlan is not implemented")
 }
 
-func (UnimplementedPlanServiceHandler) ListPlanTasks(context.Context, *connect.Request[v1.ListPlanTasksRequest]) (*connect.Response[v1.ListPlanTasksResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PlanService.ListPlanTasks is not implemented"))
+func (UnimplementedPlanServiceHandler) ListPlanTasks(context.Context, *v1.ListPlanTasksRequest) (*v1.ListPlanTasksResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PlanService.ListPlanTasks is not implemented")
 }
 
-func (UnimplementedPlanServiceHandler) ListPlansByProject(context.Context, *connect.Request[v1.ListPlansByProjectRequest]) (*connect.Response[v1.ListPlansByProjectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PlanService.ListPlansByProject is not implemented"))
+func (UnimplementedPlanServiceHandler) ListPlansByProject(context.Context, *v1.ListPlansByProjectRequest) (*v1.ListPlansByProjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PlanService.ListPlansByProject is not implemented")
+}
+
+type planServiceClient struct {
+	client *connect.Client
+}
+
+func (c *planServiceClient) CreatePlan(ctx context.Context, req *v1.CreatePlanRequest) (*v1.CreatePlanResponse, error) {
+	var res v1.CreatePlanResponse
+	if err := c.client.CallUnary(ctx, planServiceCreatePlanSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *planServiceClient) GetPlan(ctx context.Context, req *v1.GetPlanRequest) (*v1.GetPlanResponse, error) {
+	var res v1.GetPlanResponse
+	if err := c.client.CallUnary(ctx, planServiceGetPlanSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *planServiceClient) GetPlanByChatId(ctx context.Context, req *v1.GetPlanByChatIdRequest) (*v1.GetPlanByChatIdResponse, error) {
+	var res v1.GetPlanByChatIdResponse
+	if err := c.client.CallUnary(ctx, planServiceGetPlanByChatIdSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *planServiceClient) UpdatePlan(ctx context.Context, req *v1.UpdatePlanRequest) (*v1.UpdatePlanResponse, error) {
+	var res v1.UpdatePlanResponse
+	if err := c.client.CallUnary(ctx, planServiceUpdatePlanSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *planServiceClient) DeletePlan(ctx context.Context, req *v1.DeletePlanRequest) (*v1.DeletePlanResponse, error) {
+	var res v1.DeletePlanResponse
+	if err := c.client.CallUnary(ctx, planServiceDeletePlanSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *planServiceClient) ListPlanTasks(ctx context.Context, req *v1.ListPlanTasksRequest) (*v1.ListPlanTasksResponse, error) {
+	var res v1.ListPlanTasksResponse
+	if err := c.client.CallUnary(ctx, planServiceListPlanTasksSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *planServiceClient) ListPlansByProject(ctx context.Context, req *v1.ListPlansByProjectRequest) (*v1.ListPlansByProjectResponse, error) {
+	var res v1.ListPlansByProjectResponse
+	if err := c.client.CallUnary(ctx, planServiceListPlansByProjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type planServiceHandler struct{ svc PlanServiceHandler }
+
+func (h planServiceHandler) createPlan(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreatePlanRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreatePlan(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h planServiceHandler) getPlan(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPlanRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPlan(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h planServiceHandler) getPlanByChatId(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPlanByChatIdRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPlanByChatId(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h planServiceHandler) updatePlan(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdatePlanRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdatePlan(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h planServiceHandler) deletePlan(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeletePlanRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeletePlan(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h planServiceHandler) listPlanTasks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPlanTasksRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPlanTasks(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h planServiceHandler) listPlansByProject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPlansByProjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPlansByProject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

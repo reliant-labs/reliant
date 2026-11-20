@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -27,14 +27,14 @@ import (
 // A sign-in is an account decision (see provider_accounts.go). These tests drive the Complete*
 // RPCs with fake token exchanges against a real database.
 
-func oauthRequestClaude(accountID string) *connect.Request[reliantv1.CompleteClaudeOAuthRequest] {
+func oauthRequestClaude(accountID string) *reliantv1.CompleteClaudeOAuthRequest {
 	req := &reliantv1.CompleteClaudeOAuthRequest{
 		Code: "auth-code", CodeVerifier: "verifier", RedirectUri: "http://localhost:54545/callback", State: "s",
 	}
 	if accountID != "" {
 		req.AccountId = &accountID
 	}
-	return connect.NewRequest(req)
+	return req
 }
 
 type claudeLogin struct{ acct, org, email string }
@@ -77,27 +77,27 @@ func TestCompleteClaudeOAuth_SameIdentityTwiceIsOneAccountDifferentIdentityIsTwo
 
 	first, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
-	assert.True(t, first.Msg.Created)
-	assert.Nil(t, first.Msg.IdentityMismatch)
-	assert.Equal(t, "alice@example.com", first.Msg.Account.Label)
+	assert.True(t, first.Created)
+	assert.Nil(t, first.IdentityMismatch)
+	assert.Equal(t, "alice@example.com", first.Account.Label)
 
 	// The same upstream account signing in again refreshes its row, clears needs-sign-in, adds nothing.
 	reason := "refresh token rejected"
-	_, err = repo.PatchProviderAccount(ctx, "oauth-claude-dedupe", first.Msg.Account.Id, core.AccountPatch{NeedsReauth: &reason})
+	_, err = repo.PatchProviderAccount(ctx, "oauth-claude-dedupe", first.Account.Id, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 	again, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
-	assert.False(t, again.Msg.Created)
-	assert.Equal(t, first.Msg.Account.Id, again.Msg.Account.Id)
-	assert.Equal(t, reliantv1.ProviderAccountStatus_PROVIDER_ACCOUNT_STATUS_AVAILABLE, again.Msg.Account.Status)
-	assert.Contains(t, again.Msg.Message, "already connected")
+	assert.False(t, again.Created)
+	assert.Equal(t, first.Account.Id, again.Account.Id)
+	assert.Equal(t, reliantv1.ProviderAccountStatus_PROVIDER_ACCOUNT_STATUS_AVAILABLE, again.Account.Status)
+	assert.Contains(t, again.Message, "already connected")
 	assert.Len(t, accountsOfProvider(t, ctx, repo, "oauth-claude-dedupe", "claude"), 1)
 
 	// A different account is a second one, behind the first.
 	login.acct, login.email = "bob", "bob@example.com"
 	second, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
-	assert.True(t, second.Msg.Created)
+	assert.True(t, second.Created)
 	accounts := accountsOfProvider(t, ctx, repo, "oauth-claude-dedupe", "claude")
 	require.Len(t, accounts, 2)
 	assert.Equal(t, "alice@example.com", accounts[0].DisplayLabel())
@@ -120,31 +120,31 @@ func TestCompleteClaudeOAuth_ReconnectWithAnotherIdentityLeavesTheTargetUntouche
 	alice, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
 	reason := "refresh token rejected"
-	_, err = repo.PatchProviderAccount(ctx, user, alice.Msg.Account.Id, core.AccountPatch{NeedsReauth: &reason})
+	_, err = repo.PatchProviderAccount(ctx, user, alice.Account.Id, core.AccountPatch{NeedsReauth: &reason})
 	require.NoError(t, err)
 
 	// The user reconnects alice but signs in as bob.
 	login.acct, login.email = "bob", "bob@example.com"
-	res, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(alice.Msg.Account.Id))
+	res, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(alice.Account.Id))
 	require.NoError(t, err)
-	assert.True(t, res.Msg.Created, "bob was not connected, so he becomes his own account")
-	require.NotNil(t, res.Msg.IdentityMismatch)
-	assert.Contains(t, *res.Msg.IdentityMismatch, "bob@example.com")
-	assert.Contains(t, *res.Msg.IdentityMismatch, "alice@example.com")
-	assert.NotEqual(t, alice.Msg.Account.Id, res.Msg.Account.Id)
+	assert.True(t, res.Created, "bob was not connected, so he becomes his own account")
+	require.NotNil(t, res.IdentityMismatch)
+	assert.Contains(t, *res.IdentityMismatch, "bob@example.com")
+	assert.Contains(t, *res.IdentityMismatch, "alice@example.com")
+	assert.NotEqual(t, alice.Account.Id, res.Account.Id)
 	for _, a := range accountsOfProvider(t, ctx, repo, user, "claude") {
-		if a.ID == alice.Msg.Account.Id {
+		if a.ID == alice.Account.Id {
 			assert.NotNil(t, a.NeedsReauthAt, "the target keeps waiting for its own sign-in")
 		}
 	}
 
 	// Reconnecting alice as alice works and clears her.
 	login.acct, login.email = "alice", "alice@example.com"
-	res, err = svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(alice.Msg.Account.Id))
+	res, err = svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(alice.Account.Id))
 	require.NoError(t, err)
-	assert.Nil(t, res.Msg.IdentityMismatch)
-	assert.False(t, res.Msg.Created)
-	assert.Equal(t, alice.Msg.Account.Id, res.Msg.Account.Id)
+	assert.Nil(t, res.IdentityMismatch)
+	assert.False(t, res.Created)
+	assert.Equal(t, alice.Account.Id, res.Account.Id)
 }
 
 func TestCompleteClaudeOAuth_ReconnectTargetsAreScopedToTheCaller(t *testing.T) {
@@ -155,11 +155,11 @@ func TestCompleteClaudeOAuth_ReconnectTargetsAreScopedToTheCaller(t *testing.T) 
 	owner, err := svc.CompleteClaudeOAuth(isolationContext("owner"), oauthRequestClaude(""))
 	require.NoError(t, err)
 
-	_, err = svc.CompleteClaudeOAuth(isolationContext("intruder"), oauthRequestClaude(owner.Msg.Account.Id))
+	_, err = svc.CompleteClaudeOAuth(isolationContext("intruder"), oauthRequestClaude(owner.Account.Id))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	_, err = svc.CompleteClaudeOAuth(isolationContext("intruder"), oauthRequestClaude("no-such-account"))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.Empty(t, accountsOfProvider(t, isolationContext("intruder"), repo, "intruder", "claude"))
 }
 
@@ -177,11 +177,11 @@ func TestCompleteClaudeOAuth_PlanComesFromTheProfile(t *testing.T) {
 	})
 	res, err := svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
-	assert.Equal(t, "alice@example.com", res.Msg.Account.Label, "the email falls back to the profile's")
-	require.NotNil(t, res.Msg.Account.Plan)
-	assert.Equal(t, "max_20x", *res.Msg.Account.Plan)
-	require.NotNil(t, res.Msg.Account.PlanDisplay)
-	assert.Equal(t, "Max 20×", *res.Msg.Account.PlanDisplay)
+	assert.Equal(t, "alice@example.com", res.Account.Label, "the email falls back to the profile's")
+	require.NotNil(t, res.Account.Plan)
+	assert.Equal(t, "max_20x", *res.Account.Plan)
+	require.NotNil(t, res.Account.PlanDisplay)
+	assert.Equal(t, "Max 20×", *res.Account.PlanDisplay)
 
 	// A failing profile read never fails the sign-in; the plan stays unknown.
 	login.acct = "carol"
@@ -190,7 +190,7 @@ func TestCompleteClaudeOAuth_PlanComesFromTheProfile(t *testing.T) {
 	})
 	res, err = svc.CompleteClaudeOAuth(ctx, oauthRequestClaude(""))
 	require.NoError(t, err)
-	assert.Nil(t, res.Msg.Account.Plan)
+	assert.Nil(t, res.Account.Plan)
 }
 
 func TestCompleteClaudeOAuth_ConnectIsSeenByTheDriversThroughAccounts(t *testing.T) {
@@ -248,41 +248,41 @@ func TestCompleteCodexOAuth_EmailAndPlanComeFromTheIDToken(t *testing.T) {
 			return &tok, nil
 		},
 	})
-	complete := func(accountID string) *connect.Response[reliantv1.CompleteCodexOAuthResponse] {
+	complete := func(accountID string) *reliantv1.CompleteCodexOAuthResponse {
 		t.Helper()
 		req := &reliantv1.CompleteCodexOAuthRequest{Code: "c", CodeVerifier: "v", RedirectUri: "http://localhost/cb"}
 		if accountID != "" {
 			req.AccountId = &accountID
 		}
-		resp, err := svc.CompleteCodexOAuth(ctx, connect.NewRequest(req))
+		resp, err := svc.CompleteCodexOAuth(ctx, req)
 		require.NoError(t, err)
 		return resp
 	}
 
 	*next = codex.CodexTokens{AccessToken: "a1", RefreshToken: "r1", AccountID: "ws-1", IDToken: codexIDToken(t, "ws-1", "u-1", "me@example.com", "plus")}
 	one := complete("")
-	assert.True(t, one.Msg.Created)
-	assert.Equal(t, "me@example.com", one.Msg.Account.Label)
-	require.NotNil(t, one.Msg.Account.Plan)
-	assert.Equal(t, "plus", *one.Msg.Account.Plan)
+	assert.True(t, one.Created)
+	assert.Equal(t, "me@example.com", one.Account.Label)
+	require.NotNil(t, one.Account.Plan)
+	assert.Equal(t, "plus", *one.Account.Plan)
 
 	// Same ChatGPT account and user: refreshed, not duplicated.
 	next.AccessToken = "a1b"
 	again := complete("")
-	assert.False(t, again.Msg.Created)
-	assert.Equal(t, one.Msg.Account.Id, again.Msg.Account.Id)
+	assert.False(t, again.Created)
+	assert.Equal(t, one.Account.Id, again.Account.Id)
 
 	// A second ChatGPT user is a second account.
 	*next = codex.CodexTokens{AccessToken: "a2", RefreshToken: "r2", AccountID: "ws-2", IDToken: codexIDToken(t, "ws-2", "u-2", "you@example.com", "pro")}
 	two := complete("")
-	assert.True(t, two.Msg.Created)
+	assert.True(t, two.Created)
 	assert.Len(t, accountsOfProvider(t, ctx, repo, user, "codex"), 2)
 
 	// A reconnect of the first as the second saves nothing new and says so.
-	mismatch := complete(one.Msg.Account.Id)
-	assert.False(t, mismatch.Msg.Created)
-	require.NotNil(t, mismatch.Msg.IdentityMismatch)
-	assert.Contains(t, *mismatch.Msg.IdentityMismatch, "you@example.com")
+	mismatch := complete(one.Account.Id)
+	assert.False(t, mismatch.Created)
+	require.NotNil(t, mismatch.IdentityMismatch)
+	assert.Contains(t, *mismatch.IdentityMismatch, "you@example.com")
 
 	// The default (first) account is the one the drivers use.
 	accounts := accountsOfProvider(t, ctx, repo, user, "codex")
@@ -312,29 +312,29 @@ func TestCompleteAntigravityAndCopilot_AreKeyedByTheirIdentity(t *testing.T) {
 			return GitHubUser{ID: 42, Login: "octocat"}, nil
 		},
 	})
-	anti := func() *connect.Response[reliantv1.CompleteAntigravityOAuthResponse] {
-		resp, err := svc.CompleteAntigravityOAuth(ctx, connect.NewRequest(&reliantv1.CompleteAntigravityOAuthRequest{Code: "c", CodeVerifier: "v", RedirectUri: "http://localhost/cb"}))
+	anti := func() *reliantv1.CompleteAntigravityOAuthResponse {
+		resp, err := svc.CompleteAntigravityOAuth(ctx, &reliantv1.CompleteAntigravityOAuthRequest{Code: "c", CodeVerifier: "v", RedirectUri: "http://localhost/cb"})
 		require.NoError(t, err)
 		return resp
 	}
 	first := anti()
-	assert.True(t, first.Msg.Created)
-	assert.Equal(t, "google-sub-1@gmail.com", first.Msg.Account.Label)
-	assert.False(t, anti().Msg.Created)
+	assert.True(t, first.Created)
+	assert.Equal(t, "google-sub-1@gmail.com", first.Account.Label)
+	assert.False(t, anti().Created)
 	sub = "google-sub-2"
-	assert.True(t, anti().Msg.Created)
+	assert.True(t, anti().Created)
 	assert.Len(t, accountsOfProvider(t, ctx, repo, user, "antigravity"), 2)
 
-	poll := func() *connect.Response[reliantv1.PollCopilotDeviceAuthResponse] {
-		resp, err := svc.PollCopilotDeviceAuth(ctx, connect.NewRequest(&reliantv1.PollCopilotDeviceAuthRequest{DeviceCode: "dev"}))
+	poll := func() *reliantv1.PollCopilotDeviceAuthResponse {
+		resp, err := svc.PollCopilotDeviceAuth(ctx, &reliantv1.PollCopilotDeviceAuthRequest{DeviceCode: "dev"})
 		require.NoError(t, err)
 		return resp
 	}
 	cp := poll()
-	assert.Equal(t, reliantv1.PollCopilotDeviceAuthResponse_STATUS_AUTHORIZED, cp.Msg.Status)
-	assert.True(t, cp.Msg.Created)
-	assert.Equal(t, "octocat", cp.Msg.Account.Label, "a Copilot account is labelled by its GitHub login")
-	assert.False(t, poll().Msg.Created)
+	assert.Equal(t, reliantv1.PollCopilotDeviceAuthResponse_STATUS_AUTHORIZED, cp.Status)
+	assert.True(t, cp.Created)
+	assert.Equal(t, "octocat", cp.Account.Label, "a Copilot account is labelled by its GitHub login")
+	assert.False(t, poll().Created)
 	assert.Len(t, accountsOfProvider(t, ctx, repo, user, "copilot"), 1)
 }
 
@@ -348,10 +348,10 @@ func TestPollCopilotDeviceAuth_PendingStoresNothing(t *testing.T) {
 			return nil, copilot.ErrAuthorizationPending
 		},
 	})
-	resp, err := svc.PollCopilotDeviceAuth(ctx, connect.NewRequest(&reliantv1.PollCopilotDeviceAuthRequest{DeviceCode: "dev"}))
+	resp, err := svc.PollCopilotDeviceAuth(ctx, &reliantv1.PollCopilotDeviceAuthRequest{DeviceCode: "dev"})
 	require.NoError(t, err)
-	assert.Equal(t, reliantv1.PollCopilotDeviceAuthResponse_STATUS_PENDING, resp.Msg.Status)
-	assert.Nil(t, resp.Msg.Account)
+	assert.Equal(t, reliantv1.PollCopilotDeviceAuthResponse_STATUS_PENDING, resp.Status)
+	assert.Nil(t, resp.Account)
 	assert.Empty(t, accountsOfProvider(t, ctx, repo, "oauth-copilot-pending", "copilot"))
 }
 
@@ -365,7 +365,7 @@ func TestSyncReliantProvider_WritesTheManagedAccount(t *testing.T) {
 	ctx := isolationContext(user)
 
 	for range 2 { // a re-sync rotates the one managed account, never adds a second
-		_, err := svc.SyncReliantProvider(ctx, connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+		_, err := svc.SyncReliantProvider(ctx, &reliantv1.SyncReliantProviderRequest{})
 		require.NoError(t, err)
 	}
 	accounts := accountsOfProvider(t, ctx, repo, user, "reliant")
@@ -429,9 +429,9 @@ func TestCompleteClaudeOAuth_SignInInABoundWorkspaceIsTheOrgsSeat(t *testing.T) 
 	for _, a := range accountsOfProvider(t, ctx, repo, "oauth-claude-seat", "claude") {
 		byID[a.ID] = a
 	}
-	assert.Equal(t, "org-acme", byID[team.Msg.Account.Id].AttributedOrgID, "the Team sign-in is the org's seat")
-	assert.Equal(t, core.AttributionWorkspace, byID[team.Msg.Account.Id].AttributionSource)
-	assert.Empty(t, byID[personal.Msg.Account.Id].AttributedOrgID, "the same login's personal org stays the person's")
+	assert.Equal(t, "org-acme", byID[team.Account.Id].AttributedOrgID, "the Team sign-in is the org's seat")
+	assert.Equal(t, core.AttributionWorkspace, byID[team.Account.Id].AttributionSource)
+	assert.Empty(t, byID[personal.Account.Id].AttributedOrgID, "the same login's personal org stays the person's")
 
 	// A matcher that fails leaves the account as it was and the sign-in succeeds.
 	failing := newTestService(t, Deps{

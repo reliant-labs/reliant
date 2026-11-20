@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -110,10 +109,10 @@ func (s *Service) moveOrg(ctx context.Context, userID string, chat *db.Chat, sou
 // MoveChatToProject moves an idle chat to another of the caller's projects.
 func (s *Service) MoveChatToProject(
 	ctx context.Context,
-	req *connect.Request[reliantv1.MoveChatToProjectRequest],
-) (*connect.Response[reliantv1.MoveChatToProjectResponse], error) {
+	req *reliantv1.MoveChatToProjectRequest,
+) (*reliantv1.MoveChatToProjectResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	chatID, projectID := req.Msg.GetChatId(), req.Msg.GetProjectId()
+	chatID, projectID := req.GetChatId(), req.GetProjectId()
 	if chatID == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
@@ -130,7 +129,7 @@ func (s *Service) MoveChatToProject(
 		return nil, err
 	}
 	if chat.ProjectID == projectID {
-		return connect.NewResponse(&reliantv1.MoveChatToProjectResponse{Chat: s.chatToProtoWithSelection(ctx, chat)}), nil
+		return &reliantv1.MoveChatToProjectResponse{Chat: s.chatToProtoWithSelection(ctx, chat)}, nil
 	}
 	if chat.State == db.ChatStateArchived {
 		return nil, svcerr.FailedPrecondition("restore the chat before moving it to another project")
@@ -158,7 +157,7 @@ func (s *Service) MoveChatToProject(
 	if err != nil {
 		return nil, err
 	}
-	if from.workspace != nil && !req.Msg.GetLeaveWorkspace() {
+	if from.workspace != nil && !req.GetLeaveWorkspace() {
 		return nil, svcerr.FailedPrecondition(fmt.Sprintf(
 			"this chat runs in workspace %q, which belongs to project %q and stays there; "+
 				"move it with leave_workspace to continue in %q's main checkout",
@@ -169,7 +168,7 @@ func (s *Service) MoveChatToProject(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the project's main checkout"))
 	}
-	to, err := s.moveDestination(ctx, userID, chat, target, req.Msg.DaemonId)
+	to, err := s.moveDestination(ctx, userID, chat, target, req.DaemonId)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +239,7 @@ func (s *Service) MoveChatToProject(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to reload chat"))
 	}
-	return connect.NewResponse(&reliantv1.MoveChatToProjectResponse{Chat: s.chatToProtoWithSelection(ctx, updated)}), nil
+	return &reliantv1.MoveChatToProjectResponse{Chat: s.chatToProtoWithSelection(ctx, updated)}, nil
 }
 
 // ownedProject is the caller's project; another user's reads as not found.

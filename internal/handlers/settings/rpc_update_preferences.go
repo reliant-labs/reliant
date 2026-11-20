@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -20,7 +18,7 @@ import (
 )
 
 // UpdatePreferences updates user preferences
-func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[reliantv1.UpdatePreferencesRequest]) (*connect.Response[reliantv1.UpdatePreferencesResponse], error) {
+func (s *Service) UpdatePreferences(ctx context.Context, req *reliantv1.UpdatePreferencesRequest) (*reliantv1.UpdatePreferencesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	analyticsClient := analytics.ForUser(ctx, userID)
 	changedKeys := make([]string, 0, 8)
@@ -33,9 +31,9 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 		}
 	}
 
-	if req.Msg.StreamingEnabled != nil {
+	if req.StreamingEnabled != nil {
 		value := "false"
-		if *req.Msg.StreamingEnabled {
+		if *req.StreamingEnabled {
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "features.streaming_enabled", value); err != nil {
@@ -44,8 +42,8 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 		markChanged("features.streaming_enabled")
 	}
 
-	if req.Msg.WorktreeArchiveMode != nil {
-		mode := *req.Msg.WorktreeArchiveMode
+	if req.WorktreeArchiveMode != nil {
+		mode := *req.WorktreeArchiveMode
 		if mode != "ask_me" && mode != "always_cleanup" && mode != "always_keep" {
 			return nil, svcerr.InvalidArgument("invalid worktree_archive_mode. Must be 'ask_me', 'always_cleanup', or 'always_keep'")
 		}
@@ -55,9 +53,9 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 		markChanged("worktree.archive_cleanup_mode")
 	}
 
-	if req.Msg.WorktreeDefaultDeleteBranch != nil {
+	if req.WorktreeDefaultDeleteBranch != nil {
 		value := "false"
-		if *req.Msg.WorktreeDefaultDeleteBranch {
+		if *req.WorktreeDefaultDeleteBranch {
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "worktree.default_delete_branch", value); err != nil {
@@ -67,9 +65,9 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	}
 
 	// Handle default auto-approve for new chats
-	if req.Msg.DefaultAutoApprove != nil {
+	if req.DefaultAutoApprove != nil {
 		value := "false"
-		if *req.Msg.DefaultAutoApprove {
+		if *req.DefaultAutoApprove {
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "chat.default_auto_approve", value); err != nil {
@@ -79,9 +77,9 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	}
 
 	// Handle branch copy uncommitted files default
-	if req.Msg.BranchCopyUncommittedFilesDefault != nil {
+	if req.BranchCopyUncommittedFilesDefault != nil {
 		value := "false"
-		if *req.Msg.BranchCopyUncommittedFilesDefault {
+		if *req.BranchCopyUncommittedFilesDefault {
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "worktree.branch_copy_uncommitted_files_default", value); err != nil {
@@ -91,7 +89,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	}
 
 	// Handle additional arbitrary preferences
-	for key, value := range req.Msg.Additional {
+	for key, value := range req.Additional {
 		prefKey := fmt.Sprintf("preference.%s", key)
 		if err := s.upsertSetting(ctx, userID, nil, prefKey, value); err != nil {
 			logging.ErrorContext(ctx, "Failed to update preference", "key", key, "error", err)
@@ -102,8 +100,8 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	}
 
 	// Handle default MCP scope
-	if req.Msg.DefaultMcpScope != nil {
-		scopeValue := req.Msg.DefaultMcpScope.String()
+	if req.DefaultMcpScope != nil {
+		scopeValue := req.DefaultMcpScope.String()
 		if err := s.upsertSetting(ctx, userID, nil, "config.default_mcp_scope", scopeValue); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
@@ -111,8 +109,8 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	}
 
 	// Handle default workflow scope
-	if req.Msg.DefaultWorkflowScope != nil {
-		scopeValue := req.Msg.DefaultWorkflowScope.String()
+	if req.DefaultWorkflowScope != nil {
+		scopeValue := req.DefaultWorkflowScope.String()
 		if err := s.upsertSetting(ctx, userID, nil, "config.default_workflow_scope", scopeValue); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
@@ -120,17 +118,17 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	}
 
 	// Handle default workflow
-	if req.Msg.DefaultWorkflow != nil {
-		if err := s.upsertSetting(ctx, userID, nil, "config.default_workflow", *req.Msg.DefaultWorkflow); err != nil {
+	if req.DefaultWorkflow != nil {
+		if err := s.upsertSetting(ctx, userID, nil, "config.default_workflow", *req.DefaultWorkflow); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("config.default_workflow")
 	}
 
 	// Handle hide builtin workflows
-	if req.Msg.HideBuiltinWorkflows != nil {
+	if req.HideBuiltinWorkflows != nil {
 		value := "false"
-		if *req.Msg.HideBuiltinWorkflows {
+		if *req.HideBuiltinWorkflows {
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "ui.hide_builtin_workflows", value); err != nil {
@@ -140,9 +138,9 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	}
 
 	// Handle hide builtin presets
-	if req.Msg.HideBuiltinPresets != nil {
+	if req.HideBuiltinPresets != nil {
 		value := "false"
-		if *req.Msg.HideBuiltinPresets {
+		if *req.HideBuiltinPresets {
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "ui.hide_builtin_presets", value); err != nil {
@@ -163,8 +161,8 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after UpdatePreferences", "error", err)
 	}
 
-	return connect.NewResponse(&reliantv1.UpdatePreferencesResponse{
+	return &reliantv1.UpdatePreferencesResponse{
 		Success: true,
 		Message: "Preferences updated successfully",
-	}), nil
+	}, nil
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -107,11 +107,11 @@ func (f *moveFixture) chatWithRun(projectID, worktreeID string, daemonID *string
 
 func (f *moveFixture) move(req *reliantv1.MoveChatToProjectRequest) (*reliantv1.Chat, error) {
 	f.t.Helper()
-	resp, err := f.service.MoveChatToProject(f.ctx, connect.NewRequest(req))
+	resp, err := f.service.MoveChatToProject(f.ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg.Chat, nil
+	return resp.Chat, nil
 }
 
 func (f *moveFixture) row(chatID string) *db.Chat {
@@ -145,7 +145,7 @@ func (f *moveFixture) hiddenNotes(chatID string) []string {
 func requireCode(t *testing.T, err error, code connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	assert.Equal(t, code, svcerr.ToConnect(err).Code(), "error: %v", err)
+	assert.Equal(t, code, svcerr.ToConnectV2(err).Code(), "error: %v", err)
 }
 
 func TestMoveChatToProject_MovesChatPlansAndMachineAndLeavesANote(t *testing.T) {

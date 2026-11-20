@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -23,19 +23,19 @@ func TestGetProjectPrompts_Generated(t *testing.T) {
 		return nil, errors.New("setting not found")
 	}
 	empty := newService(t, none, nil)
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetProjectPromptsRequest, pb.GetProjectPromptsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetProjectPromptsRequest, pb.GetProjectPromptsResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.GetProjectPromptsRequest{ProjectId: "p-2"}),
+			Req:     &pb.GetProjectPromptsRequest{ProjectId: "p-2"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "a project with no saved prompts has none",
-			Req:  connect.NewRequest(&pb.GetProjectPromptsRequest{ProjectId: "p-1"}),
+			Req:  &pb.GetProjectPromptsRequest{ProjectId: "p-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetProjectPromptsResponse]) {
-				if got := resp.Msg.GetPrompts(); len(got) != 0 {
+			Check: func(t *testing.T, resp *pb.GetProjectPromptsResponse) {
+				if got := resp.GetPrompts(); len(got) != 0 {
 					t.Fatalf("prompts = %v, want none", got)
 				}
 			},
@@ -50,13 +50,13 @@ func TestGetProjectPrompts_Generated(t *testing.T) {
 		return &db.Setting{Value: `[{"id":"pr-1","name":"review","content":"Review this diff"}]`}, nil
 	}
 	svc := newService(t, saved, nil)
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetProjectPromptsRequest, pb.GetProjectPromptsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetProjectPromptsRequest, pb.GetProjectPromptsResponse]{
 		{
 			Name: "the caller's saved prompts for the project are returned",
-			Req:  connect.NewRequest(&pb.GetProjectPromptsRequest{ProjectId: "p-1"}),
+			Req:  &pb.GetProjectPromptsRequest{ProjectId: "p-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetProjectPromptsResponse]) {
-				got := resp.Msg.GetPrompts()
+			Check: func(t *testing.T, resp *pb.GetProjectPromptsResponse) {
+				got := resp.GetPrompts()
 				if len(got) != 1 || got[0].GetId() != "pr-1" || got[0].GetName() != "review" || got[0].GetContent() != "Review this diff" {
 					t.Fatalf("prompts = %v, want pr-1", got)
 				}

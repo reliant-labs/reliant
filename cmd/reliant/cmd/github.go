@@ -11,13 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/forgecred"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // ── GitHub as you, or as the Reliant bot ───────────────────────────────────
@@ -85,12 +86,12 @@ func fetchBotTokenFromSessions(ctx context.Context, sessions []forgecred.Session
 		// No per-request timeout: ctx's githubTokenTimeout is the whole
 		// budget, so a slow handshake on a loaded machine may use all of it.
 		httpClient := (&connection{ServerURL: s.Server}).httpClientWithBearer(s.Token)
-		resp, err := reliantv1connect.NewTokenServiceClient(httpClient, strings.TrimRight(s.Server, "/")).
-			GetGitHubBotToken(ctx, connect.NewRequest(&reliantv1.GetGitHubBotTokenRequest{
+		resp, err := reliantv1connect.NewTokenServiceClient(rpcclient.New(httpClient, strings.TrimRight(s.Server, "/"), nil)).
+			GetGitHubBotToken(ctx, &reliantv1.GetGitHubBotTokenRequest{
 				Owner: req.Owner, Repo: req.Repo, Permissions: req.Permissions,
-			}))
+			})
 		if err == nil {
-			m := resp.Msg
+			m := resp
 			if m.GetToken() == "" {
 				return githubBotToken{}, errors.New("the server returned no bot token")
 			}
@@ -139,7 +140,7 @@ var accountRefusalReasons = map[string]bool{
 // another session's account may still succeed.
 func refusedForAccount(err error) bool {
 	var ce *connect.Error
-	return errors.As(err, &ce) && accountRefusalReasons[ce.Meta().Get(svcerr.ReasonHeader)]
+	return errors.As(err, &ce) && accountRefusalReasons[svcerr.MetaOf(err).Get(svcerr.ReasonHeader)]
 }
 
 // connectMessage is a Connect error's message without the code prefix.

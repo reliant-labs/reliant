@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -23,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/repo"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
@@ -440,27 +440,27 @@ format, exit codes, and --hook).`,
 
 			// Connect client authenticated by the context bearer, mirroring how
 			// `reliant workflow follow` builds its ChatService client.
-			chatClient := reliantv1connect.NewChatServiceClient(conn.httpClient(), conn.ServerURL)
+			chatClient := reliantv1connect.NewChatServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil))
 
-			resp, err := chatClient.StartChat(cmd.Context(), connect.NewRequest(createReq))
+			resp, err := chatClient.StartChat(cmd.Context(), createReq)
 			if err != nil {
 				return conn.annotate(fmt.Errorf("starting workflow: %w", err))
 			}
 
 			// chat_id == execution_id: the follow surface is chat-scoped.
-			chatID := resp.Msg.GetChat().GetId()
+			chatID := resp.GetChat().GetId()
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Workflow %q triggered\n", workflowName)
 			if chatID != "" {
 				fmt.Fprintf(out, "  Chat/Execution ID: %s\n", chatID)
 			}
-			if t := resp.Msg.GetChat().GetTitle(); t != "" {
+			if t := resp.GetChat().GetTitle(); t != "" {
 				fmt.Fprintf(out, "  Title:             %s (listed under Runs)\n", t)
 			}
-			if wid := resp.Msg.GetWorkflowId(); wid != "" {
+			if wid := resp.GetWorkflowId(); wid != "" {
 				fmt.Fprintf(out, "  Workflow ID:       %s\n", wid)
 			}
-			if rid := resp.Msg.GetRunId(); rid != "" {
+			if rid := resp.GetRunId(); rid != "" {
 				fmt.Fprintf(out, "  Run ID:            %s\n", rid)
 			}
 

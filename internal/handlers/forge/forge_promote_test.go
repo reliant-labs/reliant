@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -116,14 +117,14 @@ func TestForgeService_PlanPromote_PassesReportThroughVerbatim(t *testing.T) {
 	router := &forgeTestRouter{reply: promoteReply(t, report, nil)}
 
 	resp, err := newForgeTestService(router).PlanPromote(authedCtx(),
-		connect.NewRequest(&reliantv1.PlanForgePromoteRequest{
+		&reliantv1.PlanForgePromoteRequest{
 			ProjectId: "p", Env: "staging", Release: "v1.5.15",
-		}))
+		})
 	require.NoError(t, err)
 
 	assert.Equal(t, "forge.promote_plan", router.lastCommandType,
 		"the preview must dispatch the READ-ONLY daemon command")
-	assert.JSONEq(t, report, resp.Msg.ReportJson,
+	assert.JSONEq(t, report, resp.ReportJson,
 		"forge's document must cross this layer unmodified")
 
 	// The env and release reach the daemon as given.
@@ -145,16 +146,16 @@ func TestForgeService_PlanPromote_NeverReportsApplied(t *testing.T) {
 	}
 
 	resp, err := newForgeTestService(router).PlanPromote(authedCtx(),
-		connect.NewRequest(&reliantv1.PlanForgePromoteRequest{
+		&reliantv1.PlanForgePromoteRequest{
 			ProjectId: "p", Env: "staging", Release: "v1.5.15",
-		}))
+		})
 	require.NoError(t, err)
 
 	var parsed struct {
 		DryRun  bool `json:"dry_run"`
 		Applied bool `json:"applied"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(resp.Msg.ReportJson), &parsed))
+	require.NoError(t, json.Unmarshal([]byte(resp.ReportJson), &parsed))
 	assert.False(t, parsed.Applied, "the plan path must never report applied:true")
 	assert.True(t, parsed.DryRun, "the plan path must report dry_run:true")
 	assert.Equal(t, "forge.promote_plan", router.lastCommandType)
@@ -184,26 +185,26 @@ func TestForgeService_ApplyPromote_RefusesStaleBinding(t *testing.T) {
 	}
 
 	resp, err := newForgeTestService(router).ApplyPromote(authedCtx(),
-		connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+		&reliantv1.PromoteForgeEnvRequest{
 			ProjectId: "p", Env: "staging", Release: "v1.5.15",
 			ExpectedCurrentRelease: "v1.3.0",
-		}))
+		})
 
 	// FAIL CLOSED. A refusal returned as a successful response with a nullable
 	// field would be safe only if every client remembered to check it; one that
 	// forgot would tell a user the promote worked.
 	require.Error(t, err, "a refused promote must FAIL the RPC, not return a success with a flag")
 	assert.Nil(t, resp)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err),
 		"a stale binding is a precondition failure, distinguishable from Internal/Unavailable")
 
 	// The structured facts must survive on the error path, or the only recovery
 	// is a blind retry — which is how a rollback gets applied twice.
-	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	connectErr := svcerr.ToConnectV2(err) // the wire form svcerr.Interceptor sends
 	require.NotNil(t, connectErr)
 	require.Len(t, connectErr.Details(), 1, "the refusal detail must be attached")
 
-	msg, detailErr := connectErr.Details()[0].Value()
+	msg, detailErr := connectproto.UnmarshalErrorDetail(connectErr.Details()[0])
 	require.NoError(t, detailErr)
 	refusal, ok := msg.(*reliantv1.ForgePromoteRefusal)
 	require.True(t, ok, "the detail must be a ForgePromoteRefusal, got %T", msg)
@@ -231,10 +232,10 @@ func TestForgeService_ApplyPromote_SucceedsAndReturnsTheAppliedPlan(t *testing.T
 	router := &forgeTestRouter{reply: promoteReply(t, applied, nil)}
 
 	resp, err := newForgeTestService(router).ApplyPromote(authedCtx(),
-		connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+		&reliantv1.PromoteForgeEnvRequest{
 			ProjectId: "p", Env: "staging", Release: "v1.5.15",
 			ExpectedCurrentRelease: "v1.3.0",
-		}))
+		})
 	require.NoError(t, err)
 
 	assert.Equal(t, "forge.promote_apply", router.lastCommandType,
@@ -244,7 +245,7 @@ func TestForgeService_ApplyPromote_SucceedsAndReturnsTheAppliedPlan(t *testing.T
 		Applied bool `json:"applied"`
 		DryRun  bool `json:"dry_run"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(resp.Msg.ReportJson), &parsed))
+	require.NoError(t, json.Unmarshal([]byte(resp.ReportJson), &parsed))
 	assert.True(t, parsed.Applied, "the response must carry the APPLIED plan, not the preview")
 	assert.False(t, parsed.DryRun)
 
@@ -290,10 +291,10 @@ func TestForgeService_ApplyPromote_RequiresAConfirmationToken(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			router := &forgeTestRouter{}
-			_, err := newForgeTestService(router).ApplyPromote(authedCtx(), connect.NewRequest(tc.req))
+			_, err := newForgeTestService(router).ApplyPromote(authedCtx(), tc.req)
 
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 			assert.Empty(t, router.lastCommandType,
 				"an unauthorised promote must never reach the daemon")
 		})
@@ -309,9 +310,9 @@ func TestForgeService_ApplyPromote_ExpectUnbound(t *testing.T) {
 				`"ships_nothing":true,"next_step":"forge env deploy dev"}`, nil),
 		}
 		_, err := newForgeTestService(router).ApplyPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+			&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "dev", Release: "v1.5.15", ExpectUnbound: true,
-			}))
+			})
 		require.NoError(t, err)
 
 		var sent struct {
@@ -337,12 +338,12 @@ func TestForgeService_ApplyPromote_ExpectUnbound(t *testing.T) {
 				}),
 		}
 		_, err := newForgeTestService(router).ApplyPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+			&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "prod", Release: "v1.5.15", ExpectUnbound: true,
-			}))
+			})
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	})
 }
 
@@ -358,18 +359,18 @@ func TestForgeService_ApplyPromote_UnknownRefusalReasonStillFails(t *testing.T) 
 		}),
 	}
 	_, err := newForgeTestService(router).ApplyPromote(authedCtx(),
-		connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+		&reliantv1.PromoteForgeEnvRequest{
 			ProjectId: "p", Env: "staging", Release: "v1.5.15",
 			ExpectedCurrentRelease: "v1.3.0",
-		}))
+		})
 
 	require.Error(t, err, "an unclassifiable refusal must not become a success")
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 
-	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	connectErr := svcerr.ToConnectV2(err) // the wire form svcerr.Interceptor sends
 	require.NotNil(t, connectErr)
 	require.Len(t, connectErr.Details(), 1)
-	msg, detailErr := connectErr.Details()[0].Value()
+	msg, detailErr := connectproto.UnmarshalErrorDetail(connectErr.Details()[0])
 	require.NoError(t, detailErr)
 	refusal := msg.(*reliantv1.ForgePromoteRefusal)
 	assert.Equal(t,
@@ -424,11 +425,11 @@ func TestForgeService_Promote_RollbackIsVisibleOnBothPaths(t *testing.T) {
 	t.Run("plan", func(t *testing.T) {
 		router := &forgeTestRouter{reply: promoteReply(t, rollback, nil)}
 		resp, err := newForgeTestService(router).PlanPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PlanForgePromoteRequest{
+			&reliantv1.PlanForgePromoteRequest{
 				ProjectId: "p", Env: "prod", Release: "v1.3.0",
-			}))
+			})
 		require.NoError(t, err, "a rollback is a legitimate plan, not an error")
-		assertRollbackVisible(t, resp.Msg.ReportJson)
+		assertRollbackVisible(t, resp.ReportJson)
 	})
 
 	t.Run("apply", func(t *testing.T) {
@@ -441,12 +442,12 @@ func TestForgeService_Promote_RollbackIsVisibleOnBothPaths(t *testing.T) {
 		router := &forgeTestRouter{reply: promoteReply(t, applied, nil)}
 
 		resp, err := newForgeTestService(router).ApplyPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+			&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "prod", Release: "v1.3.0",
 				ExpectedCurrentRelease: "v1.5.15",
-			}))
+			})
 		require.NoError(t, err, "a rollback with a matching expectation is allowed")
-		assertRollbackVisible(t, resp.Msg.ReportJson)
+		assertRollbackVisible(t, resp.ReportJson)
 	})
 }
 
@@ -476,11 +477,11 @@ func TestForgeService_Promote_ShipsNothingSurvivesBothPaths(t *testing.T) {
 			reply: promoteReply(t, promotePlanDoc("staging", "v1.5.15", "v1.3.0", false), nil),
 		}
 		resp, err := newForgeTestService(router).PlanPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PlanForgePromoteRequest{
+			&reliantv1.PlanForgePromoteRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
-			}))
+			})
 		require.NoError(t, err)
-		assertShipsNothing(t, resp.Msg.ReportJson)
+		assertShipsNothing(t, resp.ReportJson)
 	})
 
 	t.Run("a SUCCESSFUL apply still shipped nothing", func(t *testing.T) {
@@ -488,12 +489,12 @@ func TestForgeService_Promote_ShipsNothingSurvivesBothPaths(t *testing.T) {
 			reply: promoteReply(t, promotePlanDoc("staging", "v1.5.15", "v1.3.0", true), nil),
 		}
 		resp, err := newForgeTestService(router).ApplyPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+			&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
 				ExpectedCurrentRelease: "v1.3.0",
-			}))
+			})
 		require.NoError(t, err)
-		assertShipsNothing(t, resp.Msg.ReportJson)
+		assertShipsNothing(t, resp.ReportJson)
 	})
 }
 
@@ -567,9 +568,9 @@ func TestForgeService_PromoteTimeouts(t *testing.T) {
 			reply: promoteReply(t, promotePlanDoc("staging", "v1.5.15", "v1.3.0", false), nil),
 		}
 		_, err := newForgeTestService(router).PlanPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PlanForgePromoteRequest{
+			&reliantv1.PlanForgePromoteRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
-			}))
+			})
 		require.NoError(t, err)
 		assert.EqualValues(t, forgePromotePlanTimeoutMs, router.lastTimeoutMs)
 	})
@@ -579,10 +580,10 @@ func TestForgeService_PromoteTimeouts(t *testing.T) {
 			reply: promoteReply(t, promotePlanDoc("staging", "v1.5.15", "v1.3.0", true), nil),
 		}
 		_, err := newForgeTestService(router).ApplyPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+			&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
 				ExpectedCurrentRelease: "v1.3.0",
-			}))
+			})
 		require.NoError(t, err)
 		assert.EqualValues(t, forgePromoteApplyTimeoutMs, router.lastTimeoutMs)
 		assert.Greater(t, int32(forgePromoteApplyTimeoutMs), int32(forgePromotePlanTimeoutMs),
@@ -628,14 +629,14 @@ func TestForgeService_Promote_UnsupportedForgeOnBothMethods(t *testing.T) {
 
 	t.Run("PlanPromote", func(t *testing.T) {
 		resp, err := newForgeTestService(&forgeTestRouter{reply: oldForge(t)}).PlanPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PlanForgePromoteRequest{
+			&reliantv1.PlanForgePromoteRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
-			}))
+			})
 		require.NoError(t, err, "a version-capability miss is data, not an error")
-		assert.True(t, resp.Msg.Meta.IsForgeProject)
-		assert.False(t, resp.Msg.Meta.Supported)
-		assert.Equal(t, "v0.1.13", resp.Msg.Meta.ForgeVersion)
-		assert.Equal(t, "unknown flag: --plan", resp.Msg.Meta.UnsupportedReason)
+		assert.True(t, resp.Meta.IsForgeProject)
+		assert.False(t, resp.Meta.Supported)
+		assert.Equal(t, "v0.1.13", resp.Meta.ForgeVersion)
+		assert.Equal(t, "unknown flag: --plan", resp.Meta.UnsupportedReason)
 	})
 
 	t.Run("ApplyPromote", func(t *testing.T) {
@@ -644,15 +645,15 @@ func TestForgeService_Promote_UnsupportedForgeOnBothMethods(t *testing.T) {
 		// than as a refusal — they are different conditions with different
 		// remedies (upgrade forge vs. re-read the binding).
 		resp, err := newForgeTestService(&forgeTestRouter{reply: oldForge(t)}).ApplyPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+			&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
 				ExpectedCurrentRelease: "v1.3.0",
-			}))
+			})
 		require.NoError(t, err)
-		assert.False(t, resp.Msg.Meta.Supported)
-		assert.Equal(t, "v0.1.13", resp.Msg.Meta.ForgeVersion)
-		assert.Equal(t, "unknown flag: --plan", resp.Msg.Meta.UnsupportedReason)
-		assert.Empty(t, resp.Msg.ReportJson, "no plan was produced, so there is nothing to show")
+		assert.False(t, resp.Meta.Supported)
+		assert.Equal(t, "v0.1.13", resp.Meta.ForgeVersion)
+		assert.Equal(t, "unknown flag: --plan", resp.Meta.UnsupportedReason)
+		assert.Empty(t, resp.ReportJson, "no plan was produced, so there is nothing to show")
 	})
 }
 
@@ -671,25 +672,25 @@ func TestForgeService_Promote_NotAForgeProjectOnBothMethods(t *testing.T) {
 
 	t.Run("PlanPromote", func(t *testing.T) {
 		resp, err := newForgeTestService(&forgeTestRouter{reply: notForge(t)}).PlanPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PlanForgePromoteRequest{
+			&reliantv1.PlanForgePromoteRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
-			}))
+			})
 		require.NoError(t, err, "an ordinary non-forge repository is not an error condition")
-		assert.False(t, resp.Msg.Meta.IsForgeProject)
-		assert.Empty(t, resp.Msg.ReportJson)
-		assert.NotEmpty(t, resp.Msg.Meta.ForgeVersion)
+		assert.False(t, resp.Meta.IsForgeProject)
+		assert.Empty(t, resp.ReportJson)
+		assert.NotEmpty(t, resp.Meta.ForgeVersion)
 	})
 
 	t.Run("ApplyPromote", func(t *testing.T) {
 		resp, err := newForgeTestService(&forgeTestRouter{reply: notForge(t)}).ApplyPromote(authedCtx(),
-			connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+			&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
 				ExpectedCurrentRelease: "v1.3.0",
-			}))
+			})
 		require.NoError(t, err)
-		assert.False(t, resp.Msg.Meta.IsForgeProject)
-		assert.Empty(t, resp.Msg.ReportJson)
-		assert.NotEmpty(t, resp.Msg.Meta.ForgeVersion)
+		assert.False(t, resp.Meta.IsForgeProject)
+		assert.Empty(t, resp.ReportJson)
+		assert.NotEmpty(t, resp.Meta.ForgeVersion)
 	})
 }
 
@@ -705,42 +706,37 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 		{
 			name: "plan requires env",
 			call: func(s *Service) error {
-				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "  ", Release: "v1"}))
+				_, err := s.PlanPromote(authedCtx(), &reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "  ", Release: "v1"})
 				return err
 			},
 		},
 		{
 			name: "plan requires release",
 			call: func(s *Service) error {
-				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: " "}))
+				_, err := s.PlanPromote(authedCtx(), &reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: " "})
 				return err
 			},
 		},
 		{
 			name: "plan requires project_id",
 			call: func(s *Service) error {
-				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PlanForgePromoteRequest{Env: "staging", Release: "v1"}))
+				_, err := s.PlanPromote(authedCtx(), &reliantv1.PlanForgePromoteRequest{Env: "staging", Release: "v1"})
 				return err
 			},
 		},
 		{
 			name: "apply requires env",
 			call: func(s *Service) error {
-				_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PromoteForgeEnvRequest{
-						ProjectId: "p", Env: "", Release: "v1", ExpectedCurrentRelease: "v0"}))
+				_, err := s.ApplyPromote(authedCtx(), &reliantv1.PromoteForgeEnvRequest{
+					ProjectId: "p", Env: "", Release: "v1", ExpectedCurrentRelease: "v0"})
 				return err
 			},
 		},
 		{
 			name: "apply requires release",
 			call: func(s *Service) error {
-				_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PromoteForgeEnvRequest{
-						ProjectId: "p", Env: "staging", Release: "", ExpectedCurrentRelease: "v0"}))
+				_, err := s.ApplyPromote(authedCtx(), &reliantv1.PromoteForgeEnvRequest{
+					ProjectId: "p", Env: "staging", Release: "", ExpectedCurrentRelease: "v0"})
 				return err
 			},
 		},
@@ -749,7 +745,7 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 			router := &forgeTestRouter{}
 			err := tc.call(newForgeTestService(router))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 			assert.Empty(t, router.lastCommandType, "must not dispatch an invalid request")
 		})
 	}
@@ -758,16 +754,14 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 		router := &forgeTestRouter{}
 		svc := newForgeTestService(router)
 
-		_, err := svc.PlanPromote(t.Context(), connect.NewRequest(
-			&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1"}))
+		_, err := svc.PlanPromote(t.Context(), &reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1"})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 
-		_, err = svc.ApplyPromote(t.Context(), connect.NewRequest(
-			&reliantv1.PromoteForgeEnvRequest{
-				ProjectId: "p", Env: "staging", Release: "v1", ExpectedCurrentRelease: "v0"}))
+		_, err = svc.ApplyPromote(t.Context(), &reliantv1.PromoteForgeEnvRequest{
+			ProjectId: "p", Env: "staging", Release: "v1", ExpectedCurrentRelease: "v0"})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 
 		assert.Empty(t, router.lastCommandType)
 	})
@@ -785,18 +779,16 @@ func TestForgeService_Promote_TimeoutIsARealFailureNotUnreachable(t *testing.T) 
 		{
 			name: "PlanPromote",
 			call: func(s *Service) error {
-				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1.5.15"}))
+				_, err := s.PlanPromote(authedCtx(), &reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1.5.15"})
 				return err
 			},
 		},
 		{
 			name: "ApplyPromote",
 			call: func(s *Service) error {
-				_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PromoteForgeEnvRequest{
-						ProjectId: "p", Env: "staging", Release: "v1.5.15",
-						ExpectedCurrentRelease: "v1.3.0"}))
+				_, err := s.ApplyPromote(authedCtx(), &reliantv1.PromoteForgeEnvRequest{
+					ProjectId: "p", Env: "staging", Release: "v1.5.15",
+					ExpectedCurrentRelease: "v1.3.0"})
 				return err
 			},
 		},
@@ -806,7 +798,7 @@ func TestForgeService_Promote_TimeoutIsARealFailureNotUnreachable(t *testing.T) 
 			err := tc.call(newForgeTestService(router))
 			require.Error(t, err,
 				"promote reads no cluster, so a timeout says nothing about reachability")
-			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+			assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 		})
 	}
 }
@@ -819,18 +811,16 @@ func TestForgeService_Promote_MissingProjectDirIsNotFound(t *testing.T) {
 		{
 			name: "PlanPromote",
 			call: func(s *Service) error {
-				_, err := s.PlanPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1.5.15"}))
+				_, err := s.PlanPromote(authedCtx(), &reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1.5.15"})
 				return err
 			},
 		},
 		{
 			name: "ApplyPromote",
 			call: func(s *Service) error {
-				_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(
-					&reliantv1.PromoteForgeEnvRequest{
-						ProjectId: "p", Env: "staging", Release: "v1.5.15",
-						ExpectedCurrentRelease: "v1.3.0"}))
+				_, err := s.ApplyPromote(authedCtx(), &reliantv1.PromoteForgeEnvRequest{
+					ProjectId: "p", Env: "staging", Release: "v1.5.15",
+					ExpectedCurrentRelease: "v1.3.0"})
 				return err
 			},
 		},
@@ -841,7 +831,7 @@ func TestForgeService_Promote_MissingProjectDirIsNotFound(t *testing.T) {
 			}
 			err := tc.call(newForgeTestService(router))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err),
+			assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err),
 				"a deleted directory is a missing resource, not a retryable outage")
 		})
 	}

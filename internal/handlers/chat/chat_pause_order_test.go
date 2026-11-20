@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -127,9 +126,9 @@ func TestPauseChat_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 		),
 	}
 
-	resp, err := service.PauseChat(ctx, connect.NewRequest(&reliantv1.PauseChatRequest{ChatId: chatID}))
+	resp, err := service.PauseChat(ctx, &reliantv1.PauseChatRequest{ChatId: chatID})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	require.Equal(t, []string{"cancel:" + callID, "pause-signal"}, order,
 		"the daemon cancel must be pushed BEFORE the workflow pause signal -- "+

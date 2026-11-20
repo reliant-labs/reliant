@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,7 +26,7 @@ func TestListWorktrees_NeverAsksForArchivedRows(t *testing.T) {
 	}
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: repo}))
 
-	_, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID}))
+	_, err := svc.ListWorktrees(worktree.AuthedContext(t), &reliantv1.ListWorktreesRequest{ProjectId: ownProjectID})
 	require.NoError(t, err)
 	assert.False(t, got.IncludeArchived)
 	assert.False(t, got.ArchivedOnly)
@@ -44,11 +44,11 @@ func TestListWorktrees_MainOnlyAsksForMain(t *testing.T) {
 	}
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: repo}))
 
-	resp, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID, MainOnly: true}))
+	resp, err := svc.ListWorktrees(worktree.AuthedContext(t), &reliantv1.ListWorktreesRequest{ProjectId: ownProjectID, MainOnly: true})
 	require.NoError(t, err)
 	assert.True(t, got.MainOnly)
-	require.Len(t, resp.Msg.Worktrees, 1)
-	assert.True(t, resp.Msg.Worktrees[0].IsMain)
+	require.Len(t, resp.Worktrees, 1)
+	assert.True(t, resp.Worktrees[0].IsMain)
 }
 
 func TestListArchivedWorktrees_PagesAndAsksOnlyForArchived(t *testing.T) {
@@ -76,13 +76,13 @@ func TestListArchivedWorktrees_PagesAndAsksOnlyForArchived(t *testing.T) {
 		if token != "" {
 			req.PageToken = &token
 		}
-		resp, err := svc.ListArchivedWorktrees(worktree.AuthedContext(t), connect.NewRequest(req))
+		resp, err := svc.ListArchivedWorktrees(worktree.AuthedContext(t), req)
 		require.NoError(t, err)
 		pages++
-		for _, w := range resp.Msg.Worktrees {
+		for _, w := range resp.Worktrees {
 			ids = append(ids, w.Id)
 		}
-		if token = resp.Msg.NextPageToken; token == "" {
+		if token = resp.NextPageToken; token == "" {
 			break
 		}
 		require.Less(t, pages, 10)
@@ -96,14 +96,14 @@ func TestListArchivedWorktrees_RejectsForeignProjectAndBadToken(t *testing.T) {
 
 	svc := newOwnedWorktreeService(t)
 
-	_, err := svc.ListArchivedWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListArchivedWorktreesRequest{ProjectId: "p-2"}))
+	_, err := svc.ListArchivedWorktrees(worktree.AuthedContext(t), &reliantv1.ListArchivedWorktreesRequest{ProjectId: "p-2"})
 	require.Error(t, err)
-	assert.NotEqual(t, connect.Code(0), svcerr.Code(err))
+	assert.NotEqual(t, connect.Code(0), svcerr.CodeV2(err))
 
 	bad := "not-a-token!"
-	_, err = svc.ListArchivedWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListArchivedWorktreesRequest{ProjectId: ownProjectID, PageToken: &bad}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = svc.ListArchivedWorktrees(worktree.AuthedContext(t), &reliantv1.ListArchivedWorktreesRequest{ProjectId: ownProjectID, PageToken: &bad})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 
-	_, err = svc.ListArchivedWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListArchivedWorktreesRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = svc.ListArchivedWorktrees(worktree.AuthedContext(t), &reliantv1.ListArchivedWorktreesRequest{})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }

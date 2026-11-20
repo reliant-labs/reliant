@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -14,7 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 )
 
-func (s *Service) GetCatalogEntry(ctx context.Context, req *connect.Request[reliantv1.GetCatalogEntryRequest]) (*connect.Response[reliantv1.GetCatalogEntryResponse], error) {
+func (s *Service) GetCatalogEntry(ctx context.Context, req *reliantv1.GetCatalogEntryRequest) (*reliantv1.GetCatalogEntryResponse, error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
@@ -22,10 +21,10 @@ func (s *Service) GetCatalogEntry(ctx context.Context, req *connect.Request[reli
 	if s.deps.Search == nil {
 		return nil, svcerr.Unimplemented("integration catalog search is not configured")
 	}
-	if req.Msg.GetRef() == "" {
+	if req.GetRef() == "" {
 		return nil, svcerr.InvalidArgument("ref is required")
 	}
-	e, connected, err := s.deps.Search.Get(ctx, userID, req.Msg.GetRef())
+	e, connected, err := s.deps.Search.Get(ctx, userID, req.GetRef())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("catalog search failed"))
 	}
@@ -40,7 +39,7 @@ func (s *Service) GetCatalogEntry(ctx context.Context, req *connect.Request[reli
 		}
 	}
 	entry.Connection = catalogConnectionToProto(e, methods)
-	return connect.NewResponse(&reliantv1.GetCatalogEntryResponse{Entry: entry}), nil
+	return &reliantv1.GetCatalogEntryResponse{Entry: entry}, nil
 }
 
 // CatalogEntryToProto is the full wire shape of one entry, without the

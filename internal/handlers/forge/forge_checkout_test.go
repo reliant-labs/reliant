@@ -7,7 +7,8 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,10 +27,10 @@ import (
 
 func checkoutDetail(t *testing.T, err error) *reliantv1.ProjectCheckoutMissing {
 	t.Helper()
-	cerr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	cerr := svcerr.ToConnectV2(err) // the wire form svcerr.Interceptor sends
 	require.NotNil(t, cerr, "want a connect error, got %v", err)
 	for _, d := range cerr.Details() {
-		v, verr := d.Value()
+		v, verr := connectproto.UnmarshalErrorDetail(d)
 		require.NoError(t, verr)
 		if m, ok := v.(*reliantv1.ProjectCheckoutMissing); ok {
 			return m
@@ -49,7 +50,7 @@ func sentProjectPath(t *testing.T, router *forgeTestRouter) string {
 }
 
 func topology(svc *Service) error {
-	_, err := svc.GetTopology(authedCtx(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"}))
+	_, err := svc.GetTopology(authedCtx(), &reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"})
 	return err
 }
 
@@ -111,8 +112,8 @@ func TestForgeService_NoCheckoutAnywhereIsActionableAndSendsNothing(t *testing.T
 	err := topology(newForgeService(router, withRemote(repo, remote)))
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	msg := svcerr.ToConnect(err).Message()
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.Contains(t, msg, "not checked out on any of your machines")
 	assert.Contains(t, msg, "clone it onto a machine")
 	assert.NotContains(t, msg, forgeTestCreatorPath, "a path from another machine is never the answer")
@@ -129,8 +130,8 @@ func TestForgeService_NoCheckoutAnywhereIsActionableAndSendsNothing(t *testing.T
 func TestForgeService_NoCheckoutOfAPlainFolderAsksForItsMachine(t *testing.T) {
 	err := topology(newForgeService(&forgeTestRouter{}, forgeTestInstalls()))
 
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "connect the machine that holds its folder")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "connect the machine that holds its folder")
 }
 
 func TestForgeService_CloneInFlightOrFailedIsSaidAsSuch(t *testing.T) {
@@ -139,8 +140,8 @@ func TestForgeService_CloneInFlightOrFailedIsSaidAsSuch(t *testing.T) {
 		router := &forgeTestRouter{}
 		err := topology(newForgeService(router, repo))
 
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-		assert.Contains(t, svcerr.ToConnect(err).Message(), "still being cloned")
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+		assert.Contains(t, svcerr.ToConnectV2(err).Message(), "still being cloned")
 		detail := checkoutDetail(t, err)
 		assert.Equal(t, reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING, detail.State)
 		assert.Equal(t, "cloud", detail.DaemonId)
@@ -150,8 +151,8 @@ func TestForgeService_CloneInFlightOrFailedIsSaidAsSuch(t *testing.T) {
 		repo := forgeTestInstalls(&core.ProjectDaemon{DaemonID: "cloud", Path: "/p", InstallState: core.ProjectInstallFailed, InstallError: "repository not found"})
 		err := topology(newForgeService(&forgeTestRouter{}, repo))
 
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-		assert.Contains(t, svcerr.ToConnect(err).Message(), "repository not found")
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+		assert.Contains(t, svcerr.ToConnectV2(err).Message(), "repository not found")
 		detail := checkoutDetail(t, err)
 		assert.Equal(t, reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONE_FAILED, detail.State)
 		assert.Equal(t, "repository not found", detail.InstallError)
@@ -168,7 +169,7 @@ func TestForgeService_IgnoresAnotherUsersCheckout(t *testing.T) {
 
 	err := topology(newForgeService(router, repo))
 
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Zero(t, router.sends)
 }
 
@@ -181,8 +182,8 @@ func TestForgeService_ACheckoutGoneFromItsMachineNamesTheMachine(t *testing.T) {
 
 	err := topology(newForgeService(router, forgeTestProjects(cloudPath)))
 
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-	msg := svcerr.ToConnect(err).Message()
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.Contains(t, msg, cloudPath)
 	assert.Contains(t, msg, "is missing on")
 	detail := checkoutDetail(t, err)
@@ -196,7 +197,7 @@ func TestForgeService_ACheckoutGoneFromItsMachineNamesTheMachine(t *testing.T) {
 func TestForgeService_DeployStatusIsAskedOfTheCheckoutsMachine(t *testing.T) {
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, true, true, 0, "")}
 	_, err := newForgeTestService(router).GetDeployStatus(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{ProjectId: "proj-1", Handle: "h-1"}))
+		&reliantv1.GetForgeDeployStatusRequest{ProjectId: "proj-1", Handle: "h-1"})
 	require.NoError(t, err)
 	assert.Equal(t, forgeTestDaemon, router.lastDaemonID)
 }
@@ -211,7 +212,7 @@ func TestForgeService_InstallLookupFailureIsInternal(t *testing.T) {
 
 	err := topology(newForgeService(router, repo))
 
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 	assert.Zero(t, router.sends)
 }
 

@@ -20,7 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -46,6 +47,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/netports"
 	"github.com/reliant-labs/reliant/internal/procguard"
 	"github.com/reliant-labs/reliant/internal/proctree"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
@@ -754,7 +756,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		cwd:               cwd,
 		serverURL:         bootCfg.ServerURL,
 		bootCfg:           bootCfg,
-		gatewayClient:     reliantv1connect.NewToolsDaemonServiceClient(httpClient, gatewayURL, connect.WithGRPC()),
+		gatewayClient:     reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(httpClient, gatewayURL, []connecthttp.Option{connecthttp.WithGRPC()})),
 		gatewayURL:        gatewayURL,
 		mcpManager:        mcpManager,
 		localExecutor:     localExec,
@@ -1254,7 +1256,10 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 
 	logging.InfoContext(ctx, logPrefix+" Connecting to gateway", "url", baseURL)
 
-	stream := d.gatewayClient.ConnectDaemon(ctx)
+	stream, err := d.gatewayClient.ConnectDaemon(ctx)
+	if err != nil {
+		return err
+	}
 
 	// Cancelling ctx does NOT unblock the stream.Receive() below, so shutdown
 	// has to close the read side by hand.
@@ -1281,10 +1286,10 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	go func() {
 		select {
 		case <-ctx.Done():
-			// Non-blocking, and safe against the send half: CloseResponse
-			// touches only the response body, never the marshaler or request
-			// pipe that runSender is writing into.
-			_ = stream.CloseResponse()
+			// Non-blocking: Close unblocks the parked Receive and tears the
+			// stream down; runSender's next Send then fails, and the session
+			// is ending anyway.
+			_ = stream.Close()
 		case <-sessionOver:
 		}
 	}()
@@ -1335,7 +1340,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	s := newGatewaySession()
 	// Retiring a drained session is the same close the cancellation path
 	// uses: it unparks Receive without touching the send half.
-	s.retire = func() { _ = stream.CloseResponse() }
+	s.retire = func() { _ = stream.Close() }
 	go s.runSender(stream)
 
 	if err := d.sendProjectDiscovery(s); err != nil {
@@ -1361,7 +1366,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 					logging.WarnContext(ctx, logPrefix+" Gateway stream is dead; ending the session to reconnect", "reason", err.Error())
 					// Same close the cancellation path uses: it unparks the
 					// Receive below without touching the send half.
-					_ = stream.CloseResponse()
+					_ = stream.Close()
 					return
 				}
 			}
@@ -1380,7 +1385,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 		s.drain(senderDrainTimeout)
 		d.sessionEnded(s)
 	}
-	err := d.receiveSession(ctx, s, stream, liveness, &deadStream)
+	err = d.receiveSession(ctx, s, stream, liveness, &deadStream)
 	if !errors.Is(err, errGatewayMoving) {
 		end()
 		return err
@@ -1415,7 +1420,7 @@ func (d *daemonClient) receiveSession(
 		msg, err := stream.Receive()
 		if err != nil {
 			// A cancelled daemon closed its own read side to get here (see the
-			// CloseResponse goroutine above), so Receive reports a closed body
+			// stream.Close goroutine above), so Receive reports a closed stream
 			// rather than a cancellation. Report what actually happened:
 			// otherwise every ordinary shutdown logs "Session ended;
 			// reconnecting" with a torn-stream error and records the stream

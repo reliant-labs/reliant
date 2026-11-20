@@ -11,13 +11,13 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cliauth"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 func newAuthTokenCmd() *cobra.Command {
@@ -43,7 +43,7 @@ Listing and revoking use the resolved credential (RELIANT_TOKEN or your login).`
 // tokenServiceClient builds a Connect TokenService client on the resolved
 // server, authenticated with the given rlat_ bearer.
 func tokenServiceClient(conn *connection, bearer string) reliantv1connect.TokenServiceClient {
-	return reliantv1connect.NewTokenServiceClient(conn.httpClientWithBearer(bearer), conn.ServerURL)
+	return reliantv1connect.NewTokenServiceClient(rpcclient.New(conn.httpClientWithBearer(bearer), conn.ServerURL, nil))
 }
 
 // mintableTokenScopes are the scopes an API token can carry, narrowest first:
@@ -263,11 +263,11 @@ func newAuthTokenListCmd() *cobra.Command {
 			}
 
 			client := tokenServiceClient(conn, conn.Token)
-			resp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API.Enum()}))
+			resp, err := client.ListTokens(cmd.Context(), &reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API.Enum()})
 			if err != nil {
 				return conn.annotate(err)
 			}
-			toks := resp.Msg.GetTokens()
+			toks := resp.GetTokens()
 
 			if jsonOutput {
 				enc := json.NewEncoder(cmd.OutOrStdout())
@@ -323,13 +323,13 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 			}
 			client := tokenServiceClient(conn, conn.Token)
 
-			listResp, err := client.ListTokens(cmd.Context(), connect.NewRequest(&reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API.Enum()}))
+			listResp, err := client.ListTokens(cmd.Context(), &reliantv1.ListTokensRequest{Kind: reliantv1.TokenKind_TOKEN_KIND_API.Enum()})
 			if err != nil {
 				return conn.annotate(err)
 			}
 
 			var matches []*reliantv1.TokenInfo
-			for _, t := range listResp.Msg.GetTokens() {
+			for _, t := range listResp.GetTokens() {
 				if t.GetId() == target || t.GetName() == target {
 					matches = append(matches, t)
 				}
@@ -343,7 +343,7 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 			}
 
 			tok := matches[0]
-			if _, err := client.RevokeToken(cmd.Context(), connect.NewRequest(&reliantv1.RevokeTokenRequest{Id: tok.GetId()})); err != nil {
+			if _, err := client.RevokeToken(cmd.Context(), &reliantv1.RevokeTokenRequest{Id: tok.GetId()}); err != nil {
 				return conn.annotate(err)
 			}
 

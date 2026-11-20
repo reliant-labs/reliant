@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -45,19 +45,19 @@ var botPermissionNames = map[string]bool{"issues": true, "pull_requests": true, 
 // control-plane refuses the mint unless that user can push to the repository.
 // The token is passed through: never stored, cached or logged here.
 func (s *Service) GetGitHubBotToken(
-	ctx context.Context, req *connect.Request[reliantv1.GetGitHubBotTokenRequest],
-) (*connect.Response[reliantv1.GetGitHubBotTokenResponse], error) {
-	subject, err := s.daemonCredential(ctx, req.Header())
+	ctx context.Context, req *reliantv1.GetGitHubBotTokenRequest,
+) (*reliantv1.GetGitHubBotTokenResponse, error) {
+	subject, err := s.daemonCredential(ctx, serverkit.CallInfoV2(ctx).RequestHeader())
 	if err != nil {
 		return nil, err
 	}
 	userID := subject.ActingUserID
-	owner, repo := strings.TrimSpace(req.Msg.GetOwner()), strings.TrimSpace(req.Msg.GetRepo())
+	owner, repo := strings.TrimSpace(req.GetOwner()), strings.TrimSpace(req.GetRepo())
 	if !githubName.MatchString(owner) || !githubName.MatchString(repo) || repo == "." || repo == ".." {
 		return nil, svcerr.InvalidArgument("owner and repo must name one GitHub repository, e.g. owner=acme repo=api")
 	}
 	perms := map[string]string{}
-	for name, level := range req.Msg.GetPermissions() {
+	for name, level := range req.GetPermissions() {
 		name, level = strings.ToLower(strings.TrimSpace(name)), strings.ToLower(strings.TrimSpace(level))
 		if !botPermissionNames[name] {
 			return nil, svcerr.InvalidArgument("permission " + name + " is not available to the bot (allowed: issues, pull_requests, contents, actions)")
@@ -95,7 +95,7 @@ func (s *Service) GetGitHubBotToken(
 		resp.ExpiresAt = tok.ExpiresAt.UTC().Format(time.RFC3339)
 	}
 	slog.InfoContext(ctx, "github bot token issued", "user_id", userID, "repository", repository, "outcome", "ok")
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // botMintError maps a refused mint onto the wire. Each refusal a person acts on

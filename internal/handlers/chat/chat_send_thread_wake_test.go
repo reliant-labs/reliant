@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -233,7 +233,7 @@ func TestSendMessage_WakeFailureStillSavesMessage(t *testing.T) {
 
 	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "keep this"))
 	require.NoError(t, err, "a doorbell that cannot be rung must not fail the send")
-	require.NotEmpty(t, resp.Msg.MessageId)
+	require.NotEmpty(t, resp.MessageId)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
@@ -248,5 +248,5 @@ type failingWakeTemporalClient struct {
 func (c *failingWakeTemporalClient) SignalWorkflow(
 	_ context.Context, _, _ string, _ string, _ interface{},
 ) error {
-	return connect.NewError(connect.CodeUnavailable, assertNotFound{})
+	return connect.NewError(connect.CodeUnavailable, assertNotFound{}.Error()).WithCause(assertNotFound{})
 }

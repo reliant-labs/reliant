@@ -7,388 +7,442 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// MCPServiceName is the fully-qualified name of the MCPService service.
 	MCPServiceName = "reliant.v1.MCPService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// MCPServiceListServersProcedure is the fully-qualified name of the MCPService's ListServers RPC.
+	// MCPServiceListServersProcedure is the procedure name of the MCPService's ListServers RPC.
 	MCPServiceListServersProcedure = "/reliant.v1.MCPService/ListServers"
-	// MCPServiceGetServerProcedure is the fully-qualified name of the MCPService's GetServer RPC.
+	// MCPServiceGetServerProcedure is the procedure name of the MCPService's GetServer RPC.
 	MCPServiceGetServerProcedure = "/reliant.v1.MCPService/GetServer"
-	// MCPServiceGetServerToolsProcedure is the fully-qualified name of the MCPService's GetServerTools
-	// RPC.
+	// MCPServiceGetServerToolsProcedure is the procedure name of the MCPService's GetServerTools RPC.
 	MCPServiceGetServerToolsProcedure = "/reliant.v1.MCPService/GetServerTools"
-	// MCPServiceInstallServerProcedure is the fully-qualified name of the MCPService's InstallServer
-	// RPC.
+	// MCPServiceInstallServerProcedure is the procedure name of the MCPService's InstallServer RPC.
 	MCPServiceInstallServerProcedure = "/reliant.v1.MCPService/InstallServer"
-	// MCPServiceUninstallServerProcedure is the fully-qualified name of the MCPService's
-	// UninstallServer RPC.
+	// MCPServiceUninstallServerProcedure is the procedure name of the MCPService's UninstallServer RPC.
 	MCPServiceUninstallServerProcedure = "/reliant.v1.MCPService/UninstallServer"
-	// MCPServiceRestartServerProcedure is the fully-qualified name of the MCPService's RestartServer
-	// RPC.
+	// MCPServiceRestartServerProcedure is the procedure name of the MCPService's RestartServer RPC.
 	MCPServiceRestartServerProcedure = "/reliant.v1.MCPService/RestartServer"
-	// MCPServiceListRecommendedProcedure is the fully-qualified name of the MCPService's
-	// ListRecommended RPC.
+	// MCPServiceListRecommendedProcedure is the procedure name of the MCPService's ListRecommended RPC.
 	MCPServiceListRecommendedProcedure = "/reliant.v1.MCPService/ListRecommended"
-	// MCPServiceUpdateServerConfigProcedure is the fully-qualified name of the MCPService's
+	// MCPServiceUpdateServerConfigProcedure is the procedure name of the MCPService's
 	// UpdateServerConfig RPC.
 	MCPServiceUpdateServerConfigProcedure = "/reliant.v1.MCPService/UpdateServerConfig"
-	// MCPServiceSetServerEnabledProcedure is the fully-qualified name of the MCPService's
-	// SetServerEnabled RPC.
+	// MCPServiceSetServerEnabledProcedure is the procedure name of the MCPService's SetServerEnabled
+	// RPC.
 	MCPServiceSetServerEnabledProcedure = "/reliant.v1.MCPService/SetServerEnabled"
-	// MCPServiceMoveServerScopeProcedure is the fully-qualified name of the MCPService's
-	// MoveServerScope RPC.
+	// MCPServiceMoveServerScopeProcedure is the procedure name of the MCPService's MoveServerScope RPC.
 	MCPServiceMoveServerScopeProcedure = "/reliant.v1.MCPService/MoveServerScope"
+)
+
+var (
+	mCPServiceListServersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("ListServers"),
+			Procedure:  MCPServiceListServersProcedure,
+		}
+	})
+	mCPServiceGetServerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("GetServer"),
+			Procedure:  MCPServiceGetServerProcedure,
+		}
+	})
+	mCPServiceGetServerToolsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("GetServerTools"),
+			Procedure:  MCPServiceGetServerToolsProcedure,
+		}
+	})
+	mCPServiceInstallServerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("InstallServer"),
+			Procedure:  MCPServiceInstallServerProcedure,
+		}
+	})
+	mCPServiceUninstallServerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("UninstallServer"),
+			Procedure:  MCPServiceUninstallServerProcedure,
+		}
+	})
+	mCPServiceRestartServerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("RestartServer"),
+			Procedure:  MCPServiceRestartServerProcedure,
+		}
+	})
+	mCPServiceListRecommendedSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("ListRecommended"),
+			Procedure:  MCPServiceListRecommendedProcedure,
+		}
+	})
+	mCPServiceUpdateServerConfigSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("UpdateServerConfig"),
+			Procedure:  MCPServiceUpdateServerConfigProcedure,
+		}
+	})
+	mCPServiceSetServerEnabledSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("SetServerEnabled"),
+			Procedure:  MCPServiceSetServerEnabledProcedure,
+		}
+	})
+	mCPServiceMoveServerScopeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods().ByName("MoveServerScope"),
+			Procedure:  MCPServiceMoveServerScopeProcedure,
+		}
+	})
 )
 
 // MCPServiceClient is a client for the reliant.v1.MCPService service.
 type MCPServiceClient interface {
 	// ListServers returns all configured MCP servers with their status
 	// forge:custom — merges the project's three config scopes with the daemon's live server status
-	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
+	ListServers(context.Context, *v1.ListServersRequest) (*v1.ListServersResponse, error)
 	// GetServer returns detailed information about a specific MCP server
 	// forge:custom — resolves one server across the project's config scopes and the daemon's live status
-	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
+	GetServer(context.Context, *v1.GetServerRequest) (*v1.GetServerResponse, error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
-	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
+	GetServerTools(context.Context, *v1.GetServerToolsRequest) (*v1.GetServerToolsResponse, error)
 	// InstallServer installs a new MCP server
-	InstallServer(context.Context, *connect.Request[v1.InstallServerRequest]) (*connect.Response[v1.InstallServerResponse], error)
+	InstallServer(context.Context, *v1.InstallServerRequest) (*v1.InstallServerResponse, error)
 	// UninstallServer removes an MCP server
-	UninstallServer(context.Context, *connect.Request[v1.UninstallServerRequest]) (*connect.Response[v1.UninstallServerResponse], error)
+	UninstallServer(context.Context, *v1.UninstallServerRequest) (*v1.UninstallServerResponse, error)
 	// RestartServer restarts an MCP server
-	RestartServer(context.Context, *connect.Request[v1.RestartServerRequest]) (*connect.Response[v1.RestartServerResponse], error)
+	RestartServer(context.Context, *v1.RestartServerRequest) (*v1.RestartServerResponse, error)
 	// ListRecommended returns a list of recommended MCP servers
-	ListRecommended(context.Context, *connect.Request[v1.ListRecommendedRequest]) (*connect.Response[v1.ListRecommendedResponse], error)
+	ListRecommended(context.Context, *v1.ListRecommendedRequest) (*v1.ListRecommendedResponse, error)
 	// UpdateServerConfig updates the configuration of an MCP server
-	UpdateServerConfig(context.Context, *connect.Request[v1.UpdateServerConfigRequest]) (*connect.Response[v1.UpdateServerConfigResponse], error)
+	UpdateServerConfig(context.Context, *v1.UpdateServerConfigRequest) (*v1.UpdateServerConfigResponse, error)
 	// SetServerEnabled toggles whether a server is enabled without uninstalling
-	SetServerEnabled(context.Context, *connect.Request[v1.SetServerEnabledRequest]) (*connect.Response[v1.SetServerEnabledResponse], error)
+	SetServerEnabled(context.Context, *v1.SetServerEnabledRequest) (*v1.SetServerEnabledResponse, error)
 	// MoveServerScope changes where a server config is stored (global/project/project-local)
-	MoveServerScope(context.Context, *connect.Request[v1.MoveServerScopeRequest]) (*connect.Response[v1.MoveServerScopeResponse], error)
+	MoveServerScope(context.Context, *v1.MoveServerScopeRequest) (*v1.MoveServerScopeResponse, error)
 }
 
-// NewMCPServiceClient constructs a client for the reliant.v1.MCPService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewMCPServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) MCPServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	mCPServiceMethods := v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods()
-	return &mCPServiceClient{
-		listServers: connect.NewClient[v1.ListServersRequest, v1.ListServersResponse](
-			httpClient,
-			baseURL+MCPServiceListServersProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("ListServers")),
-			connect.WithClientOptions(opts...),
-		),
-		getServer: connect.NewClient[v1.GetServerRequest, v1.GetServerResponse](
-			httpClient,
-			baseURL+MCPServiceGetServerProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("GetServer")),
-			connect.WithClientOptions(opts...),
-		),
-		getServerTools: connect.NewClient[v1.GetServerToolsRequest, v1.GetServerToolsResponse](
-			httpClient,
-			baseURL+MCPServiceGetServerToolsProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("GetServerTools")),
-			connect.WithClientOptions(opts...),
-		),
-		installServer: connect.NewClient[v1.InstallServerRequest, v1.InstallServerResponse](
-			httpClient,
-			baseURL+MCPServiceInstallServerProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("InstallServer")),
-			connect.WithClientOptions(opts...),
-		),
-		uninstallServer: connect.NewClient[v1.UninstallServerRequest, v1.UninstallServerResponse](
-			httpClient,
-			baseURL+MCPServiceUninstallServerProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("UninstallServer")),
-			connect.WithClientOptions(opts...),
-		),
-		restartServer: connect.NewClient[v1.RestartServerRequest, v1.RestartServerResponse](
-			httpClient,
-			baseURL+MCPServiceRestartServerProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("RestartServer")),
-			connect.WithClientOptions(opts...),
-		),
-		listRecommended: connect.NewClient[v1.ListRecommendedRequest, v1.ListRecommendedResponse](
-			httpClient,
-			baseURL+MCPServiceListRecommendedProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("ListRecommended")),
-			connect.WithClientOptions(opts...),
-		),
-		updateServerConfig: connect.NewClient[v1.UpdateServerConfigRequest, v1.UpdateServerConfigResponse](
-			httpClient,
-			baseURL+MCPServiceUpdateServerConfigProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("UpdateServerConfig")),
-			connect.WithClientOptions(opts...),
-		),
-		setServerEnabled: connect.NewClient[v1.SetServerEnabledRequest, v1.SetServerEnabledResponse](
-			httpClient,
-			baseURL+MCPServiceSetServerEnabledProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("SetServerEnabled")),
-			connect.WithClientOptions(opts...),
-		),
-		moveServerScope: connect.NewClient[v1.MoveServerScopeRequest, v1.MoveServerScopeResponse](
-			httpClient,
-			baseURL+MCPServiceMoveServerScopeProcedure,
-			connect.WithSchema(mCPServiceMethods.ByName("MoveServerScope")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// mCPServiceClient implements MCPServiceClient.
-type mCPServiceClient struct {
-	listServers        *connect.Client[v1.ListServersRequest, v1.ListServersResponse]
-	getServer          *connect.Client[v1.GetServerRequest, v1.GetServerResponse]
-	getServerTools     *connect.Client[v1.GetServerToolsRequest, v1.GetServerToolsResponse]
-	installServer      *connect.Client[v1.InstallServerRequest, v1.InstallServerResponse]
-	uninstallServer    *connect.Client[v1.UninstallServerRequest, v1.UninstallServerResponse]
-	restartServer      *connect.Client[v1.RestartServerRequest, v1.RestartServerResponse]
-	listRecommended    *connect.Client[v1.ListRecommendedRequest, v1.ListRecommendedResponse]
-	updateServerConfig *connect.Client[v1.UpdateServerConfigRequest, v1.UpdateServerConfigResponse]
-	setServerEnabled   *connect.Client[v1.SetServerEnabledRequest, v1.SetServerEnabledResponse]
-	moveServerScope    *connect.Client[v1.MoveServerScopeRequest, v1.MoveServerScopeResponse]
-}
-
-// ListServers calls reliant.v1.MCPService.ListServers.
-func (c *mCPServiceClient) ListServers(ctx context.Context, req *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error) {
-	return c.listServers.CallUnary(ctx, req)
-}
-
-// GetServer calls reliant.v1.MCPService.GetServer.
-func (c *mCPServiceClient) GetServer(ctx context.Context, req *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error) {
-	return c.getServer.CallUnary(ctx, req)
-}
-
-// GetServerTools calls reliant.v1.MCPService.GetServerTools.
-func (c *mCPServiceClient) GetServerTools(ctx context.Context, req *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error) {
-	return c.getServerTools.CallUnary(ctx, req)
-}
-
-// InstallServer calls reliant.v1.MCPService.InstallServer.
-func (c *mCPServiceClient) InstallServer(ctx context.Context, req *connect.Request[v1.InstallServerRequest]) (*connect.Response[v1.InstallServerResponse], error) {
-	return c.installServer.CallUnary(ctx, req)
-}
-
-// UninstallServer calls reliant.v1.MCPService.UninstallServer.
-func (c *mCPServiceClient) UninstallServer(ctx context.Context, req *connect.Request[v1.UninstallServerRequest]) (*connect.Response[v1.UninstallServerResponse], error) {
-	return c.uninstallServer.CallUnary(ctx, req)
-}
-
-// RestartServer calls reliant.v1.MCPService.RestartServer.
-func (c *mCPServiceClient) RestartServer(ctx context.Context, req *connect.Request[v1.RestartServerRequest]) (*connect.Response[v1.RestartServerResponse], error) {
-	return c.restartServer.CallUnary(ctx, req)
-}
-
-// ListRecommended calls reliant.v1.MCPService.ListRecommended.
-func (c *mCPServiceClient) ListRecommended(ctx context.Context, req *connect.Request[v1.ListRecommendedRequest]) (*connect.Response[v1.ListRecommendedResponse], error) {
-	return c.listRecommended.CallUnary(ctx, req)
-}
-
-// UpdateServerConfig calls reliant.v1.MCPService.UpdateServerConfig.
-func (c *mCPServiceClient) UpdateServerConfig(ctx context.Context, req *connect.Request[v1.UpdateServerConfigRequest]) (*connect.Response[v1.UpdateServerConfigResponse], error) {
-	return c.updateServerConfig.CallUnary(ctx, req)
-}
-
-// SetServerEnabled calls reliant.v1.MCPService.SetServerEnabled.
-func (c *mCPServiceClient) SetServerEnabled(ctx context.Context, req *connect.Request[v1.SetServerEnabledRequest]) (*connect.Response[v1.SetServerEnabledResponse], error) {
-	return c.setServerEnabled.CallUnary(ctx, req)
-}
-
-// MoveServerScope calls reliant.v1.MCPService.MoveServerScope.
-func (c *mCPServiceClient) MoveServerScope(ctx context.Context, req *connect.Request[v1.MoveServerScopeRequest]) (*connect.Response[v1.MoveServerScopeResponse], error) {
-	return c.moveServerScope.CallUnary(ctx, req)
+// NewMCPServiceClient constructs a client for the reliant.v1.MCPService service. Multiple service
+// clients may share a single connect.Client.
+func NewMCPServiceClient(client *connect.Client) MCPServiceClient {
+	return &mCPServiceClient{client: client}
 }
 
 // MCPServiceHandler is an implementation of the reliant.v1.MCPService service.
 type MCPServiceHandler interface {
 	// ListServers returns all configured MCP servers with their status
 	// forge:custom — merges the project's three config scopes with the daemon's live server status
-	ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error)
+	ListServers(context.Context, *v1.ListServersRequest) (*v1.ListServersResponse, error)
 	// GetServer returns detailed information about a specific MCP server
 	// forge:custom — resolves one server across the project's config scopes and the daemon's live status
-	GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error)
+	GetServer(context.Context, *v1.GetServerRequest) (*v1.GetServerResponse, error)
 	// GetServerTools returns the list of tools exposed by a specific MCP server
-	GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error)
+	GetServerTools(context.Context, *v1.GetServerToolsRequest) (*v1.GetServerToolsResponse, error)
 	// InstallServer installs a new MCP server
-	InstallServer(context.Context, *connect.Request[v1.InstallServerRequest]) (*connect.Response[v1.InstallServerResponse], error)
+	InstallServer(context.Context, *v1.InstallServerRequest) (*v1.InstallServerResponse, error)
 	// UninstallServer removes an MCP server
-	UninstallServer(context.Context, *connect.Request[v1.UninstallServerRequest]) (*connect.Response[v1.UninstallServerResponse], error)
+	UninstallServer(context.Context, *v1.UninstallServerRequest) (*v1.UninstallServerResponse, error)
 	// RestartServer restarts an MCP server
-	RestartServer(context.Context, *connect.Request[v1.RestartServerRequest]) (*connect.Response[v1.RestartServerResponse], error)
+	RestartServer(context.Context, *v1.RestartServerRequest) (*v1.RestartServerResponse, error)
 	// ListRecommended returns a list of recommended MCP servers
-	ListRecommended(context.Context, *connect.Request[v1.ListRecommendedRequest]) (*connect.Response[v1.ListRecommendedResponse], error)
+	ListRecommended(context.Context, *v1.ListRecommendedRequest) (*v1.ListRecommendedResponse, error)
 	// UpdateServerConfig updates the configuration of an MCP server
-	UpdateServerConfig(context.Context, *connect.Request[v1.UpdateServerConfigRequest]) (*connect.Response[v1.UpdateServerConfigResponse], error)
+	UpdateServerConfig(context.Context, *v1.UpdateServerConfigRequest) (*v1.UpdateServerConfigResponse, error)
 	// SetServerEnabled toggles whether a server is enabled without uninstalling
-	SetServerEnabled(context.Context, *connect.Request[v1.SetServerEnabledRequest]) (*connect.Response[v1.SetServerEnabledResponse], error)
+	SetServerEnabled(context.Context, *v1.SetServerEnabledRequest) (*v1.SetServerEnabledResponse, error)
 	// MoveServerScope changes where a server config is stored (global/project/project-local)
-	MoveServerScope(context.Context, *connect.Request[v1.MoveServerScopeRequest]) (*connect.Response[v1.MoveServerScopeResponse], error)
+	MoveServerScope(context.Context, *v1.MoveServerScopeRequest) (*v1.MoveServerScopeResponse, error)
 }
 
-// NewMCPServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewMCPServiceHandler(svc MCPServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	mCPServiceMethods := v1.File_reliant_v1_mcp_proto.Services().ByName("MCPService").Methods()
-	mCPServiceListServersHandler := connect.NewUnaryHandler(
-		MCPServiceListServersProcedure,
-		svc.ListServers,
-		connect.WithSchema(mCPServiceMethods.ByName("ListServers")),
-		connect.WithHandlerOptions(opts...),
+// RegisterMCPServiceHandler registers svc as the reliant.v1.MCPService implementation on server.
+func RegisterMCPServiceHandler(server *connect.Server, svc MCPServiceHandler) {
+	adapter := mCPServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: mCPServiceListServersSpec(), Handler: adapter.listServers},
+		connect.Method{Spec: mCPServiceGetServerSpec(), Handler: adapter.getServer},
+		connect.Method{Spec: mCPServiceGetServerToolsSpec(), Handler: adapter.getServerTools},
+		connect.Method{Spec: mCPServiceInstallServerSpec(), Handler: adapter.installServer},
+		connect.Method{Spec: mCPServiceUninstallServerSpec(), Handler: adapter.uninstallServer},
+		connect.Method{Spec: mCPServiceRestartServerSpec(), Handler: adapter.restartServer},
+		connect.Method{Spec: mCPServiceListRecommendedSpec(), Handler: adapter.listRecommended},
+		connect.Method{Spec: mCPServiceUpdateServerConfigSpec(), Handler: adapter.updateServerConfig},
+		connect.Method{Spec: mCPServiceSetServerEnabledSpec(), Handler: adapter.setServerEnabled},
+		connect.Method{Spec: mCPServiceMoveServerScopeSpec(), Handler: adapter.moveServerScope},
 	)
-	mCPServiceGetServerHandler := connect.NewUnaryHandler(
-		MCPServiceGetServerProcedure,
-		svc.GetServer,
-		connect.WithSchema(mCPServiceMethods.ByName("GetServer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPServiceGetServerToolsHandler := connect.NewUnaryHandler(
-		MCPServiceGetServerToolsProcedure,
-		svc.GetServerTools,
-		connect.WithSchema(mCPServiceMethods.ByName("GetServerTools")),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPServiceInstallServerHandler := connect.NewUnaryHandler(
-		MCPServiceInstallServerProcedure,
-		svc.InstallServer,
-		connect.WithSchema(mCPServiceMethods.ByName("InstallServer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPServiceUninstallServerHandler := connect.NewUnaryHandler(
-		MCPServiceUninstallServerProcedure,
-		svc.UninstallServer,
-		connect.WithSchema(mCPServiceMethods.ByName("UninstallServer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPServiceRestartServerHandler := connect.NewUnaryHandler(
-		MCPServiceRestartServerProcedure,
-		svc.RestartServer,
-		connect.WithSchema(mCPServiceMethods.ByName("RestartServer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPServiceListRecommendedHandler := connect.NewUnaryHandler(
-		MCPServiceListRecommendedProcedure,
-		svc.ListRecommended,
-		connect.WithSchema(mCPServiceMethods.ByName("ListRecommended")),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPServiceUpdateServerConfigHandler := connect.NewUnaryHandler(
-		MCPServiceUpdateServerConfigProcedure,
-		svc.UpdateServerConfig,
-		connect.WithSchema(mCPServiceMethods.ByName("UpdateServerConfig")),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPServiceSetServerEnabledHandler := connect.NewUnaryHandler(
-		MCPServiceSetServerEnabledProcedure,
-		svc.SetServerEnabled,
-		connect.WithSchema(mCPServiceMethods.ByName("SetServerEnabled")),
-		connect.WithHandlerOptions(opts...),
-	)
-	mCPServiceMoveServerScopeHandler := connect.NewUnaryHandler(
-		MCPServiceMoveServerScopeProcedure,
-		svc.MoveServerScope,
-		connect.WithSchema(mCPServiceMethods.ByName("MoveServerScope")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.MCPService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case MCPServiceListServersProcedure:
-			mCPServiceListServersHandler.ServeHTTP(w, r)
-		case MCPServiceGetServerProcedure:
-			mCPServiceGetServerHandler.ServeHTTP(w, r)
-		case MCPServiceGetServerToolsProcedure:
-			mCPServiceGetServerToolsHandler.ServeHTTP(w, r)
-		case MCPServiceInstallServerProcedure:
-			mCPServiceInstallServerHandler.ServeHTTP(w, r)
-		case MCPServiceUninstallServerProcedure:
-			mCPServiceUninstallServerHandler.ServeHTTP(w, r)
-		case MCPServiceRestartServerProcedure:
-			mCPServiceRestartServerHandler.ServeHTTP(w, r)
-		case MCPServiceListRecommendedProcedure:
-			mCPServiceListRecommendedHandler.ServeHTTP(w, r)
-		case MCPServiceUpdateServerConfigProcedure:
-			mCPServiceUpdateServerConfigHandler.ServeHTTP(w, r)
-		case MCPServiceSetServerEnabledProcedure:
-			mCPServiceSetServerEnabledHandler.ServeHTTP(w, r)
-		case MCPServiceMoveServerScopeProcedure:
-			mCPServiceMoveServerScopeHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedMCPServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedMCPServiceHandler struct{}
 
-func (UnimplementedMCPServiceHandler) ListServers(context.Context, *connect.Request[v1.ListServersRequest]) (*connect.Response[v1.ListServersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.ListServers is not implemented"))
+func (UnimplementedMCPServiceHandler) ListServers(context.Context, *v1.ListServersRequest) (*v1.ListServersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.ListServers is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) GetServer(context.Context, *connect.Request[v1.GetServerRequest]) (*connect.Response[v1.GetServerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.GetServer is not implemented"))
+func (UnimplementedMCPServiceHandler) GetServer(context.Context, *v1.GetServerRequest) (*v1.GetServerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.GetServer is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) GetServerTools(context.Context, *connect.Request[v1.GetServerToolsRequest]) (*connect.Response[v1.GetServerToolsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.GetServerTools is not implemented"))
+func (UnimplementedMCPServiceHandler) GetServerTools(context.Context, *v1.GetServerToolsRequest) (*v1.GetServerToolsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.GetServerTools is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) InstallServer(context.Context, *connect.Request[v1.InstallServerRequest]) (*connect.Response[v1.InstallServerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.InstallServer is not implemented"))
+func (UnimplementedMCPServiceHandler) InstallServer(context.Context, *v1.InstallServerRequest) (*v1.InstallServerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.InstallServer is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) UninstallServer(context.Context, *connect.Request[v1.UninstallServerRequest]) (*connect.Response[v1.UninstallServerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.UninstallServer is not implemented"))
+func (UnimplementedMCPServiceHandler) UninstallServer(context.Context, *v1.UninstallServerRequest) (*v1.UninstallServerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.UninstallServer is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) RestartServer(context.Context, *connect.Request[v1.RestartServerRequest]) (*connect.Response[v1.RestartServerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.RestartServer is not implemented"))
+func (UnimplementedMCPServiceHandler) RestartServer(context.Context, *v1.RestartServerRequest) (*v1.RestartServerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.RestartServer is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) ListRecommended(context.Context, *connect.Request[v1.ListRecommendedRequest]) (*connect.Response[v1.ListRecommendedResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.ListRecommended is not implemented"))
+func (UnimplementedMCPServiceHandler) ListRecommended(context.Context, *v1.ListRecommendedRequest) (*v1.ListRecommendedResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.ListRecommended is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) UpdateServerConfig(context.Context, *connect.Request[v1.UpdateServerConfigRequest]) (*connect.Response[v1.UpdateServerConfigResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.UpdateServerConfig is not implemented"))
+func (UnimplementedMCPServiceHandler) UpdateServerConfig(context.Context, *v1.UpdateServerConfigRequest) (*v1.UpdateServerConfigResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.UpdateServerConfig is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) SetServerEnabled(context.Context, *connect.Request[v1.SetServerEnabledRequest]) (*connect.Response[v1.SetServerEnabledResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.SetServerEnabled is not implemented"))
+func (UnimplementedMCPServiceHandler) SetServerEnabled(context.Context, *v1.SetServerEnabledRequest) (*v1.SetServerEnabledResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.SetServerEnabled is not implemented")
 }
 
-func (UnimplementedMCPServiceHandler) MoveServerScope(context.Context, *connect.Request[v1.MoveServerScopeRequest]) (*connect.Response[v1.MoveServerScopeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.MCPService.MoveServerScope is not implemented"))
+func (UnimplementedMCPServiceHandler) MoveServerScope(context.Context, *v1.MoveServerScopeRequest) (*v1.MoveServerScopeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.MCPService.MoveServerScope is not implemented")
+}
+
+type mCPServiceClient struct {
+	client *connect.Client
+}
+
+func (c *mCPServiceClient) ListServers(ctx context.Context, req *v1.ListServersRequest) (*v1.ListServersResponse, error) {
+	var res v1.ListServersResponse
+	if err := c.client.CallUnary(ctx, mCPServiceListServersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) GetServer(ctx context.Context, req *v1.GetServerRequest) (*v1.GetServerResponse, error) {
+	var res v1.GetServerResponse
+	if err := c.client.CallUnary(ctx, mCPServiceGetServerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) GetServerTools(ctx context.Context, req *v1.GetServerToolsRequest) (*v1.GetServerToolsResponse, error) {
+	var res v1.GetServerToolsResponse
+	if err := c.client.CallUnary(ctx, mCPServiceGetServerToolsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) InstallServer(ctx context.Context, req *v1.InstallServerRequest) (*v1.InstallServerResponse, error) {
+	var res v1.InstallServerResponse
+	if err := c.client.CallUnary(ctx, mCPServiceInstallServerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) UninstallServer(ctx context.Context, req *v1.UninstallServerRequest) (*v1.UninstallServerResponse, error) {
+	var res v1.UninstallServerResponse
+	if err := c.client.CallUnary(ctx, mCPServiceUninstallServerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) RestartServer(ctx context.Context, req *v1.RestartServerRequest) (*v1.RestartServerResponse, error) {
+	var res v1.RestartServerResponse
+	if err := c.client.CallUnary(ctx, mCPServiceRestartServerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) ListRecommended(ctx context.Context, req *v1.ListRecommendedRequest) (*v1.ListRecommendedResponse, error) {
+	var res v1.ListRecommendedResponse
+	if err := c.client.CallUnary(ctx, mCPServiceListRecommendedSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) UpdateServerConfig(ctx context.Context, req *v1.UpdateServerConfigRequest) (*v1.UpdateServerConfigResponse, error) {
+	var res v1.UpdateServerConfigResponse
+	if err := c.client.CallUnary(ctx, mCPServiceUpdateServerConfigSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) SetServerEnabled(ctx context.Context, req *v1.SetServerEnabledRequest) (*v1.SetServerEnabledResponse, error) {
+	var res v1.SetServerEnabledResponse
+	if err := c.client.CallUnary(ctx, mCPServiceSetServerEnabledSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *mCPServiceClient) MoveServerScope(ctx context.Context, req *v1.MoveServerScopeRequest) (*v1.MoveServerScopeResponse, error) {
+	var res v1.MoveServerScopeResponse
+	if err := c.client.CallUnary(ctx, mCPServiceMoveServerScopeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type mCPServiceHandler struct{ svc MCPServiceHandler }
+
+func (h mCPServiceHandler) listServers(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListServersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListServers(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) getServer(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetServerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetServer(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) getServerTools(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetServerToolsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetServerTools(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) installServer(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InstallServerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InstallServer(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) uninstallServer(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UninstallServerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UninstallServer(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) restartServer(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestartServerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestartServer(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) listRecommended(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListRecommendedRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListRecommended(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) updateServerConfig(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateServerConfigRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateServerConfig(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) setServerEnabled(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetServerEnabledRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetServerEnabled(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h mCPServiceHandler) moveServerScope(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MoveServerScopeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MoveServerScope(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

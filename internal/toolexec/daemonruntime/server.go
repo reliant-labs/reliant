@@ -7,7 +7,10 @@ import (
 	"net"
 	"net/http"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -30,7 +33,7 @@ type daemonServer struct {
 // — the same message types as ConnectDaemon, just with the connection direction reversed.
 func (s *daemonServer) ConnectGateway(
 	ctx context.Context,
-	stream *connect.BidiStream[reliantv1.ServerMessage, reliantv1.DaemonMessage],
+	stream reliantv1connect.ToolsDaemonServiceConnectGatewayServerStream,
 ) error {
 	logging.InfoContext(ctx, serverLogPrefix+" Gateway connected")
 
@@ -117,10 +120,11 @@ func (d *daemonClient) runServerMode(ctx context.Context) error {
 	}
 
 	svc := &daemonServer{client: d}
-	path, handler := reliantv1connect.NewToolsDaemonServiceHandler(svc)
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, svc)
 
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 
 	addr := fmt.Sprintf(":%d", port)
 	listener, err := net.Listen("tcp", addr)

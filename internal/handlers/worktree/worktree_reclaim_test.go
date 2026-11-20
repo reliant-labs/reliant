@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -205,7 +205,7 @@ func TestUnarchive_RelocksAsActiveSoAStaleClaimCannotRemove(t *testing.T) {
 	r.Cwds = func(context.Context) ([]string, error) { return nil, nil }
 	require.Equal(t, worktreereclaim.OutcomeClaimed, r.Reconcile(e.ctx, claimReq).Results[0].Outcome)
 
-	_, err = e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
+	_, err = e.svc.UnarchiveWorktree(e.ctx, &reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
 	assert.Contains(t, e.router.calls, "worktree.reconcile", "unarchive asked the machine to re-lock")
 
@@ -238,11 +238,11 @@ func TestRecreate_AppliesTheSavedSnapshotAndKeepsRefsUntilThen(t *testing.T) {
 	require.Len(t, gone.CleanupMetadata.SnapshotRefs, 1)
 
 	// Plain unarchive cannot work: there is no directory.
-	_, err = e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
+	_, err = e.svc.UnarchiveWorktree(e.ctx, &reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 
-	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	_, err = e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
 	b, err := os.ReadFile(filepath.Join(path, "wip.txt"))
 	require.NoError(t, err)
@@ -262,9 +262,9 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	age(t, path)
-	_, err := e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
+	_, err := e.svc.DeleteWorktree(e.ctx, &reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	_, getErr := e.repo.GetWorktree(e.ctx, wt.ID)
 	assert.NoError(t, getErr, "the row must survive so the directory can still be found")
 	assert.True(t, exists(path))
@@ -278,9 +278,9 @@ func TestImportWorktree_RejectsAnArchivedRowsPath(t *testing.T) {
 	// Asked of the machine the directory is on (the one discovery ran on),
 	// which holds the project's checkout: unset, the import is placed on the
 	// default machine, which has none, and is refused for that instead.
-	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path, DaemonId: &e.daemon}))
+	_, err := e.svc.ImportWorktree(e.ctx, &reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path, DaemonId: &e.daemon})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an archived row's path is excluded from discovery, so it cannot be imported")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "an archived row's path is excluded from discovery, so it cannot be imported")
 }
 
 // NIT: storeCleanupMetadata merges instead of wiping held state.
@@ -345,7 +345,7 @@ func TestRecreate_RestoresEveryRepoOfAMultiRepoWorkspace(t *testing.T) {
 	require.False(t, exists(filepath.Join(ws, "api")))
 	require.False(t, exists(filepath.Join(ws, "web")))
 
-	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	_, err = e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
 	for name, file := range map[string]string{"api": "api-wip.txt", "web": "web-wip.txt"} {
 		assert.True(t, exists(filepath.Join(ws, name, ".git")), "%s was rebuilt", name)
@@ -368,7 +368,7 @@ func TestRecreate_AMissingBranchInOneRepoCreatesNothing(t *testing.T) {
 		DaemonID: &e.daemon, Status: 1, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, e.repo.CreateWorktree(e.ctx, wt))
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	_, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	_, err := e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.Error(t, err)
 	assert.False(t, exists(filepath.Join(ws, "api")), "nothing may be left behind")
 	assert.False(t, exists(filepath.Join(ws, "web")))
@@ -397,7 +397,7 @@ func TestRecreate_AFailedApplyKeepsTheSnapshotRefs(t *testing.T) {
 	// files, so use a ref that cannot resolve instead.
 	gitIn(t, e.project.Path, "update-ref", "-d", ref)
 
-	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	_, err = e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
 	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
 	require.NotNil(t, after.CleanupMetadata, "the refs are the only record of the work")
@@ -422,13 +422,13 @@ func TestRecreate_BranchMovedIsReportedAndKeepsTheRefs(t *testing.T) {
 	moved := gitIn(t, e.project.Path, "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", tree, "-p", tip, "-m", "moved on")
 	gitIn(t, e.project.Path, "update-ref", "refs/heads/"+wt.Branch, moved)
 
-	resp, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	resp, err := e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
-	assert.Contains(t, resp.Msg.SnapshotWarning, "branch moved")
-	require.Len(t, resp.Msg.SnapshotRefs, 1)
+	assert.Contains(t, resp.SnapshotWarning, "branch moved")
+	require.Len(t, resp.SnapshotRefs, 1)
 	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
 	require.NotNil(t, after.CleanupMetadata)
-	assert.Equal(t, resp.Msg.SnapshotRefs, after.CleanupMetadata.SnapshotRefs)
+	assert.Equal(t, resp.SnapshotRefs, after.CleanupMetadata.SnapshotRefs)
 	assert.NoFileExists(t, filepath.Join(path, "wip.txt"))
 }
 
@@ -439,7 +439,7 @@ func TestUnarchive_UnreachableMachineLeavesTheRowArchived(t *testing.T) {
 	wt, _ := e.worktree(t, "offlinerestore")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	e.svc = newWorktreeService(t, e.repo, &failingRouter{}, e.sweeper)
-	_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
+	_, err := e.svc.UnarchiveWorktree(e.ctx, &reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID})
 	require.Error(t, err)
 	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)
 	assert.NotNil(t, got.DeletedAt, "an unverified re-lock must not make the row active")
@@ -475,7 +475,7 @@ func TestUnarchive_OfAParkedRow(t *testing.T) {
 
 	t.Run("origin free: brought home and active", func(t *testing.T) {
 		e, wt, path, q := park(t)
-		_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
+		_, err := e.svc.UnarchiveWorktree(e.ctx, &reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID})
 		require.NoError(t, err)
 		after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
 		assert.Nil(t, after.DeletedAt)
@@ -486,7 +486,7 @@ func TestUnarchive_OfAParkedRow(t *testing.T) {
 	t.Run("origin taken: stays archived and names the parked path", func(t *testing.T) {
 		e, wt, path, q := park(t)
 		require.NoError(t, os.MkdirAll(path, 0o755))
-		_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
+		_, err := e.svc.UnarchiveWorktree(e.ctx, &reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), q)
 		after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
@@ -519,7 +519,7 @@ func TestRecreate_KeepsSavedCommitRefsListed(t *testing.T) {
 	require.NoError(t, e.repo.UpdateWorktreeCleanupMetadata(e.ctx, wt.ID, &db.CleanupMetadata{DirectoryDeleted: true, SnapshotRefs: []string{ref}}))
 	assert.Equal(t, sha, gitIn(t, e.project.Path, "rev-parse", ref))
 
-	_, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	_, err := e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
 	assert.Equal(t, sha, gitIn(t, path, "rev-parse", "HEAD"), "the branch held the commit and is checked out again")
 	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)
@@ -554,7 +554,7 @@ func TestRecreate_AppliedSnapshotKeepsSavedCommitRefs(t *testing.T) {
 	require.NotEmpty(t, orphan, "%v", gone.CleanupMetadata.SnapshotRefs)
 	require.Equal(t, lost, gitIn(t, e.project.Path, "rev-parse", orphan))
 
-	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	_, err = e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
 	require.True(t, exists(filepath.Join(path, "wip.txt")), "the snapshot was applied")
 	after, _ := e.repo.GetWorktree(e.ctx, wt.ID)

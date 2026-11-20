@@ -11,7 +11,10 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -48,31 +51,31 @@ func (f *fakeRunService) note(id string) {
 	f.gotRun = id
 }
 
-func (f *fakeRunService) CancelRun(_ context.Context, r *connect.Request[reliantv1.CancelRunRequest]) (*connect.Response[reliantv1.CancelRunResponse], error) {
-	f.note(r.Msg.GetRunId())
+func (f *fakeRunService) CancelRun(_ context.Context, r *reliantv1.CancelRunRequest) (*reliantv1.CancelRunResponse, error) {
+	f.note(r.GetRunId())
 	resp, err := f.cancel()
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
-func (f *fakeRunService) PauseRun(_ context.Context, r *connect.Request[reliantv1.PauseRunRequest]) (*connect.Response[reliantv1.PauseRunResponse], error) {
-	f.note(r.Msg.GetRunId())
+func (f *fakeRunService) PauseRun(_ context.Context, r *reliantv1.PauseRunRequest) (*reliantv1.PauseRunResponse, error) {
+	f.note(r.GetRunId())
 	resp, err := f.pause()
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
-func (f *fakeRunService) ResumeRun(_ context.Context, r *connect.Request[reliantv1.ResumeRunRequest]) (*connect.Response[reliantv1.ResumeRunResponse], error) {
-	f.note(r.Msg.GetRunId())
+func (f *fakeRunService) ResumeRun(_ context.Context, r *reliantv1.ResumeRunRequest) (*reliantv1.ResumeRunResponse, error) {
+	f.note(r.GetRunId())
 	resp, err := f.resume()
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 func newRunControlHarness(t *testing.T) (*superviseHarness, *fakeRunService) {
@@ -80,8 +83,9 @@ func newRunControlHarness(t *testing.T) (*superviseHarness, *fakeRunService) {
 	isolateCLI(t)
 	runs := &fakeRunService{}
 	mux := http.NewServeMux()
-	p, h := reliantv1connect.NewRunServiceHandler(runs)
-	mux.Handle(p, h)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterRunServiceHandler(rpcServer, runs)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	loginFor(t, srv.URL, fakeLoginToken)
@@ -129,7 +133,7 @@ func TestTerminateAndPauseDeclinedAreErrorsWithTheServersWords(t *testing.T) {
 func TestRunControlRPCFailuresKeepTheCLIsWording(t *testing.T) {
 	h, runs := newRunControlHarness(t)
 	runs.cancel = func() (*reliantv1.CancelRunResponse, error) {
-		return nil, connect.NewError(connect.CodeNotFound, assertNotFound{})
+		return nil, connect.NewError(connect.CodeNotFound, assertNotFound{}.Error())
 	}
 	_, _, err := h.run(t, "", "workflow", "terminate", "chat-1")
 	require.Error(t, err)
@@ -158,7 +162,7 @@ func TestResumeReportsASuccessAndAServerDeclineWithoutFailing(t *testing.T) {
 
 	// An rpc failure is still a failure.
 	runs.resume = func() (*reliantv1.ResumeRunResponse, error) {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, assertNotFound{})
+		return nil, connect.NewError(connect.CodeFailedPrecondition, assertNotFound{}.Error())
 	}
 	_, _, err = h.run(t, "", "workflow", "resume", "chat-1")
 	require.Error(t, err)
@@ -181,44 +185,44 @@ type fakeTriggerService struct {
 	ignoreOutcomes bool
 }
 
-func (f *fakeTriggerService) GetTrigger(_ context.Context, r *connect.Request[reliantv1.GetTriggerRequest]) (*connect.Response[reliantv1.GetTriggerResponse], error) {
+func (f *fakeTriggerService) GetTrigger(_ context.Context, r *reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error) {
 	for _, tr := range f.triggers {
-		if tr.GetId() == r.Msg.GetId() {
-			return connect.NewResponse(&reliantv1.GetTriggerResponse{Trigger: tr}), nil
+		if tr.GetId() == r.GetId() {
+			return &reliantv1.GetTriggerResponse{Trigger: tr}, nil
 		}
 	}
-	return nil, connect.NewError(connect.CodeNotFound, assertNotFound{})
+	return nil, connect.NewError(connect.CodeNotFound, assertNotFound{}.Error())
 }
 
-func (f *fakeTriggerService) ListTriggers(_ context.Context, _ *connect.Request[reliantv1.ListTriggersRequest]) (*connect.Response[reliantv1.ListTriggersResponse], error) {
-	return connect.NewResponse(&reliantv1.ListTriggersResponse{Triggers: f.triggers}), nil
+func (f *fakeTriggerService) ListTriggers(_ context.Context, _ *reliantv1.ListTriggersRequest) (*reliantv1.ListTriggersResponse, error) {
+	return &reliantv1.ListTriggersResponse{Triggers: f.triggers}, nil
 }
 
-func (f *fakeTriggerService) FireTrigger(_ context.Context, r *connect.Request[reliantv1.FireTriggerRequest]) (*connect.Response[reliantv1.FireTriggerResponse], error) {
+func (f *fakeTriggerService) FireTrigger(_ context.Context, r *reliantv1.FireTriggerRequest) (*reliantv1.FireTriggerResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.fired = r.Msg.GetId()
-	return connect.NewResponse(&reliantv1.FireTriggerResponse{FireWorkflowId: "fire-wf-1"}), nil
+	f.fired = r.GetId()
+	return &reliantv1.FireTriggerResponse{FireWorkflowId: "fire-wf-1"}, nil
 }
 
 // ListTriggerEvents pages like the server: at most `limit` events a page (50
 // when unset), and a next-page token while more remain. A client that follows
 // tokens reads them all; the command must read exactly one page.
-func (f *fakeTriggerService) ListTriggerEvents(_ context.Context, r *connect.Request[reliantv1.ListTriggerEventsRequest]) (*connect.Response[reliantv1.ListTriggerEventsResponse], error) {
+func (f *fakeTriggerService) ListTriggerEvents(_ context.Context, r *reliantv1.ListTriggerEventsRequest) (*reliantv1.ListTriggerEventsResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.gotLimit = r.Msg.GetLimit()
+	f.gotLimit = r.GetLimit()
 	f.gotPages++
-	f.gotOutcomes = r.Msg.GetOutcomes()
-	limit := int(r.Msg.GetLimit())
+	f.gotOutcomes = r.GetOutcomes()
+	limit := int(r.GetLimit())
 	if limit <= 0 {
 		limit = 50
 	}
 	events, next := f.events, ""
-	if len(r.Msg.GetOutcomes()) > 0 && !f.ignoreOutcomes {
+	if len(r.GetOutcomes()) > 0 && !f.ignoreOutcomes {
 		events = nil
 		for _, ev := range f.events {
-			for _, o := range r.Msg.GetOutcomes() {
+			for _, o := range r.GetOutcomes() {
 				if ev.GetOutcome() == o {
 					events = append(events, ev)
 				}
@@ -228,7 +232,7 @@ func (f *fakeTriggerService) ListTriggerEvents(_ context.Context, r *connect.Req
 	if len(events) > limit {
 		events, next = events[:limit], "more"
 	}
-	return connect.NewResponse(&reliantv1.ListTriggerEventsResponse{Events: events, NextPageToken: next}), nil
+	return &reliantv1.ListTriggerEventsResponse{Events: events, NextPageToken: next}, nil
 }
 
 func newTriggerHarness(t *testing.T) (*superviseHarness, *fakeTriggerService) {
@@ -243,8 +247,9 @@ func newTriggerHarness(t *testing.T) (*superviseHarness, *fakeTriggerService) {
 		trig.events = append(trig.events, &reliantv1.TriggerEvent{Id: "ev", ChatId: &chat})
 	}
 	mux := http.NewServeMux()
-	p, h := reliantv1connect.NewTriggerServiceHandler(trig)
-	mux.Handle(p, h)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterTriggerServiceHandler(rpcServer, trig)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	loginFor(t, srv.URL, fakeLoginToken)

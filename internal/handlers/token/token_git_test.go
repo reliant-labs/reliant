@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
@@ -48,12 +49,8 @@ func (a actsAsNoOne) Introspect(ctx context.Context, tok string) (*fat.Principal
 	return &cp, nil
 }
 
-func gitReq(bearer string, provider string) *connect.Request[reliantv1.GetGitTokenRequest] {
-	r := connect.NewRequest(&reliantv1.GetGitTokenRequest{Provider: provider})
-	if bearer != "" {
-		r.Header().Set("Authorization", "Bearer "+bearer)
-	}
-	return r
+func gitReq(provider string) *reliantv1.GetGitTokenRequest {
+	return &reliantv1.GetGitTokenRequest{Provider: provider}
 }
 
 func gitSvc(t *testing.T, src *fakeGitTokens) (*Service, *tokenauthority.Memory) {
@@ -69,11 +66,11 @@ func wantCode(t *testing.T, err error, code connect.Code, reason string) {
 	t.Helper()
 	// What the svcerr interceptor puts on the wire: the code and the reason
 	// header, whether the handler returned a svcerr kind or a *connect.Error.
-	ce := svcerr.ToConnect(err)
+	ce := svcerr.ToConnectV2(err)
 	if ce == nil || ce.Code() != code {
 		t.Fatalf("err = %v, want code %v", err, code)
 	}
-	if got := ce.Meta().Get(svcerr.ReasonHeader); got != reason {
+	if got := svcerr.MetaOf(err).Get(svcerr.ReasonHeader); got != reason {
 		t.Errorf("reason = %q, want %q", got, reason)
 	}
 }
@@ -84,12 +81,12 @@ func TestGetGitToken_DaemonOK(t *testing.T) {
 	svc, authority := gitSvc(t, src)
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
 
-	resp, err := svc.GetGitToken(context.Background(), gitReq(bearer, ""))
+	resp, err := tdd.CallV2(context.Background(), svc.GetGitToken, gitReq(""), bearerInfo(bearer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Msg.GetAccessToken() != secretGitToken || resp.Msg.GetExpiresAt() != "2030-01-02T03:04:05Z" {
-		t.Errorf("response = %+v", resp.Msg)
+	if resp.GetAccessToken() != secretGitToken || resp.GetExpiresAt() != "2030-01-02T03:04:05Z" {
+		t.Errorf("response = %+v", resp)
 	}
 	if src.gotUser != "user-1" || src.gotProvr != "github" {
 		t.Errorf("asked (%q, %q), want (user-1, github)", src.gotUser, src.gotProvr)
@@ -99,8 +96,8 @@ func TestGetGitToken_DaemonOK(t *testing.T) {
 func TestGetGitToken_NonExpiringHasEmptyExpiry(t *testing.T) {
 	svc, authority := gitSvc(t, &fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, nil)})
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
-	resp, err := svc.GetGitToken(context.Background(), gitReq(bearer, "GitHub"))
-	if err != nil || resp.Msg.GetExpiresAt() != "" {
+	resp, err := tdd.CallV2(context.Background(), svc.GetGitToken, gitReq("GitHub"), bearerInfo(bearer))
+	if err != nil || resp.GetExpiresAt() != "" {
 		t.Fatalf("resp=%+v err=%v", resp, err)
 	}
 }
@@ -108,15 +105,15 @@ func TestGetGitToken_NonExpiringHasEmptyExpiry(t *testing.T) {
 func TestGetGitToken_RejectsNonDaemonCredentials(t *testing.T) {
 	svc, authority := gitSvc(t, &fakeGitTokens{tok: gitcredentialclient.NewToken(secretGitToken, nil)})
 	api := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeReliantAPI}})
-	_, err := svc.GetGitToken(context.Background(), gitReq(api, ""))
+	_, err := tdd.CallV2(context.Background(), svc.GetGitToken, gitReq(""), bearerInfo(api))
 	wantCode(t, err, connect.CodePermissionDenied, "")
 
 	orgSvc := NewTestToken(t, WithTokenDeps(Deps{Authority: actsAsNoOne{authority}, GitTokens: &fakeGitTokens{}}))
-	_, err = orgSvc.GetGitToken(context.Background(), gitReq(api, ""))
+	_, err = tdd.CallV2(context.Background(), orgSvc.GetGitToken, gitReq(""), bearerInfo(api))
 	wantCode(t, err, connect.CodePermissionDenied, "")
 
 	for _, bearer := range []string{"", "not-a-token"} {
-		_, err = svc.GetGitToken(context.Background(), gitReq(bearer, ""))
+		_, err = tdd.CallV2(context.Background(), svc.GetGitToken, gitReq(""), bearerInfo(bearer))
 		wantCode(t, err, connect.CodeUnauthenticated, "")
 	}
 }
@@ -131,7 +128,7 @@ func TestGetGitToken_RevokedIsUnauthenticated(t *testing.T) {
 	if err := authority.RevokeForUser(context.Background(), "user-1", minted.TokenID); err != nil {
 		t.Fatal(err)
 	}
-	_, err = svc.GetGitToken(context.Background(), gitReq(minted.Plaintext, ""))
+	_, err = tdd.CallV2(context.Background(), svc.GetGitToken, gitReq(""), bearerInfo(minted.Plaintext))
 	wantCode(t, err, connect.CodeUnauthenticated, "")
 }
 
@@ -151,7 +148,7 @@ func TestGetGitToken_ErrorMapping(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			svc, authority := gitSvc(t, c.src)
 			bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
-			_, err := svc.GetGitToken(context.Background(), gitReq(bearer, ""))
+			_, err := tdd.CallV2(context.Background(), svc.GetGitToken, gitReq(""), bearerInfo(bearer))
 			wantCode(t, err, c.code, c.reason)
 			if strings.Contains(err.Error(), secretGitToken) {
 				t.Errorf("error leaks the token: %v", err)
@@ -173,7 +170,7 @@ func TestGetGitToken_NeverLogsToken(t *testing.T) {
 	} {
 		svc, authority := gitSvc(t, src)
 		bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
-		_, _ = svc.GetGitToken(context.Background(), gitReq(bearer, ""))
+		_, _ = tdd.CallV2(context.Background(), svc.GetGitToken, gitReq(""), bearerInfo(bearer))
 		if strings.Contains(buf.String(), bearer) {
 			t.Error("logs contain the caller's bearer")
 		}

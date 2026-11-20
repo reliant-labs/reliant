@@ -41,7 +41,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -66,10 +66,10 @@ func TestAdoptTrigger_Generated(t *testing.T) {
 		},
 	}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.AdoptTriggerRequest, pb.AdoptTriggerResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.AdoptTriggerRequest, pb.AdoptTriggerResponse]{
 		{
 			Name:    "an unknown trigger is not found",
-			Req:     connect.NewRequest(&pb.AdoptTriggerRequest{TriggerId: "missing"}),
+			Req:     &pb.AdoptTriggerRequest{TriggerId: "missing"},
 			Ctx:     automation_takeover.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

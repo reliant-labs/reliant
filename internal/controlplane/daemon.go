@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	daemonv1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
 )
@@ -20,9 +20,10 @@ import (
 
 // ResumeDaemon implements Service; see its contract.
 func (c *client) ResumeDaemon(ctx context.Context, token, daemonID string) error {
-	req := connect.NewRequest(&daemonv1.ResumeDaemonRequest{DaemonId: daemonID})
+	req := &daemonv1.ResumeDaemonRequest{DaemonId: daemonID}
+	ctx, info := connect.NewClientContext(ctx)
 	if t := strings.TrimSpace(token); t != "" {
-		req.Header().Set("Authorization", "Bearer "+t)
+		info.RequestHeader().Set("Authorization", "Bearer "+t)
 	}
 	_, err := c.daemons.ResumeDaemon(ctx, req)
 	return err
@@ -30,8 +31,8 @@ func (c *client) ResumeDaemon(ctx context.Context, token, daemonID string) error
 
 // SuspendDaemon implements Service; see its contract.
 func (c *client) SuspendDaemon(ctx context.Context, jwt, daemonID string) error {
-	req := connect.NewRequest(&daemonv1.SuspendDaemonRequest{DaemonId: daemonID})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	req := &daemonv1.SuspendDaemonRequest{DaemonId: daemonID}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	_, err := c.daemons.SuspendDaemon(ctx, req)
 	return err
 }
@@ -42,24 +43,24 @@ func (c *client) ResizeDaemon(ctx context.Context, jwt, daemonID, size string) e
 	if !ok {
 		return fmt.Errorf("unknown machine size %q: want one of s1, s2, m, l, xl, 2xl, 3xl", size)
 	}
-	req := connect.NewRequest(&daemonv1.ResizeDaemonRequest{DaemonId: daemonID, Size: pbSize})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	req := &daemonv1.ResizeDaemonRequest{DaemonId: daemonID, Size: pbSize}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	_, err := c.daemons.ResizeDaemon(ctx, req)
 	return err
 }
 
 // SetDaemonIdleTimeout implements Service; see its contract.
 func (c *client) SetDaemonIdleTimeout(ctx context.Context, jwt, daemonID, idleTimeout string) error {
-	req := connect.NewRequest(&daemonv1.UpdateDaemonRequest{DaemonId: daemonID, IdleTimeout: &idleTimeout})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	req := &daemonv1.UpdateDaemonRequest{DaemonId: daemonID, IdleTimeout: &idleTimeout}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	_, err := c.daemons.UpdateDaemon(ctx, req)
 	return err
 }
 
 // RenameDaemon implements Service; see its contract.
 func (c *client) RenameDaemon(ctx context.Context, jwt, daemonID, name string) error {
-	req := connect.NewRequest(&daemonv1.UpdateDaemonRequest{DaemonId: daemonID, NewName: name})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	req := &daemonv1.UpdateDaemonRequest{DaemonId: daemonID, NewName: name}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	_, err := c.daemons.UpdateDaemon(ctx, req)
 	return err
 }

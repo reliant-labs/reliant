@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -227,20 +227,21 @@ func accountEmail(ctx context.Context) string {
 // directory, so each account on a machine keeps its own saved daemon id.
 func (s *Service) WhoAmI(
 	ctx context.Context,
-	_ *connect.Request[reliantv1.WhoAmIRequest],
-) (*connect.Response[reliantv1.WhoAmIResponse], error) {
+	_ *reliantv1.WhoAmIRequest,
+) (*reliantv1.WhoAmIResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || strings.TrimSpace(userID) == "" {
 		return nil, svcerr.Unauthenticated("a daemon credential is required")
 	}
-	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID, AccountEmail: accountEmail(ctx)}), nil
+	return &reliantv1.WhoAmIResponse{UserId: userID, AccountEmail: accountEmail(ctx)}, nil
 }
 
 // ConnectDaemon implements the bidirectional streaming RPC for daemon connections
 func (s *Service) ConnectDaemon(
 	ctx context.Context,
-	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage],
+	stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream,
 ) error {
+	info := serverkit.CallInfoV2(ctx)
 	// This stream says its own goodbye — its hand-over tells the daemon to
 	// move (GatewayDrain, handOverOnDrain below) — so it claims the listener
 	// drain's soft phase: the drain leaves it open for the replies still in
@@ -400,7 +401,7 @@ func (s *Service) ConnectDaemon(
 		attachedAt:          now,
 		stream:              &inboundStream{stream: stream, ctx: ctx},
 		attachSource:        db.DaemonAttachmentSourceInbound,
-		network:             daemonNetworkOf(stream.RequestHeader(), stream.Peer().Addr),
+		network:             daemonNetworkOf(info.RequestHeader(), info.PeerAddr),
 		movesOnDrain:        reg.GetMovesOnDrain(),
 		build:               daemonBuildFromRegister(reg),
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
@@ -520,7 +521,7 @@ func (s *Service) RegisterOutboundConnection(
 	userID, daemonID, podIP string,
 	podPort int,
 	reg *reliantv1.DaemonRegister,
-	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage],
+	stream reliantv1connect.ToolsDaemonServiceConnectGatewayClientStream,
 	cancel context.CancelFunc,
 	org MachineOrg,
 ) (*OutboundConn, error) {

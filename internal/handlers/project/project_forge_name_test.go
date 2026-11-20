@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,15 +52,15 @@ func TestCreateProject_PersistsForgeProjectName(t *testing.T) {
 		forgeProjectName: "hounders",
 	})
 
-	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "barksocial",
 		Path: "/home/workspace/projects/forge-" + uuid.New().String(),
-	}))
+	})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetProject().GetIsForge())
-	assert.Equal(t, "hounders", resp.Msg.GetProject().GetForgeProjectName())
+	assert.True(t, resp.GetProject().GetIsForge())
+	assert.Equal(t, "hounders", resp.GetProject().GetForgeProjectName())
 
-	row, err := repo.GetProjectWithUserCheck(ctx, resp.Msg.GetProject().GetId(), userID)
+	row, err := repo.GetProjectWithUserCheck(ctx, resp.GetProject().GetId(), userID)
 	require.NoError(t, err)
 	require.NotNil(t, row.ForgeProjectName)
 	assert.Equal(t, "hounders", *row.ForgeProjectName)
@@ -76,13 +75,13 @@ func TestSetProjectForgeName_IdempotentAndOwnerScoped(t *testing.T) {
 	userID := "user-forge-name-" + uuid.New().String()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
-	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "legacy",
 		Path: "/home/workspace/projects/legacy-" + uuid.New().String(),
-	}))
+	})
 	require.NoError(t, err)
-	projectID := resp.Msg.GetProject().GetId()
-	assert.Nil(t, resp.Msg.GetProject().ForgeProjectName, "never read → unset, not guessed")
+	projectID := resp.GetProject().GetId()
+	assert.Nil(t, resp.GetProject().ForgeProjectName, "never read → unset, not guessed")
 
 	changed, err := repo.SetProjectForgeName(ctx, projectID, userID, "hounders")
 	require.NoError(t, err)

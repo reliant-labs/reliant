@@ -6,8 +6,6 @@ package reliant
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/sdk/go/reliant/askuser"
@@ -108,11 +106,11 @@ func (g *GatesClient) pending(ctx context.Context, sessionID string) ([]Gate, er
 	var gates []Gate
 
 	// Every thread's question: spawned agents each park on their own.
-	q, err := g.questions.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &sessionID}))
+	q, err := g.questions.ListPendingQuestions(ctx, &reliantv1.ListPendingQuestionsRequest{ChatId: &sessionID})
 	if err != nil {
 		return nil, err
 	}
-	for _, qi := range q.Msg.GetQuestions() {
+	for _, qi := range q.GetQuestions() {
 		gate := Gate{
 			Kind:     GateQuestion,
 			ID:       qi.GetQuestionId(),
@@ -130,11 +128,11 @@ func (g *GatesClient) pending(ctx context.Context, sessionID string) ([]Gate, er
 		gates = append(gates, gate)
 	}
 
-	a, err := g.approvals.ListApprovalsByChat(ctx, connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{ChatId: sessionID}))
+	a, err := g.approvals.ListApprovalsByChat(ctx, &reliantv1.ListApprovalsByChatRequest{ChatId: sessionID})
 	if err != nil {
 		return gates, err
 	}
-	for _, ap := range a.Msg.GetApprovals() {
+	for _, ap := range a.GetApprovals() {
 		if ap.GetStatus() != reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING {
 			continue
 		}
@@ -159,13 +157,13 @@ func (g *GatesClient) Answer(ctx context.Context, questionID string, answers []A
 	if err != nil {
 		return g.c.fail(op, ErrInvalidArgument, "%v", err)
 	}
-	resp, err := g.questions.ResolveQuestion(ctx, connect.NewRequest(&reliantv1.ResolveQuestionRequest{
+	resp, err := g.questions.ResolveQuestion(ctx, &reliantv1.ResolveQuestionRequest{
 		QuestionId:   questionID,
 		Action:       "reply",
 		ResponseData: &data,
-	}))
+	})
 	if err != nil {
 		return g.c.wrap(op, err)
 	}
-	return g.c.applied(op, resp.Msg.GetSuccess(), "the question was not resolved (already answered, or no longer pending)")
+	return g.c.applied(op, resp.GetSuccess(), "the question was not resolved (already answered, or no longer pending)")
 }

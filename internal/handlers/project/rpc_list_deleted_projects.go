@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,14 +18,14 @@ import (
 // their owner may finish (PurgeProjectNow).
 func (s *Service) ListDeletedProjects(
 	ctx context.Context,
-	req *connect.Request[pb.ListDeletedProjectsRequest],
-) (*connect.Response[pb.ListDeletedProjectsResponse], error) {
+	req *pb.ListDeletedProjectsRequest,
+) (*pb.ListDeletedProjectsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.deps.Repo.ListDeletedProjects(ctx, userID, scope, req.Msg.GetIncludePurging())
+	rows, err := s.deps.Repo.ListDeletedProjects(ctx, userID, scope, req.GetIncludePurging())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list deleted projects"))
 	}
@@ -41,5 +40,5 @@ func (s *Service) ListDeletedProjects(
 		}
 		out = append(out, deletedProjectToProto(p, authority))
 	}
-	return connect.NewResponse(&pb.ListDeletedProjectsResponse{Projects: out}), nil
+	return &pb.ListDeletedProjectsResponse{Projects: out}, nil
 }

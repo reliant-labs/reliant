@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -38,8 +38,8 @@ func TestLoadMessagesError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := messagesReadError(tc.ctx, tc.err)
-			assert.Equal(t, tc.want, svcerr.Code(err))
-			assert.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+			assert.Equal(t, tc.want, svcerr.CodeV2(err))
+			assert.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 		})
 	}
 }

@@ -3,7 +3,7 @@ package run_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,16 +20,16 @@ func TestPauseRun_Generated(t *testing.T) {
 	// No run, session or project exists (emptyRunRepo).
 	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo()}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.PauseRunRequest, pb.PauseRunResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.PauseRunRequest, pb.PauseRunResponse]{
 		{
 			Name:    "run_id is required",
-			Req:     connect.NewRequest(&pb.PauseRunRequest{}),
+			Req:     &pb.PauseRunRequest{},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown run is not found",
-			Req:     connect.NewRequest(&pb.PauseRunRequest{RunId: "run-1"}),
+			Req:     &pb.PauseRunRequest{RunId: "run-1"},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

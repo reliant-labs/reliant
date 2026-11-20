@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -37,11 +36,11 @@ func TestFileSystemProxy_CreateDirectory_AcceptsWindowsDaemonPaths(t *testing.T)
 			svc := newProxy(t, router, nil)
 			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
-			resp, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{
+			resp, err := svc.CreateDirectory(ctx, &reliantv1.CreateDirectoryRequest{
 				Path: tc.path,
-			}))
+			})
 			require.NoError(t, err)
-			assert.Equal(t, tc.path, resp.Msg.Path)
+			assert.Equal(t, tc.path, resp.Path)
 
 			assert.Equal(t, "fs.mkdir", router.lastCommandType)
 			var sent map[string]string

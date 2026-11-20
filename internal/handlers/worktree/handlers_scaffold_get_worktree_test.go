@@ -3,7 +3,7 @@ package worktree_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -17,31 +17,31 @@ func TestGetWorktree_Generated(t *testing.T) {
 
 	svc := newOwnedWorktreeService(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetWorktreeRequest, pb.GetWorktreeResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetWorktreeRequest, pb.GetWorktreeResponse]{
 		{
 			Name:    "a missing worktree_id is invalid",
-			Req:     connect.NewRequest(&pb.GetWorktreeRequest{}),
+			Req:     &pb.GetWorktreeRequest{},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an unknown worktree is not found",
-			Req:     connect.NewRequest(&pb.GetWorktreeRequest{WorktreeId: unknownID}),
+			Req:     &pb.GetWorktreeRequest{WorktreeId: unknownID},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's worktree is not found",
-			Req:     connect.NewRequest(&pb.GetWorktreeRequest{WorktreeId: otherWorktreeID}),
+			Req:     &pb.GetWorktreeRequest{WorktreeId: otherWorktreeID},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the caller's worktree",
-			Req:  connect.NewRequest(&pb.GetWorktreeRequest{WorktreeId: ownWorktreeID}),
+			Req:  &pb.GetWorktreeRequest{WorktreeId: ownWorktreeID},
 			Ctx:  worktree.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetWorktreeResponse]) {
-				got := resp.Msg.GetWorktree()
+			Check: func(t *testing.T, resp *pb.GetWorktreeResponse) {
+				got := resp.GetWorktree()
 				assert.Equal(t, ownWorktreeID, got.GetId())
 				assert.Equal(t, ownProjectID, got.GetProjectId())
 				assert.Equal(t, "feature", got.GetBranch())

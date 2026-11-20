@@ -5,44 +5,66 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/rum/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// RumServiceName is the fully-qualified name of the RumService service.
 	RumServiceName = "controlplane.v1.RumService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// RumServiceListSessionsProcedure is the fully-qualified name of the RumService's ListSessions RPC.
+	// RumServiceListSessionsProcedure is the procedure name of the RumService's ListSessions RPC.
 	RumServiceListSessionsProcedure = "/controlplane.v1.RumService/ListSessions"
-	// RumServiceGetSessionProcedure is the fully-qualified name of the RumService's GetSession RPC.
+	// RumServiceGetSessionProcedure is the procedure name of the RumService's GetSession RPC.
 	RumServiceGetSessionProcedure = "/controlplane.v1.RumService/GetSession"
-	// RumServiceGetSessionTimelineProcedure is the fully-qualified name of the RumService's
+	// RumServiceGetSessionTimelineProcedure is the procedure name of the RumService's
 	// GetSessionTimeline RPC.
 	RumServiceGetSessionTimelineProcedure = "/controlplane.v1.RumService/GetSessionTimeline"
-	// RumServiceGetSessionReplayProcedure is the fully-qualified name of the RumService's
-	// GetSessionReplay RPC.
+	// RumServiceGetSessionReplayProcedure is the procedure name of the RumService's GetSessionReplay
+	// RPC.
 	RumServiceGetSessionReplayProcedure = "/controlplane.v1.RumService/GetSessionReplay"
+)
+
+var (
+	rumServiceListSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_rum_v1_rum_proto.Services().ByName("RumService").Methods().ByName("ListSessions"),
+			Procedure:  RumServiceListSessionsProcedure,
+		}
+	})
+	rumServiceGetSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_rum_v1_rum_proto.Services().ByName("RumService").Methods().ByName("GetSession"),
+			Procedure:  RumServiceGetSessionProcedure,
+		}
+	})
+	rumServiceGetSessionTimelineSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_rum_v1_rum_proto.Services().ByName("RumService").Methods().ByName("GetSessionTimeline"),
+			Procedure:  RumServiceGetSessionTimelineProcedure,
+		}
+	})
+	rumServiceGetSessionReplaySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_rum_v1_rum_proto.Services().ByName("RumService").Methods().ByName("GetSessionReplay"),
+			Procedure:  RumServiceGetSessionReplayProcedure,
+		}
+	})
 )
 
 // RumServiceClient is a client for the controlplane.v1.RumService service.
@@ -53,17 +75,17 @@ type RumServiceClient interface {
 	//
 	// forge:custom — a session is not an entity of the generic CRUD kit: its rows
 	// are aggregated from the tenant's browser telemetry.
-	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error)
 	// GetSession returns one session's summary. NotFound when the scope cannot see
 	// the session.
 	//
 	// forge:custom — see ListSessions.
-	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
+	GetSession(context.Context, *v1.GetSessionRequest) (*v1.GetSessionResponse, error)
 	// GetSessionTimeline returns one session's navigations, clicks, failed
 	// requests, errors and custom events in time order, a page at a time. Each
 	// entry carries the trace and span it came from, and an error entry carries
 	// the issue it belongs to once the issues worker has seen its stack.
-	GetSessionTimeline(context.Context, *connect.Request[v1.GetSessionTimelineRequest]) (*connect.Response[v1.GetSessionTimelineResponse], error)
+	GetSessionTimeline(context.Context, *v1.GetSessionTimelineRequest) (*v1.GetSessionTimelineResponse, error)
 	// GetSessionReplay returns one session's rrweb events, in recorded order, a
 	// page at a time. A page is bounded by BYTES (max_bytes) and holds only whole
 	// events: the recorder splits an event over 950 KiB into several stored
@@ -81,73 +103,13 @@ type RumServiceClient interface {
 	//
 	// The event bytes are the stored rrweb JSON, masked at record time and passed
 	// through untouched.
-	GetSessionReplay(context.Context, *connect.Request[v1.GetSessionReplayRequest]) (*connect.Response[v1.GetSessionReplayResponse], error)
+	GetSessionReplay(context.Context, *v1.GetSessionReplayRequest) (*v1.GetSessionReplayResponse, error)
 }
 
-// NewRumServiceClient constructs a client for the controlplane.v1.RumService service. By default,
-// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
-// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
-// or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewRumServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RumServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	rumServiceMethods := v1.File_services_rum_v1_rum_proto.Services().ByName("RumService").Methods()
-	return &rumServiceClient{
-		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
-			httpClient,
-			baseURL+RumServiceListSessionsProcedure,
-			connect.WithSchema(rumServiceMethods.ByName("ListSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		getSession: connect.NewClient[v1.GetSessionRequest, v1.GetSessionResponse](
-			httpClient,
-			baseURL+RumServiceGetSessionProcedure,
-			connect.WithSchema(rumServiceMethods.ByName("GetSession")),
-			connect.WithClientOptions(opts...),
-		),
-		getSessionTimeline: connect.NewClient[v1.GetSessionTimelineRequest, v1.GetSessionTimelineResponse](
-			httpClient,
-			baseURL+RumServiceGetSessionTimelineProcedure,
-			connect.WithSchema(rumServiceMethods.ByName("GetSessionTimeline")),
-			connect.WithClientOptions(opts...),
-		),
-		getSessionReplay: connect.NewClient[v1.GetSessionReplayRequest, v1.GetSessionReplayResponse](
-			httpClient,
-			baseURL+RumServiceGetSessionReplayProcedure,
-			connect.WithSchema(rumServiceMethods.ByName("GetSessionReplay")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// rumServiceClient implements RumServiceClient.
-type rumServiceClient struct {
-	listSessions       *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
-	getSession         *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
-	getSessionTimeline *connect.Client[v1.GetSessionTimelineRequest, v1.GetSessionTimelineResponse]
-	getSessionReplay   *connect.Client[v1.GetSessionReplayRequest, v1.GetSessionReplayResponse]
-}
-
-// ListSessions calls controlplane.v1.RumService.ListSessions.
-func (c *rumServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
-	return c.listSessions.CallUnary(ctx, req)
-}
-
-// GetSession calls controlplane.v1.RumService.GetSession.
-func (c *rumServiceClient) GetSession(ctx context.Context, req *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error) {
-	return c.getSession.CallUnary(ctx, req)
-}
-
-// GetSessionTimeline calls controlplane.v1.RumService.GetSessionTimeline.
-func (c *rumServiceClient) GetSessionTimeline(ctx context.Context, req *connect.Request[v1.GetSessionTimelineRequest]) (*connect.Response[v1.GetSessionTimelineResponse], error) {
-	return c.getSessionTimeline.CallUnary(ctx, req)
-}
-
-// GetSessionReplay calls controlplane.v1.RumService.GetSessionReplay.
-func (c *rumServiceClient) GetSessionReplay(ctx context.Context, req *connect.Request[v1.GetSessionReplayRequest]) (*connect.Response[v1.GetSessionReplayResponse], error) {
-	return c.getSessionReplay.CallUnary(ctx, req)
+// NewRumServiceClient constructs a client for the controlplane.v1.RumService service. Multiple
+// service clients may share a single connect.Client.
+func NewRumServiceClient(client *connect.Client) RumServiceClient {
+	return &rumServiceClient{client: client}
 }
 
 // RumServiceHandler is an implementation of the controlplane.v1.RumService service.
@@ -158,17 +120,17 @@ type RumServiceHandler interface {
 	//
 	// forge:custom — a session is not an entity of the generic CRUD kit: its rows
 	// are aggregated from the tenant's browser telemetry.
-	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error)
 	// GetSession returns one session's summary. NotFound when the scope cannot see
 	// the session.
 	//
 	// forge:custom — see ListSessions.
-	GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error)
+	GetSession(context.Context, *v1.GetSessionRequest) (*v1.GetSessionResponse, error)
 	// GetSessionTimeline returns one session's navigations, clicks, failed
 	// requests, errors and custom events in time order, a page at a time. Each
 	// entry carries the trace and span it came from, and an error entry carries
 	// the issue it belongs to once the issues worker has seen its stack.
-	GetSessionTimeline(context.Context, *connect.Request[v1.GetSessionTimelineRequest]) (*connect.Response[v1.GetSessionTimelineResponse], error)
+	GetSessionTimeline(context.Context, *v1.GetSessionTimelineRequest) (*v1.GetSessionTimelineResponse, error)
 	// GetSessionReplay returns one session's rrweb events, in recorded order, a
 	// page at a time. A page is bounded by BYTES (max_bytes) and holds only whole
 	// events: the recorder splits an event over 950 KiB into several stored
@@ -186,71 +148,122 @@ type RumServiceHandler interface {
 	//
 	// The event bytes are the stored rrweb JSON, masked at record time and passed
 	// through untouched.
-	GetSessionReplay(context.Context, *connect.Request[v1.GetSessionReplayRequest]) (*connect.Response[v1.GetSessionReplayResponse], error)
+	GetSessionReplay(context.Context, *v1.GetSessionReplayRequest) (*v1.GetSessionReplayResponse, error)
 }
 
-// NewRumServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewRumServiceHandler(svc RumServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	rumServiceMethods := v1.File_services_rum_v1_rum_proto.Services().ByName("RumService").Methods()
-	rumServiceListSessionsHandler := connect.NewUnaryHandler(
-		RumServiceListSessionsProcedure,
-		svc.ListSessions,
-		connect.WithSchema(rumServiceMethods.ByName("ListSessions")),
-		connect.WithHandlerOptions(opts...),
+// RegisterRumServiceHandler registers svc as the controlplane.v1.RumService implementation on
+// server.
+func RegisterRumServiceHandler(server *connect.Server, svc RumServiceHandler) {
+	adapter := rumServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: rumServiceListSessionsSpec(), Handler: adapter.listSessions},
+		connect.Method{Spec: rumServiceGetSessionSpec(), Handler: adapter.getSession},
+		connect.Method{Spec: rumServiceGetSessionTimelineSpec(), Handler: adapter.getSessionTimeline},
+		connect.Method{Spec: rumServiceGetSessionReplaySpec(), Handler: adapter.getSessionReplay},
 	)
-	rumServiceGetSessionHandler := connect.NewUnaryHandler(
-		RumServiceGetSessionProcedure,
-		svc.GetSession,
-		connect.WithSchema(rumServiceMethods.ByName("GetSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	rumServiceGetSessionTimelineHandler := connect.NewUnaryHandler(
-		RumServiceGetSessionTimelineProcedure,
-		svc.GetSessionTimeline,
-		connect.WithSchema(rumServiceMethods.ByName("GetSessionTimeline")),
-		connect.WithHandlerOptions(opts...),
-	)
-	rumServiceGetSessionReplayHandler := connect.NewUnaryHandler(
-		RumServiceGetSessionReplayProcedure,
-		svc.GetSessionReplay,
-		connect.WithSchema(rumServiceMethods.ByName("GetSessionReplay")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.RumService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case RumServiceListSessionsProcedure:
-			rumServiceListSessionsHandler.ServeHTTP(w, r)
-		case RumServiceGetSessionProcedure:
-			rumServiceGetSessionHandler.ServeHTTP(w, r)
-		case RumServiceGetSessionTimelineProcedure:
-			rumServiceGetSessionTimelineHandler.ServeHTTP(w, r)
-		case RumServiceGetSessionReplayProcedure:
-			rumServiceGetSessionReplayHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedRumServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedRumServiceHandler struct{}
 
-func (UnimplementedRumServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.RumService.ListSessions is not implemented"))
+func (UnimplementedRumServiceHandler) ListSessions(context.Context, *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.RumService.ListSessions is not implemented")
 }
 
-func (UnimplementedRumServiceHandler) GetSession(context.Context, *connect.Request[v1.GetSessionRequest]) (*connect.Response[v1.GetSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.RumService.GetSession is not implemented"))
+func (UnimplementedRumServiceHandler) GetSession(context.Context, *v1.GetSessionRequest) (*v1.GetSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.RumService.GetSession is not implemented")
 }
 
-func (UnimplementedRumServiceHandler) GetSessionTimeline(context.Context, *connect.Request[v1.GetSessionTimelineRequest]) (*connect.Response[v1.GetSessionTimelineResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.RumService.GetSessionTimeline is not implemented"))
+func (UnimplementedRumServiceHandler) GetSessionTimeline(context.Context, *v1.GetSessionTimelineRequest) (*v1.GetSessionTimelineResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.RumService.GetSessionTimeline is not implemented")
 }
 
-func (UnimplementedRumServiceHandler) GetSessionReplay(context.Context, *connect.Request[v1.GetSessionReplayRequest]) (*connect.Response[v1.GetSessionReplayResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.RumService.GetSessionReplay is not implemented"))
+func (UnimplementedRumServiceHandler) GetSessionReplay(context.Context, *v1.GetSessionReplayRequest) (*v1.GetSessionReplayResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.RumService.GetSessionReplay is not implemented")
+}
+
+type rumServiceClient struct {
+	client *connect.Client
+}
+
+func (c *rumServiceClient) ListSessions(ctx context.Context, req *v1.ListSessionsRequest) (*v1.ListSessionsResponse, error) {
+	var res v1.ListSessionsResponse
+	if err := c.client.CallUnary(ctx, rumServiceListSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *rumServiceClient) GetSession(ctx context.Context, req *v1.GetSessionRequest) (*v1.GetSessionResponse, error) {
+	var res v1.GetSessionResponse
+	if err := c.client.CallUnary(ctx, rumServiceGetSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *rumServiceClient) GetSessionTimeline(ctx context.Context, req *v1.GetSessionTimelineRequest) (*v1.GetSessionTimelineResponse, error) {
+	var res v1.GetSessionTimelineResponse
+	if err := c.client.CallUnary(ctx, rumServiceGetSessionTimelineSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *rumServiceClient) GetSessionReplay(ctx context.Context, req *v1.GetSessionReplayRequest) (*v1.GetSessionReplayResponse, error) {
+	var res v1.GetSessionReplayResponse
+	if err := c.client.CallUnary(ctx, rumServiceGetSessionReplaySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type rumServiceHandler struct{ svc RumServiceHandler }
+
+func (h rumServiceHandler) listSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h rumServiceHandler) getSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h rumServiceHandler) getSessionTimeline(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSessionTimelineRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSessionTimeline(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h rumServiceHandler) getSessionReplay(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSessionReplayRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSessionReplay(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -19,16 +19,16 @@ func TestGetProjectGitInfo_Generated(t *testing.T) {
 	t.Parallel()
 
 	unrouted := newService(t, ownedProjectRepo(t), nil)
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetProjectGitInfoRequest, pb.GetProjectGitInfoResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetProjectGitInfoRequest, pb.GetProjectGitInfoResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-2"}),
+			Req:     &pb.GetProjectGitInfoRequest{ProjectId: "p-2"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "without a daemon there is no git to read",
-			Req:     connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1"}),
+			Req:     &pb.GetProjectGitInfoRequest{ProjectId: "p-1"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeUnavailable, // a daemon command that could not run (daemonerr), not a server fault
 		},
@@ -41,14 +41,14 @@ func TestGetProjectGitInfo_Generated(t *testing.T) {
 		return p, nil
 	}
 	notGit := newService(t, plain, nil)
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetProjectGitInfoRequest, pb.GetProjectGitInfoResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetProjectGitInfoRequest, pb.GetProjectGitInfoResponse]{
 		{
 			Name: "a project that is not a git repository says so without asking the daemon",
-			Req:  connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1"}),
+			Req:  &pb.GetProjectGitInfoRequest{ProjectId: "p-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetProjectGitInfoResponse]) {
-				if resp.Msg.GetIsGitRepo() || resp.Msg.GetProjectId() != "p-1" {
-					t.Fatalf("response = %v, want p-1, not a git repository", resp.Msg)
+			Check: func(t *testing.T, resp *pb.GetProjectGitInfoResponse) {
+				if resp.GetIsGitRepo() || resp.GetProjectId() != "p-1" {
+					t.Fatalf("response = %v, want p-1, not a git repository", resp)
 				}
 			},
 		},
@@ -61,19 +61,19 @@ func TestGetProjectGitInfo_Generated(t *testing.T) {
 	}
 	routed := newService(t, nested, answering("project.git_info", `{"path":"/work/svc"}`,
 		`{"current_branch":"feature","remote_url":"git@example.com:acme/svc.git","has_changes":true,"ahead":2}`))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetProjectGitInfoRequest, pb.GetProjectGitInfoResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetProjectGitInfoRequest, pb.GetProjectGitInfoResponse]{
 		{
 			Name:    "a repo outside the project is not found",
-			Req:     connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1", RepoId: "r-9"}),
+			Req:     &pb.GetProjectGitInfoRequest{ProjectId: "p-1", RepoId: "r-9"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the daemon reports the repo's checkout",
-			Req:  connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1"}),
+			Req:  &pb.GetProjectGitInfoRequest{ProjectId: "p-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetProjectGitInfoResponse]) {
-				m := resp.Msg
+			Check: func(t *testing.T, resp *pb.GetProjectGitInfoResponse) {
+				m := resp
 				if !m.GetIsGitRepo() || m.GetCurrentBranch() != "feature" || !m.GetHasChanges() || m.GetAhead() != 2 || m.GetRemoteUrl() != "git@example.com:acme/svc.git" {
 					t.Fatalf("git info = %v, want the daemon's report for svc/", m)
 				}

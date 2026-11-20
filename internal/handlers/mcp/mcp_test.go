@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -28,14 +27,14 @@ func TestMCPService_SetServerEnabled_UpdatesStatusAcrossToggles(t *testing.T) {
 	require.True(t, server.Enabled)
 	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED, server.Status)
 
-	disableResp, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+	disableResp, err := svc.SetServerEnabled(ctx, &reliantv1.SetServerEnabledRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Enabled:   false,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, disableResp.Msg.Success)
-	require.False(t, disableResp.Msg.Enabled)
+	require.True(t, disableResp.Success)
+	require.False(t, disableResp.Enabled)
 
 	server = getServerFromList(t, svc, ctx, projectID, "toggle-server")
 	require.False(t, server.Enabled)
@@ -43,29 +42,29 @@ func TestMCPService_SetServerEnabled_UpdatesStatusAcrossToggles(t *testing.T) {
 	require.False(t, server.Connected)
 	require.False(t, server.Healthy)
 
-	disabledGetServer, err := svc.GetServer(ctx, connect.NewRequest(&reliantv1.GetServerRequest{
+	disabledGetServer, err := svc.GetServer(ctx, &reliantv1.GetServerRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
-	}))
+	})
 	require.NoError(t, err)
-	require.False(t, disabledGetServer.Msg.Server.Enabled)
-	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISABLED, disabledGetServer.Msg.Server.Status)
+	require.False(t, disabledGetServer.Server.Enabled)
+	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISABLED, disabledGetServer.Server.Status)
 
-	disabledTools, err := svc.GetServerTools(ctx, connect.NewRequest(&reliantv1.GetServerToolsRequest{
+	disabledTools, err := svc.GetServerTools(ctx, &reliantv1.GetServerToolsRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
-	}))
+	})
 	require.NoError(t, err)
-	require.EqualValues(t, 0, disabledTools.Msg.Total)
+	require.EqualValues(t, 0, disabledTools.Total)
 
-	enableResp, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+	enableResp, err := svc.SetServerEnabled(ctx, &reliantv1.SetServerEnabledRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Enabled:   true,
-	}))
+	})
 	require.NoError(t, err)
-	require.False(t, enableResp.Msg.Success, "go version is not an MCP server; startup should fail in this test")
-	require.True(t, enableResp.Msg.Enabled)
+	require.False(t, enableResp.Success, "go version is not an MCP server; startup should fail in this test")
+	require.True(t, enableResp.Enabled)
 
 	server = getServerFromList(t, svc, ctx, projectID, "toggle-server")
 	require.True(t, server.Enabled)
@@ -75,29 +74,29 @@ func TestMCPService_SetServerEnabled_UpdatesStatusAcrossToggles(t *testing.T) {
 	require.NotNil(t, server.LastError)
 	require.NotEmpty(t, *server.LastError)
 
-	enabledGetServer, err := svc.GetServer(ctx, connect.NewRequest(&reliantv1.GetServerRequest{
+	enabledGetServer, err := svc.GetServer(ctx, &reliantv1.GetServerRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, enabledGetServer.Msg.Server.Enabled)
-	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED, enabledGetServer.Msg.Server.Status)
+	require.True(t, enabledGetServer.Server.Enabled)
+	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED, enabledGetServer.Server.Status)
 
-	reEnabledTools, err := svc.GetServerTools(ctx, connect.NewRequest(&reliantv1.GetServerToolsRequest{
+	reEnabledTools, err := svc.GetServerTools(ctx, &reliantv1.GetServerToolsRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
-	}))
+	})
 	require.NoError(t, err)
-	require.EqualValues(t, 0, reEnabledTools.Msg.Total)
+	require.EqualValues(t, 0, reEnabledTools.Total)
 
-	disableAgainResp, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+	disableAgainResp, err := svc.SetServerEnabled(ctx, &reliantv1.SetServerEnabledRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Enabled:   false,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, disableAgainResp.Msg.Success)
-	require.False(t, disableAgainResp.Msg.Enabled)
+	require.True(t, disableAgainResp.Success)
+	require.False(t, disableAgainResp.Enabled)
 
 	server = getServerFromList(t, svc, ctx, projectID, "toggle-server")
 	require.False(t, server.Enabled)
@@ -163,14 +162,14 @@ func TestMCPService_SetServerEnabled_EnableStatusBecomesHealthyWhenManagerHasCli
 	manager.healthByName["toggle-server"] = true
 	delete(manager.lastErrByName, "toggle-server")
 
-	enableResp, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+	enableResp, err := svc.SetServerEnabled(ctx, &reliantv1.SetServerEnabledRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Enabled:   true,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, enableResp.Msg.Success)
-	require.True(t, enableResp.Msg.Enabled)
+	require.True(t, enableResp.Success)
+	require.True(t, enableResp.Enabled)
 
 	server = getServerFromList(t, svc, ctx, projectID, "toggle-server")
 	require.True(t, server.Enabled)
@@ -180,37 +179,37 @@ func TestMCPService_SetServerEnabled_EnableStatusBecomesHealthyWhenManagerHasCli
 	require.EqualValues(t, 1, server.ToolCount)
 	require.Nil(t, server.LastError)
 
-	getServerResp, err := svc.GetServer(ctx, connect.NewRequest(&reliantv1.GetServerRequest{
+	getServerResp, err := svc.GetServer(ctx, &reliantv1.GetServerRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
-	}))
+	})
 	require.NoError(t, err)
-	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_HEALTHY, getServerResp.Msg.Server.Status)
-	require.True(t, getServerResp.Msg.Server.Connected)
-	require.True(t, getServerResp.Msg.Server.Healthy)
-	require.EqualValues(t, 1, getServerResp.Msg.Server.ToolCount)
+	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_HEALTHY, getServerResp.Server.Status)
+	require.True(t, getServerResp.Server.Connected)
+	require.True(t, getServerResp.Server.Healthy)
+	require.EqualValues(t, 1, getServerResp.Server.ToolCount)
 
-	toolsResp, err := svc.GetServerTools(ctx, connect.NewRequest(&reliantv1.GetServerToolsRequest{
+	toolsResp, err := svc.GetServerTools(ctx, &reliantv1.GetServerToolsRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
-	}))
+	})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, toolsResp.Msg.Total)
-	require.Equal(t, "tool-a", toolsResp.Msg.Tools[0].Name)
+	require.EqualValues(t, 1, toolsResp.Total)
+	require.Equal(t, "tool-a", toolsResp.Tools[0].Name)
 }
 
 func TestMCPService_SetServerEnabled_SuccessfulReenableClearsLastError(t *testing.T) {
 	ctx, svc, manager, projectID := setupMCPServiceToggleTest(t)
 	seedMCPServerConfig(t, svc, ctx, projectID, false)
 
-	failedEnableResp, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+	failedEnableResp, err := svc.SetServerEnabled(ctx, &reliantv1.SetServerEnabledRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Enabled:   true,
-	}))
+	})
 	require.NoError(t, err)
-	require.False(t, failedEnableResp.Msg.Success)
-	require.True(t, failedEnableResp.Msg.Enabled)
+	require.False(t, failedEnableResp.Success)
+	require.True(t, failedEnableResp.Enabled)
 
 	server := getServerFromList(t, svc, ctx, projectID, "toggle-server")
 	require.True(t, server.Enabled)
@@ -229,14 +228,14 @@ func TestMCPService_SetServerEnabled_SuccessfulReenableClearsLastError(t *testin
 		},
 	}
 
-	successEnableResp, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+	successEnableResp, err := svc.SetServerEnabled(ctx, &reliantv1.SetServerEnabledRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Enabled:   true,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, successEnableResp.Msg.Success)
-	require.True(t, successEnableResp.Msg.Enabled)
+	require.True(t, successEnableResp.Success)
+	require.True(t, successEnableResp.Enabled)
 
 	server = getServerFromList(t, svc, ctx, projectID, "toggle-server")
 	require.True(t, server.Enabled)
@@ -245,13 +244,13 @@ func TestMCPService_SetServerEnabled_SuccessfulReenableClearsLastError(t *testin
 	require.True(t, server.Healthy)
 	require.Nil(t, server.LastError, "successful re-enable should clear previous startup error")
 
-	getServerResp, err := svc.GetServer(ctx, connect.NewRequest(&reliantv1.GetServerRequest{
+	getServerResp, err := svc.GetServer(ctx, &reliantv1.GetServerRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
-	}))
+	})
 	require.NoError(t, err)
-	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_HEALTHY, getServerResp.Msg.Server.Status)
-	require.Nil(t, getServerResp.Msg.Server.LastError)
+	require.Equal(t, reliantv1.MCPServerStatus_MCP_SERVER_STATUS_HEALTHY, getServerResp.Server.Status)
+	require.Nil(t, getServerResp.Server.LastError)
 }
 
 func TestMCPService_ListServers_PrefersStoredConfigSnapshotOverFilesystem(t *testing.T) {
@@ -313,11 +312,11 @@ func TestMCPService_SetServerEnabled_UpdatesStoredSnapshot(t *testing.T) {
 		PushedAt:   now,
 	}))
 
-	_, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+	_, err := svc.SetServerEnabled(ctx, &reliantv1.SetServerEnabledRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Enabled:   false,
-	}))
+	})
 	require.NoError(t, err)
 
 	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
@@ -344,13 +343,13 @@ func TestMCPService_UpdateServerConfig_UpdatesStoredSnapshot(t *testing.T) {
 		PushedAt:   now,
 	}))
 
-	_, err := svc.UpdateServerConfig(ctx, connect.NewRequest(&reliantv1.UpdateServerConfigRequest{
+	_, err := svc.UpdateServerConfig(ctx, &reliantv1.UpdateServerConfigRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Env: map[string]string{
 			"TOKEN": "abc123",
 		},
-	}))
+	})
 	require.NoError(t, err)
 
 	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
@@ -371,7 +370,7 @@ func TestMCPService_InstallServer_PersistsToStoredSnapshot(t *testing.T) {
 		PushedAt:  now,
 	}))
 
-	resp, err := svc.InstallServer(ctx, connect.NewRequest(&reliantv1.InstallServerRequest{
+	resp, err := svc.InstallServer(ctx, &reliantv1.InstallServerRequest{
 		ProjectId: projectID,
 		Name:      "installed-server",
 		Scope:     reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT,
@@ -379,9 +378,9 @@ func TestMCPService_InstallServer_PersistsToStoredSnapshot(t *testing.T) {
 			Command: "go",
 			Args:    []string{"version"},
 		},
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
@@ -404,14 +403,14 @@ func TestMCPService_MoveServerScope_UsesStoredSnapshotAndPersistsMove(t *testing
 		PushedAt:   now,
 	}))
 
-	resp, err := svc.MoveServerScope(ctx, connect.NewRequest(&reliantv1.MoveServerScopeRequest{
+	resp, err := svc.MoveServerScope(ctx, &reliantv1.MoveServerScopeRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
 		Scope:     reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
-	require.Equal(t, reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL, resp.Msg.Scope)
+	require.True(t, resp.Success)
+	require.Equal(t, reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL, resp.Scope)
 
 	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
@@ -434,12 +433,12 @@ func TestMCPService_UninstallServer_RemovesFromStoredSnapshot(t *testing.T) {
 		PushedAt:   now,
 	}))
 
-	resp, err := svc.UninstallServer(ctx, connect.NewRequest(&reliantv1.UninstallServerRequest{
+	resp, err := svc.UninstallServer(ctx, &reliantv1.UninstallServerRequest{
 		ProjectId: projectID,
 		Name:      "toggle-server",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
@@ -510,11 +509,11 @@ func TestMCPService_SetServerEnabled_GlobalScopePropagatesStoredSnapshotAcrossPr
 	require.NoError(t, os.WriteFile(globalPath, []byte(`{"mcpServers":{"shared-global":{"command":"go","args":["version"],"enabled":true}}}`), 0o644))
 
 	svc := newMCPService(t, repo, newFakeMCPDaemonRouter(newFakeMCPManagerRuntime()))
-	_, err := svc.SetServerEnabled(ctx, connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+	_, err := svc.SetServerEnabled(ctx, &reliantv1.SetServerEnabledRequest{
 		ProjectId: projectA,
 		Name:      "shared-global",
 		Enabled:   false,
-	}))
+	})
 	require.NoError(t, err)
 
 	recordA, err := repo.GetProjectConfigRecord(ctx, projectA)
@@ -931,10 +930,10 @@ func (r *fakeMCPDaemonRouter) SendDaemonCommand(_ context.Context, _ string, com
 func getServerFromList(t *testing.T, svc *Service, ctx context.Context, projectID, serverName string) *reliantv1.MCPServer {
 	t.Helper()
 
-	listResp, err := svc.ListServers(ctx, connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: projectID}))
+	listResp, err := svc.ListServers(ctx, &reliantv1.ListServersRequest{ProjectId: projectID})
 	require.NoError(t, err)
 
-	for _, server := range listResp.Msg.Servers {
+	for _, server := range listResp.Servers {
 		if server.Name == serverName {
 			return server
 		}

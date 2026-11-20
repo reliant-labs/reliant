@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"connectrpc.com/connect/v2"
 	"connectrpc.com/otelconnect"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/serverkit"
@@ -41,7 +42,7 @@ const DaemonAudience = "daemon"
 
 // DaemonAuth authenticates the daemon audience: a daemon's `rlat_` access
 // token, resolved by the token authority (DaemonAuthInterceptor).
-type DaemonAuth struct{ serverkit.Authenticator }
+type DaemonAuth struct{ serverkit.AuthenticatorV2 }
 
 // NewDaemonAuth builds the daemon audience's authenticator over tokens, which
 // resolves daemons' credentials (uncached: a revoked daemon credential is
@@ -51,11 +52,11 @@ func NewDaemonAuth(tokens auth.AccessTokenAccountIntrospector) (*DaemonAuth, err
 	if err != nil {
 		return nil, fmt.Errorf("daemon auth: %w", err)
 	}
-	return &DaemonAuth{serverkit.AuthFor(DaemonAudience, interceptor)}, nil
+	return &DaemonAuth{serverkit.AuthForV2(DaemonAudience, interceptor.Intercept)}, nil
 }
 
 // DaemonChain is the interceptor chain of the daemon listener.
-type DaemonChain struct{ *serverkit.Chain }
+type DaemonChain struct{ *serverkit.ChainV2 }
 
 // DaemonChainDeps configures a DaemonChain.
 type DaemonChainDeps struct {
@@ -66,7 +67,7 @@ type DaemonChainDeps struct {
 	Logger *slog.Logger
 }
 
-// NewDaemonChain builds forge's chain (serverkit.NewChain) with the daemon
+// NewDaemonChain builds forge's chain (serverkit.NewChainV2) with the daemon
 // credential as its authenticator. Where it departs from the chain's
 // defaults, it says why:
 //
@@ -96,12 +97,12 @@ func NewDaemonChain(deps DaemonChainDeps) (*DaemonChain, error) {
 	if err != nil {
 		return nil, fmt.Errorf("daemon chain: %w", err)
 	}
-	chain, err := serverkit.NewChain(serverkit.ChainDeps{
-		Auth:     deps.Auth.Authenticator,
-		Logger:   deps.Logger,
-		Trace:    trace,
-		Audit:    serverkit.NoAudit,
-		Activity: serverkit.NoActivity,
+	chain, err := serverkit.NewChainV2(serverkit.ChainDepsV2{
+		Auth:       deps.Auth.AuthenticatorV2,
+		Logger:     deps.Logger,
+		Trace:      trace,
+		NoAudit:    true,
+		NoActivity: true,
 		// A failed RPC is classified as on the API listener (see
 		// NewUserChain): a stream this listener ends because it is
 		// draining is an expected outcome, never an ERROR.
@@ -112,10 +113,7 @@ func NewDaemonChain(deps DaemonChainDeps) (*DaemonChain, error) {
 		// it. No procedure is named, so the ConnectDaemon and ConnectGateway
 		// streams stay unbounded: a daemon session lives for as long as the
 		// daemon is up.
-		Deadline: serverkit.Deadline{
-			Unary:  interceptors.UnaryTimeout,
-			OnSlow: interceptors.ReportSlowRPC,
-		},
+		Deadline:     daemonChainDeadline(),
 		ReadMaxBytes: -1,
 		SendMaxBytes: -1,
 	})
@@ -125,11 +123,20 @@ func NewDaemonChain(deps DaemonChainDeps) (*DaemonChain, error) {
 	return &DaemonChain{chain}, nil
 }
 
+// daemonChainDeadline is the daemon chain's Deadline slot (NewDaemonChain
+// says why).
+func daemonChainDeadline() serverkit.Deadline {
+	return serverkit.Deadline{
+		Unary:  interceptors.UnaryTimeout,
+		OnSlow: interceptors.ReportSlowRPC,
+	}
+}
+
 // newDaemonTraceInterceptor opens the daemon listener's server spans WITHOUT
 // otelconnect.WithTrustRemote: an inbound traceparent becomes a span link,
 // never the parent.
-func newDaemonTraceInterceptor() (*otelconnect.Interceptor, error) {
-	return otelconnect.NewInterceptor()
+func newDaemonTraceInterceptor() (connect.ServerInterceptor, error) {
+	return otelconnect.NewServerInterceptor()
 }
 
 // DaemonListener is the listener daemons dial: the daemon-audience services
@@ -151,7 +158,7 @@ type DaemonListenerDeps struct {
 	// Routes is what it serves: the daemon-audience route set (internal/app's
 	// generated DaemonRoutes). serverkit refuses a service of any other
 	// audience. Required.
-	Routes serverkit.Routes
+	Routes serverkit.RoutesV2
 	// Logger receives the listener's lines and its drain phase; nil is
 	// slog.Default().
 	Logger *slog.Logger
@@ -197,10 +204,10 @@ func NewDaemonListener(deps DaemonListenerDeps) (*DaemonListener, error) {
 	cfg.RedialOnDrain = []string{reliantv1connect.ToolsDaemonServiceName}
 
 	l, err := serverkit.NewListener(serverkit.ListenerDeps{
-		Config: cfg,
-		Chain:  deps.Chain.Chain,
-		Routes: deps.Routes,
-		Logger: deps.Logger,
+		Config:   cfg,
+		ChainV2:  deps.Chain.ChainV2,
+		RoutesV2: deps.Routes,
+		Logger:   deps.Logger,
 		Edge: func(h http.Handler) http.Handler {
 			return withMembership(deps.Membership, deps.Policies, securityHeaders(h))
 		},

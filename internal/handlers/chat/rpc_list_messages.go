@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -24,19 +23,19 @@ import (
 // For branched chats, this resolves inherited messages via the context window chain.
 func (s *Service) ListMessages(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListMessagesRequest],
-) (*connect.Response[reliantv1.ListMessagesResponse], error) {
+	req *reliantv1.ListMessagesRequest,
+) (*reliantv1.ListMessagesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// Serves viewers of a shared chat: their transcript leaves every tool
 	// result out (messageproto.ElideForViewer).
 	ctx = authz.WithViewerReads(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// The owner, or a viewer of a shared chat
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -47,17 +46,17 @@ func (s *Service) ListMessages(
 
 	// Parse pagination params
 	recentLimit := 0
-	if req.Msg.Recent != nil && *req.Msg.Recent > 0 {
-		recentLimit = int(*req.Msg.Recent)
+	if req.Recent != nil && *req.Recent > 0 {
+		recentLimit = int(*req.Recent)
 	}
 
 	var beforeSeq int64
-	if req.Msg.BeforeSeq != nil && *req.Msg.BeforeSeq > 0 {
-		beforeSeq = *req.Msg.BeforeSeq
+	if req.BeforeSeq != nil && *req.BeforeSeq > 0 {
+		beforeSeq = *req.BeforeSeq
 	}
 
 	// Determine the main thread ID for this chat
-	mainThreadID := req.Msg.ChatId
+	mainThreadID := req.ChatId
 	if id := chat.MainThreadID(); id != "" {
 		mainThreadID = id
 	}
@@ -74,12 +73,12 @@ func (s *Service) ListMessages(
 	viewingThreadID := mainThreadID
 
 	switch {
-	case req.Msg.ThreadId != nil && *req.Msg.ThreadId != "":
+	case req.ThreadId != nil && *req.ThreadId != "":
 		// Single-thread read: return exactly this thread's visual thread. No
 		// merge with siblings and no main-thread window — the caller asked for
 		// one thread, so the answer is that thread or an error, never a
 		// best-effort slice of something else.
-		threadID := *req.Msg.ThreadId
+		threadID := *req.ThreadId
 		viewingThreadID = threadID
 
 		thread, err := s.deps.Repo.GetThread(ctx, threadID)
@@ -91,7 +90,7 @@ func (s *Service) ListMessages(
 		// than a silent fall back to the chat-wide list: answering a
 		// different question than the one asked is how the spawn preview
 		// came to render the wrong thing in the first place.
-		if thread.ChatID != req.Msg.ChatId {
+		if thread.ChatID != req.ChatId {
 			return nil, svcerr.NotFound("thread")
 		}
 
@@ -113,7 +112,7 @@ func (s *Service) ListMessages(
 
 	case recentLimit > 0:
 		messages, totalCount, oldestSeq, hasMore, err = s.listMessagesBounded(
-			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit)
+			ctx, threadsSvc, req.ChatId, mainThreadID, beforeSeq, recentLimit)
 		if err != nil {
 			return nil, messagesReadError(ctx, err)
 		}
@@ -121,7 +120,7 @@ func (s *Service) ListMessages(
 		// No page size given: the caller wants the whole chat (e.g. the cold
 		// initial load before any pagination has happened). Resolve every
 		// thread's full history and hand it to paginateBySeq unbounded.
-		messages, totalCount, err = s.listMessagesUnbounded(ctx, threadsSvc, req.Msg.ChatId, mainThreadID)
+		messages, totalCount, err = s.listMessagesUnbounded(ctx, threadsSvc, req.ChatId, mainThreadID)
 		if err != nil {
 			return nil, messagesReadError(ctx, err)
 		}
@@ -176,7 +175,7 @@ func (s *Service) ListMessages(
 		}
 	}
 
-	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
+	toolBodies := messageproto.ResolveToolBodyMode(req.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessages := messageproto.AssembleForDisplay(
 		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0, toolBodies)
 	if access.Viewer() {
@@ -193,18 +192,18 @@ func (s *Service) ListMessages(
 	// A scroll-back's errors are raw failure text (what a command or tool
 	// printed), which a viewer never reads: their live ERROR updates carry
 	// none either (messageproto.ViewerChatUpdate).
-	if !access.Viewer() && beforeSeq > 0 && (req.Msg.ThreadId == nil || *req.Msg.ThreadId == "") && len(messages) > 0 {
-		pageErrors = s.pageErrors(ctx, req.Msg.ChatId, mainThreadID, beforeSeq, messages, hasMore)
+	if !access.Viewer() && beforeSeq > 0 && (req.ThreadId == nil || *req.ThreadId == "") && len(messages) > 0 {
+		pageErrors = s.pageErrors(ctx, req.ChatId, mainThreadID, beforeSeq, messages, hasMore)
 	}
 
-	return connect.NewResponse(&reliantv1.ListMessagesResponse{
+	return &reliantv1.ListMessagesResponse{
 		Messages:  protoMessages,
 		Total:     int32(totalCount), //nolint:staticcheck // SA1019: deprecated for clients; the server still fills it when skip_total is unset
 		Count:     int32(len(protoMessages)),
 		HasMore:   hasMore,
 		OldestSeq: oldestSeq,
 		Errors:    pageErrors,
-	}), nil
+	}, nil
 }
 
 // pageErrors is the errors raised in the stretch of history a scroll-back

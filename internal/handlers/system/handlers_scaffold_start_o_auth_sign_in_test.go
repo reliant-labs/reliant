@@ -3,7 +3,7 @@ package system_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -19,10 +19,10 @@ func TestStartOAuthSignIn_Generated(t *testing.T) {
 
 	svc := system.NewTestSystem(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.StartOAuthSignInRequest, pb.StartOAuthSignInResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.StartOAuthSignInRequest, pb.StartOAuthSignInResponse]{
 		{
 			Name:    "provider is required",
-			Req:     connect.NewRequest(&pb.StartOAuthSignInRequest{}),
+			Req:     &pb.StartOAuthSignInRequest{},
 			WantErr: connect.CodeInvalidArgument,
 		},
 	}, svc.StartOAuthSignIn)

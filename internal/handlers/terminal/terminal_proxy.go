@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -119,8 +118,8 @@ func daemonFailure(machineDoing, doing string, err error) error {
 // ListSessions returns all active terminal sessions.
 func (s *Service) ListSessions(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListTerminalSessionsRequest],
-) (*connect.Response[reliantv1.ListTerminalSessionsResponse], error) {
+	req *reliantv1.ListTerminalSessionsRequest,
+) (*reliantv1.ListTerminalSessionsResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
@@ -164,35 +163,35 @@ func (s *Service) ListSessions(
 		sessions[i] = session
 	}
 
-	return connect.NewResponse(&reliantv1.ListTerminalSessionsResponse{
+	return &reliantv1.ListTerminalSessionsResponse{
 		Sessions: sessions,
 		Total:    int32(len(sessions)),
-	}), nil
+	}, nil
 }
 
 // CloseSession closes a specific terminal session.
 func (s *Service) CloseSession(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CloseTerminalSessionRequest],
-) (*connect.Response[reliantv1.CloseTerminalSessionResponse], error) {
+	req *reliantv1.CloseTerminalSessionRequest,
+) (*reliantv1.CloseTerminalSessionResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if req.Msg.SessionId == "" {
+	if req.SessionId == "" {
 		return nil, svcerr.InvalidArgument("session_id is required")
 	}
 
 	cmdReq := map[string]any{
-		"session_id": req.Msg.SessionId,
+		"session_id": req.SessionId,
 	}
 	payload, err := json.Marshal(cmdReq)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
-	respBytes, err := sendToMachine(ctx, s.deps.Router, userID, req.Msg.GetDaemonId(), "terminal.close", payload, 30000)
+	respBytes, err := sendToMachine(ctx, s.deps.Router, userID, req.GetDaemonId(), "terminal.close", payload, 30000)
 	if err != nil {
 		// Closing a session that is already gone has achieved what close
 		// asks for. The race is built in: the terminal connection's deferred
@@ -200,10 +199,10 @@ func (s *Service) CloseSession(
 		// CloseSession both close the same session when a tab is closed,
 		// and whichever lands second used to fail as INTERNAL (ELECTRON-97).
 		if isTerminalSessionNotFound(err) {
-			return connect.NewResponse(&reliantv1.CloseTerminalSessionResponse{
+			return &reliantv1.CloseTerminalSessionResponse{
 				Success: true,
 				Message: "Session already closed",
-			}), nil
+			}, nil
 		}
 		return nil, daemonFailure("", "daemon command terminal.close", err)
 	}
@@ -220,8 +219,8 @@ func (s *Service) CloseSession(
 		msg = "Failed to close session"
 	}
 
-	return connect.NewResponse(&reliantv1.CloseTerminalSessionResponse{
+	return &reliantv1.CloseTerminalSessionResponse{
 		Success: cmdResp.Success,
 		Message: msg,
-	}), nil
+	}, nil
 }

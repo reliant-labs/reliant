@@ -3,8 +3,6 @@ package settings
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -16,7 +14,7 @@ import (
 // ============================================================================
 
 // GetPrivacySettings retrieves user privacy settings
-func (s *Service) GetPrivacySettings(ctx context.Context, req *connect.Request[reliantv1.GetPrivacySettingsRequest]) (*connect.Response[reliantv1.GetPrivacySettingsResponse], error) {
+func (s *Service) GetPrivacySettings(ctx context.Context, req *reliantv1.GetPrivacySettingsRequest) (*reliantv1.GetPrivacySettingsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
@@ -24,8 +22,8 @@ func (s *Service) GetPrivacySettings(ctx context.Context, req *connect.Request[r
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get privacy settings"))
 	}
 
-	return connect.NewResponse(&reliantv1.GetPrivacySettingsResponse{
+	return &reliantv1.GetPrivacySettingsResponse{
 		AnalyticsEnabled:      analyticsEnabled,
 		CrashReportingEnabled: crashReportingEnabled,
-	}), nil
+	}, nil
 }

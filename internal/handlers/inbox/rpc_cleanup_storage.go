@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,16 +16,16 @@ import (
 // CleanupStorage runs the storage item's Clean up action on one machine.
 func (s *Service) CleanupStorage(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CleanupStorageRequest],
-) (*connect.Response[reliantv1.CleanupStorageResponse], error) {
+	req *reliantv1.CleanupStorageRequest,
+) (*reliantv1.CleanupStorageResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
-	if req.Msg.DaemonId == "" || len(req.Msg.WorktreeIds) == 0 {
+	if req.DaemonId == "" || len(req.WorktreeIds) == 0 {
 		return nil, svcerr.InvalidArgument("daemon_id and worktree_ids are required")
 	}
-	if len(req.Msg.WorktreeIds) > maxInboxDismissBatch {
+	if len(req.WorktreeIds) > maxInboxDismissBatch {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("at most %d worktrees per call", maxInboxDismissBatch))
 	}
 	if s.deps.Sweeper == nil {
@@ -36,7 +34,7 @@ func (s *Service) CleanupStorage(
 	// The machine must be the caller's: Cleanup only ever acts on worktrees of
 	// projects the caller owns, but naming a stranger's daemon is rejected
 	// outright rather than quietly doing nothing.
-	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
+	daemon, err := s.deps.Repo.GetDaemon(ctx, req.DaemonId)
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get machine"))
 	}
@@ -44,7 +42,7 @@ func (s *Service) CleanupStorage(
 		return nil, svcerr.NotFound("machine")
 	}
 
-	accepted, skipped, err := s.deps.Sweeper.StartCleanup(ctx, s.deps.Repo, userID, req.Msg.DaemonId, req.Msg.WorktreeIds)
+	accepted, skipped, err := s.deps.Sweeper.StartCleanup(ctx, s.deps.Repo, userID, req.DaemonId, req.WorktreeIds)
 	if errors.Is(err, worktreesweep.ErrOffline) {
 		return nil, svcerr.FailedPrecondition("that machine is offline; reconnect it and try again")
 	}
@@ -67,5 +65,5 @@ func (s *Service) CleanupStorage(
 	if len(accepted) == 0 {
 		activity.Skip(ctx) // every worktree was skipped: nothing is being cleaned up
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

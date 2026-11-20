@@ -3,7 +3,6 @@ package settings_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,10 +17,10 @@ func TestTrackPageVisited_Generated(t *testing.T) {
 	t.Parallel()
 
 	svc := settings.NewTestSettings(t, settings.WithPlaceholderDeps())
-	resp, err := svc.TrackPageVisited(settings.AuthedContext(t), connect.NewRequest(&pb.TrackPageVisitedRequest{
+	resp, err := svc.TrackPageVisited(settings.AuthedContext(t), &pb.TrackPageVisitedRequest{
 		PageName:     "settings",
 		PreviousPage: ptr.Of("chat"),
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.GetSuccess())
+	require.True(t, resp.GetSuccess())
 }

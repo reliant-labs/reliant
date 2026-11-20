@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -48,11 +47,11 @@ func TestViewerShapeIsDecidedOnce(t *testing.T) {
 
 			t.Run("GetChat", func(t *testing.T) {
 				got := read(t, func(m *viewertest.FirstAnswerOnly) (proto.Message, error) {
-					res, err := svc.GetChat(f.ContextWith(f.ViewerID, m), connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.ChatID}))
+					res, err := svc.GetChat(f.ContextWith(f.ViewerID, m), &reliantv1.GetChatRequest{ChatId: f.ChatID})
 					if err != nil {
 						return nil, err
 					}
-					return res.Msg, nil
+					return res, nil
 				}).(*reliantv1.GetChatResponse)
 				assert.True(t, got.GetChat().GetViewerAccess())
 				assert.Nil(t, got.GetChat().Selection)
@@ -61,13 +60,13 @@ func TestViewerShapeIsDecidedOnce(t *testing.T) {
 			})
 			t.Run("ListMessages", func(t *testing.T) {
 				got := read(t, func(m *viewertest.FirstAnswerOnly) (proto.Message, error) {
-					res, err := svc.ListMessages(f.ContextWith(f.ViewerID, m), connect.NewRequest(&reliantv1.ListMessagesRequest{
+					res, err := svc.ListMessages(f.ContextWith(f.ViewerID, m), &reliantv1.ListMessagesRequest{
 						ChatId: f.ChatID, ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL.Enum(),
-					}))
+					})
 					if err != nil {
 						return nil, err
 					}
-					return res.Msg, nil
+					return res, nil
 				}).(*reliantv1.ListMessagesResponse)
 				result := blocksByID(got.GetMessages())[f.Transcript.ResultBlockID]
 				require.NotNil(t, result)
@@ -75,21 +74,21 @@ func TestViewerShapeIsDecidedOnce(t *testing.T) {
 			})
 			t.Run("ListStepExecutions", func(t *testing.T) {
 				got := read(t, func(m *viewertest.FirstAnswerOnly) (proto.Message, error) {
-					res, err := svc.ListStepExecutions(f.ContextWith(f.ViewerID, m), connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: f.ChatID}))
+					res, err := svc.ListStepExecutions(f.ContextWith(f.ViewerID, m), &reliantv1.ListStepExecutionsRequest{ChatId: f.ChatID})
 					if err != nil {
 						return nil, err
 					}
-					return res.Msg, nil
+					return res, nil
 				}).(*reliantv1.ListStepExecutionsResponse)
 				require.NotEmpty(t, got.GetStepExecutions(), "the step is listed")
 			})
 			t.Run("GetWorkflowExecutions", func(t *testing.T) {
 				read(t, func(m *viewertest.FirstAnswerOnly) (proto.Message, error) {
-					res, err := svc.GetWorkflowExecutions(f.ContextWith(f.ViewerID, m), connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{ChatId: f.ChatID}))
+					res, err := svc.GetWorkflowExecutions(f.ContextWith(f.ViewerID, m), &reliantv1.GetWorkflowExecutionsRequest{ChatId: f.ChatID})
 					if err != nil {
 						return nil, err
 					}
-					return res.Msg, nil
+					return res, nil
 				})
 			})
 		})
@@ -106,7 +105,7 @@ func TestViewerStepExecutionsCarryNoResolvedValue(t *testing.T) {
 	f := viewertest.New(t, repo)
 	step := f.SeedResolvedStep(t)
 	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
-	req := connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: f.ChatID})
+	req := &reliantv1.ListStepExecutionsRequest{ChatId: f.ChatID}
 
 	byID := func(steps []*reliantv1.StepExecution) *reliantv1.StepExecution {
 		for _, s := range steps {
@@ -120,7 +119,7 @@ func TestViewerStepExecutionsCarryNoResolvedValue(t *testing.T) {
 
 	viewed, err := svc.ListStepExecutions(f.Viewer, req)
 	require.NoError(t, err)
-	got := byID(viewed.Msg.GetStepExecutions())
+	got := byID(viewed.GetStepExecutions())
 	assert.Empty(t, got.GetInputJson(), "a viewer never reads a step's resolved input")
 	assert.Empty(t, got.GetOutputJson())
 	assert.Empty(t, got.GetErrorMessage())
@@ -130,5 +129,5 @@ func TestViewerStepExecutionsCarryNoResolvedValue(t *testing.T) {
 
 	owned, err := svc.ListStepExecutions(f.Owner, req)
 	require.NoError(t, err)
-	assert.Contains(t, byID(owned.Msg.GetStepExecutions()).GetInputJson(), step.Secret, "the owner reads the step's input")
+	assert.Contains(t, byID(owned.GetStepExecutions()).GetInputJson(), step.Secret, "the owner reads the step's input")
 }

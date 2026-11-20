@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -61,16 +60,16 @@ func (s *Service) taskBelongsToUser(ctx context.Context, taskID string, userID s
 // CreateTask creates a new task
 func (s *Service) CreateTask(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateTaskRequest],
-) (*connect.Response[reliantv1.CreateTaskResponse], error) {
+	req *reliantv1.CreateTaskRequest,
+) (*reliantv1.CreateTaskResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.PlanId == "" {
+	if req.PlanId == "" {
 		return nil, svcerr.InvalidArgument("plan_id is required")
 	}
 
 	// Verify user owns the plan
-	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, req.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
@@ -89,26 +88,26 @@ func (s *Service) CreateTask(
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 
-	if req.Msg.Title == "" {
+	if req.Title == "" {
 		return nil, svcerr.InvalidArgument("title is required")
 	}
 
-	statusVal := int32(req.Msg.Status)
+	statusVal := int32(req.Status)
 	if statusVal == 0 {
 		statusVal = int32(reliantv1.TaskStatus_TASK_STATUS_PENDING)
 	}
 
 	task := &db.Task{
 		ID:          uuid.New().String(),
-		PlanID:      req.Msg.PlanId,
-		Title:       req.Msg.Title,
-		Description: ptr.StringIfNotEmpty(req.Msg.Description),
+		PlanID:      req.PlanId,
+		Title:       req.Title,
+		Description: ptr.StringIfNotEmpty(req.Description),
 		Status:      statusVal,
-		Position:    int(req.Msg.GetPosition()),
+		Position:    int(req.GetPosition()),
 	}
 
-	if req.Msg.ParentTaskId != nil {
-		task.ParentTaskID = req.Msg.ParentTaskId
+	if req.ParentTaskId != nil {
+		task.ParentTaskID = req.ParentTaskId
 	}
 
 	if err := s.deps.Repo.CreateTask(ctx, task); err != nil {
@@ -137,21 +136,21 @@ func (s *Service) CreateTask(
 		resp.Task.ParentTaskId = task.ParentTaskID
 	}
 
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // GetTask retrieves a task by ID
 func (s *Service) GetTask(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetTaskRequest],
-) (*connect.Response[reliantv1.GetTaskResponse], error) {
+	req *reliantv1.GetTaskRequest,
+) (*reliantv1.GetTaskResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.taskBelongsToUser(ctx, req.Msg.TaskId, userID); err != nil {
+	if err := s.taskBelongsToUser(ctx, req.TaskId, userID); err != nil {
 		return nil, err
 	}
 
-	task, err := s.deps.Repo.GetTask(ctx, req.Msg.TaskId)
+	task, err := s.deps.Repo.GetTask(ctx, req.TaskId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get task"))
 	}
@@ -174,24 +173,24 @@ func (s *Service) GetTask(
 		resp.Task.ParentTaskId = task.ParentTaskID
 	}
 
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // ListTasks lists tasks (optionally filtered by plan)
 func (s *Service) ListTasks(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListTasksRequest],
-) (*connect.Response[reliantv1.ListTasksResponse], error) {
+	req *reliantv1.ListTasksRequest,
+) (*reliantv1.ListTasksResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// Serves viewers of a shared chat (authz.WithViewerReads).
 	ctx = authz.WithViewerReads(ctx)
 
-	if req.Msg.GetPlanId() == "" {
+	if req.GetPlanId() == "" {
 		return nil, svcerr.InvalidArgument("plan_id is required")
 	}
 
 	// The owner of the plan's chat, or a viewer of it shared.
-	plan, err := s.deps.Repo.GetPlan(ctx, *req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, *req.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
@@ -210,7 +209,7 @@ func (s *Service) ListTasks(
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 
-	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, *req.Msg.PlanId)
+	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, *req.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list tasks"))
 	}
@@ -234,40 +233,40 @@ func (s *Service) ListTasks(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.ListTasksResponse{
+	return &reliantv1.ListTasksResponse{
 		Tasks: protoTasks,
 		Total: int32(len(tasks)),
-	}), nil
+	}, nil
 }
 
 // UpdateTask updates an existing task
 func (s *Service) UpdateTask(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateTaskRequest],
-) (*connect.Response[reliantv1.UpdateTaskResponse], error) {
+	req *reliantv1.UpdateTaskRequest,
+) (*reliantv1.UpdateTaskResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.taskBelongsToUser(ctx, req.Msg.TaskId, userID); err != nil {
+	if err := s.taskBelongsToUser(ctx, req.TaskId, userID); err != nil {
 		return nil, err
 	}
 
-	task, err := s.deps.Repo.GetTask(ctx, req.Msg.TaskId)
+	task, err := s.deps.Repo.GetTask(ctx, req.TaskId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get task"))
 	}
 
 	// Update fields
-	if req.Msg.Title != nil {
-		task.Title = *req.Msg.Title
+	if req.Title != nil {
+		task.Title = *req.Title
 	}
-	if req.Msg.Description != nil {
-		task.Description = req.Msg.Description
+	if req.Description != nil {
+		task.Description = req.Description
 	}
-	if req.Msg.Status != nil {
-		task.Status = int32(*req.Msg.Status)
+	if req.Status != nil {
+		task.Status = int32(*req.Status)
 	}
-	if req.Msg.Position != nil {
-		task.Position = int(*req.Msg.Position)
+	if req.Position != nil {
+		task.Position = int(*req.Position)
 	}
 
 	if err := s.deps.Repo.UpdateTask(ctx, task); err != nil {
@@ -301,23 +300,23 @@ func (s *Service) UpdateTask(
 		resp.Task.ParentTaskId = task.ParentTaskID
 	}
 
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // DeleteTask deletes a task
 func (s *Service) DeleteTask(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteTaskRequest],
-) (*connect.Response[reliantv1.DeleteTaskResponse], error) {
+	req *reliantv1.DeleteTaskRequest,
+) (*reliantv1.DeleteTaskResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.taskBelongsToUser(ctx, req.Msg.TaskId, userID); err != nil {
+	if err := s.taskBelongsToUser(ctx, req.TaskId, userID); err != nil {
 		return nil, err
 	}
 
 	// Get chatID before deleting (via plan's thread)
 	var deleteChatID string
-	if task, err := s.deps.Repo.GetTask(ctx, req.Msg.TaskId); err == nil {
+	if task, err := s.deps.Repo.GetTask(ctx, req.TaskId); err == nil {
 		if taskPlan, err := s.deps.Repo.GetPlan(ctx, task.PlanID); err == nil {
 			if cid, err := s.getChatIDForPlan(ctx, taskPlan); err == nil {
 				deleteChatID = cid
@@ -325,7 +324,7 @@ func (s *Service) DeleteTask(
 		}
 	}
 
-	if err := s.deps.Repo.DeleteTask(ctx, req.Msg.TaskId); err != nil {
+	if err := s.deps.Repo.DeleteTask(ctx, req.TaskId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete task"))
 	}
 
@@ -335,5 +334,5 @@ func (s *Service) DeleteTask(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.DeleteTaskResponse{Success: true}), nil
+	return &reliantv1.DeleteTaskResponse{Success: true}, nil
 }

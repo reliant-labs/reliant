@@ -10,8 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
-
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -98,21 +101,22 @@ type fakeGitTokenService struct {
 	err              error
 }
 
-func (f *fakeGitTokenService) GetGitToken(_ context.Context, r *connect.Request[reliantv1.GetGitTokenRequest]) (*connect.Response[reliantv1.GetGitTokenResponse], error) {
-	f.bearer = r.Header().Get("Authorization")
-	f.provider = r.Msg.GetProvider()
+func (f *fakeGitTokenService) GetGitToken(ctx context.Context, r *reliantv1.GetGitTokenRequest) (*reliantv1.GetGitTokenResponse, error) {
+	f.bearer = serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")
+	f.provider = r.GetProvider()
 	if f.err != nil {
 		return nil, f.err
 	}
-	return connect.NewResponse(&reliantv1.GetGitTokenResponse{AccessToken: gitCredTestToken}), nil
+	return &reliantv1.GetGitTokenResponse{AccessToken: gitCredTestToken}, nil
 }
 
 func TestFetchGitToken_CallsServerAsPinnedDaemonSession(t *testing.T) {
 	isolateForgeCredHome(t)
 	fake := &fakeGitTokenService{}
 	mux := http.NewServeMux()
-	path, h := reliantv1connect.NewTokenServiceHandler(fake)
-	mux.Handle(path, h)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterTokenServiceHandler(rpcServer, fake)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	if err := auth.WriteDaemonCredentials(&auth.DaemonCredentials{PAT: "rlat_daemon", ServerURL: srv.URL}); err != nil {
@@ -128,13 +132,13 @@ func TestFetchGitToken_CallsServerAsPinnedDaemonSession(t *testing.T) {
 		t.Fatalf("bearer=%q provider=%q", fake.bearer, fake.provider)
 	}
 
-	fake.err = connect.NewError(connect.CodeFailedPrecondition, errors.New("not connected"))
+	fake.err = connect.NewError(connect.CodeFailedPrecondition, "not connected")
 	if _, err := fetchGitToken(context.Background(), cmd, forgecred.Pin{Server: srv.URL}, "github"); !errors.Is(err, errGitProviderNotConnected) {
 		t.Fatalf("err = %v, want errGitProviderNotConnected", err)
 	}
 
 	// A transient server-side failure says to retry, not just its code.
-	fake.err = connect.NewError(connect.CodeUnavailable, errors.New("control plane down"))
+	fake.err = connect.NewError(connect.CodeUnavailable, "control plane down")
 	if _, err := fetchGitToken(context.Background(), cmd, forgecred.Pin{Server: srv.URL}, "github"); err == nil || !strings.Contains(err.Error(), "retry") {
 		t.Fatalf("err = %v, want a retry message for Unavailable", err)
 	}

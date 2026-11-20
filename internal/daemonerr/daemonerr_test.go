@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -108,7 +108,7 @@ func TestDaemonReportedMissingPathIsNotFoundAndUserClass(t *testing.T) {
 		if c := svcerr.Classify(cerr); c != svcerr.ClassUser {
 			t.Errorf("%v: DispatchConnectError class = %v, want user", report, c)
 		}
-		if code := svcerr.Code(Error("daemon command forge.topology", report)); code != connect.CodeNotFound {
+		if code := svcerr.CodeV2(Error("daemon command forge.topology", report)); code != connect.CodeNotFound {
 			t.Errorf("%v: Error code = %v, want NotFound", report, code)
 		}
 	}

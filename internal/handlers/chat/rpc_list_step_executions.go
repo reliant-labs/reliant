@@ -10,8 +10,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatproto"
 	"github.com/reliant-labs/reliant/internal/ptr"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -29,19 +27,19 @@ const stepExecutionRecordLimit = 500
 // the detail one step's inspector asks for, scoped by node_path.
 func (s *Service) ListStepExecutions(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListStepExecutionsRequest],
-) (*connect.Response[reliantv1.ListStepExecutionsResponse], error) {
+	req *reliantv1.ListStepExecutionsRequest,
+) (*reliantv1.ListStepExecutionsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// Serves viewers of a shared chat, without what a step produced
 	// (chatproto.ElideStepsForViewer).
 	ctx = authz.WithViewerReads(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	nodePath := strings.TrimSpace(req.Msg.GetNodePath())
+	nodePath := strings.TrimSpace(req.GetNodePath())
 
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -51,7 +49,7 @@ func (s *Service) ListStepExecutions(
 	}
 
 	// One more than the limit says whether anything was left out.
-	rows, err := s.deps.Repo.ListStepExecutionRecordsForChat(ctx, req.Msg.ChatId, nodePath, stepExecutionRecordLimit+1)
+	rows, err := s.deps.Repo.ListStepExecutionRecordsForChat(ctx, req.ChatId, nodePath, stepExecutionRecordLimit+1)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list step executions"))
 	}
@@ -67,10 +65,10 @@ func (s *Service) ListStepExecutions(
 	if access.Viewer() {
 		chatproto.ElideStepsForViewer(executions)
 	}
-	return connect.NewResponse(&reliantv1.ListStepExecutionsResponse{
+	return &reliantv1.ListStepExecutionsResponse{
 		StepExecutions: executions,
 		Truncated:      truncated,
-	}), nil
+	}, nil
 }
 
 func stepExecutionRecordToProto(row *db.StepExecution) *reliantv1.StepExecution {

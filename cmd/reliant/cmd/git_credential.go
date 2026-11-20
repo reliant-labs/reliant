@@ -12,13 +12,14 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/forgecred"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 )
 
@@ -121,13 +122,13 @@ func fetchGitToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin, p
 	for _, s := range sessions {
 		httpClient := (&connection{ServerURL: s.Server}).httpClientWithBearer(s.Token)
 		httpClient.Timeout = 20 * time.Second
-		resp, err := reliantv1connect.NewTokenServiceClient(httpClient, strings.TrimRight(s.Server, "/")).
-			GetGitToken(ctx, connect.NewRequest(&reliantv1.GetGitTokenRequest{Provider: provider}))
+		resp, err := reliantv1connect.NewTokenServiceClient(rpcclient.New(httpClient, strings.TrimRight(s.Server, "/"), nil)).
+			GetGitToken(ctx, &reliantv1.GetGitTokenRequest{Provider: provider})
 		if err == nil {
-			if resp.Msg.GetAccessToken() == "" {
+			if resp.GetAccessToken() == "" {
 				return "", errGitProviderNotConnected
 			}
-			return resp.Msg.GetAccessToken(), nil
+			return resp.GetAccessToken(), nil
 		}
 		switch connect.CodeOf(err) {
 		case connect.CodeFailedPrecondition:

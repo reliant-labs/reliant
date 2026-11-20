@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -126,7 +126,7 @@ func TestDecideWorktreeReclaim_UnauthorizedApproverIsDenied(t *testing.T) {
 				user = testUser
 			}
 			_, err := decide(t, repo, m, user, &pb.WorktreeReclaimDecision{Key: "a", Fingerprint: "fa", Approve: true})
-			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+			assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 			assert.Empty(t, m.commands)
 		})
 	}

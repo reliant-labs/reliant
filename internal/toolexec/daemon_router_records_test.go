@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -69,7 +69,7 @@ func (f *fakeResumer) ResumeDaemon(_ context.Context, token, daemonID string) er
 		return f.err
 	}
 	if f.boundTokens != nil && f.boundTokens[daemonID] != token {
-		return connect.NewError(connect.CodePermissionDenied, nil)
+		return connect.NewError(connect.CodePermissionDenied, "")
 	}
 	return nil
 }

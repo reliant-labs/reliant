@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -53,15 +53,15 @@ func TestSetChatDaemon_SetAndClear(t *testing.T) {
 	// choice the way StartChat does (TestSetChatDaemonRejectsADaemonTheCallerDoesNotOwn).
 	daemonID := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: "test-user"}))
-	resp, err := service.SetChatDaemon(ctx, connect.NewRequest(&reliantv1.SetChatDaemonRequest{
+	resp, err := service.SetChatDaemon(ctx, &reliantv1.SetChatDaemonRequest{
 		ChatId:   chatID,
 		DaemonId: daemonID,
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Chat)
-	assert.Equal(t, chatID, resp.Msg.Chat.Id)
-	assert.NotNil(t, resp.Msg.Chat.ActiveDaemonId)
-	assert.Equal(t, daemonID, *resp.Msg.Chat.ActiveDaemonId)
+	require.NotNil(t, resp.Chat)
+	assert.Equal(t, chatID, resp.Chat.Id)
+	assert.NotNil(t, resp.Chat.ActiveDaemonId)
+	assert.Equal(t, daemonID, *resp.Chat.ActiveDaemonId)
 
 	// Verify it persisted
 	chat, err := repo.GetChat(ctx, chatID)
@@ -70,13 +70,13 @@ func TestSetChatDaemon_SetAndClear(t *testing.T) {
 	assert.Equal(t, daemonID, *chat.ActiveDaemonID)
 
 	// Clear daemon (empty string)
-	resp, err = service.SetChatDaemon(ctx, connect.NewRequest(&reliantv1.SetChatDaemonRequest{
+	resp, err = service.SetChatDaemon(ctx, &reliantv1.SetChatDaemonRequest{
 		ChatId:   chatID,
 		DaemonId: "",
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Chat)
-	assert.Nil(t, resp.Msg.Chat.ActiveDaemonId)
+	require.NotNil(t, resp.Chat)
+	assert.Nil(t, resp.Chat.ActiveDaemonId)
 
 	// Verify cleared
 	chat, err = repo.GetChat(ctx, chatID)
@@ -93,14 +93,14 @@ func TestSetChatDaemon_ChatNotFound(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SetChatDaemon(ctx, connect.NewRequest(&reliantv1.SetChatDaemonRequest{
+	_, err := service.SetChatDaemon(ctx, &reliantv1.SetChatDaemonRequest{
 		ChatId:   "nonexistent-chat-id",
 		DaemonId: "some-daemon",
-	}))
+	})
 	require.Error(t, err)
 
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -113,14 +113,14 @@ func TestSetChatDaemon_MissingChatID(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SetChatDaemon(ctx, connect.NewRequest(&reliantv1.SetChatDaemonRequest{
+	_, err := service.SetChatDaemon(ctx, &reliantv1.SetChatDaemonRequest{
 		ChatId:   "",
 		DaemonId: "some-daemon",
-	}))
+	})
 	require.Error(t, err)
 
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
 }
 
@@ -160,14 +160,14 @@ func TestSetChatDaemon_WrongOwner(t *testing.T) {
 	ctxB := context.WithValue(context.Background(), auth.UserIDContextKey, "user-b")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SetChatDaemon(ctxB, connect.NewRequest(&reliantv1.SetChatDaemonRequest{
+	_, err := service.SetChatDaemon(ctxB, &reliantv1.SetChatDaemonRequest{
 		ChatId:   chatID,
 		DaemonId: "some-daemon",
-	}))
+	})
 	require.Error(t, err)
 
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 

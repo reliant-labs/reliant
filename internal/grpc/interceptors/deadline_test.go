@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -16,8 +16,7 @@ import (
 )
 
 // slowRPCCounters snapshots the slow-RPC metric for the procedure label that
-// connect.NewRequest produces (empty — Spec is only populated on real
-// transports). Tests assert deltas, not absolute values, so they stay
+// a hand-built unary spec carries (empty). Tests assert deltas, not absolute values, so they stay
 // independent of ordering.
 func slowRPCCounters() (inFlight, completed float64) {
 	inFlight = testutil.ToFloat64(observability.SlowRPCTotal.WithLabelValues("", "in_flight"))
@@ -28,28 +27,38 @@ func slowRPCCounters() (inFlight, completed float64) {
 // watchedBy is a Deadline slot reporting through ReportSlowRPC after
 // slowAfter, so tests don't need real 10s sleeps. The repeat interval is an
 // hour: the watchdog cannot tick twice within a test.
-func watchedBy(slowAfter time.Duration, handler connect.UnaryFunc) connect.UnaryFunc {
-	return serverkit.Deadline{
+func watchedBy(slowAfter time.Duration, handler func(context.Context) error) func(context.Context) error {
+	return deadlined(serverkit.Deadline{
 		Unary:      UnaryTimeout,
 		SlowAfter:  slowAfter,
 		SlowRepeat: time.Hour,
 		OnSlow:     ReportSlowRPC,
-	}.WrapUnary(handler)
+	}, handler)
+}
+
+// deadlined runs handler as a unary call's handler behind d's interceptor.
+func deadlined(d serverkit.Deadline, handler func(context.Context) error) func(context.Context) error {
+	wrapped := d.InterceptorV2()(func(ctx context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		return handler(ctx)
+	})
+	return func(ctx context.Context) error {
+		return wrapped(ctx, connect.Spec{StreamType: connect.StreamTypeUnary}, nil)
+	}
 }
 
 func TestReportSlowRPCCountsASlowHandler(t *testing.T) {
 	inFlightBefore, completedBefore := slowRPCCounters()
 
-	wrapped := watchedBy(20*time.Millisecond, func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+	wrapped := watchedBy(20*time.Millisecond, func(context.Context) error {
 		// Stay in flight until the in-flight tick has fired.
 		testkit.Eventually(t, "the slow handler to be reported in flight", func() bool {
 			inFlight, _ := slowRPCCounters()
 			return inFlight > inFlightBefore
 		})
-		return nil, nil
+		return nil
 	})
 
-	_, err := wrapped(context.Background(), connect.NewRequest(&struct{}{}))
+	err := wrapped(context.Background())
 	require.NoError(t, err)
 
 	inFlightAfter, completedAfter := slowRPCCounters()
@@ -62,11 +71,11 @@ func TestReportSlowRPCCountsASlowHandler(t *testing.T) {
 func TestReportSlowRPCIgnoresAFastHandler(t *testing.T) {
 	inFlightBefore, completedBefore := slowRPCCounters()
 
-	wrapped := watchedBy(50*time.Millisecond, func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-		return nil, nil
+	wrapped := watchedBy(50*time.Millisecond, func(context.Context) error {
+		return nil
 	})
 
-	_, err := wrapped(context.Background(), connect.NewRequest(&struct{}{}))
+	err := wrapped(context.Background())
 	require.NoError(t, err)
 
 	// Give a would-be stray watchdog goroutine a chance to (incorrectly)
@@ -93,17 +102,17 @@ func TestSlowRPCThresholdsAreForgeDefaults(t *testing.T) {
 // old interceptor only applied its timeout when the caller sent none).
 func TestUnaryTimeoutIsACeilingOverALongerCallerDeadline(t *testing.T) {
 	var remaining time.Duration
-	wrapped := serverkit.Deadline{Unary: UnaryTimeout, Procedures: ProcedureTimeouts()}.WrapUnary(
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	wrapped := deadlined(serverkit.Deadline{Unary: UnaryTimeout, Procedures: ProcedureTimeouts()},
+		func(ctx context.Context) error {
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			remaining = time.Until(deadline)
-			return nil, nil
+			return nil
 		})
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
 	defer cancel()
-	_, err := wrapped(ctx, connect.NewRequest(&struct{}{}))
+	err := wrapped(ctx)
 	require.NoError(t, err)
 	require.LessOrEqual(t, remaining, UnaryTimeout)
 }

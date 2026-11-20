@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -33,19 +33,19 @@ func TestListDaemons_Generated(t *testing.T) {
 			},
 		},
 	}))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListDaemonsRequest, pb.ListDaemonsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListDaemonsRequest, pb.ListDaemonsResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
-			Req:     connect.NewRequest(&pb.ListDaemonsRequest{}),
+			Req:     &pb.ListDaemonsRequest{},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name: "a caller with no daemons gets an empty list",
-			Req:  connect.NewRequest(&pb.ListDaemonsRequest{}),
+			Req:  &pb.ListDaemonsRequest{},
 			Ctx:  daemon_registry.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListDaemonsResponse]) {
-				if n := len(resp.Msg.GetDaemons()); n != 0 {
+			Check: func(t *testing.T, resp *pb.ListDaemonsResponse) {
+				if n := len(resp.GetDaemons()); n != 0 {
 					t.Fatalf("ListDaemons returned %d daemons, want 0", n)
 				}
 			},

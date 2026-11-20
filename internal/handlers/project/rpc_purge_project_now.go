@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -29,21 +28,21 @@ import (
 // request may run, and a batch cut off by the request's deadline rolls back.
 func (s *Service) PurgeProjectNow(
 	ctx context.Context,
-	req *connect.Request[pb.PurgeProjectNowRequest],
-) (*connect.Response[pb.PurgeProjectNowResponse], error) {
+	req *pb.PurgeProjectNowRequest,
+) (*pb.PurgeProjectNowResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	project, authority, err := s.deletableProject(ctx, userID, req.Msg.GetProjectId(), "delete")
+	project, authority, err := s.deletableProject(ctx, userID, req.GetProjectId(), "delete")
 	if err != nil {
 		return nil, err
 	}
 	if authority != authz.ProjectDeleteOwner {
 		return nil, svcerr.PermissionDenied("only the project's owner can delete it immediately; deleting it with DeleteProject purges it once its restore window ends")
 	}
-	if strings.TrimSpace(req.Msg.GetConfirmName()) != project.Name {
+	if strings.TrimSpace(req.GetConfirmName()) != project.Name {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("confirm_name must be the project's name, %q, to delete it immediately", project.Name))
 	}
 	var checkouts []*core.ProjectDaemon
-	if req.Msg.GetRemoveFromMachines() {
+	if req.GetRemoveFromMachines() {
 		// Read before the purge, which takes the rows that name the
 		// checkouts; removed once the claim re-checked this authority under
 		// the owner's org lock.
@@ -59,11 +58,11 @@ func (s *Service) PurgeProjectNow(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project"))
 	}
 	var removals []*pb.ProjectMachineRemoval
-	if req.Msg.GetRemoveFromMachines() {
+	if req.GetRemoveFromMachines() {
 		removals = s.removeFromMachines(ctx, userID, project, checkouts)
 	}
 	s.startPurge(ctx, project.ID, decided.OwnerUserID)
-	return connect.NewResponse(&pb.PurgeProjectNowResponse{MachineRemovals: removals}), nil
+	return &pb.PurgeProjectNowResponse{MachineRemovals: removals}, nil
 }
 
 // purgeNowBudget bounds an immediate purge's detached batches. It is shorter

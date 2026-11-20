@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -36,15 +36,15 @@ import (
 // projectDeleteClient is the slice of the ProjectService client the command
 // needs; reliantv1connect.ProjectServiceClient satisfies it.
 type projectDeleteClient interface {
-	ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error)
-	DeleteProject(context.Context, *connect.Request[reliantv1.DeleteProjectRequest]) (*connect.Response[reliantv1.DeleteProjectResponse], error)
-	ListDeletedProjects(context.Context, *connect.Request[reliantv1.ListDeletedProjectsRequest]) (*connect.Response[reliantv1.ListDeletedProjectsResponse], error)
-	PurgeProjectNow(context.Context, *connect.Request[reliantv1.PurgeProjectNowRequest]) (*connect.Response[reliantv1.PurgeProjectNowResponse], error)
+	ListProjects(context.Context, *reliantv1.ListProjectsRequest) (*reliantv1.ListProjectsResponse, error)
+	DeleteProject(context.Context, *reliantv1.DeleteProjectRequest) (*reliantv1.DeleteProjectResponse, error)
+	ListDeletedProjects(context.Context, *reliantv1.ListDeletedProjectsRequest) (*reliantv1.ListDeletedProjectsResponse, error)
+	PurgeProjectNow(context.Context, *reliantv1.PurgeProjectNowRequest) (*reliantv1.PurgeProjectNowResponse, error)
 }
 
 // projectLister is what resolving a project reference needs.
 type projectLister interface {
-	ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error)
+	ListProjects(context.Context, *reliantv1.ListProjectsRequest) (*reliantv1.ListProjectsResponse, error)
 }
 
 func newProjectDeleteCmd() *cobra.Command {
@@ -164,12 +164,12 @@ func (d projectDelete) run(ctx context.Context, ref string) error {
 	if d.now {
 		removals, err = d.purgeNow(ctx, project)
 	} else {
-		var resp *connect.Response[reliantv1.DeleteProjectResponse]
-		resp, err = d.client.DeleteProject(ctx, connect.NewRequest(&reliantv1.DeleteProjectRequest{
+		var resp *reliantv1.DeleteProjectResponse
+		resp, err = d.client.DeleteProject(ctx, &reliantv1.DeleteProjectRequest{
 			ProjectId: project.GetId(), RemoveFromMachines: d.fromMachines,
-		}))
+		})
 		if err == nil {
-			deleteAfter, removals = resp.Msg.GetDeleteAfter(), resp.Msg.GetMachineRemovals()
+			deleteAfter, removals = resp.GetDeleteAfter(), resp.GetMachineRemovals()
 		}
 	}
 	if err != nil {
@@ -214,7 +214,7 @@ var errMachineRemovalUnsupported = errors.New("this server cannot remove a proje
 // shipped with the restore window and remove_from_machines alike: a server
 // that answers it Unimplemented predates both. It reads; nothing is changed.
 func (d projectDelete) requireMachineRemoval(ctx context.Context) error {
-	_, err := d.client.ListDeletedProjects(ctx, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{}))
+	_, err := d.client.ListDeletedProjects(ctx, &reliantv1.ListDeletedProjectsRequest{})
 	switch {
 	case err == nil:
 		return nil
@@ -229,20 +229,20 @@ func (d projectDelete) requireMachineRemoval(ctx context.Context) error {
 // window has no PurgeProjectNow, and its DeleteProject is the immediate
 // delete, so that is what it asks there.
 func (d projectDelete) purgeNow(ctx context.Context, project *reliantv1.Project) ([]*reliantv1.ProjectMachineRemoval, error) {
-	resp, err := d.client.PurgeProjectNow(ctx, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{
+	resp, err := d.client.PurgeProjectNow(ctx, &reliantv1.PurgeProjectNowRequest{
 		ProjectId: project.GetId(), ConfirmName: project.GetName(), RemoveFromMachines: d.fromMachines,
-	}))
+	})
 	if connect.CodeOf(err) == connect.CodeUnimplemented {
 		if d.fromMachines {
 			return nil, errMachineRemovalUnsupported
 		}
-		_, err = d.client.DeleteProject(ctx, connect.NewRequest(&reliantv1.DeleteProjectRequest{ProjectId: project.GetId()}))
+		_, err = d.client.DeleteProject(ctx, &reliantv1.DeleteProjectRequest{ProjectId: project.GetId()})
 		return nil, err
 	}
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg.GetMachineRemovals(), nil
+	return resp.GetMachineRemovals(), nil
 }
 
 // printMachineRemovals reports, per machine, whether the checkout was removed.
@@ -290,11 +290,11 @@ func displayTime(rfc3339 string) string {
 // then a name or a path. A path matches as typed and as an absolute path, so
 // `reliant project delete .` names the project in the current directory.
 func findProjectRef(ctx context.Context, client projectLister, ref string) (*reliantv1.Project, error) {
-	resp, err := client.ListProjects(ctx, connect.NewRequest(&reliantv1.ListProjectsRequest{}))
+	resp, err := client.ListProjects(ctx, &reliantv1.ListProjectsRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("listing projects: %w", err)
 	}
-	return matchProjectRef(resp.Msg.GetProjects(), ref, "no project of yours is named %q: pass its id ('reliant project list')")
+	return matchProjectRef(resp.GetProjects(), ref, "no project of yours is named %q: pass its id ('reliant project list')")
 }
 
 // findProjectRefToPurge resolves ref for --now: among the caller's live
@@ -303,15 +303,15 @@ func findProjectRef(ctx context.Context, client projectLister, ref string) (*rel
 // began. A server from before the restore window lists no deleted projects
 // (Unimplemented): there every project is live.
 func findProjectRefToPurge(ctx context.Context, client projectDeleteClient, ref string) (*reliantv1.Project, error) {
-	resp, err := client.ListProjects(ctx, connect.NewRequest(&reliantv1.ListProjectsRequest{}))
+	resp, err := client.ListProjects(ctx, &reliantv1.ListProjectsRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("listing projects: %w", err)
 	}
-	projects := resp.Msg.GetProjects()
-	deleted, err := client.ListDeletedProjects(ctx, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{IncludePurging: true}))
+	projects := resp.GetProjects()
+	deleted, err := client.ListDeletedProjects(ctx, &reliantv1.ListDeletedProjectsRequest{IncludePurging: true})
 	switch {
 	case err == nil:
-		projects = append(projects, deleted.Msg.GetProjects()...)
+		projects = append(projects, deleted.GetProjects()...)
 	case connect.CodeOf(err) != connect.CodeUnimplemented:
 		return nil, fmt.Errorf("listing deleted projects: %w", err)
 	}

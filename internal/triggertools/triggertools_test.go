@@ -14,7 +14,6 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,13 +143,13 @@ func (e *env) activate(t *testing.T, declared string) string {
 	t.Helper()
 	enabled := true
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, e.userID)
-	resp, err := e.svc.CreateTrigger(ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+	resp, err := e.svc.CreateTrigger(ctx, &reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 		Name: "triage / " + declared, ProjectId: e.projectID, Workflow: "triage", DaemonId: e.daemonID,
 		Message: "go", Enabled: &enabled,
 		Source: &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: declared},
-	}}))
+	}})
 	require.NoError(t, err)
-	return resp.Msg.GetTrigger().GetId()
+	return resp.GetTrigger().GetId()
 }
 
 func TestListTriggersScopedToAWorkflowShowsBrokenHealth(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -79,17 +79,17 @@ func TestPreviewProjectOrgMove_Generated(t *testing.T) {
 	person := func(m authz.Membership) context.Context {
 		return authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), m), authz.CredentialKindPerson)
 	}
-	req := func(projectID, to string) *connect.Request[pb.PreviewProjectOrgMoveRequest] {
-		return connect.NewRequest(&pb.PreviewProjectOrgMoveRequest{ProjectId: projectID, ToOrgId: to})
+	req := func(projectID, to string) *pb.PreviewProjectOrgMoveRequest {
+		return &pb.PreviewProjectOrgMoveRequest{ProjectId: projectID, ToOrgId: to}
 	}
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.PreviewProjectOrgMoveRequest, pb.PreviewProjectOrgMoveResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.PreviewProjectOrgMoveRequest, pb.PreviewProjectOrgMoveResponse]{
 		{
 			Name: "the owner, an admin of the source and a member of the target",
 			Req:  req("p-mine", "globex"),
 			Ctx:  person(moveOrgs{}),
-			Check: func(t *testing.T, resp *connect.Response[pb.PreviewProjectOrgMoveResponse]) {
-				m := resp.Msg
+			Check: func(t *testing.T, resp *pb.PreviewProjectOrgMoveResponse) {
+				m := resp
 				if m.GetFromOrgId() != "acme" || m.GetToOrgId() != "globex" {
 					t.Fatalf("orgs = %q → %q", m.GetFromOrgId(), m.GetToOrgId())
 				}
@@ -118,9 +118,9 @@ func TestPreviewProjectOrgMove_Generated(t *testing.T) {
 			Name: "a project not yet assigned an org moves from the owner's default",
 			Req:  req("p-legacy", "globex"),
 			Ctx:  person(moveOrgs{}),
-			Check: func(t *testing.T, resp *connect.Response[pb.PreviewProjectOrgMoveResponse]) {
-				if resp.Msg.GetFromOrgId() != "acme" {
-					t.Fatalf("from = %q, want the default org acme", resp.Msg.GetFromOrgId())
+			Check: func(t *testing.T, resp *pb.PreviewProjectOrgMoveResponse) {
+				if resp.GetFromOrgId() != "acme" {
+					t.Fatalf("from = %q, want the default org acme", resp.GetFromOrgId())
 				}
 			},
 		},
@@ -191,10 +191,11 @@ func TestPreviewProjectOrgMove_RefusalReasons(t *testing.T) {
 		{"an agent's credential", "p-acme", "globex", software, connect.CodePermissionDenied, auth.ReasonPersonRequired},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.PreviewProjectOrgMove(tc.ctx, connect.NewRequest(&pb.PreviewProjectOrgMoveRequest{ProjectId: tc.projectID, ToOrgId: tc.to}))
-			ce := svcerr.ToConnect(err)
-			if ce == nil || ce.Code() != tc.code || ce.Meta().Get(svcerr.ReasonHeader) != tc.reason {
-				t.Fatalf("got %v (reason %q), want %v %q", err, ce.Meta().Get(svcerr.ReasonHeader), tc.code, tc.reason)
+			_, err := svc.PreviewProjectOrgMove(tc.ctx, &pb.PreviewProjectOrgMoveRequest{ProjectId: tc.projectID, ToOrgId: tc.to})
+			ce := svcerr.ToConnectV2(err)
+			reason, _ := svcerr.ReasonOf(err)
+			if ce == nil || ce.Code() != tc.code || reason != tc.reason {
+				t.Fatalf("got %v (reason %q), want %v %q", err, reason, tc.code, tc.reason)
 			}
 		})
 	}

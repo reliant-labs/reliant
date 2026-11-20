@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/api/enums/v1"
@@ -46,20 +45,20 @@ func queuedMessageID(clientID string) string {
 // boundary, not synchronously.
 func (s *Service) SendAgentMessage(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SendAgentMessageRequest],
-) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+	req *reliantv1.SendAgentMessageRequest,
+) (*reliantv1.SendAgentMessageResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	if req.Msg.ThreadId == "" {
+	if req.ThreadId == "" {
 		return nil, svcerr.InvalidArgument("thread_id is required")
 	}
-	if strings.TrimSpace(req.Msg.Message) == "" {
+	if strings.TrimSpace(req.Message) == "" {
 		return nil, svcerr.InvalidArgument("message is required")
 	}
-	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
+	clientID, err := parseClientMessageID(req.GetClientMessageId())
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +66,7 @@ func (s *Service) SendAgentMessage(
 	// Ownership check: the chat must belong to the caller. Combined with the
 	// thread.ChatID check below, this is what stops a user from addressing
 	// an arbitrary thread in someone else's chat.
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	chat, err := s.getChatForUser(ctx, req.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -75,14 +74,14 @@ func (s *Service) SendAgentMessage(
 		return nil, svcerr.NotFound("chat")
 	}
 
-	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
+	target, err := s.deps.Repo.GetThread(ctx, req.ThreadId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get thread"))
 	}
 	if target == nil {
 		return nil, svcerr.NotFound("thread")
 	}
-	if target.ChatID != req.Msg.ChatId {
+	if target.ChatID != req.ChatId {
 		// Deliberately the same NotFound the chat-ownership check above
 		// returns, rather than a distinguishable error: revealing that a
 		// thread ID exists but belongs to a different chat is an
@@ -101,20 +100,20 @@ func (s *Service) SendAgentMessage(
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check for an earlier send"))
 		}
 		if prior != nil {
-			if !humanMessageIs(prior, chat.ID, req.Msg.Message, req.Msg.Attachments) {
+			if !humanMessageIs(prior, chat.ID, req.Message, req.Attachments) {
 				return nil, launch.ErrClientMessageReused
 			}
 			if prior.Status == core.AgentMessageStatusDelivered {
-				return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+				return &reliantv1.SendAgentMessageResponse{
 					Success: true,
 					Message: queuedReceipt,
-				}), nil
+				}, nil
 			}
 		}
 	}
 
 	owningWorkflow := s.owningWorkflow(ctx, target)
-	isMainThread := req.Msg.ThreadId == chat.MainThreadID()
+	isMainThread := req.ThreadId == chat.MainThreadID()
 
 	// A message to the chat's MAIN thread after its run ended is a message to
 	// the chat, and gets what SendMessage gives one: a run started to answer
@@ -139,7 +138,7 @@ func (s *Service) SendAgentMessage(
 	if resumeStoppedAgent {
 		resumability = s.stoppedAgentResumability(ctx, chat, target)
 		if resumability.refusal != "" {
-			return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: false, Message: resumability.refusal}), nil
+			return &reliantv1.SendAgentMessageResponse{Success: false, Message: resumability.refusal}, nil
 		}
 	}
 
@@ -155,13 +154,13 @@ func (s *Service) SendAgentMessage(
 	// moment before its workflow follows, and reviving it would queue a
 	// message into an agent that really has stopped.
 	if !restartMainRun && !resumeStoppedAgent && core.ThreadStatusIsTerminal(target.Status) {
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+		return &reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: fmt.Sprintf(
 				"This agent has already finished (status: %s) — its loop has exited and there is nothing to deliver into. "+
 					"Send a new message to the chat instead.",
 				core.ThreadStatusLabel(target.Status)),
-		}), nil
+		}, nil
 	}
 
 	// A non-terminal thread status is NOT sufficient to prove there is a next
@@ -197,30 +196,30 @@ func (s *Service) SendAgentMessage(
 	// message outright, whereas wrongly accepting only reproduces today's
 	// late delivery.
 	if !restartMainRun && !resumeStoppedAgent && owningWorkflow != nil && !owningWorkflow.Status.Live() {
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+		return &reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: fmt.Sprintf(
 				"This agent isn't currently running (its run is %s), so there is no next turn to deliver into. "+
 					"Send a normal message to the chat to start one.",
 				owningWorkflow.Status.Label()),
-		}), nil
+		}, nil
 	}
 
 	// The composer queues to the MAIN thread from a run's main view. Input to
 	// a live run goes to the thread an agent of it reads (run_recipient.go):
 	// the main thread of an agent chat, the one running agent of a graph run,
 	// and never a guess among several.
-	toThread := req.Msg.ThreadId
+	toThread := req.ThreadId
 	routedToGraphAgent := false
 	if isMainThread && !restartMainRun && !resumeStoppedAgent {
 		recipient, err := s.resolveRunRecipient(ctx, chat, chat.MainThreadID(), chat.MainThreadID(), "")
 		if err != nil {
 			if errors.Is(err, core.ErrRunNoListeningAgent) || errors.Is(err, core.ErrRunRecipientAmbiguous) {
-				return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: false, Message: err.Error()}), nil
+				return &reliantv1.SendAgentMessageResponse{Success: false, Message: err.Error()}, nil
 			}
 			return nil, err
 		}
-		if recipient.thread != req.Msg.ThreadId {
+		if recipient.thread != req.ThreadId {
 			toThread = recipient.thread
 			isMainThread = false
 			routedToGraphAgent = recipient.routed && !recipient.rootReads
@@ -234,9 +233,9 @@ func (s *Service) SendAgentMessage(
 	// that drains it — this one's successor, or the one started below — would
 	// revive it anyway.
 	if restartMainRun {
-		if _, err := s.deps.Repo.ReviveThread(ctx, req.Msg.ThreadId); err != nil {
+		if _, err := s.deps.Repo.ReviveThread(ctx, req.ThreadId); err != nil {
 			logging.WarnContext(ctx, "Could not revive the main thread before queueing to its ended run",
-				"error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
+				"error", err, "chatID", req.ChatId, "threadID", req.ThreadId)
 		}
 	}
 
@@ -249,11 +248,11 @@ func (s *Service) SendAgentMessage(
 		// drain envelope this came from the user rather than a peer agent,
 		// so FromThreadID here is not read as a sender label for this kind.
 		FromThreadID: chat.MainThreadID(),
-		ChatID:       req.Msg.ChatId,
+		ChatID:       req.ChatId,
 		ToThreadID:   toThread,
 		Kind:         core.AgentMessageKindHumanMessage,
-		Body:         req.Msg.Message,
-		Attachments:  req.Msg.Attachments,
+		Body:         req.Message,
+		Attachments:  req.Attachments,
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
 		// Hidden when it is an async ask_user answer, shown on its card.
@@ -269,13 +268,13 @@ func (s *Service) SendAgentMessage(
 	}
 	msg = queued
 	if !inserted && msg.Status != core.AgentMessageStatusQueued {
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: true, Message: queuedReceipt}), nil
+		return &reliantv1.SendAgentMessageResponse{Success: true, Message: queuedReceipt}, nil
 	}
 	if !inserted && restartMainRun {
 		// The first attempt may have started the run for this row already;
 		// starting another would terminate it.
 		if state, stateErr := s.runs.State(ctx, chat.MainThreadID()); stateErr == nil && state.Exists && state.IsRunning {
-			return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: true, Message: queuedReceipt}), nil
+			return &reliantv1.SendAgentMessageResponse{Success: true, Message: queuedReceipt}, nil
 		}
 	}
 
@@ -288,7 +287,7 @@ func (s *Service) SendAgentMessage(
 
 	switch {
 	case resumeStoppedAgent:
-		return s.resumeStoppedAgent(ctx, userID, chat, req.Msg.ThreadId, msg.ID, resumability)
+		return s.resumeStoppedAgent(ctx, userID, chat, req.ThreadId, msg.ID, resumability)
 	case routedToGraphAgent:
 		// A graph run that closed before the wake is never restarted for a
 		// message (reliant #2394): withdraw the row and say so, and the
@@ -298,10 +297,10 @@ func (s *Service) SendAgentMessage(
 				logging.WarnContext(ctx, "Could not withdraw a message whose run ended before it was read",
 					"error", err, "chatID", chat.ID, "messageID", msg.ID)
 			}
-			return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+			return &reliantv1.SendAgentMessageResponse{
 				Success: false,
 				Message: "Not delivered: the run ended before its agent read the message.",
-			}), nil
+			}, nil
 		}
 	case !isMainThread:
 		_ = s.notifyThreadWake(ctx, chat, toThread, threadwake.ReasonMailbox)
@@ -309,23 +308,23 @@ func (s *Service) SendAgentMessage(
 		// A stopped run exits without reading its doorbell, even while
 		// Temporal still has it open, so a wake would strand the row. Start
 		// the run directly, as SendMessage does for a stopped run.
-		return s.startRunForQueuedRow(ctx, chat, req.Msg.ThreadId, msg.ID)
-	case s.wakeLiveRun(ctx, chat, req.Msg.ThreadId, threadwake.ReasonMailbox):
+		return s.startRunForQueuedRow(ctx, chat, req.ThreadId, msg.ID)
+	case s.wakeLiveRun(ctx, chat, req.ThreadId, threadwake.ReasonMailbox):
 		// The chat's run has closed — before this RPC, or between the
 		// liveness read above and this wake — so nothing will drain the row.
 		// Start a run for it rather than leave it for the reconciler to mark
 		// undelivered. A completed run that is still open is inside its
 		// end-of-run check, which takes the wake and continues as a fresh
 		// run for it (late_wake.go), so it lands here only once it is closed.
-		return s.startRunForQueuedRow(ctx, chat, req.Msg.ThreadId, msg.ID)
+		return s.startRunForQueuedRow(ctx, chat, req.ThreadId, msg.ID)
 	}
 
 	// The receipt is deliberately as honest as spawn_send's: queued does not
 	// mean read, and does not mean acted on.
-	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+	return &reliantv1.SendAgentMessageResponse{
 		Success: true,
 		Message: queuedReceipt,
-	}), nil
+	}, nil
 }
 
 const queuedReceipt = "Queued for delivery. It will be read at that agent's next turn — it has not been read yet."
@@ -428,18 +427,18 @@ func (s *Service) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID 
 // If the run cannot be started, the row is withdrawn and the user told to send
 // it as a message — the composer keeps the text on a refusal — rather than
 // promised a delivery nothing will make.
-func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threadID, messageID string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threadID, messageID string) (*reliantv1.SendAgentMessageResponse, error) {
 	workflowID := chat.MainThreadID()
-	refuse := func(cause error) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+	refuse := func(cause error) (*reliantv1.SendAgentMessageResponse, error) {
 		logging.WarnContext(ctx, "Could not start a run for a message queued to a run that closed; withdrawing it",
 			"error", cause, "chatID", chat.ID, "workflowID", workflowID)
 		if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
 			logging.WarnContext(ctx, "Could not withdraw the queued message", "error", err, "chatID", chat.ID, "messageID", messageID)
 		}
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+		return &reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: "The agent finished just as this was queued, so there was no turn to deliver it into. Send it as a normal message instead.",
-		}), nil
+		}, nil
 	}
 
 	if chat.WorkflowName == nil || *chat.WorkflowName == "" {
@@ -482,10 +481,10 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	s.runs.RecordRun(ctx, chat.ID, workflowID, run.GetRunID())
 	logging.InfoContext(ctx, "Started a run for a message queued as the previous one closed",
 		"chatID", chat.ID, "workflowID", workflowID, "runID", run.GetRunID())
-	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+	return &reliantv1.SendAgentMessageResponse{
 		Success: true,
 		Message: "The agent finished just as this was queued, so a new turn has started to read it.",
-	}), nil
+	}, nil
 }
 
 // newRunOptions is how every run SendMessage starts for an existing chat is

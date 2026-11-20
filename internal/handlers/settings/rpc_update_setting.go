@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -17,34 +15,34 @@ import (
 )
 
 // UpdateSetting updates an existing setting
-func (s *Service) UpdateSetting(ctx context.Context, req *connect.Request[reliantv1.UpdateSettingRequest]) (*connect.Response[reliantv1.UpdateSettingResponse], error) {
+func (s *Service) UpdateSetting(ctx context.Context, req *reliantv1.UpdateSettingRequest) (*reliantv1.UpdateSettingResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.Key == "" {
+	if req.Key == "" {
 		return nil, svcerr.InvalidArgument("key is required")
 	}
-	if err := guardSettingWrite(ctx, req.Msg.Key); err != nil {
+	if err := guardSettingWrite(ctx, req.Key); err != nil {
 		return nil, err
 	}
 
 	var projectID *string
-	if req.Msg.ProjectId != nil {
-		projectID = req.Msg.ProjectId
+	if req.ProjectId != nil {
+		projectID = req.ProjectId
 	}
 
-	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Msg.Key)
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Key)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get setting"))
 	}
 
-	if req.Msg.Value != nil {
-		if err := validateSettingValue(req.Msg.Key, *req.Msg.Value); err != nil {
+	if req.Value != nil {
+		if err := validateSettingValue(req.Key, *req.Value); err != nil {
 			return nil, err
 		}
-		setting.Value = *req.Msg.Value
+		setting.Value = *req.Value
 	}
-	if req.Msg.ValueType != nil {
-		setting.ValueType = *req.Msg.ValueType
+	if req.ValueType != nil {
+		setting.ValueType = *req.ValueType
 	}
 	setting.UpdatedAt = time.Now().UTC()
 
@@ -56,7 +54,7 @@ func (s *Service) UpdateSetting(ctx context.Context, req *connect.Request[relian
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after UpdateSetting", "error", err)
 	}
 
-	return connect.NewResponse(&reliantv1.UpdateSettingResponse{
+	return &reliantv1.UpdateSettingResponse{
 		Setting: settingToProto(setting),
-	}), nil
+	}, nil
 }

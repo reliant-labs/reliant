@@ -5,8 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -19,14 +17,14 @@ import (
 // people's membership, which a credential bound to another org cannot.
 func (s *Service) ListTriggerOffers(
 	ctx context.Context,
-	req *connect.Request[pb.ListTriggerOffersRequest],
-) (*connect.Response[pb.ListTriggerOffersResponse], error) {
+	req *pb.ListTriggerOffersRequest,
+) (*pb.ListTriggerOffersResponse, error) {
 	if err := auth.RequirePerson(ctx, "list automations offered to you"); err != nil {
 		return nil, err
 	}
 	callerID := auth.MustGetUserID(ctx)
 	f := core.TriggerOfferFilters{OffereeUserID: callerID}
-	if org := strings.TrimSpace(req.Msg.GetOrgId()); org != "" {
+	if org := strings.TrimSpace(req.GetOrgId()); org != "" {
 		f.OrgID = &org
 	}
 	offers, err := s.deps.Repo.ListPendingTriggerOffers(ctx, f)
@@ -53,5 +51,5 @@ func (s *Service) ListTriggerOffers(
 		out.Trigger, out.ParamNames = s.deps.Triggers.RenderDefinition(ctx, t)
 		resp.Offers = append(resp.Offers, out)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

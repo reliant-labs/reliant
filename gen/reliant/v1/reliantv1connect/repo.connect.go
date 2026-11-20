@@ -7,222 +7,239 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// RepoServiceName is the fully-qualified name of the RepoService service.
 	RepoServiceName = "reliant.v1.RepoService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// RepoServiceDiscoverReposProcedure is the fully-qualified name of the RepoService's DiscoverRepos
-	// RPC.
+	// RepoServiceDiscoverReposProcedure is the procedure name of the RepoService's DiscoverRepos RPC.
 	RepoServiceDiscoverReposProcedure = "/reliant.v1.RepoService/DiscoverRepos"
-	// RepoServiceListReposProcedure is the fully-qualified name of the RepoService's ListRepos RPC.
+	// RepoServiceListReposProcedure is the procedure name of the RepoService's ListRepos RPC.
 	RepoServiceListReposProcedure = "/reliant.v1.RepoService/ListRepos"
-	// RepoServiceAddRepoProcedure is the fully-qualified name of the RepoService's AddRepo RPC.
+	// RepoServiceAddRepoProcedure is the procedure name of the RepoService's AddRepo RPC.
 	RepoServiceAddRepoProcedure = "/reliant.v1.RepoService/AddRepo"
-	// RepoServiceRemoveRepoProcedure is the fully-qualified name of the RepoService's RemoveRepo RPC.
+	// RepoServiceRemoveRepoProcedure is the procedure name of the RepoService's RemoveRepo RPC.
 	RepoServiceRemoveRepoProcedure = "/reliant.v1.RepoService/RemoveRepo"
-	// RepoServiceGetRepoGitInfoProcedure is the fully-qualified name of the RepoService's
-	// GetRepoGitInfo RPC.
+	// RepoServiceGetRepoGitInfoProcedure is the procedure name of the RepoService's GetRepoGitInfo RPC.
 	RepoServiceGetRepoGitInfoProcedure = "/reliant.v1.RepoService/GetRepoGitInfo"
+)
+
+var (
+	repoServiceDiscoverReposSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_repo_proto.Services().ByName("RepoService").Methods().ByName("DiscoverRepos"),
+			Procedure:        RepoServiceDiscoverReposProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	repoServiceListReposSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_repo_proto.Services().ByName("RepoService").Methods().ByName("ListRepos"),
+			Procedure:  RepoServiceListReposProcedure,
+		}
+	})
+	repoServiceAddRepoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_repo_proto.Services().ByName("RepoService").Methods().ByName("AddRepo"),
+			Procedure:  RepoServiceAddRepoProcedure,
+		}
+	})
+	repoServiceRemoveRepoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_repo_proto.Services().ByName("RepoService").Methods().ByName("RemoveRepo"),
+			Procedure:  RepoServiceRemoveRepoProcedure,
+		}
+	})
+	repoServiceGetRepoGitInfoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_repo_proto.Services().ByName("RepoService").Methods().ByName("GetRepoGitInfo"),
+			Procedure:  RepoServiceGetRepoGitInfoProcedure,
+		}
+	})
 )
 
 // RepoServiceClient is a client for the reliant.v1.RepoService service.
 type RepoServiceClient interface {
-	DiscoverRepos(context.Context, *connect.Request[v1.DiscoverReposRequest]) (*connect.Response[v1.DiscoverReposResponse], error)
+	DiscoverRepos(context.Context, *v1.DiscoverReposRequest) (*v1.DiscoverReposResponse, error)
 	// forge:custom — lists one project's repos after checking the caller owns the project
-	ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error)
-	AddRepo(context.Context, *connect.Request[v1.AddRepoRequest]) (*connect.Response[v1.AddRepoResponse], error)
-	RemoveRepo(context.Context, *connect.Request[v1.RemoveRepoRequest]) (*connect.Response[v1.RemoveRepoResponse], error)
-	GetRepoGitInfo(context.Context, *connect.Request[v1.GetRepoGitInfoRequest]) (*connect.Response[v1.GetRepoGitInfoResponse], error)
+	ListRepos(context.Context, *v1.ListReposRequest) (*v1.ListReposResponse, error)
+	AddRepo(context.Context, *v1.AddRepoRequest) (*v1.AddRepoResponse, error)
+	RemoveRepo(context.Context, *v1.RemoveRepoRequest) (*v1.RemoveRepoResponse, error)
+	GetRepoGitInfo(context.Context, *v1.GetRepoGitInfoRequest) (*v1.GetRepoGitInfoResponse, error)
 }
 
-// NewRepoServiceClient constructs a client for the reliant.v1.RepoService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewRepoServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RepoServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	repoServiceMethods := v1.File_reliant_v1_repo_proto.Services().ByName("RepoService").Methods()
-	return &repoServiceClient{
-		discoverRepos: connect.NewClient[v1.DiscoverReposRequest, v1.DiscoverReposResponse](
-			httpClient,
-			baseURL+RepoServiceDiscoverReposProcedure,
-			connect.WithSchema(repoServiceMethods.ByName("DiscoverRepos")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listRepos: connect.NewClient[v1.ListReposRequest, v1.ListReposResponse](
-			httpClient,
-			baseURL+RepoServiceListReposProcedure,
-			connect.WithSchema(repoServiceMethods.ByName("ListRepos")),
-			connect.WithClientOptions(opts...),
-		),
-		addRepo: connect.NewClient[v1.AddRepoRequest, v1.AddRepoResponse](
-			httpClient,
-			baseURL+RepoServiceAddRepoProcedure,
-			connect.WithSchema(repoServiceMethods.ByName("AddRepo")),
-			connect.WithClientOptions(opts...),
-		),
-		removeRepo: connect.NewClient[v1.RemoveRepoRequest, v1.RemoveRepoResponse](
-			httpClient,
-			baseURL+RepoServiceRemoveRepoProcedure,
-			connect.WithSchema(repoServiceMethods.ByName("RemoveRepo")),
-			connect.WithClientOptions(opts...),
-		),
-		getRepoGitInfo: connect.NewClient[v1.GetRepoGitInfoRequest, v1.GetRepoGitInfoResponse](
-			httpClient,
-			baseURL+RepoServiceGetRepoGitInfoProcedure,
-			connect.WithSchema(repoServiceMethods.ByName("GetRepoGitInfo")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// repoServiceClient implements RepoServiceClient.
-type repoServiceClient struct {
-	discoverRepos  *connect.Client[v1.DiscoverReposRequest, v1.DiscoverReposResponse]
-	listRepos      *connect.Client[v1.ListReposRequest, v1.ListReposResponse]
-	addRepo        *connect.Client[v1.AddRepoRequest, v1.AddRepoResponse]
-	removeRepo     *connect.Client[v1.RemoveRepoRequest, v1.RemoveRepoResponse]
-	getRepoGitInfo *connect.Client[v1.GetRepoGitInfoRequest, v1.GetRepoGitInfoResponse]
-}
-
-// DiscoverRepos calls reliant.v1.RepoService.DiscoverRepos.
-func (c *repoServiceClient) DiscoverRepos(ctx context.Context, req *connect.Request[v1.DiscoverReposRequest]) (*connect.Response[v1.DiscoverReposResponse], error) {
-	return c.discoverRepos.CallUnary(ctx, req)
-}
-
-// ListRepos calls reliant.v1.RepoService.ListRepos.
-func (c *repoServiceClient) ListRepos(ctx context.Context, req *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error) {
-	return c.listRepos.CallUnary(ctx, req)
-}
-
-// AddRepo calls reliant.v1.RepoService.AddRepo.
-func (c *repoServiceClient) AddRepo(ctx context.Context, req *connect.Request[v1.AddRepoRequest]) (*connect.Response[v1.AddRepoResponse], error) {
-	return c.addRepo.CallUnary(ctx, req)
-}
-
-// RemoveRepo calls reliant.v1.RepoService.RemoveRepo.
-func (c *repoServiceClient) RemoveRepo(ctx context.Context, req *connect.Request[v1.RemoveRepoRequest]) (*connect.Response[v1.RemoveRepoResponse], error) {
-	return c.removeRepo.CallUnary(ctx, req)
-}
-
-// GetRepoGitInfo calls reliant.v1.RepoService.GetRepoGitInfo.
-func (c *repoServiceClient) GetRepoGitInfo(ctx context.Context, req *connect.Request[v1.GetRepoGitInfoRequest]) (*connect.Response[v1.GetRepoGitInfoResponse], error) {
-	return c.getRepoGitInfo.CallUnary(ctx, req)
+// NewRepoServiceClient constructs a client for the reliant.v1.RepoService service. Multiple service
+// clients may share a single connect.Client.
+func NewRepoServiceClient(client *connect.Client) RepoServiceClient {
+	return &repoServiceClient{client: client}
 }
 
 // RepoServiceHandler is an implementation of the reliant.v1.RepoService service.
 type RepoServiceHandler interface {
-	DiscoverRepos(context.Context, *connect.Request[v1.DiscoverReposRequest]) (*connect.Response[v1.DiscoverReposResponse], error)
+	DiscoverRepos(context.Context, *v1.DiscoverReposRequest) (*v1.DiscoverReposResponse, error)
 	// forge:custom — lists one project's repos after checking the caller owns the project
-	ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error)
-	AddRepo(context.Context, *connect.Request[v1.AddRepoRequest]) (*connect.Response[v1.AddRepoResponse], error)
-	RemoveRepo(context.Context, *connect.Request[v1.RemoveRepoRequest]) (*connect.Response[v1.RemoveRepoResponse], error)
-	GetRepoGitInfo(context.Context, *connect.Request[v1.GetRepoGitInfoRequest]) (*connect.Response[v1.GetRepoGitInfoResponse], error)
+	ListRepos(context.Context, *v1.ListReposRequest) (*v1.ListReposResponse, error)
+	AddRepo(context.Context, *v1.AddRepoRequest) (*v1.AddRepoResponse, error)
+	RemoveRepo(context.Context, *v1.RemoveRepoRequest) (*v1.RemoveRepoResponse, error)
+	GetRepoGitInfo(context.Context, *v1.GetRepoGitInfoRequest) (*v1.GetRepoGitInfoResponse, error)
 }
 
-// NewRepoServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewRepoServiceHandler(svc RepoServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	repoServiceMethods := v1.File_reliant_v1_repo_proto.Services().ByName("RepoService").Methods()
-	repoServiceDiscoverReposHandler := connect.NewUnaryHandler(
-		RepoServiceDiscoverReposProcedure,
-		svc.DiscoverRepos,
-		connect.WithSchema(repoServiceMethods.ByName("DiscoverRepos")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterRepoServiceHandler registers svc as the reliant.v1.RepoService implementation on server.
+func RegisterRepoServiceHandler(server *connect.Server, svc RepoServiceHandler) {
+	adapter := repoServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: repoServiceDiscoverReposSpec(), Handler: adapter.discoverRepos},
+		connect.Method{Spec: repoServiceListReposSpec(), Handler: adapter.listRepos},
+		connect.Method{Spec: repoServiceAddRepoSpec(), Handler: adapter.addRepo},
+		connect.Method{Spec: repoServiceRemoveRepoSpec(), Handler: adapter.removeRepo},
+		connect.Method{Spec: repoServiceGetRepoGitInfoSpec(), Handler: adapter.getRepoGitInfo},
 	)
-	repoServiceListReposHandler := connect.NewUnaryHandler(
-		RepoServiceListReposProcedure,
-		svc.ListRepos,
-		connect.WithSchema(repoServiceMethods.ByName("ListRepos")),
-		connect.WithHandlerOptions(opts...),
-	)
-	repoServiceAddRepoHandler := connect.NewUnaryHandler(
-		RepoServiceAddRepoProcedure,
-		svc.AddRepo,
-		connect.WithSchema(repoServiceMethods.ByName("AddRepo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	repoServiceRemoveRepoHandler := connect.NewUnaryHandler(
-		RepoServiceRemoveRepoProcedure,
-		svc.RemoveRepo,
-		connect.WithSchema(repoServiceMethods.ByName("RemoveRepo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	repoServiceGetRepoGitInfoHandler := connect.NewUnaryHandler(
-		RepoServiceGetRepoGitInfoProcedure,
-		svc.GetRepoGitInfo,
-		connect.WithSchema(repoServiceMethods.ByName("GetRepoGitInfo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.RepoService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case RepoServiceDiscoverReposProcedure:
-			repoServiceDiscoverReposHandler.ServeHTTP(w, r)
-		case RepoServiceListReposProcedure:
-			repoServiceListReposHandler.ServeHTTP(w, r)
-		case RepoServiceAddRepoProcedure:
-			repoServiceAddRepoHandler.ServeHTTP(w, r)
-		case RepoServiceRemoveRepoProcedure:
-			repoServiceRemoveRepoHandler.ServeHTTP(w, r)
-		case RepoServiceGetRepoGitInfoProcedure:
-			repoServiceGetRepoGitInfoHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedRepoServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedRepoServiceHandler struct{}
 
-func (UnimplementedRepoServiceHandler) DiscoverRepos(context.Context, *connect.Request[v1.DiscoverReposRequest]) (*connect.Response[v1.DiscoverReposResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RepoService.DiscoverRepos is not implemented"))
+func (UnimplementedRepoServiceHandler) DiscoverRepos(context.Context, *v1.DiscoverReposRequest) (*v1.DiscoverReposResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RepoService.DiscoverRepos is not implemented")
 }
 
-func (UnimplementedRepoServiceHandler) ListRepos(context.Context, *connect.Request[v1.ListReposRequest]) (*connect.Response[v1.ListReposResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RepoService.ListRepos is not implemented"))
+func (UnimplementedRepoServiceHandler) ListRepos(context.Context, *v1.ListReposRequest) (*v1.ListReposResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RepoService.ListRepos is not implemented")
 }
 
-func (UnimplementedRepoServiceHandler) AddRepo(context.Context, *connect.Request[v1.AddRepoRequest]) (*connect.Response[v1.AddRepoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RepoService.AddRepo is not implemented"))
+func (UnimplementedRepoServiceHandler) AddRepo(context.Context, *v1.AddRepoRequest) (*v1.AddRepoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RepoService.AddRepo is not implemented")
 }
 
-func (UnimplementedRepoServiceHandler) RemoveRepo(context.Context, *connect.Request[v1.RemoveRepoRequest]) (*connect.Response[v1.RemoveRepoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RepoService.RemoveRepo is not implemented"))
+func (UnimplementedRepoServiceHandler) RemoveRepo(context.Context, *v1.RemoveRepoRequest) (*v1.RemoveRepoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RepoService.RemoveRepo is not implemented")
 }
 
-func (UnimplementedRepoServiceHandler) GetRepoGitInfo(context.Context, *connect.Request[v1.GetRepoGitInfoRequest]) (*connect.Response[v1.GetRepoGitInfoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RepoService.GetRepoGitInfo is not implemented"))
+func (UnimplementedRepoServiceHandler) GetRepoGitInfo(context.Context, *v1.GetRepoGitInfoRequest) (*v1.GetRepoGitInfoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RepoService.GetRepoGitInfo is not implemented")
+}
+
+type repoServiceClient struct {
+	client *connect.Client
+}
+
+func (c *repoServiceClient) DiscoverRepos(ctx context.Context, req *v1.DiscoverReposRequest) (*v1.DiscoverReposResponse, error) {
+	var res v1.DiscoverReposResponse
+	if err := c.client.CallUnary(ctx, repoServiceDiscoverReposSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *repoServiceClient) ListRepos(ctx context.Context, req *v1.ListReposRequest) (*v1.ListReposResponse, error) {
+	var res v1.ListReposResponse
+	if err := c.client.CallUnary(ctx, repoServiceListReposSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *repoServiceClient) AddRepo(ctx context.Context, req *v1.AddRepoRequest) (*v1.AddRepoResponse, error) {
+	var res v1.AddRepoResponse
+	if err := c.client.CallUnary(ctx, repoServiceAddRepoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *repoServiceClient) RemoveRepo(ctx context.Context, req *v1.RemoveRepoRequest) (*v1.RemoveRepoResponse, error) {
+	var res v1.RemoveRepoResponse
+	if err := c.client.CallUnary(ctx, repoServiceRemoveRepoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *repoServiceClient) GetRepoGitInfo(ctx context.Context, req *v1.GetRepoGitInfoRequest) (*v1.GetRepoGitInfoResponse, error) {
+	var res v1.GetRepoGitInfoResponse
+	if err := c.client.CallUnary(ctx, repoServiceGetRepoGitInfoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type repoServiceHandler struct{ svc RepoServiceHandler }
+
+func (h repoServiceHandler) discoverRepos(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DiscoverReposRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DiscoverRepos(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h repoServiceHandler) listRepos(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListReposRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListRepos(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h repoServiceHandler) addRepo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AddRepoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AddRepo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h repoServiceHandler) removeRepo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RemoveRepoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RemoveRepo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h repoServiceHandler) getRepoGitInfo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetRepoGitInfoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetRepoGitInfo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

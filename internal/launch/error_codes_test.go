@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -38,7 +38,7 @@ func TestLaunchErrors_CarryTheirKind(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ce := svcerr.ToConnect(tc.err)
+			ce := svcerr.ToConnectV2(tc.err)
 			assert.Equal(t, tc.wantCode, ce.Code())
 			assert.Equal(t, tc.wantMsg, ce.Message())
 			assert.NotContains(t, ce.Message(), "secret")
@@ -56,7 +56,7 @@ func TestLaunchErrors_KeepTheirIdentityAndCause(t *testing.T) {
 	internal := &InternalError{Reason: "failed to start chat", Err: context.DeadlineExceeded}
 	assert.ErrorIs(t, internal, ErrInternal)
 	assert.ErrorIs(t, internal, context.DeadlineExceeded)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(internal), "an internal launch failure stays Internal")
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(internal), "an internal launch failure stays Internal")
 
 	lookup := &WorkflowLookupError{Err: errors.New("store down")}
 	var asLookup *WorkflowLookupError

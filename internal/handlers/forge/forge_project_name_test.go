@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -42,7 +41,7 @@ func topologyForProjectName(t *testing.T, projects *forgeNameRecordingProjects, 
 	t.Helper()
 	svc := newForgeService(&forgeTestRouter{reply: reply}, projects)
 	_, err := svc.GetTopology(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"}))
+		&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"})
 	require.NoError(t, err)
 }
 

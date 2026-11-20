@@ -7,7 +7,8 @@ package stories
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -81,8 +82,9 @@ func TestStory06_StartChatValidationFailsClean(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.run()
 			require.Error(t, err, "StartChat must reject the request")
-			var cerr *connect.Error
-			require.ErrorAs(t, err, &cerr)
+			// The handler is called in process: ToConnectV2 is the error a
+			// client is sent for err (its code and message).
+			cerr := svcerr.ToConnectV2(err)
 			assert.Equal(t, connect.CodeInvalidArgument, cerr.Code(),
 				"validation failures must be InvalidArgument, got %s: %s", cerr.Code(), cerr.Message())
 			assert.Contains(t, cerr.Message(), tc.errHas)

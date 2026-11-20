@@ -12,7 +12,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -96,7 +95,7 @@ func TestStory13_NoMachineAutomationFiresEndToEnd(t *testing.T) {
 	modeParam := structpb.NewStringValue("auto")
 	every := "1h"
 
-	created, err := h.TriggerSvc.CreateTrigger(h.Ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	created, err := h.TriggerSvc.CreateTrigger(h.Ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: &reliantv1.TriggerDefinition{
 			Name:      "morning digest",
 			ProjectId: h.ProjectID,
@@ -106,13 +105,13 @@ func TestStory13_NoMachineAutomationFiresEndToEnd(t *testing.T) {
 			Params:    map[string]*structpb.Value{"model": modelParam, "tools": toolsParam, "mode": modeParam},
 			Source:    &reliantv1.TriggerDefinition_Schedule{Schedule: &reliantv1.ScheduleSource{Interval: &every}},
 		},
-	}))
+	})
 	require.NoError(t, err, "a no-machine trigger on a server-only agent must be accepted")
-	trigger := created.Msg.GetTrigger()
+	trigger := created.GetTrigger()
 	require.True(t, trigger.GetNoMachine())
 	require.Empty(t, trigger.GetDaemonId())
 
-	_, err = h.TriggerSvc.FireTrigger(h.Ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: trigger.GetId()}))
+	_, err = h.TriggerSvc.FireTrigger(h.Ctx, &reliantv1.FireTriggerRequest{Id: trigger.GetId()})
 	require.NoError(t, err)
 
 	launched := core.TriggerEventLaunched

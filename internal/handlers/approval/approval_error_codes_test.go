@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -33,8 +33,8 @@ var readFailures = []struct {
 func requireClientReads(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
-	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+	require.Equal(t, want, svcerr.CodeV2(err), "err = %v", err)
+	require.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 }
 
 // The approval reads (the approval, its chat's ownership) and the resolving
@@ -55,7 +55,7 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 				GetApprovalFunc: func(context.Context, string) (*db.Approval, error) { return nil, tc.err },
 			}}))
-			_, err := svc.Approve(approval.AuthedContext(t), connect.NewRequest(&pb.ApproveRequest{RequestId: "a-1"}))
+			_, err := svc.Approve(approval.AuthedContext(t), &pb.ApproveRequest{RequestId: "a-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("ListApprovalsByChat, reading the chat: "+tc.name, func(t *testing.T) {
@@ -63,7 +63,7 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 				GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
 			}}))
-			_, err := svc.ListApprovalsByChat(approval.AuthedContext(t), connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}))
+			_, err := svc.ListApprovalsByChat(approval.AuthedContext(t), &pb.ListApprovalsByChatRequest{ChatId: "chat-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("Deny, writing the resolution: "+tc.name, func(t *testing.T) {
@@ -75,7 +75,7 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 					return tc.err
 				},
 			}}))
-			_, err := svc.Deny(approval.AuthedContext(t), connect.NewRequest(&pb.DenyRequest{RequestId: "a-1"}))
+			_, err := svc.Deny(approval.AuthedContext(t), &pb.DenyRequest{RequestId: "a-1"})
 			requireClientReads(t, err, tc.want)
 		})
 	}

@@ -6,7 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/kcleval"
@@ -35,9 +36,9 @@ func addOrgProviderAccountThrough(t *testing.T, api *configv1.ApiServerConfig) e
 	require.NoError(t, err)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "olivia")
 	ctx = auth.WithCredential(authz.WithMembership(ctx, orgAdmins{}), auth.CredentialSession)
-	_, err = svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{
+	_, err = svc.AddOrgProviderAPIKey(ctx, &pb.AddOrgProviderAPIKeyRequest{
 		OrgId: "org-1", Provider: "anthropic", ApiKey: "sk-ant-gate-test-0001", Label: "Acme prod",
-	}))
+	})
 	return err
 }
 
@@ -88,7 +89,7 @@ func TestOrgProviderAccountsGateReachesTheService(t *testing.T) {
 			if tc.wantOn {
 				require.NoError(t, err, "enabled: an org admin adds an org account")
 			} else {
-				require.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "off: refused, got %v", err)
+				require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "off: refused, got %v", err)
 			}
 		})
 	}
@@ -105,7 +106,7 @@ func TestOrgProviderAccountsGateIsOffByDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, app.APIOrgProviderAccounts(api))
 	err = addOrgProviderAccountThrough(t, api)
-	require.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "got %v", err)
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "got %v", err)
 
 	t.Setenv("RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED", "true")
 	api, err = config.LoadApiServerConfig(cmd)

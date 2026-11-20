@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -17,16 +16,16 @@ import (
 // (worktreesweep.Forget). Nothing on any disk is deleted.
 func (s *Service) ForgetStorageWorktree(
 	ctx context.Context,
-	req *connect.Request[pb.ForgetStorageWorktreeRequest],
-) (*connect.Response[pb.ForgetStorageWorktreeResponse], error) {
+	req *pb.ForgetStorageWorktreeRequest,
+) (*pb.ForgetStorageWorktreeResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
-	err := worktreesweep.Forget(ctx, s.deps.Repo, userID, req.Msg.WorktreeId)
+	err := worktreesweep.Forget(ctx, s.deps.Repo, userID, req.WorktreeId)
 	switch {
 	case errors.Is(err, worktreesweep.ErrNotHeld):
 		return nil, svcerr.NotFound("held workspace")
@@ -38,5 +37,5 @@ func (s *Service) ForgetStorageWorktree(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("could not forget the workspace"))
 	}
 	s.storageCache.Delete(userID)
-	return connect.NewResponse(&pb.ForgetStorageWorktreeResponse{}), nil
+	return &pb.ForgetStorageWorktreeResponse{}, nil
 }

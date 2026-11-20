@@ -6,8 +6,6 @@ package question
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -38,6 +36,6 @@ type Signaler interface {
 // main thread, SendAgentMessage for a sub-agent's. *chat.Service implements
 // it.
 type Messenger interface {
-	SendMessage(ctx context.Context, req *connect.Request[pb.SendMessageRequest]) (*connect.Response[pb.SendMessageResponse], error)
-	SendAgentMessage(ctx context.Context, req *connect.Request[pb.SendAgentMessageRequest]) (*connect.Response[pb.SendAgentMessageResponse], error)
+	SendMessage(ctx context.Context, req *pb.SendMessageRequest) (*pb.SendMessageResponse, error)
+	SendAgentMessage(ctx context.Context, req *pb.SendAgentMessageRequest) (*pb.SendAgentMessageResponse, error)
 }

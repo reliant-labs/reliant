@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -37,9 +36,9 @@ func TestArchive_DropsTheMessageQueuedForTheMachine(t *testing.T) {
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 
-	_, err := f.svc.UpdateChatState(f.ctx, connect.NewRequest(&reliantv1.UpdateChatStateRequest{
+	_, err := f.svc.UpdateChatState(f.ctx, &reliantv1.UpdateChatStateRequest{
 		ChatId: f.chatID, State: reliantv1.ChatState_CHAT_STATE_ARCHIVED,
-	}))
+	})
 	require.NoError(t, err)
 	assert.Equal(t, []string{f.chatID + "/"}, f.temporal.cancels(), "archiving stops the chat's current run")
 
@@ -47,9 +46,9 @@ func TestArchive_DropsTheMessageQueuedForTheMachine(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, started, "an archived chat is never delivered to")
 
-	_, err = f.svc.UpdateChatState(f.ctx, connect.NewRequest(&reliantv1.UpdateChatStateRequest{
+	_, err = f.svc.UpdateChatState(f.ctx, &reliantv1.UpdateChatStateRequest{
 		ChatId: f.chatID, State: reliantv1.ChatState_CHAT_STATE_IDLE,
-	}))
+	})
 	require.NoError(t, err)
 	// The delivery sweep and a machine connect deliver only what this lists.
 	queued, err := f.repo.ListChatsQueuedForMachine(f.ctx, "", 10)

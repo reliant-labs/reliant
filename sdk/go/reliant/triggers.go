@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
@@ -48,20 +48,20 @@ func (t *TriggersClient) Get(ctx context.Context, idOrName string) (*Trigger, er
 	if idOrName == "" {
 		return nil, t.c.fail(op, ErrInvalidArgument, "trigger id or name is required")
 	}
-	resp, err := t.triggers.GetTrigger(ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: idOrName}))
+	resp, err := t.triggers.GetTrigger(ctx, &reliantv1.GetTriggerRequest{Id: idOrName})
 	if err == nil {
-		return resp.Msg.GetTrigger(), nil
+		return resp.GetTrigger(), nil
 	}
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		return nil, t.c.wrap(op, err)
 	}
 
-	list, err := t.triggers.ListTriggers(ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	list, err := t.triggers.ListTriggers(ctx, &reliantv1.ListTriggersRequest{})
 	if err != nil {
 		return nil, t.c.wrap(op, err)
 	}
 	var matches []*Trigger
-	for _, tr := range list.Msg.GetTriggers() {
+	for _, tr := range list.GetTriggers() {
 		if tr.GetName() == idOrName {
 			matches = append(matches, tr)
 		}
@@ -89,11 +89,11 @@ func (t *TriggersClient) List(ctx context.Context, f ListTriggers) *Iter[*Trigge
 		if f.ProjectID != "" {
 			req.ProjectId = &f.ProjectID
 		}
-		resp, err := t.triggers.ListTriggers(ctx, connect.NewRequest(req))
+		resp, err := t.triggers.ListTriggers(ctx, req)
 		if err != nil {
 			return nil, "", t.c.wrap("triggers.list", err)
 		}
-		return resp.Msg.GetTriggers(), "", nil
+		return resp.GetTriggers(), "", nil
 	})
 }
 
@@ -119,11 +119,11 @@ func (t *TriggersClient) Fire(ctx context.Context, idOrName string) (*Fired, err
 	if err != nil {
 		return nil, err
 	}
-	resp, err := t.triggers.FireTrigger(ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: tr.GetId()}))
+	resp, err := t.triggers.FireTrigger(ctx, &reliantv1.FireTriggerRequest{Id: tr.GetId()})
 	if err != nil {
 		return nil, t.c.wrap(op, err)
 	}
-	return &Fired{TriggerID: tr.GetId(), FireWorkflowID: resp.Msg.GetFireWorkflowId()}, nil
+	return &Fired{TriggerID: tr.GetId(), FireWorkflowID: resp.GetFireWorkflowId()}, nil
 }
 
 // EventFilter filters a trigger's firings.
@@ -148,20 +148,20 @@ func (t *TriggersClient) Events(ctx context.Context, triggerID string, f EventFi
 		if token != "" {
 			req.PageToken = &token
 		}
-		resp, err := t.triggers.ListTriggerEvents(ctx, connect.NewRequest(req))
+		resp, err := t.triggers.ListTriggerEvents(ctx, req)
 		if err != nil {
 			return nil, "", t.c.wrap("triggers.events", err)
 		}
-		return resp.Msg.GetEvents(), resp.Msg.GetNextPageToken(), nil
+		return resp.GetEvents(), resp.GetNextPageToken(), nil
 	})
 }
 
 // LaunchEvent returns the firing that launched a session, or nil when it has
 // none (the session predates trigger events, or was started by hand).
 func (t *TriggersClient) LaunchEvent(ctx context.Context, sessionID string) (*TriggerEvent, error) {
-	resp, err := t.triggers.GetLaunchEvent(ctx, connect.NewRequest(&reliantv1.GetLaunchEventRequest{ChatId: sessionID}))
+	resp, err := t.triggers.GetLaunchEvent(ctx, &reliantv1.GetLaunchEventRequest{ChatId: sessionID})
 	if err != nil {
 		return nil, t.c.wrap("triggers.launchEvent", err)
 	}
-	return resp.Msg.Event, nil
+	return resp.Event, nil
 }

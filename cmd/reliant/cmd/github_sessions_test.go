@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -24,15 +27,15 @@ type fakeBotTokenService struct {
 	asked    []string
 }
 
-func (f *fakeBotTokenService) GetGitHubBotToken(_ context.Context, r *connect.Request[reliantv1.GetGitHubBotTokenRequest]) (*connect.Response[reliantv1.GetGitHubBotTokenResponse], error) {
-	bearer := strings.TrimPrefix(r.Header().Get("Authorization"), "Bearer ")
+func (f *fakeBotTokenService) GetGitHubBotToken(ctx context.Context, r *reliantv1.GetGitHubBotTokenRequest) (*reliantv1.GetGitHubBotTokenResponse, error) {
+	bearer := strings.TrimPrefix(serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization"), "Bearer ")
 	f.asked = append(f.asked, bearer)
 	if err := f.refusals[bearer]; err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&reliantv1.GetGitHubBotTokenResponse{
+	return &reliantv1.GetGitHubBotTokenResponse{
 		Token: ghBotTestToken, BotLogin: "reliant-labs[bot]", ActingForLogin: bearer, Repository: "acme/app",
-	}), nil
+	}, nil
 }
 
 // serveBotTokens runs fake behind forge's svcerr interceptor, the one that
@@ -40,8 +43,9 @@ func (f *fakeBotTokenService) GetGitHubBotToken(_ context.Context, r *connect.Re
 func serveBotTokens(t *testing.T, fake *fakeBotTokenService) string {
 	t.Helper()
 	mux := http.NewServeMux()
-	path, h := reliantv1connect.NewTokenServiceHandler(fake, connect.WithInterceptors(svcerr.Interceptor()))
-	mux.Handle(path, h)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterTokenServiceHandler(rpcServer, fake)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL

@@ -7,487 +7,571 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// FileSystemServiceName is the fully-qualified name of the FileSystemService service.
 	FileSystemServiceName = "reliant.v1.FileSystemService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// FileSystemServiceGetFileTreeProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceGetFileTreeProcedure is the procedure name of the FileSystemService's
 	// GetFileTree RPC.
 	FileSystemServiceGetFileTreeProcedure = "/reliant.v1.FileSystemService/GetFileTree"
-	// FileSystemServiceGetFileContentProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceGetFileContentProcedure is the procedure name of the FileSystemService's
 	// GetFileContent RPC.
 	FileSystemServiceGetFileContentProcedure = "/reliant.v1.FileSystemService/GetFileContent"
-	// FileSystemServiceSaveFileContentProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceSaveFileContentProcedure is the procedure name of the FileSystemService's
 	// SaveFileContent RPC.
 	FileSystemServiceSaveFileContentProcedure = "/reliant.v1.FileSystemService/SaveFileContent"
-	// FileSystemServiceGetFileMetadataProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceGetFileMetadataProcedure is the procedure name of the FileSystemService's
 	// GetFileMetadata RPC.
 	FileSystemServiceGetFileMetadataProcedure = "/reliant.v1.FileSystemService/GetFileMetadata"
-	// FileSystemServiceGetFilePreviewInfoProcedure is the fully-qualified name of the
-	// FileSystemService's GetFilePreviewInfo RPC.
+	// FileSystemServiceGetFilePreviewInfoProcedure is the procedure name of the FileSystemService's
+	// GetFilePreviewInfo RPC.
 	FileSystemServiceGetFilePreviewInfoProcedure = "/reliant.v1.FileSystemService/GetFilePreviewInfo"
-	// FileSystemServiceGetFilePreviewProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceGetFilePreviewProcedure is the procedure name of the FileSystemService's
 	// GetFilePreview RPC.
 	FileSystemServiceGetFilePreviewProcedure = "/reliant.v1.FileSystemService/GetFilePreview"
-	// FileSystemServiceCreateFileOrFolderProcedure is the fully-qualified name of the
-	// FileSystemService's CreateFileOrFolder RPC.
+	// FileSystemServiceCreateFileOrFolderProcedure is the procedure name of the FileSystemService's
+	// CreateFileOrFolder RPC.
 	FileSystemServiceCreateFileOrFolderProcedure = "/reliant.v1.FileSystemService/CreateFileOrFolder"
-	// FileSystemServiceDeleteFileOrFolderProcedure is the fully-qualified name of the
-	// FileSystemService's DeleteFileOrFolder RPC.
+	// FileSystemServiceDeleteFileOrFolderProcedure is the procedure name of the FileSystemService's
+	// DeleteFileOrFolder RPC.
 	FileSystemServiceDeleteFileOrFolderProcedure = "/reliant.v1.FileSystemService/DeleteFileOrFolder"
-	// FileSystemServiceCopyFileProcedure is the fully-qualified name of the FileSystemService's
-	// CopyFile RPC.
+	// FileSystemServiceCopyFileProcedure is the procedure name of the FileSystemService's CopyFile RPC.
 	FileSystemServiceCopyFileProcedure = "/reliant.v1.FileSystemService/CopyFile"
-	// FileSystemServiceSearchFilesProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceSearchFilesProcedure is the procedure name of the FileSystemService's
 	// SearchFiles RPC.
 	FileSystemServiceSearchFilesProcedure = "/reliant.v1.FileSystemService/SearchFiles"
-	// FileSystemServiceReplaceInFilesProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceReplaceInFilesProcedure is the procedure name of the FileSystemService's
 	// ReplaceInFiles RPC.
 	FileSystemServiceReplaceInFilesProcedure = "/reliant.v1.FileSystemService/ReplaceInFiles"
-	// FileSystemServiceListDirectoryProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceListDirectoryProcedure is the procedure name of the FileSystemService's
 	// ListDirectory RPC.
 	FileSystemServiceListDirectoryProcedure = "/reliant.v1.FileSystemService/ListDirectory"
-	// FileSystemServiceCreateDirectoryProcedure is the fully-qualified name of the FileSystemService's
+	// FileSystemServiceCreateDirectoryProcedure is the procedure name of the FileSystemService's
 	// CreateDirectory RPC.
 	FileSystemServiceCreateDirectoryProcedure = "/reliant.v1.FileSystemService/CreateDirectory"
+)
+
+var (
+	fileSystemServiceGetFileTreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("GetFileTree"),
+			Procedure:  FileSystemServiceGetFileTreeProcedure,
+		}
+	})
+	fileSystemServiceGetFileContentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("GetFileContent"),
+			Procedure:  FileSystemServiceGetFileContentProcedure,
+		}
+	})
+	fileSystemServiceSaveFileContentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("SaveFileContent"),
+			Procedure:  FileSystemServiceSaveFileContentProcedure,
+		}
+	})
+	fileSystemServiceGetFileMetadataSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("GetFileMetadata"),
+			Procedure:  FileSystemServiceGetFileMetadataProcedure,
+		}
+	})
+	fileSystemServiceGetFilePreviewInfoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("GetFilePreviewInfo"),
+			Procedure:  FileSystemServiceGetFilePreviewInfoProcedure,
+		}
+	})
+	fileSystemServiceGetFilePreviewSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("GetFilePreview"),
+			Procedure:  FileSystemServiceGetFilePreviewProcedure,
+		}
+	})
+	fileSystemServiceCreateFileOrFolderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("CreateFileOrFolder"),
+			Procedure:  FileSystemServiceCreateFileOrFolderProcedure,
+		}
+	})
+	fileSystemServiceDeleteFileOrFolderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("DeleteFileOrFolder"),
+			Procedure:  FileSystemServiceDeleteFileOrFolderProcedure,
+		}
+	})
+	fileSystemServiceCopyFileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("CopyFile"),
+			Procedure:  FileSystemServiceCopyFileProcedure,
+		}
+	})
+	fileSystemServiceSearchFilesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("SearchFiles"),
+			Procedure:  FileSystemServiceSearchFilesProcedure,
+		}
+	})
+	fileSystemServiceReplaceInFilesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("ReplaceInFiles"),
+			Procedure:  FileSystemServiceReplaceInFilesProcedure,
+		}
+	})
+	fileSystemServiceListDirectorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("ListDirectory"),
+			Procedure:  FileSystemServiceListDirectoryProcedure,
+		}
+	})
+	fileSystemServiceCreateDirectorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods().ByName("CreateDirectory"),
+			Procedure:  FileSystemServiceCreateDirectoryProcedure,
+		}
+	})
 )
 
 // FileSystemServiceClient is a client for the reliant.v1.FileSystemService service.
 type FileSystemServiceClient interface {
 	// GetFileTree returns the file tree structure for a project
-	GetFileTree(context.Context, *connect.Request[v1.GetFileTreeRequest]) (*connect.Response[v1.GetFileTreeResponse], error)
+	GetFileTree(context.Context, *v1.GetFileTreeRequest) (*v1.GetFileTreeResponse, error)
 	// GetFileContent returns the content of a specific file
-	GetFileContent(context.Context, *connect.Request[v1.GetFileContentRequest]) (*connect.Response[v1.GetFileContentResponse], error)
+	GetFileContent(context.Context, *v1.GetFileContentRequest) (*v1.GetFileContentResponse, error)
 	// SaveFileContent saves content to a specific file
-	SaveFileContent(context.Context, *connect.Request[v1.SaveFileContentRequest]) (*connect.Response[v1.SaveFileContentResponse], error)
+	SaveFileContent(context.Context, *v1.SaveFileContentRequest) (*v1.SaveFileContentResponse, error)
 	// GetFileMetadata returns metadata for a file or directory
-	GetFileMetadata(context.Context, *connect.Request[v1.GetFileMetadataRequest]) (*connect.Response[v1.GetFileMetadataResponse], error)
+	GetFileMetadata(context.Context, *v1.GetFileMetadataRequest) (*v1.GetFileMetadataResponse, error)
 	// GetFilePreviewInfo returns preview metadata for a file
-	GetFilePreviewInfo(context.Context, *connect.Request[v1.GetFilePreviewInfoRequest]) (*connect.Response[v1.GetFilePreviewInfoResponse], error)
+	GetFilePreviewInfo(context.Context, *v1.GetFilePreviewInfoRequest) (*v1.GetFilePreviewInfoResponse, error)
 	// GetFilePreview returns the raw binary content of a previewable file (image, PDF, audio, video).
-	GetFilePreview(context.Context, *connect.Request[v1.GetFilePreviewRequest]) (*connect.Response[v1.GetFilePreviewResponse], error)
+	GetFilePreview(context.Context, *v1.GetFilePreviewRequest) (*v1.GetFilePreviewResponse, error)
 	// CreateFileOrFolder creates a new file or folder
-	CreateFileOrFolder(context.Context, *connect.Request[v1.CreateFileOrFolderRequest]) (*connect.Response[v1.CreateFileOrFolderResponse], error)
+	CreateFileOrFolder(context.Context, *v1.CreateFileOrFolderRequest) (*v1.CreateFileOrFolderResponse, error)
 	// DeleteFileOrFolder deletes a file or folder
-	DeleteFileOrFolder(context.Context, *connect.Request[v1.DeleteFileOrFolderRequest]) (*connect.Response[v1.DeleteFileOrFolderResponse], error)
+	DeleteFileOrFolder(context.Context, *v1.DeleteFileOrFolderRequest) (*v1.DeleteFileOrFolderResponse, error)
 	// CopyFile copies a file to a new location
-	CopyFile(context.Context, *connect.Request[v1.CopyFileRequest]) (*connect.Response[v1.CopyFileResponse], error)
+	CopyFile(context.Context, *v1.CopyFileRequest) (*v1.CopyFileResponse, error)
 	// SearchFiles searches for text within files in the workspace
-	SearchFiles(context.Context, *connect.Request[v1.SearchFilesRequest]) (*connect.Response[v1.SearchFilesResponse], error)
+	SearchFiles(context.Context, *v1.SearchFilesRequest) (*v1.SearchFilesResponse, error)
 	// ReplaceInFiles replaces text in files across the workspace
-	ReplaceInFiles(context.Context, *connect.Request[v1.ReplaceInFilesRequest]) (*connect.Response[v1.ReplaceInFilesResponse], error)
+	ReplaceInFiles(context.Context, *v1.ReplaceInFilesRequest) (*v1.ReplaceInFilesResponse, error)
 	// ListDirectory lists entries in an arbitrary filesystem directory.
 	// Used by the project picker in browser mode (no Electron). daemon_id
 	// names the machine to browse; unset browses the default machine.
-	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
+	ListDirectory(context.Context, *v1.ListDirectoryRequest) (*v1.ListDirectoryResponse, error)
 	// CreateDirectory creates a new directory at an arbitrary absolute path.
 	// Used by the project picker in browser mode to make a "New folder" while
 	// choosing where to open/create a project on the remote daemon.
-	CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error)
+	CreateDirectory(context.Context, *v1.CreateDirectoryRequest) (*v1.CreateDirectoryResponse, error)
 }
 
-// NewFileSystemServiceClient constructs a client for the reliant.v1.FileSystemService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) FileSystemServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	fileSystemServiceMethods := v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods()
-	return &fileSystemServiceClient{
-		getFileTree: connect.NewClient[v1.GetFileTreeRequest, v1.GetFileTreeResponse](
-			httpClient,
-			baseURL+FileSystemServiceGetFileTreeProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileTree")),
-			connect.WithClientOptions(opts...),
-		),
-		getFileContent: connect.NewClient[v1.GetFileContentRequest, v1.GetFileContentResponse](
-			httpClient,
-			baseURL+FileSystemServiceGetFileContentProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileContent")),
-			connect.WithClientOptions(opts...),
-		),
-		saveFileContent: connect.NewClient[v1.SaveFileContentRequest, v1.SaveFileContentResponse](
-			httpClient,
-			baseURL+FileSystemServiceSaveFileContentProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("SaveFileContent")),
-			connect.WithClientOptions(opts...),
-		),
-		getFileMetadata: connect.NewClient[v1.GetFileMetadataRequest, v1.GetFileMetadataResponse](
-			httpClient,
-			baseURL+FileSystemServiceGetFileMetadataProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileMetadata")),
-			connect.WithClientOptions(opts...),
-		),
-		getFilePreviewInfo: connect.NewClient[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse](
-			httpClient,
-			baseURL+FileSystemServiceGetFilePreviewInfoProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreviewInfo")),
-			connect.WithClientOptions(opts...),
-		),
-		getFilePreview: connect.NewClient[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse](
-			httpClient,
-			baseURL+FileSystemServiceGetFilePreviewProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreview")),
-			connect.WithClientOptions(opts...),
-		),
-		createFileOrFolder: connect.NewClient[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse](
-			httpClient,
-			baseURL+FileSystemServiceCreateFileOrFolderProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("CreateFileOrFolder")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteFileOrFolder: connect.NewClient[v1.DeleteFileOrFolderRequest, v1.DeleteFileOrFolderResponse](
-			httpClient,
-			baseURL+FileSystemServiceDeleteFileOrFolderProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("DeleteFileOrFolder")),
-			connect.WithClientOptions(opts...),
-		),
-		copyFile: connect.NewClient[v1.CopyFileRequest, v1.CopyFileResponse](
-			httpClient,
-			baseURL+FileSystemServiceCopyFileProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("CopyFile")),
-			connect.WithClientOptions(opts...),
-		),
-		searchFiles: connect.NewClient[v1.SearchFilesRequest, v1.SearchFilesResponse](
-			httpClient,
-			baseURL+FileSystemServiceSearchFilesProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("SearchFiles")),
-			connect.WithClientOptions(opts...),
-		),
-		replaceInFiles: connect.NewClient[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse](
-			httpClient,
-			baseURL+FileSystemServiceReplaceInFilesProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("ReplaceInFiles")),
-			connect.WithClientOptions(opts...),
-		),
-		listDirectory: connect.NewClient[v1.ListDirectoryRequest, v1.ListDirectoryResponse](
-			httpClient,
-			baseURL+FileSystemServiceListDirectoryProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("ListDirectory")),
-			connect.WithClientOptions(opts...),
-		),
-		createDirectory: connect.NewClient[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse](
-			httpClient,
-			baseURL+FileSystemServiceCreateDirectoryProcedure,
-			connect.WithSchema(fileSystemServiceMethods.ByName("CreateDirectory")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// fileSystemServiceClient implements FileSystemServiceClient.
-type fileSystemServiceClient struct {
-	getFileTree        *connect.Client[v1.GetFileTreeRequest, v1.GetFileTreeResponse]
-	getFileContent     *connect.Client[v1.GetFileContentRequest, v1.GetFileContentResponse]
-	saveFileContent    *connect.Client[v1.SaveFileContentRequest, v1.SaveFileContentResponse]
-	getFileMetadata    *connect.Client[v1.GetFileMetadataRequest, v1.GetFileMetadataResponse]
-	getFilePreviewInfo *connect.Client[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse]
-	getFilePreview     *connect.Client[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse]
-	createFileOrFolder *connect.Client[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse]
-	deleteFileOrFolder *connect.Client[v1.DeleteFileOrFolderRequest, v1.DeleteFileOrFolderResponse]
-	copyFile           *connect.Client[v1.CopyFileRequest, v1.CopyFileResponse]
-	searchFiles        *connect.Client[v1.SearchFilesRequest, v1.SearchFilesResponse]
-	replaceInFiles     *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
-	listDirectory      *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
-	createDirectory    *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
-}
-
-// GetFileTree calls reliant.v1.FileSystemService.GetFileTree.
-func (c *fileSystemServiceClient) GetFileTree(ctx context.Context, req *connect.Request[v1.GetFileTreeRequest]) (*connect.Response[v1.GetFileTreeResponse], error) {
-	return c.getFileTree.CallUnary(ctx, req)
-}
-
-// GetFileContent calls reliant.v1.FileSystemService.GetFileContent.
-func (c *fileSystemServiceClient) GetFileContent(ctx context.Context, req *connect.Request[v1.GetFileContentRequest]) (*connect.Response[v1.GetFileContentResponse], error) {
-	return c.getFileContent.CallUnary(ctx, req)
-}
-
-// SaveFileContent calls reliant.v1.FileSystemService.SaveFileContent.
-func (c *fileSystemServiceClient) SaveFileContent(ctx context.Context, req *connect.Request[v1.SaveFileContentRequest]) (*connect.Response[v1.SaveFileContentResponse], error) {
-	return c.saveFileContent.CallUnary(ctx, req)
-}
-
-// GetFileMetadata calls reliant.v1.FileSystemService.GetFileMetadata.
-func (c *fileSystemServiceClient) GetFileMetadata(ctx context.Context, req *connect.Request[v1.GetFileMetadataRequest]) (*connect.Response[v1.GetFileMetadataResponse], error) {
-	return c.getFileMetadata.CallUnary(ctx, req)
-}
-
-// GetFilePreviewInfo calls reliant.v1.FileSystemService.GetFilePreviewInfo.
-func (c *fileSystemServiceClient) GetFilePreviewInfo(ctx context.Context, req *connect.Request[v1.GetFilePreviewInfoRequest]) (*connect.Response[v1.GetFilePreviewInfoResponse], error) {
-	return c.getFilePreviewInfo.CallUnary(ctx, req)
-}
-
-// GetFilePreview calls reliant.v1.FileSystemService.GetFilePreview.
-func (c *fileSystemServiceClient) GetFilePreview(ctx context.Context, req *connect.Request[v1.GetFilePreviewRequest]) (*connect.Response[v1.GetFilePreviewResponse], error) {
-	return c.getFilePreview.CallUnary(ctx, req)
-}
-
-// CreateFileOrFolder calls reliant.v1.FileSystemService.CreateFileOrFolder.
-func (c *fileSystemServiceClient) CreateFileOrFolder(ctx context.Context, req *connect.Request[v1.CreateFileOrFolderRequest]) (*connect.Response[v1.CreateFileOrFolderResponse], error) {
-	return c.createFileOrFolder.CallUnary(ctx, req)
-}
-
-// DeleteFileOrFolder calls reliant.v1.FileSystemService.DeleteFileOrFolder.
-func (c *fileSystemServiceClient) DeleteFileOrFolder(ctx context.Context, req *connect.Request[v1.DeleteFileOrFolderRequest]) (*connect.Response[v1.DeleteFileOrFolderResponse], error) {
-	return c.deleteFileOrFolder.CallUnary(ctx, req)
-}
-
-// CopyFile calls reliant.v1.FileSystemService.CopyFile.
-func (c *fileSystemServiceClient) CopyFile(ctx context.Context, req *connect.Request[v1.CopyFileRequest]) (*connect.Response[v1.CopyFileResponse], error) {
-	return c.copyFile.CallUnary(ctx, req)
-}
-
-// SearchFiles calls reliant.v1.FileSystemService.SearchFiles.
-func (c *fileSystemServiceClient) SearchFiles(ctx context.Context, req *connect.Request[v1.SearchFilesRequest]) (*connect.Response[v1.SearchFilesResponse], error) {
-	return c.searchFiles.CallUnary(ctx, req)
-}
-
-// ReplaceInFiles calls reliant.v1.FileSystemService.ReplaceInFiles.
-func (c *fileSystemServiceClient) ReplaceInFiles(ctx context.Context, req *connect.Request[v1.ReplaceInFilesRequest]) (*connect.Response[v1.ReplaceInFilesResponse], error) {
-	return c.replaceInFiles.CallUnary(ctx, req)
-}
-
-// ListDirectory calls reliant.v1.FileSystemService.ListDirectory.
-func (c *fileSystemServiceClient) ListDirectory(ctx context.Context, req *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error) {
-	return c.listDirectory.CallUnary(ctx, req)
-}
-
-// CreateDirectory calls reliant.v1.FileSystemService.CreateDirectory.
-func (c *fileSystemServiceClient) CreateDirectory(ctx context.Context, req *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error) {
-	return c.createDirectory.CallUnary(ctx, req)
+// NewFileSystemServiceClient constructs a client for the reliant.v1.FileSystemService service.
+// Multiple service clients may share a single connect.Client.
+func NewFileSystemServiceClient(client *connect.Client) FileSystemServiceClient {
+	return &fileSystemServiceClient{client: client}
 }
 
 // FileSystemServiceHandler is an implementation of the reliant.v1.FileSystemService service.
 type FileSystemServiceHandler interface {
 	// GetFileTree returns the file tree structure for a project
-	GetFileTree(context.Context, *connect.Request[v1.GetFileTreeRequest]) (*connect.Response[v1.GetFileTreeResponse], error)
+	GetFileTree(context.Context, *v1.GetFileTreeRequest) (*v1.GetFileTreeResponse, error)
 	// GetFileContent returns the content of a specific file
-	GetFileContent(context.Context, *connect.Request[v1.GetFileContentRequest]) (*connect.Response[v1.GetFileContentResponse], error)
+	GetFileContent(context.Context, *v1.GetFileContentRequest) (*v1.GetFileContentResponse, error)
 	// SaveFileContent saves content to a specific file
-	SaveFileContent(context.Context, *connect.Request[v1.SaveFileContentRequest]) (*connect.Response[v1.SaveFileContentResponse], error)
+	SaveFileContent(context.Context, *v1.SaveFileContentRequest) (*v1.SaveFileContentResponse, error)
 	// GetFileMetadata returns metadata for a file or directory
-	GetFileMetadata(context.Context, *connect.Request[v1.GetFileMetadataRequest]) (*connect.Response[v1.GetFileMetadataResponse], error)
+	GetFileMetadata(context.Context, *v1.GetFileMetadataRequest) (*v1.GetFileMetadataResponse, error)
 	// GetFilePreviewInfo returns preview metadata for a file
-	GetFilePreviewInfo(context.Context, *connect.Request[v1.GetFilePreviewInfoRequest]) (*connect.Response[v1.GetFilePreviewInfoResponse], error)
+	GetFilePreviewInfo(context.Context, *v1.GetFilePreviewInfoRequest) (*v1.GetFilePreviewInfoResponse, error)
 	// GetFilePreview returns the raw binary content of a previewable file (image, PDF, audio, video).
-	GetFilePreview(context.Context, *connect.Request[v1.GetFilePreviewRequest]) (*connect.Response[v1.GetFilePreviewResponse], error)
+	GetFilePreview(context.Context, *v1.GetFilePreviewRequest) (*v1.GetFilePreviewResponse, error)
 	// CreateFileOrFolder creates a new file or folder
-	CreateFileOrFolder(context.Context, *connect.Request[v1.CreateFileOrFolderRequest]) (*connect.Response[v1.CreateFileOrFolderResponse], error)
+	CreateFileOrFolder(context.Context, *v1.CreateFileOrFolderRequest) (*v1.CreateFileOrFolderResponse, error)
 	// DeleteFileOrFolder deletes a file or folder
-	DeleteFileOrFolder(context.Context, *connect.Request[v1.DeleteFileOrFolderRequest]) (*connect.Response[v1.DeleteFileOrFolderResponse], error)
+	DeleteFileOrFolder(context.Context, *v1.DeleteFileOrFolderRequest) (*v1.DeleteFileOrFolderResponse, error)
 	// CopyFile copies a file to a new location
-	CopyFile(context.Context, *connect.Request[v1.CopyFileRequest]) (*connect.Response[v1.CopyFileResponse], error)
+	CopyFile(context.Context, *v1.CopyFileRequest) (*v1.CopyFileResponse, error)
 	// SearchFiles searches for text within files in the workspace
-	SearchFiles(context.Context, *connect.Request[v1.SearchFilesRequest]) (*connect.Response[v1.SearchFilesResponse], error)
+	SearchFiles(context.Context, *v1.SearchFilesRequest) (*v1.SearchFilesResponse, error)
 	// ReplaceInFiles replaces text in files across the workspace
-	ReplaceInFiles(context.Context, *connect.Request[v1.ReplaceInFilesRequest]) (*connect.Response[v1.ReplaceInFilesResponse], error)
+	ReplaceInFiles(context.Context, *v1.ReplaceInFilesRequest) (*v1.ReplaceInFilesResponse, error)
 	// ListDirectory lists entries in an arbitrary filesystem directory.
 	// Used by the project picker in browser mode (no Electron). daemon_id
 	// names the machine to browse; unset browses the default machine.
-	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
+	ListDirectory(context.Context, *v1.ListDirectoryRequest) (*v1.ListDirectoryResponse, error)
 	// CreateDirectory creates a new directory at an arbitrary absolute path.
 	// Used by the project picker in browser mode to make a "New folder" while
 	// choosing where to open/create a project on the remote daemon.
-	CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error)
+	CreateDirectory(context.Context, *v1.CreateDirectoryRequest) (*v1.CreateDirectoryResponse, error)
 }
 
-// NewFileSystemServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	fileSystemServiceMethods := v1.File_reliant_v1_filesystem_proto.Services().ByName("FileSystemService").Methods()
-	fileSystemServiceGetFileTreeHandler := connect.NewUnaryHandler(
-		FileSystemServiceGetFileTreeProcedure,
-		svc.GetFileTree,
-		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileTree")),
-		connect.WithHandlerOptions(opts...),
+// RegisterFileSystemServiceHandler registers svc as the reliant.v1.FileSystemService implementation
+// on server.
+func RegisterFileSystemServiceHandler(server *connect.Server, svc FileSystemServiceHandler) {
+	adapter := fileSystemServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: fileSystemServiceGetFileTreeSpec(), Handler: adapter.getFileTree},
+		connect.Method{Spec: fileSystemServiceGetFileContentSpec(), Handler: adapter.getFileContent},
+		connect.Method{Spec: fileSystemServiceSaveFileContentSpec(), Handler: adapter.saveFileContent},
+		connect.Method{Spec: fileSystemServiceGetFileMetadataSpec(), Handler: adapter.getFileMetadata},
+		connect.Method{Spec: fileSystemServiceGetFilePreviewInfoSpec(), Handler: adapter.getFilePreviewInfo},
+		connect.Method{Spec: fileSystemServiceGetFilePreviewSpec(), Handler: adapter.getFilePreview},
+		connect.Method{Spec: fileSystemServiceCreateFileOrFolderSpec(), Handler: adapter.createFileOrFolder},
+		connect.Method{Spec: fileSystemServiceDeleteFileOrFolderSpec(), Handler: adapter.deleteFileOrFolder},
+		connect.Method{Spec: fileSystemServiceCopyFileSpec(), Handler: adapter.copyFile},
+		connect.Method{Spec: fileSystemServiceSearchFilesSpec(), Handler: adapter.searchFiles},
+		connect.Method{Spec: fileSystemServiceReplaceInFilesSpec(), Handler: adapter.replaceInFiles},
+		connect.Method{Spec: fileSystemServiceListDirectorySpec(), Handler: adapter.listDirectory},
+		connect.Method{Spec: fileSystemServiceCreateDirectorySpec(), Handler: adapter.createDirectory},
 	)
-	fileSystemServiceGetFileContentHandler := connect.NewUnaryHandler(
-		FileSystemServiceGetFileContentProcedure,
-		svc.GetFileContent,
-		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileContent")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceSaveFileContentHandler := connect.NewUnaryHandler(
-		FileSystemServiceSaveFileContentProcedure,
-		svc.SaveFileContent,
-		connect.WithSchema(fileSystemServiceMethods.ByName("SaveFileContent")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceGetFileMetadataHandler := connect.NewUnaryHandler(
-		FileSystemServiceGetFileMetadataProcedure,
-		svc.GetFileMetadata,
-		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileMetadata")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceGetFilePreviewInfoHandler := connect.NewUnaryHandler(
-		FileSystemServiceGetFilePreviewInfoProcedure,
-		svc.GetFilePreviewInfo,
-		connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreviewInfo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceGetFilePreviewHandler := connect.NewUnaryHandler(
-		FileSystemServiceGetFilePreviewProcedure,
-		svc.GetFilePreview,
-		connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceCreateFileOrFolderHandler := connect.NewUnaryHandler(
-		FileSystemServiceCreateFileOrFolderProcedure,
-		svc.CreateFileOrFolder,
-		connect.WithSchema(fileSystemServiceMethods.ByName("CreateFileOrFolder")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceDeleteFileOrFolderHandler := connect.NewUnaryHandler(
-		FileSystemServiceDeleteFileOrFolderProcedure,
-		svc.DeleteFileOrFolder,
-		connect.WithSchema(fileSystemServiceMethods.ByName("DeleteFileOrFolder")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceCopyFileHandler := connect.NewUnaryHandler(
-		FileSystemServiceCopyFileProcedure,
-		svc.CopyFile,
-		connect.WithSchema(fileSystemServiceMethods.ByName("CopyFile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceSearchFilesHandler := connect.NewUnaryHandler(
-		FileSystemServiceSearchFilesProcedure,
-		svc.SearchFiles,
-		connect.WithSchema(fileSystemServiceMethods.ByName("SearchFiles")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceReplaceInFilesHandler := connect.NewUnaryHandler(
-		FileSystemServiceReplaceInFilesProcedure,
-		svc.ReplaceInFiles,
-		connect.WithSchema(fileSystemServiceMethods.ByName("ReplaceInFiles")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceListDirectoryHandler := connect.NewUnaryHandler(
-		FileSystemServiceListDirectoryProcedure,
-		svc.ListDirectory,
-		connect.WithSchema(fileSystemServiceMethods.ByName("ListDirectory")),
-		connect.WithHandlerOptions(opts...),
-	)
-	fileSystemServiceCreateDirectoryHandler := connect.NewUnaryHandler(
-		FileSystemServiceCreateDirectoryProcedure,
-		svc.CreateDirectory,
-		connect.WithSchema(fileSystemServiceMethods.ByName("CreateDirectory")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.FileSystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case FileSystemServiceGetFileTreeProcedure:
-			fileSystemServiceGetFileTreeHandler.ServeHTTP(w, r)
-		case FileSystemServiceGetFileContentProcedure:
-			fileSystemServiceGetFileContentHandler.ServeHTTP(w, r)
-		case FileSystemServiceSaveFileContentProcedure:
-			fileSystemServiceSaveFileContentHandler.ServeHTTP(w, r)
-		case FileSystemServiceGetFileMetadataProcedure:
-			fileSystemServiceGetFileMetadataHandler.ServeHTTP(w, r)
-		case FileSystemServiceGetFilePreviewInfoProcedure:
-			fileSystemServiceGetFilePreviewInfoHandler.ServeHTTP(w, r)
-		case FileSystemServiceGetFilePreviewProcedure:
-			fileSystemServiceGetFilePreviewHandler.ServeHTTP(w, r)
-		case FileSystemServiceCreateFileOrFolderProcedure:
-			fileSystemServiceCreateFileOrFolderHandler.ServeHTTP(w, r)
-		case FileSystemServiceDeleteFileOrFolderProcedure:
-			fileSystemServiceDeleteFileOrFolderHandler.ServeHTTP(w, r)
-		case FileSystemServiceCopyFileProcedure:
-			fileSystemServiceCopyFileHandler.ServeHTTP(w, r)
-		case FileSystemServiceSearchFilesProcedure:
-			fileSystemServiceSearchFilesHandler.ServeHTTP(w, r)
-		case FileSystemServiceReplaceInFilesProcedure:
-			fileSystemServiceReplaceInFilesHandler.ServeHTTP(w, r)
-		case FileSystemServiceListDirectoryProcedure:
-			fileSystemServiceListDirectoryHandler.ServeHTTP(w, r)
-		case FileSystemServiceCreateDirectoryProcedure:
-			fileSystemServiceCreateDirectoryHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedFileSystemServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedFileSystemServiceHandler struct{}
 
-func (UnimplementedFileSystemServiceHandler) GetFileTree(context.Context, *connect.Request[v1.GetFileTreeRequest]) (*connect.Response[v1.GetFileTreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.GetFileTree is not implemented"))
+func (UnimplementedFileSystemServiceHandler) GetFileTree(context.Context, *v1.GetFileTreeRequest) (*v1.GetFileTreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.GetFileTree is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) GetFileContent(context.Context, *connect.Request[v1.GetFileContentRequest]) (*connect.Response[v1.GetFileContentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.GetFileContent is not implemented"))
+func (UnimplementedFileSystemServiceHandler) GetFileContent(context.Context, *v1.GetFileContentRequest) (*v1.GetFileContentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.GetFileContent is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) SaveFileContent(context.Context, *connect.Request[v1.SaveFileContentRequest]) (*connect.Response[v1.SaveFileContentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.SaveFileContent is not implemented"))
+func (UnimplementedFileSystemServiceHandler) SaveFileContent(context.Context, *v1.SaveFileContentRequest) (*v1.SaveFileContentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.SaveFileContent is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) GetFileMetadata(context.Context, *connect.Request[v1.GetFileMetadataRequest]) (*connect.Response[v1.GetFileMetadataResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.GetFileMetadata is not implemented"))
+func (UnimplementedFileSystemServiceHandler) GetFileMetadata(context.Context, *v1.GetFileMetadataRequest) (*v1.GetFileMetadataResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.GetFileMetadata is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) GetFilePreviewInfo(context.Context, *connect.Request[v1.GetFilePreviewInfoRequest]) (*connect.Response[v1.GetFilePreviewInfoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.GetFilePreviewInfo is not implemented"))
+func (UnimplementedFileSystemServiceHandler) GetFilePreviewInfo(context.Context, *v1.GetFilePreviewInfoRequest) (*v1.GetFilePreviewInfoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.GetFilePreviewInfo is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) GetFilePreview(context.Context, *connect.Request[v1.GetFilePreviewRequest]) (*connect.Response[v1.GetFilePreviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.GetFilePreview is not implemented"))
+func (UnimplementedFileSystemServiceHandler) GetFilePreview(context.Context, *v1.GetFilePreviewRequest) (*v1.GetFilePreviewResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.GetFilePreview is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) CreateFileOrFolder(context.Context, *connect.Request[v1.CreateFileOrFolderRequest]) (*connect.Response[v1.CreateFileOrFolderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.CreateFileOrFolder is not implemented"))
+func (UnimplementedFileSystemServiceHandler) CreateFileOrFolder(context.Context, *v1.CreateFileOrFolderRequest) (*v1.CreateFileOrFolderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.CreateFileOrFolder is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) DeleteFileOrFolder(context.Context, *connect.Request[v1.DeleteFileOrFolderRequest]) (*connect.Response[v1.DeleteFileOrFolderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.DeleteFileOrFolder is not implemented"))
+func (UnimplementedFileSystemServiceHandler) DeleteFileOrFolder(context.Context, *v1.DeleteFileOrFolderRequest) (*v1.DeleteFileOrFolderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.DeleteFileOrFolder is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) CopyFile(context.Context, *connect.Request[v1.CopyFileRequest]) (*connect.Response[v1.CopyFileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.CopyFile is not implemented"))
+func (UnimplementedFileSystemServiceHandler) CopyFile(context.Context, *v1.CopyFileRequest) (*v1.CopyFileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.CopyFile is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) SearchFiles(context.Context, *connect.Request[v1.SearchFilesRequest]) (*connect.Response[v1.SearchFilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.SearchFiles is not implemented"))
+func (UnimplementedFileSystemServiceHandler) SearchFiles(context.Context, *v1.SearchFilesRequest) (*v1.SearchFilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.SearchFiles is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) ReplaceInFiles(context.Context, *connect.Request[v1.ReplaceInFilesRequest]) (*connect.Response[v1.ReplaceInFilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.ReplaceInFiles is not implemented"))
+func (UnimplementedFileSystemServiceHandler) ReplaceInFiles(context.Context, *v1.ReplaceInFilesRequest) (*v1.ReplaceInFilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.ReplaceInFiles is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.ListDirectory is not implemented"))
+func (UnimplementedFileSystemServiceHandler) ListDirectory(context.Context, *v1.ListDirectoryRequest) (*v1.ListDirectoryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.ListDirectory is not implemented")
 }
 
-func (UnimplementedFileSystemServiceHandler) CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.CreateDirectory is not implemented"))
+func (UnimplementedFileSystemServiceHandler) CreateDirectory(context.Context, *v1.CreateDirectoryRequest) (*v1.CreateDirectoryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.FileSystemService.CreateDirectory is not implemented")
+}
+
+type fileSystemServiceClient struct {
+	client *connect.Client
+}
+
+func (c *fileSystemServiceClient) GetFileTree(ctx context.Context, req *v1.GetFileTreeRequest) (*v1.GetFileTreeResponse, error) {
+	var res v1.GetFileTreeResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceGetFileTreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) GetFileContent(ctx context.Context, req *v1.GetFileContentRequest) (*v1.GetFileContentResponse, error) {
+	var res v1.GetFileContentResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceGetFileContentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) SaveFileContent(ctx context.Context, req *v1.SaveFileContentRequest) (*v1.SaveFileContentResponse, error) {
+	var res v1.SaveFileContentResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceSaveFileContentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) GetFileMetadata(ctx context.Context, req *v1.GetFileMetadataRequest) (*v1.GetFileMetadataResponse, error) {
+	var res v1.GetFileMetadataResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceGetFileMetadataSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) GetFilePreviewInfo(ctx context.Context, req *v1.GetFilePreviewInfoRequest) (*v1.GetFilePreviewInfoResponse, error) {
+	var res v1.GetFilePreviewInfoResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceGetFilePreviewInfoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) GetFilePreview(ctx context.Context, req *v1.GetFilePreviewRequest) (*v1.GetFilePreviewResponse, error) {
+	var res v1.GetFilePreviewResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceGetFilePreviewSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) CreateFileOrFolder(ctx context.Context, req *v1.CreateFileOrFolderRequest) (*v1.CreateFileOrFolderResponse, error) {
+	var res v1.CreateFileOrFolderResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceCreateFileOrFolderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) DeleteFileOrFolder(ctx context.Context, req *v1.DeleteFileOrFolderRequest) (*v1.DeleteFileOrFolderResponse, error) {
+	var res v1.DeleteFileOrFolderResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceDeleteFileOrFolderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) CopyFile(ctx context.Context, req *v1.CopyFileRequest) (*v1.CopyFileResponse, error) {
+	var res v1.CopyFileResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceCopyFileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) SearchFiles(ctx context.Context, req *v1.SearchFilesRequest) (*v1.SearchFilesResponse, error) {
+	var res v1.SearchFilesResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceSearchFilesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) ReplaceInFiles(ctx context.Context, req *v1.ReplaceInFilesRequest) (*v1.ReplaceInFilesResponse, error) {
+	var res v1.ReplaceInFilesResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceReplaceInFilesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) ListDirectory(ctx context.Context, req *v1.ListDirectoryRequest) (*v1.ListDirectoryResponse, error) {
+	var res v1.ListDirectoryResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceListDirectorySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *fileSystemServiceClient) CreateDirectory(ctx context.Context, req *v1.CreateDirectoryRequest) (*v1.CreateDirectoryResponse, error) {
+	var res v1.CreateDirectoryResponse
+	if err := c.client.CallUnary(ctx, fileSystemServiceCreateDirectorySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type fileSystemServiceHandler struct{ svc FileSystemServiceHandler }
+
+func (h fileSystemServiceHandler) getFileTree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFileTreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFileTree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) getFileContent(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFileContentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFileContent(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) saveFileContent(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SaveFileContentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SaveFileContent(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) getFileMetadata(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFileMetadataRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFileMetadata(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) getFilePreviewInfo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFilePreviewInfoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFilePreviewInfo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) getFilePreview(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetFilePreviewRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetFilePreview(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) createFileOrFolder(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateFileOrFolderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateFileOrFolder(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) deleteFileOrFolder(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteFileOrFolderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteFileOrFolder(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) copyFile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CopyFileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CopyFile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) searchFiles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SearchFilesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SearchFiles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) replaceInFiles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReplaceInFilesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReplaceInFiles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) listDirectory(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDirectoryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDirectory(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h fileSystemServiceHandler) createDirectory(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateDirectoryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateDirectory(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

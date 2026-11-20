@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -27,33 +27,33 @@ func TestListTasks_Generated(t *testing.T) {
 	}
 	svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListTasksRequest, pb.ListTasksResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListTasksRequest, pb.ListTasksResponse]{
 		{
 			Name:    "plan_id is required",
-			Req:     connect.NewRequest(&pb.ListTasksRequest{}),
+			Req:     &pb.ListTasksRequest{},
 			Ctx:     task.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown plan is not found",
-			Req:     connect.NewRequest(&pb.ListTasksRequest{PlanId: ptr.Of(missingID)}),
+			Req:     &pb.ListTasksRequest{PlanId: ptr.Of(missingID)},
 			Ctx:     task.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's plan is denied",
-			Req:     connect.NewRequest(&pb.ListTasksRequest{PlanId: ptr.Of(otherPlanID)}),
+			Req:     &pb.ListTasksRequest{PlanId: ptr.Of(otherPlanID)},
 			Ctx:     task.AuthedContext(t),
 			WantErr: connect.CodePermissionDenied,
 		},
 		{
 			Name: "the plan's tasks",
-			Req:  connect.NewRequest(&pb.ListTasksRequest{PlanId: ptr.Of(ownPlanID)}),
+			Req:  &pb.ListTasksRequest{PlanId: ptr.Of(ownPlanID)},
 			Ctx:  task.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListTasksResponse]) {
-				require.EqualValues(t, 2, resp.Msg.GetTotal())
-				require.Equal(t, "task-2", resp.Msg.GetTasks()[1].GetId())
-				require.EqualValues(t, 1, resp.Msg.GetTasks()[1].GetPosition())
+			Check: func(t *testing.T, resp *pb.ListTasksResponse) {
+				require.EqualValues(t, 2, resp.GetTotal())
+				require.Equal(t, "task-2", resp.GetTasks()[1].GetId())
+				require.EqualValues(t, 1, resp.GetTasks()[1].GetPosition())
 			},
 		},
 	}, svc.ListTasks)

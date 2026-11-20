@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -22,14 +22,14 @@ import (
 func TestCreateWorkflowDraft_BlankWithTheGivenTitle(t *testing.T) {
 	ctx, repo, svc, projectID := saveTestSetup(t)
 
-	resp, err := svc.CreateWorkflowDraft(ctx, connect.NewRequest(&reliantv1.CreateWorkflowDraftRequest{
+	resp, err := svc.CreateWorkflowDraft(ctx, &reliantv1.CreateWorkflowDraftRequest{
 		ProjectId: projectID,
 		Title:     "Triage new issues",
-	}))
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "triage-new-issues", resp.Msg.Slug)
-	assert.Equal(t, "triage-new-issues", resp.Msg.Name)
-	assert.Equal(t, "Triage new issues", resp.Msg.Title)
+	assert.Equal(t, "triage-new-issues", resp.Slug)
+	assert.Equal(t, "triage-new-issues", resp.Name)
+	assert.Equal(t, "Triage new issues", resp.Title)
 
 	stored, err := repo.GetWorkflowDraftBySlug(ctx, "test-user", "triage-new-issues")
 	require.NoError(t, err)
@@ -50,9 +50,9 @@ func TestCreateWorkflowDraft_TitleAndSlugAreUnique(t *testing.T) {
 
 	create := func(title string) *reliantv1.CreateWorkflowDraftResponse {
 		t.Helper()
-		resp, err := svc.CreateWorkflowDraft(ctx, connect.NewRequest(&reliantv1.CreateWorkflowDraftRequest{ProjectId: projectID, Title: title}))
+		resp, err := svc.CreateWorkflowDraft(ctx, &reliantv1.CreateWorkflowDraftRequest{ProjectId: projectID, Title: title})
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 
 	first, second := create(""), create("")
@@ -77,14 +77,14 @@ func TestCreateWorkflowDraft_TitleAndSlugAreUnique(t *testing.T) {
 func TestCreateWorkflowDraft_FromABuiltinTemplate(t *testing.T) {
 	ctx, repo, svc, projectID := saveTestSetup(t)
 
-	resp, err := svc.CreateWorkflowDraft(ctx, connect.NewRequest(&reliantv1.CreateWorkflowDraftRequest{
+	resp, err := svc.CreateWorkflowDraft(ctx, &reliantv1.CreateWorkflowDraftRequest{
 		ProjectId: projectID,
 		Title:     "My agent",
 		Template:  "builtin://agent",
-	}))
+	})
 	require.NoError(t, err)
 
-	stored, err := repo.GetWorkflowDraftBySlug(ctx, "test-user", resp.Msg.Slug)
+	stored, err := repo.GetWorkflowDraftBySlug(ctx, "test-user", resp.Slug)
 	require.NoError(t, err)
 	require.NotNil(t, stored)
 	wf, err := wfyaml.ParseWorkflow([]byte(stored.Definition))
@@ -94,12 +94,12 @@ func TestCreateWorkflowDraft_FromABuiltinTemplate(t *testing.T) {
 	assert.Empty(t, wf.GetDescription())
 	assert.NotEmpty(t, wf.GetNodes(), "the template's graph is copied")
 
-	_, err = svc.CreateWorkflowDraft(ctx, connect.NewRequest(&reliantv1.CreateWorkflowDraftRequest{
+	_, err = svc.CreateWorkflowDraft(ctx, &reliantv1.CreateWorkflowDraftRequest{
 		ProjectId: projectID,
 		Template:  "builtin://no-such-workflow",
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 const storedValidWorkflow = `
@@ -133,13 +133,13 @@ func TestValidateWorkflow_ValidatesTheCanvasNotTheStoredCopy(t *testing.T) {
 	require.True(t, saved.Success, saved.Message)
 	require.True(t, saved.IsValid, "the stored copy is valid: %v", saved.ValidationErrors)
 
-	resp, err := svc.ValidateWorkflow(ctx, connect.NewRequest(&reliantv1.ValidateWorkflowRequest{
+	resp, err := svc.ValidateWorkflow(ctx, &reliantv1.ValidateWorkflowRequest{
 		ProjectId: projectID,
 		Workflow:  mustParse(t, canvasWithProblems),
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Valid, "the canvas has problems the stored copy does not")
-	require.NotEmpty(t, resp.Msg.Errors)
+	assert.False(t, resp.Valid, "the canvas has problems the stored copy does not")
+	require.NotEmpty(t, resp.Errors)
 }
 
 // Every finding about a step names the step and the field, and carries the
@@ -148,14 +148,14 @@ func TestValidateWorkflow_ValidatesTheCanvasNotTheStoredCopy(t *testing.T) {
 func TestValidateWorkflow_FindingsAreLocatedOnTheirNodeAndField(t *testing.T) {
 	ctx, _, svc, projectID := saveTestSetup(t)
 
-	resp, err := svc.ValidateWorkflow(ctx, connect.NewRequest(&reliantv1.ValidateWorkflowRequest{
+	resp, err := svc.ValidateWorkflow(ctx, &reliantv1.ValidateWorkflowRequest{
 		ProjectId: projectID,
 		Workflow:  mustParse(t, canvasWithProblems),
-	}))
+	})
 	require.NoError(t, err)
 
 	var model, unreachable *reliantv1.ValidationError
-	for _, finding := range resp.Msg.Errors {
+	for _, finding := range resp.Errors {
 		switch {
 		case finding.NodeId == "summarize" && finding.Field == "model":
 			model = finding
@@ -163,11 +163,11 @@ func TestValidateWorkflow_FindingsAreLocatedOnTheirNodeAndField(t *testing.T) {
 			unreachable = finding
 		}
 	}
-	require.NotNil(t, model, "the missing model is placed on summarize.model: %v", resp.Msg.Errors)
+	require.NotNil(t, model, "the missing model is placed on summarize.model: %v", resp.Errors)
 	assert.Equal(t, "canvas-check.nodes.[1](summarize).model", model.Path)
 	assert.NotContains(t, model.Detail, "canvas-check.nodes", "detail carries no location prefix")
 
-	require.NotNil(t, unreachable, "the unreachable step is placed on summarize: %v", resp.Msg.Errors)
+	require.NotNil(t, unreachable, "the unreachable step is placed on summarize: %v", resp.Errors)
 	if unreachable.Suggestion != "" {
 		assert.NotContains(t, unreachable.Detail, unreachable.Suggestion, "the remedy is in suggestion, not repeated in detail")
 		assert.Contains(t, unreachable.Message, unreachable.Suggestion, "message keeps its old shape for existing readers")

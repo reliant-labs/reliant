@@ -6,7 +6,6 @@ import (
 	"testing/synctest"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -25,13 +24,13 @@ func TestListWorkflows_ReadsEachSourceOncePerListing(t *testing.T) {
 	ctx, repo := workflowlisttest.NewFixture(t, 12)
 	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 
-	resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
+	resp, err := svc.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{
 		ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true),
-	}))
+	})
 	require.NoError(t, err)
 
 	listed := map[string]bool{}
-	for _, wf := range resp.Msg.GetWorkflows() {
+	for _, wf := range resp.GetWorkflows() {
 		listed[wf.GetName()] = true
 	}
 	require.True(t, listed["mine-0"], "the user's workflows are listed")
@@ -64,7 +63,7 @@ func TestListWorkflows_LatencyDoesNotScaleWithRefs(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, repo := workflowlisttest.NewFixture(t, 12)
 		svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
-		req := connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true)})
+		req := &reliantv1.ListWorkflowsRequest{ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true)}
 		list := func(latency time.Duration) time.Duration {
 			repo.Latency = latency
 			start := time.Now()

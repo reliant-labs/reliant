@@ -26,7 +26,7 @@ func New(deps Deps) Service {
 func UserID(ctx context.Context) (string, error) {
 	uid, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return "", svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
+		return "", svcerr.ToConnectV2(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	return uid, nil
 }

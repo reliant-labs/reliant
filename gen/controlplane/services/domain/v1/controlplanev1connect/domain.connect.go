@@ -11,57 +11,103 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/domain/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// DomainServiceName is the fully-qualified name of the DomainService service.
 	DomainServiceName = "controlplane.v1.DomainService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DomainServiceCreateDomainProcedure is the fully-qualified name of the DomainService's
-	// CreateDomain RPC.
+	// DomainServiceCreateDomainProcedure is the procedure name of the DomainService's CreateDomain RPC.
 	DomainServiceCreateDomainProcedure = "/controlplane.v1.DomainService/CreateDomain"
-	// DomainServiceGetDomainProcedure is the fully-qualified name of the DomainService's GetDomain RPC.
+	// DomainServiceGetDomainProcedure is the procedure name of the DomainService's GetDomain RPC.
 	DomainServiceGetDomainProcedure = "/controlplane.v1.DomainService/GetDomain"
-	// DomainServiceListDomainsProcedure is the fully-qualified name of the DomainService's ListDomains
-	// RPC.
+	// DomainServiceListDomainsProcedure is the procedure name of the DomainService's ListDomains RPC.
 	DomainServiceListDomainsProcedure = "/controlplane.v1.DomainService/ListDomains"
-	// DomainServiceDeleteDomainProcedure is the fully-qualified name of the DomainService's
-	// DeleteDomain RPC.
+	// DomainServiceDeleteDomainProcedure is the procedure name of the DomainService's DeleteDomain RPC.
 	DomainServiceDeleteDomainProcedure = "/controlplane.v1.DomainService/DeleteDomain"
-	// DomainServiceVerifyDomainProcedure is the fully-qualified name of the DomainService's
-	// VerifyDomain RPC.
+	// DomainServiceVerifyDomainProcedure is the procedure name of the DomainService's VerifyDomain RPC.
 	DomainServiceVerifyDomainProcedure = "/controlplane.v1.DomainService/VerifyDomain"
-	// DomainServiceCreateDomainBindingProcedure is the fully-qualified name of the DomainService's
+	// DomainServiceCreateDomainBindingProcedure is the procedure name of the DomainService's
 	// CreateDomainBinding RPC.
 	DomainServiceCreateDomainBindingProcedure = "/controlplane.v1.DomainService/CreateDomainBinding"
-	// DomainServiceDeleteDomainBindingProcedure is the fully-qualified name of the DomainService's
+	// DomainServiceDeleteDomainBindingProcedure is the procedure name of the DomainService's
 	// DeleteDomainBinding RPC.
 	DomainServiceDeleteDomainBindingProcedure = "/controlplane.v1.DomainService/DeleteDomainBinding"
-	// DomainServiceListDomainBindingsProcedure is the fully-qualified name of the DomainService's
+	// DomainServiceListDomainBindingsProcedure is the procedure name of the DomainService's
 	// ListDomainBindings RPC.
 	DomainServiceListDomainBindingsProcedure = "/controlplane.v1.DomainService/ListDomainBindings"
+)
+
+var (
+	domainServiceCreateDomainSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods().ByName("CreateDomain"),
+			Procedure:  DomainServiceCreateDomainProcedure,
+		}
+	})
+	domainServiceGetDomainSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods().ByName("GetDomain"),
+			Procedure:  DomainServiceGetDomainProcedure,
+		}
+	})
+	domainServiceListDomainsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods().ByName("ListDomains"),
+			Procedure:  DomainServiceListDomainsProcedure,
+		}
+	})
+	domainServiceDeleteDomainSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods().ByName("DeleteDomain"),
+			Procedure:  DomainServiceDeleteDomainProcedure,
+		}
+	})
+	domainServiceVerifyDomainSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods().ByName("VerifyDomain"),
+			Procedure:  DomainServiceVerifyDomainProcedure,
+		}
+	})
+	domainServiceCreateDomainBindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods().ByName("CreateDomainBinding"),
+			Procedure:  DomainServiceCreateDomainBindingProcedure,
+		}
+	})
+	domainServiceDeleteDomainBindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods().ByName("DeleteDomainBinding"),
+			Procedure:  DomainServiceDeleteDomainBindingProcedure,
+		}
+	})
+	domainServiceListDomainBindingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods().ByName("ListDomainBindings"),
+			Procedure:  DomainServiceListDomainBindingsProcedure,
+		}
+	})
 )
 
 // DomainServiceClient is a client for the controlplane.v1.DomainService service.
@@ -69,23 +115,23 @@ type DomainServiceClient interface {
 	// CreateDomain claims a hostname for the caller's org and mints its
 	// ownership token. The domain starts in PENDING_DNS with required_records
 	// populated — those records are the whole of what the tenant must do next.
-	CreateDomain(context.Context, *connect.Request[v1.CreateDomainRequest]) (*connect.Response[v1.CreateDomainResponse], error)
+	CreateDomain(context.Context, *v1.CreateDomainRequest) (*v1.CreateDomainResponse, error)
 	// GetDomain returns one domain of the caller's org, with its binding.
-	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
+	GetDomain(context.Context, *v1.GetDomainRequest) (*v1.GetDomainResponse, error)
 	// ListDomains returns every domain of the caller's org, by hostname.
-	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
+	ListDomains(context.Context, *v1.ListDomainsRequest) (*v1.ListDomainsResponse, error)
 	// DeleteDomain removes a domain and its binding, and stops serving it.
 	//
 	// This FREES THE HOSTNAME for another org to claim, which is the only
 	// self-service escape from a CONFLICT: the org that holds it lets go.
-	DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error)
+	DeleteDomain(context.Context, *v1.DeleteDomainRequest) (*v1.DeleteDomainResponse, error)
 	// VerifyDomain checks DNS right now rather than waiting for the poller.
 	//
 	// A NUDGE, NOT THE MECHANISM. The reconciler polls regardless, so this
 	// changes only latency — it exists because a tenant who has just saved a
 	// record wants an answer in a second, and the backoff that keeps a
 	// week-old domain cheap would otherwise make them wait an hour.
-	VerifyDomain(context.Context, *connect.Request[v1.VerifyDomainRequest]) (*connect.Response[v1.VerifyDomainResponse], error)
+	VerifyDomain(context.Context, *v1.VerifyDomainRequest) (*v1.VerifyDomainResponse, error)
 	// CreateDomainBinding points a domain at an environment and a target,
 	// replacing any binding it already has.
 	//
@@ -93,128 +139,20 @@ type DomainServiceClient interface {
 	// whole thing before their DNS has propagated and have it start serving by
 	// itself — which is the natural order of work, and the alternative would
 	// be an error telling them to come back later and repeat themselves.
-	CreateDomainBinding(context.Context, *connect.Request[v1.CreateDomainBindingRequest]) (*connect.Response[v1.CreateDomainBindingResponse], error)
+	CreateDomainBinding(context.Context, *v1.CreateDomainBindingRequest) (*v1.CreateDomainBindingResponse, error)
 	// DeleteDomainBinding stops the domain serving, and keeps the domain.
 	// Its verification survives, so re-binding later costs no DNS work and no
 	// new certificate.
-	DeleteDomainBinding(context.Context, *connect.Request[v1.DeleteDomainBindingRequest]) (*connect.Response[v1.DeleteDomainBindingResponse], error)
+	DeleteDomainBinding(context.Context, *v1.DeleteDomainBindingRequest) (*v1.DeleteDomainBindingResponse, error)
 	// ListDomainBindings returns the caller org's bindings, optionally only
 	// those in one environment.
-	ListDomainBindings(context.Context, *connect.Request[v1.ListDomainBindingsRequest]) (*connect.Response[v1.ListDomainBindingsResponse], error)
+	ListDomainBindings(context.Context, *v1.ListDomainBindingsRequest) (*v1.ListDomainBindingsResponse, error)
 }
 
-// NewDomainServiceClient constructs a client for the controlplane.v1.DomainService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewDomainServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DomainServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	domainServiceMethods := v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods()
-	return &domainServiceClient{
-		createDomain: connect.NewClient[v1.CreateDomainRequest, v1.CreateDomainResponse](
-			httpClient,
-			baseURL+DomainServiceCreateDomainProcedure,
-			connect.WithSchema(domainServiceMethods.ByName("CreateDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		getDomain: connect.NewClient[v1.GetDomainRequest, v1.GetDomainResponse](
-			httpClient,
-			baseURL+DomainServiceGetDomainProcedure,
-			connect.WithSchema(domainServiceMethods.ByName("GetDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		listDomains: connect.NewClient[v1.ListDomainsRequest, v1.ListDomainsResponse](
-			httpClient,
-			baseURL+DomainServiceListDomainsProcedure,
-			connect.WithSchema(domainServiceMethods.ByName("ListDomains")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteDomain: connect.NewClient[v1.DeleteDomainRequest, v1.DeleteDomainResponse](
-			httpClient,
-			baseURL+DomainServiceDeleteDomainProcedure,
-			connect.WithSchema(domainServiceMethods.ByName("DeleteDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		verifyDomain: connect.NewClient[v1.VerifyDomainRequest, v1.VerifyDomainResponse](
-			httpClient,
-			baseURL+DomainServiceVerifyDomainProcedure,
-			connect.WithSchema(domainServiceMethods.ByName("VerifyDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		createDomainBinding: connect.NewClient[v1.CreateDomainBindingRequest, v1.CreateDomainBindingResponse](
-			httpClient,
-			baseURL+DomainServiceCreateDomainBindingProcedure,
-			connect.WithSchema(domainServiceMethods.ByName("CreateDomainBinding")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteDomainBinding: connect.NewClient[v1.DeleteDomainBindingRequest, v1.DeleteDomainBindingResponse](
-			httpClient,
-			baseURL+DomainServiceDeleteDomainBindingProcedure,
-			connect.WithSchema(domainServiceMethods.ByName("DeleteDomainBinding")),
-			connect.WithClientOptions(opts...),
-		),
-		listDomainBindings: connect.NewClient[v1.ListDomainBindingsRequest, v1.ListDomainBindingsResponse](
-			httpClient,
-			baseURL+DomainServiceListDomainBindingsProcedure,
-			connect.WithSchema(domainServiceMethods.ByName("ListDomainBindings")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// domainServiceClient implements DomainServiceClient.
-type domainServiceClient struct {
-	createDomain        *connect.Client[v1.CreateDomainRequest, v1.CreateDomainResponse]
-	getDomain           *connect.Client[v1.GetDomainRequest, v1.GetDomainResponse]
-	listDomains         *connect.Client[v1.ListDomainsRequest, v1.ListDomainsResponse]
-	deleteDomain        *connect.Client[v1.DeleteDomainRequest, v1.DeleteDomainResponse]
-	verifyDomain        *connect.Client[v1.VerifyDomainRequest, v1.VerifyDomainResponse]
-	createDomainBinding *connect.Client[v1.CreateDomainBindingRequest, v1.CreateDomainBindingResponse]
-	deleteDomainBinding *connect.Client[v1.DeleteDomainBindingRequest, v1.DeleteDomainBindingResponse]
-	listDomainBindings  *connect.Client[v1.ListDomainBindingsRequest, v1.ListDomainBindingsResponse]
-}
-
-// CreateDomain calls controlplane.v1.DomainService.CreateDomain.
-func (c *domainServiceClient) CreateDomain(ctx context.Context, req *connect.Request[v1.CreateDomainRequest]) (*connect.Response[v1.CreateDomainResponse], error) {
-	return c.createDomain.CallUnary(ctx, req)
-}
-
-// GetDomain calls controlplane.v1.DomainService.GetDomain.
-func (c *domainServiceClient) GetDomain(ctx context.Context, req *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error) {
-	return c.getDomain.CallUnary(ctx, req)
-}
-
-// ListDomains calls controlplane.v1.DomainService.ListDomains.
-func (c *domainServiceClient) ListDomains(ctx context.Context, req *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error) {
-	return c.listDomains.CallUnary(ctx, req)
-}
-
-// DeleteDomain calls controlplane.v1.DomainService.DeleteDomain.
-func (c *domainServiceClient) DeleteDomain(ctx context.Context, req *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error) {
-	return c.deleteDomain.CallUnary(ctx, req)
-}
-
-// VerifyDomain calls controlplane.v1.DomainService.VerifyDomain.
-func (c *domainServiceClient) VerifyDomain(ctx context.Context, req *connect.Request[v1.VerifyDomainRequest]) (*connect.Response[v1.VerifyDomainResponse], error) {
-	return c.verifyDomain.CallUnary(ctx, req)
-}
-
-// CreateDomainBinding calls controlplane.v1.DomainService.CreateDomainBinding.
-func (c *domainServiceClient) CreateDomainBinding(ctx context.Context, req *connect.Request[v1.CreateDomainBindingRequest]) (*connect.Response[v1.CreateDomainBindingResponse], error) {
-	return c.createDomainBinding.CallUnary(ctx, req)
-}
-
-// DeleteDomainBinding calls controlplane.v1.DomainService.DeleteDomainBinding.
-func (c *domainServiceClient) DeleteDomainBinding(ctx context.Context, req *connect.Request[v1.DeleteDomainBindingRequest]) (*connect.Response[v1.DeleteDomainBindingResponse], error) {
-	return c.deleteDomainBinding.CallUnary(ctx, req)
-}
-
-// ListDomainBindings calls controlplane.v1.DomainService.ListDomainBindings.
-func (c *domainServiceClient) ListDomainBindings(ctx context.Context, req *connect.Request[v1.ListDomainBindingsRequest]) (*connect.Response[v1.ListDomainBindingsResponse], error) {
-	return c.listDomainBindings.CallUnary(ctx, req)
+// NewDomainServiceClient constructs a client for the controlplane.v1.DomainService service.
+// Multiple service clients may share a single connect.Client.
+func NewDomainServiceClient(client *connect.Client) DomainServiceClient {
+	return &domainServiceClient{client: client}
 }
 
 // DomainServiceHandler is an implementation of the controlplane.v1.DomainService service.
@@ -222,23 +160,23 @@ type DomainServiceHandler interface {
 	// CreateDomain claims a hostname for the caller's org and mints its
 	// ownership token. The domain starts in PENDING_DNS with required_records
 	// populated — those records are the whole of what the tenant must do next.
-	CreateDomain(context.Context, *connect.Request[v1.CreateDomainRequest]) (*connect.Response[v1.CreateDomainResponse], error)
+	CreateDomain(context.Context, *v1.CreateDomainRequest) (*v1.CreateDomainResponse, error)
 	// GetDomain returns one domain of the caller's org, with its binding.
-	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
+	GetDomain(context.Context, *v1.GetDomainRequest) (*v1.GetDomainResponse, error)
 	// ListDomains returns every domain of the caller's org, by hostname.
-	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
+	ListDomains(context.Context, *v1.ListDomainsRequest) (*v1.ListDomainsResponse, error)
 	// DeleteDomain removes a domain and its binding, and stops serving it.
 	//
 	// This FREES THE HOSTNAME for another org to claim, which is the only
 	// self-service escape from a CONFLICT: the org that holds it lets go.
-	DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error)
+	DeleteDomain(context.Context, *v1.DeleteDomainRequest) (*v1.DeleteDomainResponse, error)
 	// VerifyDomain checks DNS right now rather than waiting for the poller.
 	//
 	// A NUDGE, NOT THE MECHANISM. The reconciler polls regardless, so this
 	// changes only latency — it exists because a tenant who has just saved a
 	// record wants an answer in a second, and the backoff that keeps a
 	// week-old domain cheap would otherwise make them wait an hour.
-	VerifyDomain(context.Context, *connect.Request[v1.VerifyDomainRequest]) (*connect.Response[v1.VerifyDomainResponse], error)
+	VerifyDomain(context.Context, *v1.VerifyDomainRequest) (*v1.VerifyDomainResponse, error)
 	// CreateDomainBinding points a domain at an environment and a target,
 	// replacing any binding it already has.
 	//
@@ -246,126 +184,229 @@ type DomainServiceHandler interface {
 	// whole thing before their DNS has propagated and have it start serving by
 	// itself — which is the natural order of work, and the alternative would
 	// be an error telling them to come back later and repeat themselves.
-	CreateDomainBinding(context.Context, *connect.Request[v1.CreateDomainBindingRequest]) (*connect.Response[v1.CreateDomainBindingResponse], error)
+	CreateDomainBinding(context.Context, *v1.CreateDomainBindingRequest) (*v1.CreateDomainBindingResponse, error)
 	// DeleteDomainBinding stops the domain serving, and keeps the domain.
 	// Its verification survives, so re-binding later costs no DNS work and no
 	// new certificate.
-	DeleteDomainBinding(context.Context, *connect.Request[v1.DeleteDomainBindingRequest]) (*connect.Response[v1.DeleteDomainBindingResponse], error)
+	DeleteDomainBinding(context.Context, *v1.DeleteDomainBindingRequest) (*v1.DeleteDomainBindingResponse, error)
 	// ListDomainBindings returns the caller org's bindings, optionally only
 	// those in one environment.
-	ListDomainBindings(context.Context, *connect.Request[v1.ListDomainBindingsRequest]) (*connect.Response[v1.ListDomainBindingsResponse], error)
+	ListDomainBindings(context.Context, *v1.ListDomainBindingsRequest) (*v1.ListDomainBindingsResponse, error)
 }
 
-// NewDomainServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewDomainServiceHandler(svc DomainServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	domainServiceMethods := v1.File_services_domain_v1_domain_proto.Services().ByName("DomainService").Methods()
-	domainServiceCreateDomainHandler := connect.NewUnaryHandler(
-		DomainServiceCreateDomainProcedure,
-		svc.CreateDomain,
-		connect.WithSchema(domainServiceMethods.ByName("CreateDomain")),
-		connect.WithHandlerOptions(opts...),
+// RegisterDomainServiceHandler registers svc as the controlplane.v1.DomainService implementation on
+// server.
+func RegisterDomainServiceHandler(server *connect.Server, svc DomainServiceHandler) {
+	adapter := domainServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: domainServiceCreateDomainSpec(), Handler: adapter.createDomain},
+		connect.Method{Spec: domainServiceGetDomainSpec(), Handler: adapter.getDomain},
+		connect.Method{Spec: domainServiceListDomainsSpec(), Handler: adapter.listDomains},
+		connect.Method{Spec: domainServiceDeleteDomainSpec(), Handler: adapter.deleteDomain},
+		connect.Method{Spec: domainServiceVerifyDomainSpec(), Handler: adapter.verifyDomain},
+		connect.Method{Spec: domainServiceCreateDomainBindingSpec(), Handler: adapter.createDomainBinding},
+		connect.Method{Spec: domainServiceDeleteDomainBindingSpec(), Handler: adapter.deleteDomainBinding},
+		connect.Method{Spec: domainServiceListDomainBindingsSpec(), Handler: adapter.listDomainBindings},
 	)
-	domainServiceGetDomainHandler := connect.NewUnaryHandler(
-		DomainServiceGetDomainProcedure,
-		svc.GetDomain,
-		connect.WithSchema(domainServiceMethods.ByName("GetDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	domainServiceListDomainsHandler := connect.NewUnaryHandler(
-		DomainServiceListDomainsProcedure,
-		svc.ListDomains,
-		connect.WithSchema(domainServiceMethods.ByName("ListDomains")),
-		connect.WithHandlerOptions(opts...),
-	)
-	domainServiceDeleteDomainHandler := connect.NewUnaryHandler(
-		DomainServiceDeleteDomainProcedure,
-		svc.DeleteDomain,
-		connect.WithSchema(domainServiceMethods.ByName("DeleteDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	domainServiceVerifyDomainHandler := connect.NewUnaryHandler(
-		DomainServiceVerifyDomainProcedure,
-		svc.VerifyDomain,
-		connect.WithSchema(domainServiceMethods.ByName("VerifyDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	domainServiceCreateDomainBindingHandler := connect.NewUnaryHandler(
-		DomainServiceCreateDomainBindingProcedure,
-		svc.CreateDomainBinding,
-		connect.WithSchema(domainServiceMethods.ByName("CreateDomainBinding")),
-		connect.WithHandlerOptions(opts...),
-	)
-	domainServiceDeleteDomainBindingHandler := connect.NewUnaryHandler(
-		DomainServiceDeleteDomainBindingProcedure,
-		svc.DeleteDomainBinding,
-		connect.WithSchema(domainServiceMethods.ByName("DeleteDomainBinding")),
-		connect.WithHandlerOptions(opts...),
-	)
-	domainServiceListDomainBindingsHandler := connect.NewUnaryHandler(
-		DomainServiceListDomainBindingsProcedure,
-		svc.ListDomainBindings,
-		connect.WithSchema(domainServiceMethods.ByName("ListDomainBindings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.DomainService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case DomainServiceCreateDomainProcedure:
-			domainServiceCreateDomainHandler.ServeHTTP(w, r)
-		case DomainServiceGetDomainProcedure:
-			domainServiceGetDomainHandler.ServeHTTP(w, r)
-		case DomainServiceListDomainsProcedure:
-			domainServiceListDomainsHandler.ServeHTTP(w, r)
-		case DomainServiceDeleteDomainProcedure:
-			domainServiceDeleteDomainHandler.ServeHTTP(w, r)
-		case DomainServiceVerifyDomainProcedure:
-			domainServiceVerifyDomainHandler.ServeHTTP(w, r)
-		case DomainServiceCreateDomainBindingProcedure:
-			domainServiceCreateDomainBindingHandler.ServeHTTP(w, r)
-		case DomainServiceDeleteDomainBindingProcedure:
-			domainServiceDeleteDomainBindingHandler.ServeHTTP(w, r)
-		case DomainServiceListDomainBindingsProcedure:
-			domainServiceListDomainBindingsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedDomainServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDomainServiceHandler struct{}
 
-func (UnimplementedDomainServiceHandler) CreateDomain(context.Context, *connect.Request[v1.CreateDomainRequest]) (*connect.Response[v1.CreateDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DomainService.CreateDomain is not implemented"))
+func (UnimplementedDomainServiceHandler) CreateDomain(context.Context, *v1.CreateDomainRequest) (*v1.CreateDomainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DomainService.CreateDomain is not implemented")
 }
 
-func (UnimplementedDomainServiceHandler) GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DomainService.GetDomain is not implemented"))
+func (UnimplementedDomainServiceHandler) GetDomain(context.Context, *v1.GetDomainRequest) (*v1.GetDomainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DomainService.GetDomain is not implemented")
 }
 
-func (UnimplementedDomainServiceHandler) ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DomainService.ListDomains is not implemented"))
+func (UnimplementedDomainServiceHandler) ListDomains(context.Context, *v1.ListDomainsRequest) (*v1.ListDomainsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DomainService.ListDomains is not implemented")
 }
 
-func (UnimplementedDomainServiceHandler) DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DomainService.DeleteDomain is not implemented"))
+func (UnimplementedDomainServiceHandler) DeleteDomain(context.Context, *v1.DeleteDomainRequest) (*v1.DeleteDomainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DomainService.DeleteDomain is not implemented")
 }
 
-func (UnimplementedDomainServiceHandler) VerifyDomain(context.Context, *connect.Request[v1.VerifyDomainRequest]) (*connect.Response[v1.VerifyDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DomainService.VerifyDomain is not implemented"))
+func (UnimplementedDomainServiceHandler) VerifyDomain(context.Context, *v1.VerifyDomainRequest) (*v1.VerifyDomainResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DomainService.VerifyDomain is not implemented")
 }
 
-func (UnimplementedDomainServiceHandler) CreateDomainBinding(context.Context, *connect.Request[v1.CreateDomainBindingRequest]) (*connect.Response[v1.CreateDomainBindingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DomainService.CreateDomainBinding is not implemented"))
+func (UnimplementedDomainServiceHandler) CreateDomainBinding(context.Context, *v1.CreateDomainBindingRequest) (*v1.CreateDomainBindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DomainService.CreateDomainBinding is not implemented")
 }
 
-func (UnimplementedDomainServiceHandler) DeleteDomainBinding(context.Context, *connect.Request[v1.DeleteDomainBindingRequest]) (*connect.Response[v1.DeleteDomainBindingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DomainService.DeleteDomainBinding is not implemented"))
+func (UnimplementedDomainServiceHandler) DeleteDomainBinding(context.Context, *v1.DeleteDomainBindingRequest) (*v1.DeleteDomainBindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DomainService.DeleteDomainBinding is not implemented")
 }
 
-func (UnimplementedDomainServiceHandler) ListDomainBindings(context.Context, *connect.Request[v1.ListDomainBindingsRequest]) (*connect.Response[v1.ListDomainBindingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DomainService.ListDomainBindings is not implemented"))
+func (UnimplementedDomainServiceHandler) ListDomainBindings(context.Context, *v1.ListDomainBindingsRequest) (*v1.ListDomainBindingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DomainService.ListDomainBindings is not implemented")
+}
+
+type domainServiceClient struct {
+	client *connect.Client
+}
+
+func (c *domainServiceClient) CreateDomain(ctx context.Context, req *v1.CreateDomainRequest) (*v1.CreateDomainResponse, error) {
+	var res v1.CreateDomainResponse
+	if err := c.client.CallUnary(ctx, domainServiceCreateDomainSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *domainServiceClient) GetDomain(ctx context.Context, req *v1.GetDomainRequest) (*v1.GetDomainResponse, error) {
+	var res v1.GetDomainResponse
+	if err := c.client.CallUnary(ctx, domainServiceGetDomainSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *domainServiceClient) ListDomains(ctx context.Context, req *v1.ListDomainsRequest) (*v1.ListDomainsResponse, error) {
+	var res v1.ListDomainsResponse
+	if err := c.client.CallUnary(ctx, domainServiceListDomainsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *domainServiceClient) DeleteDomain(ctx context.Context, req *v1.DeleteDomainRequest) (*v1.DeleteDomainResponse, error) {
+	var res v1.DeleteDomainResponse
+	if err := c.client.CallUnary(ctx, domainServiceDeleteDomainSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *domainServiceClient) VerifyDomain(ctx context.Context, req *v1.VerifyDomainRequest) (*v1.VerifyDomainResponse, error) {
+	var res v1.VerifyDomainResponse
+	if err := c.client.CallUnary(ctx, domainServiceVerifyDomainSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *domainServiceClient) CreateDomainBinding(ctx context.Context, req *v1.CreateDomainBindingRequest) (*v1.CreateDomainBindingResponse, error) {
+	var res v1.CreateDomainBindingResponse
+	if err := c.client.CallUnary(ctx, domainServiceCreateDomainBindingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *domainServiceClient) DeleteDomainBinding(ctx context.Context, req *v1.DeleteDomainBindingRequest) (*v1.DeleteDomainBindingResponse, error) {
+	var res v1.DeleteDomainBindingResponse
+	if err := c.client.CallUnary(ctx, domainServiceDeleteDomainBindingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *domainServiceClient) ListDomainBindings(ctx context.Context, req *v1.ListDomainBindingsRequest) (*v1.ListDomainBindingsResponse, error) {
+	var res v1.ListDomainBindingsResponse
+	if err := c.client.CallUnary(ctx, domainServiceListDomainBindingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type domainServiceHandler struct{ svc DomainServiceHandler }
+
+func (h domainServiceHandler) createDomain(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateDomainRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateDomain(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h domainServiceHandler) getDomain(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetDomainRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetDomain(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h domainServiceHandler) listDomains(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDomainsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDomains(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h domainServiceHandler) deleteDomain(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteDomainRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteDomain(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h domainServiceHandler) verifyDomain(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.VerifyDomainRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.VerifyDomain(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h domainServiceHandler) createDomainBinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateDomainBindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateDomainBinding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h domainServiceHandler) deleteDomainBinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteDomainBindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteDomainBinding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h domainServiceHandler) listDomainBindings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDomainBindingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDomainBindings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

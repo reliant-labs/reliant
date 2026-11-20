@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
@@ -102,29 +101,29 @@ func TestMCPService_ReferencesReachStoreResponsesAndDaemonUnresolved(t *testing.
 	}
 	var responses []any
 	for name, cfg := range installs {
-		resp, err := svc.InstallServer(ctx, connect.NewRequest(&reliantv1.InstallServerRequest{
+		resp, err := svc.InstallServer(ctx, &reliantv1.InstallServerRequest{
 			ProjectId: projectID,
 			Name:      name,
 			Scope:     reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT,
 			Config:    cfg,
-		}))
+		})
 		require.NoError(t, err)
-		require.True(t, resp.Msg.Success, "install %s: %s", name, resp.Msg.Message)
-		responses = append(responses, resp.Msg)
+		require.True(t, resp.Success, "install %s: %s", name, resp.Message)
+		responses = append(responses, resp)
 
-		restart, err := svc.RestartServer(ctx, connect.NewRequest(&reliantv1.RestartServerRequest{ProjectId: projectID, Name: name}))
+		restart, err := svc.RestartServer(ctx, &reliantv1.RestartServerRequest{ProjectId: projectID, Name: name})
 		require.NoError(t, err)
-		require.True(t, restart.Msg.Success, "restart %s: %s", name, restart.Msg.Message)
-		responses = append(responses, restart.Msg)
+		require.True(t, restart.Success, "restart %s: %s", name, restart.Message)
+		responses = append(responses, restart)
 
-		got, err := svc.GetServer(ctx, connect.NewRequest(&reliantv1.GetServerRequest{ProjectId: projectID, Name: name}))
+		got, err := svc.GetServer(ctx, &reliantv1.GetServerRequest{ProjectId: projectID, Name: name})
 		require.NoError(t, err)
-		responses = append(responses, got.Msg)
+		responses = append(responses, got)
 	}
-	list, err := svc.ListServers(ctx, connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: projectID}))
+	list, err := svc.ListServers(ctx, &reliantv1.ListServersRequest{ProjectId: projectID})
 	require.NoError(t, err)
-	require.Len(t, list.Msg.Servers, 2)
-	responses = append(responses, list.Msg)
+	require.Len(t, list.Servers, 2)
+	responses = append(responses, list)
 
 	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)
@@ -135,7 +134,7 @@ func TestMCPService_ReferencesReachStoreResponsesAndDaemonUnresolved(t *testing.
 		require.NoError(t, err)
 		require.NotContains(t, string(encoded), serverOnlySecret, "an RPC response carries the server's value")
 	}
-	require.Contains(t, mustJSON(t, list.Msg), "Bearer "+serverOnlyRef, "ListServers must show the reference as written")
+	require.Contains(t, mustJSON(t, list), "Bearer "+serverOnlyRef, "ListServers must show the reference as written")
 
 	require.NotContains(t, *record.MCPConfigs, serverOnlySecret, "the stored row carries the server's value")
 	require.Contains(t, *record.MCPConfigs, serverOnlyRef, "the stored row must keep the reference as written")
@@ -173,14 +172,14 @@ func TestMCPService_InstallServerStoresHomeReferenceVerbatim(t *testing.T) {
 	}))
 
 	args := []string{"--root", "${HOME}/code", "--config=${HOME}/.config/server.json"}
-	resp, err := svc.InstallServer(ctx, connect.NewRequest(&reliantv1.InstallServerRequest{
+	resp, err := svc.InstallServer(ctx, &reliantv1.InstallServerRequest{
 		ProjectId: projectID,
 		Name:      "home-ref",
 		Scope:     reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT,
 		Config:    &reliantv1.MCPServerConfig{Command: "${HOME}/bin/server", Args: args},
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success, resp.Msg.Message)
+	require.True(t, resp.Success, resp.Message)
 
 	record, err := svc.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	require.NoError(t, err)

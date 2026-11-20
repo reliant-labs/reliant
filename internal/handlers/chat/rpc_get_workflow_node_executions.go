@@ -5,8 +5,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -23,10 +21,10 @@ import (
 // node events are newer than anything returned here.
 func (s *Service) GetWorkflowNodeExecutions(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetWorkflowNodeExecutionsRequest],
-) (*connect.Response[reliantv1.GetWorkflowNodeExecutionsResponse], error) {
+	req *reliantv1.GetWorkflowNodeExecutionsRequest,
+) (*reliantv1.GetWorkflowNodeExecutionsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	chatID, workflowID := req.Msg.GetChatId(), req.Msg.GetWorkflowId()
+	chatID, workflowID := req.GetChatId(), req.GetWorkflowId()
 	if chatID == "" || workflowID == "" {
 		return nil, svcerr.InvalidArgument("chat_id and workflow_id are required")
 	}
@@ -49,5 +47,5 @@ func (s *Service) GetWorkflowNodeExecutions(
 			CreatedAt:      update.CreatedAt.Format(time.RFC3339Nano),
 		}
 	}
-	return connect.NewResponse(&reliantv1.GetWorkflowNodeExecutionsResponse{Updates: out}), nil
+	return &reliantv1.GetWorkflowNodeExecutionsResponse{Updates: out}, nil
 }

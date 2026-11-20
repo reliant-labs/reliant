@@ -4,7 +4,6 @@ package project
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -12,10 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
@@ -27,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -85,23 +88,23 @@ func TestCreateProjectFromRepo_QueuedCloneIsRecordedAsInstalling(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	name := "widgets-" + uuid.NewString()
-	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	resp, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/acme/" + name + ".git",
 		DaemonId: "daemon-abc",
-	}))
+	})
 	require.NoError(t, err)
 
 	// The whole point: the checkout does not exist yet, and the response
 	// must not imply otherwise.
-	assert.True(t, resp.Msg.GetQueued(), "a queued clone must report queued=true")
-	assert.Equal(t, "my-machine", resp.Msg.GetDaemonName(),
+	assert.True(t, resp.GetQueued(), "a queued clone must report queued=true")
+	assert.Equal(t, "my-machine", resp.GetDaemonName(),
 		"the UI needs the machine's name to say what it is waiting on")
-	require.NotNil(t, resp.Msg.GetProject())
+	require.NotNil(t, resp.GetProject())
 	assert.Equal(t, reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLING,
-		resp.Msg.GetProjectDaemon().GetInstallState())
+		resp.GetProjectDaemon().GetInstallState())
 
 	// And it is persisted that way, so a page reload still shows the truth.
-	rows, err := repo.ListProjectDaemonsForProject(ctx, resp.Msg.GetProject().GetId())
+	rows, err := repo.ListProjectDaemonsForProject(ctx, resp.GetProject().GetId())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "installing", string(rows[0].InstallState))
@@ -113,7 +116,7 @@ func TestCreateProjectFromRepo_RefusedClonePersistsNothing(t *testing.T) {
 	// The reason this is one RPC: a refused clone must not leave a project
 	// row the user has to clean up by hand.
 	cp := &cloneStubControlPlane{err: connect.NewError(
-		connect.CodeFailedPrecondition, errors.New(`no git credential found for provider "github"`))}
+		connect.CodeFailedPrecondition, `no git credential found for provider "github"`)}
 	svc, repo, cleanup := newFromRepoService(t, cp)
 	defer cleanup()
 
@@ -121,15 +124,15 @@ func TestCreateProjectFromRepo_RefusedClonePersistsNothing(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	name := "widgets-" + uuid.NewString()
-	_, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	_, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/acme/" + name + ".git",
 		DaemonId: "daemon-abc",
-	}))
+	})
 	require.Error(t, err)
 	// The control plane's own code reaches the user, rather than being
 	// flattened to Internal — "connect GitHub" is actionable, "internal
 	// error" is not.
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 
 	projects, err := repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
 	require.NoError(t, err)
@@ -144,19 +147,19 @@ func TestCreateProjectFromRepo_RefusedClonePersistsNothing(t *testing.T) {
 // it as a target and say so.
 func TestCreateProjectFromRepo_DeletedMachinePersistsNothing(t *testing.T) {
 	cp := &cloneStubControlPlane{err: connect.NewError(
-		connect.CodeNotFound, errors.New(`daemon "cda8a89b-d15c-455d-a506-4c40335e4278" not found`))}
+		connect.CodeNotFound, `daemon "cda8a89b-d15c-455d-a506-4c40335e4278" not found`)}
 	svc, repo, cleanup := newFromRepoService(t, cp)
 	defer cleanup()
 
 	userID := "user-from-repo-" + uuid.NewString()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
-	_, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	_, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/reliant-labs/forge.git",
 		DaemonId: "cda8a89b-d15c-455d-a506-4c40335e4278",
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
 	projects, err := repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
 	require.NoError(t, err)
@@ -175,14 +178,14 @@ func TestCreateProjectFromRepo_CompletedCloneIsRecordedAsInstalled(t *testing.T)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	name := "widgets-" + uuid.NewString()
-	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	resp, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/acme/" + name + ".git",
 		DaemonId: "daemon-abc",
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.GetQueued())
+	assert.False(t, resp.GetQueued())
 
-	rows, err := repo.ListProjectDaemonsForProject(ctx, resp.Msg.GetProject().GetId())
+	rows, err := repo.ListProjectDaemonsForProject(ctx, resp.GetProject().GetId())
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "installed", string(rows[0].InstallState))
@@ -207,10 +210,10 @@ func TestCreateProjectFromRepo_RegistersTheRootRepo(t *testing.T) {
 	name := "control-plane-" + uuid.NewString()
 	cloneURL := "https://github.com/acme/" + name + ".git"
 	req := &reliantv1.CreateProjectFromRepoRequest{CloneUrl: cloneURL, DaemonId: "daemon-abc"}
-	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(req))
+	resp, err := svc.CreateProjectFromRepo(ctx, req)
 	require.NoError(t, err)
 
-	repos, err := repo.ListReposByProject(ctx, resp.Msg.GetProject().GetId())
+	repos, err := repo.ListReposByProject(ctx, resp.GetProject().GetId())
 	require.NoError(t, err)
 	require.Len(t, repos, 1)
 	assert.Equal(t, "", repos[0].RelativePath)
@@ -220,9 +223,9 @@ func TestCreateProjectFromRepo_RegistersTheRootRepo(t *testing.T) {
 
 	// Adding the same repo again finds the project and leaves its registry
 	// alone.
-	_, err = svc.CreateProjectFromRepo(ctx, connect.NewRequest(req))
+	_, err = svc.CreateProjectFromRepo(ctx, req)
 	require.NoError(t, err)
-	repos, err = repo.ListReposByProject(ctx, resp.Msg.GetProject().GetId())
+	repos, err = repo.ListReposByProject(ctx, resp.GetProject().GetId())
 	require.NoError(t, err)
 	assert.Len(t, repos, 1)
 }
@@ -236,11 +239,11 @@ func TestCreateProjectFromRepo_RequiresATargetMachine(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-x")
-	_, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	_, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/acme/widgets.git",
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Zero(t, cp.calls, "must not dispatch a clone with no target")
 }
 
@@ -255,13 +258,14 @@ func TestCreateProjectFromRepo_ForwardsTheCallersJWT(t *testing.T) {
 	userID := "user-from-repo-" + uuid.NewString()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
-	req := connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	req := &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/acme/widgets-" + uuid.NewString() + ".git",
 		DaemonId: "daemon-abc",
-	})
-	req.Header().Set("Authorization", "Bearer caller-jwt-123")
+	}
+	info := &connect.CallInfo{}
+	info.RequestHeader().Set("Authorization", "Bearer caller-jwt-123")
 
-	_, err := svc.CreateProjectFromRepo(ctx, req)
+	_, err := tdd.CallV2(ctx, svc.CreateProjectFromRepo, req, info)
 	require.NoError(t, err)
 	assert.Equal(t, "caller-jwt-123", cp.lastJWT)
 }
@@ -275,13 +279,13 @@ func TestCreateProjectFromRepo_DerivesNameAndPathFromTheCloneURL(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	name := "widgets-" + uuid.NewString()
-	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	resp, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/acme/" + name + ".git",
 		DaemonId: "daemon-abc",
-	}))
+	})
 	require.NoError(t, err)
 
-	assert.Equal(t, name, resp.Msg.GetProject().GetName(),
+	assert.Equal(t, name, resp.GetProject().GetName(),
 		"the repo name is the obvious default; making the user retype it is friction")
 	assert.Equal(t, "/home/workspace/projects/"+name, cp.lastReq.Path)
 }
@@ -299,16 +303,16 @@ func TestCreateProjectFromRepo_NeverForwardsOrStoresACredentialURL(t *testing.T)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	name := "widgets-" + uuid.NewString()
 
-	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	resp, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://x-access-token:ghs_FIXTURE0TOKEN@github.com/acme/" + name + ".git",
 		DaemonId: "daemon-abc",
-	}))
+	})
 	require.NoError(t, err)
 
 	want := "https://github.com/acme/" + name + ".git"
 	assert.Equal(t, want, cp.lastReq.CloneURL, "the control plane is handed the clean URL")
-	assert.Equal(t, want, resp.Msg.GetProject().GetRemoteUrl(), "the response carries the clean URL")
-	stored, err := repo.GetProject(ctx, resp.Msg.GetProject().GetId())
+	assert.Equal(t, want, resp.GetProject().GetRemoteUrl(), "the response carries the clean URL")
+	stored, err := repo.GetProject(ctx, resp.GetProject().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, stored.RemoteURL)
 	assert.Equal(t, want, *stored.RemoteURL, "the stored remote is the clean URL")
@@ -328,12 +332,12 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 
 	userID := "user-from-repo-" + uuid.NewString()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	resp, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/acme/widgets-" + uuid.NewString() + ".git",
 		DaemonId: "daemon-abc",
-	}))
+	})
 	require.NoError(t, err)
-	projectID := resp.Msg.GetProject().GetId()
+	projectID := resp.GetProject().GetId()
 
 	require.NotEmpty(t, cp.lastReq.RequestID, "the clone must carry a request id the failure can be matched by")
 	rows, err := repo.ListProjectDaemonsForProject(ctx, projectID)
@@ -364,7 +368,7 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 // daemon gateway (tools_daemon) over ConnectDaemon and returns the stream
 // once the gateway has acknowledged the registration, for the test to send
 // what a daemon sends.
-func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream {
 	t.Helper()
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
 		Logger: slog.New(slog.DiscardHandler),
@@ -375,7 +379,9 @@ func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonI
 	t.Cleanup(gateway.Close)
 
 	routes := http.NewServeMux()
-	gateway.Register(routes) // the production mount
+	server := connect.NewServer(svcerr.InterceptorV2())
+	gateway.RegisterV2(server) // the production registration
+	mountkit.MountV2(routes, server, connecthttp.WithReadMaxBytes(0))
 	// A serverkit listener gives every request an abortable body; ConnectDaemon
 	// refuses a stream without one.
 	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -394,8 +400,9 @@ func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonI
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	stream := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC()).ConnectDaemon(ctx)
-	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
+	stream, err := reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(cl, srv.URL, []connecthttp.Option{connecthttp.WithGRPC()})).ConnectDaemon(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.CloseSend(); _ = stream.Close() })
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID, Platform: "linux", DaemonType: "local"},
 	}}))
@@ -417,13 +424,13 @@ func TestCreateProjectFromRepo_StampsCreationTime(t *testing.T) {
 	userID := "user-from-repo-" + uuid.NewString()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	before := time.Now().Add(-time.Minute)
-	resp, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+	resp, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 		CloneUrl: "https://github.com/acme/widgets-" + uuid.NewString() + ".git",
 		DaemonId: "daemon-abc",
-	}))
+	})
 	require.NoError(t, err)
 
-	stored, err := repo.GetProject(ctx, resp.Msg.GetProject().GetId())
+	stored, err := repo.GetProject(ctx, resp.GetProject().GetId())
 	require.NoError(t, err)
 	for field, ts := range map[string]time.Time{
 		"created_at":  stored.CreatedAt,

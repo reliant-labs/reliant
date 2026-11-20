@@ -8,9 +8,10 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -259,13 +260,13 @@ func TestExchangeToken_CallerChain_EnvironmentBoundGrant(t *testing.T) {
 				}
 
 				svc := newTokenService(t, cp, TokenControlPlane{Issuer: testControlPlane})
-				resp, err := svc.ExchangeToken(context.Background(), exchangeReq(parentToken, &reliantv1.ExchangeTokenRequest{
+				resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{
 					Audience: testControlPlane, Scopes: []string{string(fat.ScopeDeployRead), string(write)},
-				}))
+				}, bearerInfo(parentToken))
 				child := ""
 				if err == nil {
-					child = resp.Msg.GetToken()
-				} else if svcerr.Code(err) != connect.CodePermissionDenied {
+					child = resp.GetToken()
+				} else if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 					t.Fatalf("ExchangeToken: %v, want success or PermissionDenied", err)
 				}
 
@@ -338,11 +339,11 @@ func TestExchangeToken_EnvironmentOnlyScopeIsRefusedNotAnOutage(t *testing.T) {
 				before := len(cp.tokens)
 
 				svc := newTokenService(t, cp, TokenControlPlane{Issuer: testControlPlane})
-				resp, err := svc.ExchangeToken(context.Background(), exchangeReq(parentToken, &reliantv1.ExchangeTokenRequest{
+				resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{
 					Audience: testControlPlane, Scopes: tc.ask,
-				}))
+				}, bearerInfo(parentToken))
 				if !tc.minted {
-					if svcerr.Code(err) != connect.CodeFailedPrecondition {
+					if svcerr.CodeV2(err) != connect.CodeFailedPrecondition {
 						t.Fatalf("ExchangeToken: %v, want FailedPrecondition", err)
 					}
 					for _, tok := range cp.tokens {
@@ -358,7 +359,7 @@ func TestExchangeToken_EnvironmentOnlyScopeIsRefusedNotAnOutage(t *testing.T) {
 				if err != nil {
 					t.Fatalf("ExchangeToken: %v", err)
 				}
-				child := resp.Msg.GetToken()
+				child := resp.GetToken()
 				if _, err := cp.Introspect(context.Background(), child); err != nil {
 					t.Fatalf("the child does not authenticate: %v", err)
 				}
@@ -392,7 +393,7 @@ func TestConfirmOrg_AChildThatResolvesToNothingIsRevokedAndExplained(t *testing.
 	}
 	svc := newTokenService(t, cp, TokenControlPlane{Issuer: testControlPlane})
 	err = svc.confirmOrg(context.Background(), "user-1", minted, "org-1")
-	if svcerr.Code(err) != connect.CodeFailedPrecondition {
+	if svcerr.CodeV2(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("confirmOrg: %v, want FailedPrecondition", err)
 	}
 	if _, err := cp.Introspect(context.Background(), minted.Plaintext); !errors.Is(err, tokenauthority.ErrInactive) {

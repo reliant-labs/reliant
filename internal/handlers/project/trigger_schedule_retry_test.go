@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -111,9 +110,9 @@ func TestProjectDeleteAndRestoreRetryAFailedTriggerScheduleSync(t *testing.T) {
 
 	// The restore's own sync fails; the retry resumes the schedule.
 	temporal.failing(func(call int) bool { return call == 3 })
-	restored, err := svc.RestoreProject(owner, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+	restored, err := svc.RestoreProject(owner, &reliantv1.RestoreProjectRequest{ProjectId: f.project})
 	require.NoError(t, err, "a failed sync never fails the restore")
-	assert.EqualValues(t, 1, restored.Msg.GetTriggersResumed())
+	assert.EqualValues(t, 1, restored.GetTriggersResumed())
 	svc.WaitForScheduleRetries(t, ctx)
 	paused, _ = temporal.schedule(f.trigger)
 	assert.False(t, paused, "the restored trigger fires again in Temporal, with no restart")

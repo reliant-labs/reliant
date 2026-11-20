@@ -4,7 +4,7 @@ package runtime
 import (
 	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -81,7 +81,7 @@ func keepsErrorLevel(err error) bool {
 	if !errclass.IsServerError(err) {
 		return false
 	}
-	switch svcerr.Code(err) {
+	switch svcerr.CodeV2(err) {
 	case connect.CodeDeadlineExceeded, connect.CodeAborted, connect.CodeUnimplemented:
 		return false
 	}

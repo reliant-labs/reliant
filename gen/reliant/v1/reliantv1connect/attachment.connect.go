@@ -7,204 +7,217 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AttachmentServiceName is the fully-qualified name of the AttachmentService service.
 	AttachmentServiceName = "reliant.v1.AttachmentService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AttachmentServiceUploadAttachmentProcedure is the fully-qualified name of the AttachmentService's
+	// AttachmentServiceUploadAttachmentProcedure is the procedure name of the AttachmentService's
 	// UploadAttachment RPC.
 	AttachmentServiceUploadAttachmentProcedure = "/reliant.v1.AttachmentService/UploadAttachment"
-	// AttachmentServiceCreateFileReferenceProcedure is the fully-qualified name of the
-	// AttachmentService's CreateFileReference RPC.
+	// AttachmentServiceCreateFileReferenceProcedure is the procedure name of the AttachmentService's
+	// CreateFileReference RPC.
 	AttachmentServiceCreateFileReferenceProcedure = "/reliant.v1.AttachmentService/CreateFileReference"
-	// AttachmentServiceGetAttachmentProcedure is the fully-qualified name of the AttachmentService's
+	// AttachmentServiceGetAttachmentProcedure is the procedure name of the AttachmentService's
 	// GetAttachment RPC.
 	AttachmentServiceGetAttachmentProcedure = "/reliant.v1.AttachmentService/GetAttachment"
-	// AttachmentServiceDeleteAttachmentProcedure is the fully-qualified name of the AttachmentService's
+	// AttachmentServiceDeleteAttachmentProcedure is the procedure name of the AttachmentService's
 	// DeleteAttachment RPC.
 	AttachmentServiceDeleteAttachmentProcedure = "/reliant.v1.AttachmentService/DeleteAttachment"
+)
+
+var (
+	attachmentServiceUploadAttachmentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_attachment_proto.Services().ByName("AttachmentService").Methods().ByName("UploadAttachment"),
+			Procedure:  AttachmentServiceUploadAttachmentProcedure,
+		}
+	})
+	attachmentServiceCreateFileReferenceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_attachment_proto.Services().ByName("AttachmentService").Methods().ByName("CreateFileReference"),
+			Procedure:  AttachmentServiceCreateFileReferenceProcedure,
+		}
+	})
+	attachmentServiceGetAttachmentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_attachment_proto.Services().ByName("AttachmentService").Methods().ByName("GetAttachment"),
+			Procedure:  AttachmentServiceGetAttachmentProcedure,
+		}
+	})
+	attachmentServiceDeleteAttachmentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_attachment_proto.Services().ByName("AttachmentService").Methods().ByName("DeleteAttachment"),
+			Procedure:  AttachmentServiceDeleteAttachmentProcedure,
+		}
+	})
 )
 
 // AttachmentServiceClient is a client for the reliant.v1.AttachmentService service.
 type AttachmentServiceClient interface {
 	// UploadAttachment uploads a new binary file attachment (for images)
-	UploadAttachment(context.Context, *connect.Request[v1.UploadAttachmentRequest]) (*connect.Response[v1.UploadAttachmentResponse], error)
+	UploadAttachment(context.Context, *v1.UploadAttachmentRequest) (*v1.UploadAttachmentResponse, error)
 	// CreateFileReference creates a reference to a local file (for text files)
-	CreateFileReference(context.Context, *connect.Request[v1.CreateFileReferenceRequest]) (*connect.Response[v1.CreateFileReferenceResponse], error)
+	CreateFileReference(context.Context, *v1.CreateFileReferenceRequest) (*v1.CreateFileReferenceResponse, error)
 	// GetAttachment retrieves an attachment by ID (includes file content)
 	// forge:custom — scoped to the caller: another user's attachment answers NotFound
-	GetAttachment(context.Context, *connect.Request[v1.GetAttachmentRequest]) (*connect.Response[v1.GetAttachmentResponse], error)
+	GetAttachment(context.Context, *v1.GetAttachmentRequest) (*v1.GetAttachmentResponse, error)
 	// DeleteAttachment removes an attachment by ID
 	// forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
-	DeleteAttachment(context.Context, *connect.Request[v1.DeleteAttachmentRequest]) (*connect.Response[v1.DeleteAttachmentResponse], error)
+	DeleteAttachment(context.Context, *v1.DeleteAttachmentRequest) (*v1.DeleteAttachmentResponse, error)
 }
 
-// NewAttachmentServiceClient constructs a client for the reliant.v1.AttachmentService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAttachmentServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AttachmentServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	attachmentServiceMethods := v1.File_reliant_v1_attachment_proto.Services().ByName("AttachmentService").Methods()
-	return &attachmentServiceClient{
-		uploadAttachment: connect.NewClient[v1.UploadAttachmentRequest, v1.UploadAttachmentResponse](
-			httpClient,
-			baseURL+AttachmentServiceUploadAttachmentProcedure,
-			connect.WithSchema(attachmentServiceMethods.ByName("UploadAttachment")),
-			connect.WithClientOptions(opts...),
-		),
-		createFileReference: connect.NewClient[v1.CreateFileReferenceRequest, v1.CreateFileReferenceResponse](
-			httpClient,
-			baseURL+AttachmentServiceCreateFileReferenceProcedure,
-			connect.WithSchema(attachmentServiceMethods.ByName("CreateFileReference")),
-			connect.WithClientOptions(opts...),
-		),
-		getAttachment: connect.NewClient[v1.GetAttachmentRequest, v1.GetAttachmentResponse](
-			httpClient,
-			baseURL+AttachmentServiceGetAttachmentProcedure,
-			connect.WithSchema(attachmentServiceMethods.ByName("GetAttachment")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteAttachment: connect.NewClient[v1.DeleteAttachmentRequest, v1.DeleteAttachmentResponse](
-			httpClient,
-			baseURL+AttachmentServiceDeleteAttachmentProcedure,
-			connect.WithSchema(attachmentServiceMethods.ByName("DeleteAttachment")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// attachmentServiceClient implements AttachmentServiceClient.
-type attachmentServiceClient struct {
-	uploadAttachment    *connect.Client[v1.UploadAttachmentRequest, v1.UploadAttachmentResponse]
-	createFileReference *connect.Client[v1.CreateFileReferenceRequest, v1.CreateFileReferenceResponse]
-	getAttachment       *connect.Client[v1.GetAttachmentRequest, v1.GetAttachmentResponse]
-	deleteAttachment    *connect.Client[v1.DeleteAttachmentRequest, v1.DeleteAttachmentResponse]
-}
-
-// UploadAttachment calls reliant.v1.AttachmentService.UploadAttachment.
-func (c *attachmentServiceClient) UploadAttachment(ctx context.Context, req *connect.Request[v1.UploadAttachmentRequest]) (*connect.Response[v1.UploadAttachmentResponse], error) {
-	return c.uploadAttachment.CallUnary(ctx, req)
-}
-
-// CreateFileReference calls reliant.v1.AttachmentService.CreateFileReference.
-func (c *attachmentServiceClient) CreateFileReference(ctx context.Context, req *connect.Request[v1.CreateFileReferenceRequest]) (*connect.Response[v1.CreateFileReferenceResponse], error) {
-	return c.createFileReference.CallUnary(ctx, req)
-}
-
-// GetAttachment calls reliant.v1.AttachmentService.GetAttachment.
-func (c *attachmentServiceClient) GetAttachment(ctx context.Context, req *connect.Request[v1.GetAttachmentRequest]) (*connect.Response[v1.GetAttachmentResponse], error) {
-	return c.getAttachment.CallUnary(ctx, req)
-}
-
-// DeleteAttachment calls reliant.v1.AttachmentService.DeleteAttachment.
-func (c *attachmentServiceClient) DeleteAttachment(ctx context.Context, req *connect.Request[v1.DeleteAttachmentRequest]) (*connect.Response[v1.DeleteAttachmentResponse], error) {
-	return c.deleteAttachment.CallUnary(ctx, req)
+// NewAttachmentServiceClient constructs a client for the reliant.v1.AttachmentService service.
+// Multiple service clients may share a single connect.Client.
+func NewAttachmentServiceClient(client *connect.Client) AttachmentServiceClient {
+	return &attachmentServiceClient{client: client}
 }
 
 // AttachmentServiceHandler is an implementation of the reliant.v1.AttachmentService service.
 type AttachmentServiceHandler interface {
 	// UploadAttachment uploads a new binary file attachment (for images)
-	UploadAttachment(context.Context, *connect.Request[v1.UploadAttachmentRequest]) (*connect.Response[v1.UploadAttachmentResponse], error)
+	UploadAttachment(context.Context, *v1.UploadAttachmentRequest) (*v1.UploadAttachmentResponse, error)
 	// CreateFileReference creates a reference to a local file (for text files)
-	CreateFileReference(context.Context, *connect.Request[v1.CreateFileReferenceRequest]) (*connect.Response[v1.CreateFileReferenceResponse], error)
+	CreateFileReference(context.Context, *v1.CreateFileReferenceRequest) (*v1.CreateFileReferenceResponse, error)
 	// GetAttachment retrieves an attachment by ID (includes file content)
 	// forge:custom — scoped to the caller: another user's attachment answers NotFound
-	GetAttachment(context.Context, *connect.Request[v1.GetAttachmentRequest]) (*connect.Response[v1.GetAttachmentResponse], error)
+	GetAttachment(context.Context, *v1.GetAttachmentRequest) (*v1.GetAttachmentResponse, error)
 	// DeleteAttachment removes an attachment by ID
 	// forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
-	DeleteAttachment(context.Context, *connect.Request[v1.DeleteAttachmentRequest]) (*connect.Response[v1.DeleteAttachmentResponse], error)
+	DeleteAttachment(context.Context, *v1.DeleteAttachmentRequest) (*v1.DeleteAttachmentResponse, error)
 }
 
-// NewAttachmentServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAttachmentServiceHandler(svc AttachmentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	attachmentServiceMethods := v1.File_reliant_v1_attachment_proto.Services().ByName("AttachmentService").Methods()
-	attachmentServiceUploadAttachmentHandler := connect.NewUnaryHandler(
-		AttachmentServiceUploadAttachmentProcedure,
-		svc.UploadAttachment,
-		connect.WithSchema(attachmentServiceMethods.ByName("UploadAttachment")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAttachmentServiceHandler registers svc as the reliant.v1.AttachmentService implementation
+// on server.
+func RegisterAttachmentServiceHandler(server *connect.Server, svc AttachmentServiceHandler) {
+	adapter := attachmentServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: attachmentServiceUploadAttachmentSpec(), Handler: adapter.uploadAttachment},
+		connect.Method{Spec: attachmentServiceCreateFileReferenceSpec(), Handler: adapter.createFileReference},
+		connect.Method{Spec: attachmentServiceGetAttachmentSpec(), Handler: adapter.getAttachment},
+		connect.Method{Spec: attachmentServiceDeleteAttachmentSpec(), Handler: adapter.deleteAttachment},
 	)
-	attachmentServiceCreateFileReferenceHandler := connect.NewUnaryHandler(
-		AttachmentServiceCreateFileReferenceProcedure,
-		svc.CreateFileReference,
-		connect.WithSchema(attachmentServiceMethods.ByName("CreateFileReference")),
-		connect.WithHandlerOptions(opts...),
-	)
-	attachmentServiceGetAttachmentHandler := connect.NewUnaryHandler(
-		AttachmentServiceGetAttachmentProcedure,
-		svc.GetAttachment,
-		connect.WithSchema(attachmentServiceMethods.ByName("GetAttachment")),
-		connect.WithHandlerOptions(opts...),
-	)
-	attachmentServiceDeleteAttachmentHandler := connect.NewUnaryHandler(
-		AttachmentServiceDeleteAttachmentProcedure,
-		svc.DeleteAttachment,
-		connect.WithSchema(attachmentServiceMethods.ByName("DeleteAttachment")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.AttachmentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AttachmentServiceUploadAttachmentProcedure:
-			attachmentServiceUploadAttachmentHandler.ServeHTTP(w, r)
-		case AttachmentServiceCreateFileReferenceProcedure:
-			attachmentServiceCreateFileReferenceHandler.ServeHTTP(w, r)
-		case AttachmentServiceGetAttachmentProcedure:
-			attachmentServiceGetAttachmentHandler.ServeHTTP(w, r)
-		case AttachmentServiceDeleteAttachmentProcedure:
-			attachmentServiceDeleteAttachmentHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAttachmentServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAttachmentServiceHandler struct{}
 
-func (UnimplementedAttachmentServiceHandler) UploadAttachment(context.Context, *connect.Request[v1.UploadAttachmentRequest]) (*connect.Response[v1.UploadAttachmentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AttachmentService.UploadAttachment is not implemented"))
+func (UnimplementedAttachmentServiceHandler) UploadAttachment(context.Context, *v1.UploadAttachmentRequest) (*v1.UploadAttachmentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AttachmentService.UploadAttachment is not implemented")
 }
 
-func (UnimplementedAttachmentServiceHandler) CreateFileReference(context.Context, *connect.Request[v1.CreateFileReferenceRequest]) (*connect.Response[v1.CreateFileReferenceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AttachmentService.CreateFileReference is not implemented"))
+func (UnimplementedAttachmentServiceHandler) CreateFileReference(context.Context, *v1.CreateFileReferenceRequest) (*v1.CreateFileReferenceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AttachmentService.CreateFileReference is not implemented")
 }
 
-func (UnimplementedAttachmentServiceHandler) GetAttachment(context.Context, *connect.Request[v1.GetAttachmentRequest]) (*connect.Response[v1.GetAttachmentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AttachmentService.GetAttachment is not implemented"))
+func (UnimplementedAttachmentServiceHandler) GetAttachment(context.Context, *v1.GetAttachmentRequest) (*v1.GetAttachmentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AttachmentService.GetAttachment is not implemented")
 }
 
-func (UnimplementedAttachmentServiceHandler) DeleteAttachment(context.Context, *connect.Request[v1.DeleteAttachmentRequest]) (*connect.Response[v1.DeleteAttachmentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AttachmentService.DeleteAttachment is not implemented"))
+func (UnimplementedAttachmentServiceHandler) DeleteAttachment(context.Context, *v1.DeleteAttachmentRequest) (*v1.DeleteAttachmentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AttachmentService.DeleteAttachment is not implemented")
+}
+
+type attachmentServiceClient struct {
+	client *connect.Client
+}
+
+func (c *attachmentServiceClient) UploadAttachment(ctx context.Context, req *v1.UploadAttachmentRequest) (*v1.UploadAttachmentResponse, error) {
+	var res v1.UploadAttachmentResponse
+	if err := c.client.CallUnary(ctx, attachmentServiceUploadAttachmentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *attachmentServiceClient) CreateFileReference(ctx context.Context, req *v1.CreateFileReferenceRequest) (*v1.CreateFileReferenceResponse, error) {
+	var res v1.CreateFileReferenceResponse
+	if err := c.client.CallUnary(ctx, attachmentServiceCreateFileReferenceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *attachmentServiceClient) GetAttachment(ctx context.Context, req *v1.GetAttachmentRequest) (*v1.GetAttachmentResponse, error) {
+	var res v1.GetAttachmentResponse
+	if err := c.client.CallUnary(ctx, attachmentServiceGetAttachmentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *attachmentServiceClient) DeleteAttachment(ctx context.Context, req *v1.DeleteAttachmentRequest) (*v1.DeleteAttachmentResponse, error) {
+	var res v1.DeleteAttachmentResponse
+	if err := c.client.CallUnary(ctx, attachmentServiceDeleteAttachmentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type attachmentServiceHandler struct{ svc AttachmentServiceHandler }
+
+func (h attachmentServiceHandler) uploadAttachment(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UploadAttachmentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UploadAttachment(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h attachmentServiceHandler) createFileReference(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateFileReferenceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateFileReference(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h attachmentServiceHandler) getAttachment(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetAttachmentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetAttachment(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h attachmentServiceHandler) deleteAttachment(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteAttachmentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteAttachment(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

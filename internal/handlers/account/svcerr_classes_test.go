@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -28,13 +28,13 @@ func TestDeleteAccount_ControlPlaneErrorsOnTheWire(t *testing.T) {
 	}{
 		{
 			name:        "refund not confirmed",
-			remote:      connect.NewError(connect.CodeUnavailable, errors.New("stripe.internal:443: refund re_123 pending")),
+			remote:      connect.NewError(connect.CodeUnavailable, "stripe.internal:443: refund re_123 pending"),
 			wantCode:    connect.CodeUnavailable,
 			wantMessage: "we could not confirm your refund with our payment provider; nothing was deleted, please try again in a minute",
 		},
 		{
 			name:        "any other control-plane failure",
-			remote:      connect.NewError(connect.CodeNotFound, errors.New("billing-svc.internal:8443: no customer row")),
+			remote:      connect.NewError(connect.CodeNotFound, "billing-svc.internal:8443: no customer row"),
 			wantCode:    connect.CodeInternal,
 			wantMessage: "could not delete your platform account; nothing was deleted",
 		},
@@ -49,7 +49,7 @@ func TestDeleteAccount_ControlPlaneErrorsOnTheWire(t *testing.T) {
 			cp := &stubControlPlane{err: tc.remote}
 			_, client := NewTestAccountServer(t, WithAccountDeps(Deps{ControlPlane: cp}), WithPlaceholderDeps())
 
-			_, err := client.DeleteAccount(context.Background(), connect.NewRequest(&reliantv1.DeleteAccountRequest{ConfirmEmail: "test-user@example.test"}))
+			_, err := client.DeleteAccount(context.Background(), &reliantv1.DeleteAccountRequest{ConfirmEmail: "test-user@example.test"})
 			var cerr *connect.Error
 			require.ErrorAs(t, err, &cerr)
 			assert.Equal(t, tc.wantCode, cerr.Code())

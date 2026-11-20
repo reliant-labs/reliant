@@ -23,9 +23,11 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/golang-jwt/jwt/v5"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
@@ -36,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/middleware"
@@ -324,11 +327,11 @@ func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubP
 	})
 	require.NoError(t, err)
 	mux := http.NewServeMux()
-	// svcerr.Interceptor innermost, as serverkit.NewChain installs it in
+	// svcerr.InterceptorV2 innermost, as serverkit.NewChainV2 installs it in
 	// production: it gives the handler's svcerr errors their Connect code.
-	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService,
-		connect.WithInterceptors(authInterceptor, svcerr.Interceptor()))
-	mux.Handle(path, handler)
+	server := connect.NewServer(authInterceptor.Intercept, svcerr.InterceptorV2())
+	reliantv1connect.RegisterTokenServiceHandler(server, tokenService)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
@@ -351,12 +354,16 @@ func connectDaemon(t *testing.T, gatewayURL, bearer string) (*reliantv1.ServerMe
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client := reliantv1connect.NewToolsDaemonServiceClient(priorKnowledgeClient(), gatewayURL, connect.WithGRPC())
-	stream := client.ConnectDaemon(ctx)
-	stream.RequestHeader().Set("Authorization", "Bearer "+bearer)
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+bearer)
+	client := reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(priorKnowledgeClient(), gatewayURL, []connecthttp.Option{connecthttp.WithGRPC()}))
+	stream, err := client.ConnectDaemon(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer func() {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 	}()
 	if err := stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: &reliantv1.DaemonRegister{Hostname: "e2e-host", Platform: "linux", DaemonType: "local"},
@@ -386,16 +393,16 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 	gatewayURL := serveGateway(t, authority)
 
 	tokens := func(bearer string) reliantv1connect.TokenServiceClient {
-		return reliantv1connect.NewTokenServiceClient(&http.Client{Transport: bearerTransport(bearer)}, apiURL)
+		return reliantv1connect.NewTokenServiceClient(rpcclient.New(&http.Client{Transport: bearerTransport(bearer)}, apiURL, nil))
 	}
 	session := signer.sign(t, userID)
 
 	// 1. Mint through reliant's facade with an interactive session.
-	created, err := tokens(session).CreateToken(context.Background(), connect.NewRequest(&reliantv1.CreateTokenRequest{
+	created, err := tokens(session).CreateToken(context.Background(), &reliantv1.CreateTokenRequest{
 		Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
-	}))
+	})
 	require.NoError(t, err)
-	daemonToken := created.Msg.GetToken()
+	daemonToken := created.GetToken()
 	require.True(t, fat.HasFormat(daemonToken), "minted %q is not an rlat_ token", daemonToken)
 	// The row lives in control-plane's store, not reliant's.
 	p, err := cp.store.Introspect(context.Background(), daemonToken)
@@ -416,19 +423,19 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 
 	// A daemon credential holds every scope its person holds ("*", owner
 	// decision 2026-10-29), reliant:api included: the API admits it as them.
-	_, err = tokens(daemonToken).ListTokens(context.Background(), connect.NewRequest(&reliantv1.ListTokensRequest{}))
+	_, err = tokens(daemonToken).ListTokens(context.Background(), &reliantv1.ListTokensRequest{})
 	require.NoError(t, err, "a daemon credential holds reliant:api like every other scope")
 
 	// 3. The user revokes it through the same facade.
-	_, err = tokens(session).RevokeToken(context.Background(), connect.NewRequest(&reliantv1.RevokeTokenRequest{
-		Id: created.Msg.GetInfo().GetId(),
-	}))
+	_, err = tokens(session).RevokeToken(context.Background(), &reliantv1.RevokeTokenRequest{
+		Id: created.GetInfo().GetId(),
+	})
 	require.NoError(t, err)
 
 	// 4. The very next connect is refused — no cache window at the gateway.
 	_, err = connectDaemon(t, gatewayURL, daemonToken)
 	require.Error(t, err, "a revoked daemon credential must not connect")
-	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "revocation is a credential rejection: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err), "revocation is a credential rejection: %v", err)
 }
 
 // TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown pins "never fall
@@ -448,7 +455,7 @@ func TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown(t *testing.T) {
 	minted, err := fat.Mint()
 	require.NoError(t, err)
 	_, err = connectDaemon(t, serveGateway(t, authority), minted.Plaintext)
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "an unreachable control-plane must refuse loudly: %v", err)
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "an unreachable control-plane must refuse loudly: %v", err)
 }
 
 // TestDaemonCredential_SelfHostedEndToEnd is the self-hosted twin: no
@@ -467,36 +474,36 @@ func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	signer := newSessionSigner(t)
 	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{})
 	gatewayURL := serveGateway(t, authority)
-	tokens := reliantv1connect.NewTokenServiceClient(&http.Client{Transport: bearerTransport(signer.sign(t, userID))}, apiURL)
+	tokens := reliantv1connect.NewTokenServiceClient(rpcclient.New(&http.Client{Transport: bearerTransport(signer.sign(t, userID))}, apiURL, nil))
 
-	created, err := tokens.CreateToken(context.Background(), connect.NewRequest(&reliantv1.CreateTokenRequest{
+	created, err := tokens.CreateToken(context.Background(), &reliantv1.CreateTokenRequest{
 		Name: "server", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
-	}))
+	})
 	require.NoError(t, err)
-	daemonToken := created.Msg.GetToken()
+	daemonToken := created.GetToken()
 	require.True(t, fat.HasFormat(daemonToken))
 
 	var stored int
 	require.NoError(t, rawDB.QueryRow(`SELECT count(*) FROM access_tokens WHERE id = $1 AND acting_user_id = $2`,
-		created.Msg.GetInfo().GetId(), userID).Scan(&stored))
+		created.GetInfo().GetId(), userID).Scan(&stored))
 	require.Equal(t, 1, stored, "self-hosted tokens live in reliant's own access_tokens")
 
 	msg, err := connectDaemon(t, gatewayURL, daemonToken)
 	require.NoError(t, err)
 	require.Equal(t, userID, msg.GetRegistrationAck().GetUserId())
 
-	listed, err := tokens.ListTokens(context.Background(), connect.NewRequest(&reliantv1.ListTokensRequest{
+	listed, err := tokens.ListTokens(context.Background(), &reliantv1.ListTokensRequest{
 		Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON.Enum(),
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, listed.Msg.GetTokens(), 1)
+	require.Len(t, listed.GetTokens(), 1)
 
-	_, err = tokens.RevokeToken(context.Background(), connect.NewRequest(&reliantv1.RevokeTokenRequest{
-		Id: created.Msg.GetInfo().GetId(),
-	}))
+	_, err = tokens.RevokeToken(context.Background(), &reliantv1.RevokeTokenRequest{
+		Id: created.GetInfo().GetId(),
+	})
 	require.NoError(t, err)
 	_, err = connectDaemon(t, gatewayURL, daemonToken)
-	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "revoked: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err), "revoked: %v", err)
 }
 
 type bearerTransport string

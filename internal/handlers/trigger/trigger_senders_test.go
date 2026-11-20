@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,13 +35,13 @@ func (f *fakeSenders) IsPermanent(error) bool { return f.permanent }
 func (f *fakeSenders) IsInvalid(error) bool   { return f.invalid }
 
 func resolveSenders(env *triggerTestEnv, integration string, handles, ids []string) (*reliantv1.ResolveTriggerSendersResponse, error) {
-	resp, err := env.svc.ResolveTriggerSenders(env.ctx, connect.NewRequest(&reliantv1.ResolveTriggerSendersRequest{
+	resp, err := env.svc.ResolveTriggerSenders(env.ctx, &reliantv1.ResolveTriggerSendersRequest{
 		Integration: integration, Handles: handles, SenderIds: ids,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 // "Only from" resolves a login to the id it stores, and an id to the login it
@@ -72,10 +72,10 @@ func TestResolveTriggerSendersErrors(t *testing.T) {
 	env := setupTriggerTest(t)
 
 	_, err := resolveSenders(env, "slack", []string{"U123"}, nil)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "Slack ids are already what a person pastes")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "Slack ids are already what a person pastes")
 
 	_, err = resolveSenders(env, "github", []string{"octocat"}, nil)
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "no GitHub on this server")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "no GitHub on this server")
 
 	cases := map[string]struct {
 		dir  *fakeSenders
@@ -90,7 +90,7 @@ func TestResolveTriggerSendersErrors(t *testing.T) {
 			env.configure(t, func(d *Deps) { d.Senders = map[string]SenderDirectory{"github": tc.dir} })
 			_, err := resolveSenders(env, "github", []string{"octocat"}, nil)
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err))
+			assert.Equal(t, tc.code, svcerr.CodeV2(err))
 		})
 	}
 }
@@ -112,9 +112,9 @@ func TestListTriggerEventsCarriesTheSender(t *testing.T) {
 		require.True(t, ok)
 	}
 
-	resp, err := env.svc.ListTriggerEvents(env.ctx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: created.GetId()}))
+	resp, err := env.svc.ListTriggerEvents(env.ctx, &reliantv1.ListTriggerEventsRequest{TriggerId: created.GetId()})
 	require.NoError(t, err)
-	events := resp.Msg.GetEvents()
+	events := resp.GetEvents()
 	require.Len(t, events, 2)
 	assert.Nil(t, events[0].GetSender(), "none recorded: none rendered")
 	got := events[1].GetSender()

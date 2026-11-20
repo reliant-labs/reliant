@@ -3,8 +3,6 @@ package system_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,12 +17,12 @@ func TestVersion_Generated(t *testing.T) {
 	svc := system.NewTestSystem(t)
 	build := version.Get()
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.VersionRequest, pb.VersionResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.VersionRequest, pb.VersionResponse]{
 		{
 			Name: "build info",
-			Req:  connect.NewRequest(&pb.VersionRequest{}),
-			Check: func(t *testing.T, resp *connect.Response[pb.VersionResponse]) {
-				got := resp.Msg
+			Req:  &pb.VersionRequest{},
+			Check: func(t *testing.T, resp *pb.VersionResponse) {
+				got := resp
 				if got.Version != build.Version || got.Commit != build.Commit || got.Date != build.Date || got.Branch != build.Branch {
 					t.Fatalf("Version = %+v, want %+v", got, build)
 				}

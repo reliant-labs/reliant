@@ -3,8 +3,6 @@ package project
 import (
 	"testing"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -28,11 +26,11 @@ func TestGetProjectForAViewerHasNoPath(t *testing.T) {
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
 	svc := NewTestProject(t, WithProjectDeps(Deps{Repo: repo, Orgs: f.Membership}))
-	resp, err := svc.GetProject(f.Viewer, connect.NewRequest(&reliantv1.GetProjectRequest{ProjectId: f.ProjectID}))
+	resp, err := svc.GetProject(f.Viewer, &reliantv1.GetProjectRequest{ProjectId: f.ProjectID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := resp.Msg.Project
+	p := resp.Project
 	if !p.GetViewerAccess() || p.GetPath() != "" || p.GetVisibility() != reliantv1.ResourceVisibility_RESOURCE_VISIBILITY_ORG {
 		t.Fatalf("viewer's project: viewer_access %v path %q visibility %v", p.GetViewerAccess(), p.GetPath(), p.GetVisibility())
 	}

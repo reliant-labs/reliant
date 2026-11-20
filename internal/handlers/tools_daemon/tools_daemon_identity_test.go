@@ -3,22 +3,15 @@ package tools_daemon
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
-	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -97,38 +90,23 @@ func (l *recordingListener) OnDaemonDisconnected(string, string) {}
 // asserting assertedID, and returns the first thing the gateway answers.
 func registerAs(t *testing.T, svc *Service, userID, assertedID string) error {
 	t.Helper()
-	routes := http.NewServeMux()
 	// The production mount, with the end of the production chain
-	// (serverkit.NewChain): svcerr.Interceptor gives a handler's svcerr error
-	// its Connect code on the wire.
-	svc.Register(routes, connect.WithInterceptors(svcerr.Interceptor()))
-	// Streams.Install is the listener's edge: the abortable request body
-	// ConnectDaemon needs (serverkit.AbortReceive).
-	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get("X-Test-User"))
-		routes.ServeHTTP(w, r.WithContext(ctx))
-	}))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.Start()
-	defer srv.Close()
-
-	cl := &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, network, addr)
-		},
-	}}
+	// (serverkit.NewChainV2): svcerr.InterceptorV2 gives a handler's svcerr
+	// error its Connect code on the wire. Streams.Install is the listener's
+	// edge: the abortable request body ConnectDaemon needs
+	// (serverkit.AbortReceive).
+	client := daemonServer(t, svc, true, withTestUser)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	client := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC())
-	stream := client.ConnectDaemon(ctx)
-	stream.RequestHeader().Set("X-Test-User", userID)
-	defer func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() }()
+	stream, err := client.ConnectDaemon(asTestUser(ctx, userID))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = stream.CloseSend(); _ = stream.Close() }()
 	_ = stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: &reliantv1.DaemonRegister{DaemonId: assertedID, Hostname: "h", Platform: "linux", DaemonType: "local"},
 	}})
-	_, err := stream.Receive()
+	_, err = stream.Receive()
 	return err
 }
 
@@ -149,7 +127,7 @@ func TestConnectDaemonRefusesDaemonIDOwnedByAnotherUser(t *testing.T) {
 	err := registerAs(t, svc, "user-B", daemonID)
 
 	require.Error(t, err)
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	require.Equal(t, "user-A", repo.ownerOf(daemonID), "row must still belong to A")
 	require.NoError(t, victim.closedReason(), "A's connection must not be superseded")
 	svc.mu.RLock()
@@ -173,13 +151,14 @@ func TestConnectDaemonForeignRefusalCarriesStableReasonAndNoOwner(t *testing.T) 
 
 	err := registerAs(t, svc, "user-B", daemonID)
 
-	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	connectErr := svcerr.ToConnectV2(err) // the error the daemon's client received
 	require.NotNil(t, connectErr)
 	require.Equal(t, connect.CodePermissionDenied, connectErr.Code())
-	require.Equal(t, "daemon_id_owned_by_another_user", connectErr.Meta().Get("x-forge-error-reason"),
+	meta := svcerr.MetaOf(err) // the response metadata it came with
+	require.Equal(t, "daemon_id_owned_by_another_user", meta.Get("x-forge-error-reason"),
 		"the refusal must carry a stable machine-readable reason")
 	require.NotContains(t, connectErr.Error(), "user-A", "the refusal must not name the owner")
-	require.NotContains(t, fmt.Sprint(connectErr.Meta()), "user-A", "nor carry the owner in metadata")
+	require.NotContains(t, fmt.Sprint(meta), "user-A", "nor carry the owner in metadata")
 }
 
 // WhoAmI is how `daemon start --token` learns whose token was pasted before it
@@ -191,20 +170,20 @@ func TestWhoAmINamesOnlyTheCallersAccount(t *testing.T) {
 	t.Cleanup(svc.Close)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-B")
-	resp, err := svc.WhoAmI(ctx, connect.NewRequest(&reliantv1.WhoAmIRequest{}))
+	resp, err := svc.WhoAmI(ctx, &reliantv1.WhoAmIRequest{})
 	require.NoError(t, err)
-	require.Equal(t, "user-B", resp.Msg.GetUserId())
-	require.Empty(t, resp.Msg.GetAccountEmail(), "an authority that named no email names none here")
+	require.Equal(t, "user-B", resp.GetUserId())
+	require.Empty(t, resp.GetAccountEmail(), "an authority that named no email names none here")
 	require.Empty(t, repo.owners, "WhoAmI must not register or touch any daemon row")
 
 	// The email the token authority named for the credential's account.
 	resp, err = svc.WhoAmI(context.WithValue(ctx, auth.UserEmailContextKey, "b@example.com"),
-		connect.NewRequest(&reliantv1.WhoAmIRequest{}))
+		&reliantv1.WhoAmIRequest{})
 	require.NoError(t, err)
-	require.Equal(t, "b@example.com", resp.Msg.GetAccountEmail())
+	require.Equal(t, "b@example.com", resp.GetAccountEmail())
 
-	_, err = svc.WhoAmI(context.Background(), connect.NewRequest(&reliantv1.WhoAmIRequest{}))
-	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err),
+	_, err = svc.WhoAmI(context.Background(), &reliantv1.WhoAmIRequest{})
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err),
 		"no authenticated principal is a credential problem")
 }
 
@@ -222,7 +201,7 @@ func TestConnectDaemonRefusesSupersedingAnotherUsersLiveConnection(t *testing.T)
 
 	err := registerAs(t, svc, "user-B", daemonID)
 
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	require.NoError(t, victim.closedReason())
 }
 
@@ -237,7 +216,7 @@ func TestValidateAssertedDaemonID(t *testing.T) {
 	for _, bad := range []string{"a.b", "a>b", "a*b", "a b\tc", "a_b", "../x", "a\x00b", string(long), "é"} {
 		err := validateAssertedDaemonID(bad)
 		require.Error(t, err, "%q", bad)
-		require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	}
 }
 
@@ -245,7 +224,7 @@ func TestConnectDaemonRejectsMalformedAssertedID(t *testing.T) {
 	svc := newTestService(newOwnershipRepo(map[string]string{}))
 	t.Cleanup(svc.Close)
 	err := registerAs(t, svc, "user-B", "evil.>")
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // requireNotSuperseded fails if conn was closed (an outbound replace closes
@@ -279,12 +258,12 @@ func TestRegisterOutboundConnectionRefusesDaemonIDOwnedByAnotherUser(t *testing.
 	svc.AddConnectionListener(listener)
 
 	out, err := svc.RegisterOutboundConnection(context.Background(), "user-B", daemonID, "10.0.0.1", 9190,
-		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, nil, nil, MachineOrg{})
+		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, reliantv1connect.ToolsDaemonServiceConnectGatewayClientStream{}, nil, MachineOrg{})
 
 	require.Nil(t, out)
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
-	connectErr := svcerr.ToConnect(err)
-	require.Equal(t, "daemon_id_owned_by_another_user", connectErr.Meta().Get("x-forge-error-reason"))
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
+	connectErr := svcerr.ToConnectV2(err)
+	require.Equal(t, "daemon_id_owned_by_another_user", svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 	require.NotContains(t, connectErr.Error(), "user-A", "the refusal must not name the owner")
 	require.Equal(t, "user-A", repo.ownerOf(daemonID), "row must still belong to A")
 	listener.mu.Lock()
@@ -312,10 +291,10 @@ func TestRegisterOutboundConnectionRefusesSupersedingAnotherUsersLiveConnection(
 	svc.mu.Unlock()
 
 	out, err := svc.RegisterOutboundConnection(context.Background(), "user-B", daemonID, "10.0.0.1", 9190,
-		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, nil, nil, MachineOrg{})
+		&reliantv1.DaemonRegister{Hostname: "h", Platform: "linux"}, reliantv1connect.ToolsDaemonServiceConnectGatewayClientStream{}, nil, MachineOrg{})
 
 	require.Nil(t, out)
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	requireNotSuperseded(t, svc, incumbent)
 	listener.mu.Lock()
 	require.Empty(t, listener.connected, "no NATS-side notification for a refused registration")

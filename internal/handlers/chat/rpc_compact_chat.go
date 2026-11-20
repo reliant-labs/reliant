@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -21,19 +20,19 @@ import (
 // CompactChat triggers manual context compaction for a chat
 func (s *Service) CompactChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CompactChatRequest],
-) (*connect.Response[reliantv1.CompactChatResponse], error) {
+	req *reliantv1.CompactChatRequest,
+) (*reliantv1.CompactChatResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	if req.Msg.ThreadId == "" {
+	if req.ThreadId == "" {
 		return nil, svcerr.InvalidArgument("thread_id is required")
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -42,8 +41,8 @@ func (s *Service) CompactChat(
 	}
 
 	// Check if there are any messages to compact on the specified thread
-	threadToCompact := req.Msg.ThreadId
-	messages, err := s.deps.Repo.ListMessages(ctx, req.Msg.ChatId, db.MessageListOptions{
+	threadToCompact := req.ThreadId
+	messages, err := s.deps.Repo.ListMessages(ctx, req.ChatId, db.MessageListOptions{
 		Thread: &threadToCompact,
 	})
 	if err != nil {
@@ -78,19 +77,19 @@ func (s *Service) CompactChat(
 
 	// Compact workflow uses the specified thread
 	workflowInput := v2.WorkflowInput{
-		ChatID:       req.Msg.ChatId,
+		ChatID:       req.ChatId,
 		WorkflowName: "builtin://compact",
 		Inputs: map[string]interface{}{
 			"thread": threadToCompact,
 		},
 		ExecContext: &v2.ExecutionContext{
 			WorkflowID:   workflowID,
-			ChatID:       req.Msg.ChatId,
+			ChatID:       req.ChatId,
 			WorkflowName: "builtin://compact",
 			Thread:       threadToCompact,
 			ThreadMode:   model.ThreadModeInherit,
 		},
-		Trigger: launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
+		Trigger: launch.LoadChatTrigger(ctx, s.deps.Repo, req.ChatId),
 	}
 
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
@@ -99,13 +98,13 @@ func (s *Service) CompactChat(
 	}
 
 	runID := workflowRun.GetRunID()
-	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
+	s.runs.RecordRun(ctx, req.ChatId, workflowID, runID)
 
-	return connect.NewResponse(&reliantv1.CompactChatResponse{
-		ChatId:     req.Msg.ChatId,
+	return &reliantv1.CompactChatResponse{
+		ChatId:     req.ChatId,
 		WorkflowId: workflowID,
 		RunId:      runID,
 		Status:     "compacting",
 		Message:    "Context compaction started",
-	}), nil
+	}, nil
 }

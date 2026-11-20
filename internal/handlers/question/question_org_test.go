@@ -6,7 +6,6 @@ import (
 	"sort"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -45,10 +44,10 @@ func TestListPendingQuestions_LeavesOutQuestionsOfAnOrgTheCallerMayNotRead(t *te
 	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
 	ids := func(ctx context.Context) []string {
 		t.Helper()
-		resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{}))
+		resp, err := svc.ListPendingQuestions(ctx, &reliantv1.ListPendingQuestionsRequest{})
 		require.NoError(t, err)
 		var out []string
-		for _, q := range resp.Msg.GetQuestions() {
+		for _, q := range resp.GetQuestions() {
 			out = append(out, q.GetQuestionId())
 		}
 		sort.Strings(out)

@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -17,16 +16,16 @@ import (
 // In-flight activities are cancelled immediately via the shared cancellable activity context.
 func (s *Service) PauseChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PauseChatRequest],
-) (*connect.Response[reliantv1.PauseChatResponse], error) {
+	req *reliantv1.PauseChatRequest,
+) (*reliantv1.PauseChatResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -43,7 +42,7 @@ func (s *Service) PauseChat(
 	// and resumes it. Taken before the tool cancel, not just around the
 	// signal, so the order the server received the two requests in is the
 	// order they take effect. See runs.Service.LockRunControl.
-	release := s.runs.LockRunControl(ctx, req.Msg.ChatId)
+	release := s.runs.LockRunControl(ctx, req.ChatId)
 	defer release()
 
 	// Kill the tools BEFORE freeing the workflow to re-dispatch. The pause
@@ -62,22 +61,22 @@ func (s *Service) PauseChat(
 	}
 	if _, err := threadsSvc.CancelChatToolCalls(ctx, threads.CancelChatToolCallsOpts{
 		UserID: userID,
-		ChatID: req.Msg.ChatId,
+		ChatID: req.ChatId,
 	}); err != nil {
 		logging.WarnContext(ctx, "Failed to push tool cancel while pausing; the workflow-level pause still applies",
-			"error", err, "chatID", req.Msg.ChatId)
+			"error", err, "chatID", req.ChatId)
 	}
 
 	// A run that had already finished is not an error — the service reconciles
 	// the stale row and reports success, because the user's intent is met.
 	// A failed cancel push above must not strand the workflow un-paused, so
 	// this always runs regardless of that outcome.
-	if err := s.runs.Pause(ctx, req.Msg.ChatId); err != nil {
+	if err := s.runs.Pause(ctx, req.ChatId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to pause workflow"))
 	}
 
-	return connect.NewResponse(&reliantv1.PauseChatResponse{
+	return &reliantv1.PauseChatResponse{
 		Success: true,
 		Message: "Chat paused successfully",
-	}), nil
+	}, nil
 }

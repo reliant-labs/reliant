@@ -215,7 +215,7 @@ func (t *activationTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall,
 func activationFailureMessage(tool string, err error) string {
 	reason := ActivationRefusalReason(err)
 	if reason == "" && svcerr.IsUserError(err) {
-		if ce := svcerr.ToConnect(err); ce != nil {
+		if ce := svcerr.ToConnectV2(err); ce != nil {
 			reason = ce.Message()
 		}
 	}

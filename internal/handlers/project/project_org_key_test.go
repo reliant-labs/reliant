@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,13 +50,13 @@ func newOrgsFixture(t *testing.T) *machinesFixture {
 
 func (f *machinesFixture) create(t *testing.T, path, org string, machine *string) (*reliantv1.CreateProjectResponse, error) {
 	t.Helper()
-	resp, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := f.svc.CreateProject(f.ctx, &reliantv1.CreateProjectRequest{
 		Name: "dbpwathces", Path: path, OrgId: &org, DaemonId: machine,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 // The same folder is a project in each of two orgs.
@@ -144,9 +144,9 @@ func TestAttachProjectToDaemon_AnotherOrgsMachine_Refused(t *testing.T) {
 	require.NoError(t, err)
 	f.disk.folder(f.cloud, path, "")
 
-	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: acme.Project.Id, DaemonId: f.cloud, Path: path,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
 	assert.NotContains(t, f.rows(t, acme.Project.Id), f.cloud)
@@ -184,9 +184,9 @@ func TestAttachProjectToDaemon_MachineOfNoKnownOrgHoldsOnlyTheDefaultOrg(t *test
 	globex, err := f.create(t, path, "globex", &f.cloud)
 	require.NoError(t, err)
 
-	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: globex.Project.Id, DaemonId: f.desktop, Path: path,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
 	assert.Contains(t, err.Error(), "default organization")
@@ -194,8 +194,8 @@ func TestAttachProjectToDaemon_MachineOfNoKnownOrgHoldsOnlyTheDefaultOrg(t *test
 	acme, err := f.create(t, "/home/workspace/projects/v-"+uuid.NewString(), "acme", nil)
 	require.NoError(t, err)
 	f.disk.folder(f.desktop, "/home/workspace/projects/elsewhere", "")
-	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: acme.Project.Id, DaemonId: f.desktop, Path: "/home/workspace/projects/elsewhere",
-	}))
+	})
 	assert.NoError(t, err)
 }

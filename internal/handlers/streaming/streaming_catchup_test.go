@@ -2,15 +2,19 @@ package streaming
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -18,6 +22,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/streaming"
 )
 
@@ -61,30 +66,56 @@ func (catchupChatRepo) GetThread(context.Context, string) (*db.Thread, error) {
 // returns a client for it. Everything is torn down at test end.
 func streamingTestClient(t *testing.T, svc *Service) reliantv1connect.StreamingServiceClient {
 	t.Helper()
+	return serveStreaming(t, svc, authInjector)
+}
 
+// serveStreaming serves svc over h2c behind svcerr.InterceptorV2 (the error
+// mapping production's chain applies) with edge, the per-request HTTP
+// middleware that stands in for the listener's authentication, around it,
+// and returns a client for it. Everything is torn down at test end.
+func serveStreaming(t *testing.T, svc *Service, edge func(http.Handler) http.Handler) reliantv1connect.StreamingServiceClient {
+	t.Helper()
+
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterStreamingServiceHandler(server, svc)
 	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc)
-	mux.Handle(path, authInjector(handler))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
+	srv := httptest.NewUnstartedServer(h2c.NewHandler(edge(mux), &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()
 	t.Cleanup(srv.Close)
-	return reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL)
+	return reliantv1connect.NewStreamingServiceClient(rpcclient.New(srv.Client(), srv.URL, nil))
+}
+
+// clientStream is a server-streaming rpc's generated client stream.
+type clientStream[E any] interface {
+	Receive() (*E, error)
+	Close() error
 }
 
 // receiveAll forwards every message of an open server stream to a channel,
-// closing it when the stream ends.
-func receiveAll[E any](t *testing.T, stream *connect.ServerStreamForClient[E]) <-chan *E {
+// closing it when the stream ends. The func it returns is the error the
+// stream ended with, nil for a clean end; call it only once the channel is
+// closed (before then it races the receive loop).
+func receiveAll[E any](t *testing.T, stream clientStream[E]) (<-chan *E, func() error) {
 	t.Helper()
 	t.Cleanup(func() { _ = stream.Close() })
 	events := make(chan *E, 256)
+	var end error
 	go func() {
 		defer close(events)
-		for stream.Receive() {
-			events <- stream.Msg()
+		for {
+			msg, err := stream.Receive()
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					end = err
+				}
+				return
+			}
+			events <- msg
 		}
 	}()
-	return events
+	return events, func() error { return end }
 }
 
 // userStreamEvents opens a user stream with req and returns a channel of
@@ -93,9 +124,10 @@ func userStreamEvents(t *testing.T, svc *Service, req *reliantv1.StreamUserUpdat
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := streamingTestClient(t, svc).StreamUserUpdates(ctx, connect.NewRequest(req))
+	stream, err := streamingTestClient(t, svc).StreamUserUpdates(ctx, req)
 	require.NoError(t, err)
-	return receiveAll(t, stream)
+	events, _ := receiveAll(t, stream)
+	return events
 }
 
 // chatStreamEvents opens a chat stream with req and returns a channel of
@@ -104,9 +136,10 @@ func chatStreamEvents(t *testing.T, svc *Service, req *reliantv1.StreamChatUpdat
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := streamingTestClient(t, svc).StreamChatUpdates(ctx, connect.NewRequest(req))
+	stream, err := streamingTestClient(t, svc).StreamChatUpdates(ctx, req)
 	require.NoError(t, err)
-	return receiveAll(t, stream)
+	events, _ := receiveAll(t, stream)
+	return events
 }
 
 // nextEvent returns the next event matching pred, failing on timeout.

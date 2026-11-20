@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
@@ -176,8 +176,8 @@ func TestOutageWithinAndBeyondGrace(t *testing.T) {
 
 	c.advance(Grace) // well past Grace of the v7 fetch
 	_, err := r.Resolve(context.Background(), "org-a")
-	if !IsUnavailable(err) || connect.CodeOf(err) != connect.CodeUnavailable || reasonOf(err) != ReasonUnavailable {
-		t.Fatalf("beyond grace: err = %v (code %v, reason %q), want Unavailable %q", err, connect.CodeOf(err), reasonOf(err), ReasonUnavailable)
+	if !IsUnavailable(err) || svcerr.CodeV2(err) != connect.CodeUnavailable || reasonOf(err) != ReasonUnavailable {
+		t.Fatalf("beyond grace: err = %v (code %v, reason %q), want Unavailable %q", err, svcerr.CodeV2(err), reasonOf(err), ReasonUnavailable)
 	}
 
 	// Recovery: the next answer after the retry wait is served again.
@@ -301,11 +301,7 @@ func TestOnTheContext(t *testing.T) {
 }
 
 func reasonOf(err error) string {
-	var ce *connect.Error
-	if !errors.As(err, &ce) {
-		return ""
-	}
-	return ce.Meta().Get(svcerr.ReasonHeader)
+	return svcerr.MetaOf(err).Get(svcerr.ReasonHeader)
 }
 
 // unsupported is a control plane without the rpc.

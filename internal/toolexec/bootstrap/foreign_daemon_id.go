@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -34,22 +34,22 @@ const foreignDaemonIDMessage = "daemon id is owned by another user"
 // NewForeignDaemonIDError is the gateway's refusal of a daemon id owned by
 // another user.
 func NewForeignDaemonIDError() *connect.Error {
-	return svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied(foreignDaemonIDMessage), ForeignDaemonIDReason))
+	return svcerr.ToConnectV2(svcerr.WithReason(svcerr.PermissionDenied(foreignDaemonIDMessage), ForeignDaemonIDReason))
 }
 
 // IsForeignDaemonIDError reports whether err, or anything it wraps, is the
 // gateway refusing a daemon id because another user owns it: the
 // *connect.Error a daemon receives over the wire, or the same refusal still
-// in process (svcerr.Code and ToConnect read both).
+// in process (svcerr.CodeV2 and svcerr.MetaOf read both; the wire reason
+// needs a client with svcerr.ClientInterceptorV2, as rpcclient builds).
 func IsForeignDaemonIDError(err error) bool {
-	if err == nil || svcerr.Code(err) != connect.CodePermissionDenied {
+	if err == nil || svcerr.CodeV2(err) != connect.CodePermissionDenied {
 		return false
 	}
-	connectErr := svcerr.ToConnect(err)
-	if connectErr.Meta().Get(svcerr.ReasonHeader) == ForeignDaemonIDReason {
+	if svcerr.MetaOf(err).Get(svcerr.ReasonHeader) == ForeignDaemonIDReason {
 		return true
 	}
-	return connectErr.Message() == foreignDaemonIDMessage
+	return svcerr.ToConnectV2(err).Message() == foreignDaemonIDMessage
 }
 
 // SetAsideDaemonID moves this instance's daemon-id file out of the way and

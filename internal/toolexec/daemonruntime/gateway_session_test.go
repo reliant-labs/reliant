@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -301,7 +301,7 @@ func (g *drainingGateway) record(event string) {
 	g.events = append(g.events, event)
 }
 
-func (g *drainingGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (g *drainingGateway) ConnectDaemon(ctx context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	n := g.sessions.Add(1)
 	replica := "A"
 	if n > 1 {
@@ -356,7 +356,7 @@ func (g *drainingGateway) ConnectDaemon(ctx context.Context, stream *connect.Bid
 			g.record(replica + ": daemon ended the stream")
 			return err
 		case <-cut:
-			return connect.NewError(connect.CodeUnavailable, nil)
+			return connect.NewError(connect.CodeUnavailable, "")
 		case msg := <-received:
 			if r := msg.GetToolResponse(); r != nil {
 				g.responses <- replica + ":" + r.RequestId

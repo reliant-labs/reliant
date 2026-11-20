@@ -3,8 +3,6 @@ package settings
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -28,7 +26,7 @@ var statusProviders = []struct{ id, name string }{
 // GetProviderStatuses reports which providers can serve, derived from the user's accounts: a
 // provider is configured when at least one of its accounts is not waiting for sign-in. Masked
 // keys and per-account detail live on the accounts (ProviderAccountService).
-func (s *Service) GetProviderStatuses(ctx context.Context, req *connect.Request[reliantv1.GetProviderStatusesRequest]) (*connect.Response[reliantv1.GetProviderStatusesResponse], error) {
+func (s *Service) GetProviderStatuses(ctx context.Context, req *reliantv1.GetProviderStatusesRequest) (*reliantv1.GetProviderStatusesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	accounts, err := s.deps.Repo.ListProviderAccounts(ctx, userID)
@@ -54,5 +52,5 @@ func (s *Service) GetProviderStatuses(ctx context.Context, req *connect.Request[
 			OutputModalities: providerOutputModalities(p.id),
 		})
 	}
-	return connect.NewResponse(&reliantv1.GetProviderStatusesResponse{Providers: statuses}), nil
+	return &reliantv1.GetProviderStatusesResponse{Providers: statuses}, nil
 }

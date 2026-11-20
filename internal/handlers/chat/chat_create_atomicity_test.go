@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 
@@ -120,7 +119,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 		runs:    runs.NewService(failingRepo, temporal, nil),
 	}
 
-	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+	_, err := service.StartChat(ctx, &reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "builtin://agent",
 		Messages: []*reliantv1.InputMessage{{
@@ -130,7 +129,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 		WorkflowParams: map[string]*structpb.Value{
 			"model": mustStructValue(t, map[string]interface{}{"id": "mock"}),
 		},
-	}))
+	})
 	require.Error(t, err, "StartChat must fail when the trailing chat_created write fails")
 	require.True(t, failingRepo.injected, "StartChat must fail on the injected chat_created write, not before it: %v", err)
 
@@ -199,7 +198,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 		runs:    runs.NewService(failingRepo, temporal, nil),
 	}
 
-	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+	resp, err := service.StartChat(ctx, &reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "builtin://agent",
 		Messages: []*reliantv1.InputMessage{{
@@ -209,11 +208,11 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 		WorkflowParams: map[string]*structpb.Value{
 			"model": mustStructValue(t, map[string]interface{}{"id": "mock"}),
 		},
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Chat)
+	require.NotNil(t, resp.Chat)
 
-	chatID := resp.Msg.Chat.Id
+	chatID := resp.Chat.Id
 	createdChat, getErr := repo.GetChat(ctx, chatID)
 	require.NoError(t, getErr)
 	require.NotNil(t, createdChat)

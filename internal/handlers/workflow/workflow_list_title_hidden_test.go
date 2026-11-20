@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -40,12 +39,12 @@ func TestWorkflowService_ListWorkflows_TitleAndHiddenBuiltins(t *testing.T) {
 
 	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 	list := func(includeHidden bool) map[string]*reliantv1.WorkflowListItem {
-		resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
+		resp, err := svc.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{
 			ProjectId: projectID, IncludeHidden: proto.Bool(includeHidden),
-		}))
+		})
 		require.NoError(t, err)
 		out := map[string]*reliantv1.WorkflowListItem{}
-		for _, w := range resp.Msg.Workflows {
+		for _, w := range resp.Workflows {
 			out[w.Name] = w
 		}
 		return out

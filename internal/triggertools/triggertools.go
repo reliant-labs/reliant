@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -30,9 +28,9 @@ import (
 // satisfied by *trigger.Service (internal/handlers/trigger), whose handlers
 // authorize the caller from the request context.
 type TriggerAPI interface {
-	ListTriggers(context.Context, *connect.Request[reliantv1.ListTriggersRequest]) (*connect.Response[reliantv1.ListTriggersResponse], error)
-	FireTrigger(context.Context, *connect.Request[reliantv1.FireTriggerRequest]) (*connect.Response[reliantv1.FireTriggerResponse], error)
-	ListTriggerEvents(context.Context, *connect.Request[reliantv1.ListTriggerEventsRequest]) (*connect.Response[reliantv1.ListTriggerEventsResponse], error)
+	ListTriggers(context.Context, *reliantv1.ListTriggersRequest) (*reliantv1.ListTriggersResponse, error)
+	FireTrigger(context.Context, *reliantv1.FireTriggerRequest) (*reliantv1.FireTriggerResponse, error)
+	ListTriggerEvents(context.Context, *reliantv1.ListTriggerEventsRequest) (*reliantv1.ListTriggerEventsResponse, error)
 }
 
 // Triggers implements tools.TriggerLister.
@@ -59,12 +57,12 @@ func (t *Triggers) ListTriggers(ctx context.Context, userID string, f tools.Trig
 	if f.ProjectID != "" {
 		req.ProjectId = &f.ProjectID
 	}
-	resp, err := t.api.ListTriggers(asOwner(ctx, userID), connect.NewRequest(req))
+	resp, err := t.api.ListTriggers(asOwner(ctx, userID), req)
 	if err != nil {
 		return nil, unwrapConnect(err)
 	}
-	out := make([]tools.TriggerSummary, 0, len(resp.Msg.GetTriggers()))
-	for _, tr := range resp.Msg.GetTriggers() {
+	out := make([]tools.TriggerSummary, 0, len(resp.GetTriggers()))
+	for _, tr := range resp.GetTriggers() {
 		if f.Workflow != "" && !sameWorkflow(tr.GetWorkflow(), f.Workflow) {
 			continue
 		}
@@ -78,11 +76,11 @@ func (t *Triggers) FireTrigger(ctx context.Context, userID, triggerID string) (s
 	if t.api == nil {
 		return "", errors.New("no trigger service is configured")
 	}
-	resp, err := t.api.FireTrigger(asOwner(ctx, userID), connect.NewRequest(&reliantv1.FireTriggerRequest{Id: triggerID}))
+	resp, err := t.api.FireTrigger(asOwner(ctx, userID), &reliantv1.FireTriggerRequest{Id: triggerID})
 	if err != nil {
 		return "", unwrapConnect(err)
 	}
-	return resp.Msg.GetFireWorkflowId(), nil
+	return resp.GetFireWorkflowId(), nil
 }
 
 // ListTriggerEvents projects only operational summaries; source payloads and
@@ -101,12 +99,12 @@ func (t *Triggers) ListTriggerEvents(ctx context.Context, userID, triggerID stri
 	if pageToken != "" {
 		req.PageToken = &pageToken
 	}
-	resp, err := t.api.ListTriggerEvents(asOwner(ctx, userID), connect.NewRequest(req))
+	resp, err := t.api.ListTriggerEvents(asOwner(ctx, userID), req)
 	if err != nil {
 		return tools.TriggerEventPage{}, unwrapConnect(err)
 	}
-	page := tools.TriggerEventPage{Events: make([]tools.TriggerEventSummary, 0, len(resp.Msg.GetEvents())), NextPageToken: resp.Msg.GetNextPageToken()}
-	for _, ev := range resp.Msg.GetEvents() {
+	page := tools.TriggerEventPage{Events: make([]tools.TriggerEventSummary, 0, len(resp.GetEvents())), NextPageToken: resp.GetNextPageToken()}
+	for _, ev := range resp.GetEvents() {
 		s := tools.TriggerEventSummary{FireWorkflowID: ev.GetFireWorkflowId(), ID: ev.GetId(), OccurredAt: ev.GetOccurredAt(), Outcome: strings.TrimPrefix(ev.GetOutcome().String(), "TRIGGER_EVENT_OUTCOME_"), Detail: ev.GetOutcomeDetail(), ChatID: ev.GetChatId()}
 		if ev.GetRun() != nil {
 			s.RunState = strings.TrimPrefix(ev.GetRun().GetDisplayState().String(), "RUN_DISPLAY_STATE_")
@@ -216,5 +214,5 @@ func describeSource(tr *reliantv1.Trigger) (string, string) {
 // what the svcerr interceptor would send a client, so an unclassified
 // failure's own text stays server-side; the code adds nothing it can act on.
 func unwrapConnect(err error) error {
-	return errors.New(svcerr.ToConnect(err).Message())
+	return errors.New(svcerr.ToConnectV2(err).Message())
 }

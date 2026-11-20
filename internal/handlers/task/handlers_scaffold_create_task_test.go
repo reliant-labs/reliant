@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -28,41 +28,41 @@ func TestCreateTask_Generated(t *testing.T) {
 	}
 	svc := task.NewTestTask(t, task.WithTaskDeps(task.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateTaskRequest, pb.CreateTaskResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CreateTaskRequest, pb.CreateTaskResponse]{
 		{
 			Name:    "unknown plan is not found",
-			Req:     connect.NewRequest(&pb.CreateTaskRequest{PlanId: missingID, Title: "Task"}),
+			Req:     &pb.CreateTaskRequest{PlanId: missingID, Title: "Task"},
 			Ctx:     task.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's plan is denied",
-			Req:     connect.NewRequest(&pb.CreateTaskRequest{PlanId: otherPlanID, Title: "Task"}),
+			Req:     &pb.CreateTaskRequest{PlanId: otherPlanID, Title: "Task"},
 			Ctx:     task.AuthedContext(t),
 			WantErr: connect.CodePermissionDenied,
 		},
 		{
 			Name:    "title is required",
-			Req:     connect.NewRequest(&pb.CreateTaskRequest{PlanId: ownPlanID}),
+			Req:     &pb.CreateTaskRequest{PlanId: ownPlanID},
 			Ctx:     task.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "a new task is pending, under its parent",
-			Req: connect.NewRequest(&pb.CreateTaskRequest{
+			Req: &pb.CreateTaskRequest{
 				PlanId:       ownPlanID,
 				Title:        "Write tests",
 				Position:     ptr.Of(int32(3)),
 				ParentTaskId: ptr.Of(ownTaskID),
-			}),
+			},
 			Ctx: task.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.CreateTaskResponse]) {
+			Check: func(t *testing.T, resp *pb.CreateTaskResponse) {
 				require.NotNil(t, created)
-				require.Equal(t, created.ID, resp.Msg.GetTask().GetId())
-				require.Equal(t, ownPlanID, resp.Msg.GetTask().GetPlanId())
-				require.Equal(t, pb.TaskStatus_TASK_STATUS_PENDING, resp.Msg.GetTask().GetStatus())
-				require.EqualValues(t, 3, resp.Msg.GetTask().GetPosition())
-				require.Equal(t, ownTaskID, resp.Msg.GetTask().GetParentTaskId())
+				require.Equal(t, created.ID, resp.GetTask().GetId())
+				require.Equal(t, ownPlanID, resp.GetTask().GetPlanId())
+				require.Equal(t, pb.TaskStatus_TASK_STATUS_PENDING, resp.GetTask().GetStatus())
+				require.EqualValues(t, 3, resp.GetTask().GetPosition())
+				require.Equal(t, ownTaskID, resp.GetTask().GetParentTaskId())
 			},
 		},
 	}, svc.CreateTask)

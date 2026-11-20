@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,8 +84,8 @@ func paramsOf(t *testing.T, kv map[string]any) map[string]*structpb.Value {
 	return out
 }
 
-func updateParams(chatID string, params map[string]*structpb.Value) *connect.Request[reliantv1.UpdateWorkflowParamsRequest] {
-	return connect.NewRequest(&reliantv1.UpdateWorkflowParamsRequest{ChatId: chatID, Params: params})
+func updateParams(chatID string, params map[string]*structpb.Value) *reliantv1.UpdateWorkflowParamsRequest {
+	return &reliantv1.UpdateWorkflowParamsRequest{ChatId: chatID, Params: params}
 }
 
 // F1: the pick lived only in one browser profile's localStorage, so a send that
@@ -206,9 +206,9 @@ func TestUpdateWorkflowParams_ModeOnlySignalsExactlyMode(t *testing.T) {
 	assert.Equal(t, map[string]interface{}{"mode": "plan"}, temporal.signals[0].Arg,
 		"only the key the client sent may reach the run")
 
-	require.NotNil(t, resp.Msg.Selection)
-	assert.Equal(t, "plan", resp.Msg.Selection.Params.AsMap()["mode"])
-	assert.Equal(t, sonnetOnClaude, modelID(t, resp.Msg.Selection.Params.AsMap()["model"]), "the model survives a mode edit")
+	require.NotNil(t, resp.Selection)
+	assert.Equal(t, "plan", resp.Selection.Params.AsMap()["mode"])
+	assert.Equal(t, sonnetOnClaude, modelID(t, resp.Selection.Params.AsMap()["model"]), "the model survives a mode edit")
 }
 
 // F3(b): a sub-agent's edit is that thread's alone — it carries no root preset,
@@ -223,7 +223,7 @@ func TestUpdateWorkflowParams_ThreadScopedCarriesNoPresetAndIsNotStored(t *testi
 
 	thread := fx.rootThreadID
 	req := updateParams(fx.chatID, paramsOf(t, map[string]any{"mode": "plan"}))
-	req.Msg.ThreadId = &thread
+	req.ThreadId = &thread
 	_, err = service.UpdateWorkflowParams(ctx, req)
 	require.NoError(t, err)
 
@@ -263,7 +263,7 @@ func TestUpdateWorkflowParams_UnavailableRootPickIsRejected(t *testing.T) {
 		"model": map[string]any{"id": codexOnlyModel},
 	})))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Empty(t, temporal.signals)
 	after, err := chatselection.New(repo).Get(ctx, fx.chatID)
 	require.NoError(t, err)
@@ -280,10 +280,10 @@ func TestUpdateWorkflowParams_StaleVersionIsAborted(t *testing.T) {
 
 	req := updateParams(fx.chatID, paramsOf(t, map[string]any{"mode": "manual"}))
 	stale := first.Version
-	req.Msg.ExpectedVersion = &stale
+	req.ExpectedVersion = &stale
 	_, err := service.UpdateWorkflowParams(ctx, req)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAborted, svcerr.Code(err))
+	assert.Equal(t, connect.CodeAborted, svcerr.CodeV2(err))
 
 	got, err := chatselection.New(repo).Get(ctx, fx.chatID)
 	require.NoError(t, err)
@@ -291,11 +291,11 @@ func TestUpdateWorkflowParams_StaleVersionIsAborted(t *testing.T) {
 
 	// With the current version the same edit lands.
 	current := got.Version
-	req.Msg.ExpectedVersion = &current
+	req.ExpectedVersion = &current
 	resp, err := service.UpdateWorkflowParams(ctx, req)
 	require.NoError(t, err)
-	assert.Equal(t, "manual", resp.Msg.Selection.Params.AsMap()["mode"])
-	assert.Greater(t, resp.Msg.Selection.Version, current)
+	assert.Equal(t, "manual", resp.Selection.Params.AsMap()["mode"])
+	assert.Greater(t, resp.Selection.Version, current)
 }
 
 // The provider policy is stored and returned, not acted on.
@@ -304,19 +304,19 @@ func TestUpdateChatProviderPolicy_RoundTripsThroughGetChat(t *testing.T) {
 	setSelection(t, ctx, repo, fx.chatID, map[string]any{"model": map[string]any{"id": sonnetOnClaude}})
 	fallback := codexOnlyModel
 
-	resp, err := service.UpdateChatProviderPolicy(ctx, connect.NewRequest(&reliantv1.UpdateChatProviderPolicyRequest{
+	resp, err := service.UpdateChatProviderPolicy(ctx, &reliantv1.UpdateChatProviderPolicyRequest{
 		ChatId: fx.chatID,
 		ProviderPolicy: &reliantv1.ProviderPolicy{
 			OnLimit:       reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK,
 			FallbackModel: &fallback,
 		},
-	}))
+	})
 	require.NoError(t, err)
-	assert.Equal(t, reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK, resp.Msg.Selection.ProviderPolicy.OnLimit)
+	assert.Equal(t, reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK, resp.Selection.ProviderPolicy.OnLimit)
 
-	got, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: fx.chatID}))
+	got, err := service.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: fx.chatID})
 	require.NoError(t, err)
-	sel := got.Msg.Chat.Selection
+	sel := got.Chat.Selection
 	require.NotNil(t, sel)
 	assert.Equal(t, reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK, sel.ProviderPolicy.OnLimit)
 	assert.Equal(t, codexOnlyModel, sel.ProviderPolicy.GetFallbackModel())
@@ -329,35 +329,35 @@ func TestUpdateChatProviderPolicy_RefusesNonsenseAndStaleVersions(t *testing.T) 
 	first := setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": "auto"})
 	setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": "plan"})
 
-	_, err := service.UpdateChatProviderPolicy(ctx, connect.NewRequest(&reliantv1.UpdateChatProviderPolicyRequest{
+	_, err := service.UpdateChatProviderPolicy(ctx, &reliantv1.UpdateChatProviderPolicyRequest{
 		ChatId:         fx.chatID,
 		ProviderPolicy: &reliantv1.ProviderPolicy{OnLimit: reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK},
-	}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a fallback with no model is not a policy")
+	})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "a fallback with no model is not a policy")
 
 	stale := first.Version
-	_, err = service.UpdateChatProviderPolicy(ctx, connect.NewRequest(&reliantv1.UpdateChatProviderPolicyRequest{
+	_, err = service.UpdateChatProviderPolicy(ctx, &reliantv1.UpdateChatProviderPolicyRequest{
 		ChatId:          fx.chatID,
 		ProviderPolicy:  &reliantv1.ProviderPolicy{OnLimit: reliantv1.ProviderPolicy_ON_LIMIT_WAIT},
 		ExpectedVersion: &stale,
-	}))
-	assert.Equal(t, connect.CodeAborted, svcerr.Code(err))
+	})
+	assert.Equal(t, connect.CodeAborted, svcerr.CodeV2(err))
 }
 
 // A second device opening the chat reads the same selection from the server.
 func TestGetChat_CarriesTheSelectionToAnyDevice(t *testing.T) {
 	ctx, fx, repo, _, service := selectionFixture(t, db.Completed())
 
-	none, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: fx.chatID}))
+	none, err := service.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: fx.chatID})
 	require.NoError(t, err)
-	assert.Nil(t, none.Msg.Chat.Selection, "a chat nobody has configured has no selection to seed from")
+	assert.Nil(t, none.Chat.Selection, "a chat nobody has configured has no selection to seed from")
 
 	setSelection(t, ctx, repo, fx.chatID, map[string]any{"model": map[string]any{"id": sonnetOnClaude}})
-	got, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: fx.chatID}))
+	got, err := service.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: fx.chatID})
 	require.NoError(t, err)
-	require.NotNil(t, got.Msg.Chat.Selection)
-	assert.Equal(t, sonnetOnClaude, modelID(t, got.Msg.Chat.Selection.Params.AsMap()["model"]))
-	assert.EqualValues(t, 1, got.Msg.Chat.Selection.Version)
+	require.NotNil(t, got.Chat.Selection)
+	assert.Equal(t, sonnetOnClaude, modelID(t, got.Chat.Selection.Params.AsMap()["model"]))
+	assert.EqualValues(t, 1, got.Chat.Selection.Version)
 }
 
 func branchTestContext(t *testing.T, repo *db.Repo) (context.Context, string) {
@@ -396,10 +396,10 @@ func TestBranchChat_CopiesTheSelectionAndPresets(t *testing.T) {
 	require.NoError(t, err)
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{ChatId: sourceChatID, MessageId: messageID}))
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{ChatId: sourceChatID, MessageId: messageID})
 	require.NoError(t, err)
 
-	branch := resp.Msg.Chat
+	branch := resp.Chat
 	assert.Equal(t, map[string]string{"": "general"}, branch.SelectedPresets)
 	require.NotNil(t, branch.Selection, "the branch response carries the selection the composer seeds from")
 	assert.Equal(t, map[string]any{"id": "gpt-5.6-sol@codex", "thinking_level": "high"}, branch.Selection.Params.AsMap()["model"])

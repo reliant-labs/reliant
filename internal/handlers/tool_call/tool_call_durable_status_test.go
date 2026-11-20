@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -29,11 +28,11 @@ func TestCancelToolCall_PersistsCancelledStatus(t *testing.T) {
 	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"sleep 600"}`)
 
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
-	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
+	resp, err := svc.CancelToolCall(ctx, &reliantv1.CancelToolCallRequest{
 		ToolCallId: f.ToolCallID,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	call, err := repo.GetToolCall(ctx, f.ToolCallID)
 	require.NoError(t, err, "cancelling must leave a durable row, not just an event")
@@ -59,11 +58,11 @@ func TestConvertToBackground_PersistsBackgroundedStatus(t *testing.T) {
 	f := dbtest.SeedToolCall(t, ctx, repo, `{"command":"npm run dev"}`)
 
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
-	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
+	resp, err := svc.ConvertToBackground(ctx, &reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: f.ToolCallID,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	call, err := repo.GetToolCall(ctx, f.ToolCallID)
 	require.NoError(t, err, "backgrounding must leave a durable row")
@@ -96,9 +95,9 @@ func TestCancelToolCall_PreservesExistingExecutionFields(t *testing.T) {
 	}))
 
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
-	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
+	_, err := svc.CancelToolCall(ctx, &reliantv1.CancelToolCallRequest{
 		ToolCallId: f.ToolCallID,
-	}))
+	})
 	require.NoError(t, err)
 
 	call, err := repo.GetToolCall(ctx, f.ToolCallID)
@@ -123,9 +122,9 @@ func TestCancelToolCall_IsIdempotent(t *testing.T) {
 
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
 	for i := 0; i < 3; i++ {
-		_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
+		_, err := svc.CancelToolCall(ctx, &reliantv1.CancelToolCallRequest{
 			ToolCallId: f.ToolCallID,
-		}))
+		})
 		require.NoError(t, err)
 	}
 

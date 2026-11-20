@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -291,9 +290,9 @@ func (s *Service) issueWebhookToken(ctx context.Context, triggerID string) (*rel
 // RotateWebhookToken replaces a webhook trigger's token.
 func (s *Service) RotateWebhookToken(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RotateWebhookTokenRequest],
-) (*connect.Response[reliantv1.RotateWebhookTokenResponse], error) {
-	trigger, err := s.ownedTrigger(ctx, req.Msg.Id)
+	req *reliantv1.RotateWebhookTokenRequest,
+) (*reliantv1.RotateWebhookTokenResponse, error) {
+	trigger, err := s.ownedTrigger(ctx, req.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -313,17 +312,17 @@ func (s *Service) RotateWebhookToken(
 			return nil, err
 		}
 		logging.InfoContext(ctx, "managed webhook trigger re-provisioned with a new token", "trigger_id", trigger.ID, "user_id", trigger.UserID)
-		return connect.NewResponse(&reliantv1.RotateWebhookTokenResponse{Trigger: s.render(ctx, trigger)}), nil
+		return &reliantv1.RotateWebhookTokenResponse{Trigger: s.render(ctx, trigger)}, nil
 	}
 	cred, err := s.issueWebhookToken(ctx, trigger.ID)
 	if err != nil {
 		return nil, err
 	}
 	logging.InfoContext(ctx, "webhook trigger token rotated", "trigger_id", trigger.ID, "user_id", trigger.UserID)
-	return connect.NewResponse(&reliantv1.RotateWebhookTokenResponse{
+	return &reliantv1.RotateWebhookTokenResponse{
 		Trigger: s.render(ctx, trigger),
 		Webhook: cred,
-	}), nil
+	}, nil
 }
 
 // fireInbound is "run now" for an inbound trigger: a manual event with an

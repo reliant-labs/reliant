@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,14 +64,14 @@ func (f *builderTestFixture) saveDraft(t *testing.T, owner, slug string, status 
 	}))
 }
 
-func (f *builderTestFixture) start(workflow string, builderTest *bool, chatID *string) (*connect.Response[reliantv1.StartChatResponse], error) {
-	return f.service.StartChat(f.ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+func (f *builderTestFixture) start(workflow string, builderTest *bool, chatID *string) (*reliantv1.StartChatResponse, error) {
+	return f.service.StartChat(f.ctx, &reliantv1.StartChatRequest{
 		ProjectId:   f.projectID,
 		Workflow:    workflow,
 		BuilderTest: builderTest,
 		ChatId:      chatID,
 		Messages:    []*reliantv1.InputMessage{{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "go"}},
-	}))
+	})
 }
 
 func (f *builderTestFixture) launchKind(t *testing.T, chatID string) string {
@@ -91,7 +91,7 @@ func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
 
 	resp, err := f.start("bt-draft", proto.Bool(true), nil)
 	require.NoError(t, err)
-	chatID := resp.Msg.GetChat().GetId()
+	chatID := resp.GetChat().GetId()
 
 	assert.Equal(t, "builder.test", f.launchKind(t, chatID))
 	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
@@ -132,7 +132,7 @@ func TestStartChat_ClientCannotClaimOtherLaunchKinds(t *testing.T) {
 	for _, flag := range []*bool{nil, proto.Bool(false)} {
 		resp, err := f.start("bt-draft", flag, nil)
 		require.NoError(t, err)
-		assert.Equal(t, "chat.start", f.launchKind(t, resp.Msg.GetChat().GetId()))
+		assert.Equal(t, "chat.start", f.launchKind(t, resp.GetChat().GetId()))
 	}
 
 	fields := (&reliantv1.StartChatRequest{}).ProtoReflect().Descriptor().Fields()
@@ -164,7 +164,7 @@ func TestStartChat_BuilderTestRequiresAnOwnedSavedDraft(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := f.start(tc.workflow, proto.Bool(true), tc.chatID)
 			require.Error(t, err)
-			assert.Equal(t, tc.want, svcerr.Code(err), err.Error())
+			assert.Equal(t, tc.want, svcerr.CodeV2(err), err.Error())
 		})
 	}
 

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -33,9 +32,9 @@ func recoveryToProto(row *core.WorktreeRecovery) *pb.WorktreeRecovery {
 	return out
 }
 
-func (s *Service) ListWorktreeRecoveries(ctx context.Context, req *connect.Request[pb.ListWorktreeRecoveriesRequest]) (*connect.Response[pb.ListWorktreeRecoveriesResponse], error) {
+func (s *Service) ListWorktreeRecoveries(ctx context.Context, req *pb.ListWorktreeRecoveriesRequest) (*pb.ListWorktreeRecoveriesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	rows, err := s.deps.Repo.ListWorktreeRecoveries(ctx, userID, req.Msg.GetProjectId())
+	rows, err := s.deps.Repo.ListWorktreeRecoveries(ctx, userID, req.GetProjectId())
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -59,11 +58,11 @@ func (s *Service) ListWorktreeRecoveries(ctx context.Context, req *connect.Reque
 	})
 	out := &pb.ListWorktreeRecoveriesResponse{}
 	for _, row := range rows {
-		if req.Msg.GetSourceWorktreeId() == "" || row.SourceWorktreeID == req.Msg.GetSourceWorktreeId() {
+		if req.GetSourceWorktreeId() == "" || row.SourceWorktreeID == req.GetSourceWorktreeId() {
 			out.Recoveries = append(out.Recoveries, recoveryToProto(row))
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // recoveryInstallationPath never treats a project's path on one machine as an
@@ -243,12 +242,12 @@ func (s *Service) restoreRecovery(ctx context.Context, req *pb.RestoreWorktreeRe
 	return &pb.RestoreWorktreeRecoveryResponse{Recovery: recoveryToProto(row), WorktreeId: wt.ID}, nil
 }
 
-func (s *Service) DeleteWorktreeRecovery(ctx context.Context, req *connect.Request[pb.DeleteWorktreeRecoveryRequest]) (*connect.Response[pb.DeleteWorktreeRecoveryResponse], error) {
+func (s *Service) DeleteWorktreeRecovery(ctx context.Context, req *pb.DeleteWorktreeRecoveryRequest) (*pb.DeleteWorktreeRecoveryResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	if req.Msg.RecoveryId == "" || req.Msg.IdempotencyKey == "" {
+	if req.RecoveryId == "" || req.IdempotencyKey == "" {
 		return nil, svcerr.InvalidArgument("recovery_id and idempotency_key required")
 	}
-	row, err := s.deps.Repo.GetWorktreeRecovery(ctx, userID, req.Msg.RecoveryId)
+	row, err := s.deps.Repo.GetWorktreeRecovery(ctx, userID, req.RecoveryId)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -256,7 +255,7 @@ func (s *Service) DeleteWorktreeRecovery(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, err
 	}
-	if err := s.deps.Repo.BeginWorktreeRecoveryOperation(ctx, userID, row.ID, "deletion_requested", req.Msg.IdempotencyKey, ""); err != nil {
+	if err := s.deps.Repo.BeginWorktreeRecoveryOperation(ctx, userID, row.ID, "deletion_requested", req.IdempotencyKey, ""); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	// No source filesystem is needed. Any CURRENT owner daemon can perform the
@@ -300,13 +299,13 @@ func (s *Service) DeleteWorktreeRecovery(ctx context.Context, req *connect.Reque
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	return connect.NewResponse(&pb.DeleteWorktreeRecoveryResponse{Recovery: recoveryToProto(row)}), nil
+	return &pb.DeleteWorktreeRecoveryResponse{Recovery: recoveryToProto(row)}, nil
 }
 
-func (s *Service) RestoreWorktreeRecovery(ctx context.Context, req *connect.Request[pb.RestoreWorktreeRecoveryRequest]) (*connect.Response[pb.RestoreWorktreeRecoveryResponse], error) {
-	out, err := s.restoreRecovery(ctx, req.Msg)
+func (s *Service) RestoreWorktreeRecovery(ctx context.Context, req *pb.RestoreWorktreeRecoveryRequest) (*pb.RestoreWorktreeRecoveryResponse, error) {
+	out, err := s.restoreRecovery(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

@@ -5,66 +5,135 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/issues/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// IssuesServiceName is the fully-qualified name of the IssuesService service.
 	IssuesServiceName = "controlplane.v1.IssuesService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// IssuesServiceListIssuesProcedure is the fully-qualified name of the IssuesService's ListIssues
-	// RPC.
+	// IssuesServiceListIssuesProcedure is the procedure name of the IssuesService's ListIssues RPC.
 	IssuesServiceListIssuesProcedure = "/controlplane.v1.IssuesService/ListIssues"
-	// IssuesServiceGetIssueProcedure is the fully-qualified name of the IssuesService's GetIssue RPC.
+	// IssuesServiceGetIssueProcedure is the procedure name of the IssuesService's GetIssue RPC.
 	IssuesServiceGetIssueProcedure = "/controlplane.v1.IssuesService/GetIssue"
-	// IssuesServiceListIssueEventsProcedure is the fully-qualified name of the IssuesService's
+	// IssuesServiceListIssueEventsProcedure is the procedure name of the IssuesService's
 	// ListIssueEvents RPC.
 	IssuesServiceListIssueEventsProcedure = "/controlplane.v1.IssuesService/ListIssueEvents"
-	// IssuesServiceUpdateIssueStatusProcedure is the fully-qualified name of the IssuesService's
+	// IssuesServiceUpdateIssueStatusProcedure is the procedure name of the IssuesService's
 	// UpdateIssueStatus RPC.
 	IssuesServiceUpdateIssueStatusProcedure = "/controlplane.v1.IssuesService/UpdateIssueStatus"
-	// IssuesServiceAddIssueCommentProcedure is the fully-qualified name of the IssuesService's
+	// IssuesServiceAddIssueCommentProcedure is the procedure name of the IssuesService's
 	// AddIssueComment RPC.
 	IssuesServiceAddIssueCommentProcedure = "/controlplane.v1.IssuesService/AddIssueComment"
-	// IssuesServiceUpdateIssueCommentProcedure is the fully-qualified name of the IssuesService's
+	// IssuesServiceUpdateIssueCommentProcedure is the procedure name of the IssuesService's
 	// UpdateIssueComment RPC.
 	IssuesServiceUpdateIssueCommentProcedure = "/controlplane.v1.IssuesService/UpdateIssueComment"
-	// IssuesServiceDeleteIssueCommentProcedure is the fully-qualified name of the IssuesService's
+	// IssuesServiceDeleteIssueCommentProcedure is the procedure name of the IssuesService's
 	// DeleteIssueComment RPC.
 	IssuesServiceDeleteIssueCommentProcedure = "/controlplane.v1.IssuesService/DeleteIssueComment"
-	// IssuesServiceAssignIssueProcedure is the fully-qualified name of the IssuesService's AssignIssue
-	// RPC.
+	// IssuesServiceAssignIssueProcedure is the procedure name of the IssuesService's AssignIssue RPC.
 	IssuesServiceAssignIssueProcedure = "/controlplane.v1.IssuesService/AssignIssue"
-	// IssuesServiceLinkIssueChatProcedure is the fully-qualified name of the IssuesService's
-	// LinkIssueChat RPC.
+	// IssuesServiceLinkIssueChatProcedure is the procedure name of the IssuesService's LinkIssueChat
+	// RPC.
 	IssuesServiceLinkIssueChatProcedure = "/controlplane.v1.IssuesService/LinkIssueChat"
-	// IssuesServiceListAssignableUsersProcedure is the fully-qualified name of the IssuesService's
+	// IssuesServiceListAssignableUsersProcedure is the procedure name of the IssuesService's
 	// ListAssignableUsers RPC.
 	IssuesServiceListAssignableUsersProcedure = "/controlplane.v1.IssuesService/ListAssignableUsers"
-	// IssuesServiceListIssueTimelineProcedure is the fully-qualified name of the IssuesService's
+	// IssuesServiceListIssueTimelineProcedure is the procedure name of the IssuesService's
 	// ListIssueTimeline RPC.
 	IssuesServiceListIssueTimelineProcedure = "/controlplane.v1.IssuesService/ListIssueTimeline"
+)
+
+var (
+	issuesServiceListIssuesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("ListIssues"),
+			Procedure:  IssuesServiceListIssuesProcedure,
+		}
+	})
+	issuesServiceGetIssueSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("GetIssue"),
+			Procedure:  IssuesServiceGetIssueProcedure,
+		}
+	})
+	issuesServiceListIssueEventsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("ListIssueEvents"),
+			Procedure:  IssuesServiceListIssueEventsProcedure,
+		}
+	})
+	issuesServiceUpdateIssueStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("UpdateIssueStatus"),
+			Procedure:  IssuesServiceUpdateIssueStatusProcedure,
+		}
+	})
+	issuesServiceAddIssueCommentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("AddIssueComment"),
+			Procedure:  IssuesServiceAddIssueCommentProcedure,
+		}
+	})
+	issuesServiceUpdateIssueCommentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("UpdateIssueComment"),
+			Procedure:  IssuesServiceUpdateIssueCommentProcedure,
+		}
+	})
+	issuesServiceDeleteIssueCommentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("DeleteIssueComment"),
+			Procedure:  IssuesServiceDeleteIssueCommentProcedure,
+		}
+	})
+	issuesServiceAssignIssueSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("AssignIssue"),
+			Procedure:  IssuesServiceAssignIssueProcedure,
+		}
+	})
+	issuesServiceLinkIssueChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("LinkIssueChat"),
+			Procedure:  IssuesServiceLinkIssueChatProcedure,
+		}
+	})
+	issuesServiceListAssignableUsersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("ListAssignableUsers"),
+			Procedure:  IssuesServiceListAssignableUsersProcedure,
+		}
+	})
+	issuesServiceListIssueTimelineSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods().ByName("ListIssueTimeline"),
+			Procedure:  IssuesServiceListIssueTimelineProcedure,
+		}
+	})
 )
 
 // IssuesServiceClient is a client for the controlplane.v1.IssuesService service.
@@ -74,202 +143,58 @@ type IssuesServiceClient interface {
 	//
 	// forge:custom — an issue is not an entity of the generic CRUD kit: its rows
 	// are written by the issues worker and read through the grouping queries.
-	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
+	ListIssues(context.Context, *v1.ListIssuesRequest) (*v1.ListIssuesResponse, error)
 	// GetIssue returns one issue with its latest event, its symbolicated frames,
 	// the per-version breakdown, the issues that tend to occur with it, and the
 	// release it first appeared in.
 	//
 	// forge:custom — see ListIssues.
-	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
+	GetIssue(context.Context, *v1.GetIssueRequest) (*v1.GetIssueResponse, error)
 	// ListIssueEvents returns the individual events of one issue, newest first.
-	ListIssueEvents(context.Context, *connect.Request[v1.ListIssueEventsRequest]) (*connect.Response[v1.ListIssueEventsResponse], error)
+	ListIssueEvents(context.Context, *v1.ListIssueEventsRequest) (*v1.ListIssueEventsResponse, error)
 	// UpdateIssueStatus resolves, ignores or reopens an issue. A person or a
 	// machine credential with obs:triage.
 	//
 	// The event the call records is the specific transition (resolve, ignore or
 	// unresolve); the declared verb is the fallback the activity interceptor
 	// writes when the handler records none.
-	UpdateIssueStatus(context.Context, *connect.Request[v1.UpdateIssueStatusRequest]) (*connect.Response[v1.UpdateIssueStatusResponse], error)
+	UpdateIssueStatus(context.Context, *v1.UpdateIssueStatusRequest) (*v1.UpdateIssueStatusResponse, error)
 	// AddIssueComment adds a comment to an issue. The body is plain text or
 	// markdown, stored verbatim (at most 10000 characters); clients render it
 	// safely.
-	AddIssueComment(context.Context, *connect.Request[v1.AddIssueCommentRequest]) (*connect.Response[v1.AddIssueCommentResponse], error)
+	AddIssueComment(context.Context, *v1.AddIssueCommentRequest) (*v1.AddIssueCommentResponse, error)
 	// UpdateIssueComment replaces the body of a comment. Its author only.
-	UpdateIssueComment(context.Context, *connect.Request[v1.UpdateIssueCommentRequest]) (*connect.Response[v1.UpdateIssueCommentResponse], error)
+	UpdateIssueComment(context.Context, *v1.UpdateIssueCommentRequest) (*v1.UpdateIssueCommentResponse, error)
 	// DeleteIssueComment removes a comment from the timeline (it is kept, hidden).
 	// Its author, or an owner or admin of the org.
-	DeleteIssueComment(context.Context, *connect.Request[v1.DeleteIssueCommentRequest]) (*connect.Response[v1.DeleteIssueCommentResponse], error)
+	DeleteIssueComment(context.Context, *v1.DeleteIssueCommentRequest) (*v1.DeleteIssueCommentResponse, error)
 	// AssignIssue sets or clears the issue's assignee. The assignee must be a
 	// member of the issue's org. It bumps Issue.version, and a stale
 	// expected_version is Aborted, exactly as UpdateIssueStatus.
-	AssignIssue(context.Context, *connect.Request[v1.AssignIssueRequest]) (*connect.Response[v1.AssignIssueResponse], error)
+	AssignIssue(context.Context, *v1.AssignIssueRequest) (*v1.AssignIssueResponse, error)
 	// LinkIssueChat records that a chat was started from the issue ("Ask
 	// Reliant"). Idempotent per (issue, chat): linking a chat again changes
 	// nothing but a non-empty title, and writes no new timeline entry.
-	LinkIssueChat(context.Context, *connect.Request[v1.LinkIssueChatRequest]) (*connect.Response[v1.LinkIssueChatResponse], error)
+	LinkIssueChat(context.Context, *v1.LinkIssueChatRequest) (*v1.LinkIssueChatResponse, error)
 	// ListAssignableUsers returns the people an issue of the org can be assigned
 	// to: its members, as {id, name} and nothing else, ordered by name. A person
 	// needs membership of the org (any role); a machine credential needs obs:read
 	// and to act for that org. Served from Postgres alone. This is the read an
 	// assignee picker uses; the member list with grants and emails
 	// (ListOrgMemberGrants) needs token:read.
-	ListAssignableUsers(context.Context, *connect.Request[v1.ListAssignableUsersRequest]) (*connect.Response[v1.ListAssignableUsersResponse], error)
+	ListAssignableUsers(context.Context, *v1.ListAssignableUsersRequest) (*v1.ListAssignableUsersResponse, error)
 	// ListIssueTimeline returns the issue's timeline, oldest first: status changes
 	// (opened, resolved, ignored, reopened, regressed), comments, assignment
 	// changes and linked chats. Deleted comments are not in it. Served from
 	// Postgres alone. A person needs org membership, a machine credential
 	// obs:read.
-	ListIssueTimeline(context.Context, *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error)
+	ListIssueTimeline(context.Context, *v1.ListIssueTimelineRequest) (*v1.ListIssueTimelineResponse, error)
 }
 
-// NewIssuesServiceClient constructs a client for the controlplane.v1.IssuesService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) IssuesServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	issuesServiceMethods := v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods()
-	return &issuesServiceClient{
-		listIssues: connect.NewClient[v1.ListIssuesRequest, v1.ListIssuesResponse](
-			httpClient,
-			baseURL+IssuesServiceListIssuesProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("ListIssues")),
-			connect.WithClientOptions(opts...),
-		),
-		getIssue: connect.NewClient[v1.GetIssueRequest, v1.GetIssueResponse](
-			httpClient,
-			baseURL+IssuesServiceGetIssueProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("GetIssue")),
-			connect.WithClientOptions(opts...),
-		),
-		listIssueEvents: connect.NewClient[v1.ListIssueEventsRequest, v1.ListIssueEventsResponse](
-			httpClient,
-			baseURL+IssuesServiceListIssueEventsProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("ListIssueEvents")),
-			connect.WithClientOptions(opts...),
-		),
-		updateIssueStatus: connect.NewClient[v1.UpdateIssueStatusRequest, v1.UpdateIssueStatusResponse](
-			httpClient,
-			baseURL+IssuesServiceUpdateIssueStatusProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("UpdateIssueStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		addIssueComment: connect.NewClient[v1.AddIssueCommentRequest, v1.AddIssueCommentResponse](
-			httpClient,
-			baseURL+IssuesServiceAddIssueCommentProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("AddIssueComment")),
-			connect.WithClientOptions(opts...),
-		),
-		updateIssueComment: connect.NewClient[v1.UpdateIssueCommentRequest, v1.UpdateIssueCommentResponse](
-			httpClient,
-			baseURL+IssuesServiceUpdateIssueCommentProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("UpdateIssueComment")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteIssueComment: connect.NewClient[v1.DeleteIssueCommentRequest, v1.DeleteIssueCommentResponse](
-			httpClient,
-			baseURL+IssuesServiceDeleteIssueCommentProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("DeleteIssueComment")),
-			connect.WithClientOptions(opts...),
-		),
-		assignIssue: connect.NewClient[v1.AssignIssueRequest, v1.AssignIssueResponse](
-			httpClient,
-			baseURL+IssuesServiceAssignIssueProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("AssignIssue")),
-			connect.WithClientOptions(opts...),
-		),
-		linkIssueChat: connect.NewClient[v1.LinkIssueChatRequest, v1.LinkIssueChatResponse](
-			httpClient,
-			baseURL+IssuesServiceLinkIssueChatProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("LinkIssueChat")),
-			connect.WithClientOptions(opts...),
-		),
-		listAssignableUsers: connect.NewClient[v1.ListAssignableUsersRequest, v1.ListAssignableUsersResponse](
-			httpClient,
-			baseURL+IssuesServiceListAssignableUsersProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("ListAssignableUsers")),
-			connect.WithClientOptions(opts...),
-		),
-		listIssueTimeline: connect.NewClient[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse](
-			httpClient,
-			baseURL+IssuesServiceListIssueTimelineProcedure,
-			connect.WithSchema(issuesServiceMethods.ByName("ListIssueTimeline")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// issuesServiceClient implements IssuesServiceClient.
-type issuesServiceClient struct {
-	listIssues          *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
-	getIssue            *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
-	listIssueEvents     *connect.Client[v1.ListIssueEventsRequest, v1.ListIssueEventsResponse]
-	updateIssueStatus   *connect.Client[v1.UpdateIssueStatusRequest, v1.UpdateIssueStatusResponse]
-	addIssueComment     *connect.Client[v1.AddIssueCommentRequest, v1.AddIssueCommentResponse]
-	updateIssueComment  *connect.Client[v1.UpdateIssueCommentRequest, v1.UpdateIssueCommentResponse]
-	deleteIssueComment  *connect.Client[v1.DeleteIssueCommentRequest, v1.DeleteIssueCommentResponse]
-	assignIssue         *connect.Client[v1.AssignIssueRequest, v1.AssignIssueResponse]
-	linkIssueChat       *connect.Client[v1.LinkIssueChatRequest, v1.LinkIssueChatResponse]
-	listAssignableUsers *connect.Client[v1.ListAssignableUsersRequest, v1.ListAssignableUsersResponse]
-	listIssueTimeline   *connect.Client[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse]
-}
-
-// ListIssues calls controlplane.v1.IssuesService.ListIssues.
-func (c *issuesServiceClient) ListIssues(ctx context.Context, req *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error) {
-	return c.listIssues.CallUnary(ctx, req)
-}
-
-// GetIssue calls controlplane.v1.IssuesService.GetIssue.
-func (c *issuesServiceClient) GetIssue(ctx context.Context, req *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error) {
-	return c.getIssue.CallUnary(ctx, req)
-}
-
-// ListIssueEvents calls controlplane.v1.IssuesService.ListIssueEvents.
-func (c *issuesServiceClient) ListIssueEvents(ctx context.Context, req *connect.Request[v1.ListIssueEventsRequest]) (*connect.Response[v1.ListIssueEventsResponse], error) {
-	return c.listIssueEvents.CallUnary(ctx, req)
-}
-
-// UpdateIssueStatus calls controlplane.v1.IssuesService.UpdateIssueStatus.
-func (c *issuesServiceClient) UpdateIssueStatus(ctx context.Context, req *connect.Request[v1.UpdateIssueStatusRequest]) (*connect.Response[v1.UpdateIssueStatusResponse], error) {
-	return c.updateIssueStatus.CallUnary(ctx, req)
-}
-
-// AddIssueComment calls controlplane.v1.IssuesService.AddIssueComment.
-func (c *issuesServiceClient) AddIssueComment(ctx context.Context, req *connect.Request[v1.AddIssueCommentRequest]) (*connect.Response[v1.AddIssueCommentResponse], error) {
-	return c.addIssueComment.CallUnary(ctx, req)
-}
-
-// UpdateIssueComment calls controlplane.v1.IssuesService.UpdateIssueComment.
-func (c *issuesServiceClient) UpdateIssueComment(ctx context.Context, req *connect.Request[v1.UpdateIssueCommentRequest]) (*connect.Response[v1.UpdateIssueCommentResponse], error) {
-	return c.updateIssueComment.CallUnary(ctx, req)
-}
-
-// DeleteIssueComment calls controlplane.v1.IssuesService.DeleteIssueComment.
-func (c *issuesServiceClient) DeleteIssueComment(ctx context.Context, req *connect.Request[v1.DeleteIssueCommentRequest]) (*connect.Response[v1.DeleteIssueCommentResponse], error) {
-	return c.deleteIssueComment.CallUnary(ctx, req)
-}
-
-// AssignIssue calls controlplane.v1.IssuesService.AssignIssue.
-func (c *issuesServiceClient) AssignIssue(ctx context.Context, req *connect.Request[v1.AssignIssueRequest]) (*connect.Response[v1.AssignIssueResponse], error) {
-	return c.assignIssue.CallUnary(ctx, req)
-}
-
-// LinkIssueChat calls controlplane.v1.IssuesService.LinkIssueChat.
-func (c *issuesServiceClient) LinkIssueChat(ctx context.Context, req *connect.Request[v1.LinkIssueChatRequest]) (*connect.Response[v1.LinkIssueChatResponse], error) {
-	return c.linkIssueChat.CallUnary(ctx, req)
-}
-
-// ListAssignableUsers calls controlplane.v1.IssuesService.ListAssignableUsers.
-func (c *issuesServiceClient) ListAssignableUsers(ctx context.Context, req *connect.Request[v1.ListAssignableUsersRequest]) (*connect.Response[v1.ListAssignableUsersResponse], error) {
-	return c.listAssignableUsers.CallUnary(ctx, req)
-}
-
-// ListIssueTimeline calls controlplane.v1.IssuesService.ListIssueTimeline.
-func (c *issuesServiceClient) ListIssueTimeline(ctx context.Context, req *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error) {
-	return c.listIssueTimeline.CallUnary(ctx, req)
+// NewIssuesServiceClient constructs a client for the controlplane.v1.IssuesService service.
+// Multiple service clients may share a single connect.Client.
+func NewIssuesServiceClient(client *connect.Client) IssuesServiceClient {
+	return &issuesServiceClient{client: client}
 }
 
 // IssuesServiceHandler is an implementation of the controlplane.v1.IssuesService service.
@@ -279,200 +204,342 @@ type IssuesServiceHandler interface {
 	//
 	// forge:custom — an issue is not an entity of the generic CRUD kit: its rows
 	// are written by the issues worker and read through the grouping queries.
-	ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error)
+	ListIssues(context.Context, *v1.ListIssuesRequest) (*v1.ListIssuesResponse, error)
 	// GetIssue returns one issue with its latest event, its symbolicated frames,
 	// the per-version breakdown, the issues that tend to occur with it, and the
 	// release it first appeared in.
 	//
 	// forge:custom — see ListIssues.
-	GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error)
+	GetIssue(context.Context, *v1.GetIssueRequest) (*v1.GetIssueResponse, error)
 	// ListIssueEvents returns the individual events of one issue, newest first.
-	ListIssueEvents(context.Context, *connect.Request[v1.ListIssueEventsRequest]) (*connect.Response[v1.ListIssueEventsResponse], error)
+	ListIssueEvents(context.Context, *v1.ListIssueEventsRequest) (*v1.ListIssueEventsResponse, error)
 	// UpdateIssueStatus resolves, ignores or reopens an issue. A person or a
 	// machine credential with obs:triage.
 	//
 	// The event the call records is the specific transition (resolve, ignore or
 	// unresolve); the declared verb is the fallback the activity interceptor
 	// writes when the handler records none.
-	UpdateIssueStatus(context.Context, *connect.Request[v1.UpdateIssueStatusRequest]) (*connect.Response[v1.UpdateIssueStatusResponse], error)
+	UpdateIssueStatus(context.Context, *v1.UpdateIssueStatusRequest) (*v1.UpdateIssueStatusResponse, error)
 	// AddIssueComment adds a comment to an issue. The body is plain text or
 	// markdown, stored verbatim (at most 10000 characters); clients render it
 	// safely.
-	AddIssueComment(context.Context, *connect.Request[v1.AddIssueCommentRequest]) (*connect.Response[v1.AddIssueCommentResponse], error)
+	AddIssueComment(context.Context, *v1.AddIssueCommentRequest) (*v1.AddIssueCommentResponse, error)
 	// UpdateIssueComment replaces the body of a comment. Its author only.
-	UpdateIssueComment(context.Context, *connect.Request[v1.UpdateIssueCommentRequest]) (*connect.Response[v1.UpdateIssueCommentResponse], error)
+	UpdateIssueComment(context.Context, *v1.UpdateIssueCommentRequest) (*v1.UpdateIssueCommentResponse, error)
 	// DeleteIssueComment removes a comment from the timeline (it is kept, hidden).
 	// Its author, or an owner or admin of the org.
-	DeleteIssueComment(context.Context, *connect.Request[v1.DeleteIssueCommentRequest]) (*connect.Response[v1.DeleteIssueCommentResponse], error)
+	DeleteIssueComment(context.Context, *v1.DeleteIssueCommentRequest) (*v1.DeleteIssueCommentResponse, error)
 	// AssignIssue sets or clears the issue's assignee. The assignee must be a
 	// member of the issue's org. It bumps Issue.version, and a stale
 	// expected_version is Aborted, exactly as UpdateIssueStatus.
-	AssignIssue(context.Context, *connect.Request[v1.AssignIssueRequest]) (*connect.Response[v1.AssignIssueResponse], error)
+	AssignIssue(context.Context, *v1.AssignIssueRequest) (*v1.AssignIssueResponse, error)
 	// LinkIssueChat records that a chat was started from the issue ("Ask
 	// Reliant"). Idempotent per (issue, chat): linking a chat again changes
 	// nothing but a non-empty title, and writes no new timeline entry.
-	LinkIssueChat(context.Context, *connect.Request[v1.LinkIssueChatRequest]) (*connect.Response[v1.LinkIssueChatResponse], error)
+	LinkIssueChat(context.Context, *v1.LinkIssueChatRequest) (*v1.LinkIssueChatResponse, error)
 	// ListAssignableUsers returns the people an issue of the org can be assigned
 	// to: its members, as {id, name} and nothing else, ordered by name. A person
 	// needs membership of the org (any role); a machine credential needs obs:read
 	// and to act for that org. Served from Postgres alone. This is the read an
 	// assignee picker uses; the member list with grants and emails
 	// (ListOrgMemberGrants) needs token:read.
-	ListAssignableUsers(context.Context, *connect.Request[v1.ListAssignableUsersRequest]) (*connect.Response[v1.ListAssignableUsersResponse], error)
+	ListAssignableUsers(context.Context, *v1.ListAssignableUsersRequest) (*v1.ListAssignableUsersResponse, error)
 	// ListIssueTimeline returns the issue's timeline, oldest first: status changes
 	// (opened, resolved, ignored, reopened, regressed), comments, assignment
 	// changes and linked chats. Deleted comments are not in it. Served from
 	// Postgres alone. A person needs org membership, a machine credential
 	// obs:read.
-	ListIssueTimeline(context.Context, *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error)
+	ListIssueTimeline(context.Context, *v1.ListIssueTimelineRequest) (*v1.ListIssueTimelineResponse, error)
 }
 
-// NewIssuesServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	issuesServiceMethods := v1.File_services_issues_v1_issues_proto.Services().ByName("IssuesService").Methods()
-	issuesServiceListIssuesHandler := connect.NewUnaryHandler(
-		IssuesServiceListIssuesProcedure,
-		svc.ListIssues,
-		connect.WithSchema(issuesServiceMethods.ByName("ListIssues")),
-		connect.WithHandlerOptions(opts...),
+// RegisterIssuesServiceHandler registers svc as the controlplane.v1.IssuesService implementation on
+// server.
+func RegisterIssuesServiceHandler(server *connect.Server, svc IssuesServiceHandler) {
+	adapter := issuesServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: issuesServiceListIssuesSpec(), Handler: adapter.listIssues},
+		connect.Method{Spec: issuesServiceGetIssueSpec(), Handler: adapter.getIssue},
+		connect.Method{Spec: issuesServiceListIssueEventsSpec(), Handler: adapter.listIssueEvents},
+		connect.Method{Spec: issuesServiceUpdateIssueStatusSpec(), Handler: adapter.updateIssueStatus},
+		connect.Method{Spec: issuesServiceAddIssueCommentSpec(), Handler: adapter.addIssueComment},
+		connect.Method{Spec: issuesServiceUpdateIssueCommentSpec(), Handler: adapter.updateIssueComment},
+		connect.Method{Spec: issuesServiceDeleteIssueCommentSpec(), Handler: adapter.deleteIssueComment},
+		connect.Method{Spec: issuesServiceAssignIssueSpec(), Handler: adapter.assignIssue},
+		connect.Method{Spec: issuesServiceLinkIssueChatSpec(), Handler: adapter.linkIssueChat},
+		connect.Method{Spec: issuesServiceListAssignableUsersSpec(), Handler: adapter.listAssignableUsers},
+		connect.Method{Spec: issuesServiceListIssueTimelineSpec(), Handler: adapter.listIssueTimeline},
 	)
-	issuesServiceGetIssueHandler := connect.NewUnaryHandler(
-		IssuesServiceGetIssueProcedure,
-		svc.GetIssue,
-		connect.WithSchema(issuesServiceMethods.ByName("GetIssue")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceListIssueEventsHandler := connect.NewUnaryHandler(
-		IssuesServiceListIssueEventsProcedure,
-		svc.ListIssueEvents,
-		connect.WithSchema(issuesServiceMethods.ByName("ListIssueEvents")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceUpdateIssueStatusHandler := connect.NewUnaryHandler(
-		IssuesServiceUpdateIssueStatusProcedure,
-		svc.UpdateIssueStatus,
-		connect.WithSchema(issuesServiceMethods.ByName("UpdateIssueStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceAddIssueCommentHandler := connect.NewUnaryHandler(
-		IssuesServiceAddIssueCommentProcedure,
-		svc.AddIssueComment,
-		connect.WithSchema(issuesServiceMethods.ByName("AddIssueComment")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceUpdateIssueCommentHandler := connect.NewUnaryHandler(
-		IssuesServiceUpdateIssueCommentProcedure,
-		svc.UpdateIssueComment,
-		connect.WithSchema(issuesServiceMethods.ByName("UpdateIssueComment")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceDeleteIssueCommentHandler := connect.NewUnaryHandler(
-		IssuesServiceDeleteIssueCommentProcedure,
-		svc.DeleteIssueComment,
-		connect.WithSchema(issuesServiceMethods.ByName("DeleteIssueComment")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceAssignIssueHandler := connect.NewUnaryHandler(
-		IssuesServiceAssignIssueProcedure,
-		svc.AssignIssue,
-		connect.WithSchema(issuesServiceMethods.ByName("AssignIssue")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceLinkIssueChatHandler := connect.NewUnaryHandler(
-		IssuesServiceLinkIssueChatProcedure,
-		svc.LinkIssueChat,
-		connect.WithSchema(issuesServiceMethods.ByName("LinkIssueChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceListAssignableUsersHandler := connect.NewUnaryHandler(
-		IssuesServiceListAssignableUsersProcedure,
-		svc.ListAssignableUsers,
-		connect.WithSchema(issuesServiceMethods.ByName("ListAssignableUsers")),
-		connect.WithHandlerOptions(opts...),
-	)
-	issuesServiceListIssueTimelineHandler := connect.NewUnaryHandler(
-		IssuesServiceListIssueTimelineProcedure,
-		svc.ListIssueTimeline,
-		connect.WithSchema(issuesServiceMethods.ByName("ListIssueTimeline")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.IssuesService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case IssuesServiceListIssuesProcedure:
-			issuesServiceListIssuesHandler.ServeHTTP(w, r)
-		case IssuesServiceGetIssueProcedure:
-			issuesServiceGetIssueHandler.ServeHTTP(w, r)
-		case IssuesServiceListIssueEventsProcedure:
-			issuesServiceListIssueEventsHandler.ServeHTTP(w, r)
-		case IssuesServiceUpdateIssueStatusProcedure:
-			issuesServiceUpdateIssueStatusHandler.ServeHTTP(w, r)
-		case IssuesServiceAddIssueCommentProcedure:
-			issuesServiceAddIssueCommentHandler.ServeHTTP(w, r)
-		case IssuesServiceUpdateIssueCommentProcedure:
-			issuesServiceUpdateIssueCommentHandler.ServeHTTP(w, r)
-		case IssuesServiceDeleteIssueCommentProcedure:
-			issuesServiceDeleteIssueCommentHandler.ServeHTTP(w, r)
-		case IssuesServiceAssignIssueProcedure:
-			issuesServiceAssignIssueHandler.ServeHTTP(w, r)
-		case IssuesServiceLinkIssueChatProcedure:
-			issuesServiceLinkIssueChatHandler.ServeHTTP(w, r)
-		case IssuesServiceListAssignableUsersProcedure:
-			issuesServiceListAssignableUsersHandler.ServeHTTP(w, r)
-		case IssuesServiceListIssueTimelineProcedure:
-			issuesServiceListIssueTimelineHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedIssuesServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedIssuesServiceHandler struct{}
 
-func (UnimplementedIssuesServiceHandler) ListIssues(context.Context, *connect.Request[v1.ListIssuesRequest]) (*connect.Response[v1.ListIssuesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.ListIssues is not implemented"))
+func (UnimplementedIssuesServiceHandler) ListIssues(context.Context, *v1.ListIssuesRequest) (*v1.ListIssuesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.ListIssues is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) GetIssue(context.Context, *connect.Request[v1.GetIssueRequest]) (*connect.Response[v1.GetIssueResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.GetIssue is not implemented"))
+func (UnimplementedIssuesServiceHandler) GetIssue(context.Context, *v1.GetIssueRequest) (*v1.GetIssueResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.GetIssue is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) ListIssueEvents(context.Context, *connect.Request[v1.ListIssueEventsRequest]) (*connect.Response[v1.ListIssueEventsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.ListIssueEvents is not implemented"))
+func (UnimplementedIssuesServiceHandler) ListIssueEvents(context.Context, *v1.ListIssueEventsRequest) (*v1.ListIssueEventsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.ListIssueEvents is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) UpdateIssueStatus(context.Context, *connect.Request[v1.UpdateIssueStatusRequest]) (*connect.Response[v1.UpdateIssueStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.UpdateIssueStatus is not implemented"))
+func (UnimplementedIssuesServiceHandler) UpdateIssueStatus(context.Context, *v1.UpdateIssueStatusRequest) (*v1.UpdateIssueStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.UpdateIssueStatus is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) AddIssueComment(context.Context, *connect.Request[v1.AddIssueCommentRequest]) (*connect.Response[v1.AddIssueCommentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.AddIssueComment is not implemented"))
+func (UnimplementedIssuesServiceHandler) AddIssueComment(context.Context, *v1.AddIssueCommentRequest) (*v1.AddIssueCommentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.AddIssueComment is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) UpdateIssueComment(context.Context, *connect.Request[v1.UpdateIssueCommentRequest]) (*connect.Response[v1.UpdateIssueCommentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.UpdateIssueComment is not implemented"))
+func (UnimplementedIssuesServiceHandler) UpdateIssueComment(context.Context, *v1.UpdateIssueCommentRequest) (*v1.UpdateIssueCommentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.UpdateIssueComment is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) DeleteIssueComment(context.Context, *connect.Request[v1.DeleteIssueCommentRequest]) (*connect.Response[v1.DeleteIssueCommentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.DeleteIssueComment is not implemented"))
+func (UnimplementedIssuesServiceHandler) DeleteIssueComment(context.Context, *v1.DeleteIssueCommentRequest) (*v1.DeleteIssueCommentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.DeleteIssueComment is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) AssignIssue(context.Context, *connect.Request[v1.AssignIssueRequest]) (*connect.Response[v1.AssignIssueResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.AssignIssue is not implemented"))
+func (UnimplementedIssuesServiceHandler) AssignIssue(context.Context, *v1.AssignIssueRequest) (*v1.AssignIssueResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.AssignIssue is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) LinkIssueChat(context.Context, *connect.Request[v1.LinkIssueChatRequest]) (*connect.Response[v1.LinkIssueChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.LinkIssueChat is not implemented"))
+func (UnimplementedIssuesServiceHandler) LinkIssueChat(context.Context, *v1.LinkIssueChatRequest) (*v1.LinkIssueChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.LinkIssueChat is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) ListAssignableUsers(context.Context, *connect.Request[v1.ListAssignableUsersRequest]) (*connect.Response[v1.ListAssignableUsersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.ListAssignableUsers is not implemented"))
+func (UnimplementedIssuesServiceHandler) ListAssignableUsers(context.Context, *v1.ListAssignableUsersRequest) (*v1.ListAssignableUsersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.ListAssignableUsers is not implemented")
 }
 
-func (UnimplementedIssuesServiceHandler) ListIssueTimeline(context.Context, *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.ListIssueTimeline is not implemented"))
+func (UnimplementedIssuesServiceHandler) ListIssueTimeline(context.Context, *v1.ListIssueTimelineRequest) (*v1.ListIssueTimelineResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IssuesService.ListIssueTimeline is not implemented")
+}
+
+type issuesServiceClient struct {
+	client *connect.Client
+}
+
+func (c *issuesServiceClient) ListIssues(ctx context.Context, req *v1.ListIssuesRequest) (*v1.ListIssuesResponse, error) {
+	var res v1.ListIssuesResponse
+	if err := c.client.CallUnary(ctx, issuesServiceListIssuesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) GetIssue(ctx context.Context, req *v1.GetIssueRequest) (*v1.GetIssueResponse, error) {
+	var res v1.GetIssueResponse
+	if err := c.client.CallUnary(ctx, issuesServiceGetIssueSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) ListIssueEvents(ctx context.Context, req *v1.ListIssueEventsRequest) (*v1.ListIssueEventsResponse, error) {
+	var res v1.ListIssueEventsResponse
+	if err := c.client.CallUnary(ctx, issuesServiceListIssueEventsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) UpdateIssueStatus(ctx context.Context, req *v1.UpdateIssueStatusRequest) (*v1.UpdateIssueStatusResponse, error) {
+	var res v1.UpdateIssueStatusResponse
+	if err := c.client.CallUnary(ctx, issuesServiceUpdateIssueStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) AddIssueComment(ctx context.Context, req *v1.AddIssueCommentRequest) (*v1.AddIssueCommentResponse, error) {
+	var res v1.AddIssueCommentResponse
+	if err := c.client.CallUnary(ctx, issuesServiceAddIssueCommentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) UpdateIssueComment(ctx context.Context, req *v1.UpdateIssueCommentRequest) (*v1.UpdateIssueCommentResponse, error) {
+	var res v1.UpdateIssueCommentResponse
+	if err := c.client.CallUnary(ctx, issuesServiceUpdateIssueCommentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) DeleteIssueComment(ctx context.Context, req *v1.DeleteIssueCommentRequest) (*v1.DeleteIssueCommentResponse, error) {
+	var res v1.DeleteIssueCommentResponse
+	if err := c.client.CallUnary(ctx, issuesServiceDeleteIssueCommentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) AssignIssue(ctx context.Context, req *v1.AssignIssueRequest) (*v1.AssignIssueResponse, error) {
+	var res v1.AssignIssueResponse
+	if err := c.client.CallUnary(ctx, issuesServiceAssignIssueSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) LinkIssueChat(ctx context.Context, req *v1.LinkIssueChatRequest) (*v1.LinkIssueChatResponse, error) {
+	var res v1.LinkIssueChatResponse
+	if err := c.client.CallUnary(ctx, issuesServiceLinkIssueChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) ListAssignableUsers(ctx context.Context, req *v1.ListAssignableUsersRequest) (*v1.ListAssignableUsersResponse, error) {
+	var res v1.ListAssignableUsersResponse
+	if err := c.client.CallUnary(ctx, issuesServiceListAssignableUsersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *issuesServiceClient) ListIssueTimeline(ctx context.Context, req *v1.ListIssueTimelineRequest) (*v1.ListIssueTimelineResponse, error) {
+	var res v1.ListIssueTimelineResponse
+	if err := c.client.CallUnary(ctx, issuesServiceListIssueTimelineSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type issuesServiceHandler struct{ svc IssuesServiceHandler }
+
+func (h issuesServiceHandler) listIssues(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListIssuesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListIssues(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) getIssue(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetIssueRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetIssue(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) listIssueEvents(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListIssueEventsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListIssueEvents(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) updateIssueStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateIssueStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateIssueStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) addIssueComment(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AddIssueCommentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AddIssueComment(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) updateIssueComment(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateIssueCommentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateIssueComment(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) deleteIssueComment(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteIssueCommentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteIssueComment(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) assignIssue(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AssignIssueRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AssignIssue(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) linkIssueChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.LinkIssueChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.LinkIssueChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) listAssignableUsers(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAssignableUsersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAssignableUsers(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h issuesServiceHandler) listIssueTimeline(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListIssueTimelineRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListIssueTimeline(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

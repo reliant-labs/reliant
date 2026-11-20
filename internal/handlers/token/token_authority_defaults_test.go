@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -27,11 +28,11 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 	authority := tokenauthority.NewMemory()
 	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: append([]fat.Scope{fat.ScopeDaemonConnect}, exchangeableScopes...)})
-	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	p, err := authority.Introspect(context.Background(), resp.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,17 +45,17 @@ func TestExchangeToken_BillingReadRequiresHeldExplicitScope(t *testing.T) {
 	authority := tokenauthority.NewMemory()
 	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	bearer := mintSession(t, authority, "restricted-user", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeObsRead}})
-	_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+	_, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{
 		Audience: testControlPlane, Scopes: []string{string(fat.ScopeBillingRead)},
-	}))
-	if svcerr.Code(err) != connect.CodePermissionDenied {
+	}, bearerInfo(bearer))
+	if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 		t.Fatalf("unheld billing:read was delegated: %v", err)
 	}
-	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	child, err := authority.Introspect(context.Background(), resp.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,18 +72,18 @@ func TestExchangeToken_ConfigAndStorageReadRequireHeldScope(t *testing.T) {
 	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	bearer := mintSession(t, authority, "restricted-user", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeObsRead}})
 	for _, scope := range []fat.Scope{fat.ScopeDeployConfigRead, fat.ScopeStorageRead} {
-		_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+		_, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{
 			Audience: testControlPlane, Scopes: []string{string(scope)},
-		}))
-		if svcerr.Code(err) != connect.CodePermissionDenied {
+		}, bearerInfo(bearer))
+		if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 			t.Fatalf("unheld %s was delegated: %v", scope, err)
 		}
 	}
-	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	child, err := authority.Introspect(context.Background(), resp.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,11 +102,11 @@ func TestExchangeToken_BoundUserCapabilitiesKeepLifecycle(t *testing.T) {
 	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	resource := fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-1"}
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon, Resource: &resource})
-	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	p, err := authority.Introspect(context.Background(), resp.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +117,7 @@ func TestExchangeToken_BoundUserCapabilitiesKeepLifecycle(t *testing.T) {
 	if _, err := authority.RevokeResource(context.Background(), resource); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := authority.Introspect(context.Background(), resp.Msg.GetToken()); err == nil {
+	if _, err := authority.Introspect(context.Background(), resp.GetToken()); err == nil {
 		t.Fatal("child survived daemon teardown")
 	}
 }
@@ -138,11 +139,11 @@ func TestExchangeToken_RefreshPreservesOptInRestrictions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+		resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
 		if err != nil {
 			t.Fatal(err)
 		}
-		child, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+		child, err := authority.Introspect(context.Background(), resp.GetToken())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -157,8 +158,8 @@ func TestExchangeToken_WriteDoesNotDelegateAnUnheldReadScope(t *testing.T) {
 	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
 	for _, pair := range [][2]fat.Scope{{fat.ScopeDeployWrite, fat.ScopeDeployRead}, {fat.ScopeIdentityManage, fat.ScopeIdentityRead}, {fat.ScopeObsTriage, fat.ScopeObsRead}, {fat.ScopeObsWrite, fat.ScopeObsRead}} {
 		bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect, pair[0]}})
-		_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane, Scopes: []string{string(pair[1])}}))
-		if svcerr.Code(err) != connect.CodePermissionDenied {
+		_, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane, Scopes: []string{string(pair[1])}}, bearerInfo(bearer))
+		if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 			t.Fatalf("%s delegated unheld %s: %v", pair[0], pair[1], err)
 		}
 	}
@@ -199,29 +200,29 @@ func (*clippingAuthority) UpdateForUser(context.Context, string, string, *string
 func TestCreateAndExchangeToken_ReportCurrentOrgGrants(t *testing.T) {
 	a := &clippingAuthority{Memory: tokenauthority.NewMemory(), grants: fat.SetOf(fat.ScopeObsRead, fat.ScopeObsTriage)}
 	svc := newTokenService(t, a, TokenControlPlane{Issuer: testControlPlane})
-	created, err := svc.CreateToken(tokenAuthCtx("user-1"), connect.NewRequest(&reliantv1.CreateTokenRequest{Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON}))
+	created, err := svc.CreateToken(tokenAuthCtx("user-1"), &reliantv1.CreateTokenRequest{Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON})
 	if err != nil {
 		t.Fatal(err)
 	}
-	parent, err := a.Introspect(context.Background(), created.Msg.GetToken())
+	parent, err := a.Introspect(context.Background(), created.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(parent.Scopes, fat.SetOf(fat.ScopeDaemonConnect, fat.ScopeObsRead, fat.ScopeObsTriage)) || !reflect.DeepEqual(created.Msg.GetInfo().GetScopes(), parent.Scopes.Strings()) {
-		t.Fatalf("default mint did not report clipped authority: %+v", created.Msg.GetInfo())
+	if !reflect.DeepEqual(parent.Scopes, fat.SetOf(fat.ScopeDaemonConnect, fat.ScopeObsRead, fat.ScopeObsTriage)) || !reflect.DeepEqual(created.GetInfo().GetScopes(), parent.Scopes.Strings()) {
+		t.Fatalf("default mint did not report clipped authority: %+v", created.GetInfo())
 	}
 	// The parent still holds triage, but the owner has since lost that grant.
 	a.grants = fat.SetOf(fat.ScopeObsRead)
-	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(created.Msg.GetToken(), &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(created.GetToken()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := a.Introspect(context.Background(), resp.Msg.GetToken())
+	child, err := a.Introspect(context.Background(), resp.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(child.Scopes, a.grants) || !reflect.DeepEqual(resp.Msg.GetScopes(), a.grants.Strings()) {
-		t.Fatalf("exchange did not report current org grant clipping: child=%s response=%v", child.Scopes, resp.Msg.GetScopes())
+	if !reflect.DeepEqual(child.Scopes, a.grants) || !reflect.DeepEqual(resp.GetScopes(), a.grants.Strings()) {
+		t.Fatalf("exchange did not report current org grant clipping: child=%s response=%v", child.Scopes, resp.GetScopes())
 	}
 }
 

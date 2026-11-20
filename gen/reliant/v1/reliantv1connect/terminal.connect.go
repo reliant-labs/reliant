@@ -7,138 +7,135 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// TerminalServiceName is the fully-qualified name of the TerminalService service.
 	TerminalServiceName = "reliant.v1.TerminalService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// TerminalServiceListSessionsProcedure is the fully-qualified name of the TerminalService's
-	// ListSessions RPC.
+	// TerminalServiceListSessionsProcedure is the procedure name of the TerminalService's ListSessions
+	// RPC.
 	TerminalServiceListSessionsProcedure = "/reliant.v1.TerminalService/ListSessions"
-	// TerminalServiceCloseSessionProcedure is the fully-qualified name of the TerminalService's
-	// CloseSession RPC.
+	// TerminalServiceCloseSessionProcedure is the procedure name of the TerminalService's CloseSession
+	// RPC.
 	TerminalServiceCloseSessionProcedure = "/reliant.v1.TerminalService/CloseSession"
+)
+
+var (
+	terminalServiceListSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_terminal_proto.Services().ByName("TerminalService").Methods().ByName("ListSessions"),
+			Procedure:  TerminalServiceListSessionsProcedure,
+		}
+	})
+	terminalServiceCloseSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_terminal_proto.Services().ByName("TerminalService").Methods().ByName("CloseSession"),
+			Procedure:  TerminalServiceCloseSessionProcedure,
+		}
+	})
 )
 
 // TerminalServiceClient is a client for the reliant.v1.TerminalService service.
 type TerminalServiceClient interface {
 	// ListSessions returns all active terminal sessions
-	ListSessions(context.Context, *connect.Request[v1.ListTerminalSessionsRequest]) (*connect.Response[v1.ListTerminalSessionsResponse], error)
+	ListSessions(context.Context, *v1.ListTerminalSessionsRequest) (*v1.ListTerminalSessionsResponse, error)
 	// CloseSession closes a specific terminal session
-	CloseSession(context.Context, *connect.Request[v1.CloseTerminalSessionRequest]) (*connect.Response[v1.CloseTerminalSessionResponse], error)
+	CloseSession(context.Context, *v1.CloseTerminalSessionRequest) (*v1.CloseTerminalSessionResponse, error)
 }
 
-// NewTerminalServiceClient constructs a client for the reliant.v1.TerminalService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewTerminalServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) TerminalServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	terminalServiceMethods := v1.File_reliant_v1_terminal_proto.Services().ByName("TerminalService").Methods()
-	return &terminalServiceClient{
-		listSessions: connect.NewClient[v1.ListTerminalSessionsRequest, v1.ListTerminalSessionsResponse](
-			httpClient,
-			baseURL+TerminalServiceListSessionsProcedure,
-			connect.WithSchema(terminalServiceMethods.ByName("ListSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		closeSession: connect.NewClient[v1.CloseTerminalSessionRequest, v1.CloseTerminalSessionResponse](
-			httpClient,
-			baseURL+TerminalServiceCloseSessionProcedure,
-			connect.WithSchema(terminalServiceMethods.ByName("CloseSession")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// terminalServiceClient implements TerminalServiceClient.
-type terminalServiceClient struct {
-	listSessions *connect.Client[v1.ListTerminalSessionsRequest, v1.ListTerminalSessionsResponse]
-	closeSession *connect.Client[v1.CloseTerminalSessionRequest, v1.CloseTerminalSessionResponse]
-}
-
-// ListSessions calls reliant.v1.TerminalService.ListSessions.
-func (c *terminalServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListTerminalSessionsRequest]) (*connect.Response[v1.ListTerminalSessionsResponse], error) {
-	return c.listSessions.CallUnary(ctx, req)
-}
-
-// CloseSession calls reliant.v1.TerminalService.CloseSession.
-func (c *terminalServiceClient) CloseSession(ctx context.Context, req *connect.Request[v1.CloseTerminalSessionRequest]) (*connect.Response[v1.CloseTerminalSessionResponse], error) {
-	return c.closeSession.CallUnary(ctx, req)
+// NewTerminalServiceClient constructs a client for the reliant.v1.TerminalService service. Multiple
+// service clients may share a single connect.Client.
+func NewTerminalServiceClient(client *connect.Client) TerminalServiceClient {
+	return &terminalServiceClient{client: client}
 }
 
 // TerminalServiceHandler is an implementation of the reliant.v1.TerminalService service.
 type TerminalServiceHandler interface {
 	// ListSessions returns all active terminal sessions
-	ListSessions(context.Context, *connect.Request[v1.ListTerminalSessionsRequest]) (*connect.Response[v1.ListTerminalSessionsResponse], error)
+	ListSessions(context.Context, *v1.ListTerminalSessionsRequest) (*v1.ListTerminalSessionsResponse, error)
 	// CloseSession closes a specific terminal session
-	CloseSession(context.Context, *connect.Request[v1.CloseTerminalSessionRequest]) (*connect.Response[v1.CloseTerminalSessionResponse], error)
+	CloseSession(context.Context, *v1.CloseTerminalSessionRequest) (*v1.CloseTerminalSessionResponse, error)
 }
 
-// NewTerminalServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewTerminalServiceHandler(svc TerminalServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	terminalServiceMethods := v1.File_reliant_v1_terminal_proto.Services().ByName("TerminalService").Methods()
-	terminalServiceListSessionsHandler := connect.NewUnaryHandler(
-		TerminalServiceListSessionsProcedure,
-		svc.ListSessions,
-		connect.WithSchema(terminalServiceMethods.ByName("ListSessions")),
-		connect.WithHandlerOptions(opts...),
+// RegisterTerminalServiceHandler registers svc as the reliant.v1.TerminalService implementation on
+// server.
+func RegisterTerminalServiceHandler(server *connect.Server, svc TerminalServiceHandler) {
+	adapter := terminalServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: terminalServiceListSessionsSpec(), Handler: adapter.listSessions},
+		connect.Method{Spec: terminalServiceCloseSessionSpec(), Handler: adapter.closeSession},
 	)
-	terminalServiceCloseSessionHandler := connect.NewUnaryHandler(
-		TerminalServiceCloseSessionProcedure,
-		svc.CloseSession,
-		connect.WithSchema(terminalServiceMethods.ByName("CloseSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.TerminalService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case TerminalServiceListSessionsProcedure:
-			terminalServiceListSessionsHandler.ServeHTTP(w, r)
-		case TerminalServiceCloseSessionProcedure:
-			terminalServiceCloseSessionHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedTerminalServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedTerminalServiceHandler struct{}
 
-func (UnimplementedTerminalServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListTerminalSessionsRequest]) (*connect.Response[v1.ListTerminalSessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TerminalService.ListSessions is not implemented"))
+func (UnimplementedTerminalServiceHandler) ListSessions(context.Context, *v1.ListTerminalSessionsRequest) (*v1.ListTerminalSessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TerminalService.ListSessions is not implemented")
 }
 
-func (UnimplementedTerminalServiceHandler) CloseSession(context.Context, *connect.Request[v1.CloseTerminalSessionRequest]) (*connect.Response[v1.CloseTerminalSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TerminalService.CloseSession is not implemented"))
+func (UnimplementedTerminalServiceHandler) CloseSession(context.Context, *v1.CloseTerminalSessionRequest) (*v1.CloseTerminalSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TerminalService.CloseSession is not implemented")
+}
+
+type terminalServiceClient struct {
+	client *connect.Client
+}
+
+func (c *terminalServiceClient) ListSessions(ctx context.Context, req *v1.ListTerminalSessionsRequest) (*v1.ListTerminalSessionsResponse, error) {
+	var res v1.ListTerminalSessionsResponse
+	if err := c.client.CallUnary(ctx, terminalServiceListSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *terminalServiceClient) CloseSession(ctx context.Context, req *v1.CloseTerminalSessionRequest) (*v1.CloseTerminalSessionResponse, error) {
+	var res v1.CloseTerminalSessionResponse
+	if err := c.client.CallUnary(ctx, terminalServiceCloseSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type terminalServiceHandler struct{ svc TerminalServiceHandler }
+
+func (h terminalServiceHandler) listSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTerminalSessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h terminalServiceHandler) closeSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CloseTerminalSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CloseSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

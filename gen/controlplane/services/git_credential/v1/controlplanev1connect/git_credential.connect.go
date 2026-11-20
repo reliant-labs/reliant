@@ -11,61 +11,97 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// GitCredentialServiceName is the fully-qualified name of the GitCredentialService service.
 	GitCredentialServiceName = "controlplane.v1.GitCredentialService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// GitCredentialServiceSaveGitCredentialProcedure is the fully-qualified name of the
+	// GitCredentialServiceSaveGitCredentialProcedure is the procedure name of the
 	// GitCredentialService's SaveGitCredential RPC.
 	GitCredentialServiceSaveGitCredentialProcedure = "/controlplane.v1.GitCredentialService/SaveGitCredential"
-	// GitCredentialServiceGetGitCredentialProcedure is the fully-qualified name of the
-	// GitCredentialService's GetGitCredential RPC.
+	// GitCredentialServiceGetGitCredentialProcedure is the procedure name of the GitCredentialService's
+	// GetGitCredential RPC.
 	GitCredentialServiceGetGitCredentialProcedure = "/controlplane.v1.GitCredentialService/GetGitCredential"
-	// GitCredentialServiceDeleteGitCredentialProcedure is the fully-qualified name of the
+	// GitCredentialServiceDeleteGitCredentialProcedure is the procedure name of the
 	// GitCredentialService's DeleteGitCredential RPC.
 	GitCredentialServiceDeleteGitCredentialProcedure = "/controlplane.v1.GitCredentialService/DeleteGitCredential"
-	// GitCredentialServiceCloneRepoProcedure is the fully-qualified name of the GitCredentialService's
+	// GitCredentialServiceCloneRepoProcedure is the procedure name of the GitCredentialService's
 	// CloneRepo RPC.
 	GitCredentialServiceCloneRepoProcedure = "/controlplane.v1.GitCredentialService/CloneRepo"
-	// GitCredentialServiceListGitReposProcedure is the fully-qualified name of the
-	// GitCredentialService's ListGitRepos RPC.
+	// GitCredentialServiceListGitReposProcedure is the procedure name of the GitCredentialService's
+	// ListGitRepos RPC.
 	GitCredentialServiceListGitReposProcedure = "/controlplane.v1.GitCredentialService/ListGitRepos"
-	// GitCredentialServiceExchangeGithubOAuthCodeProcedure is the fully-qualified name of the
+	// GitCredentialServiceExchangeGithubOAuthCodeProcedure is the procedure name of the
 	// GitCredentialService's ExchangeGithubOAuthCode RPC.
 	GitCredentialServiceExchangeGithubOAuthCodeProcedure = "/controlplane.v1.GitCredentialService/ExchangeGithubOAuthCode"
 )
 
+var (
+	gitCredentialServiceSaveGitCredentialSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_git_credential_v1_git_credential_proto.Services().ByName("GitCredentialService").Methods().ByName("SaveGitCredential"),
+			Procedure:  GitCredentialServiceSaveGitCredentialProcedure,
+		}
+	})
+	gitCredentialServiceGetGitCredentialSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_git_credential_v1_git_credential_proto.Services().ByName("GitCredentialService").Methods().ByName("GetGitCredential"),
+			Procedure:  GitCredentialServiceGetGitCredentialProcedure,
+		}
+	})
+	gitCredentialServiceDeleteGitCredentialSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_git_credential_v1_git_credential_proto.Services().ByName("GitCredentialService").Methods().ByName("DeleteGitCredential"),
+			Procedure:  GitCredentialServiceDeleteGitCredentialProcedure,
+		}
+	})
+	gitCredentialServiceCloneRepoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_git_credential_v1_git_credential_proto.Services().ByName("GitCredentialService").Methods().ByName("CloneRepo"),
+			Procedure:  GitCredentialServiceCloneRepoProcedure,
+		}
+	})
+	gitCredentialServiceListGitReposSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_git_credential_v1_git_credential_proto.Services().ByName("GitCredentialService").Methods().ByName("ListGitRepos"),
+			Procedure:  GitCredentialServiceListGitReposProcedure,
+		}
+	})
+	gitCredentialServiceExchangeGithubOAuthCodeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_git_credential_v1_git_credential_proto.Services().ByName("GitCredentialService").Methods().ByName("ExchangeGithubOAuthCode"),
+			Procedure:  GitCredentialServiceExchangeGithubOAuthCodeProcedure,
+		}
+	})
+)
+
 // GitCredentialServiceClient is a client for the controlplane.v1.GitCredentialService service.
 type GitCredentialServiceClient interface {
-	SaveGitCredential(context.Context, *connect.Request[v1.SaveGitCredentialRequest]) (*connect.Response[v1.SaveGitCredentialResponse], error)
-	GetGitCredential(context.Context, *connect.Request[v1.GetGitCredentialRequest]) (*connect.Response[v1.GetGitCredentialResponse], error)
-	DeleteGitCredential(context.Context, *connect.Request[v1.DeleteGitCredentialRequest]) (*connect.Response[v1.DeleteGitCredentialResponse], error)
-	CloneRepo(context.Context, *connect.Request[v1.CloneRepoRequest]) (*connect.Response[v1.CloneRepoResponse], error)
-	ListGitRepos(context.Context, *connect.Request[v1.ListGitReposRequest]) (*connect.Response[v1.ListGitReposResponse], error)
+	SaveGitCredential(context.Context, *v1.SaveGitCredentialRequest) (*v1.SaveGitCredentialResponse, error)
+	GetGitCredential(context.Context, *v1.GetGitCredentialRequest) (*v1.GetGitCredentialResponse, error)
+	DeleteGitCredential(context.Context, *v1.DeleteGitCredentialRequest) (*v1.DeleteGitCredentialResponse, error)
+	CloneRepo(context.Context, *v1.CloneRepoRequest) (*v1.CloneRepoResponse, error)
+	ListGitRepos(context.Context, *v1.ListGitReposRequest) (*v1.ListGitReposResponse, error)
 	// ExchangeGithubOAuthCode finishes the GitHub OAuth connect flow that the
 	// browser/electron client started via GET /auth/github/authorize. The client
 	// owns its own callback route (so it works behind Firebase SPA-rewrites, which
@@ -74,107 +110,23 @@ type GitCredentialServiceClient interface {
 	// state (not a JWT), so this method is auth_required:false — the handler
 	// verifies the state signature, exchanges the code for a token, and saves the
 	// credential for the user the state names.
-	ExchangeGithubOAuthCode(context.Context, *connect.Request[v1.ExchangeGithubOAuthCodeRequest]) (*connect.Response[v1.ExchangeGithubOAuthCodeResponse], error)
+	ExchangeGithubOAuthCode(context.Context, *v1.ExchangeGithubOAuthCodeRequest) (*v1.ExchangeGithubOAuthCodeResponse, error)
 }
 
 // NewGitCredentialServiceClient constructs a client for the controlplane.v1.GitCredentialService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewGitCredentialServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) GitCredentialServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	gitCredentialServiceMethods := v1.File_services_git_credential_v1_git_credential_proto.Services().ByName("GitCredentialService").Methods()
-	return &gitCredentialServiceClient{
-		saveGitCredential: connect.NewClient[v1.SaveGitCredentialRequest, v1.SaveGitCredentialResponse](
-			httpClient,
-			baseURL+GitCredentialServiceSaveGitCredentialProcedure,
-			connect.WithSchema(gitCredentialServiceMethods.ByName("SaveGitCredential")),
-			connect.WithClientOptions(opts...),
-		),
-		getGitCredential: connect.NewClient[v1.GetGitCredentialRequest, v1.GetGitCredentialResponse](
-			httpClient,
-			baseURL+GitCredentialServiceGetGitCredentialProcedure,
-			connect.WithSchema(gitCredentialServiceMethods.ByName("GetGitCredential")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteGitCredential: connect.NewClient[v1.DeleteGitCredentialRequest, v1.DeleteGitCredentialResponse](
-			httpClient,
-			baseURL+GitCredentialServiceDeleteGitCredentialProcedure,
-			connect.WithSchema(gitCredentialServiceMethods.ByName("DeleteGitCredential")),
-			connect.WithClientOptions(opts...),
-		),
-		cloneRepo: connect.NewClient[v1.CloneRepoRequest, v1.CloneRepoResponse](
-			httpClient,
-			baseURL+GitCredentialServiceCloneRepoProcedure,
-			connect.WithSchema(gitCredentialServiceMethods.ByName("CloneRepo")),
-			connect.WithClientOptions(opts...),
-		),
-		listGitRepos: connect.NewClient[v1.ListGitReposRequest, v1.ListGitReposResponse](
-			httpClient,
-			baseURL+GitCredentialServiceListGitReposProcedure,
-			connect.WithSchema(gitCredentialServiceMethods.ByName("ListGitRepos")),
-			connect.WithClientOptions(opts...),
-		),
-		exchangeGithubOAuthCode: connect.NewClient[v1.ExchangeGithubOAuthCodeRequest, v1.ExchangeGithubOAuthCodeResponse](
-			httpClient,
-			baseURL+GitCredentialServiceExchangeGithubOAuthCodeProcedure,
-			connect.WithSchema(gitCredentialServiceMethods.ByName("ExchangeGithubOAuthCode")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// gitCredentialServiceClient implements GitCredentialServiceClient.
-type gitCredentialServiceClient struct {
-	saveGitCredential       *connect.Client[v1.SaveGitCredentialRequest, v1.SaveGitCredentialResponse]
-	getGitCredential        *connect.Client[v1.GetGitCredentialRequest, v1.GetGitCredentialResponse]
-	deleteGitCredential     *connect.Client[v1.DeleteGitCredentialRequest, v1.DeleteGitCredentialResponse]
-	cloneRepo               *connect.Client[v1.CloneRepoRequest, v1.CloneRepoResponse]
-	listGitRepos            *connect.Client[v1.ListGitReposRequest, v1.ListGitReposResponse]
-	exchangeGithubOAuthCode *connect.Client[v1.ExchangeGithubOAuthCodeRequest, v1.ExchangeGithubOAuthCodeResponse]
-}
-
-// SaveGitCredential calls controlplane.v1.GitCredentialService.SaveGitCredential.
-func (c *gitCredentialServiceClient) SaveGitCredential(ctx context.Context, req *connect.Request[v1.SaveGitCredentialRequest]) (*connect.Response[v1.SaveGitCredentialResponse], error) {
-	return c.saveGitCredential.CallUnary(ctx, req)
-}
-
-// GetGitCredential calls controlplane.v1.GitCredentialService.GetGitCredential.
-func (c *gitCredentialServiceClient) GetGitCredential(ctx context.Context, req *connect.Request[v1.GetGitCredentialRequest]) (*connect.Response[v1.GetGitCredentialResponse], error) {
-	return c.getGitCredential.CallUnary(ctx, req)
-}
-
-// DeleteGitCredential calls controlplane.v1.GitCredentialService.DeleteGitCredential.
-func (c *gitCredentialServiceClient) DeleteGitCredential(ctx context.Context, req *connect.Request[v1.DeleteGitCredentialRequest]) (*connect.Response[v1.DeleteGitCredentialResponse], error) {
-	return c.deleteGitCredential.CallUnary(ctx, req)
-}
-
-// CloneRepo calls controlplane.v1.GitCredentialService.CloneRepo.
-func (c *gitCredentialServiceClient) CloneRepo(ctx context.Context, req *connect.Request[v1.CloneRepoRequest]) (*connect.Response[v1.CloneRepoResponse], error) {
-	return c.cloneRepo.CallUnary(ctx, req)
-}
-
-// ListGitRepos calls controlplane.v1.GitCredentialService.ListGitRepos.
-func (c *gitCredentialServiceClient) ListGitRepos(ctx context.Context, req *connect.Request[v1.ListGitReposRequest]) (*connect.Response[v1.ListGitReposResponse], error) {
-	return c.listGitRepos.CallUnary(ctx, req)
-}
-
-// ExchangeGithubOAuthCode calls controlplane.v1.GitCredentialService.ExchangeGithubOAuthCode.
-func (c *gitCredentialServiceClient) ExchangeGithubOAuthCode(ctx context.Context, req *connect.Request[v1.ExchangeGithubOAuthCodeRequest]) (*connect.Response[v1.ExchangeGithubOAuthCodeResponse], error) {
-	return c.exchangeGithubOAuthCode.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewGitCredentialServiceClient(client *connect.Client) GitCredentialServiceClient {
+	return &gitCredentialServiceClient{client: client}
 }
 
 // GitCredentialServiceHandler is an implementation of the controlplane.v1.GitCredentialService
 // service.
 type GitCredentialServiceHandler interface {
-	SaveGitCredential(context.Context, *connect.Request[v1.SaveGitCredentialRequest]) (*connect.Response[v1.SaveGitCredentialResponse], error)
-	GetGitCredential(context.Context, *connect.Request[v1.GetGitCredentialRequest]) (*connect.Response[v1.GetGitCredentialResponse], error)
-	DeleteGitCredential(context.Context, *connect.Request[v1.DeleteGitCredentialRequest]) (*connect.Response[v1.DeleteGitCredentialResponse], error)
-	CloneRepo(context.Context, *connect.Request[v1.CloneRepoRequest]) (*connect.Response[v1.CloneRepoResponse], error)
-	ListGitRepos(context.Context, *connect.Request[v1.ListGitReposRequest]) (*connect.Response[v1.ListGitReposResponse], error)
+	SaveGitCredential(context.Context, *v1.SaveGitCredentialRequest) (*v1.SaveGitCredentialResponse, error)
+	GetGitCredential(context.Context, *v1.GetGitCredentialRequest) (*v1.GetGitCredentialResponse, error)
+	DeleteGitCredential(context.Context, *v1.DeleteGitCredentialRequest) (*v1.DeleteGitCredentialResponse, error)
+	CloneRepo(context.Context, *v1.CloneRepoRequest) (*v1.CloneRepoResponse, error)
+	ListGitRepos(context.Context, *v1.ListGitReposRequest) (*v1.ListGitReposResponse, error)
 	// ExchangeGithubOAuthCode finishes the GitHub OAuth connect flow that the
 	// browser/electron client started via GET /auth/github/authorize. The client
 	// owns its own callback route (so it works behind Firebase SPA-rewrites, which
@@ -183,95 +135,172 @@ type GitCredentialServiceHandler interface {
 	// state (not a JWT), so this method is auth_required:false — the handler
 	// verifies the state signature, exchanges the code for a token, and saves the
 	// credential for the user the state names.
-	ExchangeGithubOAuthCode(context.Context, *connect.Request[v1.ExchangeGithubOAuthCodeRequest]) (*connect.Response[v1.ExchangeGithubOAuthCodeResponse], error)
+	ExchangeGithubOAuthCode(context.Context, *v1.ExchangeGithubOAuthCodeRequest) (*v1.ExchangeGithubOAuthCodeResponse, error)
 }
 
-// NewGitCredentialServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewGitCredentialServiceHandler(svc GitCredentialServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	gitCredentialServiceMethods := v1.File_services_git_credential_v1_git_credential_proto.Services().ByName("GitCredentialService").Methods()
-	gitCredentialServiceSaveGitCredentialHandler := connect.NewUnaryHandler(
-		GitCredentialServiceSaveGitCredentialProcedure,
-		svc.SaveGitCredential,
-		connect.WithSchema(gitCredentialServiceMethods.ByName("SaveGitCredential")),
-		connect.WithHandlerOptions(opts...),
+// RegisterGitCredentialServiceHandler registers svc as the controlplane.v1.GitCredentialService
+// implementation on server.
+func RegisterGitCredentialServiceHandler(server *connect.Server, svc GitCredentialServiceHandler) {
+	adapter := gitCredentialServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: gitCredentialServiceSaveGitCredentialSpec(), Handler: adapter.saveGitCredential},
+		connect.Method{Spec: gitCredentialServiceGetGitCredentialSpec(), Handler: adapter.getGitCredential},
+		connect.Method{Spec: gitCredentialServiceDeleteGitCredentialSpec(), Handler: adapter.deleteGitCredential},
+		connect.Method{Spec: gitCredentialServiceCloneRepoSpec(), Handler: adapter.cloneRepo},
+		connect.Method{Spec: gitCredentialServiceListGitReposSpec(), Handler: adapter.listGitRepos},
+		connect.Method{Spec: gitCredentialServiceExchangeGithubOAuthCodeSpec(), Handler: adapter.exchangeGithubOAuthCode},
 	)
-	gitCredentialServiceGetGitCredentialHandler := connect.NewUnaryHandler(
-		GitCredentialServiceGetGitCredentialProcedure,
-		svc.GetGitCredential,
-		connect.WithSchema(gitCredentialServiceMethods.ByName("GetGitCredential")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitCredentialServiceDeleteGitCredentialHandler := connect.NewUnaryHandler(
-		GitCredentialServiceDeleteGitCredentialProcedure,
-		svc.DeleteGitCredential,
-		connect.WithSchema(gitCredentialServiceMethods.ByName("DeleteGitCredential")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitCredentialServiceCloneRepoHandler := connect.NewUnaryHandler(
-		GitCredentialServiceCloneRepoProcedure,
-		svc.CloneRepo,
-		connect.WithSchema(gitCredentialServiceMethods.ByName("CloneRepo")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitCredentialServiceListGitReposHandler := connect.NewUnaryHandler(
-		GitCredentialServiceListGitReposProcedure,
-		svc.ListGitRepos,
-		connect.WithSchema(gitCredentialServiceMethods.ByName("ListGitRepos")),
-		connect.WithHandlerOptions(opts...),
-	)
-	gitCredentialServiceExchangeGithubOAuthCodeHandler := connect.NewUnaryHandler(
-		GitCredentialServiceExchangeGithubOAuthCodeProcedure,
-		svc.ExchangeGithubOAuthCode,
-		connect.WithSchema(gitCredentialServiceMethods.ByName("ExchangeGithubOAuthCode")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.GitCredentialService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case GitCredentialServiceSaveGitCredentialProcedure:
-			gitCredentialServiceSaveGitCredentialHandler.ServeHTTP(w, r)
-		case GitCredentialServiceGetGitCredentialProcedure:
-			gitCredentialServiceGetGitCredentialHandler.ServeHTTP(w, r)
-		case GitCredentialServiceDeleteGitCredentialProcedure:
-			gitCredentialServiceDeleteGitCredentialHandler.ServeHTTP(w, r)
-		case GitCredentialServiceCloneRepoProcedure:
-			gitCredentialServiceCloneRepoHandler.ServeHTTP(w, r)
-		case GitCredentialServiceListGitReposProcedure:
-			gitCredentialServiceListGitReposHandler.ServeHTTP(w, r)
-		case GitCredentialServiceExchangeGithubOAuthCodeProcedure:
-			gitCredentialServiceExchangeGithubOAuthCodeHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedGitCredentialServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedGitCredentialServiceHandler struct{}
 
-func (UnimplementedGitCredentialServiceHandler) SaveGitCredential(context.Context, *connect.Request[v1.SaveGitCredentialRequest]) (*connect.Response[v1.SaveGitCredentialResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.GitCredentialService.SaveGitCredential is not implemented"))
+func (UnimplementedGitCredentialServiceHandler) SaveGitCredential(context.Context, *v1.SaveGitCredentialRequest) (*v1.SaveGitCredentialResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.GitCredentialService.SaveGitCredential is not implemented")
 }
 
-func (UnimplementedGitCredentialServiceHandler) GetGitCredential(context.Context, *connect.Request[v1.GetGitCredentialRequest]) (*connect.Response[v1.GetGitCredentialResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.GitCredentialService.GetGitCredential is not implemented"))
+func (UnimplementedGitCredentialServiceHandler) GetGitCredential(context.Context, *v1.GetGitCredentialRequest) (*v1.GetGitCredentialResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.GitCredentialService.GetGitCredential is not implemented")
 }
 
-func (UnimplementedGitCredentialServiceHandler) DeleteGitCredential(context.Context, *connect.Request[v1.DeleteGitCredentialRequest]) (*connect.Response[v1.DeleteGitCredentialResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.GitCredentialService.DeleteGitCredential is not implemented"))
+func (UnimplementedGitCredentialServiceHandler) DeleteGitCredential(context.Context, *v1.DeleteGitCredentialRequest) (*v1.DeleteGitCredentialResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.GitCredentialService.DeleteGitCredential is not implemented")
 }
 
-func (UnimplementedGitCredentialServiceHandler) CloneRepo(context.Context, *connect.Request[v1.CloneRepoRequest]) (*connect.Response[v1.CloneRepoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.GitCredentialService.CloneRepo is not implemented"))
+func (UnimplementedGitCredentialServiceHandler) CloneRepo(context.Context, *v1.CloneRepoRequest) (*v1.CloneRepoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.GitCredentialService.CloneRepo is not implemented")
 }
 
-func (UnimplementedGitCredentialServiceHandler) ListGitRepos(context.Context, *connect.Request[v1.ListGitReposRequest]) (*connect.Response[v1.ListGitReposResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.GitCredentialService.ListGitRepos is not implemented"))
+func (UnimplementedGitCredentialServiceHandler) ListGitRepos(context.Context, *v1.ListGitReposRequest) (*v1.ListGitReposResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.GitCredentialService.ListGitRepos is not implemented")
 }
 
-func (UnimplementedGitCredentialServiceHandler) ExchangeGithubOAuthCode(context.Context, *connect.Request[v1.ExchangeGithubOAuthCodeRequest]) (*connect.Response[v1.ExchangeGithubOAuthCodeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.GitCredentialService.ExchangeGithubOAuthCode is not implemented"))
+func (UnimplementedGitCredentialServiceHandler) ExchangeGithubOAuthCode(context.Context, *v1.ExchangeGithubOAuthCodeRequest) (*v1.ExchangeGithubOAuthCodeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.GitCredentialService.ExchangeGithubOAuthCode is not implemented")
+}
+
+type gitCredentialServiceClient struct {
+	client *connect.Client
+}
+
+func (c *gitCredentialServiceClient) SaveGitCredential(ctx context.Context, req *v1.SaveGitCredentialRequest) (*v1.SaveGitCredentialResponse, error) {
+	var res v1.SaveGitCredentialResponse
+	if err := c.client.CallUnary(ctx, gitCredentialServiceSaveGitCredentialSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitCredentialServiceClient) GetGitCredential(ctx context.Context, req *v1.GetGitCredentialRequest) (*v1.GetGitCredentialResponse, error) {
+	var res v1.GetGitCredentialResponse
+	if err := c.client.CallUnary(ctx, gitCredentialServiceGetGitCredentialSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitCredentialServiceClient) DeleteGitCredential(ctx context.Context, req *v1.DeleteGitCredentialRequest) (*v1.DeleteGitCredentialResponse, error) {
+	var res v1.DeleteGitCredentialResponse
+	if err := c.client.CallUnary(ctx, gitCredentialServiceDeleteGitCredentialSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitCredentialServiceClient) CloneRepo(ctx context.Context, req *v1.CloneRepoRequest) (*v1.CloneRepoResponse, error) {
+	var res v1.CloneRepoResponse
+	if err := c.client.CallUnary(ctx, gitCredentialServiceCloneRepoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitCredentialServiceClient) ListGitRepos(ctx context.Context, req *v1.ListGitReposRequest) (*v1.ListGitReposResponse, error) {
+	var res v1.ListGitReposResponse
+	if err := c.client.CallUnary(ctx, gitCredentialServiceListGitReposSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitCredentialServiceClient) ExchangeGithubOAuthCode(ctx context.Context, req *v1.ExchangeGithubOAuthCodeRequest) (*v1.ExchangeGithubOAuthCodeResponse, error) {
+	var res v1.ExchangeGithubOAuthCodeResponse
+	if err := c.client.CallUnary(ctx, gitCredentialServiceExchangeGithubOAuthCodeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type gitCredentialServiceHandler struct{ svc GitCredentialServiceHandler }
+
+func (h gitCredentialServiceHandler) saveGitCredential(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SaveGitCredentialRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SaveGitCredential(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitCredentialServiceHandler) getGitCredential(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetGitCredentialRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetGitCredential(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitCredentialServiceHandler) deleteGitCredential(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteGitCredentialRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteGitCredential(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitCredentialServiceHandler) cloneRepo(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CloneRepoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CloneRepo(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitCredentialServiceHandler) listGitRepos(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListGitReposRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListGitRepos(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitCredentialServiceHandler) exchangeGithubOAuthCode(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExchangeGithubOAuthCodeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ExchangeGithubOAuthCode(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

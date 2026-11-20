@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -31,27 +31,27 @@ func TestGetFilePreview_Generated(t *testing.T) {
 
 	svc := file_system.NewTestFileSystem(t, file_system.WithFileSystemDeps(file_system.Deps{Repo: previewNoProjectRepo{}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetFilePreviewRequest, pb.GetFilePreviewResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetFilePreviewRequest, pb.GetFilePreviewResponse]{
 		{
 			Name:    "anonymous caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.GetFilePreviewRequest{ProjectId: "p-1", Path: "a.png"}),
+			Req:     &pb.GetFilePreviewRequest{ProjectId: "p-1", Path: "a.png"},
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "path is required",
-			Req:     connect.NewRequest(&pb.GetFilePreviewRequest{ProjectId: "p-1"}),
+			Req:     &pb.GetFilePreviewRequest{ProjectId: "p-1"},
 			Ctx:     file_system.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "project_id is required",
-			Req:     connect.NewRequest(&pb.GetFilePreviewRequest{Path: "a.png"}),
+			Req:     &pb.GetFilePreviewRequest{Path: "a.png"},
 			Ctx:     file_system.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown project is not found",
-			Req:     connect.NewRequest(&pb.GetFilePreviewRequest{ProjectId: "p-missing", Path: "a.png"}),
+			Req:     &pb.GetFilePreviewRequest{ProjectId: "p-missing", Path: "a.png"},
 			Ctx:     file_system.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

@@ -12,7 +12,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -35,28 +35,28 @@ func TestDecideWorktreeReclaim_Generated(t *testing.T) {
 		many[i] = &pb.WorktreeReclaimDecision{Key: "k", Fingerprint: "f"}
 	}
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DecideWorktreeReclaimRequest, pb.DecideWorktreeReclaimResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DecideWorktreeReclaimRequest, pb.DecideWorktreeReclaimResponse]{
 		{
 			Name:    "unauthenticated",
-			Req:     connect.NewRequest(&pb.DecideWorktreeReclaimRequest{DaemonId: "d-1", Decisions: one}),
+			Req:     &pb.DecideWorktreeReclaimRequest{DaemonId: "d-1", Decisions: one},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "no_daemon",
-			Req:     connect.NewRequest(&pb.DecideWorktreeReclaimRequest{Decisions: one}),
+			Req:     &pb.DecideWorktreeReclaimRequest{Decisions: one},
 			Ctx:     authed,
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "no_decisions",
-			Req:     connect.NewRequest(&pb.DecideWorktreeReclaimRequest{DaemonId: "d-1"}),
+			Req:     &pb.DecideWorktreeReclaimRequest{DaemonId: "d-1"},
 			Ctx:     authed,
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "too_many_decisions",
-			Req:     connect.NewRequest(&pb.DecideWorktreeReclaimRequest{DaemonId: "d-1", Decisions: many}),
+			Req:     &pb.DecideWorktreeReclaimRequest{DaemonId: "d-1", Decisions: many},
 			Ctx:     authed,
 			WantErr: connect.CodeInvalidArgument,
 		},

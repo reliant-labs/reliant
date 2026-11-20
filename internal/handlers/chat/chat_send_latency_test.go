@@ -94,7 +94,7 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 		// An already-expired deadline (negative) is still bounded.
 		assert.LessOrEqual(t, q.left, paramsChangeQueryTimeout, "the send waited on the workflow's answer to an advisory query")
 	}
-	assert.True(t, resp.Msg.Queued, "the message is queued for the running thread's next turn")
+	assert.True(t, resp.Queued, "the message is queued for the running thread's next turn")
 
 	var names []string
 	for _, s := range temporal.signals {
@@ -164,7 +164,7 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			}
 
 			req := sendMessageRequest(t, fx.chatID, "next step")
-			req.Msg.SelectedPresets = map[string]string{"default": "general"}
+			req.SelectedPresets = map[string]string{"default": "general"}
 			_, err = service.SendMessage(ctx, req)
 			require.NoError(t, err)
 

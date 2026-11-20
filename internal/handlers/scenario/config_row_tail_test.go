@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -106,27 +106,27 @@ expect:
 	}))
 	const scenarioID = "project:tail-flow:drafts"
 
-	list, err := service.ListScenarios(ctx, connect.NewRequest(&reliantv1.ListScenariosRequest{
+	list, err := service.ListScenarios(ctx, &reliantv1.ListScenariosRequest{
 		ProjectId: proto.String(projectID), WorkflowSlug: "tail-flow",
-	}))
+	})
 	require.NoError(t, err)
 	var ids []string
-	for _, s := range list.Msg.Scenarios {
+	for _, s := range list.Scenarios {
 		ids = append(ids, s.Id)
 	}
 	require.Equal(t, []string{scenarioID}, ids, "the stored project scenario must be listed")
 
-	exported, err := service.ExportScenario(ctx, connect.NewRequest(&reliantv1.ExportScenarioRequest{
+	exported, err := service.ExportScenario(ctx, &reliantv1.ExportScenarioRequest{
 		ProjectId: projectID, ScenarioId: scenarioID,
-	}))
+	})
 	require.NoError(t, err)
-	require.Equal(t, scenarioYAML, exported.Msg.YamlContent)
+	require.Equal(t, scenarioYAML, exported.YamlContent)
 
-	run, err := service.RunScenario(ctx, connect.NewRequest(&reliantv1.RunScenarioRequest{
+	run, err := service.RunScenario(ctx, &reliantv1.RunScenarioRequest{
 		ProjectId: projectID, ScenarioId: scenarioID,
-	}))
+	})
 	require.NoError(t, err)
-	require.Equal(t, "passed", run.Msg.Result.Status, "mismatches: %v", run.Msg.Result.Mismatches)
+	require.Equal(t, "passed", run.Result.Status, "mismatches: %v", run.Result.Mismatches)
 
 	// A project whose daemon has not synced is NotFound, as before.
 	otherProject := uuid.NewString()
@@ -134,10 +134,10 @@ expect:
 		ID: otherProject, UserID: userID, Name: "Unsynced", Path: t.TempDir(),
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	_, err = service.ExportScenario(ctx, connect.NewRequest(&reliantv1.ExportScenarioRequest{
+	_, err = service.ExportScenario(ctx, &reliantv1.ExportScenarioRequest{
 		ProjectId: otherProject, ScenarioId: scenarioID,
-	}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "err = %v", err)
+	})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "err = %v", err)
 
 	require.Empty(t, spy.reads(), "a scenario RPC read the whole project config row")
 }

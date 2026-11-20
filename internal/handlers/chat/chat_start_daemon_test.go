@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,7 +84,7 @@ func (e *startDaemonEnv) daemon(t *testing.T, userID string) string {
 	return id
 }
 
-func (e *startDaemonEnv) start(t *testing.T, mutate func(*reliantv1.StartChatRequest)) (*connect.Response[reliantv1.StartChatResponse], error) {
+func (e *startDaemonEnv) start(t *testing.T, mutate func(*reliantv1.StartChatRequest)) (*reliantv1.StartChatResponse, error) {
 	t.Helper()
 	req := &reliantv1.StartChatRequest{
 		ProjectId: e.projectID,
@@ -99,7 +99,7 @@ func (e *startDaemonEnv) start(t *testing.T, mutate func(*reliantv1.StartChatReq
 	if mutate != nil {
 		mutate(req)
 	}
-	return e.svc.StartChat(e.ctx, connect.NewRequest(req))
+	return e.svc.StartChat(e.ctx, req)
 }
 
 func TestStartChatWithDaemonIDPinsTheChatAndTheRun(t *testing.T) {
@@ -109,7 +109,7 @@ func TestStartChatWithDaemonIDPinsTheChatAndTheRun(t *testing.T) {
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(chosen) })
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := e.repo.GetChat(e.ctx, resp.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, chosen, *chat.ActiveDaemonID)
@@ -124,7 +124,7 @@ func TestStartChatWithoutDaemonIDLeavesSelectionToTheRuntime(t *testing.T) {
 	resp, err := e.start(t, nil)
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := e.repo.GetChat(e.ctx, resp.GetChat().GetId())
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 	require.Len(t, e.temporal.inputs, 1)
@@ -139,7 +139,7 @@ func TestStartChatRejectsADaemonTheCallerDoesNotOwn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(id) })
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+			assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 			assert.Empty(t, e.temporal.inputs, "a rejected start must launch nothing")
 			assert.Empty(t, e.router.selectors, "a rejected start must not wake anything")
 		})
@@ -154,7 +154,7 @@ func TestStartChatRejectsADaemonTheProjectIsNotInstalledOn(t *testing.T) {
 
 	_, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(elsewhere) })
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Empty(t, e.temporal.inputs)
 
 	_, err = e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(installedOn) })
@@ -175,7 +175,7 @@ func TestStartChatBranchRejectsADaemonThatConflictsWithItsWorktree(t *testing.T)
 		r.DaemonId = ptr.Of(other)
 	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "pinned daemon")
 	assert.Empty(t, e.router.selectors)
 	assert.Empty(t, e.temporal.inputs)
@@ -197,7 +197,7 @@ func TestStartChatBranchAcceptsTheDaemonItIsAlreadyPinnedTo(t *testing.T) {
 		r.DaemonId = ptr.Of(pinned)
 	})
 	if err != nil {
-		assert.NotEqual(t, connect.CodeInvalidArgument, svcerr.Code(err), "a matching daemon_id is not a conflict: %v", err)
+		assert.NotEqual(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "a matching daemon_id is not a conflict: %v", err)
 	}
 	require.Len(t, e.router.selectors, 1)
 	assert.Equal(t, pinned, e.router.selectors[0].ID)

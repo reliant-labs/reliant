@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -39,10 +37,10 @@ type machineRegistry interface {
 // rules, side effects (pool members' idle timeouts) and refusals the web's
 // does. The caller's id is on the ctx, as the auth middleware puts it.
 type machinePoolAdmin interface {
-	SetMachineLabels(context.Context, *connect.Request[pb.SetMachineLabelsRequest]) (*connect.Response[pb.SetMachineLabelsResponse], error)
-	ListMachinePools(context.Context, *connect.Request[pb.ListMachinePoolsRequest]) (*connect.Response[pb.ListMachinePoolsResponse], error)
-	PutMachinePool(context.Context, *connect.Request[pb.PutMachinePoolRequest]) (*connect.Response[pb.PutMachinePoolResponse], error)
-	DeleteMachinePool(context.Context, *connect.Request[pb.DeleteMachinePoolRequest]) (*connect.Response[pb.DeleteMachinePoolResponse], error)
+	SetMachineLabels(context.Context, *pb.SetMachineLabelsRequest) (*pb.SetMachineLabelsResponse, error)
+	ListMachinePools(context.Context, *pb.ListMachinePoolsRequest) (*pb.ListMachinePoolsResponse, error)
+	PutMachinePool(context.Context, *pb.PutMachinePoolRequest) (*pb.PutMachinePoolResponse, error)
+	DeleteMachinePool(context.Context, *pb.DeleteMachinePoolRequest) (*pb.DeleteMachinePoolResponse, error)
 }
 
 // machineWaker wakes one machine; *toolexec.NATSDaemonRouter is it.
@@ -161,12 +159,12 @@ func (m *machineController) ListMachinePools(ctx context.Context, userID string)
 	if m.pools == nil {
 		return nil, errNoPoolAdmin
 	}
-	resp, err := m.pools.ListMachinePools(asUser(ctx, userID), connect.NewRequest(&pb.ListMachinePoolsRequest{}))
+	resp, err := m.pools.ListMachinePools(asUser(ctx, userID), &pb.ListMachinePoolsRequest{})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]tools.MachinePoolSummary, 0, len(resp.Msg.GetPools()))
-	for _, p := range resp.Msg.GetPools() {
+	out := make([]tools.MachinePoolSummary, 0, len(resp.GetPools()))
+	for _, p := range resp.GetPools() {
 		out = append(out, poolSummary(p))
 	}
 	return out, nil
@@ -179,7 +177,7 @@ func (m *machineController) SetMachineLabels(ctx context.Context, userID, daemon
 	if err := m.owned(ctx, userID, daemonID); err != nil {
 		return err
 	}
-	_, err := m.pools.SetMachineLabels(asUser(ctx, userID), connect.NewRequest(&pb.SetMachineLabelsRequest{DaemonId: daemonID, Labels: labels}))
+	_, err := m.pools.SetMachineLabels(asUser(ctx, userID), &pb.SetMachineLabelsRequest{DaemonId: daemonID, Labels: labels})
 	return err
 }
 
@@ -187,23 +185,23 @@ func (m *machineController) PutMachinePool(ctx context.Context, userID string, s
 	if m.pools == nil {
 		return tools.MachinePoolSummary{}, errNoPoolAdmin
 	}
-	resp, err := m.pools.PutMachinePool(asUser(ctx, userID), connect.NewRequest(&pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{
+	resp, err := m.pools.PutMachinePool(asUser(ctx, userID), &pb.PutMachinePoolRequest{Pool: &pb.MachinePoolSpec{
 		Name: spec.Name, Selector: spec.Selector,
 		MinMembers: uint32(max(spec.MinMembers, 0)), MaxMembers: uint32(max(spec.MaxMembers, 0)),
 		MemberSize: spec.MemberSize, MaxRunsPerMember: uint32(max(spec.MaxRunsPerMember, 0)),
 		MemberIdleTimeout: spec.MemberIdleTimeout,
-	}}))
+	}})
 	if err != nil {
 		return tools.MachinePoolSummary{}, err
 	}
-	return poolSummary(resp.Msg.GetPool()), nil
+	return poolSummary(resp.GetPool()), nil
 }
 
 func (m *machineController) DeleteMachinePool(ctx context.Context, userID, name string) error {
 	if m.pools == nil {
 		return errNoPoolAdmin
 	}
-	_, err := m.pools.DeleteMachinePool(asUser(ctx, userID), connect.NewRequest(&pb.DeleteMachinePoolRequest{Name: name}))
+	_, err := m.pools.DeleteMachinePool(asUser(ctx, userID), &pb.DeleteMachinePoolRequest{Name: name})
 	return err
 }
 

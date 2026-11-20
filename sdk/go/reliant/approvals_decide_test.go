@@ -9,18 +9,17 @@ import (
 	"slices"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
 
-func refusal(reason, scopes string) *connect.Error {
-	e := connect.NewError(connect.CodePermissionDenied, errors.New("refused"))
-	e.Meta().Set(headerErrorReason, reason)
+func refusal(reason, scopes string) error {
+	kv := []string{headerErrorReason, reason}
 	if scopes != "" {
-		e.Meta().Set(headerErrorScopes, scopes)
+		kv = append(kv, headerErrorScopes, scopes)
 	}
-	return e
+	return withMeta(connect.NewError(connect.CodePermissionDenied, "refused"), kv...)
 }
 
 func TestApprovalsDecideSendsTheRequest(t *testing.T) {
@@ -82,14 +81,14 @@ func TestApprovalsDecideRequiresIDs(t *testing.T) {
 
 func TestApprovalsDecideRefusals(t *testing.T) {
 	cases := map[string]struct {
-		err   *connect.Error
+		err   error
 		want  []error
 		scope []string
 	}{
 		"scope missing": {refusal("scope_missing", "approvals:decide"), []error{ErrScopeMissing, ErrPermissionDenied}, []string{"approvals:decide"}},
 		"machine bound": {refusal("machine_credential_cannot_decide", ""), []error{ErrMachineCredential, ErrPermissionDenied}, nil},
-		"not pending":   {connect.NewError(connect.CodeFailedPrecondition, errors.New("already approved")), []error{ErrFailedPrecondition}, nil},
-		"not found":     {connect.NewError(connect.CodeNotFound, errors.New("approval not found")), []error{ErrNotFound}, nil},
+		"not pending":   {connect.NewError(connect.CodeFailedPrecondition, "already approved"), []error{ErrFailedPrecondition}, nil},
+		"not found":     {connect.NewError(connect.CodeNotFound, "approval not found"), []error{ErrNotFound}, nil},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -121,8 +120,7 @@ func TestApprovalsDecideRefusals(t *testing.T) {
 }
 
 func TestApprovalNotPendingReason(t *testing.T) {
-	e := connect.NewError(connect.CodeFailedPrecondition, errors.New("already resolved"))
-	e.Meta().Set(headerErrorReason, "approval_not_pending")
+	e := withMeta(connect.NewError(connect.CodeFailedPrecondition, "already resolved"), headerErrorReason, "approval_not_pending")
 	f := &fake{approve: func(*reliantv1.ApproveRequest) (*reliantv1.ApproveResponse, error) { return nil, e }}
 	c, _ := f.start(t)
 	_, err := c.Approvals.Approve(context.Background(), "a", DecideOptions{})

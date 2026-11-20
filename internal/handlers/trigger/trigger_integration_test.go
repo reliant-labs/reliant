@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,7 +105,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	defer restore()
 
 	every := "2s"
-	created, err := svc.CreateTrigger(authCtx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	created, err := svc.CreateTrigger(authCtx, &reliantv1.CreateTriggerRequest{
 		Trigger: &reliantv1.TriggerDefinition{
 			Name:      "e2e sweep",
 			ProjectId: projectID,
@@ -125,9 +124,9 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 				Overlap: reliantv1.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_ALLOW,
 			}},
 		},
-	}))
+	})
 	require.NoError(t, err)
-	triggerID := created.Msg.GetTrigger().GetId()
+	triggerID := created.GetTrigger().GetId()
 	t.Cleanup(func() { _ = backend.Delete(context.Background(), triggerID) })
 
 	// Wait for a LAUNCHED event. The event row is the durable record of
@@ -265,7 +264,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 	authCtx := context.WithValue(ctx, auth.UserIDContextKey, userID)
 
-	created, err := svc.CreateTrigger(authCtx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	created, err := svc.CreateTrigger(authCtx, &reliantv1.CreateTriggerRequest{
 		Trigger: &reliantv1.TriggerDefinition{
 			Name:      "every minute",
 			ProjectId: projectID,
@@ -278,14 +277,14 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 				Timezone: "America/New_York",
 			}},
 		},
-	}))
+	})
 	require.NoError(t, err)
-	triggerID := created.Msg.GetTrigger().GetId()
+	triggerID := created.GetTrigger().GetId()
 	t.Cleanup(func() { _ = backend.Delete(context.Background(), triggerID) })
 
 	// The schedule reports where it will fire next, which is what the UI shows.
-	require.NotNil(t, created.Msg.GetTrigger().NextFireAt, "an enabled cron trigger must report its next fire time")
-	next, err := time.Parse(time.RFC3339, created.Msg.GetTrigger().GetNextFireAt())
+	require.NotNil(t, created.GetTrigger().NextFireAt, "an enabled cron trigger must report its next fire time")
+	next, err := time.Parse(time.RFC3339, created.GetTrigger().GetNextFireAt())
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now(), next, 61*time.Second, "an every-minute cron fires within the next minute")
 	assert.Zero(t, next.Second(), "a cron fire lands on a minute boundary")
@@ -360,7 +359,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	// enabled check, which is the case someone testing a trigger before
 	// turning it on actually hits.
 	disabled := false
-	created, err := svc.CreateTrigger(authCtx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	created, err := svc.CreateTrigger(authCtx, &reliantv1.CreateTriggerRequest{
 		Trigger: &reliantv1.TriggerDefinition{
 			Name:      "manual only",
 			ProjectId: projectID,
@@ -373,16 +372,16 @@ func TestManualFireEndToEnd(t *testing.T) {
 				Cron: []string{"0 9 * * *"},
 			}},
 		},
-	}))
+	})
 	require.NoError(t, err)
-	triggerID := created.Msg.GetTrigger().GetId()
-	require.False(t, created.Msg.GetTrigger().GetEnabled())
+	triggerID := created.GetTrigger().GetId()
+	require.False(t, created.GetTrigger().GetEnabled())
 	t.Cleanup(func() { _ = backend.Delete(context.Background(), triggerID) })
 
 	fired, err := svc.FireTrigger(authCtx,
-		connect.NewRequest(&reliantv1.FireTriggerRequest{Id: triggerID}))
+		&reliantv1.FireTriggerRequest{Id: triggerID})
 	require.NoError(t, err)
-	fireID := fired.Msg.GetFireWorkflowId()
+	fireID := fired.GetFireWorkflowId()
 	assert.Contains(t, fireID, "manual")
 
 	launchedOutcome := core.TriggerEventLaunched

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -165,15 +164,15 @@ func TestBranchChat_InheritedMessage_UsesRequestingChatWorktree(t *testing.T) {
 		threads: threadsSvc,
 	}
 
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    chatBID, // User is viewing Chat B
 		MessageId: msgM1ID, // Branching from M1 (which belongs to Chat A)
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Chat)
+	require.NotNil(t, resp.Chat)
 
 	// Verify the branched chat has Chat B's worktree (W2), NOT Chat A's (W1)
-	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	branchedChat, err := repo.GetChat(ctx, resp.Chat.Id)
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.WorktreeID, "branched chat should have a worktree")
 	require.Equal(t, worktreeID2, *branchedChat.WorktreeID,
@@ -264,14 +263,14 @@ func TestBranchChat_SameChat_UsesSourceWorktree(t *testing.T) {
 		threads: threadsSvc,
 	}
 
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    chatID,
 		MessageId: msgID,
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Chat)
+	require.NotNil(t, resp.Chat)
 
-	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	branchedChat, err := repo.GetChat(ctx, resp.Chat.Id)
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.WorktreeID, "branched chat should have a worktree")
 	require.Equal(t, worktreeID, *branchedChat.WorktreeID,
@@ -359,14 +358,14 @@ func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threadsSvc}
 
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    chatID,
 		MessageId: msgID,
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Chat)
+	require.NotNil(t, resp.Chat)
 
-	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	branchedChat, err := repo.GetChat(ctx, resp.Chat.Id)
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.ActiveDaemonID, "branched chat must be pinned to the worktree's daemon")
 	require.Equal(t, daemonID, *branchedChat.ActiveDaemonID)
@@ -424,13 +423,13 @@ func TestBranchChat_InheritsSourceMachineOnUnownedWorktree(t *testing.T) {
 	}))
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threadsSvc}
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    chatID,
 		MessageId: msgID,
-	}))
+	})
 	require.NoError(t, err)
 
-	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	branchedChat, err := repo.GetChat(ctx, resp.Chat.Id)
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.ActiveDaemonID, "branch must stay on its source chat's machine")
 	require.Equal(t, sourceDaemonID, *branchedChat.ActiveDaemonID)
@@ -581,18 +580,18 @@ func TestBranchChat_MultiThreadChat_ToolCallAdjustment_OrdinalSeqDiverge(t *test
 	service := &Service{deps: Deps{Repo: repo}, threads: threadsSvc}
 
 	// ACT: branch from the assistant message (the one with the pending tool call).
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    chatID,
 		MessageId: assistantMsgID,
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Chat)
+	require.NotNil(t, resp.Chat)
 
 	// ASSERT: the branched thread's messages should include the tool result,
 	// proving the branch point was auto-adjusted past the assistant message
 	// to include the matching tool response — by identity, not by ordinal
 	// magnitude.
-	branchWorkflowID := resp.Msg.Chat.Id
+	branchWorkflowID := resp.Chat.Id
 	msgs, err := threadsSvc.LoadCurrentMessages(ctx, branchWorkflowID)
 	require.NoError(t, err)
 

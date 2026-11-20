@@ -3,7 +3,7 @@ package system_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -17,10 +17,10 @@ func TestDevAuthClear_Generated(t *testing.T) {
 
 	svc := system.NewTestSystem(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DevAuthClearRequest, pb.DevAuthClearResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DevAuthClearRequest, pb.DevAuthClearResponse]{
 		{
 			Name:    "not supported",
-			Req:     connect.NewRequest(&pb.DevAuthClearRequest{}),
+			Req:     &pb.DevAuthClearRequest{},
 			WantErr: connect.CodeUnimplemented,
 		},
 	}, svc.DevAuthClear)

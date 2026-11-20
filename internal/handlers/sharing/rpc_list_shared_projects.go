@@ -3,7 +3,6 @@ package sharing
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,21 +17,21 @@ import (
 // viewer's shape (no path).
 func (s *Service) ListSharedProjects(
 	ctx context.Context,
-	req *connect.Request[pb.ListSharedProjectsRequest],
-) (*connect.Response[pb.ListSharedProjectsResponse], error) {
+	req *pb.ListSharedProjectsRequest,
+) (*pb.ListSharedProjectsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	if err := auth.RequirePerson(ctx, "read what others shared with your organization"); err != nil {
 		return nil, err
 	}
-	org, err := s.sharedOrg(ctx, userID, req.Msg.OrgId)
+	org, err := s.sharedOrg(ctx, userID, req.OrgId)
 	if err != nil {
 		return nil, err
 	}
 	out := &pb.ListSharedProjectsResponse{Projects: []*pb.Project{}}
 	if org == "" {
-		return connect.NewResponse(out), nil
+		return out, nil
 	}
-	limit, offset := page(req.Msg.GetLimit(), req.Msg.GetOffset())
+	limit, offset := page(req.GetLimit(), req.GetOffset())
 	projects, err := s.deps.Repo.ListSharedProjects(ctx, core.SharedProjectFilters{
 		OrgID: org, ViewerUserID: userID, Limit: limit, Offset: offset,
 	})
@@ -43,5 +42,5 @@ func (s *Service) ListSharedProjects(
 	for _, p := range authz.SharedProjectsFor(ctx, userID, projects) {
 		out.Projects = append(out.Projects, projectproto.ForViewer(projectproto.Project(p)))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

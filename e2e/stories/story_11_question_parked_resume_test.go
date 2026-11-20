@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,13 +142,13 @@ func TestStory11_TerminateQuestionParkedResumesViaMarkedAnswer(t *testing.T) {
 	h.LLM.Append(Turn{Text: "Nested iteration three."})
 	modelParam, err := structpb.NewValue(map[string]any{"id": "mock"})
 	require.NoError(t, err)
-	_, err = h.ChatSvc.SendMessage(h.Ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+	_, err = h.ChatSvc.SendMessage(h.Ctx, &reliantv1.SendMessageRequest{
 		ChatId: chatID,
 		Messages: []*reliantv1.InputMessage{
 			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "please wrap it up"},
 		},
 		WorkflowParams: map[string]*structpb.Value{"model": modelParam},
-	}))
+	})
 	require.NoError(t, err, "SendMessage (plain) after terminate")
 
 	// 5. The marked answer (freetext) is feedback, so the inner loop re-enters

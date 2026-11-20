@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/errreason"
@@ -94,15 +94,15 @@ func processNotRunning(err error) error {
 	if !ok || !strings.Contains(text, processNotRunningMarker) {
 		return err
 	}
-	return svcerr.WithReason(svcerr.WithCause(svcerr.FailedPrecondition(svcerr.ToConnect(err).Message()), err),
+	return svcerr.WithReason(svcerr.WithCause(svcerr.FailedPrecondition(svcerr.ToConnectV2(err).Message()), err),
 		errreason.ProcessNotRunning)
 }
 
 // ListProcesses returns all background processes.
 func (s *Service) ListProcesses(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListBackgroundProcessesRequest],
-) (*connect.Response[reliantv1.ListBackgroundProcessesResponse], error) {
+	req *reliantv1.ListBackgroundProcessesRequest,
+) (*reliantv1.ListBackgroundProcessesResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
@@ -131,9 +131,9 @@ func (s *Service) ListProcesses(
 		processes[i] = proc
 	}
 
-	return connect.NewResponse(&reliantv1.ListBackgroundProcessesResponse{
+	return &reliantv1.ListBackgroundProcessesResponse{
 		Processes: processes,
-	}), nil
+	}, nil
 }
 
 // daemonProcessInfo mirrors daemon.ProcessInfo for JSON deserialization.
@@ -149,19 +149,19 @@ type daemonProcessInfo struct {
 // GetProcessOutput returns the stdout/stderr output of a process.
 func (s *Service) GetProcessOutput(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetProcessOutputRequest],
-) (*connect.Response[reliantv1.GetProcessOutputResponse], error) {
+	req *reliantv1.GetProcessOutputRequest,
+) (*reliantv1.GetProcessOutputResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if req.Msg.ProcessId == "" {
+	if req.ProcessId == "" {
 		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	cmdReq := map[string]any{
-		"process_id": req.Msg.ProcessId,
+		"process_id": req.ProcessId,
 	}
 
 	var cmdResp struct {
@@ -174,27 +174,27 @@ func (s *Service) GetProcessOutput(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.GetProcessOutputResponse{
+	return &reliantv1.GetProcessOutputResponse{
 		Stdout: cmdResp.Output,
-	}), nil
+	}, nil
 }
 
 // KillProcess terminates a background process.
 func (s *Service) KillProcess(
 	ctx context.Context,
-	req *connect.Request[reliantv1.KillProcessRequest],
-) (*connect.Response[reliantv1.KillProcessResponse], error) {
+	req *reliantv1.KillProcessRequest,
+) (*reliantv1.KillProcessResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if req.Msg.ProcessId == "" {
+	if req.ProcessId == "" {
 		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	cmdReq := map[string]any{
-		"process_id": req.Msg.ProcessId,
+		"process_id": req.ProcessId,
 	}
 
 	var cmdResp struct{}
@@ -202,33 +202,33 @@ func (s *Service) KillProcess(
 		return nil, processNotRunning(err)
 	}
 
-	return connect.NewResponse(&reliantv1.KillProcessResponse{
+	return &reliantv1.KillProcessResponse{
 		Message: "Process killed successfully",
-	}), nil
+	}, nil
 }
 
 // StreamProcessOutput streams real-time process output by subscribing to the
 // daemon's output channel via the router.
 func (s *Service) StreamProcessOutput(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StreamProcessOutputRequest],
-	stream *connect.ServerStream[reliantv1.ProcessOutputEvent],
+	req *reliantv1.StreamProcessOutputRequest,
+	stream reliantv1connect.BackgroundServiceStreamProcessOutputServerStream,
 ) error {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return err
 	}
 
-	if req.Msg.ProcessId == "" {
+	if req.ProcessId == "" {
 		return svcerr.InvalidArgument("process_id is required")
 	}
 
 	// A process lives on one machine. The router resolves a named one among
 	// the caller's own machines only, so another user's id is not found.
-	if daemonID := req.Msg.GetDaemonId(); daemonID != "" {
+	if daemonID := req.GetDaemonId(); daemonID != "" {
 		ctx = toolexec.WithDaemonSelector(ctx, &toolexec.DaemonSelector{ID: daemonID})
 	}
-	outputCh, unsub, err := s.deps.Router.SubscribeProcessOutput(ctx, userID, req.Msg.ProcessId, req.Msg.NewOnly)
+	outputCh, unsub, err := s.deps.Router.SubscribeProcessOutput(ctx, userID, req.ProcessId, req.NewOnly)
 	if err != nil {
 		return daemonFailure("subscribe process output", err)
 	}

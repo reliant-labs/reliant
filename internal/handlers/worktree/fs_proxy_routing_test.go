@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -105,19 +105,19 @@ func newFSRoutingFixture(t *testing.T) *fsRoutingFixture {
 // a chat: the tree, the preview classification, and the content.
 func (f *fsRoutingFixture) browse(t *testing.T, worktreeID, chatID *string) error {
 	t.Helper()
-	if _, err := f.fs.GetFileTree(f.ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{
+	if _, err := f.fs.GetFileTree(f.ctx, &reliantv1.GetFileTreeRequest{
 		ProjectId: f.projectID, Path: "/", WorktreeId: worktreeID, ChatId: chatID,
-	})); err != nil {
+	}); err != nil {
 		return err
 	}
-	if _, err := f.fs.GetFilePreviewInfo(f.ctx, connect.NewRequest(&reliantv1.GetFilePreviewInfoRequest{
+	if _, err := f.fs.GetFilePreviewInfo(f.ctx, &reliantv1.GetFilePreviewInfoRequest{
 		ProjectId: f.projectID, Path: "a.txt", WorktreeId: worktreeID, ChatId: chatID,
-	})); err != nil {
+	}); err != nil {
 		return err
 	}
-	_, err := f.fs.GetFileContent(f.ctx, connect.NewRequest(&reliantv1.GetFileContentRequest{
+	_, err := f.fs.GetFileContent(f.ctx, &reliantv1.GetFileContentRequest{
 		ProjectId: f.projectID, Path: "a.txt", WorktreeId: worktreeID, ChatId: chatID,
-	}))
+	})
 	return err
 }
 
@@ -236,13 +236,13 @@ func TestFileSystemProxy_ChatOnMachineB_WritesToB(t *testing.T) {
 	f := newFSRoutingFixture(t)
 	chatID := f.chat(t, f.userID, "daemon-b", "")
 
-	_, err := f.fs.SaveFileContent(f.ctx, connect.NewRequest(&reliantv1.SaveFileContentRequest{
+	_, err := f.fs.SaveFileContent(f.ctx, &reliantv1.SaveFileContentRequest{
 		ProjectId: f.projectID, Path: "a.txt", Content: "x", ChatId: &chatID,
-	}))
+	})
 	require.NoError(t, err)
-	_, err = f.fs.SearchFiles(f.ctx, connect.NewRequest(&reliantv1.SearchFilesRequest{
+	_, err = f.fs.SearchFiles(f.ctx, &reliantv1.SearchFilesRequest{
 		ProjectId: f.projectID, Query: "x", ChatId: &chatID,
-	}))
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{"daemon-b"}, f.router.daemonsFor("fs.write_file"))
@@ -260,7 +260,7 @@ func TestFileSystemProxy_RefusesAnotherUsersChat(t *testing.T) {
 
 	err := f.browse(t, nil, &chatID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.False(t, f.router.sent(), "nothing may reach a daemon for another user's chat")
 }
 
@@ -299,9 +299,9 @@ func TestFileSystemProxy_ChatFromAnotherProject_IsIgnored(t *testing.T) {
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	resp, err := f.fs.GetFileTree(f.ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{
+	resp, err := f.fs.GetFileTree(f.ctx, &reliantv1.GetFileTreeRequest{
 		ProjectId: f.projectID, Path: "/", ChatId: &chatID,
-	}))
+	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, []string{fsRoutingDefaultDaemon}, f.router.daemonsFor("fs.get_tree"))

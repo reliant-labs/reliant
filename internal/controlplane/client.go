@@ -8,7 +8,8 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/reliant-labs/forge/pkg/observe"
 	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
 	accesstokenv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1/controlplanev1connect"
@@ -19,6 +20,7 @@ import (
 	organizationv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/organization/v1/controlplanev1connect"
 	userv1 "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1"
 	userv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1/controlplanev1connect"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 const defaultBaseURL = "http://localhost:8090"
@@ -150,23 +152,27 @@ func New(deps Deps) Service {
 	// Connect rpcs by the otelconnect interceptor. An otelhttp transport under
 	// the Connect clients would nest a duplicate span under every rpc.
 	httpClient, rpcClient := deps.HTTPClient, deps.HTTPClient
-	var rpcOpts []connect.ClientOption
+	var (
+		rpcHTTPOpts     []connecthttp.Option
+		rpcInterceptors []connect.ClientInterceptor
+	)
 	if httpClient == nil {
 		httpClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second})
 		rpcClient = httpClient
-		if stack, err := observe.NewClientStack(observe.ClientStackDeps{Timeout: 30 * time.Second}); err == nil {
-			rpcClient, rpcOpts = stack.HTTPClient, stack.ClientOptions
+		if stack, err := observe.NewClientStackV2(observe.ClientStackDepsV2{Timeout: 30 * time.Second}); err == nil {
+			rpcClient, rpcHTTPOpts, rpcInterceptors = stack.HTTPClient, stack.HTTPOptions, stack.Interceptors
 		}
 	}
+	rpc := rpcclient.New(rpcClient, baseURL, rpcHTTPOpts, rpcInterceptors...)
 	return &client{
 		httpClient:     httpClient,
 		baseURL:        baseURL,
 		sign:           deps.Sign,
-		accessTokens:   accesstokenv1connect.NewAccessTokenServiceClient(rpcClient, baseURL, rpcOpts...),
-		users:          userv1connect.NewUserServiceClient(rpcClient, baseURL, rpcOpts...),
-		gitCredentials: gitcredentialv1connect.NewGitCredentialServiceClient(rpcClient, baseURL, rpcOpts...),
-		daemons:        daemonv1connect.NewDaemonServiceClient(rpcClient, baseURL, rpcOpts...),
-		organizations:  organizationv1connect.NewOrganizationServiceClient(rpcClient, baseURL, rpcOpts...),
+		accessTokens:   accesstokenv1connect.NewAccessTokenServiceClient(rpc),
+		users:          userv1connect.NewUserServiceClient(rpc),
+		gitCredentials: gitcredentialv1connect.NewGitCredentialServiceClient(rpc),
+		daemons:        daemonv1connect.NewDaemonServiceClient(rpc),
+		organizations:  organizationv1connect.NewOrganizationServiceClient(rpc),
 	}
 }
 
@@ -198,47 +204,47 @@ func EndpointFrom(cfg *configv1.ControlPlaneConfig) Endpoint {
 func (e Endpoint) Hosted() bool { return e.URL != "" }
 
 func (c *client) CloneRepoOntoDaemon(ctx context.Context, jwt string, in CloneRepoRequest) (CloneRepoResult, error) {
-	req := connect.NewRequest(&gitcredentialv1.CloneRepoRequest{
+	req := &gitcredentialv1.CloneRepoRequest{
 		DaemonId:  in.DaemonID,
 		GitRepo:   in.CloneURL,
 		GitBranch: in.Branch,
 		Path:      in.Path,
 		RequestId: in.RequestID,
-	})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.gitCredentials.CloneRepo(ctx, req)
 	if err != nil {
 		return CloneRepoResult{}, err
 	}
 	return CloneRepoResult{
-		ClonedPath: resp.Msg.GetClonedPath(),
-		Queued:     resp.Msg.GetQueued(),
-		DaemonName: resp.Msg.GetDaemonName(),
+		ClonedPath: resp.GetClonedPath(),
+		Queued:     resp.GetQueued(),
+		DaemonName: resp.GetDaemonName(),
 	}, nil
 }
 
 func (c *client) ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error) {
-	req := connect.NewRequest(&organizationv1.ListMyOrganizationsRequest{})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	req := &organizationv1.ListMyOrganizationsRequest{}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.organizations.ListMyOrganizations(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]MyOrganization, 0, len(resp.Msg.GetOrganizations()))
-	for _, o := range resp.Msg.GetOrganizations() {
+	out := make([]MyOrganization, 0, len(resp.GetOrganizations()))
+	for _, o := range resp.GetOrganizations() {
 		out = append(out, MyOrganization{ID: o.GetId(), Role: o.GetRole()})
 	}
 	return out, nil
 }
 
 func (c *client) PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error) {
-	req := connect.NewRequest(&userv1.PreviewAccountDeletionRequest{})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	req := &userv1.PreviewAccountDeletionRequest{}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.users.PreviewAccountDeletion(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	w := resp.Msg.GetWallet()
+	w := resp.GetWallet()
 	if w == nil {
 		return nil, nil
 	}
@@ -251,20 +257,20 @@ func (c *client) PreviewAccountDeletionWallet(ctx context.Context, jwt string) (
 }
 
 func (c *client) DeleteCurrentUserAccount(ctx context.Context, jwt string) (*AccountDeletionResult, error) {
-	req := connect.NewRequest(&userv1.DeleteCurrentUserAccountRequest{})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	req := &userv1.DeleteCurrentUserAccountRequest{}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.users.DeleteCurrentUserAccount(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	out := &AccountDeletionResult{RefundPending: resp.Msg.GetRefundPending()}
-	for _, b := range resp.Msg.GetBlockers() {
+	out := &AccountDeletionResult{RefundPending: resp.GetRefundPending()}
+	for _, b := range resp.GetBlockers() {
 		out.Blockers = append(out.Blockers, AccountDeletionBlocker{
 			Reason: b.GetReason(),
 			Detail: b.GetDetail(),
 		})
 	}
-	if w := resp.Msg.GetWallet(); w != nil {
+	if w := resp.GetWallet(); w != nil {
 		out.RefundedCents = w.GetRefundedCents()
 		out.RefundDestinations = refundDestinations(w.GetDestinations())
 		out.RefundOwedCents = w.GetRefundOwedCents()
@@ -286,64 +292,67 @@ func refundDestinations(in []*userv1.WalletRefundDestination) []RefundDestinatio
 }
 
 func (c *client) MintLLMKey(ctx context.Context, jwt, deviceName string) (LLMKey, error) {
-	req := connect.NewRequest(&accesstokenv1.CreateMyTokenRequest{
+	req := &accesstokenv1.CreateMyTokenRequest{
 		Name:   deviceName,
 		Scopes: []string{"llm:invoke"},
 		Rotate: true,
-	})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.accessTokens.CreateMyToken(ctx, req)
 	if err != nil {
 		return LLMKey{}, err
 	}
 	return LLMKey{
-		Plaintext: strings.TrimSpace(resp.Msg.GetSecret()),
-		Rotated:   resp.Msg.GetRotated(),
+		Plaintext: strings.TrimSpace(resp.GetSecret()),
+		Rotated:   resp.GetRotated(),
 	}, nil
 }
 
 func (c *client) MintDaemonResumeToken(ctx context.Context, jwt, daemonID, name string) (DaemonResumeToken, error) {
-	req := connect.NewRequest(&accesstokenv1.CreateMyTokenRequest{
+	req := &accesstokenv1.CreateMyTokenRequest{
 		Name:     name,
 		Scopes:   []string{daemonResumeScope},
 		Resource: &accesstokenv1.ResourceBinding{Kind: daemonResourceKind, Id: daemonID},
 		Rotate:   true,
-	})
-	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	}
+	ctx = withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.accessTokens.CreateMyToken(ctx, req)
 	if err != nil {
 		return DaemonResumeToken{}, err
 	}
-	return DaemonResumeToken{Plaintext: strings.TrimSpace(resp.Msg.GetSecret())}, nil
+	return DaemonResumeToken{Plaintext: strings.TrimSpace(resp.GetSecret())}, nil
 }
 
 func (c *client) RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error {
 	scope := daemonResumeScope
-	listReq := connect.NewRequest(&accesstokenv1.ListMyTokensRequest{Scope: &scope})
-	attachAuthorization(listReq, "Bearer "+strings.TrimSpace(jwt))
-	listed, err := c.accessTokens.ListMyTokens(ctx, listReq)
+	listReq := &accesstokenv1.ListMyTokensRequest{Scope: &scope}
+	listed, err := c.accessTokens.ListMyTokens(withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt)), listReq)
 	if err != nil {
 		return err
 	}
 	var firstErr error
-	for _, tok := range listed.Msg.GetTokens() {
+	for _, tok := range listed.GetTokens() {
 		if tok.GetResource().GetKind() != daemonResourceKind || tok.GetResource().GetId() != daemonID {
 			continue
 		}
 		if tok.GetRevokedAt() != nil {
 			continue
 		}
-		revokeReq := connect.NewRequest(&accesstokenv1.RevokeMyTokenRequest{Id: tok.GetId()})
-		attachAuthorization(revokeReq, "Bearer "+strings.TrimSpace(jwt))
-		if _, err := c.accessTokens.RevokeMyToken(ctx, revokeReq); err != nil && firstErr == nil {
+		revokeReq := &accesstokenv1.RevokeMyTokenRequest{Id: tok.GetId()}
+		if _, err := c.accessTokens.RevokeMyToken(withAuthorization(ctx, "Bearer "+strings.TrimSpace(jwt)), revokeReq); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
 	return firstErr
 }
 
-func attachAuthorization[T any](req *connect.Request[T], authHeader string) {
+// withAuthorization returns ctx carrying a fresh client CallInfo whose request
+// header sends authHeader as Authorization (nothing when it is blank). Each
+// call gets its own context: a CallInfo describes one call.
+func withAuthorization(ctx context.Context, authHeader string) context.Context {
+	ctx, info := connect.NewClientContext(ctx)
 	if trimmed := strings.TrimSpace(authHeader); trimmed != "" {
-		req.Header().Set("Authorization", trimmed)
+		info.RequestHeader().Set("Authorization", trimmed)
 	}
+	return ctx
 }

@@ -22,7 +22,7 @@ import (
 func Caller(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return "", svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
+		return "", svcerr.ToConnectV2(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	return userID, nil
 }

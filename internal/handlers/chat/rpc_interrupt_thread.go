@@ -4,8 +4,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -16,8 +14,8 @@ import (
 // mailbox now rather than after finishing what it started.
 func (s *Service) InterruptThread(
 	ctx context.Context,
-	req *connect.Request[reliantv1.InterruptThreadRequest],
-) (*connect.Response[reliantv1.InterruptThreadResponse], error) {
+	req *reliantv1.InterruptThreadRequest,
+) (*reliantv1.InterruptThreadResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	threadsSvc := s.threads
@@ -30,15 +28,15 @@ func (s *Service) InterruptThread(
 
 	result, err := threadsSvc.InterruptThread(ctx, threads.InterruptThreadOpts{
 		UserID:   userID,
-		ChatID:   req.Msg.ChatId,
-		ThreadID: req.Msg.ThreadId,
+		ChatID:   req.ChatId,
+		ThreadID: req.ThreadId,
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to interrupt thread"))
 	}
 
-	return connect.NewResponse(&reliantv1.InterruptThreadResponse{
+	return &reliantv1.InterruptThreadResponse{
 		CancelledToolCalls:     int32(result.CancelledToolCalls),
 		UndeliverableToolCalls: result.UndeliverableToolCalls,
-	}), nil
+	}, nil
 }

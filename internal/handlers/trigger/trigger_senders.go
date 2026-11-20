@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -41,10 +39,10 @@ type ResolvedSender struct {
 // the caller's triggers: it asks the provider, as the caller, about people.
 func (s *Service) ResolveTriggerSenders(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ResolveTriggerSendersRequest],
-) (*connect.Response[reliantv1.ResolveTriggerSendersResponse], error) {
+	req *reliantv1.ResolveTriggerSendersRequest,
+) (*reliantv1.ResolveTriggerSendersResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	integration := strings.TrimSpace(req.Msg.Integration)
+	integration := strings.TrimSpace(req.Integration)
 	if integration != "github" {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("looking people up is only available for GitHub, not %q", integration))
 	}
@@ -52,7 +50,7 @@ func (s *Service) ResolveTriggerSenders(
 	if dir == nil {
 		return nil, svcerr.Unavailable("GitHub triggers are not set up on this server, so GitHub people cannot be looked up")
 	}
-	found, err := dir.Resolve(ctx, userID, req.Msg.Handles, req.Msg.SenderIds)
+	found, err := dir.Resolve(ctx, userID, req.Handles, req.SenderIds)
 	switch {
 	case err == nil:
 	case dir.IsInvalid(err):
@@ -68,5 +66,5 @@ func (s *Service) ResolveTriggerSenders(
 	for _, f := range found {
 		out = append(out, &reliantv1.ResolvedTriggerSender{Query: f.Query, SenderId: f.ID, DisplayName: f.DisplayName})
 	}
-	return connect.NewResponse(&reliantv1.ResolveTriggerSendersResponse{Senders: out}), nil
+	return &reliantv1.ResolveTriggerSendersResponse{Senders: out}, nil
 }

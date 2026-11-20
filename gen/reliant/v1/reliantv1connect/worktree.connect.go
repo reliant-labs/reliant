@@ -7,127 +7,310 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// WorktreeServiceName is the fully-qualified name of the WorktreeService service.
 	WorktreeServiceName = "reliant.v1.WorktreeService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// WorktreeServiceListWorktreeRecoveriesProcedure is the fully-qualified name of the
-	// WorktreeService's ListWorktreeRecoveries RPC.
+	// WorktreeServiceListWorktreeRecoveriesProcedure is the procedure name of the WorktreeService's
+	// ListWorktreeRecoveries RPC.
 	WorktreeServiceListWorktreeRecoveriesProcedure = "/reliant.v1.WorktreeService/ListWorktreeRecoveries"
-	// WorktreeServiceRestoreWorktreeRecoveryProcedure is the fully-qualified name of the
-	// WorktreeService's RestoreWorktreeRecovery RPC.
+	// WorktreeServiceRestoreWorktreeRecoveryProcedure is the procedure name of the WorktreeService's
+	// RestoreWorktreeRecovery RPC.
 	WorktreeServiceRestoreWorktreeRecoveryProcedure = "/reliant.v1.WorktreeService/RestoreWorktreeRecovery"
-	// WorktreeServiceDeleteWorktreeRecoveryProcedure is the fully-qualified name of the
-	// WorktreeService's DeleteWorktreeRecovery RPC.
+	// WorktreeServiceDeleteWorktreeRecoveryProcedure is the procedure name of the WorktreeService's
+	// DeleteWorktreeRecovery RPC.
 	WorktreeServiceDeleteWorktreeRecoveryProcedure = "/reliant.v1.WorktreeService/DeleteWorktreeRecovery"
-	// WorktreeServiceCreateWorktreeProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceCreateWorktreeProcedure is the procedure name of the WorktreeService's
 	// CreateWorktree RPC.
 	WorktreeServiceCreateWorktreeProcedure = "/reliant.v1.WorktreeService/CreateWorktree"
-	// WorktreeServiceListWorktreesProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceListWorktreesProcedure is the procedure name of the WorktreeService's
 	// ListWorktrees RPC.
 	WorktreeServiceListWorktreesProcedure = "/reliant.v1.WorktreeService/ListWorktrees"
-	// WorktreeServiceListArchivedWorktreesProcedure is the fully-qualified name of the
-	// WorktreeService's ListArchivedWorktrees RPC.
+	// WorktreeServiceListArchivedWorktreesProcedure is the procedure name of the WorktreeService's
+	// ListArchivedWorktrees RPC.
 	WorktreeServiceListArchivedWorktreesProcedure = "/reliant.v1.WorktreeService/ListArchivedWorktrees"
-	// WorktreeServiceGetWorktreeProcedure is the fully-qualified name of the WorktreeService's
-	// GetWorktree RPC.
+	// WorktreeServiceGetWorktreeProcedure is the procedure name of the WorktreeService's GetWorktree
+	// RPC.
 	WorktreeServiceGetWorktreeProcedure = "/reliant.v1.WorktreeService/GetWorktree"
-	// WorktreeServiceUpdateWorktreeProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceUpdateWorktreeProcedure is the procedure name of the WorktreeService's
 	// UpdateWorktree RPC.
 	WorktreeServiceUpdateWorktreeProcedure = "/reliant.v1.WorktreeService/UpdateWorktree"
-	// WorktreeServiceDeleteWorktreeProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceDeleteWorktreeProcedure is the procedure name of the WorktreeService's
 	// DeleteWorktree RPC.
 	WorktreeServiceDeleteWorktreeProcedure = "/reliant.v1.WorktreeService/DeleteWorktree"
-	// WorktreeServiceArchiveWorktreeProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceArchiveWorktreeProcedure is the procedure name of the WorktreeService's
 	// ArchiveWorktree RPC.
 	WorktreeServiceArchiveWorktreeProcedure = "/reliant.v1.WorktreeService/ArchiveWorktree"
-	// WorktreeServiceUnarchiveWorktreeProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceUnarchiveWorktreeProcedure is the procedure name of the WorktreeService's
 	// UnarchiveWorktree RPC.
 	WorktreeServiceUnarchiveWorktreeProcedure = "/reliant.v1.WorktreeService/UnarchiveWorktree"
-	// WorktreeServiceImportWorktreeProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceImportWorktreeProcedure is the procedure name of the WorktreeService's
 	// ImportWorktree RPC.
 	WorktreeServiceImportWorktreeProcedure = "/reliant.v1.WorktreeService/ImportWorktree"
-	// WorktreeServiceDiscoverWorktreesProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceDiscoverWorktreesProcedure is the procedure name of the WorktreeService's
 	// DiscoverWorktrees RPC.
 	WorktreeServiceDiscoverWorktreesProcedure = "/reliant.v1.WorktreeService/DiscoverWorktrees"
-	// WorktreeServicePruneWorktreesProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServicePruneWorktreesProcedure is the procedure name of the WorktreeService's
 	// PruneWorktrees RPC.
 	WorktreeServicePruneWorktreesProcedure = "/reliant.v1.WorktreeService/PruneWorktrees"
-	// WorktreeServiceRecreateWorktreeProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceRecreateWorktreeProcedure is the procedure name of the WorktreeService's
 	// RecreateWorktree RPC.
 	WorktreeServiceRecreateWorktreeProcedure = "/reliant.v1.WorktreeService/RecreateWorktree"
-	// WorktreeServiceGetWorktreeChangesProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceGetWorktreeChangesProcedure is the procedure name of the WorktreeService's
 	// GetWorktreeChanges RPC.
 	WorktreeServiceGetWorktreeChangesProcedure = "/reliant.v1.WorktreeService/GetWorktreeChanges"
-	// WorktreeServiceGetWorktreeGitStatusProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceGetWorktreeGitStatusProcedure is the procedure name of the WorktreeService's
 	// GetWorktreeGitStatus RPC.
 	WorktreeServiceGetWorktreeGitStatusProcedure = "/reliant.v1.WorktreeService/GetWorktreeGitStatus"
-	// WorktreeServiceGetWorktreeCommitsProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceGetWorktreeCommitsProcedure is the procedure name of the WorktreeService's
 	// GetWorktreeCommits RPC.
 	WorktreeServiceGetWorktreeCommitsProcedure = "/reliant.v1.WorktreeService/GetWorktreeCommits"
-	// WorktreeServiceListWorktreeRepoStatusesProcedure is the fully-qualified name of the
-	// WorktreeService's ListWorktreeRepoStatuses RPC.
+	// WorktreeServiceListWorktreeRepoStatusesProcedure is the procedure name of the WorktreeService's
+	// ListWorktreeRepoStatuses RPC.
 	WorktreeServiceListWorktreeRepoStatusesProcedure = "/reliant.v1.WorktreeService/ListWorktreeRepoStatuses"
-	// WorktreeServiceStageFilesProcedure is the fully-qualified name of the WorktreeService's
-	// StageFiles RPC.
+	// WorktreeServiceStageFilesProcedure is the procedure name of the WorktreeService's StageFiles RPC.
 	WorktreeServiceStageFilesProcedure = "/reliant.v1.WorktreeService/StageFiles"
-	// WorktreeServiceUnstageFilesProcedure is the fully-qualified name of the WorktreeService's
-	// UnstageFiles RPC.
+	// WorktreeServiceUnstageFilesProcedure is the procedure name of the WorktreeService's UnstageFiles
+	// RPC.
 	WorktreeServiceUnstageFilesProcedure = "/reliant.v1.WorktreeService/UnstageFiles"
-	// WorktreeServiceRevertFilesProcedure is the fully-qualified name of the WorktreeService's
-	// RevertFiles RPC.
+	// WorktreeServiceRevertFilesProcedure is the procedure name of the WorktreeService's RevertFiles
+	// RPC.
 	WorktreeServiceRevertFilesProcedure = "/reliant.v1.WorktreeService/RevertFiles"
-	// WorktreeServiceCommitWorktreeProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceCommitWorktreeProcedure is the procedure name of the WorktreeService's
 	// CommitWorktree RPC.
 	WorktreeServiceCommitWorktreeProcedure = "/reliant.v1.WorktreeService/CommitWorktree"
-	// WorktreeServicePushWorktreeProcedure is the fully-qualified name of the WorktreeService's
-	// PushWorktree RPC.
+	// WorktreeServicePushWorktreeProcedure is the procedure name of the WorktreeService's PushWorktree
+	// RPC.
 	WorktreeServicePushWorktreeProcedure = "/reliant.v1.WorktreeService/PushWorktree"
-	// WorktreeServicePullWorktreeProcedure is the fully-qualified name of the WorktreeService's
-	// PullWorktree RPC.
+	// WorktreeServicePullWorktreeProcedure is the procedure name of the WorktreeService's PullWorktree
+	// RPC.
 	WorktreeServicePullWorktreeProcedure = "/reliant.v1.WorktreeService/PullWorktree"
-	// WorktreeServiceGetWorktreePRProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceGetWorktreePRProcedure is the procedure name of the WorktreeService's
 	// GetWorktreePR RPC.
 	WorktreeServiceGetWorktreePRProcedure = "/reliant.v1.WorktreeService/GetWorktreePR"
-	// WorktreeServiceCreateWorktreePRProcedure is the fully-qualified name of the WorktreeService's
+	// WorktreeServiceCreateWorktreePRProcedure is the procedure name of the WorktreeService's
 	// CreateWorktreePR RPC.
 	WorktreeServiceCreateWorktreePRProcedure = "/reliant.v1.WorktreeService/CreateWorktreePR"
+)
+
+var (
+	worktreeServiceListWorktreeRecoveriesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("ListWorktreeRecoveries"),
+			Procedure:  WorktreeServiceListWorktreeRecoveriesProcedure,
+		}
+	})
+	worktreeServiceRestoreWorktreeRecoverySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("RestoreWorktreeRecovery"),
+			Procedure:  WorktreeServiceRestoreWorktreeRecoveryProcedure,
+		}
+	})
+	worktreeServiceDeleteWorktreeRecoverySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("DeleteWorktreeRecovery"),
+			Procedure:  WorktreeServiceDeleteWorktreeRecoveryProcedure,
+		}
+	})
+	worktreeServiceCreateWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("CreateWorktree"),
+			Procedure:  WorktreeServiceCreateWorktreeProcedure,
+		}
+	})
+	worktreeServiceListWorktreesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("ListWorktrees"),
+			Procedure:  WorktreeServiceListWorktreesProcedure,
+		}
+	})
+	worktreeServiceListArchivedWorktreesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("ListArchivedWorktrees"),
+			Procedure:  WorktreeServiceListArchivedWorktreesProcedure,
+		}
+	})
+	worktreeServiceGetWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("GetWorktree"),
+			Procedure:  WorktreeServiceGetWorktreeProcedure,
+		}
+	})
+	worktreeServiceUpdateWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("UpdateWorktree"),
+			Procedure:  WorktreeServiceUpdateWorktreeProcedure,
+		}
+	})
+	worktreeServiceDeleteWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("DeleteWorktree"),
+			Procedure:  WorktreeServiceDeleteWorktreeProcedure,
+		}
+	})
+	worktreeServiceArchiveWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("ArchiveWorktree"),
+			Procedure:  WorktreeServiceArchiveWorktreeProcedure,
+		}
+	})
+	worktreeServiceUnarchiveWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("UnarchiveWorktree"),
+			Procedure:  WorktreeServiceUnarchiveWorktreeProcedure,
+		}
+	})
+	worktreeServiceImportWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("ImportWorktree"),
+			Procedure:  WorktreeServiceImportWorktreeProcedure,
+		}
+	})
+	worktreeServiceDiscoverWorktreesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("DiscoverWorktrees"),
+			Procedure:        WorktreeServiceDiscoverWorktreesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	worktreeServicePruneWorktreesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("PruneWorktrees"),
+			Procedure:  WorktreeServicePruneWorktreesProcedure,
+		}
+	})
+	worktreeServiceRecreateWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("RecreateWorktree"),
+			Procedure:  WorktreeServiceRecreateWorktreeProcedure,
+		}
+	})
+	worktreeServiceGetWorktreeChangesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("GetWorktreeChanges"),
+			Procedure:  WorktreeServiceGetWorktreeChangesProcedure,
+		}
+	})
+	worktreeServiceGetWorktreeGitStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("GetWorktreeGitStatus"),
+			Procedure:  WorktreeServiceGetWorktreeGitStatusProcedure,
+		}
+	})
+	worktreeServiceGetWorktreeCommitsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("GetWorktreeCommits"),
+			Procedure:  WorktreeServiceGetWorktreeCommitsProcedure,
+		}
+	})
+	worktreeServiceListWorktreeRepoStatusesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("ListWorktreeRepoStatuses"),
+			Procedure:  WorktreeServiceListWorktreeRepoStatusesProcedure,
+		}
+	})
+	worktreeServiceStageFilesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("StageFiles"),
+			Procedure:  WorktreeServiceStageFilesProcedure,
+		}
+	})
+	worktreeServiceUnstageFilesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("UnstageFiles"),
+			Procedure:  WorktreeServiceUnstageFilesProcedure,
+		}
+	})
+	worktreeServiceRevertFilesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("RevertFiles"),
+			Procedure:  WorktreeServiceRevertFilesProcedure,
+		}
+	})
+	worktreeServiceCommitWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("CommitWorktree"),
+			Procedure:  WorktreeServiceCommitWorktreeProcedure,
+		}
+	})
+	worktreeServicePushWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("PushWorktree"),
+			Procedure:  WorktreeServicePushWorktreeProcedure,
+		}
+	})
+	worktreeServicePullWorktreeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("PullWorktree"),
+			Procedure:  WorktreeServicePullWorktreeProcedure,
+		}
+	})
+	worktreeServiceGetWorktreePRSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("GetWorktreePR"),
+			Procedure:  WorktreeServiceGetWorktreePRProcedure,
+		}
+	})
+	worktreeServiceCreateWorktreePRSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods().ByName("CreateWorktreePR"),
+			Procedure:  WorktreeServiceCreateWorktreePRProcedure,
+		}
+	})
 )
 
 // WorktreeServiceClient is a client for the reliant.v1.WorktreeService service.
 type WorktreeServiceClient interface {
 	// Owner-scoped durable recovery catalog, independent of source row lifetime.
 	// forge:custom — owner authorization and retained catalog semantics.
-	ListWorktreeRecoveries(context.Context, *connect.Request[v1.ListWorktreeRecoveriesRequest]) (*connect.Response[v1.ListWorktreeRecoveriesResponse], error)
+	ListWorktreeRecoveries(context.Context, *v1.ListWorktreeRecoveriesRequest) (*v1.ListWorktreeRecoveriesResponse, error)
 	// Restores into a separate worktree; never resets an existing branch.
-	RestoreWorktreeRecovery(context.Context, *connect.Request[v1.RestoreWorktreeRecoveryRequest]) (*connect.Response[v1.RestoreWorktreeRecoveryResponse], error)
+	RestoreWorktreeRecovery(context.Context, *v1.RestoreWorktreeRecoveryRequest) (*v1.RestoreWorktreeRecoveryResponse, error)
 	// Explicit exact-ref deletion only; not called on source removal or restore.
 	// forge:custom — journals exact remote ref deletion; never CRUD row deletion.
-	DeleteWorktreeRecovery(context.Context, *connect.Request[v1.DeleteWorktreeRecoveryRequest]) (*connect.Response[v1.DeleteWorktreeRecoveryResponse], error)
+	DeleteWorktreeRecovery(context.Context, *v1.DeleteWorktreeRecoveryRequest) (*v1.DeleteWorktreeRecoveryResponse, error)
 	// CRUD Operations
 	// CreateWorktree creates ONE workspace-level worktree for the project.
 	// The daemon enumerates the project's nested repos and fans out N
@@ -135,406 +318,69 @@ type WorktreeServiceClient interface {
 	// returned Worktree row spans the whole workspace; tools scope to a nested
 	// repo via the per-call `repo` param, not via per-repo worktree rows.
 	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
-	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
+	CreateWorktree(context.Context, *v1.CreateWorktreeRequest) (*v1.CreateWorktreeResponse, error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
-	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
+	ListWorktrees(context.Context, *v1.ListWorktreesRequest) (*v1.ListWorktreesResponse, error)
 	// ListArchivedWorktrees pages through the project's archived workspaces,
 	// most recently archived first. Archived workspaces are never part of
 	// ListWorktrees: only the archived view asks for them.
 	// forge:custom — authorizes through the project and reads only archived rows
-	ListArchivedWorktrees(context.Context, *connect.Request[v1.ListArchivedWorktreesRequest]) (*connect.Response[v1.ListArchivedWorktreesResponse], error)
+	ListArchivedWorktrees(context.Context, *v1.ListArchivedWorktreesRequest) (*v1.ListArchivedWorktreesResponse, error)
 	// forge:custom — authorizes through the worktree's project before it reads
-	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
+	GetWorktree(context.Context, *v1.GetWorktreeRequest) (*v1.GetWorktreeResponse, error)
 	// forge:custom — a partial update authorized through the worktree's project
-	UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error)
+	UpdateWorktree(context.Context, *v1.UpdateWorktreeRequest) (*v1.UpdateWorktreeResponse, error)
 	// forge:custom — archives a live worktree, and deletes an archived one only once its machine removed the directory
-	DeleteWorktree(context.Context, *connect.Request[v1.DeleteWorktreeRequest]) (*connect.Response[v1.DeleteWorktreeResponse], error)
-	ArchiveWorktree(context.Context, *connect.Request[v1.ArchiveWorktreeRequest]) (*connect.Response[v1.ArchiveWorktreeResponse], error)
-	UnarchiveWorktree(context.Context, *connect.Request[v1.UnarchiveWorktreeRequest]) (*connect.Response[v1.UnarchiveWorktreeResponse], error)
+	DeleteWorktree(context.Context, *v1.DeleteWorktreeRequest) (*v1.DeleteWorktreeResponse, error)
+	ArchiveWorktree(context.Context, *v1.ArchiveWorktreeRequest) (*v1.ArchiveWorktreeResponse, error)
+	UnarchiveWorktree(context.Context, *v1.UnarchiveWorktreeRequest) (*v1.UnarchiveWorktreeResponse, error)
 	// Import/Discovery Operations
-	ImportWorktree(context.Context, *connect.Request[v1.ImportWorktreeRequest]) (*connect.Response[v1.ImportWorktreeResponse], error)
+	ImportWorktree(context.Context, *v1.ImportWorktreeRequest) (*v1.ImportWorktreeResponse, error)
 	// DiscoverWorktrees only reads (git worktree list in each repo), and says so
 	// with NO_SIDE_EFFECTS: forge then generates a useQuery for it, so the
 	// discovered list lives in the query cache under worktreeServiceKeys.
-	DiscoverWorktrees(context.Context, *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error)
+	DiscoverWorktrees(context.Context, *v1.DiscoverWorktreesRequest) (*v1.DiscoverWorktreesResponse, error)
 	// PruneWorktrees runs `git worktree prune` in each repo of the project. It
 	// only drops records whose directories are already gone; it never touches a
 	// directory that exists. Explicit user action only, never automatic.
-	PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error)
-	RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error)
+	PruneWorktrees(context.Context, *v1.PruneWorktreesRequest) (*v1.PruneWorktreesResponse, error)
+	RecreateWorktree(context.Context, *v1.RecreateWorktreeRequest) (*v1.RecreateWorktreeResponse, error)
 	// Git Read Operations
-	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
-	GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error)
-	GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error)
+	GetWorktreeChanges(context.Context, *v1.GetWorktreeChangesRequest) (*v1.GetWorktreeChangesResponse, error)
+	GetWorktreeGitStatus(context.Context, *v1.GetWorktreeGitStatusRequest) (*v1.GetWorktreeGitStatusResponse, error)
+	GetWorktreeCommits(context.Context, *v1.GetWorktreeCommitsRequest) (*v1.GetWorktreeCommitsResponse, error)
 	// ListWorktreeRepoStatuses returns per-repo git status for every nested
 	// repo in the worktree's project. Drives the right-sidebar grouped view.
 	// Single-repo and zero-repo projects collapse to a single-element (or empty)
 	// response so callers don't need a special case.
-	ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error)
+	ListWorktreeRepoStatuses(context.Context, *v1.ListWorktreeRepoStatusesRequest) (*v1.ListWorktreeRepoStatusesResponse, error)
 	// Git Write Operations
-	StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error)
-	UnstageFiles(context.Context, *connect.Request[v1.UnstageFilesRequest]) (*connect.Response[v1.UnstageFilesResponse], error)
-	RevertFiles(context.Context, *connect.Request[v1.RevertFilesRequest]) (*connect.Response[v1.RevertFilesResponse], error)
-	CommitWorktree(context.Context, *connect.Request[v1.CommitWorktreeRequest]) (*connect.Response[v1.CommitWorktreeResponse], error)
-	PushWorktree(context.Context, *connect.Request[v1.PushWorktreeRequest]) (*connect.Response[v1.PushWorktreeResponse], error)
-	PullWorktree(context.Context, *connect.Request[v1.PullWorktreeRequest]) (*connect.Response[v1.PullWorktreeResponse], error)
-	GetWorktreePR(context.Context, *connect.Request[v1.GetWorktreePRRequest]) (*connect.Response[v1.GetWorktreePRResponse], error)
-	CreateWorktreePR(context.Context, *connect.Request[v1.CreateWorktreePRRequest]) (*connect.Response[v1.CreateWorktreePRResponse], error)
+	StageFiles(context.Context, *v1.StageFilesRequest) (*v1.StageFilesResponse, error)
+	UnstageFiles(context.Context, *v1.UnstageFilesRequest) (*v1.UnstageFilesResponse, error)
+	RevertFiles(context.Context, *v1.RevertFilesRequest) (*v1.RevertFilesResponse, error)
+	CommitWorktree(context.Context, *v1.CommitWorktreeRequest) (*v1.CommitWorktreeResponse, error)
+	PushWorktree(context.Context, *v1.PushWorktreeRequest) (*v1.PushWorktreeResponse, error)
+	PullWorktree(context.Context, *v1.PullWorktreeRequest) (*v1.PullWorktreeResponse, error)
+	GetWorktreePR(context.Context, *v1.GetWorktreePRRequest) (*v1.GetWorktreePRResponse, error)
+	CreateWorktreePR(context.Context, *v1.CreateWorktreePRRequest) (*v1.CreateWorktreePRResponse, error)
 }
 
-// NewWorktreeServiceClient constructs a client for the reliant.v1.WorktreeService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorktreeServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	worktreeServiceMethods := v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods()
-	return &worktreeServiceClient{
-		listWorktreeRecoveries: connect.NewClient[v1.ListWorktreeRecoveriesRequest, v1.ListWorktreeRecoveriesResponse](
-			httpClient,
-			baseURL+WorktreeServiceListWorktreeRecoveriesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRecoveries")),
-			connect.WithClientOptions(opts...),
-		),
-		restoreWorktreeRecovery: connect.NewClient[v1.RestoreWorktreeRecoveryRequest, v1.RestoreWorktreeRecoveryResponse](
-			httpClient,
-			baseURL+WorktreeServiceRestoreWorktreeRecoveryProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("RestoreWorktreeRecovery")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteWorktreeRecovery: connect.NewClient[v1.DeleteWorktreeRecoveryRequest, v1.DeleteWorktreeRecoveryResponse](
-			httpClient,
-			baseURL+WorktreeServiceDeleteWorktreeRecoveryProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("DeleteWorktreeRecovery")),
-			connect.WithClientOptions(opts...),
-		),
-		createWorktree: connect.NewClient[v1.CreateWorktreeRequest, v1.CreateWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceCreateWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("CreateWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		listWorktrees: connect.NewClient[v1.ListWorktreesRequest, v1.ListWorktreesResponse](
-			httpClient,
-			baseURL+WorktreeServiceListWorktreesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktrees")),
-			connect.WithClientOptions(opts...),
-		),
-		listArchivedWorktrees: connect.NewClient[v1.ListArchivedWorktreesRequest, v1.ListArchivedWorktreesResponse](
-			httpClient,
-			baseURL+WorktreeServiceListArchivedWorktreesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("ListArchivedWorktrees")),
-			connect.WithClientOptions(opts...),
-		),
-		getWorktree: connect.NewClient[v1.GetWorktreeRequest, v1.GetWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceGetWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		updateWorktree: connect.NewClient[v1.UpdateWorktreeRequest, v1.UpdateWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceUpdateWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("UpdateWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteWorktree: connect.NewClient[v1.DeleteWorktreeRequest, v1.DeleteWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceDeleteWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("DeleteWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		archiveWorktree: connect.NewClient[v1.ArchiveWorktreeRequest, v1.ArchiveWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceArchiveWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("ArchiveWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		unarchiveWorktree: connect.NewClient[v1.UnarchiveWorktreeRequest, v1.UnarchiveWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceUnarchiveWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("UnarchiveWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		importWorktree: connect.NewClient[v1.ImportWorktreeRequest, v1.ImportWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceImportWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("ImportWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		discoverWorktrees: connect.NewClient[v1.DiscoverWorktreesRequest, v1.DiscoverWorktreesResponse](
-			httpClient,
-			baseURL+WorktreeServiceDiscoverWorktreesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("DiscoverWorktrees")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		pruneWorktrees: connect.NewClient[v1.PruneWorktreesRequest, v1.PruneWorktreesResponse](
-			httpClient,
-			baseURL+WorktreeServicePruneWorktreesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("PruneWorktrees")),
-			connect.WithClientOptions(opts...),
-		),
-		recreateWorktree: connect.NewClient[v1.RecreateWorktreeRequest, v1.RecreateWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceRecreateWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("RecreateWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		getWorktreeChanges: connect.NewClient[v1.GetWorktreeChangesRequest, v1.GetWorktreeChangesResponse](
-			httpClient,
-			baseURL+WorktreeServiceGetWorktreeChangesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeChanges")),
-			connect.WithClientOptions(opts...),
-		),
-		getWorktreeGitStatus: connect.NewClient[v1.GetWorktreeGitStatusRequest, v1.GetWorktreeGitStatusResponse](
-			httpClient,
-			baseURL+WorktreeServiceGetWorktreeGitStatusProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeGitStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		getWorktreeCommits: connect.NewClient[v1.GetWorktreeCommitsRequest, v1.GetWorktreeCommitsResponse](
-			httpClient,
-			baseURL+WorktreeServiceGetWorktreeCommitsProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeCommits")),
-			connect.WithClientOptions(opts...),
-		),
-		listWorktreeRepoStatuses: connect.NewClient[v1.ListWorktreeRepoStatusesRequest, v1.ListWorktreeRepoStatusesResponse](
-			httpClient,
-			baseURL+WorktreeServiceListWorktreeRepoStatusesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRepoStatuses")),
-			connect.WithClientOptions(opts...),
-		),
-		stageFiles: connect.NewClient[v1.StageFilesRequest, v1.StageFilesResponse](
-			httpClient,
-			baseURL+WorktreeServiceStageFilesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("StageFiles")),
-			connect.WithClientOptions(opts...),
-		),
-		unstageFiles: connect.NewClient[v1.UnstageFilesRequest, v1.UnstageFilesResponse](
-			httpClient,
-			baseURL+WorktreeServiceUnstageFilesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("UnstageFiles")),
-			connect.WithClientOptions(opts...),
-		),
-		revertFiles: connect.NewClient[v1.RevertFilesRequest, v1.RevertFilesResponse](
-			httpClient,
-			baseURL+WorktreeServiceRevertFilesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("RevertFiles")),
-			connect.WithClientOptions(opts...),
-		),
-		commitWorktree: connect.NewClient[v1.CommitWorktreeRequest, v1.CommitWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServiceCommitWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("CommitWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		pushWorktree: connect.NewClient[v1.PushWorktreeRequest, v1.PushWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServicePushWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("PushWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		pullWorktree: connect.NewClient[v1.PullWorktreeRequest, v1.PullWorktreeResponse](
-			httpClient,
-			baseURL+WorktreeServicePullWorktreeProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("PullWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		getWorktreePR: connect.NewClient[v1.GetWorktreePRRequest, v1.GetWorktreePRResponse](
-			httpClient,
-			baseURL+WorktreeServiceGetWorktreePRProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreePR")),
-			connect.WithClientOptions(opts...),
-		),
-		createWorktreePR: connect.NewClient[v1.CreateWorktreePRRequest, v1.CreateWorktreePRResponse](
-			httpClient,
-			baseURL+WorktreeServiceCreateWorktreePRProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("CreateWorktreePR")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// worktreeServiceClient implements WorktreeServiceClient.
-type worktreeServiceClient struct {
-	listWorktreeRecoveries   *connect.Client[v1.ListWorktreeRecoveriesRequest, v1.ListWorktreeRecoveriesResponse]
-	restoreWorktreeRecovery  *connect.Client[v1.RestoreWorktreeRecoveryRequest, v1.RestoreWorktreeRecoveryResponse]
-	deleteWorktreeRecovery   *connect.Client[v1.DeleteWorktreeRecoveryRequest, v1.DeleteWorktreeRecoveryResponse]
-	createWorktree           *connect.Client[v1.CreateWorktreeRequest, v1.CreateWorktreeResponse]
-	listWorktrees            *connect.Client[v1.ListWorktreesRequest, v1.ListWorktreesResponse]
-	listArchivedWorktrees    *connect.Client[v1.ListArchivedWorktreesRequest, v1.ListArchivedWorktreesResponse]
-	getWorktree              *connect.Client[v1.GetWorktreeRequest, v1.GetWorktreeResponse]
-	updateWorktree           *connect.Client[v1.UpdateWorktreeRequest, v1.UpdateWorktreeResponse]
-	deleteWorktree           *connect.Client[v1.DeleteWorktreeRequest, v1.DeleteWorktreeResponse]
-	archiveWorktree          *connect.Client[v1.ArchiveWorktreeRequest, v1.ArchiveWorktreeResponse]
-	unarchiveWorktree        *connect.Client[v1.UnarchiveWorktreeRequest, v1.UnarchiveWorktreeResponse]
-	importWorktree           *connect.Client[v1.ImportWorktreeRequest, v1.ImportWorktreeResponse]
-	discoverWorktrees        *connect.Client[v1.DiscoverWorktreesRequest, v1.DiscoverWorktreesResponse]
-	pruneWorktrees           *connect.Client[v1.PruneWorktreesRequest, v1.PruneWorktreesResponse]
-	recreateWorktree         *connect.Client[v1.RecreateWorktreeRequest, v1.RecreateWorktreeResponse]
-	getWorktreeChanges       *connect.Client[v1.GetWorktreeChangesRequest, v1.GetWorktreeChangesResponse]
-	getWorktreeGitStatus     *connect.Client[v1.GetWorktreeGitStatusRequest, v1.GetWorktreeGitStatusResponse]
-	getWorktreeCommits       *connect.Client[v1.GetWorktreeCommitsRequest, v1.GetWorktreeCommitsResponse]
-	listWorktreeRepoStatuses *connect.Client[v1.ListWorktreeRepoStatusesRequest, v1.ListWorktreeRepoStatusesResponse]
-	stageFiles               *connect.Client[v1.StageFilesRequest, v1.StageFilesResponse]
-	unstageFiles             *connect.Client[v1.UnstageFilesRequest, v1.UnstageFilesResponse]
-	revertFiles              *connect.Client[v1.RevertFilesRequest, v1.RevertFilesResponse]
-	commitWorktree           *connect.Client[v1.CommitWorktreeRequest, v1.CommitWorktreeResponse]
-	pushWorktree             *connect.Client[v1.PushWorktreeRequest, v1.PushWorktreeResponse]
-	pullWorktree             *connect.Client[v1.PullWorktreeRequest, v1.PullWorktreeResponse]
-	getWorktreePR            *connect.Client[v1.GetWorktreePRRequest, v1.GetWorktreePRResponse]
-	createWorktreePR         *connect.Client[v1.CreateWorktreePRRequest, v1.CreateWorktreePRResponse]
-}
-
-// ListWorktreeRecoveries calls reliant.v1.WorktreeService.ListWorktreeRecoveries.
-func (c *worktreeServiceClient) ListWorktreeRecoveries(ctx context.Context, req *connect.Request[v1.ListWorktreeRecoveriesRequest]) (*connect.Response[v1.ListWorktreeRecoveriesResponse], error) {
-	return c.listWorktreeRecoveries.CallUnary(ctx, req)
-}
-
-// RestoreWorktreeRecovery calls reliant.v1.WorktreeService.RestoreWorktreeRecovery.
-func (c *worktreeServiceClient) RestoreWorktreeRecovery(ctx context.Context, req *connect.Request[v1.RestoreWorktreeRecoveryRequest]) (*connect.Response[v1.RestoreWorktreeRecoveryResponse], error) {
-	return c.restoreWorktreeRecovery.CallUnary(ctx, req)
-}
-
-// DeleteWorktreeRecovery calls reliant.v1.WorktreeService.DeleteWorktreeRecovery.
-func (c *worktreeServiceClient) DeleteWorktreeRecovery(ctx context.Context, req *connect.Request[v1.DeleteWorktreeRecoveryRequest]) (*connect.Response[v1.DeleteWorktreeRecoveryResponse], error) {
-	return c.deleteWorktreeRecovery.CallUnary(ctx, req)
-}
-
-// CreateWorktree calls reliant.v1.WorktreeService.CreateWorktree.
-func (c *worktreeServiceClient) CreateWorktree(ctx context.Context, req *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error) {
-	return c.createWorktree.CallUnary(ctx, req)
-}
-
-// ListWorktrees calls reliant.v1.WorktreeService.ListWorktrees.
-func (c *worktreeServiceClient) ListWorktrees(ctx context.Context, req *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error) {
-	return c.listWorktrees.CallUnary(ctx, req)
-}
-
-// ListArchivedWorktrees calls reliant.v1.WorktreeService.ListArchivedWorktrees.
-func (c *worktreeServiceClient) ListArchivedWorktrees(ctx context.Context, req *connect.Request[v1.ListArchivedWorktreesRequest]) (*connect.Response[v1.ListArchivedWorktreesResponse], error) {
-	return c.listArchivedWorktrees.CallUnary(ctx, req)
-}
-
-// GetWorktree calls reliant.v1.WorktreeService.GetWorktree.
-func (c *worktreeServiceClient) GetWorktree(ctx context.Context, req *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error) {
-	return c.getWorktree.CallUnary(ctx, req)
-}
-
-// UpdateWorktree calls reliant.v1.WorktreeService.UpdateWorktree.
-func (c *worktreeServiceClient) UpdateWorktree(ctx context.Context, req *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error) {
-	return c.updateWorktree.CallUnary(ctx, req)
-}
-
-// DeleteWorktree calls reliant.v1.WorktreeService.DeleteWorktree.
-func (c *worktreeServiceClient) DeleteWorktree(ctx context.Context, req *connect.Request[v1.DeleteWorktreeRequest]) (*connect.Response[v1.DeleteWorktreeResponse], error) {
-	return c.deleteWorktree.CallUnary(ctx, req)
-}
-
-// ArchiveWorktree calls reliant.v1.WorktreeService.ArchiveWorktree.
-func (c *worktreeServiceClient) ArchiveWorktree(ctx context.Context, req *connect.Request[v1.ArchiveWorktreeRequest]) (*connect.Response[v1.ArchiveWorktreeResponse], error) {
-	return c.archiveWorktree.CallUnary(ctx, req)
-}
-
-// UnarchiveWorktree calls reliant.v1.WorktreeService.UnarchiveWorktree.
-func (c *worktreeServiceClient) UnarchiveWorktree(ctx context.Context, req *connect.Request[v1.UnarchiveWorktreeRequest]) (*connect.Response[v1.UnarchiveWorktreeResponse], error) {
-	return c.unarchiveWorktree.CallUnary(ctx, req)
-}
-
-// ImportWorktree calls reliant.v1.WorktreeService.ImportWorktree.
-func (c *worktreeServiceClient) ImportWorktree(ctx context.Context, req *connect.Request[v1.ImportWorktreeRequest]) (*connect.Response[v1.ImportWorktreeResponse], error) {
-	return c.importWorktree.CallUnary(ctx, req)
-}
-
-// DiscoverWorktrees calls reliant.v1.WorktreeService.DiscoverWorktrees.
-func (c *worktreeServiceClient) DiscoverWorktrees(ctx context.Context, req *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error) {
-	return c.discoverWorktrees.CallUnary(ctx, req)
-}
-
-// PruneWorktrees calls reliant.v1.WorktreeService.PruneWorktrees.
-func (c *worktreeServiceClient) PruneWorktrees(ctx context.Context, req *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error) {
-	return c.pruneWorktrees.CallUnary(ctx, req)
-}
-
-// RecreateWorktree calls reliant.v1.WorktreeService.RecreateWorktree.
-func (c *worktreeServiceClient) RecreateWorktree(ctx context.Context, req *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error) {
-	return c.recreateWorktree.CallUnary(ctx, req)
-}
-
-// GetWorktreeChanges calls reliant.v1.WorktreeService.GetWorktreeChanges.
-func (c *worktreeServiceClient) GetWorktreeChanges(ctx context.Context, req *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error) {
-	return c.getWorktreeChanges.CallUnary(ctx, req)
-}
-
-// GetWorktreeGitStatus calls reliant.v1.WorktreeService.GetWorktreeGitStatus.
-func (c *worktreeServiceClient) GetWorktreeGitStatus(ctx context.Context, req *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error) {
-	return c.getWorktreeGitStatus.CallUnary(ctx, req)
-}
-
-// GetWorktreeCommits calls reliant.v1.WorktreeService.GetWorktreeCommits.
-func (c *worktreeServiceClient) GetWorktreeCommits(ctx context.Context, req *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error) {
-	return c.getWorktreeCommits.CallUnary(ctx, req)
-}
-
-// ListWorktreeRepoStatuses calls reliant.v1.WorktreeService.ListWorktreeRepoStatuses.
-func (c *worktreeServiceClient) ListWorktreeRepoStatuses(ctx context.Context, req *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error) {
-	return c.listWorktreeRepoStatuses.CallUnary(ctx, req)
-}
-
-// StageFiles calls reliant.v1.WorktreeService.StageFiles.
-func (c *worktreeServiceClient) StageFiles(ctx context.Context, req *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error) {
-	return c.stageFiles.CallUnary(ctx, req)
-}
-
-// UnstageFiles calls reliant.v1.WorktreeService.UnstageFiles.
-func (c *worktreeServiceClient) UnstageFiles(ctx context.Context, req *connect.Request[v1.UnstageFilesRequest]) (*connect.Response[v1.UnstageFilesResponse], error) {
-	return c.unstageFiles.CallUnary(ctx, req)
-}
-
-// RevertFiles calls reliant.v1.WorktreeService.RevertFiles.
-func (c *worktreeServiceClient) RevertFiles(ctx context.Context, req *connect.Request[v1.RevertFilesRequest]) (*connect.Response[v1.RevertFilesResponse], error) {
-	return c.revertFiles.CallUnary(ctx, req)
-}
-
-// CommitWorktree calls reliant.v1.WorktreeService.CommitWorktree.
-func (c *worktreeServiceClient) CommitWorktree(ctx context.Context, req *connect.Request[v1.CommitWorktreeRequest]) (*connect.Response[v1.CommitWorktreeResponse], error) {
-	return c.commitWorktree.CallUnary(ctx, req)
-}
-
-// PushWorktree calls reliant.v1.WorktreeService.PushWorktree.
-func (c *worktreeServiceClient) PushWorktree(ctx context.Context, req *connect.Request[v1.PushWorktreeRequest]) (*connect.Response[v1.PushWorktreeResponse], error) {
-	return c.pushWorktree.CallUnary(ctx, req)
-}
-
-// PullWorktree calls reliant.v1.WorktreeService.PullWorktree.
-func (c *worktreeServiceClient) PullWorktree(ctx context.Context, req *connect.Request[v1.PullWorktreeRequest]) (*connect.Response[v1.PullWorktreeResponse], error) {
-	return c.pullWorktree.CallUnary(ctx, req)
-}
-
-// GetWorktreePR calls reliant.v1.WorktreeService.GetWorktreePR.
-func (c *worktreeServiceClient) GetWorktreePR(ctx context.Context, req *connect.Request[v1.GetWorktreePRRequest]) (*connect.Response[v1.GetWorktreePRResponse], error) {
-	return c.getWorktreePR.CallUnary(ctx, req)
-}
-
-// CreateWorktreePR calls reliant.v1.WorktreeService.CreateWorktreePR.
-func (c *worktreeServiceClient) CreateWorktreePR(ctx context.Context, req *connect.Request[v1.CreateWorktreePRRequest]) (*connect.Response[v1.CreateWorktreePRResponse], error) {
-	return c.createWorktreePR.CallUnary(ctx, req)
+// NewWorktreeServiceClient constructs a client for the reliant.v1.WorktreeService service. Multiple
+// service clients may share a single connect.Client.
+func NewWorktreeServiceClient(client *connect.Client) WorktreeServiceClient {
+	return &worktreeServiceClient{client: client}
 }
 
 // WorktreeServiceHandler is an implementation of the reliant.v1.WorktreeService service.
 type WorktreeServiceHandler interface {
 	// Owner-scoped durable recovery catalog, independent of source row lifetime.
 	// forge:custom — owner authorization and retained catalog semantics.
-	ListWorktreeRecoveries(context.Context, *connect.Request[v1.ListWorktreeRecoveriesRequest]) (*connect.Response[v1.ListWorktreeRecoveriesResponse], error)
+	ListWorktreeRecoveries(context.Context, *v1.ListWorktreeRecoveriesRequest) (*v1.ListWorktreeRecoveriesResponse, error)
 	// Restores into a separate worktree; never resets an existing branch.
-	RestoreWorktreeRecovery(context.Context, *connect.Request[v1.RestoreWorktreeRecoveryRequest]) (*connect.Response[v1.RestoreWorktreeRecoveryResponse], error)
+	RestoreWorktreeRecovery(context.Context, *v1.RestoreWorktreeRecoveryRequest) (*v1.RestoreWorktreeRecoveryResponse, error)
 	// Explicit exact-ref deletion only; not called on source removal or restore.
 	// forge:custom — journals exact remote ref deletion; never CRUD row deletion.
-	DeleteWorktreeRecovery(context.Context, *connect.Request[v1.DeleteWorktreeRecoveryRequest]) (*connect.Response[v1.DeleteWorktreeRecoveryResponse], error)
+	DeleteWorktreeRecovery(context.Context, *v1.DeleteWorktreeRecoveryRequest) (*v1.DeleteWorktreeRecoveryResponse, error)
 	// CRUD Operations
 	// CreateWorktree creates ONE workspace-level worktree for the project.
 	// The daemon enumerates the project's nested repos and fans out N
@@ -542,392 +388,741 @@ type WorktreeServiceHandler interface {
 	// returned Worktree row spans the whole workspace; tools scope to a nested
 	// repo via the per-call `repo` param, not via per-repo worktree rows.
 	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
-	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
+	CreateWorktree(context.Context, *v1.CreateWorktreeRequest) (*v1.CreateWorktreeResponse, error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
-	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
+	ListWorktrees(context.Context, *v1.ListWorktreesRequest) (*v1.ListWorktreesResponse, error)
 	// ListArchivedWorktrees pages through the project's archived workspaces,
 	// most recently archived first. Archived workspaces are never part of
 	// ListWorktrees: only the archived view asks for them.
 	// forge:custom — authorizes through the project and reads only archived rows
-	ListArchivedWorktrees(context.Context, *connect.Request[v1.ListArchivedWorktreesRequest]) (*connect.Response[v1.ListArchivedWorktreesResponse], error)
+	ListArchivedWorktrees(context.Context, *v1.ListArchivedWorktreesRequest) (*v1.ListArchivedWorktreesResponse, error)
 	// forge:custom — authorizes through the worktree's project before it reads
-	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
+	GetWorktree(context.Context, *v1.GetWorktreeRequest) (*v1.GetWorktreeResponse, error)
 	// forge:custom — a partial update authorized through the worktree's project
-	UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error)
+	UpdateWorktree(context.Context, *v1.UpdateWorktreeRequest) (*v1.UpdateWorktreeResponse, error)
 	// forge:custom — archives a live worktree, and deletes an archived one only once its machine removed the directory
-	DeleteWorktree(context.Context, *connect.Request[v1.DeleteWorktreeRequest]) (*connect.Response[v1.DeleteWorktreeResponse], error)
-	ArchiveWorktree(context.Context, *connect.Request[v1.ArchiveWorktreeRequest]) (*connect.Response[v1.ArchiveWorktreeResponse], error)
-	UnarchiveWorktree(context.Context, *connect.Request[v1.UnarchiveWorktreeRequest]) (*connect.Response[v1.UnarchiveWorktreeResponse], error)
+	DeleteWorktree(context.Context, *v1.DeleteWorktreeRequest) (*v1.DeleteWorktreeResponse, error)
+	ArchiveWorktree(context.Context, *v1.ArchiveWorktreeRequest) (*v1.ArchiveWorktreeResponse, error)
+	UnarchiveWorktree(context.Context, *v1.UnarchiveWorktreeRequest) (*v1.UnarchiveWorktreeResponse, error)
 	// Import/Discovery Operations
-	ImportWorktree(context.Context, *connect.Request[v1.ImportWorktreeRequest]) (*connect.Response[v1.ImportWorktreeResponse], error)
+	ImportWorktree(context.Context, *v1.ImportWorktreeRequest) (*v1.ImportWorktreeResponse, error)
 	// DiscoverWorktrees only reads (git worktree list in each repo), and says so
 	// with NO_SIDE_EFFECTS: forge then generates a useQuery for it, so the
 	// discovered list lives in the query cache under worktreeServiceKeys.
-	DiscoverWorktrees(context.Context, *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error)
+	DiscoverWorktrees(context.Context, *v1.DiscoverWorktreesRequest) (*v1.DiscoverWorktreesResponse, error)
 	// PruneWorktrees runs `git worktree prune` in each repo of the project. It
 	// only drops records whose directories are already gone; it never touches a
 	// directory that exists. Explicit user action only, never automatic.
-	PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error)
-	RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error)
+	PruneWorktrees(context.Context, *v1.PruneWorktreesRequest) (*v1.PruneWorktreesResponse, error)
+	RecreateWorktree(context.Context, *v1.RecreateWorktreeRequest) (*v1.RecreateWorktreeResponse, error)
 	// Git Read Operations
-	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
-	GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error)
-	GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error)
+	GetWorktreeChanges(context.Context, *v1.GetWorktreeChangesRequest) (*v1.GetWorktreeChangesResponse, error)
+	GetWorktreeGitStatus(context.Context, *v1.GetWorktreeGitStatusRequest) (*v1.GetWorktreeGitStatusResponse, error)
+	GetWorktreeCommits(context.Context, *v1.GetWorktreeCommitsRequest) (*v1.GetWorktreeCommitsResponse, error)
 	// ListWorktreeRepoStatuses returns per-repo git status for every nested
 	// repo in the worktree's project. Drives the right-sidebar grouped view.
 	// Single-repo and zero-repo projects collapse to a single-element (or empty)
 	// response so callers don't need a special case.
-	ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error)
+	ListWorktreeRepoStatuses(context.Context, *v1.ListWorktreeRepoStatusesRequest) (*v1.ListWorktreeRepoStatusesResponse, error)
 	// Git Write Operations
-	StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error)
-	UnstageFiles(context.Context, *connect.Request[v1.UnstageFilesRequest]) (*connect.Response[v1.UnstageFilesResponse], error)
-	RevertFiles(context.Context, *connect.Request[v1.RevertFilesRequest]) (*connect.Response[v1.RevertFilesResponse], error)
-	CommitWorktree(context.Context, *connect.Request[v1.CommitWorktreeRequest]) (*connect.Response[v1.CommitWorktreeResponse], error)
-	PushWorktree(context.Context, *connect.Request[v1.PushWorktreeRequest]) (*connect.Response[v1.PushWorktreeResponse], error)
-	PullWorktree(context.Context, *connect.Request[v1.PullWorktreeRequest]) (*connect.Response[v1.PullWorktreeResponse], error)
-	GetWorktreePR(context.Context, *connect.Request[v1.GetWorktreePRRequest]) (*connect.Response[v1.GetWorktreePRResponse], error)
-	CreateWorktreePR(context.Context, *connect.Request[v1.CreateWorktreePRRequest]) (*connect.Response[v1.CreateWorktreePRResponse], error)
+	StageFiles(context.Context, *v1.StageFilesRequest) (*v1.StageFilesResponse, error)
+	UnstageFiles(context.Context, *v1.UnstageFilesRequest) (*v1.UnstageFilesResponse, error)
+	RevertFiles(context.Context, *v1.RevertFilesRequest) (*v1.RevertFilesResponse, error)
+	CommitWorktree(context.Context, *v1.CommitWorktreeRequest) (*v1.CommitWorktreeResponse, error)
+	PushWorktree(context.Context, *v1.PushWorktreeRequest) (*v1.PushWorktreeResponse, error)
+	PullWorktree(context.Context, *v1.PullWorktreeRequest) (*v1.PullWorktreeResponse, error)
+	GetWorktreePR(context.Context, *v1.GetWorktreePRRequest) (*v1.GetWorktreePRResponse, error)
+	CreateWorktreePR(context.Context, *v1.CreateWorktreePRRequest) (*v1.CreateWorktreePRResponse, error)
 }
 
-// NewWorktreeServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	worktreeServiceMethods := v1.File_reliant_v1_worktree_proto.Services().ByName("WorktreeService").Methods()
-	worktreeServiceListWorktreeRecoveriesHandler := connect.NewUnaryHandler(
-		WorktreeServiceListWorktreeRecoveriesProcedure,
-		svc.ListWorktreeRecoveries,
-		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRecoveries")),
-		connect.WithHandlerOptions(opts...),
+// RegisterWorktreeServiceHandler registers svc as the reliant.v1.WorktreeService implementation on
+// server.
+func RegisterWorktreeServiceHandler(server *connect.Server, svc WorktreeServiceHandler) {
+	adapter := worktreeServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: worktreeServiceListWorktreeRecoveriesSpec(), Handler: adapter.listWorktreeRecoveries},
+		connect.Method{Spec: worktreeServiceRestoreWorktreeRecoverySpec(), Handler: adapter.restoreWorktreeRecovery},
+		connect.Method{Spec: worktreeServiceDeleteWorktreeRecoverySpec(), Handler: adapter.deleteWorktreeRecovery},
+		connect.Method{Spec: worktreeServiceCreateWorktreeSpec(), Handler: adapter.createWorktree},
+		connect.Method{Spec: worktreeServiceListWorktreesSpec(), Handler: adapter.listWorktrees},
+		connect.Method{Spec: worktreeServiceListArchivedWorktreesSpec(), Handler: adapter.listArchivedWorktrees},
+		connect.Method{Spec: worktreeServiceGetWorktreeSpec(), Handler: adapter.getWorktree},
+		connect.Method{Spec: worktreeServiceUpdateWorktreeSpec(), Handler: adapter.updateWorktree},
+		connect.Method{Spec: worktreeServiceDeleteWorktreeSpec(), Handler: adapter.deleteWorktree},
+		connect.Method{Spec: worktreeServiceArchiveWorktreeSpec(), Handler: adapter.archiveWorktree},
+		connect.Method{Spec: worktreeServiceUnarchiveWorktreeSpec(), Handler: adapter.unarchiveWorktree},
+		connect.Method{Spec: worktreeServiceImportWorktreeSpec(), Handler: adapter.importWorktree},
+		connect.Method{Spec: worktreeServiceDiscoverWorktreesSpec(), Handler: adapter.discoverWorktrees},
+		connect.Method{Spec: worktreeServicePruneWorktreesSpec(), Handler: adapter.pruneWorktrees},
+		connect.Method{Spec: worktreeServiceRecreateWorktreeSpec(), Handler: adapter.recreateWorktree},
+		connect.Method{Spec: worktreeServiceGetWorktreeChangesSpec(), Handler: adapter.getWorktreeChanges},
+		connect.Method{Spec: worktreeServiceGetWorktreeGitStatusSpec(), Handler: adapter.getWorktreeGitStatus},
+		connect.Method{Spec: worktreeServiceGetWorktreeCommitsSpec(), Handler: adapter.getWorktreeCommits},
+		connect.Method{Spec: worktreeServiceListWorktreeRepoStatusesSpec(), Handler: adapter.listWorktreeRepoStatuses},
+		connect.Method{Spec: worktreeServiceStageFilesSpec(), Handler: adapter.stageFiles},
+		connect.Method{Spec: worktreeServiceUnstageFilesSpec(), Handler: adapter.unstageFiles},
+		connect.Method{Spec: worktreeServiceRevertFilesSpec(), Handler: adapter.revertFiles},
+		connect.Method{Spec: worktreeServiceCommitWorktreeSpec(), Handler: adapter.commitWorktree},
+		connect.Method{Spec: worktreeServicePushWorktreeSpec(), Handler: adapter.pushWorktree},
+		connect.Method{Spec: worktreeServicePullWorktreeSpec(), Handler: adapter.pullWorktree},
+		connect.Method{Spec: worktreeServiceGetWorktreePRSpec(), Handler: adapter.getWorktreePR},
+		connect.Method{Spec: worktreeServiceCreateWorktreePRSpec(), Handler: adapter.createWorktreePR},
 	)
-	worktreeServiceRestoreWorktreeRecoveryHandler := connect.NewUnaryHandler(
-		WorktreeServiceRestoreWorktreeRecoveryProcedure,
-		svc.RestoreWorktreeRecovery,
-		connect.WithSchema(worktreeServiceMethods.ByName("RestoreWorktreeRecovery")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceDeleteWorktreeRecoveryHandler := connect.NewUnaryHandler(
-		WorktreeServiceDeleteWorktreeRecoveryProcedure,
-		svc.DeleteWorktreeRecovery,
-		connect.WithSchema(worktreeServiceMethods.ByName("DeleteWorktreeRecovery")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceCreateWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceCreateWorktreeProcedure,
-		svc.CreateWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("CreateWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceListWorktreesHandler := connect.NewUnaryHandler(
-		WorktreeServiceListWorktreesProcedure,
-		svc.ListWorktrees,
-		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktrees")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceListArchivedWorktreesHandler := connect.NewUnaryHandler(
-		WorktreeServiceListArchivedWorktreesProcedure,
-		svc.ListArchivedWorktrees,
-		connect.WithSchema(worktreeServiceMethods.ByName("ListArchivedWorktrees")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceGetWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceGetWorktreeProcedure,
-		svc.GetWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceUpdateWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceUpdateWorktreeProcedure,
-		svc.UpdateWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("UpdateWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceDeleteWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceDeleteWorktreeProcedure,
-		svc.DeleteWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("DeleteWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceArchiveWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceArchiveWorktreeProcedure,
-		svc.ArchiveWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("ArchiveWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceUnarchiveWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceUnarchiveWorktreeProcedure,
-		svc.UnarchiveWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("UnarchiveWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceImportWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceImportWorktreeProcedure,
-		svc.ImportWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("ImportWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceDiscoverWorktreesHandler := connect.NewUnaryHandler(
-		WorktreeServiceDiscoverWorktreesProcedure,
-		svc.DiscoverWorktrees,
-		connect.WithSchema(worktreeServiceMethods.ByName("DiscoverWorktrees")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServicePruneWorktreesHandler := connect.NewUnaryHandler(
-		WorktreeServicePruneWorktreesProcedure,
-		svc.PruneWorktrees,
-		connect.WithSchema(worktreeServiceMethods.ByName("PruneWorktrees")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceRecreateWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceRecreateWorktreeProcedure,
-		svc.RecreateWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("RecreateWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceGetWorktreeChangesHandler := connect.NewUnaryHandler(
-		WorktreeServiceGetWorktreeChangesProcedure,
-		svc.GetWorktreeChanges,
-		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeChanges")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceGetWorktreeGitStatusHandler := connect.NewUnaryHandler(
-		WorktreeServiceGetWorktreeGitStatusProcedure,
-		svc.GetWorktreeGitStatus,
-		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeGitStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceGetWorktreeCommitsHandler := connect.NewUnaryHandler(
-		WorktreeServiceGetWorktreeCommitsProcedure,
-		svc.GetWorktreeCommits,
-		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeCommits")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceListWorktreeRepoStatusesHandler := connect.NewUnaryHandler(
-		WorktreeServiceListWorktreeRepoStatusesProcedure,
-		svc.ListWorktreeRepoStatuses,
-		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRepoStatuses")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceStageFilesHandler := connect.NewUnaryHandler(
-		WorktreeServiceStageFilesProcedure,
-		svc.StageFiles,
-		connect.WithSchema(worktreeServiceMethods.ByName("StageFiles")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceUnstageFilesHandler := connect.NewUnaryHandler(
-		WorktreeServiceUnstageFilesProcedure,
-		svc.UnstageFiles,
-		connect.WithSchema(worktreeServiceMethods.ByName("UnstageFiles")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceRevertFilesHandler := connect.NewUnaryHandler(
-		WorktreeServiceRevertFilesProcedure,
-		svc.RevertFiles,
-		connect.WithSchema(worktreeServiceMethods.ByName("RevertFiles")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceCommitWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServiceCommitWorktreeProcedure,
-		svc.CommitWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("CommitWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServicePushWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServicePushWorktreeProcedure,
-		svc.PushWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("PushWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServicePullWorktreeHandler := connect.NewUnaryHandler(
-		WorktreeServicePullWorktreeProcedure,
-		svc.PullWorktree,
-		connect.WithSchema(worktreeServiceMethods.ByName("PullWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceGetWorktreePRHandler := connect.NewUnaryHandler(
-		WorktreeServiceGetWorktreePRProcedure,
-		svc.GetWorktreePR,
-		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreePR")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceCreateWorktreePRHandler := connect.NewUnaryHandler(
-		WorktreeServiceCreateWorktreePRProcedure,
-		svc.CreateWorktreePR,
-		connect.WithSchema(worktreeServiceMethods.ByName("CreateWorktreePR")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.WorktreeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case WorktreeServiceListWorktreeRecoveriesProcedure:
-			worktreeServiceListWorktreeRecoveriesHandler.ServeHTTP(w, r)
-		case WorktreeServiceRestoreWorktreeRecoveryProcedure:
-			worktreeServiceRestoreWorktreeRecoveryHandler.ServeHTTP(w, r)
-		case WorktreeServiceDeleteWorktreeRecoveryProcedure:
-			worktreeServiceDeleteWorktreeRecoveryHandler.ServeHTTP(w, r)
-		case WorktreeServiceCreateWorktreeProcedure:
-			worktreeServiceCreateWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceListWorktreesProcedure:
-			worktreeServiceListWorktreesHandler.ServeHTTP(w, r)
-		case WorktreeServiceListArchivedWorktreesProcedure:
-			worktreeServiceListArchivedWorktreesHandler.ServeHTTP(w, r)
-		case WorktreeServiceGetWorktreeProcedure:
-			worktreeServiceGetWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceUpdateWorktreeProcedure:
-			worktreeServiceUpdateWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceDeleteWorktreeProcedure:
-			worktreeServiceDeleteWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceArchiveWorktreeProcedure:
-			worktreeServiceArchiveWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceUnarchiveWorktreeProcedure:
-			worktreeServiceUnarchiveWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceImportWorktreeProcedure:
-			worktreeServiceImportWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceDiscoverWorktreesProcedure:
-			worktreeServiceDiscoverWorktreesHandler.ServeHTTP(w, r)
-		case WorktreeServicePruneWorktreesProcedure:
-			worktreeServicePruneWorktreesHandler.ServeHTTP(w, r)
-		case WorktreeServiceRecreateWorktreeProcedure:
-			worktreeServiceRecreateWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceGetWorktreeChangesProcedure:
-			worktreeServiceGetWorktreeChangesHandler.ServeHTTP(w, r)
-		case WorktreeServiceGetWorktreeGitStatusProcedure:
-			worktreeServiceGetWorktreeGitStatusHandler.ServeHTTP(w, r)
-		case WorktreeServiceGetWorktreeCommitsProcedure:
-			worktreeServiceGetWorktreeCommitsHandler.ServeHTTP(w, r)
-		case WorktreeServiceListWorktreeRepoStatusesProcedure:
-			worktreeServiceListWorktreeRepoStatusesHandler.ServeHTTP(w, r)
-		case WorktreeServiceStageFilesProcedure:
-			worktreeServiceStageFilesHandler.ServeHTTP(w, r)
-		case WorktreeServiceUnstageFilesProcedure:
-			worktreeServiceUnstageFilesHandler.ServeHTTP(w, r)
-		case WorktreeServiceRevertFilesProcedure:
-			worktreeServiceRevertFilesHandler.ServeHTTP(w, r)
-		case WorktreeServiceCommitWorktreeProcedure:
-			worktreeServiceCommitWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServicePushWorktreeProcedure:
-			worktreeServicePushWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServicePullWorktreeProcedure:
-			worktreeServicePullWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceGetWorktreePRProcedure:
-			worktreeServiceGetWorktreePRHandler.ServeHTTP(w, r)
-		case WorktreeServiceCreateWorktreePRProcedure:
-			worktreeServiceCreateWorktreePRHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedWorktreeServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedWorktreeServiceHandler struct{}
 
-func (UnimplementedWorktreeServiceHandler) ListWorktreeRecoveries(context.Context, *connect.Request[v1.ListWorktreeRecoveriesRequest]) (*connect.Response[v1.ListWorktreeRecoveriesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ListWorktreeRecoveries is not implemented"))
+func (UnimplementedWorktreeServiceHandler) ListWorktreeRecoveries(context.Context, *v1.ListWorktreeRecoveriesRequest) (*v1.ListWorktreeRecoveriesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.ListWorktreeRecoveries is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) RestoreWorktreeRecovery(context.Context, *connect.Request[v1.RestoreWorktreeRecoveryRequest]) (*connect.Response[v1.RestoreWorktreeRecoveryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.RestoreWorktreeRecovery is not implemented"))
+func (UnimplementedWorktreeServiceHandler) RestoreWorktreeRecovery(context.Context, *v1.RestoreWorktreeRecoveryRequest) (*v1.RestoreWorktreeRecoveryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.RestoreWorktreeRecovery is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) DeleteWorktreeRecovery(context.Context, *connect.Request[v1.DeleteWorktreeRecoveryRequest]) (*connect.Response[v1.DeleteWorktreeRecoveryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.DeleteWorktreeRecovery is not implemented"))
+func (UnimplementedWorktreeServiceHandler) DeleteWorktreeRecovery(context.Context, *v1.DeleteWorktreeRecoveryRequest) (*v1.DeleteWorktreeRecoveryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.DeleteWorktreeRecovery is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.CreateWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) CreateWorktree(context.Context, *v1.CreateWorktreeRequest) (*v1.CreateWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.CreateWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ListWorktrees is not implemented"))
+func (UnimplementedWorktreeServiceHandler) ListWorktrees(context.Context, *v1.ListWorktreesRequest) (*v1.ListWorktreesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.ListWorktrees is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) ListArchivedWorktrees(context.Context, *connect.Request[v1.ListArchivedWorktreesRequest]) (*connect.Response[v1.ListArchivedWorktreesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ListArchivedWorktrees is not implemented"))
+func (UnimplementedWorktreeServiceHandler) ListArchivedWorktrees(context.Context, *v1.ListArchivedWorktreesRequest) (*v1.ListArchivedWorktreesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.ListArchivedWorktrees is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.GetWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) GetWorktree(context.Context, *v1.GetWorktreeRequest) (*v1.GetWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.GetWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.UpdateWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) UpdateWorktree(context.Context, *v1.UpdateWorktreeRequest) (*v1.UpdateWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.UpdateWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) DeleteWorktree(context.Context, *connect.Request[v1.DeleteWorktreeRequest]) (*connect.Response[v1.DeleteWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.DeleteWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) DeleteWorktree(context.Context, *v1.DeleteWorktreeRequest) (*v1.DeleteWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.DeleteWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) ArchiveWorktree(context.Context, *connect.Request[v1.ArchiveWorktreeRequest]) (*connect.Response[v1.ArchiveWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ArchiveWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) ArchiveWorktree(context.Context, *v1.ArchiveWorktreeRequest) (*v1.ArchiveWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.ArchiveWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) UnarchiveWorktree(context.Context, *connect.Request[v1.UnarchiveWorktreeRequest]) (*connect.Response[v1.UnarchiveWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.UnarchiveWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) UnarchiveWorktree(context.Context, *v1.UnarchiveWorktreeRequest) (*v1.UnarchiveWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.UnarchiveWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) ImportWorktree(context.Context, *connect.Request[v1.ImportWorktreeRequest]) (*connect.Response[v1.ImportWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ImportWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) ImportWorktree(context.Context, *v1.ImportWorktreeRequest) (*v1.ImportWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.ImportWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) DiscoverWorktrees(context.Context, *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.DiscoverWorktrees is not implemented"))
+func (UnimplementedWorktreeServiceHandler) DiscoverWorktrees(context.Context, *v1.DiscoverWorktreesRequest) (*v1.DiscoverWorktreesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.DiscoverWorktrees is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.PruneWorktrees is not implemented"))
+func (UnimplementedWorktreeServiceHandler) PruneWorktrees(context.Context, *v1.PruneWorktreesRequest) (*v1.PruneWorktreesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.PruneWorktrees is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.RecreateWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) RecreateWorktree(context.Context, *v1.RecreateWorktreeRequest) (*v1.RecreateWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.RecreateWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.GetWorktreeChanges is not implemented"))
+func (UnimplementedWorktreeServiceHandler) GetWorktreeChanges(context.Context, *v1.GetWorktreeChangesRequest) (*v1.GetWorktreeChangesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.GetWorktreeChanges is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.GetWorktreeGitStatus is not implemented"))
+func (UnimplementedWorktreeServiceHandler) GetWorktreeGitStatus(context.Context, *v1.GetWorktreeGitStatusRequest) (*v1.GetWorktreeGitStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.GetWorktreeGitStatus is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.GetWorktreeCommits is not implemented"))
+func (UnimplementedWorktreeServiceHandler) GetWorktreeCommits(context.Context, *v1.GetWorktreeCommitsRequest) (*v1.GetWorktreeCommitsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.GetWorktreeCommits is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ListWorktreeRepoStatuses is not implemented"))
+func (UnimplementedWorktreeServiceHandler) ListWorktreeRepoStatuses(context.Context, *v1.ListWorktreeRepoStatusesRequest) (*v1.ListWorktreeRepoStatusesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.ListWorktreeRepoStatuses is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.StageFiles is not implemented"))
+func (UnimplementedWorktreeServiceHandler) StageFiles(context.Context, *v1.StageFilesRequest) (*v1.StageFilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.StageFiles is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) UnstageFiles(context.Context, *connect.Request[v1.UnstageFilesRequest]) (*connect.Response[v1.UnstageFilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.UnstageFiles is not implemented"))
+func (UnimplementedWorktreeServiceHandler) UnstageFiles(context.Context, *v1.UnstageFilesRequest) (*v1.UnstageFilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.UnstageFiles is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) RevertFiles(context.Context, *connect.Request[v1.RevertFilesRequest]) (*connect.Response[v1.RevertFilesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.RevertFiles is not implemented"))
+func (UnimplementedWorktreeServiceHandler) RevertFiles(context.Context, *v1.RevertFilesRequest) (*v1.RevertFilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.RevertFiles is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) CommitWorktree(context.Context, *connect.Request[v1.CommitWorktreeRequest]) (*connect.Response[v1.CommitWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.CommitWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) CommitWorktree(context.Context, *v1.CommitWorktreeRequest) (*v1.CommitWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.CommitWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) PushWorktree(context.Context, *connect.Request[v1.PushWorktreeRequest]) (*connect.Response[v1.PushWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.PushWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) PushWorktree(context.Context, *v1.PushWorktreeRequest) (*v1.PushWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.PushWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) PullWorktree(context.Context, *connect.Request[v1.PullWorktreeRequest]) (*connect.Response[v1.PullWorktreeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.PullWorktree is not implemented"))
+func (UnimplementedWorktreeServiceHandler) PullWorktree(context.Context, *v1.PullWorktreeRequest) (*v1.PullWorktreeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.PullWorktree is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) GetWorktreePR(context.Context, *connect.Request[v1.GetWorktreePRRequest]) (*connect.Response[v1.GetWorktreePRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.GetWorktreePR is not implemented"))
+func (UnimplementedWorktreeServiceHandler) GetWorktreePR(context.Context, *v1.GetWorktreePRRequest) (*v1.GetWorktreePRResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.GetWorktreePR is not implemented")
 }
 
-func (UnimplementedWorktreeServiceHandler) CreateWorktreePR(context.Context, *connect.Request[v1.CreateWorktreePRRequest]) (*connect.Response[v1.CreateWorktreePRResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.CreateWorktreePR is not implemented"))
+func (UnimplementedWorktreeServiceHandler) CreateWorktreePR(context.Context, *v1.CreateWorktreePRRequest) (*v1.CreateWorktreePRResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeService.CreateWorktreePR is not implemented")
+}
+
+type worktreeServiceClient struct {
+	client *connect.Client
+}
+
+func (c *worktreeServiceClient) ListWorktreeRecoveries(ctx context.Context, req *v1.ListWorktreeRecoveriesRequest) (*v1.ListWorktreeRecoveriesResponse, error) {
+	var res v1.ListWorktreeRecoveriesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceListWorktreeRecoveriesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) RestoreWorktreeRecovery(ctx context.Context, req *v1.RestoreWorktreeRecoveryRequest) (*v1.RestoreWorktreeRecoveryResponse, error) {
+	var res v1.RestoreWorktreeRecoveryResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceRestoreWorktreeRecoverySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) DeleteWorktreeRecovery(ctx context.Context, req *v1.DeleteWorktreeRecoveryRequest) (*v1.DeleteWorktreeRecoveryResponse, error) {
+	var res v1.DeleteWorktreeRecoveryResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceDeleteWorktreeRecoverySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) CreateWorktree(ctx context.Context, req *v1.CreateWorktreeRequest) (*v1.CreateWorktreeResponse, error) {
+	var res v1.CreateWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceCreateWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) ListWorktrees(ctx context.Context, req *v1.ListWorktreesRequest) (*v1.ListWorktreesResponse, error) {
+	var res v1.ListWorktreesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceListWorktreesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) ListArchivedWorktrees(ctx context.Context, req *v1.ListArchivedWorktreesRequest) (*v1.ListArchivedWorktreesResponse, error) {
+	var res v1.ListArchivedWorktreesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceListArchivedWorktreesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) GetWorktree(ctx context.Context, req *v1.GetWorktreeRequest) (*v1.GetWorktreeResponse, error) {
+	var res v1.GetWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceGetWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) UpdateWorktree(ctx context.Context, req *v1.UpdateWorktreeRequest) (*v1.UpdateWorktreeResponse, error) {
+	var res v1.UpdateWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceUpdateWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) DeleteWorktree(ctx context.Context, req *v1.DeleteWorktreeRequest) (*v1.DeleteWorktreeResponse, error) {
+	var res v1.DeleteWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceDeleteWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) ArchiveWorktree(ctx context.Context, req *v1.ArchiveWorktreeRequest) (*v1.ArchiveWorktreeResponse, error) {
+	var res v1.ArchiveWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceArchiveWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) UnarchiveWorktree(ctx context.Context, req *v1.UnarchiveWorktreeRequest) (*v1.UnarchiveWorktreeResponse, error) {
+	var res v1.UnarchiveWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceUnarchiveWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) ImportWorktree(ctx context.Context, req *v1.ImportWorktreeRequest) (*v1.ImportWorktreeResponse, error) {
+	var res v1.ImportWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceImportWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) DiscoverWorktrees(ctx context.Context, req *v1.DiscoverWorktreesRequest) (*v1.DiscoverWorktreesResponse, error) {
+	var res v1.DiscoverWorktreesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceDiscoverWorktreesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) PruneWorktrees(ctx context.Context, req *v1.PruneWorktreesRequest) (*v1.PruneWorktreesResponse, error) {
+	var res v1.PruneWorktreesResponse
+	if err := c.client.CallUnary(ctx, worktreeServicePruneWorktreesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) RecreateWorktree(ctx context.Context, req *v1.RecreateWorktreeRequest) (*v1.RecreateWorktreeResponse, error) {
+	var res v1.RecreateWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceRecreateWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) GetWorktreeChanges(ctx context.Context, req *v1.GetWorktreeChangesRequest) (*v1.GetWorktreeChangesResponse, error) {
+	var res v1.GetWorktreeChangesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceGetWorktreeChangesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) GetWorktreeGitStatus(ctx context.Context, req *v1.GetWorktreeGitStatusRequest) (*v1.GetWorktreeGitStatusResponse, error) {
+	var res v1.GetWorktreeGitStatusResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceGetWorktreeGitStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) GetWorktreeCommits(ctx context.Context, req *v1.GetWorktreeCommitsRequest) (*v1.GetWorktreeCommitsResponse, error) {
+	var res v1.GetWorktreeCommitsResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceGetWorktreeCommitsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) ListWorktreeRepoStatuses(ctx context.Context, req *v1.ListWorktreeRepoStatusesRequest) (*v1.ListWorktreeRepoStatusesResponse, error) {
+	var res v1.ListWorktreeRepoStatusesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceListWorktreeRepoStatusesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) StageFiles(ctx context.Context, req *v1.StageFilesRequest) (*v1.StageFilesResponse, error) {
+	var res v1.StageFilesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceStageFilesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) UnstageFiles(ctx context.Context, req *v1.UnstageFilesRequest) (*v1.UnstageFilesResponse, error) {
+	var res v1.UnstageFilesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceUnstageFilesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) RevertFiles(ctx context.Context, req *v1.RevertFilesRequest) (*v1.RevertFilesResponse, error) {
+	var res v1.RevertFilesResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceRevertFilesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) CommitWorktree(ctx context.Context, req *v1.CommitWorktreeRequest) (*v1.CommitWorktreeResponse, error) {
+	var res v1.CommitWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceCommitWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) PushWorktree(ctx context.Context, req *v1.PushWorktreeRequest) (*v1.PushWorktreeResponse, error) {
+	var res v1.PushWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServicePushWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) PullWorktree(ctx context.Context, req *v1.PullWorktreeRequest) (*v1.PullWorktreeResponse, error) {
+	var res v1.PullWorktreeResponse
+	if err := c.client.CallUnary(ctx, worktreeServicePullWorktreeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) GetWorktreePR(ctx context.Context, req *v1.GetWorktreePRRequest) (*v1.GetWorktreePRResponse, error) {
+	var res v1.GetWorktreePRResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceGetWorktreePRSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *worktreeServiceClient) CreateWorktreePR(ctx context.Context, req *v1.CreateWorktreePRRequest) (*v1.CreateWorktreePRResponse, error) {
+	var res v1.CreateWorktreePRResponse
+	if err := c.client.CallUnary(ctx, worktreeServiceCreateWorktreePRSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type worktreeServiceHandler struct{ svc WorktreeServiceHandler }
+
+func (h worktreeServiceHandler) listWorktreeRecoveries(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListWorktreeRecoveriesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListWorktreeRecoveries(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) restoreWorktreeRecovery(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestoreWorktreeRecoveryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestoreWorktreeRecovery(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) deleteWorktreeRecovery(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteWorktreeRecoveryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteWorktreeRecovery(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) createWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) listWorktrees(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListWorktreesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListWorktrees(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) listArchivedWorktrees(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListArchivedWorktreesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListArchivedWorktrees(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) getWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) updateWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) deleteWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) archiveWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ArchiveWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ArchiveWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) unarchiveWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UnarchiveWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UnarchiveWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) importWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ImportWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ImportWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) discoverWorktrees(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DiscoverWorktreesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DiscoverWorktrees(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) pruneWorktrees(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PruneWorktreesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PruneWorktrees(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) recreateWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RecreateWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RecreateWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) getWorktreeChanges(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWorktreeChangesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWorktreeChanges(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) getWorktreeGitStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWorktreeGitStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWorktreeGitStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) getWorktreeCommits(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWorktreeCommitsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWorktreeCommits(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) listWorktreeRepoStatuses(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListWorktreeRepoStatusesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListWorktreeRepoStatuses(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) stageFiles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StageFilesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StageFiles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) unstageFiles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UnstageFilesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UnstageFiles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) revertFiles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevertFilesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevertFiles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) commitWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CommitWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CommitWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) pushWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PushWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PushWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) pullWorktree(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PullWorktreeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PullWorktree(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) getWorktreePR(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWorktreePRRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWorktreePR(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h worktreeServiceHandler) createWorktreePR(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateWorktreePRRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateWorktreePR(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

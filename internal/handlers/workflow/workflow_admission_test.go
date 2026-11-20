@@ -4,7 +4,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,12 +21,12 @@ func TestSaveWorkflowInvalidProjectUpdateNeverReachesWriter(t *testing.T) {
 	storedBefore, err := repo.GetWorkflowDraft(ctx, before.Id)
 	require.NoError(t, err)
 	path := filepath.Join(project.Path, ".reliant", "workflows", "save-router-skip.yaml")
-	resp, err := svc.SaveWorkflow(ctx, connect.NewRequest(&reliantv1.SaveWorkflowRequest{
+	resp, err := svc.SaveWorkflow(ctx, &reliantv1.SaveWorkflowRequest{
 		ProjectId: projectID, Workflow: mustParse(t, routerSkipWorkflow), SourcePath: &path,
-	}))
+	})
 	require.NoError(t, err, "validation must precede any write command")
-	require.False(t, resp.Msg.Success)
-	assertHasNodeOrderingError(t, resp.Msg.ValidationErrors)
+	require.False(t, resp.Success)
+	assertHasNodeOrderingError(t, resp.ValidationErrors)
 	after, err := repo.GetWorkflowDraft(ctx, before.Id)
 	require.NoError(t, err)
 	assert.Equal(t, storedBefore.Definition, after.Definition)
@@ -40,13 +39,13 @@ func TestImportWorkflowUnknownRuntimeKeyCannotBeSaved(t *testing.T) {
 		reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
 		reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
 	} {
-		resp, err := svc.ImportWorkflow(ctx, connect.NewRequest(&reliantv1.ImportWorkflowRequest{
+		resp, err := svc.ImportWorkflow(ctx, &reliantv1.ImportWorkflowRequest{
 			ProjectId: projectID, Status: status,
 			YamlContent: []byte(validLifecycleWorkflow + "\ninvented_runtime_field: true\n"),
-		}))
+		})
 		if err == nil {
-			require.False(t, resp.Msg.Success)
-			assert.Contains(t, resp.Msg.Message, "invented_runtime_field")
+			require.False(t, resp.Success)
+			assert.Contains(t, resp.Message, "invented_runtime_field")
 		} else {
 			assert.Contains(t, err.Error(), "invented_runtime_field")
 		}

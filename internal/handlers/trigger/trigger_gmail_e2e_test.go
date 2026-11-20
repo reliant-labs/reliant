@@ -25,7 +25,6 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/stretchr/testify/assert"
@@ -182,7 +181,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 		conn := connectGmail(userID, email)
 		created, err := svc.CreateTrigger(context.WithValue(ctx, auth.UserIDContextKey, userID),
-			connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+			&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 				Name: "triage invoices", ProjectId: projectID, DaemonId: daemonID, Workflow: "builtin://agent",
 				Message: "File the invoice.", Params: mockModelTriggerParams(t),
 				// CEL over the polled payload: only invoices launch.
@@ -190,11 +189,11 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 				Source: &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{
 					Integration: "gmail", Events: []string{"message.received"},
 				}},
-			}}))
+			}})
 		require.NoError(t, err)
-		require.Equal(t, conn.ID, created.Msg.GetTrigger().GetConnectionId())
-		cleanupGmailSchedule(t, temporalClient, created.Msg.GetTrigger().GetId())
-		return tenant{userID: userID, email: email, conn: conn, trigger: created.Msg.GetTrigger()}
+		require.Equal(t, conn.ID, created.GetTrigger().GetConnectionId())
+		cleanupGmailSchedule(t, temporalClient, created.GetTrigger().GetId())
+		return tenant{userID: userID, email: email, conn: conn, trigger: created.GetTrigger()}
 	}
 	ann := newTenant("ann@example.com")
 	bob := newTenant("bob@example.org")
@@ -278,10 +277,10 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	connRow, err := store.GetConnection(ctx, ann.userID, ann.conn.ID)
 	require.NoError(t, err)
 	assert.Equal(t, core.ConnectionStatusNeedsReauth, connRow.Status)
-	list, err := svc.ListTriggers(context.WithValue(ctx, auth.UserIDContextKey, ann.userID), connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	list, err := svc.ListTriggers(context.WithValue(ctx, auth.UserIDContextKey, ann.userID), &reliantv1.ListTriggersRequest{})
 	require.NoError(t, err)
-	require.Len(t, list.Msg.GetTriggers(), 1)
-	health := list.Msg.GetTriggers()[0].GetHealth()
+	require.Len(t, list.GetTriggers(), 1)
+	health := list.GetTriggers()[0].GetHealth()
 	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, health.GetStatus(), "a dead source is FAILING, not HEALTHY")
 	assert.Contains(t, health.GetLastFailureDetail(), "reconnect")
 	refreshes = google.refreshCount()
@@ -293,10 +292,10 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	inboxService, err := inbox.New(inbox.Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo})
 	require.NoError(t, err)
 	failing := func(userID string) []*reliantv1.InboxItem {
-		resp, err := inboxService.ListInbox(context.WithValue(ctx, auth.UserIDContextKey, userID), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+		resp, err := inboxService.ListInbox(context.WithValue(ctx, auth.UserIDContextKey, userID), &reliantv1.ListInboxRequest{})
 		require.NoError(t, err)
 		var items []*reliantv1.InboxItem
-		for _, it := range resp.Msg.GetItems() {
+		for _, it := range resp.GetItems() {
 			if it.GetKind() == reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING {
 				items = append(items, it)
 			}

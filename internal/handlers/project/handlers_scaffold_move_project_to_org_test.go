@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -105,12 +105,13 @@ func personIn(t *testing.T, m authz.Membership) context.Context {
 	return authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), m), authz.CredentialKindPerson)
 }
 
-func moveReq(projectID, to, from, key string) *connect.Request[pb.MoveProjectToOrgRequest] {
-	return connect.NewRequest(&pb.MoveProjectToOrgRequest{ProjectId: projectID, ToOrgId: to, ExpectedFromOrgId: from, RequestKey: key})
+func moveReq(projectID, to, from, key string) *pb.MoveProjectToOrgRequest {
+	return &pb.MoveProjectToOrgRequest{ProjectId: projectID, ToOrgId: to, ExpectedFromOrgId: from, RequestKey: key}
 }
 
 func reasonOf(err error) string {
-	return svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader)
+	reason, _ := svcerr.ReasonOf(err)
+	return reason
 }
 
 // MoveProjectToOrg records the move, starts its saga and answers it once it
@@ -122,7 +123,7 @@ func TestMoveProjectToOrg(t *testing.T) {
 	t.Run("the gate is off", func(t *testing.T) {
 		f := newMoveFixture()
 		_, err := f.service(t, false).MoveProjectToOrg(ctx, moveReq("p-mine", "globex", "acme", "k"))
-		require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 		assert.Equal(t, project.ReasonProjectMovesDisabled, reasonOf(err))
 		assert.Empty(t, f.moves)
 	})
@@ -132,7 +133,7 @@ func TestMoveProjectToOrg(t *testing.T) {
 		svc := f.service(t, true)
 		resp, err := svc.MoveProjectToOrg(ctx, moveReq("p-mine", "globex", "acme", "k-1"))
 		require.NoError(t, err)
-		m := resp.Msg.GetMove()
+		m := resp.GetMove()
 		assert.Equal(t, "acme", m.GetFromOrgId())
 		assert.Equal(t, "globex", m.GetToOrgId())
 		assert.Equal(t, "test-user", m.GetOwnerUserId())
@@ -143,7 +144,7 @@ func TestMoveProjectToOrg(t *testing.T) {
 		// The same request key again is the same move, not a second one.
 		again, err := svc.MoveProjectToOrg(ctx, moveReq("p-mine", "globex", "acme", "k-1"))
 		require.NoError(t, err)
-		assert.Equal(t, m.GetId(), again.Msg.GetMove().GetId())
+		assert.Equal(t, m.GetId(), again.GetMove().GetId())
 		assert.Len(t, f.moves, 1)
 		assert.Len(t, f.started, 1, "a settled move is not started again")
 	})
@@ -154,7 +155,7 @@ func TestMoveProjectToOrg(t *testing.T) {
 		project.SetMoveWait(t, 20*time.Millisecond, time.Millisecond)
 		resp, err := f.service(t, true).MoveProjectToOrg(ctx, moveReq("p-mine", "globex", "acme", "k-2"))
 		require.NoError(t, err)
-		assert.Equal(t, pb.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_PREPARING, resp.Msg.GetMove().GetState())
+		assert.Equal(t, pb.ProjectOrgMoveState_PROJECT_ORG_MOVE_STATE_PREPARING, resp.GetMove().GetState())
 	})
 
 	t.Run("a project not yet assigned an org is stamped into the default first", func(t *testing.T) {
@@ -167,7 +168,7 @@ func TestMoveProjectToOrg(t *testing.T) {
 	t.Run("a stale source org", func(t *testing.T) {
 		f := newMoveFixture()
 		_, err := f.service(t, true).MoveProjectToOrg(ctx, moveReq("p-mine", "globex", "initech", "k"))
-		require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 		assert.Equal(t, project.ReasonOrgChanged, reasonOf(err))
 		assert.Empty(t, f.moves)
 	})
@@ -176,7 +177,7 @@ func TestMoveProjectToOrg(t *testing.T) {
 		f := newMoveFixture()
 		f.blockers = core.ProjectOrgMoveBlockers{ChatsTotal: 1}
 		_, err := f.service(t, true).MoveProjectToOrg(ctx, moveReq("p-mine", "globex", "acme", "k"))
-		require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 		assert.Equal(t, project.ReasonProjectBusy, reasonOf(err))
 		assert.Empty(t, f.moves)
 	})
@@ -184,7 +185,7 @@ func TestMoveProjectToOrg(t *testing.T) {
 	t.Run("another member's project", func(t *testing.T) {
 		f := newMoveFixture()
 		_, err := f.service(t, true).MoveProjectToOrg(ctx, moveReq("p-theirs", "globex", "acme", "k"))
-		require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+		require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 		assert.Empty(t, f.moves)
 	})
 
@@ -192,7 +193,7 @@ func TestMoveProjectToOrg(t *testing.T) {
 		f := newMoveFixture()
 		software := authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), moveOrgs{}), authz.CredentialKindSoftware)
 		_, err := f.service(t, true).MoveProjectToOrg(software, moveReq("p-mine", "globex", "acme", "k"))
-		require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+		require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 		assert.Empty(t, f.moves)
 	})
 }
@@ -207,11 +208,11 @@ func TestProjectOrgMoveReads(t *testing.T) {
 	svc := f.service(t, false)
 	ctx := personIn(t, moveOrgs{})
 	get := func(id string) (*pb.ProjectOrgMove, error) {
-		resp, err := svc.GetProjectOrgMove(ctx, connect.NewRequest(&pb.GetProjectOrgMoveRequest{MoveId: id}))
+		resp, err := svc.GetProjectOrgMove(ctx, &pb.GetProjectOrgMoveRequest{MoveId: id})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg.GetMove(), nil
+		return resp.GetMove(), nil
 	}
 
 	m, err := get("m-mine")
@@ -220,17 +221,17 @@ func TestProjectOrgMoveReads(t *testing.T) {
 	_, err = get("m-acme")
 	require.NoError(t, err, "test-user administers acme, the source")
 	_, err = get("m-far")
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "neither org is test-user's to administer")
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "neither org is test-user's to administer")
 	_, err = get("m-missing")
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
 	list := func(org *string) ([]string, error) {
-		resp, err := svc.ListProjectOrgMoves(ctx, connect.NewRequest(&pb.ListProjectOrgMovesRequest{OrgId: org}))
+		resp, err := svc.ListProjectOrgMoves(ctx, &pb.ListProjectOrgMovesRequest{OrgId: org})
 		if err != nil {
 			return nil, err
 		}
 		var ids []string
-		for _, m := range resp.Msg.GetMoves() {
+		for _, m := range resp.GetMoves() {
 			ids = append(ids, m.GetId())
 		}
 		return ids, nil
@@ -240,7 +241,7 @@ func TestProjectOrgMoveReads(t *testing.T) {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"m-mine", "m-acme"}, ids, "acme's ledger: every move in or out of it")
 	_, err = list(&globex)
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "a plain member of globex reads no ledger of it")
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "a plain member of globex reads no ledger of it")
 	ids, err = list(nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"m-mine"}, ids, "no org: the caller's own moves")
@@ -249,7 +250,7 @@ func TestProjectOrgMoveReads(t *testing.T) {
 	// between two others, read alone or listed.
 	ctx = authz.WithCredentialOrg(ctx, "initech")
 	_, err = get("m-mine")
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "bound to initech: a move between acme and globex")
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "bound to initech: a move between acme and globex")
 	ids, err = list(nil)
 	require.NoError(t, err)
 	assert.Empty(t, ids, "bound to initech: no own move between acme and globex")

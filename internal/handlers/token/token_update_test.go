@@ -32,10 +32,10 @@ func TestListTokens_ReportsTheScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTokens: %v", err)
 	}
-	if len(resp.Msg.GetTokens()) != 1 {
-		t.Fatalf("listed %d tokens, want 1", len(resp.Msg.GetTokens()))
+	if len(resp.GetTokens()) != 1 {
+		t.Fatalf("listed %d tokens, want 1", len(resp.GetTokens()))
 	}
-	scopes := resp.Msg.GetTokens()[0].GetScopes()
+	scopes := resp.GetTokens()[0].GetScopes()
 	if len(scopes) == 0 {
 		t.Fatal("the token list reports no scopes; a permanent credential's permissions " +
 			"are the only thing left to audit and the UI cannot show them")
@@ -63,8 +63,8 @@ func TestUpdateToken_RenamesWithoutTouchingScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
-	id := created.Msg.GetInfo().GetId()
-	before := created.Msg.GetInfo().GetScopes()
+	id := created.GetInfo().GetId()
+	before := created.GetInfo().GetScopes()
 
 	newName := "new-name"
 	resp, err := svc.UpdateToken(tokenAuthCtx("user-1"), req(&reliantv1.UpdateTokenRequest{
@@ -73,10 +73,10 @@ func TestUpdateToken_RenamesWithoutTouchingScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateToken: %v", err)
 	}
-	if got := resp.Msg.GetInfo().GetName(); got != newName {
+	if got := resp.GetInfo().GetName(); got != newName {
 		t.Errorf("name = %q, want %q", got, newName)
 	}
-	if got := len(resp.Msg.GetInfo().GetScopes()); got != len(before) {
+	if got := len(resp.GetInfo().GetScopes()); got != len(before) {
 		t.Fatalf("a rename changed the scope count from %d to %d", len(before), got)
 	}
 }
@@ -92,8 +92,8 @@ func TestUpdateToken_ChangesScopesWithoutReissuingTheSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateToken: %v", err)
 	}
-	raw := created.Msg.GetToken()
-	id := created.Msg.GetInfo().GetId()
+	raw := created.GetToken()
+	id := created.GetInfo().GetId()
 
 	resp, err := svc.UpdateToken(tokenAuthCtx("user-1"), req(&reliantv1.UpdateTokenRequest{
 		Id: id,
@@ -104,8 +104,8 @@ func TestUpdateToken_ChangesScopesWithoutReissuingTheSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateToken: %v", err)
 	}
-	if n := len(resp.Msg.GetInfo().GetScopes()); n != 2 {
-		t.Fatalf("scopes = %v, want two", resp.Msg.GetInfo().GetScopes())
+	if n := len(resp.GetInfo().GetScopes()); n != 2 {
+		t.Fatalf("scopes = %v, want two", resp.GetInfo().GetScopes())
 	}
 
 	// THE SAME SECRET still authenticates, now with the new authority.
@@ -130,7 +130,7 @@ func TestUpdateToken_ScopedToTheCaller(t *testing.T) {
 	}
 	newName := "stolen"
 	if _, err := svc.UpdateToken(tokenAuthCtx("user-2"), req(&reliantv1.UpdateTokenRequest{
-		Id: created.Msg.GetInfo().GetId(), Name: &newName,
+		Id: created.GetInfo().GetId(), Name: &newName,
 	})); err == nil {
 		t.Fatal("user-2 edited user-1's token")
 	}
@@ -147,7 +147,7 @@ func TestUpdateToken_RejectsAnEmptyUpdate(t *testing.T) {
 		t.Fatalf("CreateToken: %v", err)
 	}
 	if _, err := svc.UpdateToken(tokenAuthCtx("user-1"), req(&reliantv1.UpdateTokenRequest{
-		Id: created.Msg.GetInfo().GetId(),
+		Id: created.GetInfo().GetId(),
 	})); err == nil {
 		t.Fatal("an update that changes nothing was accepted")
 	}
@@ -177,7 +177,7 @@ func TestUpdateToken_MachineCallerCannotWiden(t *testing.T) {
 		t.Fatalf("CreateToken: %v", err)
 	}
 	if _, err := svc.UpdateToken(machineAuthCtx("user-1"), req(&reliantv1.UpdateTokenRequest{
-		Id: created.Msg.GetInfo().GetId(),
+		Id: created.GetInfo().GetId(),
 		Scopes: &reliantv1.ScopeList{Scopes: []string{
 			string(fat.ScopeDaemonConnect), string(fat.ScopeDeployWrite),
 		}},

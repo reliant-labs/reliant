@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -26,22 +26,22 @@ func TestForgetStorageWorktree_Generated(t *testing.T) {
 		},
 	}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ForgetStorageWorktreeRequest, pb.ForgetStorageWorktreeResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ForgetStorageWorktreeRequest, pb.ForgetStorageWorktreeResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.ForgetStorageWorktreeRequest{WorktreeId: "wt-1"}),
+			Req:     &pb.ForgetStorageWorktreeRequest{WorktreeId: "wt-1"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "worktree_id is required",
-			Req:     connect.NewRequest(&pb.ForgetStorageWorktreeRequest{}),
+			Req:     &pb.ForgetStorageWorktreeRequest{},
 			Ctx:     inbox.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a workspace the caller does not hold is not found",
-			Req:     connect.NewRequest(&pb.ForgetStorageWorktreeRequest{WorktreeId: "wt-1"}),
+			Req:     &pb.ForgetStorageWorktreeRequest{WorktreeId: "wt-1"},
 			Ctx:     inbox.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

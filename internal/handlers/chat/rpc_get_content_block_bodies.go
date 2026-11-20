@@ -4,7 +4,6 @@ import (
 	"context"
 	"slices"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/proto"
 
@@ -46,17 +45,17 @@ var contentBlockBodiesBudget = 4 << 20
 // deferred, and at least one body is always returned.
 func (s *Service) GetContentBlockBodies(
 	ctx context.Context,
-	req *connect.Request[pb.GetContentBlockBodiesRequest],
-) (*connect.Response[pb.GetContentBlockBodiesResponse], error) {
+	req *pb.GetContentBlockBodiesRequest,
+) (*pb.GetContentBlockBodiesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("chat_id is required"))
 	}
-	if len(req.Msg.BlockIds) > maxContentBlockBodyIDs {
+	if len(req.BlockIds) > maxContentBlockBodyIDs {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("at most 100 block_ids per request"))
 	}
 	ctx = authz.WithViewerReads(ctx)
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -65,7 +64,7 @@ func (s *Service) GetContentBlockBodies(
 		return nil, svcerr.Wrap(svcerr.NotFound("chat"))
 	}
 
-	ids := uniqueNonEmpty(req.Msg.BlockIds)
+	ids := uniqueNonEmpty(req.BlockIds)
 	blocks, err := s.deps.Repo.ListContentBlocksByIDs(ctx, ids)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read content blocks"))
@@ -81,7 +80,7 @@ func (s *Service) GetContentBlockBodies(
 
 	// Inherited history is the chat's owner's (a branch's source is always
 	// its own user's), whoever reads it.
-	vis := s.newChatBlockVisibility(req.Msg.ChatId, chat.UserID)
+	vis := s.newChatBlockVisibility(req.ChatId, chat.UserID)
 	resp := &pb.GetContentBlockBodiesResponse{}
 	var shown []*db.MessageContentBlock
 	for _, id := range ids {
@@ -105,7 +104,7 @@ func (s *Service) GetContentBlockBodies(
 		shown = append(shown, block)
 	}
 	// An empty id is never a block, but it was asked for, so it is answered.
-	if slices.Contains(req.Msg.BlockIds, "") {
+	if slices.Contains(req.BlockIds, "") {
 		resp.NotFound = append(resp.NotFound, "")
 	}
 
@@ -116,7 +115,7 @@ func (s *Service) GetContentBlockBodies(
 			resp.Deferred = append(resp.Deferred, block.ID)
 			continue
 		}
-		body := contentBlockBody(block, toolNames[block.ID], req.Msg.GetFull())
+		body := contentBlockBody(block, toolNames[block.ID], req.GetFull())
 		size := proto.Size(body)
 		if len(resp.Bodies) > 0 && total+size > contentBlockBodiesBudget {
 			resp.Deferred = append(resp.Deferred, block.ID)
@@ -125,7 +124,7 @@ func (s *Service) GetContentBlockBodies(
 		total += size
 		resp.Bodies = append(resp.Bodies, body)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // contentBlockBody is block's body as a FULL transcript read sends it: input

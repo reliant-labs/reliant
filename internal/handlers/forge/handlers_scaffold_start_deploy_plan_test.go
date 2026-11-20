@@ -3,7 +3,7 @@ package forge_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -16,16 +16,16 @@ func TestStartDeployPlan_Generated(t *testing.T) {
 
 	svc := newOwnedProjectService(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.StartForgeDeployPlanRequest, pb.StartForgeDeployResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.StartForgeDeployPlanRequest, pb.StartForgeDeployResponse]{
 		{
 			Name:    "a missing env is invalid",
-			Req:     connect.NewRequest(&pb.StartForgeDeployPlanRequest{ProjectId: ownProjectID}),
+			Req:     &pb.StartForgeDeployPlanRequest{ProjectId: ownProjectID},
 			Ctx:     forge.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "another user's project is not found",
-			Req:     connect.NewRequest(&pb.StartForgeDeployPlanRequest{ProjectId: otherProjectID, Env: "staging"}),
+			Req:     &pb.StartForgeDeployPlanRequest{ProjectId: otherProjectID, Env: "staging"},
 			Ctx:     forge.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

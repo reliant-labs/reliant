@@ -55,7 +55,7 @@ import (
 	"os"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
 )
@@ -99,13 +99,18 @@ type Client struct {
 // BaseURL is the server this client talks to, without a trailing slash.
 func (c *Client) BaseURL() string { return c.baseURL }
 
-// HTTPClient is the authenticated *http.Client every call goes through. Build
-// a generated client from it to reach an rpc this package does not wrap:
-//
-//	reliantv1connect.NewRunServiceClient(c.HTTPClient(), c.BaseURL())
-//
-// It adds the bearer token only to requests for BaseURL's host.
+// HTTPClient is the authenticated *http.Client every call goes through. It
+// adds the bearer token only to requests for BaseURL's host. To reach an rpc
+// this package does not wrap, use RPCClient.
 func (c *Client) HTTPClient() *http.Client { return c.http }
+
+// RPCClient is a connect-go v2 client over HTTPClient and BaseURL, configured
+// as the SDK's own: no limit on a received message's size, and errors that
+// keep the server's metadata. Build a generated client from it to reach an rpc
+// this package does not wrap:
+//
+//	reliantv1connect.NewRunServiceClient(c.RPCClient())
+func (c *Client) RPCClient() *connect.Client { return newRPCClient(c.http, c.baseURL) }
 
 type config struct {
 	baseURL    string
@@ -198,12 +203,12 @@ func New(opts ...Option) (*Client, error) {
 	}
 
 	c := &Client{baseURL: base, http: authed}
-	c.Runs = &RunsClient{c: c, runs: reliantv1connect.NewRunServiceClient(authed, base)}
-	c.Gates = &GatesClient{c: c, questions: reliantv1connect.NewQuestionServiceClient(authed, base), approvals: reliantv1connect.NewApprovalServiceClient(authed, base)}
-	c.Triggers = &TriggersClient{c: c, triggers: reliantv1connect.NewTriggerServiceClient(authed, base)}
-	c.Inbox = &InboxClient{c: c, inbox: reliantv1connect.NewInboxServiceClient(authed, base)}
-	c.Approvals = &ApprovalsClient{c: c, approvals: reliantv1connect.NewApprovalServiceClient(authed, base)}
-	c.Runs.chat = reliantv1connect.NewChatServiceClient(authed, base)
+	c.Runs = &RunsClient{c: c, runs: reliantv1connect.NewRunServiceClient(newRPCClient(authed, base))}
+	c.Gates = &GatesClient{c: c, questions: reliantv1connect.NewQuestionServiceClient(newRPCClient(authed, base)), approvals: reliantv1connect.NewApprovalServiceClient(newRPCClient(authed, base))}
+	c.Triggers = &TriggersClient{c: c, triggers: reliantv1connect.NewTriggerServiceClient(newRPCClient(authed, base))}
+	c.Inbox = &InboxClient{c: c, inbox: reliantv1connect.NewInboxServiceClient(newRPCClient(authed, base))}
+	c.Approvals = &ApprovalsClient{c: c, approvals: reliantv1connect.NewApprovalServiceClient(newRPCClient(authed, base))}
+	c.Runs.chat = reliantv1connect.NewChatServiceClient(newRPCClient(authed, base))
 	return c, nil
 }
 

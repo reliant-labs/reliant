@@ -5,8 +5,6 @@ import (
 	"sort"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -19,19 +17,19 @@ import (
 // GetWorkflowExecutions returns the workflow execution tree for a chat
 func (s *Service) GetWorkflowExecutions(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetWorkflowExecutionsRequest],
-) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
+	req *reliantv1.GetWorkflowExecutionsRequest,
+) (*reliantv1.GetWorkflowExecutionsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// Serves viewers of a shared chat, without what its steps produced
 	// (chatproto.ElideWorkflowsForViewer).
 	ctx = authz.WithViewerReads(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// The owner, or a viewer of a shared chat.
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -41,13 +39,13 @@ func (s *Service) GetWorkflowExecutions(
 	}
 
 	// Get all workflows for this chat
-	workflows, err := s.deps.Repo.ListWorkflowsByChat(ctx, req.Msg.ChatId)
+	workflows, err := s.deps.Repo.ListWorkflowsByChat(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list workflows"))
 	}
 
 	if len(workflows) == 0 {
-		return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{}), nil
+		return &reliantv1.GetWorkflowExecutionsResponse{}, nil
 	}
 
 	// Every step of every workflow of this chat, in ONE query.
@@ -69,10 +67,10 @@ func (s *Service) GetWorkflowExecutions(
 	// against ~1s. FULL is every step, for the workflow viewer and the CLI.
 	// Either way it is ONE chat-scoped query.
 	var steps []*db.ChatStepExecution
-	if req.Msg.View == reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL {
-		steps, err = s.deps.Repo.GetStepExecutionsForChat(ctx, req.Msg.ChatId)
+	if req.View == reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL {
+		steps, err = s.deps.Repo.GetStepExecutionsForChat(ctx, req.ChatId)
 	} else {
-		steps, err = s.deps.Repo.GetBasicStepExecutionsForChat(ctx, req.Msg.ChatId)
+		steps, err = s.deps.Repo.GetBasicStepExecutionsForChat(ctx, req.ChatId)
 	}
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get step executions"))
@@ -97,7 +95,7 @@ func (s *Service) GetWorkflowExecutions(
 	}
 
 	if len(roots) == 0 {
-		return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{}), nil
+		return &reliantv1.GetWorkflowExecutionsResponse{}, nil
 	}
 
 	// Sort roots by created_at descending (newest first)
@@ -110,7 +108,7 @@ func (s *Service) GetWorkflowExecutions(
 	// workflow with context.Background(): 199 workflows, ~400 serial queries
 	// for the worst real chat, unattached to the request's cancellation.
 	// attachThreadsWithoutWorkflowRow needs the same list.
-	threads, threadsErr := s.deps.Repo.ListThreadsByConversation(ctx, req.Msg.ChatId)
+	threads, threadsErr := s.deps.Repo.ListThreadsByConversation(ctx, req.ChatId)
 	if threadsErr != nil {
 		// Degrade to a tree with no thread metadata rather than failing the
 		// read: a partial timeline beats an error page. Logged loudly because
@@ -118,7 +116,7 @@ func (s *Service) GetWorkflowExecutions(
 		// unattributable; it explains every missing thread, so the tree does
 		// not report them again.
 		logging.ErrorContext(ctx, "[WorkflowTree] Failed to list threads; thread origin will be empty and threads without a workflow row will be missing from the timeline",
-			"error", threadsErr, "chatID", req.Msg.ChatId)
+			"error", threadsErr, "chatID", req.ChatId)
 	}
 	threadsByID := make(map[string]*db.Thread, len(threads))
 	var childThreadIDs []string
@@ -138,7 +136,7 @@ func (s *Service) GetWorkflowExecutions(
 		forkedIDs, err := s.deps.Repo.ListForkedThreadIDs(ctx, childThreadIDs)
 		if err != nil {
 			logging.ErrorContext(ctx, "[WorkflowTree] Failed to resolve forked threads; ForkedFromThread will be empty",
-				"error", err, "chatID", req.Msg.ChatId)
+				"error", err, "chatID", req.ChatId)
 		}
 		for _, id := range forkedIDs {
 			forkedThreads[id] = true
@@ -165,7 +163,7 @@ func (s *Service) GetWorkflowExecutions(
 	for _, root := range roots {
 		allRootProtos = append(allRootProtos, tree.build(root))
 	}
-	tree.reportMissingThreads(ctx, req.Msg.ChatId, threadsErr)
+	tree.reportMissingThreads(ctx, req.ChatId, threadsErr)
 
 	// The tree above can only describe threads that a workflow row points at,
 	// and that is strictly fewer than the threads which exist. Fill the gap
@@ -177,9 +175,9 @@ func (s *Service) GetWorkflowExecutions(
 		chatproto.ElideWorkflowsForViewer(allRootProtos)
 	}
 
-	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
+	return &reliantv1.GetWorkflowExecutionsResponse{
 		AllRootWorkflows: allRootProtos,
-	}), nil
+	}, nil
 }
 
 // attachThreadsWithoutWorkflowRow adds a node for every thread in the chat that

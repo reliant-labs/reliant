@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +47,7 @@ func TestCreateWorktree_RefusesARequestedMachineThatIsNotTheCallers(t *testing.T
 
 	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{DaemonId: &foreign})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.Empty(t, f.router.daemonsFor("worktree.create"), "nothing may be created on another user's machine")
 }
 
@@ -62,7 +62,7 @@ func TestCreateWorktree_RefusesARequestedMachineOtherThanTheSources(t *testing.T
 
 	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{SourceWorktreeId: &source.ID, DaemonId: &machine})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Empty(t, f.router.daemonsFor("worktree.create"))
 }
 
@@ -75,7 +75,7 @@ func TestCreateWorktree_RefusesARequestedMachineOtherThanTheChats(t *testing.T) 
 
 	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &chatID, DaemonId: &machine})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // The requested-machine path keeps the placement path's project binding: a
@@ -95,7 +95,7 @@ func TestCreateWorktree_RefusesARequestedMachineWithAnotherProjectsChat(t *testi
 
 	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &c.ID, DaemonId: &machine})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Empty(t, f.router.daemonsFor("worktree.create"))
 }
 
@@ -133,5 +133,5 @@ func TestCreateWorktree_AChatPinnedOffItsWorkspaceBranchesOnTheOwner(t *testing.
 	require.NoError(t, err, "the workspace's machine is the chat's machine")
 	_, err = f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &chatID, DaemonId: &machineA})
 	require.Error(t, err, "the stale pin is not the chat's machine")
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }

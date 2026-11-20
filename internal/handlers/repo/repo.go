@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -112,10 +111,10 @@ func repoToProto(r *core.Repo, apps []core.RepoForgeApp) *reliantv1.Repo {
 
 func (s *Service) DiscoverRepos(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DiscoverReposRequest],
-) (*connect.Response[reliantv1.DiscoverReposResponse], error) {
+	req *reliantv1.DiscoverReposRequest,
+) (*reliantv1.DiscoverReposResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	project, err := s.authorizeProject(ctx, req.Msg.ProjectId, userID)
+	project, err := s.authorizeProject(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +135,7 @@ func (s *Service) DiscoverRepos(
 	}
 	payload := map[string]interface{}{
 		"path":      target.Path,
-		"max_depth": req.Msg.MaxDepth,
+		"max_depth": req.MaxDepth,
 	}
 	if err := s.sendToCheckout(ctx, userID, target, "repo.discover", payload, &daemonResp); err != nil {
 		return nil, daemonerr.Error("scan the project for repos", err)
@@ -154,11 +153,11 @@ func (s *Service) DiscoverRepos(
 			UpdatedAt:    now,
 		}
 	}
-	return connect.NewResponse(&reliantv1.DiscoverReposResponse{
+	return &reliantv1.DiscoverReposResponse{
 		Discovered:      out,
 		Truncated:       daemonResp.Truncated,
 		TruncatedReason: daemonResp.TruncatedReason,
-	}), nil
+	}, nil
 }
 
 // =============================================================================
@@ -167,18 +166,18 @@ func (s *Service) DiscoverRepos(
 
 func (s *Service) ListRepos(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListReposRequest],
-) (*connect.Response[reliantv1.ListReposResponse], error) {
+	req *reliantv1.ListReposRequest,
+) (*reliantv1.ListReposResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	if _, err := s.authorizeProject(ctx, req.Msg.ProjectId, userID); err != nil {
+	if _, err := s.authorizeProject(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	repos, err := s.deps.Repo.ListReposByProject(ctx, req.Msg.ProjectId)
+	repos, err := s.deps.Repo.ListReposByProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos"))
 	}
-	apps, err := s.deps.Repo.ListRepoForgeAppsByProject(ctx, req.Msg.ProjectId)
+	apps, err := s.deps.Repo.ListRepoForgeAppsByProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list the repos' forge apps"))
 	}
@@ -191,7 +190,7 @@ func (s *Service) ListRepos(
 	for i, r := range repos {
 		out[i] = repoToProto(r, appsByRepo[r.ID])
 	}
-	return connect.NewResponse(&reliantv1.ListReposResponse{Repos: out}), nil
+	return &reliantv1.ListReposResponse{Repos: out}, nil
 }
 
 // =============================================================================
@@ -203,15 +202,15 @@ func (s *Service) ListRepos(
 
 func (s *Service) AddRepo(
 	ctx context.Context,
-	req *connect.Request[reliantv1.AddRepoRequest],
-) (*connect.Response[reliantv1.AddRepoResponse], error) {
+	req *reliantv1.AddRepoRequest,
+) (*reliantv1.AddRepoResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	project, err := s.authorizeProject(ctx, req.Msg.ProjectId, userID)
+	project, err := s.authorizeProject(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	relPath := req.Msg.RelativePath
+	relPath := req.RelativePath
 	target, err := s.checkout(ctx, userID, project, "add a repo to it")
 	if err != nil {
 		return nil, err
@@ -256,8 +255,8 @@ func (s *Service) AddRepo(
 	}
 
 	name := ""
-	if req.Msg.Name != nil {
-		name = *req.Msg.Name
+	if req.Name != nil {
+		name = *req.Name
 	}
 	if name == "" {
 		name = filepath.Base(repoPath)
@@ -290,7 +289,7 @@ func (s *Service) AddRepo(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.AddRepoResponse{Repo: repoToProto(record, nil)}), nil
+	return &reliantv1.AddRepoResponse{Repo: repoToProto(record, nil)}, nil
 }
 
 // =============================================================================
@@ -302,10 +301,10 @@ func (s *Service) AddRepo(
 
 func (s *Service) RemoveRepo(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RemoveRepoRequest],
-) (*connect.Response[reliantv1.RemoveRepoResponse], error) {
+	req *reliantv1.RemoveRepoRequest,
+) (*reliantv1.RemoveRepoResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	repo, _, err := s.authorizeRepo(ctx, req.Msg.RepoId, userID)
+	repo, _, err := s.authorizeRepo(ctx, req.RepoId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -321,7 +320,7 @@ func (s *Service) RemoveRepo(
 	// a plain git project the user never registered still is a git repo. The
 	// flag is reconciled from the daemon in GetProject / project discovery.
 
-	return connect.NewResponse(&reliantv1.RemoveRepoResponse{Success: true}), nil
+	return &reliantv1.RemoveRepoResponse{Success: true}, nil
 }
 
 // =============================================================================
@@ -333,10 +332,10 @@ func (s *Service) RemoveRepo(
 
 func (s *Service) GetRepoGitInfo(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetRepoGitInfoRequest],
-) (*connect.Response[reliantv1.GetRepoGitInfoResponse], error) {
+	req *reliantv1.GetRepoGitInfoRequest,
+) (*reliantv1.GetRepoGitInfoResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	repo, project, err := s.authorizeRepo(ctx, req.Msg.RepoId, userID)
+	repo, project, err := s.authorizeRepo(ctx, req.RepoId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -362,7 +361,7 @@ func (s *Service) GetRepoGitInfo(
 		return nil, daemonerr.Error("get git info", err)
 	}
 
-	return connect.NewResponse(&reliantv1.GetRepoGitInfoResponse{
+	return &reliantv1.GetRepoGitInfoResponse{
 		RepoId:         repo.ID,
 		CurrentBranch:  gitInfo.CurrentBranch,
 		HasChanges:     gitInfo.HasChanges,
@@ -373,5 +372,5 @@ func (s *Service) GetRepoGitInfo(
 		Ahead:          gitInfo.Ahead,
 		Behind:         gitInfo.Behind,
 		RemoteUrl:      gitremote.StripCredentials(gitInfo.RemoteURL),
-	}), nil
+	}, nil
 }

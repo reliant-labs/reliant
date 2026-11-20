@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -60,14 +60,14 @@ func automation(id, ref, project string) *core.Trigger {
 	return &core.Trigger{ID: id, UserID: "test-user", ProjectID: project, Name: "Autopilot · " + id, Workflow: ref, Kind: core.TriggerKindWebhook}
 }
 
-func deleteFlow(t *testing.T, store *automationsStore, r *retirer, name string) (*connect.Response[pb.DeleteWorkflowResponse], error) {
+func deleteFlow(t *testing.T, store *automationsStore, r *retirer, name string) (*pb.DeleteWorkflowResponse, error) {
 	t.Helper()
 	deps := workflow.Deps{Repo: store}
 	if r != nil {
 		deps.Automations = r
 	}
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(deps))
-	return svc.DeleteWorkflow(workflow.AuthedContext(t), connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: name}))
+	return svc.DeleteWorkflow(workflow.AuthedContext(t), &pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: name})
 }
 
 func TestDeleteWorkflow_DeletesItsAutomationsAcrossProjects(t *testing.T) {
@@ -85,8 +85,8 @@ func TestDeleteWorkflow_DeletesItsAutomationsAcrossProjects(t *testing.T) {
 	resp, err := deleteFlow(t, store, r, "pr-review")
 
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetSuccess())
-	assert.Contains(t, resp.Msg.GetMessage(), "3 automations")
+	assert.True(t, resp.GetSuccess())
+	assert.Contains(t, resp.GetMessage(), "3 automations")
 	assert.ElementsMatch(t, []string{"a1", "a2", "a3"}, store.deleted, "only the automations that ran the deleted user workflow go")
 	assert.Len(t, r.retired, 3, "their schedules and access are retired")
 	assert.Len(t, store.Calls("DeleteWorkflowDraftBySlug"), 1)
@@ -101,7 +101,7 @@ func TestDeleteWorkflow_WithNoAutomationsRetiresNothing(t *testing.T) {
 	resp, err := deleteFlow(t, store, r, "pr-review")
 
 	require.NoError(t, err)
-	assert.Equal(t, "Workflow deleted successfully", resp.Msg.GetMessage())
+	assert.Equal(t, "Workflow deleted successfully", resp.GetMessage())
 	assert.Empty(t, store.deleted)
 	assert.Empty(t, r.retired)
 }
@@ -137,7 +137,7 @@ func TestDeleteWorkflow_IsAllOrNothing(t *testing.T) {
 	_, err := deleteFlow(t, store, r, "pr-review")
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 	assert.Empty(t, store.deleted, "the automation deletion rolled back with the workflow's")
 	assert.Empty(t, r.retired, "nothing is retired for a delete that did not happen")
 }

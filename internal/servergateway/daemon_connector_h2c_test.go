@@ -10,12 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // testDaemonHandler mimics the real daemon's ConnectGateway implementation
@@ -32,7 +36,7 @@ type testDaemonHandler struct {
 
 func (h *testDaemonHandler) ConnectGateway(
 	ctx context.Context,
-	stream *connect.BidiStream[reliantv1.ServerMessage, reliantv1.DaemonMessage],
+	stream reliantv1connect.ToolsDaemonServiceConnectGatewayServerStream,
 ) error {
 	close(h.streamOpened)
 
@@ -60,10 +64,11 @@ func startTestDaemonServer(t *testing.T) (baseURL string, opened <-chan struct{}
 	t.Helper()
 
 	handler := &testDaemonHandler{streamOpened: make(chan struct{})}
-	path, h := reliantv1connect.NewToolsDaemonServiceHandler(handler)
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, handler)
 
 	mux := http.NewServeMux()
-	mux.Handle(path, h)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -100,18 +105,18 @@ func TestH2cBidiReceive(t *testing.T) {
 	baseURL, streamOpened, stop := startTestDaemonServer(t)
 	defer stop()
 
-	client := reliantv1connect.NewToolsDaemonServiceClient(
-		h2cClient(),
-		baseURL,
-	)
+	client := reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(h2cClient(), baseURL, nil))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	stream := client.ConnectGateway(ctx)
+	stream, err := client.ConnectGateway(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 	}()
 
 	// Kick the stream with an empty GatewayHello — mirrors the prod fix in

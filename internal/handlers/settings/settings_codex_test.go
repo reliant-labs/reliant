@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -58,9 +57,9 @@ func TestSettingsService_ValidateProviderAPIKey_SubscriptionProvidersReportTheir
 	userID := "test-user"
 	validate := func(provider string) *reliantv1.ValidateProviderAPIKeyResponse {
 		t.Helper()
-		resp, err := svc.ValidateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{Provider: provider}))
+		resp, err := svc.ValidateProviderAPIKey(ctx, &reliantv1.ValidateProviderAPIKeyRequest{Provider: provider})
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 
 	// No account => not connected.
@@ -103,9 +102,9 @@ func TestSettingsService_GetProviderStatuses_ConfiguredMeansAnAccountCanServe(t 
 	userID := "test-user"
 	statusOf := func(provider string) *reliantv1.ProviderStatus {
 		t.Helper()
-		resp, err := svc.GetProviderStatuses(ctx, connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
+		resp, err := svc.GetProviderStatuses(ctx, &reliantv1.GetProviderStatusesRequest{})
 		require.NoError(t, err)
-		return findProviderStatus(t, resp.Msg.Providers, provider)
+		return findProviderStatus(t, resp.Providers, provider)
 	}
 
 	assert.False(t, statusOf("codex").Configured)

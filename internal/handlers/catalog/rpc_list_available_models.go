@@ -3,8 +3,6 @@ package catalog
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -19,10 +17,10 @@ import (
 // provider so one flaky provider never blanks the list.
 func (s *Service) ListAvailableModels(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListAvailableModelsRequest],
-) (*connect.Response[reliantv1.ListAvailableModelsResponse], error) {
+	req *reliantv1.ListAvailableModelsRequest,
+) (*reliantv1.ListAvailableModelsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	scope, err := s.pickerScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.pickerScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -52,5 +50,5 @@ func (s *Service) ListAvailableModels(
 	}
 
 	logging.DebugContext(ctx, "[ListAvailableModels] Returning available models", "userID", userID, "count", len(out))
-	return connect.NewResponse(&reliantv1.ListAvailableModelsResponse{Models: out}), nil
+	return &reliantv1.ListAvailableModelsResponse{Models: out}, nil
 }

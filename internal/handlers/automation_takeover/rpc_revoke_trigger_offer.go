@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -17,13 +17,13 @@ import (
 // admin of its org withdraws it. Anyone else's offer is NotFound.
 func (s *Service) RevokeTriggerOffer(
 	ctx context.Context,
-	req *connect.Request[pb.RevokeTriggerOfferRequest],
-) (*connect.Response[pb.RevokeTriggerOfferResponse], error) {
+	req *pb.RevokeTriggerOfferRequest,
+) (*pb.RevokeTriggerOfferResponse, error) {
 	if err := auth.RequirePerson(ctx, "decline or withdraw an automation offer"); err != nil {
 		return nil, err
 	}
 	callerID := auth.MustGetUserID(ctx)
-	offer, err := s.deps.Repo.GetTriggerOffer(ctx, req.Msg.GetOfferId())
+	offer, err := s.deps.Repo.GetTriggerOffer(ctx, req.GetOfferId())
 	if errors.Is(err, core.ErrTriggerOfferNotFound) {
 		return nil, svcerr.NotFound("trigger offer")
 	}
@@ -42,7 +42,7 @@ func (s *Service) RevokeTriggerOffer(
 		if err := orgtakeover.RequireAdmin(ctx, callerID, offer.OrgID); err != nil {
 			// An offer is visible only to its offeree and the org's
 			// admins: to another member it does not exist.
-			if svcerr.Code(err) == connect.CodePermissionDenied {
+			if svcerr.CodeV2(err) == connect.CodePermissionDenied {
 				return nil, svcerr.NotFound("trigger offer")
 			}
 			return nil, err
@@ -60,5 +60,5 @@ func (s *Service) RevokeTriggerOffer(
 		return nil, svcerr.WithReason(svcerr.FailedPrecondition("this offer is no longer pending"), ReasonOfferNotLive)
 	}
 	offer.Status, offer.StatusReason = core.TriggerOfferRevoked, reason
-	return connect.NewResponse(&pb.RevokeTriggerOfferResponse{Offer: offerToProto(offer)}), nil
+	return &pb.RevokeTriggerOfferResponse{Offer: offerToProto(offer)}, nil
 }

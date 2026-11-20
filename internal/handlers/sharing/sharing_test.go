@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,19 +30,20 @@ const (
 )
 
 func setChat(svc *Service, ctx context.Context, chatID string, v pb.ResourceVisibility) (*pb.SetChatVisibilityResponse, error) {
-	resp, err := svc.SetChatVisibility(ctx, connect.NewRequest(&pb.SetChatVisibilityRequest{ChatId: chatID, Visibility: v}))
+	resp, err := svc.SetChatVisibility(ctx, &pb.SetChatVisibilityRequest{ChatId: chatID, Visibility: v})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 func requireRefusal(t *testing.T, err error, code connect.Code, reason string) {
 	t.Helper()
 	require.Error(t, err)
-	assert.Equal(t, code, svcerr.Code(err), "error: %v", err)
+	assert.Equal(t, code, svcerr.CodeV2(err), "error: %v", err)
 	if reason != "" {
-		assert.Equal(t, reason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader), "error: %v", err)
+		got, _ := svcerr.ReasonOf(err)
+		assert.Equal(t, reason, got, "error: %v", err)
 	}
 }
 
@@ -154,11 +155,11 @@ func TestSetChatVisibilityNeedsAnOrg(t *testing.T) {
 func TestSetProjectVisibility(t *testing.T) {
 	svc, f := sharingFixture(t)
 	set := func(ctx context.Context, v pb.ResourceVisibility) (*pb.SetProjectVisibilityResponse, error) {
-		resp, err := svc.SetProjectVisibility(ctx, connect.NewRequest(&pb.SetProjectVisibilityRequest{ProjectId: f.ProjectID, Visibility: v}))
+		resp, err := svc.SetProjectVisibility(ctx, &pb.SetProjectVisibilityRequest{ProjectId: f.ProjectID, Visibility: v})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg, nil
+		return resp, nil
 	}
 	// The fixture's project is shared.
 	got, err := set(f.Owner, org)
@@ -189,11 +190,11 @@ func TestSetProjectVisibility(t *testing.T) {
 func TestListShared(t *testing.T) {
 	svc, f := sharingFixture(t)
 	listChats := func(ctx context.Context, req *pb.ListSharedChatsRequest) ([]*pb.Chat, error) {
-		resp, err := svc.ListSharedChats(ctx, connect.NewRequest(req))
+		resp, err := svc.ListSharedChats(ctx, req)
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg.Chats, nil
+		return resp.Chats, nil
 	}
 	chats, err := listChats(f.Viewer, &pb.ListSharedChatsRequest{})
 	require.NoError(t, err)
@@ -224,17 +225,17 @@ func TestListShared(t *testing.T) {
 	_, err = listChats(f.ContextAs(f.ViewerID, auth.CredentialAccessToken), &pb.ListSharedChatsRequest{})
 	requireRefusal(t, err, connect.CodePermissionDenied, auth.ReasonPersonRequired)
 
-	projects, err := svc.ListSharedProjects(f.Viewer, connect.NewRequest(&pb.ListSharedProjectsRequest{}))
+	projects, err := svc.ListSharedProjects(f.Viewer, &pb.ListSharedProjectsRequest{})
 	require.NoError(t, err)
-	require.Len(t, projects.Msg.Projects, 1)
-	p := projects.Msg.Projects[0]
+	require.Len(t, projects.Projects, 1)
+	p := projects.Projects[0]
 	assert.Equal(t, f.ProjectID, p.GetId())
 	assert.True(t, p.GetViewerAccess())
 	assert.Empty(t, p.GetPath(), "a viewer never reads the owner's path")
-	projects, err = svc.ListSharedProjects(f.Owner, connect.NewRequest(&pb.ListSharedProjectsRequest{}))
+	projects, err = svc.ListSharedProjects(f.Owner, &pb.ListSharedProjectsRequest{})
 	require.NoError(t, err)
-	assert.Empty(t, projects.Msg.Projects)
-	_, err = svc.ListSharedProjects(f.ContextAs(f.ViewerID, auth.CredentialAccessToken), connect.NewRequest(&pb.ListSharedProjectsRequest{}))
+	assert.Empty(t, projects.Projects)
+	_, err = svc.ListSharedProjects(f.ContextAs(f.ViewerID, auth.CredentialAccessToken), &pb.ListSharedProjectsRequest{})
 	requireRefusal(t, err, connect.CodePermissionDenied, auth.ReasonPersonRequired)
 }
 
@@ -244,9 +245,9 @@ func TestListSharedWithoutOrgs(t *testing.T) {
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
 	svc := NewTestSharing(t, WithSharingDeps(Deps{Repo: repo}))
-	resp, err := svc.ListSharedChats(f.Viewer, connect.NewRequest(&pb.ListSharedChatsRequest{}))
+	resp, err := svc.ListSharedChats(f.Viewer, &pb.ListSharedChatsRequest{})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.Chats)
+	assert.Empty(t, resp.Chats)
 }
 
 // ListSharedChats with app_name is the shared half of an app's chat list,
@@ -257,9 +258,9 @@ func TestListSharedChatsByApp(t *testing.T) {
 	require.NoError(t, err)
 	list := func(app *string) []*pb.Chat {
 		t.Helper()
-		resp, err := svc.ListSharedChats(f.Viewer, connect.NewRequest(&pb.ListSharedChatsRequest{AppName: app}))
+		resp, err := svc.ListSharedChats(f.Viewer, &pb.ListSharedChatsRequest{AppName: app})
 		require.NoError(t, err)
-		return resp.Msg.Chats
+		return resp.Chats
 	}
 	storefront, blog, empty := "storefront", "blog", ""
 	chats := list(&storefront)

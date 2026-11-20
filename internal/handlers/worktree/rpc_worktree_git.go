@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -22,19 +21,19 @@ import (
 // StageFiles stages files in a worktree
 func (s *Service) StageFiles(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StageFilesRequest],
-) (*connect.Response[reliantv1.StageFilesResponse], error) {
+	req *reliantv1.StageFilesRequest,
+) (*reliantv1.StageFilesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -43,7 +42,7 @@ func (s *Service) StageFiles(
 		return nil, err
 	}
 
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +58,7 @@ func (s *Service) StageFiles(
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.stage", stageReq{
 		WorktreePath: repoPath,
-		Files:        req.Msg.Files,
+		Files:        req.Files,
 	}, &stageResp); err != nil {
 		return nil, daemonerr.Error("stage files", err)
 	}
@@ -74,28 +73,28 @@ func (s *Service) StageFiles(
 		return nil, svcerr.Internal(fmt.Sprintf("failed to stage files: %s", stageResp.Error))
 	}
 
-	return connect.NewResponse(&reliantv1.StageFilesResponse{
+	return &reliantv1.StageFilesResponse{
 		Message: "Files staged successfully",
-		Files:   req.Msg.Files,
-	}), nil
+		Files:   req.Files,
+	}, nil
 }
 
 // UnstageFiles unstages files in a worktree
 func (s *Service) UnstageFiles(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UnstageFilesRequest],
-) (*connect.Response[reliantv1.UnstageFilesResponse], error) {
+	req *reliantv1.UnstageFilesRequest,
+) (*reliantv1.UnstageFilesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -104,7 +103,7 @@ func (s *Service) UnstageFiles(
 		return nil, err
 	}
 
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +119,7 @@ func (s *Service) UnstageFiles(
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.unstage", unstageReq{
 		WorktreePath: repoPath,
-		Files:        req.Msg.Files,
+		Files:        req.Files,
 	}, &unstageResp); err != nil {
 		return nil, daemonerr.Error("unstage files", err)
 	}
@@ -128,32 +127,32 @@ func (s *Service) UnstageFiles(
 		return nil, svcerr.Internal(fmt.Sprintf("failed to unstage files: %s", unstageResp.Error))
 	}
 
-	return connect.NewResponse(&reliantv1.UnstageFilesResponse{
+	return &reliantv1.UnstageFilesResponse{
 		Message: "Files unstaged successfully",
-		Files:   req.Msg.Files,
-	}), nil
+		Files:   req.Files,
+	}, nil
 }
 
 // CommitWorktree commits staged changes in a worktree via daemon
 func (s *Service) CommitWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CommitWorktreeRequest],
-) (*connect.Response[reliantv1.CommitWorktreeResponse], error) {
+	req *reliantv1.CommitWorktreeRequest,
+) (*reliantv1.CommitWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if req.Msg.Message == "" {
+	if req.Message == "" {
 		return nil, svcerr.InvalidArgument("commit message is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -162,13 +161,13 @@ func (s *Service) CommitWorktree(
 		return nil, err
 	}
 
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
 
 	// Commit via daemon
-	output, err := s.commitViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath, req.Msg.Message)
+	output, err := s.commitViaDaemon(ctx, userID, daemonplacement.WorktreeOwner(worktree), repoPath, req.Message)
 	if err != nil {
 		// err's text is the client's: git's words, or the machine's state.
 		errStr := err.Error()
@@ -178,28 +177,28 @@ func (s *Service) CommitWorktree(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.CommitWorktreeResponse{
+	return &reliantv1.CommitWorktreeResponse{
 		Message: "Changes committed successfully",
 		Output:  output,
-	}), nil
+	}, nil
 }
 
 // PushWorktree pushes changes from a worktree to remote
 func (s *Service) PushWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PushWorktreeRequest],
-) (*connect.Response[reliantv1.PushWorktreeResponse], error) {
+	req *reliantv1.PushWorktreeRequest,
+) (*reliantv1.PushWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -208,7 +207,7 @@ func (s *Service) PushWorktree(
 		return nil, err
 	}
 
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -221,28 +220,28 @@ func (s *Service) PushWorktree(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.PushWorktreeResponse{
+	return &reliantv1.PushWorktreeResponse{
 		Message: "Changes pushed successfully",
 		Output:  output,
-	}), nil
+	}, nil
 }
 
 // PullWorktree pulls changes from remote
 func (s *Service) PullWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PullWorktreeRequest],
-) (*connect.Response[reliantv1.PullWorktreeResponse], error) {
+	req *reliantv1.PullWorktreeRequest,
+) (*reliantv1.PullWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -251,7 +250,7 @@ func (s *Service) PullWorktree(
 		return nil, err
 	}
 
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -262,28 +261,28 @@ func (s *Service) PullWorktree(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.PullWorktreeResponse{
+	return &reliantv1.PullWorktreeResponse{
 		Message: "Changes pulled successfully",
 		Output:  output,
-	}), nil
+	}, nil
 }
 
 // GetWorktreePR checks if a PR already exists for the worktree's branch
 func (s *Service) GetWorktreePR(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetWorktreePRRequest],
-) (*connect.Response[reliantv1.GetWorktreePRResponse], error) {
+	req *reliantv1.GetWorktreePRRequest,
+) (*reliantv1.GetWorktreePRResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -292,7 +291,7 @@ func (s *Service) GetWorktreePR(
 		return nil, err
 	}
 
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -320,46 +319,46 @@ func (s *Service) GetWorktreePR(
 	}
 
 	if !prResp.Exists {
-		return connect.NewResponse(&reliantv1.GetWorktreePRResponse{Exists: false}), nil
+		return &reliantv1.GetWorktreePRResponse{Exists: false}, nil
 	}
 
 	// If the PR is not OPEN, check if commits match
 	if prResp.State != "OPEN" {
 		if prResp.LocalHead != "" && prResp.HeadRefOid != "" && prResp.LocalHead != prResp.HeadRefOid {
-			return connect.NewResponse(&reliantv1.GetWorktreePRResponse{Exists: false}), nil
+			return &reliantv1.GetWorktreePRResponse{Exists: false}, nil
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetWorktreePRResponse{
+	return &reliantv1.GetWorktreePRResponse{
 		Exists: true,
 		Url:    &prResp.URL,
 		Number: &prResp.Number,
 		Title:  &prResp.Title,
 		State:  &prResp.State,
-	}), nil
+	}, nil
 }
 
 // CreateWorktreePR creates a pull request for a worktree
 // It automatically stages, commits, and pushes changes if needed for a seamless PR experience
 func (s *Service) CreateWorktreePR(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateWorktreePRRequest],
-) (*connect.Response[reliantv1.CreateWorktreePRResponse], error) {
+	req *reliantv1.CreateWorktreePRRequest,
+) (*reliantv1.CreateWorktreePRResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if req.Msg.Title == "" {
+	if req.Title == "" {
 		return nil, svcerr.InvalidArgument("PR title is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -368,7 +367,7 @@ func (s *Service) CreateWorktreePR(
 		return nil, err
 	}
 
-	repoPath, repo, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	repoPath, repo, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -380,8 +379,8 @@ func (s *Service) CreateWorktreePR(
 	// create time per-repo (worktree.BaseBranches[repo_id]) so we can honor
 	// non-default bases like master/develop/release.
 	body := ""
-	if req.Msg.Body != nil && *req.Msg.Body != "" {
-		body = *req.Msg.Body
+	if req.Body != nil && *req.Body != "" {
+		body = *req.Body
 	}
 
 	baseBranch := s.resolveRepoBaseBranch(worktree, repo)
@@ -396,7 +395,7 @@ func (s *Service) CreateWorktreePR(
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.create_pr", map[string]string{
 		"worktree_path": repoPath,
-		"title":         req.Msg.Title,
+		"title":         req.Title,
 		"body":          body,
 		"base_branch":   baseBranch,
 	}, &prResp); err != nil {
@@ -422,35 +421,35 @@ func (s *Service) CreateWorktreePR(
 		message = "Branch pushed, pull request created successfully"
 	}
 
-	return connect.NewResponse(&reliantv1.CreateWorktreePRResponse{
+	return &reliantv1.CreateWorktreePRResponse{
 		Message:       message,
 		PrUrl:         prResp.PRURL,
 		Output:        prResp.Output,
 		AutoCommitted: prResp.AutoCommitted,
 		AutoPushed:    prResp.AutoPushed,
-	}), nil
+	}, nil
 }
 
 // RevertFiles reverts/discards file changes via daemon
 func (s *Service) RevertFiles(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RevertFilesRequest],
-) (*connect.Response[reliantv1.RevertFilesResponse], error) {
+	req *reliantv1.RevertFilesRequest,
+) (*reliantv1.RevertFilesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if len(req.Msg.Files) == 0 {
+	if len(req.Files) == 0 {
 		return nil, svcerr.InvalidArgument("at least one file is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -459,7 +458,7 @@ func (s *Service) RevertFiles(
 		return nil, err
 	}
 
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +475,7 @@ func (s *Service) RevertFiles(
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.revert", map[string]interface{}{
 		"worktree_path": repoPath,
-		"files":         req.Msg.Files,
+		"files":         req.Files,
 	}, &revertResp); err != nil {
 		return nil, daemonerr.Error("revert files", err)
 	}
@@ -505,8 +504,8 @@ func (s *Service) RevertFiles(
 		message = fmt.Sprintf("%s, %d error(s): %s", message, len(errors), strings.Join(errors, "; "))
 	}
 
-	return connect.NewResponse(&reliantv1.RevertFilesResponse{
+	return &reliantv1.RevertFilesResponse{
 		Message: message,
 		Files:   revertedFiles,
-	}), nil
+	}, nil
 }

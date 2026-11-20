@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,9 +39,10 @@ func latestApprovalFeedStatus(t *testing.T, repo *db.Repo, chatID, approvalID st
 func notActionableErr(t *testing.T, err error) string {
 	t.Helper()
 	require.Error(t, err)
-	ce := svcerr.ToConnect(err)
+	ce := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeFailedPrecondition, ce.Code())
-	assert.Equal(t, ReasonApprovalNotPending, ce.Meta().Get(svcerr.ReasonHeader))
+	reason, _ := svcerr.ReasonOf(err)
+	assert.Equal(t, ReasonApprovalNotPending, reason)
 	return ce.Message()
 }
 
@@ -74,10 +75,10 @@ func TestApproval_ExpiredIsAnnouncedAndExplained(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, closed)
 
-	_, err = service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{RequestId: approvalID}))
+	_, err = service.Approve(approvalTestCtx(), &reliantv1.ApproveRequest{RequestId: approvalID})
 	assert.Equal(t, "This request expired: no one answered within 1h", notActionableErr(t, err))
 
-	_, err = service.BatchApprove(approvalTestCtx(), connect.NewRequest(&reliantv1.BatchApproveRequest{RequestIds: []string{approvalID}}))
+	_, err = service.BatchApprove(approvalTestCtx(), &reliantv1.BatchApproveRequest{RequestIds: []string{approvalID}})
 	assert.Equal(t, "This request expired: no one answered within 1h", notActionableErr(t, err))
 }
 
@@ -108,7 +109,7 @@ func TestApprove_LegacyTimedOutDenialSaysExpired(t *testing.T) {
 	timeout := "timeout"
 	require.NoError(t, repo.UpdateApprovalStatus(ctx, approvalID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), nil, &timeout, nil))
 
-	_, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{RequestId: approvalID}))
+	_, err := service.Approve(approvalTestCtx(), &reliantv1.ApproveRequest{RequestId: approvalID})
 	assert.Contains(t, notActionableErr(t, err), "This request expired")
 }
 
@@ -123,10 +124,10 @@ func TestBatchApprove_SkipsResolvedApprovals(t *testing.T) {
 	_, err := repo.ResolvePendingApproval(ctx, stale, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), "the run waiting on it finished", "run_ended")
 	require.NoError(t, err)
 
-	resp, err := service.BatchApprove(approvalTestCtx(), connect.NewRequest(&reliantv1.BatchApproveRequest{RequestIds: []string{stale, live}}))
+	resp, err := service.BatchApprove(approvalTestCtx(), &reliantv1.BatchApproveRequest{RequestIds: []string{stale, live}})
 	require.NoError(t, err)
-	assert.Equal(t, int32(1), resp.Msg.Approved)
-	assert.Contains(t, resp.Msg.Message, "1 already resolved")
+	assert.Equal(t, int32(1), resp.Approved)
+	assert.Contains(t, resp.Message, "1 already resolved")
 
 	a, err := repo.GetApproval(ctx, live)
 	require.NoError(t, err)

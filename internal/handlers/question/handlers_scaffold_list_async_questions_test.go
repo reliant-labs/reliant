@@ -8,8 +8,8 @@
 // the whole file was deleted before either wrote a test. Anything forge
 // scaffolds once has to survive the way forge's own output says to grow.
 //
-// TestListAsyncQuestions_Generated is a thin shim over `tdd.RunRPCCases`
-// (== `tdd.TableRPC`, see pkg/tdd/rpc.go). Rows declare the request, the
+// TestListAsyncQuestions_Generated is a thin shim over `tdd.RunRPCCasesV2`
+// (== `tdd.TableRPCV2`, see pkg/tdd/rpc_v2.go). Rows declare the request, the
 // expected outcome, and (optionally) a Setup/Check hook — the runner
 // iterates rows as t.Run subtests and asserts on either a Connect error
 // code or a happy-path response.
@@ -40,7 +40,7 @@ package question_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -50,7 +50,7 @@ import (
 )
 
 // TestListAsyncQuestions_Generated runs the canonical scaffold rows for ListAsyncQuestions.
-// Add more rows by appending tdd.RPCCase entries — never write a new
+// Add more rows by appending tdd.RPCCaseV2 entries — never write a new
 // Test<X> function for what is really a new row in this table.
 func TestListAsyncQuestions_Generated(t *testing.T) {
 	t.Parallel()
@@ -60,10 +60,10 @@ func TestListAsyncQuestions_Generated(t *testing.T) {
 	// with question.WithQuestionDeps(...), or per-row via Case.Setup.
 	svc := question.NewTestQuestion(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListAsyncQuestionsRequest, pb.ListAsyncQuestionsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListAsyncQuestionsRequest, pb.ListAsyncQuestionsResponse]{
 		{
 			Name:    "chat_id_required",
-			Req:     connect.NewRequest(&pb.ListAsyncQuestionsRequest{}),
+			Req:     &pb.ListAsyncQuestionsRequest{},
 			Ctx:     question.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
 			WantErr: connect.CodeInvalidArgument,
 		},

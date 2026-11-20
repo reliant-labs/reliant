@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -40,10 +39,10 @@ const runNowDefaultMessage = "Run now."
 // RPC with the tool catalog.
 func (s *Service) RunNow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RunNowRequest],
-) (*connect.Response[reliantv1.RunNowResponse], error) {
+	req *reliantv1.RunNowRequest,
+) (*reliantv1.RunNowResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	msg := req.Msg
+	msg := req
 	if strings.TrimSpace(msg.GetProjectId()) == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -96,7 +95,7 @@ func (s *Service) RunNow(
 	if err != nil {
 		return nil, err
 	}
-	chat := resp.Msg.GetChat()
+	chat := resp.GetChat()
 	// The person who pressed the button owns this run from its first turn, so it
 	// is adopted at birth: it lists in the sidebar and is replied to as a chat,
 	// not offered for take-over like an automation's. Best effort — the run is
@@ -109,11 +108,11 @@ func (s *Service) RunNow(
 			chat.AdoptedAt = &now
 		}
 	}
-	return connect.NewResponse(&reliantv1.RunNowResponse{
+	return &reliantv1.RunNowResponse{
 		Chat:       chat,
-		WorkflowId: resp.Msg.GetWorkflowId(),
-		RunId:      resp.Msg.GetRunId(),
-	}), nil
+		WorkflowId: resp.GetWorkflowId(),
+		RunId:      resp.GetRunId(),
+	}, nil
 }
 
 // replayRecord is what a manual run's launch event remembers of the event it

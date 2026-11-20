@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 
@@ -51,7 +51,7 @@ func TestImportWorktreeError_CodeSaysWhoMustAct(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := importWorktreeError("import worktree", tc.err)
-			assert.Equal(t, tc.code, svcerr.Code(err))
+			assert.Equal(t, tc.code, svcerr.CodeV2(err))
 			assert.Contains(t, err.Error(), tc.contains)
 		})
 	}
@@ -62,6 +62,6 @@ func TestImportWorktreeError_InternalDoesNotLeakTheCause(t *testing.T) {
 	t.Parallel()
 
 	err := importWorktreeError("import worktree", errors.New("pq: password authentication failed for user reliant"))
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 	assert.NotContains(t, err.Error(), "pq:")
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -89,9 +88,9 @@ func TestListMessagesToolBodies(t *testing.T) {
 
 	list := func(t *testing.T, svc *Service, req *reliantv1.ListMessagesRequest) *reliantv1.ListMessagesResponse {
 		t.Helper()
-		resp, err := svc.ListMessages(ctx, connect.NewRequest(req))
+		resp, err := svc.ListMessages(ctx, req)
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 	stub := reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum()
 
@@ -142,7 +141,7 @@ func TestListMessagesToolBodies(t *testing.T) {
 		recorder := tracetest.NewSpanRecorder()
 		spanCtx, rpcSpan := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder)).
 			Tracer("test").Start(ctx, "ListMessages")
-		resp, err := svc.ListMessages(spanCtx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: stub}))
+		resp, err := svc.ListMessages(spanCtx, &reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: stub})
 		rpcSpan.End()
 		require.NoError(t, err)
 		require.Len(t, recorder.Ended(), 1)
@@ -152,7 +151,7 @@ func TestListMessagesToolBodies(t *testing.T) {
 		}
 
 		var wire, inputs, elided int64
-		for _, m := range resp.Msg.Messages {
+		for _, m := range resp.Messages {
 			wire += int64(proto.Size(m))
 			for _, b := range m.ContentBlocks {
 				if b.GetType() == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL {
@@ -196,9 +195,9 @@ func TestGetChatUpdatesToolBodies(t *testing.T) {
 	svc := &Service{deps: Deps{Repo: repo}}
 	get := func(t *testing.T, svc *Service, mode *reliantv1.ToolBodyMode) *reliantv1.GetChatUpdatesResponse {
 		t.Helper()
-		resp, err := svc.GetChatUpdates(ctx, connect.NewRequest(&reliantv1.GetChatUpdatesRequest{ChatId: f.ChatID, ToolBodies: mode}))
+		resp, err := svc.GetChatUpdates(ctx, &reliantv1.GetChatUpdatesRequest{ChatId: f.ChatID, ToolBodies: mode})
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 
 	unset := get(t, svc, nil)

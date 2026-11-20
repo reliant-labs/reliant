@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -41,13 +41,13 @@ func TestCreateProject_AcceptsWindowsDaemonPaths(t *testing.T) {
 			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 			s := newProjectService(t, repo, &createProjectDaemonRouter{})
 
-			resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+			resp, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 				Name: "proj",
 				Path: tc.path,
-			}))
+			})
 			require.NoError(t, err, "a Windows daemon's absolute path must not be rejected as relative")
 			require.NotNil(t, resp)
-			assert.Equal(t, tc.path, resp.Msg.Project.Path, "the path must be persisted verbatim, not rewritten into POSIX form")
+			assert.Equal(t, tc.path, resp.Project.Path, "the path must be persisted verbatim, not rewritten into POSIX form")
 		})
 	}
 }
@@ -69,11 +69,11 @@ func TestCreateProject_StillRejectsNonAbsolutePaths(t *testing.T) {
 		"   ",     // whitespace only
 		"/a\x00b", // NUL truncates at the syscall boundary
 	} {
-		_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+		_, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 			Name: "proj",
 			Path: path,
-		}))
+		})
 		require.Error(t, err, "path %q must still be refused", path)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "path %q", path)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "path %q", path)
 	}
 }

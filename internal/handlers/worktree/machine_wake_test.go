@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -14,8 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/machinewake"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
@@ -109,7 +112,7 @@ func (r *asleepRouter) SendDaemonCommand(ctx context.Context, userID, commandTyp
 
 func (r *asleepRouter) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, commandType string, payload []byte, _ int32) ([]byte, error) {
 	if r.isAsleep(daemonID) {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("no daemon connected for user"))
+		return nil, connect.NewError(connect.CodeUnavailable, "no daemon connected for user")
 	}
 	return r.deliverAwake(daemonID, commandType, payload)
 }
@@ -203,9 +206,9 @@ func (f *asleepFixture) noMachineChat(t *testing.T) string {
 }
 
 func (f *asleepFixture) getTree(worktreeID, chatID *string) error {
-	_, err := f.fs.GetFileTree(f.ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{
+	_, err := f.fs.GetFileTree(f.ctx, &reliantv1.GetFileTreeRequest{
 		ProjectId: f.projectID, Path: "/", WorktreeId: worktreeID, ChatId: chatID,
-	}))
+	})
 	return err
 }
 
@@ -213,14 +216,17 @@ func (f *asleepFixture) getTree(worktreeID, chatID *string) error {
 // returns the Connect error a client receives.
 func asWire(t *testing.T, err error) *connect.Error {
 	t.Helper()
-	wrapped := machinewake.NewInterceptor().WrapUnary(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-		return nil, err
+	wrapped := machinewake.NewInterceptor()(func(context.Context, connect.Spec, connect.ServerStream) error {
+		return err
 	})
-	_, wireErr := wrapped(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{}))
+	wireErr := wrapped(context.Background(), connect.Spec{
+		Procedure:  reliantv1connect.FileSystemServiceGetFileTreeProcedure,
+		StreamType: connect.StreamTypeUnary,
+	}, nil)
 	require.Error(t, wireErr)
 	// What the transport sends: the svcerr interceptor's ToConnect, which
 	// returns a *connect.Error (the waking one) as it is.
-	return svcerr.ToConnect(wireErr)
+	return svcerr.ToConnectV2(wireErr)
 }
 
 // requireWaking asserts err reaches the client as "your machine daemonID is
@@ -233,7 +239,7 @@ func requireWaking(t *testing.T, err error, daemonID string) {
 	assert.Contains(t, cerr.Message(), "no daemon connected", "the UI's machine wait keys on this marker")
 	var waking []*reliantv1.DaemonWaking
 	for _, d := range cerr.Details() {
-		if v, derr := d.Value(); derr == nil {
+		if v, derr := connectproto.UnmarshalErrorDetail(d); derr == nil {
 			if w, ok := v.(*reliantv1.DaemonWaking); ok {
 				waking = append(waking, w)
 			}
@@ -304,17 +310,17 @@ func TestCreateWorktree_NoMachineChatWithRequestedMachine_NeverWakes(t *testing.
 	chatID := f.noMachineChat(t)
 	machine := asleepMachineB
 
-	resp, err := f.wt.CreateWorktree(f.ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := f.wt.CreateWorktree(f.ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: f.projectID, Name: "nm-" + uuid.NewString()[:8], Branch: "nm-branch",
 		ChatId: &chatID, DaemonId: &machine,
-	}))
+	})
 	if err != nil {
 		assert.False(t, machinewake.IsWaking(err), "got %v", err)
 	} else {
 		// The checkouts are made in the background, after the response: they
 		// must not wake the machine either. Wait for them to settle (the
 		// machine is asleep, so they fail) before looking.
-		awaitWorktreeStatus(t, f.repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+		awaitWorktreeStatus(t, f.repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 	}
 	assert.Empty(t, f.router.wakeCalls(), "a no-machine chat must never wake a machine, even one it names")
 }
@@ -374,28 +380,28 @@ func TestMachineWakingInterceptor_OnTheWire(t *testing.T) {
 	f := newAsleepFixture(t, asleepMachineB)
 	chatID := f.chat(t, f.userID, asleepMachineB, "")
 
-	withUser := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			return next(context.WithValue(ctx, auth.UserIDContextKey, f.userID), req)
+	withUser := connect.ServerInterceptor(func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(context.WithValue(ctx, auth.UserIDContextKey, f.userID), spec, stream)
 		}
 	})
-	path, handler := reliantv1connect.NewFileSystemServiceHandler(f.fs,
-		connect.WithInterceptors(withUser), connect.WithInterceptors(machinewake.NewInterceptor()))
+	server := connect.NewServer(svcerr.InterceptorV2(), withUser, machinewake.NewInterceptor())
+	reliantv1connect.RegisterFileSystemServiceHandler(server, f.fs)
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	client := reliantv1connect.NewFileSystemServiceClient(srv.Client(), srv.URL)
-	_, err := client.GetFileTree(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+	client := reliantv1connect.NewFileSystemServiceClient(rpcclient.New(srv.Client(), srv.URL, nil))
+	_, err := client.GetFileTree(context.Background(), &reliantv1.GetFileTreeRequest{
 		ProjectId: f.projectID, Path: "/", ChatId: &chatID,
-	}))
+	})
 	require.Error(t, err)
-	cerr := svcerr.ToConnect(err) // a client's error is a *connect.Error already
+	cerr := svcerr.ToConnectV2(err) // a client's error is a *connect.Error already
 	assert.Equal(t, connect.CodeUnavailable, cerr.Code())
 	assert.Contains(t, cerr.Message(), "no daemon connected")
 	require.Len(t, cerr.Details(), 1)
-	v, derr := cerr.Details()[0].Value()
+	v, derr := connectproto.UnmarshalErrorDetail(cerr.Details()[0])
 	require.NoError(t, derr)
 	waking, ok := v.(*reliantv1.DaemonWaking)
 	require.True(t, ok, "detail is %T", v)
@@ -409,7 +415,7 @@ func TestWorktreeGitStatus_AsleepOwner_WakesThenServes(t *testing.T) {
 	f := newAsleepFixture(t, asleepMachineB)
 	wt := f.worktree(t, asleepMachineB)
 	status := func() error {
-		_, err := f.wt.GetWorktreeGitStatus(f.ctx, connect.NewRequest(&reliantv1.GetWorktreeGitStatusRequest{WorktreeId: wt.ID}))
+		_, err := f.wt.GetWorktreeGitStatus(f.ctx, &reliantv1.GetWorktreeGitStatusRequest{WorktreeId: wt.ID})
 		return err
 	}
 
@@ -428,10 +434,10 @@ func TestCreateWorktree_AsleepChatMachine_WakesBeforeRecordingAnything(t *testin
 	f := newAsleepFixture(t, asleepMachineB)
 	chatID := f.chat(t, f.userID, asleepMachineB, "")
 	key := uuid.NewString()
-	create := func() (*connect.Response[reliantv1.CreateWorktreeResponse], error) {
-		return f.wt.CreateWorktree(f.ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	create := func() (*reliantv1.CreateWorktreeResponse, error) {
+		return f.wt.CreateWorktree(f.ctx, &reliantv1.CreateWorktreeRequest{
 			ProjectId: f.projectID, Name: "wake-test", Branch: "wake-test", ChatId: &chatID, IdempotencyKey: &key,
-		}))
+		})
 	}
 
 	_, err := create()
@@ -444,7 +450,7 @@ func TestCreateWorktree_AsleepChatMachine_WakesBeforeRecordingAnything(t *testin
 	f.router.wakeUp(asleepMachineB)
 	resp, err := create()
 	require.NoError(t, err, "the retry creates the worktree on the machine that is now up")
-	wt := awaitWorktreeStatus(t, f.repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	wt := awaitWorktreeStatus(t, f.repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	assertPlacedOn(t, &f.router.placementRouter, wt, asleepMachineB)
 }
 
@@ -455,9 +461,9 @@ func TestDeleteWorktree_AsleepOwner_WakesInsteadOfArchiving(t *testing.T) {
 	f := newAsleepFixture(t, asleepMachineB)
 	wt := f.worktree(t, asleepMachineB)
 	del := func() error {
-		_, err := f.wt.DeleteWorktree(f.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{
+		_, err := f.wt.DeleteWorktree(f.ctx, &reliantv1.DeleteWorktreeRequest{
 			WorktreeId: wt.ID, DeleteGitBranch: true,
-		}))
+		})
 		return err
 	}
 
@@ -482,14 +488,14 @@ func TestFileSystemProxy_GetFilePreview_ServesImageFromOwningDaemon(t *testing.T
 	f := newAsleepFixture(t)
 	chatID := f.chat(t, f.userID, asleepMachineB, "")
 
-	resp, err := f.fs.GetFilePreview(f.ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{
+	resp, err := f.fs.GetFilePreview(f.ctx, &reliantv1.GetFilePreviewRequest{
 		ProjectId: f.projectID, Path: "diagram.png", ChatId: &chatID,
-	}))
+	})
 	require.NoError(t, err)
-	assert.Equal(t, asleepTestPNG, resp.Msg.GetContent())
-	assert.Equal(t, "image/png", resp.Msg.GetContentType())
-	assert.Equal(t, "diagram.png", resp.Msg.GetFilename())
-	assert.Equal(t, int64(len(asleepTestPNG)), resp.Msg.GetSize())
+	assert.Equal(t, asleepTestPNG, resp.GetContent())
+	assert.Equal(t, "image/png", resp.GetContentType())
+	assert.Equal(t, "diagram.png", resp.GetFilename())
+	assert.Equal(t, int64(len(asleepTestPNG)), resp.GetSize())
 	assert.Equal(t, []string{asleepMachineB}, f.router.daemonsFor("fs.preview_info"))
 	assert.Equal(t, []string{asleepMachineB}, f.router.daemonsFor("fs.read_binary_file"),
 		"the bytes come from the machine that holds the file")
@@ -525,11 +531,11 @@ func TestFileSystemProxy_GetFilePreview_Refusals(t *testing.T) {
 			fs := newFileSystemService(t, router, f.repo)
 			chatID := f.chat(t, f.userID, asleepMachineB, "")
 
-			_, err := fs.GetFilePreview(f.ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{
+			_, err := fs.GetFilePreview(f.ctx, &reliantv1.GetFilePreviewRequest{
 				ProjectId: f.projectID, Path: "x", ChatId: &chatID,
-			}))
+			})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err))
+			assert.Equal(t, tc.code, svcerr.CodeV2(err))
 			assert.Empty(t, router.daemonsFor("fs.read_binary_file"), "a refused preview reads nothing")
 		})
 	}
@@ -540,9 +546,9 @@ func TestFileSystemProxy_GetFilePreview_AsleepMachineWakes(t *testing.T) {
 	f := newAsleepFixture(t, asleepMachineB)
 	chatID := f.chat(t, f.userID, asleepMachineB, "")
 	preview := func() error {
-		_, err := f.fs.GetFilePreview(f.ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{
+		_, err := f.fs.GetFilePreview(f.ctx, &reliantv1.GetFilePreviewRequest{
 			ProjectId: f.projectID, Path: "diagram.png", ChatId: &chatID,
-		}))
+		})
 		return err
 	}
 

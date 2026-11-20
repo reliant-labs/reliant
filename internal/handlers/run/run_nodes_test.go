@@ -6,7 +6,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/ptr"
 
-	"connectrpc.com/connect"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -29,10 +28,10 @@ func TestGetRunProjectsPreNodeFailure(t *testing.T) {
 		},
 	}
 	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo}))
-	resp, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "root"}))
+	resp, err := svc.GetRun(run.AuthedContext(t), &pb.GetRunRequest{RunId: "root"})
 	require.NoError(t, err)
-	require.Empty(t, resp.Msg.Nodes, "failure happened before any node started")
-	require.Equal(t, detail, resp.Msg.Run.GetFailureDetail())
+	require.Empty(t, resp.Nodes, "failure happened before any node started")
+	require.Equal(t, detail, resp.Run.GetFailureDetail())
 }
 
 func TestGetRunProjectsBoundedNodesAfterOwnership(t *testing.T) {
@@ -54,11 +53,11 @@ func TestGetRunProjectsBoundedNodesAfterOwnership(t *testing.T) {
 		},
 	}
 	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo}))
-	resp, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "root"}))
+	resp, err := svc.GetRun(run.AuthedContext(t), &pb.GetRunRequest{RunId: "root"})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.NodesTruncated)
-	require.Len(t, resp.Msg.Nodes, rundiagnostics.RecordLimit)
-	require.Equal(t, "failed", resp.Msg.Nodes[0].Status)
-	require.Equal(t, "[REDACTED: credential-bearing diagnostic omitted]", resp.Msg.Nodes[0].StderrTail)
-	require.Equal(t, "failed build", resp.Msg.Nodes[0].StdoutTail)
+	require.True(t, resp.NodesTruncated)
+	require.Len(t, resp.Nodes, rundiagnostics.RecordLimit)
+	require.Equal(t, "failed", resp.Nodes[0].Status)
+	require.Equal(t, "[REDACTED: credential-bearing diagnostic omitted]", resp.Nodes[0].StderrTail)
+	require.Equal(t, "failed build", resp.Nodes[0].StdoutTail)
 }

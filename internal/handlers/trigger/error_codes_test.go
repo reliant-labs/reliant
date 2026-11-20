@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,10 +37,10 @@ func TestTriggerStoreErrorCodes(t *testing.T) {
 			t.Parallel()
 			repo := &MockRepository{GetTriggerFunc: func(context.Context, string) (*core.Trigger, error) { return nil, tc.err }}
 			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}), WithPlaceholderDeps())
-			_, err := svc.GetTrigger(AuthedContext(t), connect.NewRequest(&reliantv1.GetTriggerRequest{Id: "t-1"}))
+			_, err := svc.GetTrigger(AuthedContext(t), &reliantv1.GetTriggerRequest{Id: "t-1"})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.code, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.NotContains(t, msg, "secret")
 			if tc.msg != "" {
 				assert.Equal(t, tc.msg, msg)
@@ -66,15 +66,15 @@ func TestTriggerErrorsOnTheWire(t *testing.T) {
 	}}
 	_, client := NewTestTriggerServer(t, WithTriggerDeps(Deps{Repo: repo}), WithPlaceholderDeps())
 	for _, id := range []string{"theirs", "missing"} {
-		_, err := client.GetTrigger(context.Background(), connect.NewRequest(&reliantv1.GetTriggerRequest{Id: id}))
+		_, err := client.GetTrigger(context.Background(), &reliantv1.GetTriggerRequest{Id: id})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), id)
-		assert.Equal(t, "trigger not found", svcerr.ToConnect(err).Message(), id)
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), id)
+		assert.Equal(t, "trigger not found", svcerr.ToConnectV2(err).Message(), id)
 	}
-	_, err := client.GetTrigger(context.Background(), connect.NewRequest(&reliantv1.GetTriggerRequest{Id: "broken"}))
+	_, err := client.GetTrigger(context.Background(), &reliantv1.GetTriggerRequest{Id: "broken"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
-	assert.Equal(t, "database error", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
+	assert.Equal(t, "database error", svcerr.ToConnectV2(err).Message())
 }
 
 // A second trigger with a name the project already has is AlreadyExists with
@@ -83,6 +83,6 @@ func TestTriggerErrorsOnTheWire(t *testing.T) {
 func TestCreateTriggerNameTakenIsAlreadyExists(t *testing.T) {
 	t.Parallel()
 	err := triggerDBError("create trigger", fmt.Errorf("%w: %q", core.ErrTriggerNameTaken, "tick"))
-	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "already exists")
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "already exists")
 }

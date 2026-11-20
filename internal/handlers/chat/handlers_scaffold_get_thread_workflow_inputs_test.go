@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -23,28 +23,28 @@ func TestGetThreadWorkflowInputs_Generated(t *testing.T) {
 	}
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetThreadWorkflowInputsRequest, pb.GetThreadWorkflowInputsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetThreadWorkflowInputsRequest, pb.GetThreadWorkflowInputsResponse]{
 		{
 			Name:    "chat_id is required",
-			Req:     connect.NewRequest(&pb.GetThreadWorkflowInputsRequest{ThreadId: "thread-1"}),
+			Req:     &pb.GetThreadWorkflowInputsRequest{ThreadId: "thread-1"},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "thread_id is required",
-			Req:     connect.NewRequest(&pb.GetThreadWorkflowInputsRequest{ChatId: ownChatID}),
+			Req:     &pb.GetThreadWorkflowInputsRequest{ChatId: ownChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "another user's chat is not found",
-			Req:     connect.NewRequest(&pb.GetThreadWorkflowInputsRequest{ChatId: otherChatID, ThreadId: "thread-1"}),
+			Req:     &pb.GetThreadWorkflowInputsRequest{ChatId: otherChatID, ThreadId: "thread-1"},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "a thread with no workflow is not found",
-			Req:     connect.NewRequest(&pb.GetThreadWorkflowInputsRequest{ChatId: ownChatID, ThreadId: "thread-1"}),
+			Req:     &pb.GetThreadWorkflowInputsRequest{ChatId: ownChatID, ThreadId: "thread-1"},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

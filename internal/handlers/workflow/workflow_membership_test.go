@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -45,20 +45,20 @@ func TestWorkflowDraft_RemovedMemberByIDAndByName(t *testing.T) {
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, left))
 	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 
-	_, err := svc.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{DraftId: &left.ID}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "get by draft id: %v", err)
-	_, err = svc.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{Name: left.Name}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "get by name: %v", err)
+	_, err := svc.GetWorkflow(ctx, &reliantv1.GetWorkflowRequest{DraftId: &left.ID})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "get by draft id: %v", err)
+	_, err = svc.GetWorkflow(ctx, &reliantv1.GetWorkflowRequest{Name: left.Name})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "get by name: %v", err)
 
 	edited := mustParse(t, "name: left-flow\nentry: [echo]\nnodes:\n  - id: echo\n    type: run\n    command: \"echo hijacked\"\n")
-	_, err = svc.SaveWorkflow(ctx, connect.NewRequest(&reliantv1.SaveWorkflowRequest{
+	_, err = svc.SaveWorkflow(ctx, &reliantv1.SaveWorkflowRequest{
 		ProjectId: projectID, DraftId: &left.ID, Workflow: edited,
-	}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "save by draft id: %v", err)
-	_, err = svc.SaveWorkflow(ctx, connect.NewRequest(&reliantv1.SaveWorkflowRequest{
+	})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "save by draft id: %v", err)
+	_, err = svc.SaveWorkflow(ctx, &reliantv1.SaveWorkflowRequest{
 		ProjectId: projectID, Workflow: edited,
-	}))
-	require.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err), "save by name: %v", err)
+	})
+	require.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err), "save by name: %v", err)
 
 	kept, err := repo.GetWorkflowDraft(ctx, left.ID)
 	require.NoError(t, err)

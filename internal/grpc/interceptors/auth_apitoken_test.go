@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/require"
 

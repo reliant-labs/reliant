@@ -3,13 +3,14 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -21,6 +22,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 const echoProcedure = "/reliant.observability.v1.EchoService/Echo"
@@ -53,7 +56,7 @@ func TestConnectAndHTTPInstrumentationPropagateTrace(t *testing.T) {
 	}))
 	defer downstream.Close()
 
-	handler := connect.NewUnaryHandler(echoProcedure, func(ctx context.Context, _ *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
+	url := serveUnary(t, echoProcedure, func(ctx context.Context) error {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, downstream.URL, nil)
 		require.NoError(t, err)
 		resp, err := (&http.Client{Transport: otelhttp.NewTransport(http.DefaultTransport)}).Do(req)
@@ -61,15 +64,12 @@ func TestConnectAndHTTPInstrumentationPropagateTrace(t *testing.T) {
 		defer resp.Body.Close()
 		_, err = io.Copy(io.Discard, resp.Body)
 		require.NoError(t, err)
-		return connect.NewResponse(&emptypb.Empty{}), nil
-	}, connect.WithInterceptors(userChainInterceptors(t)...))
-	server := httptest.NewServer(handler)
-	defer server.Close()
+		return nil
+	}, userChainInterceptors(t)...)
 
-	stack, err := observe.NewClientStack(observe.ClientStackDeps{})
+	stack, err := observe.NewClientStackV2(observe.ClientStackDepsV2{})
 	require.NoError(t, err)
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](stack.HTTPClient, server.URL+echoProcedure, stack.ClientOptions...)
-	_, err = client.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+	err = stack.NewClient(url).CallUnary(context.Background(), unarySpec(echoProcedure), &emptypb.Empty{}, &emptypb.Empty{})
 	require.NoError(t, err)
 
 	spans := exporter.GetSpans()
@@ -108,20 +108,14 @@ func TestUntrustedServerStartsNewRootAndLinksRemoteTrace(t *testing.T) {
 			if !tc.trust {
 				daemonTrace, err := newDaemonTraceInterceptor()
 				require.NoError(t, err)
-				chain = []connect.Interceptor{daemonTrace} // NewDaemonChain's Trace slot
+				chain = []connect.ServerInterceptor{daemonTrace} // NewDaemonChain's Trace slot
 			}
-			handler := connect.NewUnaryHandler(echoProcedure, func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-				return connect.NewResponse(&emptypb.Empty{}), nil
-			}, connect.WithInterceptors(chain...))
-			server := httptest.NewServer(handler)
-			defer server.Close()
+			url := serveUnary(t, echoProcedure, func(context.Context) error { return nil }, chain...)
 
 			const remoteTrace = "0af7651916cd43dd8448eb211c80319c"
-			client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, server.URL+echoProcedure)
-			req := connect.NewRequest(&emptypb.Empty{})
-			req.Header().Set("traceparent", "00-"+remoteTrace+"-b7ad6b7169203331-01")
-			_, err := client.CallUnary(context.Background(), req)
-			require.NoError(t, err)
+			ctx, info := connect.NewClientContext(context.Background())
+			info.RequestHeader().Set("traceparent", "00-"+remoteTrace+"-b7ad6b7169203331-01")
+			require.NoError(t, callUnary(ctx, http.DefaultClient, url, echoProcedure))
 
 			var serverSpans []tracetest.SpanStub
 			for _, span := range exporter.GetSpans() {
@@ -162,23 +156,29 @@ func TestUserChainContinuesTheCallerTraceOnServerStreams(t *testing.T) {
 	})
 
 	const streamProcedure = "/reliant.observability.v1.EchoService/EchoStream"
-	handler := connect.NewServerStreamHandler(streamProcedure,
-		func(_ context.Context, _ *connect.Request[emptypb.Empty], stream *connect.ServerStream[emptypb.Empty]) error {
-			return stream.Send(&emptypb.Empty{})
-		}, connect.WithInterceptors(userChainInterceptors(t)...))
-	server := httptest.NewServer(handler)
-	defer server.Close()
+	url := serveServerStream(t, streamProcedure, func(_ context.Context, stream connect.ServerStream) error {
+		return stream.Send(&emptypb.Empty{})
+	}, userChainInterceptors(t)...)
 
 	const remoteTrace = "0af7651916cd43dd8448eb211c80319c"
 	const remoteSpan = "b7ad6b7169203331"
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, server.URL+streamProcedure)
-	req := connect.NewRequest(&emptypb.Empty{})
-	req.Header().Set("traceparent", "00-"+remoteTrace+"-"+remoteSpan+"-01")
-	stream, err := client.CallServerStream(context.Background(), req)
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("traceparent", "00-"+remoteTrace+"-"+remoteSpan+"-01")
+	stream, err := rpcclient.New(http.DefaultClient, url, nil).CallServerStream(ctx,
+		connect.Spec{StreamType: connect.StreamTypeServer, Procedure: streamProcedure}, &emptypb.Empty{})
 	require.NoError(t, err)
-	for stream.Receive() {
+	var streamErr error
+	for {
+		err := stream.Receive(&emptypb.Empty{})
+		if err != nil {
+			streamErr = err
+			break
+		}
 	}
-	require.NoError(t, stream.Err())
+	if errors.Is(streamErr, io.EOF) {
+		streamErr = nil
+	}
+	require.NoError(t, streamErr)
 	require.NoError(t, stream.Close())
 
 	var serverSpans []tracetest.SpanStub

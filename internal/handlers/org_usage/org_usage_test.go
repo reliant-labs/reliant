@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -161,13 +161,13 @@ func (e *env) seed() {
 }
 
 func (e *env) read(ctx context.Context, org string, groupBy pb.OrgLLMUsageGroupBy) (*pb.GetOrgLLMUsageResponse, error) {
-	resp, err := e.svc.GetOrgLLMUsage(ctx, connect.NewRequest(&pb.GetOrgLLMUsageRequest{
+	resp, err := e.svc.GetOrgLLMUsage(ctx, &pb.GetOrgLLMUsageRequest{
 		OrgId: org, StartDate: "2026-11-01", EndDate: "2026-11-14", GroupBy: groupBy,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 func keys(buckets []*pb.OrgLLMUsageBucket) []string {
@@ -179,11 +179,7 @@ func keys(buckets []*pb.OrgLLMUsageBucket) []string {
 }
 
 func reason(err error) string {
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		return ce.Meta().Get(svcerr.ReasonHeader)
-	}
-	return ""
+	return svcerr.MetaOf(err).Get(svcerr.ReasonHeader)
 }
 
 func scopes(t *testing.T, names ...fat.Scope) fat.Set {
@@ -230,10 +226,10 @@ func TestGetOrgLLMUsage_NeverReturnsAPersonalRow(t *testing.T) {
 
 	// Asking for a personal funding filter is not even expressible: the enum
 	// has no personal value, and an unknown one is refused.
-	_, err = e.svc.GetOrgLLMUsage(ctx, connect.NewRequest(&pb.GetOrgLLMUsageRequest{
+	_, err = e.svc.GetOrgLLMUsage(ctx, &pb.GetOrgLLMUsageRequest{
 		OrgId: "org-a", StartDate: "2026-11-01", EndDate: "2026-11-14", Funding: pb.OrgLLMFunding(4).Enum(),
-	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // Costs are labelled estimates of the org's own keys only, and completeness
@@ -309,7 +305,7 @@ func TestGetOrgLLMUsage_CrossTenantGetsNothing(t *testing.T) {
 	got, err := e.read(e.asPerson("ada"), "org-b", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)
 	require.Error(t, err)
 	assert.Nil(t, got)
-	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	assert.Equal(t, orgs.ReasonNotOrgMember, reason(err))
 
 	// And org B's admin reads only org B.
@@ -326,7 +322,7 @@ func TestGetOrgLLMUsage_DeniedWithoutBillingRead(t *testing.T) {
 	e.seed()
 	_, err := e.read(e.asPerson("bob"), "org-a", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	assert.Equal(t, org_usage.ReasonMissingScope, reason(err))
 
 	ctx := e.asPerson("ada")
@@ -338,7 +334,7 @@ func TestGetOrgLLMUsage_DeniedWithoutBillingRead(t *testing.T) {
 
 	e.dir.err = errors.New("control plane down")
 	_, err = e.read(ctx, "org-a", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "an outage must fail closed")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "an outage must fail closed")
 }
 
 // Software credentials: an rlat_ token needs billing:read among its own
@@ -369,7 +365,7 @@ func TestGetOrgLLMUsage_Credentials(t *testing.T) {
 	// The same token is bound to org-a: it reads nothing of another org.
 	e.dir.set("org-b", "ada", string(fat.ScopeBillingRead))
 	_, err = e.read(billing, "org-b", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)
-	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 }
 
 // A rate the price source should never send (negative) leaves that model

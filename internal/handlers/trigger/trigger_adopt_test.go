@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -86,9 +86,9 @@ func (e *adoptEnv) project(t *testing.T, userID string, org *string) string {
 func (e *adoptEnv) made(t *testing.T, def *reliantv1.TriggerDefinition) (*core.Trigger, *reliantv1.CreateTriggerResponse) {
 	t.Helper()
 	def.ProjectId = e.acmeProject
-	resp, err := e.svc.CreateTrigger(e.creatorCtx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: def}))
+	resp, err := e.svc.CreateTrigger(e.creatorCtx, &reliantv1.CreateTriggerRequest{Trigger: def})
 	require.NoError(t, err)
-	return e.row(t, resp.Msg.GetTrigger().GetId()), resp.Msg
+	return e.row(t, resp.GetTrigger().GetId()), resp
 }
 
 func (e *adoptEnv) row(t *testing.T, id string) *core.Trigger {
@@ -187,7 +187,7 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 				// trigger's org is fixed.
 				_, err := e.svc.AdoptAs(e.bobCtx, e.row(t, adopted.ID), e.bobID,
 					e.rebinding(func(rb *reliantv1.TriggerRebinding) { rb.ProjectId = e.globexBobPrj }), "")
-				assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "error: %v", err)
+				assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "error: %v", err)
 			},
 		},
 		{
@@ -270,9 +270,9 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 				// re-reads it and applies its params as the run's inputs.
 				assert.Equal(t, map[string]any{"channel": "#bob"}, adopted.Params, "only the adopter's values")
 				assert.NotContains(t, resp.GetTrigger().String(), "hunter2", "the response carries none of the old owner's values")
-				got, err := e.svc.GetTrigger(e.bobCtx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: adopted.ID}))
+				got, err := e.svc.GetTrigger(e.bobCtx, &reliantv1.GetTriggerRequest{Id: adopted.ID})
 				require.NoError(t, err)
-				assert.NotContains(t, got.Msg.GetTrigger().String(), "hunter2", "nor does the adopter's own read of it")
+				assert.NotContains(t, got.GetTrigger().String(), "hunter2", "nor does the adopter's own read of it")
 				var stored string
 				require.NoError(t, e.repo.ORM().Bun().NewRaw(`SELECT params::text FROM triggers WHERE id = ?`, adopted.ID).Scan(context.Background(), &stored))
 				assert.NotContains(t, stored, "hunter2", "the value is gone from the row itself")
@@ -322,7 +322,7 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 
 			if tc.refused != nil {
 				_, err := e.svc.AdoptAs(e.bobCtx, old, e.bobID, tc.refused(e, old), "")
-				assert.Equal(t, tc.refusedCode, svcerr.Code(err), "error: %v", err)
+				assert.Equal(t, tc.refusedCode, svcerr.CodeV2(err), "error: %v", err)
 				unchanged := e.row(t, old.ID)
 				assert.Equal(t, e.userID, unchanged.UserID, "a refused adoption changes nothing")
 				if old.Kind == core.TriggerKindWebhook {
@@ -371,25 +371,25 @@ func TestAdoptAs_AdoptedTriggerIsDisabledAndEnablingGatesAsTheAdopter(t *testing
 	assert.NotEmpty(t, resp.GetNotices())
 	assert.NotContains(t, access.users(), e.bobID, "adoption itself enables nothing, so checks nothing yet")
 
-	got, err := e.svc.GetTrigger(e.bobCtx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: old.ID}))
+	got, err := e.svc.GetTrigger(e.bobCtx, &reliantv1.GetTriggerRequest{Id: old.ID})
 	require.NoError(t, err)
 	var ops []string
-	for _, c := range got.Msg.GetTrigger().GetChanges() {
+	for _, c := range got.GetTrigger().GetChanges() {
 		ops = append(ops, c.GetOperation())
 	}
 	assert.Contains(t, ops, "adopted", "one trigger_changes entry records the adoption")
 
 	enable := func(ctx context.Context) error {
-		_, err := e.svc.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: old.ID, Enabled: true}))
+		_, err := e.svc.SetTriggerEnabled(ctx, &reliantv1.SetTriggerEnabledRequest{Id: old.ID, Enabled: true})
 		return err
 	}
 	// The departed creator is not its owner any more.
 	departed := authz.WithMembership(e.ctx, adoptMembers{left: map[string]bool{e.userID: true}})
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(enable(departed)))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(enable(departed)))
 
 	access.err, access.permanent = assert.AnError, true
 	err = enable(e.bobCtx)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "error: %v", err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "error: %v", err)
 	users := access.users()
 	require.NotEmpty(t, users)
 	assert.Equal(t, e.bobID, users[len(users)-1], "the gate checked the ADOPTER's access")
@@ -497,7 +497,7 @@ func TestAdoptAs_BindsAnOrgGitHubInstallationAsCreateDoes(t *testing.T) {
 		e, old := setup(t, gateOn)
 		for _, id := range []string{"controlplane:github-app:9999", "controlplane:github-app:7"} { // not acme's; suspended
 			_, err := e.svc.AdoptAs(e.bobCtx, old, e.bobID, rebind(e, &id), "")
-			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "%s: %v", id, err)
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "%s: %v", id, err)
 		}
 		assert.Equal(t, e.userID, e.row(t, old.ID).UserID, "a refused adoption changes nothing")
 	})
@@ -506,7 +506,7 @@ func TestAdoptAs_BindsAnOrgGitHubInstallationAsCreateDoes(t *testing.T) {
 		e, old := setup(t, nil)
 		linked := "controlplane:github-app:4242"
 		_, err := e.svc.AdoptAs(e.bobCtx, old, e.bobID, rebind(e, &linked), "")
-		assert.Equal(t, ReasonOrgInstallationTriggersDisabled, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader), "error: %v", err)
+		assert.Equal(t, ReasonOrgInstallationTriggersDisabled, svcerr.MetaOf(err).Get(svcerr.ReasonHeader), "error: %v", err)
 		assert.Equal(t, e.userID, e.row(t, old.ID).UserID)
 	})
 	t.Run("without one the old binding is not carried", func(t *testing.T) {

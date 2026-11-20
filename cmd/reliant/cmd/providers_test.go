@@ -16,7 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -62,11 +64,11 @@ type fakeProviderAccounts struct {
 	read chan struct{}
 }
 
-func (f *fakeProviderAccounts) ListProviderAccounts(context.Context, *connect.Request[reliantv1.ListProviderAccountsRequest]) (*connect.Response[reliantv1.ListProviderAccountsResponse], error) {
-	return connect.NewResponse(&reliantv1.ListProviderAccountsResponse{Accounts: f.accounts}), nil
+func (f *fakeProviderAccounts) ListProviderAccounts(context.Context, *reliantv1.ListProviderAccountsRequest) (*reliantv1.ListProviderAccountsResponse, error) {
+	return &reliantv1.ListProviderAccountsResponse{Accounts: f.accounts}, nil
 }
 
-func (f *fakeProviderAccounts) GetPersonalFundingQuestion(context.Context, *connect.Request[reliantv1.GetPersonalFundingQuestionRequest]) (*connect.Response[reliantv1.GetPersonalFundingQuestionResponse], error) {
+func (f *fakeProviderAccounts) GetPersonalFundingQuestion(context.Context, *reliantv1.GetPersonalFundingQuestionRequest) (*reliantv1.GetPersonalFundingQuestionResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.reads++
@@ -76,7 +78,7 @@ func (f *fakeProviderAccounts) GetPersonalFundingQuestion(context.Context, *conn
 		default:
 		}
 	}
-	return connect.NewResponse(&reliantv1.GetPersonalFundingQuestionResponse{Question: f.question}), nil
+	return &reliantv1.GetPersonalFundingQuestionResponse{Question: f.question}, nil
 }
 
 func (f *fakeProviderAccounts) setQuestion(q *reliantv1.PersonalFundingQuestion) {
@@ -93,11 +95,11 @@ type fakeOrgProviderAccounts struct {
 	keys     []*reliantv1.OrgProviderAccount
 }
 
-func (f *fakeOrgProviderAccounts) ListOrgProviderAccounts(context.Context, *connect.Request[reliantv1.ListOrgProviderAccountsRequest]) (*connect.Response[reliantv1.ListOrgProviderAccountsResponse], error) {
+func (f *fakeOrgProviderAccounts) ListOrgProviderAccounts(context.Context, *reliantv1.ListOrgProviderAccountsRequest) (*reliantv1.ListOrgProviderAccountsResponse, error) {
 	if !f.asPerson {
-		return nil, svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied("only a person signed in to the app can list an organization's AI accounts"), "person_required"))
+		return nil, svcerr.ToConnectV2(svcerr.WithReason(svcerr.PermissionDenied("only a person signed in to the app can list an organization's AI accounts"), "person_required"))
 	}
-	return connect.NewResponse(&reliantv1.ListOrgProviderAccountsResponse{Accounts: f.keys}), nil
+	return &reliantv1.ListOrgProviderAccountsResponse{Accounts: f.keys}, nil
 }
 
 type fakeSettings struct {
@@ -105,12 +107,12 @@ type fakeSettings struct {
 	values map[string]string
 }
 
-func (f *fakeSettings) GetSetting(_ context.Context, req *connect.Request[reliantv1.GetSettingRequest]) (*connect.Response[reliantv1.GetSettingResponse], error) {
-	v, ok := f.values[req.Msg.GetKey()]
+func (f *fakeSettings) GetSetting(_ context.Context, req *reliantv1.GetSettingRequest) (*reliantv1.GetSettingResponse, error) {
+	v, ok := f.values[req.GetKey()]
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, nil)
+		return nil, connect.NewError(connect.CodeNotFound, "")
 	}
-	return connect.NewResponse(&reliantv1.GetSettingResponse{Setting: &reliantv1.Setting{Key: req.Msg.GetKey(), Value: v}}), nil
+	return &reliantv1.GetSettingResponse{Setting: &reliantv1.Setting{Key: req.GetKey(), Value: v}}, nil
 }
 
 type providersHarness struct {
@@ -128,12 +130,11 @@ func newProvidersHarness(t *testing.T) *providersHarness {
 		settings: &fakeSettings{values: map[string]string{}},
 	}
 	mux := http.NewServeMux()
-	p1, h1 := reliantv1connect.NewProviderAccountServiceHandler(h.accounts)
-	mux.Handle(p1, h1)
-	p2, h2 := reliantv1connect.NewOrgProviderAccountServiceHandler(h.org)
-	mux.Handle(p2, h2)
-	p3, h3 := reliantv1connect.NewSettingsServiceHandler(h.settings)
-	mux.Handle(p3, h3)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterProviderAccountServiceHandler(rpcServer, h.accounts)
+	reliantv1connect.RegisterOrgProviderAccountServiceHandler(rpcServer, h.org)
+	reliantv1connect.RegisterSettingsServiceHandler(rpcServer, h.settings)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	loginFor(t, srv.URL, fakeLoginToken)

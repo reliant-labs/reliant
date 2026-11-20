@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,10 +18,10 @@ import (
 // else gets NotFound.
 func (s *Service) GetProjectOrgMove(
 	ctx context.Context,
-	req *connect.Request[pb.GetProjectOrgMoveRequest],
-) (*connect.Response[pb.GetProjectOrgMoveResponse], error) {
+	req *pb.GetProjectOrgMoveRequest,
+) (*pb.GetProjectOrgMoveResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	move, err := s.deps.Repo.GetProjectOrgMove(ctx, req.Msg.GetMoveId())
+	move, err := s.deps.Repo.GetProjectOrgMove(ctx, req.GetMoveId())
 	if errors.Is(err, core.ErrProjectOrgMoveNotFound) {
 		return nil, svcerr.NotFound("project move")
 	}
@@ -32,7 +31,7 @@ func (s *Service) GetProjectOrgMove(
 	if !canReadMove(ctx, userID, move) {
 		return nil, svcerr.NotFound("project move")
 	}
-	return connect.NewResponse(&pb.GetProjectOrgMoveResponse{Move: projectOrgMoveProto(move)}), nil
+	return &pb.GetProjectOrgMoveResponse{Move: projectOrgMoveProto(move)}, nil
 }
 
 // canReadMove: the move's owner or actor while they may still see their own

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -467,11 +467,11 @@ func (s *Service) dispatchError(ctx context.Context, target projectcheckout.Targ
 // router's. On the secret path the daemon has already withheld forge's stderr,
 // so re-classifying adds nothing to it. err stays the logged cause.
 func remapForgeDispatchError(commandType string, err error) error {
-	if svcerr.Code(err) != connect.CodeUnavailable {
+	if svcerr.CodeV2(err) != connect.CodeUnavailable {
 		return err
 	}
 	text := forgeDaemonText(err)
-	message := svcerr.ToConnect(err).Message()
+	message := svcerr.ToConnectV2(err).Message()
 	switch {
 	case strings.Contains(text, forgeErrProjectDirNotExistMarker):
 		return svcerr.WithCause(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("forge project path not found on the daemon: %s", commandType)), err)
@@ -526,7 +526,7 @@ func isForgeClusterReadTimeout(err error) bool {
 	}
 
 	if toolexec.IsDaemonTimeout(err) || errors.Is(err, context.DeadlineExceeded) ||
-		svcerr.Code(err) == connect.CodeDeadlineExceeded {
+		svcerr.CodeV2(err) == connect.CodeDeadlineExceeded {
 		return true
 	}
 	for _, marker := range []string{
@@ -598,13 +598,13 @@ const forgeExitUnreachable = 2
 // GetTopology returns the release/environment topology.
 func (s *Service) GetTopology(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetForgeTopologyRequest],
-) (*connect.Response[reliantv1.GetForgeTopologyResponse], error) {
+	req *reliantv1.GetForgeTopologyRequest,
+) (*reliantv1.GetForgeTopologyResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +612,7 @@ func (s *Service) GetTopology(
 	// --verify is what turns this from a local file read into a fleet of
 	// cluster round trips, so it selects both the budget and whether a
 	// timeout is a reachability verdict.
-	verify := req.Msg.Verify
+	verify := req.Verify
 	timeout := int32(forgeTopologyTimeoutMs)
 	if verify {
 		timeout = forgeTopologyVerifyTimeoutMs
@@ -625,7 +625,7 @@ func (s *Service) GetTopology(
 			Envs        []string `json:"envs,omitempty"`
 			OrgID       string   `json:"org_id,omitempty"`
 			ProjectID   string   `json:"project_id,omitempty"`
-		}{ProjectPath: projectPath, Verify: verify, Envs: req.Msg.Envs, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
+		}{ProjectPath: projectPath, Verify: verify, Envs: req.Envs, OrgID: req.GetOrgId(), ProjectID: target.Project.ID}
 	}
 
 	reply, unreachable, answered, err := s.forgeReadDispatch(ctx, userID, target, "forge.topology", payload, timeout, verify)
@@ -635,26 +635,26 @@ func (s *Service) GetTopology(
 	s.rememberForgeProjectName(ctx, answered.Project, userID, reply)
 	s.refreshForgeApps(ctx, userID, answered)
 
-	return connect.NewResponse(&reliantv1.GetForgeTopologyResponse{
+	return &reliantv1.GetForgeTopologyResponse{
 		Meta:       forgeMeta(reply, verify, unreachable),
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // VerifyEnv reconciles one environment against its live cluster.
 func (s *Service) VerifyEnv(
 	ctx context.Context,
-	req *connect.Request[reliantv1.VerifyForgeEnvRequest],
-) (*connect.Response[reliantv1.VerifyForgeEnvResponse], error) {
+	req *reliantv1.VerifyForgeEnvRequest,
+) (*reliantv1.VerifyForgeEnvResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -664,17 +664,17 @@ func (s *Service) VerifyEnv(
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
 		ProjectID   string `json:"project_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
+	}{ProjectPath: target.Path, Env: env, OrgID: req.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.VerifyForgeEnvResponse{
+	return &reliantv1.VerifyForgeEnvResponse{
 		Meta:       forgeMeta(reply, true, unreachable),
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // ListSecrets returns declared/present/inert secrets for an environment.
@@ -694,17 +694,17 @@ func (s *Service) VerifyEnv(
 //     from transport text, not from the report body.
 func (s *Service) ListSecrets(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListForgeSecretsRequest],
-) (*connect.Response[reliantv1.ListForgeSecretsResponse], error) {
+	req *reliantv1.ListForgeSecretsRequest,
+) (*reliantv1.ListForgeSecretsResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -714,7 +714,7 @@ func (s *Service) ListSecrets(
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
 		ProjectID   string `json:"project_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
+	}{ProjectPath: target.Path, Env: env, OrgID: req.GetOrgId(), ProjectID: target.Project.ID}
 
 	// readsCluster=false: secret presence is resolved from the declaration and
 	// the provider's metadata, not by reading cluster workloads, so a timeout
@@ -724,26 +724,26 @@ func (s *Service) ListSecrets(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.ListForgeSecretsResponse{
+	return &reliantv1.ListForgeSecretsResponse{
 		Meta:       forgeMeta(reply, false, unreachable),
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // GetEnvStatus returns runtime checks for an environment.
 func (s *Service) GetEnvStatus(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetForgeEnvStatusRequest],
-) (*connect.Response[reliantv1.GetForgeEnvStatusResponse], error) {
+	req *reliantv1.GetForgeEnvStatusRequest,
+) (*reliantv1.GetForgeEnvStatusResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -753,17 +753,17 @@ func (s *Service) GetEnvStatus(
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
 		ProjectID   string `json:"project_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
+	}{ProjectPath: target.Path, Env: env, OrgID: req.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.GetForgeEnvStatusResponse{
+	return &reliantv1.GetForgeEnvStatusResponse{
 		Meta:       forgeMeta(reply, true, unreachable),
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // GetEnvShape projects one environment's render into the declaration the
@@ -781,17 +781,17 @@ func (s *Service) GetEnvStatus(
 // work as `env status` for one environment.
 func (s *Service) GetEnvShape(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetForgeEnvShapeRequest],
-) (*connect.Response[reliantv1.GetForgeEnvShapeResponse], error) {
+	req *reliantv1.GetForgeEnvShapeRequest,
+) (*reliantv1.GetForgeEnvShapeResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -801,17 +801,17 @@ func (s *Service) GetEnvShape(
 		Env         string `json:"env"`
 		OrgID       string `json:"org_id,omitempty"`
 		ProjectID   string `json:"project_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
+	}{ProjectPath: target.Path, Env: env, OrgID: req.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_shape", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.GetForgeEnvShapeResponse{
+	return &reliantv1.GetForgeEnvShapeResponse{
 		Meta:       forgeMeta(reply, true, unreachable),
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // =============================================================================
@@ -878,21 +878,21 @@ func forgeReleaseArg(release string) (string, error) {
 // the wrong thing.
 func (s *Service) PlanPromote(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PlanForgePromoteRequest],
-) (*connect.Response[reliantv1.PlanForgePromoteResponse], error) {
+	req *reliantv1.PlanForgePromoteRequest,
+) (*reliantv1.PlanForgePromoteResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
-	release, err := forgeReleaseArg(req.Msg.Release)
+	release, err := forgeReleaseArg(req.Release)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -903,7 +903,7 @@ func (s *Service) PlanPromote(
 		Release     string `json:"release"`
 		OrgID       string `json:"org_id,omitempty"`
 		ProjectID   string `json:"project_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, Release: release, OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
+	}{ProjectPath: target.Path, Env: env, Release: release, OrgID: req.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(
 		ctx, userID, target, "forge.promote_plan", payload, forgePromotePlanTimeoutMs, false)
@@ -911,10 +911,10 @@ func (s *Service) PlanPromote(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.PlanForgePromoteResponse{
+	return &reliantv1.PlanForgePromoteResponse{
 		Meta:       forgeMeta(reply, false, unreachable),
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // ApplyPromote WRITES the binding, guarded by the caller's view of current
@@ -936,17 +936,17 @@ func (s *Service) PlanPromote(
 // as a failure, and the structured facts still survive in the detail.
 func (s *Service) ApplyPromote(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PromoteForgeEnvRequest],
-) (*connect.Response[reliantv1.PromoteForgeEnvResponse], error) {
+	req *reliantv1.PromoteForgeEnvRequest,
+) (*reliantv1.PromoteForgeEnvResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
-	release, err := forgeReleaseArg(req.Msg.Release)
+	release, err := forgeReleaseArg(req.Release)
 	if err != nil {
 		return nil, err
 	}
@@ -956,18 +956,18 @@ func (s *Service) ApplyPromote(
 	// nothing. An unset expected_current_release must never be readable as "I
 	// saw nothing" — that is how an empty request would authorise a blind
 	// overwrite of a bound environment.
-	expected := strings.TrimSpace(req.Msg.ExpectedCurrentRelease)
+	expected := strings.TrimSpace(req.ExpectedCurrentRelease)
 	switch {
-	case req.Msg.ExpectUnbound && expected != "":
+	case req.ExpectUnbound && expected != "":
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("expect_unbound and expected_current_release %q are contradictory: assert either "+
 			"that the environment was unbound or which release it was bound to", expected))
-	case !req.Msg.ExpectUnbound && expected == "":
+	case !req.ExpectUnbound && expected == "":
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("expected_current_release is required (or set expect_unbound for a first promote): "+
 			"promoting overwrites %q's binding irrecoverably, so the request must state the release it "+
 			"expects to replace", env))
 	}
 
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -985,8 +985,8 @@ func (s *Service) ApplyPromote(
 		Env:                    env,
 		Release:                release,
 		ExpectedCurrentRelease: expected,
-		ExpectUnbound:          req.Msg.ExpectUnbound,
-		OrgID:                  req.Msg.GetOrgId(),
+		ExpectUnbound:          req.ExpectUnbound,
+		OrgID:                  req.GetOrgId(),
 		ProjectID:              target.Project.ID,
 	}
 
@@ -1023,10 +1023,10 @@ func (s *Service) ApplyPromote(
 	// Applied. report_json is the plan forge ACTUALLY applied, not the preview,
 	// and it still carries ships_nothing/next_step — this promote moved a
 	// pointer and deployed nothing.
-	return connect.NewResponse(&reliantv1.PromoteForgeEnvResponse{
+	return &reliantv1.PromoteForgeEnvResponse{
 		Meta:       forgeMeta(reply.forgeReportReply, false, ""),
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // forgePromoteRefusalReason maps the daemon's stable token onto the enum.
@@ -1252,17 +1252,17 @@ func forgeDeployRefusedError(refused *forgeDeployRefusalReply) error {
 // here means live state is UNKNOWN rather than that something broke.
 func (s *Service) PlanDeploy(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PlanForgeDeployRequest],
-) (*connect.Response[reliantv1.PlanForgeDeployResponse], error) {
+	req *reliantv1.PlanForgeDeployRequest,
+) (*reliantv1.PlanForgeDeployResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1273,7 +1273,7 @@ func (s *Service) PlanDeploy(
 		CheckoutPath string `json:"checkout_path,omitempty"`
 		OrgID        string `json:"org_id,omitempty"`
 		ProjectID    string `json:"project_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
+	}{ProjectPath: target.Path, Env: env, CheckoutPath: strings.TrimSpace(req.CheckoutPath), OrgID: req.GetOrgId(), ProjectID: target.Project.ID}
 
 	reply, unreachable, err := s.forgeDispatch(
 		ctx, userID, target, "forge.deploy_plan", payload, forgeDeployPlanTimeoutMs, true)
@@ -1286,10 +1286,10 @@ func (s *Service) PlanDeploy(
 		return nil, refusal
 	}
 
-	return connect.NewResponse(&reliantv1.PlanForgeDeployResponse{
+	return &reliantv1.PlanForgeDeployResponse{
 		Meta:       forgeMeta(reply, true, unreachable),
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // StartDeployPlan begins the APPROVABLE plan as a background job.
@@ -1304,17 +1304,17 @@ func (s *Service) PlanDeploy(
 // cold multi-image build is minutes, far past any synchronous budget.
 func (s *Service) StartDeployPlan(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StartForgeDeployPlanRequest],
-) (*connect.Response[reliantv1.StartForgeDeployResponse], error) {
+	req *reliantv1.StartForgeDeployPlanRequest,
+) (*reliantv1.StartForgeDeployResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1325,7 +1325,7 @@ func (s *Service) StartDeployPlan(
 		CheckoutPath string `json:"checkout_path,omitempty"`
 		OrgID        string `json:"org_id,omitempty"`
 		ProjectID    string `json:"project_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, CheckoutPath: strings.TrimSpace(req.Msg.CheckoutPath), OrgID: req.Msg.GetOrgId(), ProjectID: target.Project.ID}
+	}{ProjectPath: target.Path, Env: env, CheckoutPath: strings.TrimSpace(req.CheckoutPath), OrgID: req.GetOrgId(), ProjectID: target.Project.ID}
 
 	// Dispatched directly, and WITHOUT the reachability escape hatch, for the
 	// same reason StartDeploy is: a start that timed out may or may not have
@@ -1345,23 +1345,23 @@ func (s *Service) StartDeployPlan(
 	// command. Reported as the structured not-supported answer rather than an
 	// empty handle a client would poll forever.
 	if strings.TrimSpace(reply.Handle) == "" {
-		return connect.NewResponse(&reliantv1.StartForgeDeployResponse{
+		return &reliantv1.StartForgeDeployResponse{
 			Meta:      forgeMeta(reply.forgeReportReply, false, ""),
 			Env:       env,
 			JobStatus: reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_UNSPECIFIED,
-		}), nil
+		}, nil
 	}
 
 	// NO report on this response: the plan does not exist yet. A plan here
 	// would invite a client to render and approve something before the build
 	// that produces it has run.
-	return connect.NewResponse(&reliantv1.StartForgeDeployResponse{
+	return &reliantv1.StartForgeDeployResponse{
 		Meta:      forgeMeta(reply.forgeReportReply, false, ""),
 		Handle:    reply.Handle,
 		Env:       env,
 		JobStatus: forgeDeployJobStatus(reply.JobStatus),
 		StartedAt: reply.StartedAt,
-	}), nil
+	}, nil
 }
 
 // StartDeploy begins a real deploy as a background job and returns its handle.
@@ -1384,13 +1384,13 @@ func (s *Service) StartDeployPlan(
 // GetDeployStatus.
 func (s *Service) StartDeploy(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StartForgeDeployRequest],
-) (*connect.Response[reliantv1.StartForgeDeployResponse], error) {
+	req *reliantv1.StartForgeDeployRequest,
+) (*reliantv1.StartForgeDeployResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	env, err := forgeEnvArg(req.Msg.Env)
+	env, err := forgeEnvArg(req.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -1398,7 +1398,7 @@ func (s *Service) StartDeploy(
 	// THE CLUSTER CLAIM IS MANDATORY, and there is no spelling of this request
 	// that means "I did not populate it". A deploy whose target cluster the
 	// operator never saw is the accident this whole path is built around.
-	expectedContext := strings.TrimSpace(req.Msg.ExpectedDeclaredContext)
+	expectedContext := strings.TrimSpace(req.ExpectedDeclaredContext)
 	if expectedContext == "" {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("expected_declared_context is required: deploying to %q applies manifests to a "+
 			"live cluster, and forge applies to the context the environment DECLARES — which can "+
@@ -1408,13 +1408,13 @@ func (s *Service) StartDeploy(
 
 	// And the release claim, in the same three-way shape promote uses: an unset
 	// expected_current_release must never be readable as "I saw no binding".
-	expectedRelease := strings.TrimSpace(req.Msg.ExpectedCurrentRelease)
+	expectedRelease := strings.TrimSpace(req.ExpectedCurrentRelease)
 	switch {
-	case req.Msg.ExpectUnbound && expectedRelease != "":
+	case req.ExpectUnbound && expectedRelease != "":
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("expect_unbound and expected_current_release %q are contradictory: assert "+
 			"either that the environment had no release binding or which release it was bound to",
 			expectedRelease))
-	case !req.Msg.ExpectUnbound && expectedRelease == "":
+	case !req.ExpectUnbound && expectedRelease == "":
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("expected_current_release is required (or set expect_unbound for an "+
 			"environment with no binding): the token states the binding the operator "+
 			"reviewed for %q, so the request must name it", env))
@@ -1424,27 +1424,27 @@ func (s *Service) StartDeploy(
 	// cover. A deploy builds from the checkout and cuts a new release, so
 	// without a digest the request approves whatever forge computes when it
 	// runs rather than the change set a human read.
-	approveDigest := strings.TrimSpace(req.Msg.ApproveDigest)
+	approveDigest := strings.TrimSpace(req.ApproveDigest)
 	if approveDigest == "" {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("approve_digest is required: deploying %q ships a change set, and the "+
 			"request must name the one a human reviewed. Compute it with StartDeployPlan "+
 			"and send that plan's digest", env))
 	}
-	releaseVersion := strings.TrimSpace(req.Msg.ReleaseVersion)
+	releaseVersion := strings.TrimSpace(req.ReleaseVersion)
 	if releaseVersion == "" {
 		return nil, svcerr.InvalidArgument("release_version is required: it is the release the plan was computed " +
 			"for, and deploying it by name is what ships those artifacts. Without it the " +
 			"deploy would build and cut a second release, whose plan the approved digest " +
 			"could not match")
 	}
-	for _, code := range req.Msg.AcknowledgedFindings {
+	for _, code := range req.AcknowledgedFindings {
 		if strings.TrimSpace(code) == "" {
 			return nil, svcerr.InvalidArgument("acknowledged_findings must not contain an empty value: each entry " +
 				"names one destructive change from the approved plan")
 		}
 	}
 
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1466,12 +1466,12 @@ func (s *Service) StartDeploy(
 		Env:                     env,
 		ExpectedDeclaredContext: expectedContext,
 		ExpectedCurrentRelease:  expectedRelease,
-		ExpectUnbound:           req.Msg.ExpectUnbound,
+		ExpectUnbound:           req.ExpectUnbound,
 		ApproveDigest:           approveDigest,
-		AcknowledgedFindings:    req.Msg.AcknowledgedFindings,
+		AcknowledgedFindings:    req.AcknowledgedFindings,
 		ReleaseVersion:          releaseVersion,
-		CheckoutPath:            strings.TrimSpace(req.Msg.CheckoutPath),
-		OrgID:                   req.Msg.GetOrgId(),
+		CheckoutPath:            strings.TrimSpace(req.CheckoutPath),
+		OrgID:                   req.GetOrgId(),
 		ProjectID:               target.Project.ID,
 	}
 
@@ -1497,25 +1497,25 @@ func (s *Service) StartDeploy(
 	// it as the structured not-supported answer rather than handing back an empty
 	// handle a client would poll forever.
 	if strings.TrimSpace(reply.Handle) == "" {
-		return connect.NewResponse(&reliantv1.StartForgeDeployResponse{
+		return &reliantv1.StartForgeDeployResponse{
 			Meta:       forgeMeta(reply.forgeReportReply, false, ""),
 			Env:        env,
 			JobStatus:  reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_UNSPECIFIED,
 			ReportJson: reply.reportJSON(),
-		}), nil
+		}, nil
 	}
 
 	// Started. report_json is the GUARD PLAN this deploy was authorised against
 	// — the read-only document, mode "dry_run" — not an apply report. No apply
 	// report exists yet.
-	return connect.NewResponse(&reliantv1.StartForgeDeployResponse{
+	return &reliantv1.StartForgeDeployResponse{
 		Meta:       forgeMeta(reply.forgeReportReply, false, ""),
 		Handle:     reply.Handle,
 		Env:        env,
 		JobStatus:  forgeDeployJobStatus(reply.JobStatus),
 		StartedAt:  reply.StartedAt,
 		ReportJson: reply.reportJSON(),
-	}), nil
+	}, nil
 }
 
 // GetDeployStatus polls a running or finished deploy by handle.
@@ -1534,13 +1534,13 @@ func (s *Service) StartDeploy(
 // cluster that is converging; reporting FAILED would invite a retry.
 func (s *Service) GetDeployStatus(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetForgeDeployStatusRequest],
-) (*connect.Response[reliantv1.GetForgeDeployStatusResponse], error) {
+	req *reliantv1.GetForgeDeployStatusRequest,
+) (*reliantv1.GetForgeDeployStatusResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	handle := strings.TrimSpace(req.Msg.Handle)
+	handle := strings.TrimSpace(req.Handle)
 	if handle == "" {
 		return nil, svcerr.InvalidArgument("handle is required")
 	}
@@ -1549,7 +1549,7 @@ func (s *Service) GetDeployStatus(
 	// asked, and it is how the request reaches the right daemon at all — the
 	// job registry is in memory on the machine that started the deploy, which
 	// is the machine forgeTarget pinned the start to.
-	target, err := s.forgeTarget(ctx, req.Msg.ProjectId, userID)
+	target, err := s.forgeTarget(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -1576,7 +1576,7 @@ func (s *Service) GetDeployStatus(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetForgeDeployStatusResponse{
+	return &reliantv1.GetForgeDeployStatusResponse{
 		Meta:            forgeMeta(reply.forgeReportReply, false, ""),
 		Handle:          reply.Handle,
 		Env:             reply.Env,
@@ -1587,5 +1587,5 @@ func (s *Service) GetDeployStatus(
 		ReportJson:      reply.reportJSON(),
 		PlanOnly:        reply.PlanOnly,
 		Refusal:         refusal,
-	}), nil
+	}, nil
 }

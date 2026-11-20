@@ -5,7 +5,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/ptr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -24,48 +24,48 @@ func TestCreateScenario_Generated(t *testing.T) {
 		Events: []*pb.SimulatedEvent{{Node: "draft", OutputJson: `{"response_text":"done"}`}},
 	}
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateScenarioRequest, pb.CreateScenarioResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CreateScenarioRequest, pb.CreateScenarioResponse]{
 		{
 			Name:    "scenario is required",
-			Req:     connect.NewRequest(&pb.CreateScenarioRequest{WorkflowSlug: ownWorkflowSlug}),
+			Req:     &pb.CreateScenarioRequest{WorkflowSlug: ownWorkflowSlug},
 			Ctx:     scenario.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.CreateScenarioRequest{ProjectId: missingID, WorkflowSlug: ownWorkflowSlug, Scenario: def}),
+			Req:     &pb.CreateScenarioRequest{ProjectId: missingID, WorkflowSlug: ownWorkflowSlug, Scenario: def},
 			Ctx:     scenario.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "workflow_slug or workflow_yaml is required",
-			Req:     connect.NewRequest(&pb.CreateScenarioRequest{Scenario: def}),
+			Req:     &pb.CreateScenarioRequest{Scenario: def},
 			Ctx:     scenario.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an unknown workflow is not found",
-			Req:     connect.NewRequest(&pb.CreateScenarioRequest{WorkflowSlug: "unknown-flow", Scenario: def}),
+			Req:     &pb.CreateScenarioRequest{WorkflowSlug: "unknown-flow", Scenario: def},
 			Ctx:     scenario.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "workflow_yaml that is not a workflow is rejected",
-			Req:     connect.NewRequest(&pb.CreateScenarioRequest{WorkflowYaml: "nodes: [", Scenario: def}),
+			Req:     &pb.CreateScenarioRequest{WorkflowYaml: "nodes: [", Scenario: def},
 			Ctx:     scenario.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "a saved scenario belongs to the caller and the workflow",
-			Req:  connect.NewRequest(&pb.CreateScenarioRequest{WorkflowSlug: ownWorkflowSlug, Scenario: def, Save: true}),
+			Req:  &pb.CreateScenarioRequest{WorkflowSlug: ownWorkflowSlug, Scenario: def, Save: true},
 			Ctx:  scenario.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.CreateScenarioResponse]) {
+			Check: func(t *testing.T, resp *pb.CreateScenarioResponse) {
 				require.Len(t, f.created, 1)
 				require.Equal(t, "test-user", f.created[0].UserID)
 				require.Equal(t, ownWorkflowDraft, ptr.From(f.created[0].WorkflowDraftID))
-				require.Equal(t, f.created[0].ID, resp.Msg.GetScenario().GetId())
-				require.Len(t, resp.Msg.GetScenario().GetEvents(), 1)
-				require.Nil(t, resp.Msg.GetResult(), "not run unless asked")
+				require.Equal(t, f.created[0].ID, resp.GetScenario().GetId())
+				require.Len(t, resp.GetScenario().GetEvents(), 1)
+				require.Nil(t, resp.GetResult(), "not run unless asked")
 			},
 		},
 	}, svc.CreateScenario)

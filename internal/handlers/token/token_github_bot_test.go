@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
@@ -42,12 +43,8 @@ func mintedBotToken() gitcredentialclient.InstallationToken {
 	}
 }
 
-func botReq(bearer, owner, repo string, perms map[string]string) *connect.Request[reliantv1.GetGitHubBotTokenRequest] {
-	r := connect.NewRequest(&reliantv1.GetGitHubBotTokenRequest{Owner: owner, Repo: repo, Permissions: perms})
-	if bearer != "" {
-		r.Header().Set("Authorization", "Bearer "+bearer)
-	}
-	return r
+func botReq(owner, repo string, perms map[string]string) *reliantv1.GetGitHubBotTokenRequest {
+	return &reliantv1.GetGitHubBotTokenRequest{Owner: owner, Repo: repo, Permissions: perms}
 }
 
 func botSvc(t *testing.T, src *fakeBotTokens) (*Service, *tokenauthority.Memory) {
@@ -67,12 +64,11 @@ func TestGetGitHubBotToken_MintsForTheCallerAndOneRepository(t *testing.T) {
 	src := &fakeBotTokens{tok: mintedBotToken()}
 	svc, authority := botSvc(t, src)
 
-	resp, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), " acme ", "api",
-		map[string]string{"Pull_Requests": "WRITE"}))
+	resp, err := tdd.CallV2(context.Background(), svc.GetGitHubBotToken, botReq(" acme ", "api", map[string]string{"Pull_Requests": "WRITE"}), bearerInfo(daemonBearer(t, authority)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := resp.Msg
+	m := resp
 	if m.GetToken() != secretBotToken || m.GetExpiresAt() != "2030-01-02T03:04:05Z" ||
 		m.GetBotLogin() != "reliant-labs[bot]" || m.GetActingForLogin() != "octocat" || m.GetRepository() != "acme/api" {
 		t.Errorf("response = %+v", m)
@@ -89,15 +85,15 @@ func TestGetGitHubBotToken_RejectsNonDaemonCredentials(t *testing.T) {
 	src := &fakeBotTokens{tok: mintedBotToken()}
 	svc, authority := botSvc(t, src)
 	api := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeReliantAPI}})
-	_, err := svc.GetGitHubBotToken(context.Background(), botReq(api, "acme", "api", nil))
+	_, err := tdd.CallV2(context.Background(), svc.GetGitHubBotToken, botReq("acme", "api", nil), bearerInfo(api))
 	wantCode(t, err, connect.CodePermissionDenied, "")
 
 	orgSvc := NewTestToken(t, WithTokenDeps(Deps{Authority: actsAsNoOne{authority}, GitBotTokens: src}))
-	_, err = orgSvc.GetGitHubBotToken(context.Background(), botReq(api, "acme", "api", nil))
+	_, err = tdd.CallV2(context.Background(), orgSvc.GetGitHubBotToken, botReq("acme", "api", nil), bearerInfo(api))
 	wantCode(t, err, connect.CodePermissionDenied, "")
 
 	for _, bearer := range []string{"", "not-a-token"} {
-		_, err = svc.GetGitHubBotToken(context.Background(), botReq(bearer, "acme", "api", nil))
+		_, err = tdd.CallV2(context.Background(), svc.GetGitHubBotToken, botReq("acme", "api", nil), bearerInfo(bearer))
 		wantCode(t, err, connect.CodeUnauthenticated, "")
 	}
 	if src.calls != 0 {
@@ -111,14 +107,13 @@ func TestGetGitHubBotToken_ActionsPassesThroughWhenNamed(t *testing.T) {
 	src := &fakeBotTokens{tok: mintedBotToken()}
 	svc, authority := botSvc(t, src)
 
-	if _, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api",
-		map[string]string{"Actions": "Write"})); err != nil {
+	if _, err := tdd.CallV2(context.Background(), svc.GetGitHubBotToken, botReq("acme", "api", map[string]string{"Actions": "Write"}), bearerInfo(daemonBearer(t, authority))); err != nil {
 		t.Fatal(err)
 	}
 	if len(src.got.Permissions) != 1 || src.got.Permissions["actions"] != "write" {
 		t.Errorf("minted with %+v, want actions write only", src.got.Permissions)
 	}
-	if _, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api", nil)); err != nil {
+	if _, err := tdd.CallV2(context.Background(), svc.GetGitHubBotToken, botReq("acme", "api", nil), bearerInfo(daemonBearer(t, authority))); err != nil {
 		t.Fatal(err)
 	}
 	if len(src.got.Permissions) != 0 {
@@ -127,21 +122,20 @@ func TestGetGitHubBotToken_ActionsPassesThroughWhenNamed(t *testing.T) {
 }
 
 func TestGetGitHubBotToken_InvalidRequestsMintNothing(t *testing.T) {
-	cases := map[string]*connect.Request[reliantv1.GetGitHubBotTokenRequest]{
-		"no owner":         botReq("", "", "api", nil),
-		"no repo":          botReq("", "acme", "", nil),
-		"path in repo":     botReq("", "acme", "api/../x", nil),
-		"dot repo":         botReq("", "acme", "..", nil),
-		"unknown perm":     botReq("", "acme", "api", map[string]string{"administration": "write"}),
-		"admin level":      botReq("", "acme", "api", map[string]string{"contents": "admin"}),
-		"workflows (wide)": botReq("", "acme", "api", map[string]string{"workflows": "write"}),
+	cases := map[string]*reliantv1.GetGitHubBotTokenRequest{
+		"no owner":         botReq("", "api", nil),
+		"no repo":          botReq("acme", "", nil),
+		"path in repo":     botReq("acme", "api/../x", nil),
+		"dot repo":         botReq("acme", "..", nil),
+		"unknown perm":     botReq("acme", "api", map[string]string{"administration": "write"}),
+		"admin level":      botReq("acme", "api", map[string]string{"contents": "admin"}),
+		"workflows (wide)": botReq("acme", "api", map[string]string{"workflows": "write"}),
 	}
 	for name, req := range cases {
 		t.Run(name, func(t *testing.T) {
 			src := &fakeBotTokens{tok: mintedBotToken()}
 			svc, authority := botSvc(t, src)
-			req.Header().Set("Authorization", "Bearer "+daemonBearer(t, authority))
-			_, err := svc.GetGitHubBotToken(context.Background(), req)
+			_, err := tdd.CallV2(context.Background(), svc.GetGitHubBotToken, req, bearerInfo(daemonBearer(t, authority)))
 			wantCode(t, err, connect.CodeInvalidArgument, "")
 			if src.calls != 0 {
 				t.Error("minted a token for an invalid request")
@@ -173,7 +167,7 @@ func TestGetGitHubBotToken_ErrorMapping(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			svc, authority := botSvc(t, c.src)
-			_, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api", nil))
+			_, err := tdd.CallV2(context.Background(), svc.GetGitHubBotToken, botReq("acme", "api", nil), bearerInfo(daemonBearer(t, authority)))
 			wantCode(t, err, c.code, c.reason)
 			if strings.Contains(err.Error(), secretBotToken) {
 				t.Errorf("error leaks the token: %v", err)
@@ -191,10 +185,10 @@ func TestGetGitHubBotToken_RateLimitPassesThroughWithRetryAfter(t *testing.T) {
 		RetryAfter: 89500 * time.Millisecond,
 	}}
 	svc, authority := botSvc(t, src)
-	_, err := svc.GetGitHubBotToken(context.Background(), botReq(daemonBearer(t, authority), "acme", "api", nil))
+	_, err := tdd.CallV2(context.Background(), svc.GetGitHubBotToken, botReq("acme", "api", nil), bearerInfo(daemonBearer(t, authority)))
 	wantCode(t, err, connect.CodeResourceExhausted, "github_rate_limited")
-	ce := svcerr.ToConnect(err)
-	if got := ce.Meta().Get("Retry-After"); got != "90" {
+	ce := svcerr.ToConnectV2(err)
+	if got := svcerr.MetaOf(err).Get("Retry-After"); got != "90" {
 		t.Errorf("Retry-After = %q, want 90 (rounded up)", got)
 	}
 	if !strings.Contains(ce.Message(), "until 2026-11-18T15:00:00Z") {
@@ -218,7 +212,7 @@ func TestGetGitHubBotToken_NeverLogsToken(t *testing.T) {
 	} {
 		svc, authority := botSvc(t, src)
 		bearer := daemonBearer(t, authority)
-		_, _ = svc.GetGitHubBotToken(context.Background(), botReq(bearer, "acme", "api", nil))
+		_, _ = tdd.CallV2(context.Background(), svc.GetGitHubBotToken, botReq("acme", "api", nil), bearerInfo(bearer))
 		if strings.Contains(buf.String(), bearer) {
 			t.Error("logs contain the caller's bearer")
 		}

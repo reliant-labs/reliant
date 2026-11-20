@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -21,20 +20,20 @@ import (
 // Health returns the health status of the service
 func (s *Service) Health(
 	ctx context.Context,
-	req *connect.Request[reliantv1.HealthRequest],
-) (*connect.Response[reliantv1.HealthResponse], error) {
+	req *reliantv1.HealthRequest,
+) (*reliantv1.HealthResponse, error) {
 	resp := &reliantv1.HealthResponse{
 		Status:  "ok",
 		Version: "v2",
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // Ready returns the readiness status of the service
 func (s *Service) Ready(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ReadyRequest],
-) (*connect.Response[reliantv1.ReadyResponse], error) {
+	req *reliantv1.ReadyRequest,
+) (*reliantv1.ReadyResponse, error) {
 	var failures []string
 
 	// Check database connectivity
@@ -71,14 +70,14 @@ func (s *Service) Ready(
 		Status:    status,
 		Timestamp: time.Now().UTC().Unix(),
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // Info returns general API information including version, build info, and worktree
 func (s *Service) Info(
 	ctx context.Context,
-	req *connect.Request[reliantv1.InfoRequest],
-) (*connect.Response[reliantv1.InfoResponse], error) {
+	req *reliantv1.InfoRequest,
+) (*reliantv1.InfoResponse, error) {
 	buildInfo := version.Get()
 
 	// Extract worktree name from working directory
@@ -97,14 +96,14 @@ func (s *Service) Info(
 		Timestamp:    time.Now().UTC().Unix(),
 		WorktreeName: worktreeName,
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // Version returns detailed version information
 func (s *Service) Version(
 	ctx context.Context,
-	req *connect.Request[reliantv1.VersionRequest],
-) (*connect.Response[reliantv1.VersionResponse], error) {
+	req *reliantv1.VersionRequest,
+) (*reliantv1.VersionResponse, error) {
 	buildInfo := version.Get()
 
 	resp := &reliantv1.VersionResponse{
@@ -113,15 +112,15 @@ func (s *Service) Version(
 		Date:    buildInfo.Date,
 		Branch:  buildInfo.Branch,
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // StartOAuthSignIn completes the Electron-local OAuth sign-in flow for any provider.
 func (s *Service) StartOAuthSignIn(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StartOAuthSignInRequest],
-) (*connect.Response[reliantv1.StartOAuthSignInResponse], error) {
-	provider := req.Msg.Provider
+	req *reliantv1.StartOAuthSignInRequest,
+) (*reliantv1.StartOAuthSignInResponse, error) {
+	provider := req.Provider
 	if provider == "" {
 		return nil, svcerr.InvalidArgument("provider is required")
 	}
@@ -131,13 +130,13 @@ func (s *Service) StartOAuthSignIn(
 		return nil, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("failed to complete %s OAuth sign-in", provider)))
 	}
 
-	return connect.NewResponse(&reliantv1.StartOAuthSignInResponse{
+	return &reliantv1.StartOAuthSignInResponse{
 		AccessToken:   result.AccessToken,
 		RefreshToken:  result.RefreshToken,
 		UserId:        result.UserID,
 		Email:         result.Email,
 		ProviderToken: result.ProviderToken,
-	}), nil
+	}, nil
 }
 
 // ============================================
@@ -147,23 +146,23 @@ func (s *Service) StartOAuthSignIn(
 // DevAuthLoad loads the global auth session (development only)
 func (s *Service) DevAuthLoad(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DevAuthLoadRequest],
-) (*connect.Response[reliantv1.DevAuthLoadResponse], error) {
+	req *reliantv1.DevAuthLoadRequest,
+) (*reliantv1.DevAuthLoadResponse, error) {
 	return nil, svcerr.Unimplemented("DevAuthLoad is not supported")
 }
 
 // DevAuthSave saves the global auth session (development only)
 func (s *Service) DevAuthSave(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DevAuthSaveRequest],
-) (*connect.Response[reliantv1.DevAuthSaveResponse], error) {
+	req *reliantv1.DevAuthSaveRequest,
+) (*reliantv1.DevAuthSaveResponse, error) {
 	return nil, svcerr.Unimplemented("DevAuthSave is not supported")
 }
 
 // DevAuthClear clears the global auth session (development only)
 func (s *Service) DevAuthClear(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DevAuthClearRequest],
-) (*connect.Response[reliantv1.DevAuthClearResponse], error) {
+	req *reliantv1.DevAuthClearRequest,
+) (*reliantv1.DevAuthClearResponse, error) {
 	return nil, svcerr.Unimplemented("DevAuthClear is not supported")
 }

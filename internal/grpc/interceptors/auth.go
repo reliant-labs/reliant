@@ -5,7 +5,7 @@
 // reliantv1connect.*ServiceHandler. The contract is the .proto service, so a
 // contract.go here would duplicate the proto boundary.
 //
-//forge:exclude-contract: Connect interceptors (auth, recovery, observability, timeouts); shaped by connect.Interceptor, not a Service
+//forge:exclude-contract: Connect interceptors (auth, recovery, observability, timeouts); shaped by connect.ServerInterceptor, not a Service
 package interceptors
 
 import (
@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
@@ -168,14 +168,14 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	if authHeader == "" {
 		logging.DebugContext(ctx, "[gRPC Auth] Missing authorization token",
 			"procedure", procedure)
-		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("missing authorization token"))
+		return nil, nil, svcerr.ToConnectV2(svcerr.Unauthenticated("missing authorization token"))
 	}
 
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == authHeader {
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid authorization header format",
 			"procedure", procedure)
-		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid authorization header format"))
+		return nil, nil, svcerr.ToConnectV2(svcerr.Unauthenticated("invalid authorization header format"))
 	}
 
 	// Shape dispatch: `rlat_` bearers are access tokens (resolved by the token
@@ -190,7 +190,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		if i.accessTokens == nil {
 			logging.WarnContext(ctx, "[gRPC Auth] access token presented but access-token auth is not enabled",
 				"procedure", procedure)
-			return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
+			return nil, nil, svcerr.ToConnectV2(svcerr.Unauthenticated("invalid or expired token"))
 		}
 		claims, principal, err = auth.ClaimsForAccessToken(ctx, i.accessTokens, tokenString)
 	} else {
@@ -210,13 +210,13 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 			// The client reads only the fixed text; the store's or JWKS's
 			// own error (driver messages, URLs) stays server-side as the
 			// cause, which the "rpc failed" record logs.
-			return nil, nil, svcerr.ToConnect(svcerr.WithCause(
+			return nil, nil, svcerr.ToConnectV2(svcerr.WithCause(
 				svcerr.Unavailable("token verification unavailable"), err))
 		}
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid token",
 			"error", err,
 			"procedure", procedure)
-		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
+		return nil, nil, svcerr.ToConnectV2(svcerr.Unauthenticated("invalid or expired token"))
 	}
 
 	// A machine credential may be a narrow slice of reliant:api (runs:*,
@@ -227,7 +227,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 			logging.DebugContext(ctx, "[gRPC Auth] Access token lacks the scope for this procedure",
 				"procedure", procedure,
 				"token_id", principal.TokenID)
-			return nil, nil, svcerr.ToConnect(err)
+			return nil, nil, svcerr.ToConnectV2(err)
 		}
 	}
 
@@ -299,26 +299,59 @@ func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClai
 	}
 }
 
-// WrapUnary implements connect.Interceptor for unary RPCs
-func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		procedure := req.Spec().Procedure
-
-		ctx, claims, err := i.authenticateRequest(ctx, procedure, req.Header().Get)
+// Intercept is the authentication interceptor (a connect.ServerInterceptor),
+// for unary and streaming RPCs alike. A refusal goes out through
+// svcerr.RejectV2: the interceptor sits outside the chain's svcerr layer, so
+// that is what delivers the refusal's reason to the client.
+func (i *AuthInterceptor) Intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		header := requestHeader(ctx)
+		authedCtx, claims, err := i.authenticateRequest(ctx, spec.Procedure, header)
 		if err != nil {
-			return nil, err
+			return svcerr.RejectV2(ctx, err)
 		}
+		ctx = authedCtx
 
 		i.trackSession(ctx, claims)
 
-		// Stash x-daemon-last-seen header in context for downstream daemon router.
-		if v := req.Header().Get("x-daemon-last-seen"); v != "" {
-			ctx = WithDaemonLastSeen(ctx, v)
+		// Stash x-daemon-last-seen header in context for downstream daemon
+		// router (unary calls, as it always has been).
+		if spec.StreamType == connect.StreamTypeUnary {
+			if v := header("x-daemon-last-seen"); v != "" {
+				ctx = WithDaemonLastSeen(ctx, v)
+			}
 		}
 
-		resp, err := next(ctx, req)
-		return resp, credentialMismatch(ctx, err)
+		err = next(ctx, spec, stream)
+		if mismatch, ok := mismatchedCredential(ctx, err); ok {
+			return replaceVerdict(ctx, err, mismatch)
+		}
+		return err
 	}
+}
+
+// requestHeader reads the call's request headers; a context outside a server
+// call (a test driving the interceptor by hand) has none.
+func requestHeader(ctx context.Context) func(string) string {
+	if info, ok := connect.CallInfoForServerContext(ctx); ok {
+		return info.RequestHeader().Get
+	}
+	return func(string) string { return "" }
+}
+
+// replaceVerdict answers the call with replacement instead of err. err came
+// back through the chain's svcerr layer, which has already written its
+// metadata (its reason, say) onto the response; that metadata is withdrawn,
+// as a v1 error's Meta left with the error, so the client reads only the
+// replacement's, which svcerr.RejectV2 delivers.
+func replaceVerdict(ctx context.Context, err, replacement error) error {
+	if info, ok := connect.CallInfoForServerContext(ctx); ok {
+		for key := range svcerr.MetaOf(err) {
+			info.ResponseHeader().Delete(key)
+			info.ResponseTrailer().Delete(key)
+		}
+	}
+	return svcerr.RejectV2(ctx, replacement)
 }
 
 // credentialMismatch turns a refusal the handler answered as missing into one
@@ -326,40 +359,27 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 // another org: a CLI user then knows to sign in for that org instead of
 // hunting for a resource that exists. Any other error passes as it is.
 func credentialMismatch(ctx context.Context, err error) error {
+	if mismatch, ok := mismatchedCredential(ctx, err); ok {
+		return mismatch
+	}
+	return err
+}
+
+// mismatchedCredential is credentialMismatch's refusal, and whether err is one
+// it replaces.
+func mismatchedCredential(ctx context.Context, err error) (error, bool) {
 	if err == nil {
-		return nil
+		return nil, false
 	}
 	bound, refused, ok := authz.CredentialRefusal(ctx)
 	if !ok {
-		return err
+		return nil, false
 	}
-	if code := svcerr.Code(err); code != connect.CodeNotFound && code != connect.CodePermissionDenied {
-		return err
+	if code := svcerr.CodeV2(err); code != connect.CodeNotFound && code != connect.CodePermissionDenied {
+		return nil, false
 	}
-	return svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
+	return svcerr.ToConnectV2(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
 		"this credential acts in organization %s only, and this belongs to organization %s; "+
 			"to act there, sign in for it: `reliant auth login` (or `forge login --org %s`)",
-		bound, refused, refused)), orgs.ReasonOrgMismatch))
-}
-
-// WrapStreamingClient implements connect.Interceptor for client streaming (not used server-side)
-func (i *AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	// Client-side streaming doesn't need server authentication
-	return next
-}
-
-// WrapStreamingHandler implements connect.Interceptor for server streaming RPCs
-func (i *AuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		procedure := conn.Spec().Procedure
-
-		ctx, claims, err := i.authenticateRequest(ctx, procedure, conn.RequestHeader().Get)
-		if err != nil {
-			return err
-		}
-
-		i.trackSession(ctx, claims)
-
-		return credentialMismatch(ctx, next(ctx, conn))
-	}
+		bound, refused, refused)), orgs.ReasonOrgMismatch)), true
 }

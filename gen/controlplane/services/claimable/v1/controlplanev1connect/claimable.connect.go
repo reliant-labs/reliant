@@ -11,55 +11,97 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/claimable/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ClaimableServiceName is the fully-qualified name of the ClaimableService service.
 	ClaimableServiceName = "controlplane.v1.ClaimableService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ClaimableServiceStartClaimableDeployProcedure is the fully-qualified name of the
-	// ClaimableService's StartClaimableDeploy RPC.
+	// ClaimableServiceStartClaimableDeployProcedure is the procedure name of the ClaimableService's
+	// StartClaimableDeploy RPC.
 	ClaimableServiceStartClaimableDeployProcedure = "/controlplane.v1.ClaimableService/StartClaimableDeploy"
-	// ClaimableServiceGetClaimableChallengeProcedure is the fully-qualified name of the
-	// ClaimableService's GetClaimableChallenge RPC.
+	// ClaimableServiceGetClaimableChallengeProcedure is the procedure name of the ClaimableService's
+	// GetClaimableChallenge RPC.
 	ClaimableServiceGetClaimableChallengeProcedure = "/controlplane.v1.ClaimableService/GetClaimableChallenge"
-	// ClaimableServiceGetClaimableAvailabilityProcedure is the fully-qualified name of the
-	// ClaimableService's GetClaimableAvailability RPC.
+	// ClaimableServiceGetClaimableAvailabilityProcedure is the procedure name of the ClaimableService's
+	// GetClaimableAvailability RPC.
 	ClaimableServiceGetClaimableAvailabilityProcedure = "/controlplane.v1.ClaimableService/GetClaimableAvailability"
-	// ClaimableServiceGetClaimProcedure is the fully-qualified name of the ClaimableService's GetClaim
-	// RPC.
+	// ClaimableServiceGetClaimProcedure is the procedure name of the ClaimableService's GetClaim RPC.
 	ClaimableServiceGetClaimProcedure = "/controlplane.v1.ClaimableService/GetClaim"
-	// ClaimableServiceOpenClaimSessionProcedure is the fully-qualified name of the ClaimableService's
+	// ClaimableServiceOpenClaimSessionProcedure is the procedure name of the ClaimableService's
 	// OpenClaimSession RPC.
 	ClaimableServiceOpenClaimSessionProcedure = "/controlplane.v1.ClaimableService/OpenClaimSession"
-	// ClaimableServiceCompleteClaimProcedure is the fully-qualified name of the ClaimableService's
+	// ClaimableServiceCompleteClaimProcedure is the procedure name of the ClaimableService's
 	// CompleteClaim RPC.
 	ClaimableServiceCompleteClaimProcedure = "/controlplane.v1.ClaimableService/CompleteClaim"
-	// ClaimableServiceGetClaimFreeSiteProcedure is the fully-qualified name of the ClaimableService's
+	// ClaimableServiceGetClaimFreeSiteProcedure is the procedure name of the ClaimableService's
 	// GetClaimFreeSite RPC.
 	ClaimableServiceGetClaimFreeSiteProcedure = "/controlplane.v1.ClaimableService/GetClaimFreeSite"
+)
+
+var (
+	claimableServiceStartClaimableDeploySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods().ByName("StartClaimableDeploy"),
+			Procedure:  ClaimableServiceStartClaimableDeployProcedure,
+		}
+	})
+	claimableServiceGetClaimableChallengeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods().ByName("GetClaimableChallenge"),
+			Procedure:  ClaimableServiceGetClaimableChallengeProcedure,
+		}
+	})
+	claimableServiceGetClaimableAvailabilitySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods().ByName("GetClaimableAvailability"),
+			Procedure:  ClaimableServiceGetClaimableAvailabilityProcedure,
+		}
+	})
+	claimableServiceGetClaimSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods().ByName("GetClaim"),
+			Procedure:  ClaimableServiceGetClaimProcedure,
+		}
+	})
+	claimableServiceOpenClaimSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods().ByName("OpenClaimSession"),
+			Procedure:  ClaimableServiceOpenClaimSessionProcedure,
+		}
+	})
+	claimableServiceCompleteClaimSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods().ByName("CompleteClaim"),
+			Procedure:  ClaimableServiceCompleteClaimProcedure,
+		}
+	})
+	claimableServiceGetClaimFreeSiteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods().ByName("GetClaimFreeSite"),
+			Procedure:  ClaimableServiceGetClaimFreeSiteProcedure,
+		}
+	})
 )
 
 // ClaimableServiceClient is a client for the controlplane.v1.ClaimableService service.
@@ -76,11 +118,11 @@ type ClaimableServiceClient interface {
 	//
 	// Throttled: ResourceExhausted, reason claimable_throttled, with a
 	// ClaimableThrottle detail.
-	StartClaimableDeploy(context.Context, *connect.Request[v1.StartClaimableDeployRequest]) (*connect.Response[v1.StartClaimableDeployResponse], error)
+	StartClaimableDeploy(context.Context, *v1.StartClaimableDeployRequest) (*v1.StartClaimableDeployResponse, error)
 	// GetClaimableChallenge hands out a fresh proof-of-work challenge for
 	// StartClaimableDeploy. Stateless on the server (the challenge is signed and
 	// time-boxed), so it creates nothing and is cheap to call.
-	GetClaimableChallenge(context.Context, *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error)
+	GetClaimableChallenge(context.Context, *v1.GetClaimableChallengeRequest) (*v1.GetClaimableChallengeResponse, error)
 	// GetClaimableAvailability says whether a claimable deploy can start right
 	// now, and if not, every reason why: an operator's switch, or a dependency
 	// this deployment lacks. Separately, whether an unclaimed SERVICE or
@@ -88,11 +130,11 @@ type ClaimableServiceClient interface {
 	// configuration and the kill switches, creates nothing and solves no proof
 	// of work, so forge calls it before any build (`forge env deploy
 	// --claimable`) and in the local preview (`--claimable --plan-only`).
-	GetClaimableAvailability(context.Context, *connect.Request[v1.GetClaimableAvailabilityRequest]) (*connect.Response[v1.GetClaimableAvailabilityResponse], error)
+	GetClaimableAvailability(context.Context, *v1.GetClaimableAvailabilityRequest) (*v1.GetClaimableAvailabilityResponse, error)
 	// GetClaim is what the /claim page shows BEFORE it asks anyone to sign in:
 	// what is being claimed, whether it still can be, and when it expires. It
 	// returns no secret and no token of any kind.
-	GetClaim(context.Context, *connect.Request[v1.GetClaimRequest]) (*connect.Response[v1.GetClaimResponse], error)
+	GetClaim(context.Context, *v1.GetClaimRequest) (*v1.GetClaimResponse, error)
 	// OpenClaimSession releases the vaulted anonymous GoTrue session to the
 	// claimant's browser, so it can setSession() and then upgrade the anonymous
 	// user in place. Released AT MOST ONCE: the server redeems its vaulted
@@ -102,7 +144,7 @@ type ClaimableServiceClient interface {
 	// retry with the first call's retry_key (see OpenClaimSessionRequest); one
 	// that arrives while the first is still running answers Unavailable,
 	// reason claimable_unavailable: retry shortly.
-	OpenClaimSession(context.Context, *connect.Request[v1.OpenClaimSessionRequest]) (*connect.Response[v1.OpenClaimSessionResponse], error)
+	OpenClaimSession(context.Context, *v1.OpenClaimSessionRequest) (*v1.OpenClaimSessionResponse, error)
 	// CompleteClaim binds the claim to the signed-in human. REFUSED for an
 	// anonymous caller (PermissionDenied): a claim by someone who has not yet
 	// upgraded would claim nothing.
@@ -130,114 +172,18 @@ type ClaimableServiceClient interface {
 	//
 	// Completion is ONE compare-and-set on the claimable_deploys row; the first
 	// completion wins. It revokes the CLI's token.
-	CompleteClaim(context.Context, *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error)
+	CompleteClaim(context.Context, *v1.CompleteClaimRequest) (*v1.CompleteClaimResponse, error)
 	// GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
 	// claiming would put a second site on their one free slot, and names both
 	// sites. GetClaim cannot say: it is public and does not know who is asking.
 	// Read-only; the claim re-checks, so a stale answer cannot mis-claim.
-	GetClaimFreeSite(context.Context, *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error)
+	GetClaimFreeSite(context.Context, *v1.GetClaimFreeSiteRequest) (*v1.GetClaimFreeSiteResponse, error)
 }
 
 // NewClaimableServiceClient constructs a client for the controlplane.v1.ClaimableService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewClaimableServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ClaimableServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	claimableServiceMethods := v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods()
-	return &claimableServiceClient{
-		startClaimableDeploy: connect.NewClient[v1.StartClaimableDeployRequest, v1.StartClaimableDeployResponse](
-			httpClient,
-			baseURL+ClaimableServiceStartClaimableDeployProcedure,
-			connect.WithSchema(claimableServiceMethods.ByName("StartClaimableDeploy")),
-			connect.WithClientOptions(opts...),
-		),
-		getClaimableChallenge: connect.NewClient[v1.GetClaimableChallengeRequest, v1.GetClaimableChallengeResponse](
-			httpClient,
-			baseURL+ClaimableServiceGetClaimableChallengeProcedure,
-			connect.WithSchema(claimableServiceMethods.ByName("GetClaimableChallenge")),
-			connect.WithClientOptions(opts...),
-		),
-		getClaimableAvailability: connect.NewClient[v1.GetClaimableAvailabilityRequest, v1.GetClaimableAvailabilityResponse](
-			httpClient,
-			baseURL+ClaimableServiceGetClaimableAvailabilityProcedure,
-			connect.WithSchema(claimableServiceMethods.ByName("GetClaimableAvailability")),
-			connect.WithClientOptions(opts...),
-		),
-		getClaim: connect.NewClient[v1.GetClaimRequest, v1.GetClaimResponse](
-			httpClient,
-			baseURL+ClaimableServiceGetClaimProcedure,
-			connect.WithSchema(claimableServiceMethods.ByName("GetClaim")),
-			connect.WithClientOptions(opts...),
-		),
-		openClaimSession: connect.NewClient[v1.OpenClaimSessionRequest, v1.OpenClaimSessionResponse](
-			httpClient,
-			baseURL+ClaimableServiceOpenClaimSessionProcedure,
-			connect.WithSchema(claimableServiceMethods.ByName("OpenClaimSession")),
-			connect.WithClientOptions(opts...),
-		),
-		completeClaim: connect.NewClient[v1.CompleteClaimRequest, v1.CompleteClaimResponse](
-			httpClient,
-			baseURL+ClaimableServiceCompleteClaimProcedure,
-			connect.WithSchema(claimableServiceMethods.ByName("CompleteClaim")),
-			connect.WithClientOptions(opts...),
-		),
-		getClaimFreeSite: connect.NewClient[v1.GetClaimFreeSiteRequest, v1.GetClaimFreeSiteResponse](
-			httpClient,
-			baseURL+ClaimableServiceGetClaimFreeSiteProcedure,
-			connect.WithSchema(claimableServiceMethods.ByName("GetClaimFreeSite")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// claimableServiceClient implements ClaimableServiceClient.
-type claimableServiceClient struct {
-	startClaimableDeploy     *connect.Client[v1.StartClaimableDeployRequest, v1.StartClaimableDeployResponse]
-	getClaimableChallenge    *connect.Client[v1.GetClaimableChallengeRequest, v1.GetClaimableChallengeResponse]
-	getClaimableAvailability *connect.Client[v1.GetClaimableAvailabilityRequest, v1.GetClaimableAvailabilityResponse]
-	getClaim                 *connect.Client[v1.GetClaimRequest, v1.GetClaimResponse]
-	openClaimSession         *connect.Client[v1.OpenClaimSessionRequest, v1.OpenClaimSessionResponse]
-	completeClaim            *connect.Client[v1.CompleteClaimRequest, v1.CompleteClaimResponse]
-	getClaimFreeSite         *connect.Client[v1.GetClaimFreeSiteRequest, v1.GetClaimFreeSiteResponse]
-}
-
-// StartClaimableDeploy calls controlplane.v1.ClaimableService.StartClaimableDeploy.
-func (c *claimableServiceClient) StartClaimableDeploy(ctx context.Context, req *connect.Request[v1.StartClaimableDeployRequest]) (*connect.Response[v1.StartClaimableDeployResponse], error) {
-	return c.startClaimableDeploy.CallUnary(ctx, req)
-}
-
-// GetClaimableChallenge calls controlplane.v1.ClaimableService.GetClaimableChallenge.
-func (c *claimableServiceClient) GetClaimableChallenge(ctx context.Context, req *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error) {
-	return c.getClaimableChallenge.CallUnary(ctx, req)
-}
-
-// GetClaimableAvailability calls controlplane.v1.ClaimableService.GetClaimableAvailability.
-func (c *claimableServiceClient) GetClaimableAvailability(ctx context.Context, req *connect.Request[v1.GetClaimableAvailabilityRequest]) (*connect.Response[v1.GetClaimableAvailabilityResponse], error) {
-	return c.getClaimableAvailability.CallUnary(ctx, req)
-}
-
-// GetClaim calls controlplane.v1.ClaimableService.GetClaim.
-func (c *claimableServiceClient) GetClaim(ctx context.Context, req *connect.Request[v1.GetClaimRequest]) (*connect.Response[v1.GetClaimResponse], error) {
-	return c.getClaim.CallUnary(ctx, req)
-}
-
-// OpenClaimSession calls controlplane.v1.ClaimableService.OpenClaimSession.
-func (c *claimableServiceClient) OpenClaimSession(ctx context.Context, req *connect.Request[v1.OpenClaimSessionRequest]) (*connect.Response[v1.OpenClaimSessionResponse], error) {
-	return c.openClaimSession.CallUnary(ctx, req)
-}
-
-// CompleteClaim calls controlplane.v1.ClaimableService.CompleteClaim.
-func (c *claimableServiceClient) CompleteClaim(ctx context.Context, req *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error) {
-	return c.completeClaim.CallUnary(ctx, req)
-}
-
-// GetClaimFreeSite calls controlplane.v1.ClaimableService.GetClaimFreeSite.
-func (c *claimableServiceClient) GetClaimFreeSite(ctx context.Context, req *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error) {
-	return c.getClaimFreeSite.CallUnary(ctx, req)
+// Multiple service clients may share a single connect.Client.
+func NewClaimableServiceClient(client *connect.Client) ClaimableServiceClient {
+	return &claimableServiceClient{client: client}
 }
 
 // ClaimableServiceHandler is an implementation of the controlplane.v1.ClaimableService service.
@@ -254,11 +200,11 @@ type ClaimableServiceHandler interface {
 	//
 	// Throttled: ResourceExhausted, reason claimable_throttled, with a
 	// ClaimableThrottle detail.
-	StartClaimableDeploy(context.Context, *connect.Request[v1.StartClaimableDeployRequest]) (*connect.Response[v1.StartClaimableDeployResponse], error)
+	StartClaimableDeploy(context.Context, *v1.StartClaimableDeployRequest) (*v1.StartClaimableDeployResponse, error)
 	// GetClaimableChallenge hands out a fresh proof-of-work challenge for
 	// StartClaimableDeploy. Stateless on the server (the challenge is signed and
 	// time-boxed), so it creates nothing and is cheap to call.
-	GetClaimableChallenge(context.Context, *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error)
+	GetClaimableChallenge(context.Context, *v1.GetClaimableChallengeRequest) (*v1.GetClaimableChallengeResponse, error)
 	// GetClaimableAvailability says whether a claimable deploy can start right
 	// now, and if not, every reason why: an operator's switch, or a dependency
 	// this deployment lacks. Separately, whether an unclaimed SERVICE or
@@ -266,11 +212,11 @@ type ClaimableServiceHandler interface {
 	// configuration and the kill switches, creates nothing and solves no proof
 	// of work, so forge calls it before any build (`forge env deploy
 	// --claimable`) and in the local preview (`--claimable --plan-only`).
-	GetClaimableAvailability(context.Context, *connect.Request[v1.GetClaimableAvailabilityRequest]) (*connect.Response[v1.GetClaimableAvailabilityResponse], error)
+	GetClaimableAvailability(context.Context, *v1.GetClaimableAvailabilityRequest) (*v1.GetClaimableAvailabilityResponse, error)
 	// GetClaim is what the /claim page shows BEFORE it asks anyone to sign in:
 	// what is being claimed, whether it still can be, and when it expires. It
 	// returns no secret and no token of any kind.
-	GetClaim(context.Context, *connect.Request[v1.GetClaimRequest]) (*connect.Response[v1.GetClaimResponse], error)
+	GetClaim(context.Context, *v1.GetClaimRequest) (*v1.GetClaimResponse, error)
 	// OpenClaimSession releases the vaulted anonymous GoTrue session to the
 	// claimant's browser, so it can setSession() and then upgrade the anonymous
 	// user in place. Released AT MOST ONCE: the server redeems its vaulted
@@ -280,7 +226,7 @@ type ClaimableServiceHandler interface {
 	// retry with the first call's retry_key (see OpenClaimSessionRequest); one
 	// that arrives while the first is still running answers Unavailable,
 	// reason claimable_unavailable: retry shortly.
-	OpenClaimSession(context.Context, *connect.Request[v1.OpenClaimSessionRequest]) (*connect.Response[v1.OpenClaimSessionResponse], error)
+	OpenClaimSession(context.Context, *v1.OpenClaimSessionRequest) (*v1.OpenClaimSessionResponse, error)
 	// CompleteClaim binds the claim to the signed-in human. REFUSED for an
 	// anonymous caller (PermissionDenied): a claim by someone who has not yet
 	// upgraded would claim nothing.
@@ -308,112 +254,202 @@ type ClaimableServiceHandler interface {
 	//
 	// Completion is ONE compare-and-set on the claimable_deploys row; the first
 	// completion wins. It revokes the CLI's token.
-	CompleteClaim(context.Context, *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error)
+	CompleteClaim(context.Context, *v1.CompleteClaimRequest) (*v1.CompleteClaimResponse, error)
 	// GetClaimFreeSite tells the signed-in caller, BEFORE they claim, whether
 	// claiming would put a second site on their one free slot, and names both
 	// sites. GetClaim cannot say: it is public and does not know who is asking.
 	// Read-only; the claim re-checks, so a stale answer cannot mis-claim.
-	GetClaimFreeSite(context.Context, *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error)
+	GetClaimFreeSite(context.Context, *v1.GetClaimFreeSiteRequest) (*v1.GetClaimFreeSiteResponse, error)
 }
 
-// NewClaimableServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewClaimableServiceHandler(svc ClaimableServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	claimableServiceMethods := v1.File_services_claimable_v1_claimable_proto.Services().ByName("ClaimableService").Methods()
-	claimableServiceStartClaimableDeployHandler := connect.NewUnaryHandler(
-		ClaimableServiceStartClaimableDeployProcedure,
-		svc.StartClaimableDeploy,
-		connect.WithSchema(claimableServiceMethods.ByName("StartClaimableDeploy")),
-		connect.WithHandlerOptions(opts...),
+// RegisterClaimableServiceHandler registers svc as the controlplane.v1.ClaimableService
+// implementation on server.
+func RegisterClaimableServiceHandler(server *connect.Server, svc ClaimableServiceHandler) {
+	adapter := claimableServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: claimableServiceStartClaimableDeploySpec(), Handler: adapter.startClaimableDeploy},
+		connect.Method{Spec: claimableServiceGetClaimableChallengeSpec(), Handler: adapter.getClaimableChallenge},
+		connect.Method{Spec: claimableServiceGetClaimableAvailabilitySpec(), Handler: adapter.getClaimableAvailability},
+		connect.Method{Spec: claimableServiceGetClaimSpec(), Handler: adapter.getClaim},
+		connect.Method{Spec: claimableServiceOpenClaimSessionSpec(), Handler: adapter.openClaimSession},
+		connect.Method{Spec: claimableServiceCompleteClaimSpec(), Handler: adapter.completeClaim},
+		connect.Method{Spec: claimableServiceGetClaimFreeSiteSpec(), Handler: adapter.getClaimFreeSite},
 	)
-	claimableServiceGetClaimableChallengeHandler := connect.NewUnaryHandler(
-		ClaimableServiceGetClaimableChallengeProcedure,
-		svc.GetClaimableChallenge,
-		connect.WithSchema(claimableServiceMethods.ByName("GetClaimableChallenge")),
-		connect.WithHandlerOptions(opts...),
-	)
-	claimableServiceGetClaimableAvailabilityHandler := connect.NewUnaryHandler(
-		ClaimableServiceGetClaimableAvailabilityProcedure,
-		svc.GetClaimableAvailability,
-		connect.WithSchema(claimableServiceMethods.ByName("GetClaimableAvailability")),
-		connect.WithHandlerOptions(opts...),
-	)
-	claimableServiceGetClaimHandler := connect.NewUnaryHandler(
-		ClaimableServiceGetClaimProcedure,
-		svc.GetClaim,
-		connect.WithSchema(claimableServiceMethods.ByName("GetClaim")),
-		connect.WithHandlerOptions(opts...),
-	)
-	claimableServiceOpenClaimSessionHandler := connect.NewUnaryHandler(
-		ClaimableServiceOpenClaimSessionProcedure,
-		svc.OpenClaimSession,
-		connect.WithSchema(claimableServiceMethods.ByName("OpenClaimSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	claimableServiceCompleteClaimHandler := connect.NewUnaryHandler(
-		ClaimableServiceCompleteClaimProcedure,
-		svc.CompleteClaim,
-		connect.WithSchema(claimableServiceMethods.ByName("CompleteClaim")),
-		connect.WithHandlerOptions(opts...),
-	)
-	claimableServiceGetClaimFreeSiteHandler := connect.NewUnaryHandler(
-		ClaimableServiceGetClaimFreeSiteProcedure,
-		svc.GetClaimFreeSite,
-		connect.WithSchema(claimableServiceMethods.ByName("GetClaimFreeSite")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.ClaimableService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ClaimableServiceStartClaimableDeployProcedure:
-			claimableServiceStartClaimableDeployHandler.ServeHTTP(w, r)
-		case ClaimableServiceGetClaimableChallengeProcedure:
-			claimableServiceGetClaimableChallengeHandler.ServeHTTP(w, r)
-		case ClaimableServiceGetClaimableAvailabilityProcedure:
-			claimableServiceGetClaimableAvailabilityHandler.ServeHTTP(w, r)
-		case ClaimableServiceGetClaimProcedure:
-			claimableServiceGetClaimHandler.ServeHTTP(w, r)
-		case ClaimableServiceOpenClaimSessionProcedure:
-			claimableServiceOpenClaimSessionHandler.ServeHTTP(w, r)
-		case ClaimableServiceCompleteClaimProcedure:
-			claimableServiceCompleteClaimHandler.ServeHTTP(w, r)
-		case ClaimableServiceGetClaimFreeSiteProcedure:
-			claimableServiceGetClaimFreeSiteHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedClaimableServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedClaimableServiceHandler struct{}
 
-func (UnimplementedClaimableServiceHandler) StartClaimableDeploy(context.Context, *connect.Request[v1.StartClaimableDeployRequest]) (*connect.Response[v1.StartClaimableDeployResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.StartClaimableDeploy is not implemented"))
+func (UnimplementedClaimableServiceHandler) StartClaimableDeploy(context.Context, *v1.StartClaimableDeployRequest) (*v1.StartClaimableDeployResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClaimableService.StartClaimableDeploy is not implemented")
 }
 
-func (UnimplementedClaimableServiceHandler) GetClaimableChallenge(context.Context, *connect.Request[v1.GetClaimableChallengeRequest]) (*connect.Response[v1.GetClaimableChallengeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.GetClaimableChallenge is not implemented"))
+func (UnimplementedClaimableServiceHandler) GetClaimableChallenge(context.Context, *v1.GetClaimableChallengeRequest) (*v1.GetClaimableChallengeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClaimableService.GetClaimableChallenge is not implemented")
 }
 
-func (UnimplementedClaimableServiceHandler) GetClaimableAvailability(context.Context, *connect.Request[v1.GetClaimableAvailabilityRequest]) (*connect.Response[v1.GetClaimableAvailabilityResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.GetClaimableAvailability is not implemented"))
+func (UnimplementedClaimableServiceHandler) GetClaimableAvailability(context.Context, *v1.GetClaimableAvailabilityRequest) (*v1.GetClaimableAvailabilityResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClaimableService.GetClaimableAvailability is not implemented")
 }
 
-func (UnimplementedClaimableServiceHandler) GetClaim(context.Context, *connect.Request[v1.GetClaimRequest]) (*connect.Response[v1.GetClaimResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.GetClaim is not implemented"))
+func (UnimplementedClaimableServiceHandler) GetClaim(context.Context, *v1.GetClaimRequest) (*v1.GetClaimResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClaimableService.GetClaim is not implemented")
 }
 
-func (UnimplementedClaimableServiceHandler) OpenClaimSession(context.Context, *connect.Request[v1.OpenClaimSessionRequest]) (*connect.Response[v1.OpenClaimSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.OpenClaimSession is not implemented"))
+func (UnimplementedClaimableServiceHandler) OpenClaimSession(context.Context, *v1.OpenClaimSessionRequest) (*v1.OpenClaimSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClaimableService.OpenClaimSession is not implemented")
 }
 
-func (UnimplementedClaimableServiceHandler) CompleteClaim(context.Context, *connect.Request[v1.CompleteClaimRequest]) (*connect.Response[v1.CompleteClaimResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.CompleteClaim is not implemented"))
+func (UnimplementedClaimableServiceHandler) CompleteClaim(context.Context, *v1.CompleteClaimRequest) (*v1.CompleteClaimResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClaimableService.CompleteClaim is not implemented")
 }
 
-func (UnimplementedClaimableServiceHandler) GetClaimFreeSite(context.Context, *connect.Request[v1.GetClaimFreeSiteRequest]) (*connect.Response[v1.GetClaimFreeSiteResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClaimableService.GetClaimFreeSite is not implemented"))
+func (UnimplementedClaimableServiceHandler) GetClaimFreeSite(context.Context, *v1.GetClaimFreeSiteRequest) (*v1.GetClaimFreeSiteResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClaimableService.GetClaimFreeSite is not implemented")
+}
+
+type claimableServiceClient struct {
+	client *connect.Client
+}
+
+func (c *claimableServiceClient) StartClaimableDeploy(ctx context.Context, req *v1.StartClaimableDeployRequest) (*v1.StartClaimableDeployResponse, error) {
+	var res v1.StartClaimableDeployResponse
+	if err := c.client.CallUnary(ctx, claimableServiceStartClaimableDeploySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *claimableServiceClient) GetClaimableChallenge(ctx context.Context, req *v1.GetClaimableChallengeRequest) (*v1.GetClaimableChallengeResponse, error) {
+	var res v1.GetClaimableChallengeResponse
+	if err := c.client.CallUnary(ctx, claimableServiceGetClaimableChallengeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *claimableServiceClient) GetClaimableAvailability(ctx context.Context, req *v1.GetClaimableAvailabilityRequest) (*v1.GetClaimableAvailabilityResponse, error) {
+	var res v1.GetClaimableAvailabilityResponse
+	if err := c.client.CallUnary(ctx, claimableServiceGetClaimableAvailabilitySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *claimableServiceClient) GetClaim(ctx context.Context, req *v1.GetClaimRequest) (*v1.GetClaimResponse, error) {
+	var res v1.GetClaimResponse
+	if err := c.client.CallUnary(ctx, claimableServiceGetClaimSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *claimableServiceClient) OpenClaimSession(ctx context.Context, req *v1.OpenClaimSessionRequest) (*v1.OpenClaimSessionResponse, error) {
+	var res v1.OpenClaimSessionResponse
+	if err := c.client.CallUnary(ctx, claimableServiceOpenClaimSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *claimableServiceClient) CompleteClaim(ctx context.Context, req *v1.CompleteClaimRequest) (*v1.CompleteClaimResponse, error) {
+	var res v1.CompleteClaimResponse
+	if err := c.client.CallUnary(ctx, claimableServiceCompleteClaimSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *claimableServiceClient) GetClaimFreeSite(ctx context.Context, req *v1.GetClaimFreeSiteRequest) (*v1.GetClaimFreeSiteResponse, error) {
+	var res v1.GetClaimFreeSiteResponse
+	if err := c.client.CallUnary(ctx, claimableServiceGetClaimFreeSiteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type claimableServiceHandler struct{ svc ClaimableServiceHandler }
+
+func (h claimableServiceHandler) startClaimableDeploy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartClaimableDeployRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartClaimableDeploy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h claimableServiceHandler) getClaimableChallenge(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetClaimableChallengeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetClaimableChallenge(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h claimableServiceHandler) getClaimableAvailability(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetClaimableAvailabilityRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetClaimableAvailability(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h claimableServiceHandler) getClaim(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetClaimRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetClaim(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h claimableServiceHandler) openClaimSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.OpenClaimSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.OpenClaimSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h claimableServiceHandler) completeClaim(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteClaimRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteClaim(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h claimableServiceHandler) getClaimFreeSite(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetClaimFreeSiteRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetClaimFreeSite(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

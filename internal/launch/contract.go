@@ -369,7 +369,7 @@ func OwnerLeftOrg(err error) bool {
 	if errors.Is(err, authz.ErrNotOrgMember) {
 		return true
 	}
-	return svcerr.IsPermissionDenied(err) && svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader) == orgs.ReasonNotOrgMember
+	return svcerr.IsPermissionDenied(err) && svcerr.MetaOf(err).Get(svcerr.ReasonHeader) == orgs.ReasonNotOrgMember
 }
 
 // ReasonNoOrgAccount is the svcerr reason of a NoOrgAccountError.

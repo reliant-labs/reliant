@@ -8,7 +8,6 @@ import (
 	"sort"
 	"time"
 
-	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -64,9 +63,9 @@ var groupKeys = map[pb.OrgLLMUsageGroupBy]func(*db.LLMOrgUsageDay) string{
 // into buckets, with an estimated list cost for the org's own keys.
 func (s *Service) GetOrgLLMUsage(
 	ctx context.Context,
-	req *connect.Request[pb.GetOrgLLMUsageRequest],
-) (*connect.Response[pb.GetOrgLLMUsageResponse], error) {
-	msg := req.Msg
+	req *pb.GetOrgLLMUsageRequest,
+) (*pb.GetOrgLLMUsageResponse, error) {
+	msg := req
 	orgID := msg.GetOrgId()
 	if err := authorize(ctx, orgID); err != nil {
 		return nil, err
@@ -118,7 +117,7 @@ func (s *Service) GetOrgLLMUsage(
 		s.labelAccounts(ctx, buckets)
 	}
 
-	return connect.NewResponse(&pb.GetOrgLLMUsageResponse{
+	return &pb.GetOrgLLMUsageResponse{
 		OrgId:   orgID,
 		GroupBy: groupBy,
 		Buckets: buckets,
@@ -129,7 +128,7 @@ func (s *Service) GetOrgLLMUsage(
 		AsOf:         s.now().Format(time.RFC3339),
 		Note:         Note,
 		Estimate:     estimate,
-	}), nil
+	}, nil
 }
 
 // authorize admits a member of orgID who holds billing:read there, read from

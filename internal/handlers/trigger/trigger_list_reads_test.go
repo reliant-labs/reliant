@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -84,9 +83,9 @@ func TestListTriggersReadsEachCatalogOnce(t *testing.T) {
 	counting := &countingRepo{Repo: env.repo}
 	env.configure(t, func(d *Deps) { d.Repo = counting })
 
-	resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{ProjectId: &env.projectID}))
+	resp, err := env.svc.ListTriggers(env.ctx, &reliantv1.ListTriggersRequest{ProjectId: &env.projectID})
 	require.NoError(t, err)
-	listed := resp.Msg.GetTriggers()
+	listed := resp.GetTriggers()
 	require.Len(t, listed, 2*workflows)
 	t.Logf("reads: catalogs=%d drafts=%d", counting.catalogs.Load(), counting.drafts.Load())
 	require.EqualValues(t, 1, counting.catalogs.Load(),
@@ -98,9 +97,9 @@ func TestListTriggersReadsEachCatalogOnce(t *testing.T) {
 	for _, got := range listed {
 		require.NotEqual(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN, got.GetHealth().GetStatus(), got.GetHealth().GetLastFailureDetail())
 		require.NotNil(t, got.GetDefinitionSource(), "%s has no definition source", got.GetName())
-		one, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: got.GetId()}))
+		one, err := env.svc.GetTrigger(env.ctx, &reliantv1.GetTriggerRequest{Id: got.GetId()})
 		require.NoError(t, err)
-		require.True(t, proto.Equal(one.Msg.GetTrigger().GetHealth(), got.GetHealth()), "health of %s", got.GetName())
-		require.True(t, proto.Equal(one.Msg.GetTrigger().GetDefinitionSource(), got.GetDefinitionSource()), "definition source of %s", got.GetName())
+		require.True(t, proto.Equal(one.GetTrigger().GetHealth(), got.GetHealth()), "health of %s", got.GetName())
+		require.True(t, proto.Equal(one.GetTrigger().GetDefinitionSource(), got.GetDefinitionSource()), "definition source of %s", got.GetName())
 	}
 }

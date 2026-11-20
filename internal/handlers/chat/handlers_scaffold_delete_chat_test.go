@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -18,22 +18,22 @@ func TestDeleteChat_Generated(t *testing.T) {
 
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: newChatRepo()}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteChatRequest, pb.DeleteChatResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DeleteChatRequest, pb.DeleteChatResponse]{
 		{
 			Name:    "chat_id is required",
-			Req:     connect.NewRequest(&pb.DeleteChatRequest{}),
+			Req:     &pb.DeleteChatRequest{},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown chat is not found",
-			Req:     connect.NewRequest(&pb.DeleteChatRequest{ChatId: missingChatID}),
+			Req:     &pb.DeleteChatRequest{ChatId: missingChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's chat is not found",
-			Req:     connect.NewRequest(&pb.DeleteChatRequest{ChatId: otherChatID}),
+			Req:     &pb.DeleteChatRequest{ChatId: otherChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
@@ -42,7 +42,7 @@ func TestDeleteChat_Generated(t *testing.T) {
 		// or archived.
 		{
 			Name:    "a chat that is not archived is refused, not archived",
-			Req:     connect.NewRequest(&pb.DeleteChatRequest{ChatId: ownChatID}),
+			Req:     &pb.DeleteChatRequest{ChatId: ownChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeFailedPrecondition,
 		},
@@ -63,8 +63,8 @@ func TestDeleteChat_DeletesAnArchivedChatPermanently(t *testing.T) {
 	}
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
-	resp, err := svc.DeleteChat(chat.AuthedContext(t), connect.NewRequest(&pb.DeleteChatRequest{ChatId: archivedChatID}))
+	resp, err := svc.DeleteChat(chat.AuthedContext(t), &pb.DeleteChatRequest{ChatId: archivedChatID})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.GetPermanentlyDeleted())
+	require.True(t, resp.GetPermanentlyDeleted())
 	require.Equal(t, []string{archivedChatID}, deleted)
 }

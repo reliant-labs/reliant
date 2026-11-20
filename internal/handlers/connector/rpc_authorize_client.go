@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -25,19 +24,19 @@ import (
 // AuthorizeClient records the consent decision.
 func (s *Service) AuthorizeClient(
 	ctx context.Context,
-	req *connect.Request[reliantv1.AuthorizeClientRequest],
-) (*connect.Response[reliantv1.AuthorizeClientResponse], error) {
+	req *reliantv1.AuthorizeClientRequest,
+) (*reliantv1.AuthorizeClientResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
 
-	clientID := strings.TrimSpace(req.Msg.GetClientId())
+	clientID := strings.TrimSpace(req.GetClientId())
 	if clientID == "" {
 		return nil, svcerr.InvalidArgument("client id is required")
 	}
 
-	grant, credential, err := s.grantForConsent(ctx, userID, req.Msg)
+	grant, credential, err := s.grantForConsent(ctx, userID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -49,16 +48,16 @@ func (s *Service) AuthorizeClient(
 		// connector and a forge connector at once.
 		ClientID:   connectorgrant.BindingClientID(grant.KindOrDefault(), clientID),
 		GrantID:    grant.ID,
-		ClientName: strings.TrimSpace(req.Msg.GetClientName()),
+		ClientName: strings.TrimSpace(req.GetClientName()),
 	}
 	if err := s.deps.Grants.PutBinding(ctx, binding); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record consent"))
 	}
 
-	return connect.NewResponse(&reliantv1.AuthorizeClientResponse{
+	return &reliantv1.AuthorizeClientResponse{
 		Connector:  toProtoConnector(grant),
 		Credential: credential,
-	}), nil
+	}, nil
 }
 
 // grantForConsent resolves the connector a consent request names, creating one

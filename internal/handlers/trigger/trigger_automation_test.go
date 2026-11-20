@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -17,11 +16,11 @@ import (
 
 func (e *triggerTestEnv) createNamed(t *testing.T, name string) string {
 	t.Helper()
-	resp, err := e.svc.CreateTrigger(e.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	resp, err := e.svc.CreateTrigger(e.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: e.definition(func(d *reliantv1.TriggerDefinition) { d.Name = name }),
-	}))
+	})
 	require.NoError(t, err)
-	return resp.Msg.GetTrigger().GetId()
+	return resp.GetTrigger().GetId()
 }
 
 func (e *triggerTestEnv) stored(t *testing.T) (string, error) {
@@ -79,11 +78,11 @@ func TestTriggerRevokesOnlyWhenNoEnabledTriggerRemains(t *testing.T) {
 	first := env.createNamed(t, "a")
 	second := env.createNamed(t, "b")
 
-	_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: first, Enabled: false}))
+	_, err := env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: first, Enabled: false})
 	require.NoError(t, err)
 	assert.Empty(t, cp.revokes, "another enabled trigger still names the daemon")
 
-	_, err = env.svc.DeleteTrigger(env.ctx, connect.NewRequest(&reliantv1.DeleteTriggerRequest{Id: second}))
+	_, err = env.svc.DeleteTrigger(env.ctx, &reliantv1.DeleteTriggerRequest{Id: second})
 	require.NoError(t, err)
 	assert.Equal(t, []string{env.daemonID}, cp.revokes)
 	_, err = env.stored(t)
@@ -98,11 +97,11 @@ func TestTriggerDisableRevokes(t *testing.T) {
 	env.configure(t, func(d *Deps) { d.ControlPlane = cp })
 	id := env.createNamed(t, "a")
 
-	_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+	_, err := env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 	require.NoError(t, err)
 	assert.Equal(t, []string{env.daemonID}, cp.revokes)
 
-	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
+	_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true})
 	require.NoError(t, err)
 	assert.Len(t, cp.mints, 2, "re-enabling mints again")
 	_ = core.TriggerKindSchedule

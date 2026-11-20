@@ -2,10 +2,9 @@
 package trigger
 
 import (
-	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
@@ -19,10 +18,12 @@ func TestActivationRefusalKeepsTheRPCError(t *testing.T) {
 	classified := tools.RefuseActivation("no github connection", cause)
 
 	require.Equal(t, "no github connection", tools.ActivationRefusalReason(classified))
-	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(classified))
-	var plain, wrapped *connect.Error
-	require.True(t, errors.As(svcerr.Wrap(cause), &plain))
-	require.True(t, errors.As(svcerr.Wrap(classified), &wrapped))
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(classified))
+	// What the RPC sends for each: svcerr.InterceptorV2's wire form.
+	plain, wrapped := svcerr.ToConnectV2(svcerr.Wrap(cause)), svcerr.ToConnectV2(svcerr.Wrap(classified))
+	require.NotNil(t, plain)
+	require.NotNil(t, wrapped)
+	require.Equal(t, plain.Code(), wrapped.Code())
 	require.Equal(t, plain.Message(), wrapped.Message())
 
 	// The innermost classification is the most specific; a stage wrap keeps it.

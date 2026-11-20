@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -105,10 +105,10 @@ func TestActivateDeclaredWebhookAndIntegration(t *testing.T) {
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
 
-	hook, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.activation("hook", nil)}))
+	hook, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{Trigger: env.activation("hook", nil)})
 	require.NoError(t, err)
-	assert.NotEmpty(t, hook.Msg.GetWebhook().GetToken(), "a declared webhook gets a token like any other")
-	assert.Equal(t, "trigger.payload.body.ok == true", hook.Msg.GetTrigger().GetFilter(), "the filter is the declaration's")
+	assert.NotEmpty(t, hook.GetWebhook().GetToken(), "a declared webhook gets a token like any other")
+	assert.Equal(t, "trigger.payload.body.ok == true", hook.GetTrigger().GetFilter(), "the filter is the declaration's")
 
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
 	issue := env.create(t, env.activation("new-issue", func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &conn.ID }))
@@ -170,9 +170,9 @@ func TestActivateDeclaredTriggerRejects(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: tc.def}))
+			_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{Trigger: tc.def})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err), err.Error())
+			assert.Equal(t, tc.code, svcerr.CodeV2(err), err.Error())
 			assert.Contains(t, err.Error(), tc.reason)
 		})
 	}
@@ -208,11 +208,11 @@ func TestActivationParamsAreCheckedAgainstTheWorkflowsInputs(t *testing.T) {
 		"the wrong type":   {map[string]*structpb.Value{"mode": structpb.NewNumberValue(3)}, "input 'mode' expects string"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+			_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 				Trigger: env.activation("nightly", func(d *reliantv1.TriggerDefinition) { d.Params = tc.params }),
-			}))
+			})
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), err.Error())
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), err.Error())
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
@@ -230,9 +230,9 @@ func TestActivationHealthReportsABrokenDeclaration(t *testing.T) {
 	got := env.create(t, env.activation("nightly", nil))
 
 	list := func() *reliantv1.Trigger {
-		resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+		resp, err := env.svc.ListTriggers(env.ctx, &reliantv1.ListTriggersRequest{})
 		require.NoError(t, err)
-		for _, tr := range resp.Msg.GetTriggers() {
+		for _, tr := range resp.GetTriggers() {
 			if tr.GetId() == got.GetId() {
 				return tr
 			}
@@ -260,9 +260,9 @@ nodes:
 	assert.Contains(t, broken.GetHealth().GetLastFailureDetail(), "morning")
 
 	// GetTrigger agrees with ListTriggers.
-	one, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: got.GetId()}))
+	one, err := env.svc.GetTrigger(env.ctx, &reliantv1.GetTriggerRequest{Id: got.GetId()})
 	require.NoError(t, err)
-	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN, one.Msg.GetTrigger().GetHealth().GetStatus())
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN, one.GetTrigger().GetHealth().GetStatus())
 
 	// Restoring it heals it.
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
@@ -279,26 +279,26 @@ func TestUpdateActivationKeepsItsDeclaration(t *testing.T) {
 	got := env.create(t, env.activation("nightly", nil))
 
 	disabled := false
-	resp, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	resp, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id:      got.GetId(),
 		Trigger: env.activation("nightly", func(d *reliantv1.TriggerDefinition) { d.Enabled = &disabled; d.Message = "changed" }),
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.GetTrigger().GetEnabled())
-	assert.Equal(t, "changed", resp.Msg.GetTrigger().GetMessage())
-	assert.Equal(t, "nightly", resp.Msg.GetTrigger().GetWorkflowTrigger())
+	assert.False(t, resp.GetTrigger().GetEnabled())
+	assert.Equal(t, "changed", resp.GetTrigger().GetMessage())
+	assert.Equal(t, "nightly", resp.GetTrigger().GetWorkflowTrigger())
 
 	// Inline source on an activation: rejected.
-	_, err = env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	_, err = env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id: got.GetId(), Trigger: env.definition(nil),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 
 	// Another declaration of another kind: rejected (the kind is not updatable).
-	_, err = env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	_, err = env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id: got.GetId(), Trigger: env.activation("after-deploy", nil),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }

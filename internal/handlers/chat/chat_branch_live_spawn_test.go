@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -160,10 +159,10 @@ func TestBranchChat_LiveSpawn_DoesNotRepairSourceThread(t *testing.T) {
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
 
-	_, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	_, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
 		MessageId: f.assistantMsg,
-	}))
+	})
 	require.NoError(t, err)
 
 	// No synthetic tool_result may exist for the running spawn.
@@ -203,18 +202,18 @@ func TestBranchChat_LiveSpawn_BranchDoesNotShowSpawnAsRunning(t *testing.T) {
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
 
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
 		MessageId: f.assistantMsg,
-	}))
+	})
 	require.NoError(t, err)
 
-	listed, err := service.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
-		ChatId: resp.Msg.Chat.Id,
-	}))
+	listed, err := service.ListMessages(ctx, &reliantv1.ListMessagesRequest{
+		ChatId: resp.Chat.Id,
+	})
 	require.NoError(t, err)
 
-	for _, m := range listed.Msg.Messages {
+	for _, m := range listed.Messages {
 		for _, b := range m.ContentBlocks {
 			if b.ToolCallId == nil || *b.ToolCallId != f.toolCallID {
 				continue
@@ -242,19 +241,19 @@ func TestBranchChat_LiveSpawn_SourceStillShowsSpawnRunning(t *testing.T) {
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
 
-	_, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	_, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    f.chatID,
 		MessageId: f.assistantMsg,
-	}))
+	})
 	require.NoError(t, err)
 
-	listed, err := service.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	listed, err := service.ListMessages(ctx, &reliantv1.ListMessagesRequest{
 		ChatId: f.chatID,
-	}))
+	})
 	require.NoError(t, err)
 
 	found := false
-	for _, m := range listed.Msg.Messages {
+	for _, m := range listed.Messages {
 		for _, b := range m.ContentBlocks {
 			if b.ToolCallId == nil || *b.ToolCallId != f.toolCallID {
 				continue
@@ -352,10 +351,10 @@ func TestBranchChat_DeadToolCall_StillRepaired(t *testing.T) {
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threadsSvc}
 
-	_, err = service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	_, err = service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    chatID,
 		MessageId: assistantMsgID,
-	}))
+	})
 	require.NoError(t, err)
 
 	resultBlock, err := repo.GetToolResultBlock(ctx, toolCallID)

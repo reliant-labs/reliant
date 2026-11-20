@@ -3,7 +3,6 @@ package daemon_registry
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -16,14 +15,14 @@ import (
 // daemon row on its next request; nothing already pinned moves.
 func (s *Service) SetDefaultDaemon(
 	ctx context.Context,
-	req *connect.Request[pb.SetDefaultDaemonRequest],
-) (*connect.Response[pb.SetDefaultDaemonResponse], error) {
+	req *pb.SetDefaultDaemonRequest,
+) (*pb.SetDefaultDaemonResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
-	if err := s.deps.Repo.SetDefaultDaemon(ctx, userID, req.Msg.GetDaemonId()); err != nil {
+	if err := s.deps.Repo.SetDefaultDaemon(ctx, userID, req.GetDaemonId()); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to set default machine"))
 	}
-	return connect.NewResponse(&pb.SetDefaultDaemonResponse{}), nil
+	return &pb.SetDefaultDaemonResponse{}, nil
 }

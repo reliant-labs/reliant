@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -69,11 +69,11 @@ func TestConvertToBackground_SendsRequestToDaemon(t *testing.T) {
 	router := &toolexectest.Recorder{}
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: router}))
 
-	resp, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
+	resp, err := svc.ConvertToBackground(ctx, &reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: toolCallID,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	require.Len(t, router.BackgroundCalls, 1,
 		"the request must cross the wire — the command runs in the daemon, not here")
@@ -95,11 +95,11 @@ func TestConvertToBackground_DaemonUnreachable_DoesNotClaimSuccess(t *testing.T)
 	router := &toolexectest.Recorder{BackgroundErr: errors.New("daemon offline")}
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: router}))
 
-	_, err := svc.ConvertToBackground(ctx, connect.NewRequest(&reliantv1.ConvertToBackgroundRequest{
+	_, err := svc.ConvertToBackground(ctx, &reliantv1.ConvertToBackgroundRequest{
 		ToolCallId: toolCallID,
-	}))
+	})
 	require.Error(t, err)
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 
 	// And the row must not claim BACKGROUNDED for a command that never was.
 	calls, listErr := repo.ListToolCallsByIDs(ctx, []string{toolCallID})

@@ -6,12 +6,14 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // The forge RPC surface's server-side kill switch (ForgeAPIDisabled, which the
@@ -28,14 +30,14 @@ import (
 // forge_api_disabled reason is an answer the web can show as "turned off".
 
 func forgeClient(baseURL string) reliantv1connect.ForgeServiceClient {
-	return reliantv1connect.NewForgeServiceClient(h2cClient(), baseURL)
+	return reliantv1connect.NewForgeServiceClient(rpcclient.New(h2cClient(), baseURL, nil))
 }
 
-// authed is msg as the test server's API-key caller sends it.
-func authed[T any](msg *T) *connect.Request[T] {
-	req := connect.NewRequest(msg)
-	req.Header().Set("Authorization", "Bearer "+drainTestAPIKey)
-	return req
+// authed is ctx carrying the test server's API-key caller's credential.
+func authed(ctx context.Context) context.Context {
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+drainTestAPIKey)
+	return ctx
 }
 
 func requireForgeAPIDisabled(t *testing.T, err error) {
@@ -46,9 +48,9 @@ func requireForgeAPIDisabled(t *testing.T, err error) {
 	require.Contains(t, connectErr.Message(), "the forge API is disabled in this deployment")
 	require.Equal(t, "the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)", connectErr.Message(),
 		"byte-identical: clients from before the reason match on it")
-	require.Equal(t, "forge_api_disabled", connectErr.Meta().Get(svcerr.ReasonHeader),
+	require.Equal(t, "forge_api_disabled", svcerr.MetaOf(err).Get(svcerr.ReasonHeader),
 		"the reason is how the web tells this apart from forge failing")
-	require.Empty(t, connectErr.Meta().Get("X-Reliant-Reason"), "the pre-svcerr header is retired (R3w2)")
+	require.Empty(t, svcerr.MetaOf(err).Get("X-Reliant-Reason"), "the pre-svcerr header is retired (R3w2)")
 }
 
 func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {
@@ -58,18 +60,18 @@ func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {
 	t.Run("a unary rpc, before its handler runs", func(t *testing.T) {
 		// An empty project_id is refused by the handler (InvalidArgument), so
 		// FailedPrecondition proves the handler never ran.
-		_, err := forge.GetTopology(context.Background(), authed(&reliantv1.GetForgeTopologyRequest{}))
+		_, err := forge.GetTopology(authed(context.Background()), &reliantv1.GetForgeTopologyRequest{})
 		requireForgeAPIDisabled(t, err)
 	})
 	t.Run("the deploy path", func(t *testing.T) {
-		_, err := forge.StartDeploy(context.Background(), authed(&reliantv1.StartForgeDeployRequest{}))
+		_, err := forge.StartDeploy(authed(context.Background()), &reliantv1.StartForgeDeployRequest{})
 		requireForgeAPIDisabled(t, err)
 	})
 	t.Run("after authentication", func(t *testing.T) {
 		// An anonymous caller learns nothing about how this deployment is
 		// configured: it is refused for its missing credential first.
-		_, err := forge.GetTopology(context.Background(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{}))
-		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "got %v", err)
+		_, err := forge.GetTopology(context.Background(), &reliantv1.GetForgeTopologyRequest{})
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err), "got %v", err)
 	})
 }
 
@@ -77,18 +79,18 @@ func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {
 // so adding one cannot open a hole in the switch.
 func TestDisabledForgeAPIRefusesStreamingHandlers(t *testing.T) {
 	called := false
-	handler := forgeAPIDisabled{}.WrapStreamingHandler(func(context.Context, connect.StreamingHandlerConn) error {
+	handler := forgeAPIDisabled{}.intercept(func(context.Context, connect.Spec, connect.ServerStream) error {
 		called = true
 		return nil
 	})
-	requireForgeAPIDisabled(t, handler(context.Background(), nil))
+	requireForgeAPIDisabled(t, handler(context.Background(), connect.Spec{StreamType: connect.StreamTypeServer}, nil))
 	require.False(t, called, "the wrapped handler must not run")
 }
 
 func TestEnabledForgeAPIReachesItsHandlers(t *testing.T) {
 	_, baseURL := startTestServer(t, testForge(t))
 
-	_, err := forgeClient(baseURL).GetTopology(context.Background(), authed(&reliantv1.GetForgeTopologyRequest{}))
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err),
+	_, err := forgeClient(baseURL).GetTopology(authed(context.Background()), &reliantv1.GetForgeTopologyRequest{})
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err),
 		"the handler's own answer to an empty project_id; got %v", err)
 }

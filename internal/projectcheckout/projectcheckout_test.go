@@ -6,7 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -47,8 +48,8 @@ func (r *recorder) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, com
 
 func detailOf(t *testing.T, err error) *reliantv1.ProjectCheckoutMissing {
 	t.Helper()
-	for _, d := range svcerr.ToConnect(err).Details() {
-		v, verr := d.Value()
+	for _, d := range svcerr.ToConnectV2(err).Details() {
+		v, verr := connectproto.UnmarshalErrorDetail(d)
 		require.NoError(t, verr)
 		if m, ok := v.(*reliantv1.ProjectCheckoutMissing); ok {
 			return m
@@ -102,8 +103,8 @@ func TestResolve_NoCheckoutIsActionable(t *testing.T) {
 			_, err := Resolve(context.Background(), tc.rows, machines{def: "cloud"}, "u", tc.project, "use it")
 			require.Error(t, err)
 			assert.True(t, IsMissing(err))
-			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.Contains(t, msg, tc.says)
 			assert.NotContains(t, msg, "/Users/creator/cp", "no machine's path is the answer")
 			d := detailOf(t, err)
@@ -116,8 +117,8 @@ func TestResolve_NoCheckoutIsActionable(t *testing.T) {
 func TestGoneError_NamesTheMachineAndItsPath(t *testing.T) {
 	target := Target{Project: mac, DaemonID: "cloud", Path: "/home/workspace/projects/cp"}
 	err := GoneError(context.Background(), installs{}, target, errors.New("dir does not exist"))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-	msg := svcerr.ToConnect(err).Message()
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.Contains(t, msg, "/home/workspace/projects/cp")
 	assert.Contains(t, msg, `"cloud box"`)
 	d := detailOf(t, err)

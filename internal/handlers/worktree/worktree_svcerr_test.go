@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,8 +29,8 @@ var errOpaqueSecret = errors.New("dsn=postgres://u:secret@h")
 func requireCode(t *testing.T, err error, code connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	assert.Equal(t, code, svcerr.Code(err), "err = %v", err)
-	assert.NotContains(t, svcerr.ToConnect(err).Message(), "secret", "the store's text must not reach the client")
+	assert.Equal(t, code, svcerr.CodeV2(err), "err = %v", err)
+	assert.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret", "the store's text must not reach the client")
 }
 
 // The ownership check keeps hiding existence — a worktree in someone else's
@@ -40,7 +40,7 @@ func TestWorktreeOwnership_ErrorClasses(t *testing.T) {
 	t.Parallel()
 	get := func(t *testing.T, store *worktree.MockRepository, id string) error {
 		svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store}))
-		_, err := svc.GetWorktree(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.GetWorktreeRequest{WorktreeId: id}))
+		_, err := svc.GetWorktree(worktree.AuthedContext(t), &reliantv1.GetWorktreeRequest{WorktreeId: id})
 		return err
 	}
 
@@ -48,7 +48,7 @@ func TestWorktreeOwnership_ErrorClasses(t *testing.T) {
 		t.Parallel()
 		err := get(t, ownedWorktreeRepo(t), otherWorktreeID)
 		requireCode(t, err, connect.CodeNotFound)
-		assert.Equal(t, "worktree not found", svcerr.ToConnect(err).Message(), "nothing says the project exists")
+		assert.Equal(t, "worktree not found", svcerr.ToConnectV2(err).Message(), "nothing says the project exists")
 	})
 	t.Run("a missing worktree is not found", func(t *testing.T) {
 		t.Parallel()
@@ -97,10 +97,10 @@ func TestListWorktrees_StoreErrorClasses(t *testing.T) {
 			store := ownedWorktreeRepo(t)
 			store.ListWorktreesFunc = func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error) { return nil, tc.err }
 			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store}))
-			_, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID}))
+			_, err := svc.ListWorktrees(worktree.AuthedContext(t), &reliantv1.ListWorktreesRequest{ProjectId: ownProjectID})
 			requireCode(t, err, tc.code)
 			if tc.code == connect.CodeInternal {
-				assert.Equal(t, "failed to list worktrees", svcerr.ToConnect(err).Message())
+				assert.Equal(t, "failed to list worktrees", svcerr.ToConnectV2(err).Message())
 			}
 		})
 	}
@@ -163,12 +163,13 @@ func TestPushWorktree_DaemonFailureClasses(t *testing.T) {
 				},
 			}
 			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store, Router: router}))
-			_, err := svc.PushWorktree(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.PushWorktreeRequest{WorktreeId: ownWorktreeID}))
+			_, err := svc.PushWorktree(worktree.AuthedContext(t), &reliantv1.PushWorktreeRequest{WorktreeId: ownWorktreeID})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err), "err = %v", err)
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.code, svcerr.CodeV2(err), "err = %v", err)
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.Contains(t, msg, tc.contains)
-			assert.Equal(t, tc.reason, wirecheck.RoundTrip(t, err).Meta().Get(svcerr.ReasonHeader))
+			_, meta := wirecheck.RoundTripMeta(t, err)
+			assert.Equal(t, tc.reason, meta.Get(svcerr.ReasonHeader))
 			if tc.withheld != "" {
 				assert.NotContains(t, msg, tc.withheld)
 			}
@@ -206,12 +207,12 @@ func TestStageFiles_GitRefusalClasses(t *testing.T) {
 				},
 			}
 			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store, Router: router}))
-			_, err := svc.StageFiles(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.StageFilesRequest{
+			_, err := svc.StageFiles(worktree.AuthedContext(t), &reliantv1.StageFilesRequest{
 				WorktreeId: ownWorktreeID, Files: []string{"marketing/header.png"},
-			}))
+			})
 			require.Error(t, err)
-			assert.Equal(t, code, svcerr.Code(err), "err = %v", err)
-			assert.Contains(t, svcerr.ToConnect(err).Message(), answer)
+			assert.Equal(t, code, svcerr.CodeV2(err), "err = %v", err)
+			assert.Contains(t, svcerr.ToConnectV2(err).Message(), answer)
 		})
 	}
 }

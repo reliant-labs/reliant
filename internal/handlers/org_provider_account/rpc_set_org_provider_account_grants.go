@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -16,18 +15,18 @@ import (
 // leave, and a rejoin starts with none: routing compares it with the membership's start).
 func (s *Service) SetOrgProviderAccountGrants(
 	ctx context.Context,
-	req *connect.Request[pb.SetOrgProviderAccountGrantsRequest],
-) (*connect.Response[pb.SetOrgProviderAccountGrantsResponse], error) {
-	orgID, err := requireOrgID(req.Msg.GetOrgId())
+	req *pb.SetOrgProviderAccountGrantsRequest,
+) (*pb.SetOrgProviderAccountGrantsResponse, error) {
+	orgID, err := requireOrgID(req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
-	if len(req.Msg.GetUserIds()) > maxGrants {
+	if len(req.GetUserIds()) > maxGrants {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("too many members in one grant"))
 	}
 	seen := map[string]bool{}
-	users := make([]string, 0, len(req.Msg.GetUserIds()))
-	for _, u := range req.Msg.GetUserIds() {
+	users := make([]string, 0, len(req.GetUserIds()))
+	for _, u := range req.GetUserIds() {
 		u = strings.TrimSpace(u)
 		if u == "" {
 			return nil, svcerr.Wrap(svcerr.InvalidArgument("user_ids must not hold an empty id"))
@@ -41,7 +40,7 @@ func (s *Service) SetOrgProviderAccountGrants(
 	if err != nil {
 		return nil, err
 	}
-	acct, err := s.find(ctx, orgID, req.Msg.GetAccountId())
+	acct, err := s.find(ctx, orgID, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
@@ -64,5 +63,5 @@ func (s *Service) SetOrgProviderAccountGrants(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.SetOrgProviderAccountGrantsResponse{Account: out}), nil
+	return &pb.SetOrgProviderAccountGrantsResponse{Account: out}, nil
 }

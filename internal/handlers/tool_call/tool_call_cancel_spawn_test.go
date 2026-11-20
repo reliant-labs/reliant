@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -98,11 +98,11 @@ func TestCancelToolCall_SignalsParentToCancelSpawn(t *testing.T) {
 	tc := &signaltest.Recorder{}
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Temporal: tc, Router: &toolexectest.Recorder{}}))
 
-	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
+	resp, err := svc.CancelToolCall(ctx, &reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	require.Len(t, tc.Signals, 1, "cancelling a spawn must reach the parent that is running it")
 	require.Equal(t, v2.CancelThreadSignalName, tc.Signals[0].Name)
@@ -126,11 +126,11 @@ func TestCancelToolCall_SignalFails_DoesNotClaimCancelled(t *testing.T) {
 	tc := &signaltest.Recorder{SignalErr: errors.New("workflow not found")}
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Temporal: tc, Router: &toolexectest.Recorder{}}))
 
-	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
+	_, err := svc.CancelToolCall(ctx, &reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
-	}))
+	})
 	require.Error(t, err)
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 
 	wf, wfErr := repo.GetWorkflow(ctx, childThreadID)
 	require.NoError(t, wfErr)
@@ -148,9 +148,9 @@ func TestCancelToolCall_ReconcilesSpawnWorkflowRow(t *testing.T) {
 	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Temporal: &signaltest.Recorder{}, Router: &toolexectest.Recorder{}}))
-	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
+	_, err := svc.CancelToolCall(ctx, &reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
-	}))
+	})
 	require.NoError(t, err)
 
 	wf, err := repo.GetWorkflow(ctx, childThreadID)
@@ -208,9 +208,9 @@ func TestCancelToolCall_RegularToolTouchesNoWorkflow(t *testing.T) {
 	}))
 
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: &toolexectest.Recorder{}}))
-	_, err = svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
+	_, err = svc.CancelToolCall(ctx, &reliantv1.CancelToolCallRequest{
 		ToolCallId: toolCallID,
-	}))
+	})
 	require.NoError(t, err)
 
 	wf, err := repo.GetWorkflow(ctx, chatWorkflowID)

@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"text/tabwriter"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 func newProjectCmd() *cobra.Command {
@@ -76,7 +77,7 @@ RELIANT_TOKEN or the login 'reliant auth login' stored for that server.`,
 				req.Description = &description
 			}
 
-			resp, err := client.CreateProject(cmd.Context(), connect.NewRequest(req))
+			resp, err := client.CreateProject(cmd.Context(), req)
 			if err != nil {
 				// Idempotent-by-path: surface the existing project's ID instead
 				// of failing, so re-runs and scripts stay a clean one-liner.
@@ -91,7 +92,7 @@ RELIANT_TOKEN or the login 'reliant auth login' stored for that server.`,
 				return conn.annotate(fmt.Errorf("creating project: %w", err))
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), resp.Msg.GetProject().GetId())
+			fmt.Fprintln(cmd.OutOrStdout(), resp.GetProject().GetId())
 			return nil
 		},
 	}
@@ -120,11 +121,11 @@ RELIANT_TOKEN or the login 'reliant auth login' stored for that server.`,
 				return err
 			}
 
-			resp, err := newProjectServiceClient(conn).ListProjects(cmd.Context(), connect.NewRequest(&reliantv1.ListProjectsRequest{}))
+			resp, err := newProjectServiceClient(conn).ListProjects(cmd.Context(), &reliantv1.ListProjectsRequest{})
 			if err != nil {
 				return conn.annotate(fmt.Errorf("listing projects: %w", err))
 			}
-			projects := resp.Msg.GetProjects()
+			projects := resp.GetProjects()
 
 			if jsonOutput {
 				enc := json.NewEncoder(cmd.OutOrStdout())
@@ -162,7 +163,7 @@ RELIANT_TOKEN or the login 'reliant auth login' stored for that server.`,
 // projectDaemonLister is the slice of the ProjectService client that
 // checkProjectOnDaemon needs; reliantv1connect.ProjectServiceClient satisfies it.
 type projectDaemonLister interface {
-	ListProjectDaemons(context.Context, *connect.Request[reliantv1.ListProjectDaemonsRequest]) (*connect.Response[reliantv1.ListProjectDaemonsResponse], error)
+	ListProjectDaemons(context.Context, *reliantv1.ListProjectDaemonsRequest) (*reliantv1.ListProjectDaemonsResponse, error)
 }
 
 // checkProjectOnDaemon refuses `workflow run --project-id --daemon` unless the
@@ -171,11 +172,11 @@ type projectDaemonLister interface {
 // wherever it already is, so a run sent to a machine that does not hold it
 // could only fail once it touched the project.
 func checkProjectOnDaemon(ctx context.Context, client projectDaemonLister, projectID, daemonID string) error {
-	resp, err := client.ListProjectDaemons(ctx, connect.NewRequest(&reliantv1.ListProjectDaemonsRequest{}))
+	resp, err := client.ListProjectDaemons(ctx, &reliantv1.ListProjectDaemonsRequest{})
 	if err != nil {
 		return fmt.Errorf("checking that project %s is on machine %s: %w", projectID, daemonID, err)
 	}
-	for _, pd := range resp.Msg.GetProjectDaemons() {
+	for _, pd := range resp.GetProjectDaemons() {
 		if pd.GetProjectId() != projectID || pd.GetDaemonId() != daemonID {
 			continue
 		}
@@ -197,8 +198,8 @@ func checkProjectOnDaemon(ctx context.Context, client projectDaemonLister, proje
 // testable with a small fake — reliantv1connect.ProjectServiceClient satisfies
 // it directly.
 type projectResolverClient interface {
-	ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error)
-	CreateProject(context.Context, *connect.Request[reliantv1.CreateProjectRequest]) (*connect.Response[reliantv1.CreateProjectResponse], error)
+	ListProjects(context.Context, *reliantv1.ListProjectsRequest) (*reliantv1.ListProjectsResponse, error)
+	CreateProject(context.Context, *reliantv1.CreateProjectRequest) (*reliantv1.CreateProjectResponse, error)
 }
 
 // newProjectServiceClient builds a ProjectService Connect client for the
@@ -206,7 +207,7 @@ type projectResolverClient interface {
 // command, so 'project list' and 'workflow run' can never disagree about which
 // server they are talking to.
 func newProjectServiceClient(conn *connection) reliantv1connect.ProjectServiceClient {
-	return reliantv1connect.NewProjectServiceClient(conn.httpClient(), conn.ServerURL)
+	return reliantv1connect.NewProjectServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil))
 }
 
 // resolveProjectPathToID resolves a filesystem path to a project ID on the
@@ -251,9 +252,9 @@ func resolveProjectIDOn(ctx context.Context, client projectResolverClient, absPa
 	if daemonID != "" {
 		req.DaemonId = &daemonID
 	}
-	resp, err := client.CreateProject(ctx, connect.NewRequest(req))
+	resp, err := client.CreateProject(ctx, req)
 	if err == nil {
-		return resp.Msg.GetProject().GetId(), nil
+		return resp.GetProject().GetId(), nil
 	}
 	if connect.CodeOf(err) == connect.CodeAlreadyExists {
 		if id, ferr := findProjectIDByPath(ctx, client, absPath); ferr == nil && id != "" {
@@ -267,11 +268,11 @@ func resolveProjectIDOn(ctx context.Context, client projectResolverClient, absPa
 // findProjectIDByPath returns the ID of the caller's project whose path exactly
 // matches absPath, or an empty string if none match.
 func findProjectIDByPath(ctx context.Context, client projectResolverClient, absPath string) (string, error) {
-	resp, err := client.ListProjects(ctx, connect.NewRequest(&reliantv1.ListProjectsRequest{}))
+	resp, err := client.ListProjects(ctx, &reliantv1.ListProjectsRequest{})
 	if err != nil {
 		return "", err
 	}
-	for _, p := range resp.Msg.GetProjects() {
+	for _, p := range resp.GetProjects() {
 		if p.GetPath() == absPath {
 			return p.GetId(), nil
 		}

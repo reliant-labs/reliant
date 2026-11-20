@@ -11,7 +11,11 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -28,10 +32,10 @@ type fakeChatService struct {
 	sawBearer  string
 }
 
-func (f *fakeChatService) GetChatUpdates(_ context.Context, req *connect.Request[reliantv1.GetChatUpdatesRequest]) (*connect.Response[reliantv1.GetChatUpdatesResponse], error) {
+func (f *fakeChatService) GetChatUpdates(ctx context.Context, req *reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.sawBearer = req.Header().Get("Authorization")
+	f.sawBearer = serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")
 
 	var out []*reliantv1.ChatUpdate
 	var latest int64
@@ -39,18 +43,18 @@ func (f *fakeChatService) GetChatUpdates(_ context.Context, req *connect.Request
 		if u.SequenceNumber > latest {
 			latest = u.SequenceNumber
 		}
-		if u.SequenceNumber > req.Msg.GetSinceSeq() {
+		if u.SequenceNumber > req.GetSinceSeq() {
 			out = append(out, u)
 		}
 	}
-	return connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
+	return &reliantv1.GetChatUpdatesResponse{
 		Updates:        out,
 		Total:          int32(len(out)),
 		LatestSequence: latest,
-	}), nil
+	}, nil
 }
 
-func (f *fakeChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
+func (f *fakeChatService) GetWorkflowExecutions(_ context.Context, _ *reliantv1.GetWorkflowExecutionsRequest) (*reliantv1.GetWorkflowExecutionsResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	root := &reliantv1.WorkflowExecution{
@@ -59,9 +63,9 @@ func (f *fakeChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Re
 		State:        f.rootState,
 		StopReason:   f.rootReason,
 	}
-	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
+	return &reliantv1.GetWorkflowExecutionsResponse{
 		AllRootWorkflows: []*reliantv1.WorkflowExecution{root},
-	}), nil
+	}, nil
 }
 
 // TestWorkflowFollowEndToEnd drives the real cobra command against a fake
@@ -101,8 +105,9 @@ func TestWorkflowFollowEndToEnd(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewChatServiceHandler(fake)
-	mux.Handle(path, handler)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterChatServiceHandler(rpcServer, fake)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

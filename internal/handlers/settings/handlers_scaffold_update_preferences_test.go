@@ -3,7 +3,7 @@ package settings_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -19,22 +19,22 @@ func TestUpdatePreferences_Generated(t *testing.T) {
 	stored := memorySettings{}
 	svc := newSettingsService(t, stored.repo())
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdatePreferencesRequest, pb.UpdatePreferencesResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.UpdatePreferencesRequest, pb.UpdatePreferencesResponse]{
 		{
 			Name:    "an unknown worktree_archive_mode is rejected",
-			Req:     connect.NewRequest(&pb.UpdatePreferencesRequest{WorktreeArchiveMode: ptr.Of("sometimes")}),
+			Req:     &pb.UpdatePreferencesRequest{WorktreeArchiveMode: ptr.Of("sometimes")},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "only the preferences set are written",
-			Req: connect.NewRequest(&pb.UpdatePreferencesRequest{
+			Req: &pb.UpdatePreferencesRequest{
 				StreamingEnabled:    ptr.Of(true),
 				WorktreeArchiveMode: ptr.Of("always_keep"),
-			}),
+			},
 			Ctx: settings.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.UpdatePreferencesResponse]) {
-				require.True(t, resp.Msg.GetSuccess())
+			Check: func(t *testing.T, resp *pb.UpdatePreferencesResponse) {
+				require.True(t, resp.GetSuccess())
 				require.Equal(t, "true", stored["features.streaming_enabled"].Value)
 				require.Equal(t, "always_keep", stored["worktree.archive_cleanup_mode"].Value)
 				require.NotContains(t, stored, "worktree.default_delete_branch")

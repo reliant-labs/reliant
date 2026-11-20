@@ -3,8 +3,6 @@ package catalog_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,18 +16,18 @@ func TestListTools_Generated(t *testing.T) {
 
 	svc := catalog.NewTestCatalog(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListToolsRequest, pb.ListToolsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListToolsRequest, pb.ListToolsResponse]{
 		{
 			Name: "every registered tool is listed once, with a category",
-			Req:  connect.NewRequest(&pb.ListToolsRequest{}),
+			Req:  &pb.ListToolsRequest{},
 			Ctx:  catalog.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListToolsResponse]) {
+			Check: func(t *testing.T, resp *pb.ListToolsResponse) {
 				registry := tools.GetToolRegistry()
-				if got := resp.Msg.GetTools(); len(got) != len(registry) || int(resp.Msg.GetTotal()) != len(registry) {
-					t.Fatalf("listed %d tools (total %d), want the %d registered", len(got), resp.Msg.GetTotal(), len(registry))
+				if got := resp.GetTools(); len(got) != len(registry) || int(resp.GetTotal()) != len(registry) {
+					t.Fatalf("listed %d tools (total %d), want the %d registered", len(got), resp.GetTotal(), len(registry))
 				}
 				seen := map[string]bool{}
-				for _, tool := range resp.Msg.GetTools() {
+				for _, tool := range resp.GetTools() {
 					if seen[tool.GetName()] {
 						t.Fatalf("tool %q is listed twice", tool.GetName())
 					}

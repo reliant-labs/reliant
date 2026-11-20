@@ -3,8 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -17,17 +15,17 @@ import (
 // GetChat retrieves a specific chat by ID
 func (s *Service) GetChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetChatRequest],
-) (*connect.Response[reliantv1.GetChatResponse], error) {
+	req *reliantv1.GetChatRequest,
+) (*reliantv1.GetChatResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// Serves viewers of a shared chat (chatproto.ForViewer).
 	ctx = authz.WithViewerReads(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -40,7 +38,7 @@ func (s *Service) GetChat(
 	// A viewer reads the chat, never the owner's composer, workspace or run
 	// recovery: no selection read, no Temporal describe.
 	if access.Viewer() {
-		return connect.NewResponse(&reliantv1.GetChatResponse{Chat: chatproto.ForViewer(chatToProto(chat))}), nil
+		return &reliantv1.GetChatResponse{Chat: chatproto.ForViewer(chatToProto(chat))}, nil
 	}
 
 	// Ghost detection (DB says running, but Temporal lost it) is advisory
@@ -57,9 +55,9 @@ func (s *Service) GetChat(
 	// Carries the composer's choice for this chat, so any device opens on it.
 	protoChat := s.chatToProtoWithSelection(ctx, chat)
 	protoChat.NeedsRecovery = <-ghost
-	return connect.NewResponse(&reliantv1.GetChatResponse{
+	return &reliantv1.GetChatResponse{
 		Chat: protoChat,
-	}), nil
+	}, nil
 }
 
 // chatNeedsRecovery reports whether the chat's root run is a ghost: the

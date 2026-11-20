@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -35,20 +34,20 @@ import (
 // User workflows override project workflows with the same slug.
 func (s *Service) ListWorkflows(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListWorkflowsRequest],
-) (*connect.Response[reliantv1.ListWorkflowsResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.ListWorkflowsRequest,
+) (*reliantv1.ListWorkflowsResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	project, err := s.ownedProject(ctx, req.Msg.ProjectId, userID)
+	project, err := s.ownedProject(ctx, req.ProjectId, userID)
 	if err != nil {
 		return nil, err
 	}
 	// Saved workflows of another org are left out when the request names
 	// one; builtin and repository workflows are listed whatever the org.
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +131,7 @@ func (s *Service) ListWorkflows(
 
 		// Hidden builtins are building blocks other workflows ref:; they stay
 		// runnable and resolvable, just out of the default listing.
-		if protoWf.Hidden && !req.Msg.GetIncludeHidden() {
+		if protoWf.Hidden && !req.GetIncludeHidden() {
 			continue
 		}
 
@@ -172,7 +171,7 @@ func (s *Service) ListWorkflows(
 	// include_hidden=true; each carries its status and current findings.
 	drafts, draftsErr := catalog.Drafts()
 	if draftsErr != nil {
-		logging.ErrorContext(ctx, "Failed to list workflows from database", "error", draftsErr, "user_id", userID, "include_hidden", req.Msg.GetIncludeHidden())
+		logging.ErrorContext(ctx, "Failed to list workflows from database", "error", draftsErr, "user_id", userID, "include_hidden", req.GetIncludeHidden())
 		// Continue with builtins and project workflows
 	} else {
 		// One loader for every workflow validated here, so a ref several of
@@ -187,11 +186,11 @@ func (s *Service) ListWorkflows(
 			if !scope.Includes(draft.OrgID) {
 				continue
 			}
-			if !req.Msg.GetIncludeHidden() && (draft.IsHidden || draft.Status != db.WorkflowDraftStatusComplete) {
+			if !req.GetIncludeHidden() && (draft.IsHidden || draft.Status != db.WorkflowDraftStatusComplete) {
 				continue
 			}
 			check := validateWorkflowDefinitionWith([]byte(draft.Definition), validationLoader)
-			if !req.Msg.GetIncludeHidden() && !check.valid() {
+			if !req.GetIncludeHidden() && !check.valid() {
 				continue
 			}
 			item, err := userWorkflowListItem(draft, check)
@@ -201,7 +200,7 @@ func (s *Service) ListWorkflows(
 			}
 			// A definition that declares `hidden: true` is a building block, as
 			// a hidden builtin is: out of the default listing, still resolvable.
-			if item.IsHidden && !req.Msg.GetIncludeHidden() {
+			if item.IsHidden && !req.GetIncludeHidden() {
 				continue
 			}
 			// Use draft.Slug directly as the map key - this is the stable runtime identifier.
@@ -247,11 +246,11 @@ func (s *Service) ListWorkflows(
 	for _, wf := range workflowsBySlug {
 		// A project workflow whose definition declares `hidden: true` is a
 		// building block: out of the default listing, like a hidden builtin.
-		if wf.Source == "project" && wf.IsHidden && !req.Msg.GetIncludeHidden() {
+		if wf.Source == "project" && wf.IsHidden && !req.GetIncludeHidden() {
 			continue
 		}
 		// Check visibility for builtin workflows (unless include_hidden is set)
-		if wf.Source == "builtin" && !req.Msg.GetIncludeHidden() {
+		if wf.Source == "builtin" && !req.GetIncludeHidden() {
 			visible, ok := wfOverrides[wf.Name]
 			if !ok {
 				visible = !wfHiddenDefaultSet[wf.Name]
@@ -263,11 +262,11 @@ func (s *Service) ListWorkflows(
 		workflows = append(workflows, wf)
 	}
 
-	return connect.NewResponse(&reliantv1.ListWorkflowsResponse{
+	return &reliantv1.ListWorkflowsResponse{
 		Workflows:        workflows,
 		Total:            int32(len(workflows)),
 		InvalidWorkflows: invalidWorkflows,
-	}), nil
+	}, nil
 }
 
 // userWorkflowListItem renders a stored workflow for list responses, with its

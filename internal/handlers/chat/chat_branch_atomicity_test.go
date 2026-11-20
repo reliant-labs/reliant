@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -125,10 +124,10 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	require.NoError(t, err)
 	beforeCount := len(before)
 
-	_, branchErr := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	_, branchErr := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    sourceChatID,
 		MessageId: msgID,
-	}))
+	})
 	require.Error(t, branchErr, "BranchChat must fail when the trailing chat_created write fails")
 
 	after, err := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})
@@ -177,14 +176,14 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 		threads: threads.NewService(failingRepo),
 	}
 
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    sourceChatID,
 		MessageId: msgID,
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Chat)
+	require.NotNil(t, resp.Chat)
 
-	branchChatID := resp.Msg.Chat.Id
+	branchChatID := resp.Chat.Id
 	branchChat, getErr := repo.GetChat(ctx, branchChatID)
 	require.NoError(t, getErr)
 	require.NotNil(t, branchChat)

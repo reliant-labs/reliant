@@ -7,7 +7,6 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -25,17 +24,17 @@ type manualAPI struct {
 	err      error
 }
 
-func (a *manualAPI) ListTriggers(context.Context, *connect.Request[reliantv1.ListTriggersRequest]) (*connect.Response[reliantv1.ListTriggersResponse], error) {
+func (a *manualAPI) ListTriggers(context.Context, *reliantv1.ListTriggersRequest) (*reliantv1.ListTriggersResponse, error) {
 	panic("not used")
 }
-func (a *manualAPI) FireTrigger(ctx context.Context, req *connect.Request[reliantv1.FireTriggerRequest]) (*connect.Response[reliantv1.FireTriggerResponse], error) {
-	a.user, a.id = auth.MustGetUserID(ctx), req.Msg.Id
-	return connect.NewResponse(&reliantv1.FireTriggerResponse{FireWorkflowId: "fire-1"}), a.err
+func (a *manualAPI) FireTrigger(ctx context.Context, req *reliantv1.FireTriggerRequest) (*reliantv1.FireTriggerResponse, error) {
+	a.user, a.id = auth.MustGetUserID(ctx), req.Id
+	return &reliantv1.FireTriggerResponse{FireWorkflowId: "fire-1"}, a.err
 }
-func (a *manualAPI) ListTriggerEvents(ctx context.Context, req *connect.Request[reliantv1.ListTriggerEventsRequest]) (*connect.Response[reliantv1.ListTriggerEventsResponse], error) {
-	a.user, a.id, a.limit, a.token = auth.MustGetUserID(ctx), req.Msg.TriggerId, req.Msg.Limit, req.Msg.GetPageToken()
+func (a *manualAPI) ListTriggerEvents(ctx context.Context, req *reliantv1.ListTriggerEventsRequest) (*reliantv1.ListTriggerEventsResponse, error) {
+	a.user, a.id, a.limit, a.token = auth.MustGetUserID(ctx), req.TriggerId, req.Limit, req.GetPageToken()
 	chat := "chat-1"
-	return connect.NewResponse(&reliantv1.ListTriggerEventsResponse{Events: []*reliantv1.TriggerEvent{{Id: "event-1", FireWorkflowId: "fire-1", ChatId: &chat, OccurredAt: "2026-10-23T00:00:00Z", Outcome: reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_LAUNCHED, Payload: &structpb.Struct{Fields: map[string]*structpb.Value{"secret": structpb.NewStringValue("must-not-appear")}}}}, NextPageToken: "next"}), a.err
+	return &reliantv1.ListTriggerEventsResponse{Events: []*reliantv1.TriggerEvent{{Id: "event-1", FireWorkflowId: "fire-1", ChatId: &chat, OccurredAt: "2026-10-23T00:00:00Z", Outcome: reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_LAUNCHED, Payload: &structpb.Struct{Fields: map[string]*structpb.Value{"secret": structpb.NewStringValue("must-not-appear")}}}}, NextPageToken: "next"}, a.err
 }
 func TestManualAdapterActsAsOwnerAndSanitizesErrors(t *testing.T) {
 	a := &manualAPI{}
@@ -93,7 +92,7 @@ func TestManualToolUsesServiceOwnershipWithoutEnabling(t *testing.T) {
 	e := setup(t, "https://api.example.com")
 	id := e.activate(t, "nightly")
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, e.userID)
-	_, err := e.svc.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+	_, err := e.svc.SetTriggerEnabled(ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 	require.NoError(t, err)
 	tool := tools.NewFireTriggerTool(e.repo, triggertools.New(e.svc))
 	before, err := e.repo.GetTrigger(context.Background(), id)

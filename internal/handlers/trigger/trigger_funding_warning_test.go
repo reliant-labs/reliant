@@ -7,7 +7,6 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -130,28 +129,28 @@ func TestFundingWarning_OnCreateUpdateAndResume(t *testing.T) {
 	assert.Equal(t, "mock", created.GetFundingWarning().GetModel())
 	assert.True(t, row.Enabled)
 
-	paused, err := e.svc.SetTriggerEnabled(e.creatorCtx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: row.ID, Enabled: false}))
+	paused, err := e.svc.SetTriggerEnabled(e.creatorCtx, &reliantv1.SetTriggerEnabledRequest{Id: row.ID, Enabled: false})
 	require.NoError(t, err)
-	assert.Nil(t, paused.Msg.GetFundingWarning(), "a paused automation spends nothing")
+	assert.Nil(t, paused.GetFundingWarning(), "a paused automation spends nothing")
 
-	resumed, err := e.svc.SetTriggerEnabled(e.creatorCtx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: row.ID, Enabled: true}))
+	resumed, err := e.svc.SetTriggerEnabled(e.creatorCtx, &reliantv1.SetTriggerEnabledRequest{Id: row.ID, Enabled: true})
 	require.NoError(t, err)
-	require.NotNil(t, resumed.Msg.GetFundingWarning())
+	require.NotNil(t, resumed.GetFundingWarning())
 
-	updated, err := e.svc.UpdateTrigger(e.creatorCtx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: row.ID, Trigger: def(nil)}))
+	updated, err := e.svc.UpdateTrigger(e.creatorCtx, &reliantv1.UpdateTriggerRequest{Id: row.ID, Trigger: def(nil)})
 	require.NoError(t, err)
-	require.NotNil(t, updated.Msg.GetFundingWarning())
+	require.NotNil(t, updated.GetFundingWarning())
 
 	anthropic, err := structpb.NewValue(map[string]any{"tags": []any{"flagship"}})
 	require.NoError(t, err)
 	sources.mu.Lock()
 	sources.anthropic = true
 	sources.mu.Unlock()
-	served, err := e.svc.UpdateTrigger(e.creatorCtx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: row.ID, Trigger: def(func(d *reliantv1.TriggerDefinition) {
+	served, err := e.svc.UpdateTrigger(e.creatorCtx, &reliantv1.UpdateTriggerRequest{Id: row.ID, Trigger: def(func(d *reliantv1.TriggerDefinition) {
 		d.Params = map[string]*structpb.Value{"model": anthropic}
-	})}))
+	})})
 	require.NoError(t, err)
-	assert.Nil(t, served.Msg.GetFundingWarning(), "an org account serves the model")
+	assert.Nil(t, served.GetFundingWarning(), "an org account serves the model")
 }
 
 const fundingWorkflowYAML = `name: funded
@@ -177,13 +176,13 @@ func TestFundingWarning_OnEnableWorkflow(t *testing.T) {
 	e.svc.sources = (&orgSourcesStub{}).lookup
 	e.saveWorkflow(t, "funded", fundingWorkflowYAML)
 
-	resp, err := e.svc.EnableWorkflow(e.creatorCtx, connect.NewRequest(&reliantv1.EnableWorkflowRequest{
+	resp, err := e.svc.EnableWorkflow(e.creatorCtx, &reliantv1.EnableWorkflowRequest{
 		Workflow: "funded", ProjectId: e.acmeProject, DaemonId: e.daemonID, Params: mockModelTriggerParams(t),
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.GetEnabled(), "%v", resp.Msg.GetResults())
-	require.Len(t, resp.Msg.GetResults(), 1)
-	r := resp.Msg.GetResults()[0]
+	require.True(t, resp.GetEnabled(), "%v", resp.GetResults())
+	require.Len(t, resp.GetResults(), 1)
+	r := resp.GetResults()[0]
 	require.NotNil(t, r.GetFundingWarning())
 	assert.Equal(t, "mock", r.GetFundingWarning().GetModel())
 	assert.Contains(t, r.GetWarnings(), r.GetFundingWarning().GetMessage())

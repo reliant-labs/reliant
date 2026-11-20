@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
@@ -47,10 +47,10 @@ var movePollInterval = 1500 * time.Millisecond
 // projectMoveClient is the slice of the ProjectService client the command
 // needs; reliantv1connect.ProjectServiceClient satisfies it.
 type projectMoveClient interface {
-	ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error)
-	PreviewProjectOrgMove(context.Context, *connect.Request[reliantv1.PreviewProjectOrgMoveRequest]) (*connect.Response[reliantv1.PreviewProjectOrgMoveResponse], error)
-	MoveProjectToOrg(context.Context, *connect.Request[reliantv1.MoveProjectToOrgRequest]) (*connect.Response[reliantv1.MoveProjectToOrgResponse], error)
-	GetProjectOrgMove(context.Context, *connect.Request[reliantv1.GetProjectOrgMoveRequest]) (*connect.Response[reliantv1.GetProjectOrgMoveResponse], error)
+	ListProjects(context.Context, *reliantv1.ListProjectsRequest) (*reliantv1.ListProjectsResponse, error)
+	PreviewProjectOrgMove(context.Context, *reliantv1.PreviewProjectOrgMoveRequest) (*reliantv1.PreviewProjectOrgMoveResponse, error)
+	MoveProjectToOrg(context.Context, *reliantv1.MoveProjectToOrgRequest) (*reliantv1.MoveProjectToOrgResponse, error)
+	GetProjectOrgMove(context.Context, *reliantv1.GetProjectOrgMoveRequest) (*reliantv1.GetProjectOrgMoveResponse, error)
 }
 
 func newProjectMoveCmd() *cobra.Command {
@@ -127,11 +127,11 @@ func (m projectMove) run(ctx context.Context, ref, toOrg string) error {
 	if err != nil {
 		return err
 	}
-	pv, err := m.client.PreviewProjectOrgMove(ctx, connect.NewRequest(&reliantv1.PreviewProjectOrgMoveRequest{ProjectId: project.GetId(), ToOrgId: toOrg}))
+	pv, err := m.client.PreviewProjectOrgMove(ctx, &reliantv1.PreviewProjectOrgMoveRequest{ProjectId: project.GetId(), ToOrgId: toOrg})
 	if err != nil {
 		return moveRefusal("checking the move", err)
 	}
-	preview := pv.Msg
+	preview := pv
 	printMovePreview(m.out, project, preview)
 	if m.dryRun {
 		fmt.Fprintln(m.out, "\nDry run: nothing moved.")
@@ -145,16 +145,16 @@ func (m projectMove) run(ctx context.Context, ref, toOrg string) error {
 			return err
 		}
 	}
-	resp, err := m.client.MoveProjectToOrg(ctx, connect.NewRequest(&reliantv1.MoveProjectToOrgRequest{
+	resp, err := m.client.MoveProjectToOrg(ctx, &reliantv1.MoveProjectToOrgRequest{
 		ProjectId:         project.GetId(),
 		ToOrgId:           toOrg,
 		ExpectedFromOrgId: preview.GetFromOrgId(),
 		RequestKey:        uuid.NewString(),
-	}))
+	})
 	if err != nil {
 		return moveRefusal("moving the project", err)
 	}
-	move, err := m.follow(ctx, resp.Msg.GetMove())
+	move, err := m.follow(ctx, resp.GetMove())
 	if err != nil {
 		return err
 	}
@@ -199,11 +199,11 @@ func (m projectMove) follow(ctx context.Context, move *reliantv1.ProjectOrgMove)
 			return nil, ctx.Err()
 		case <-time.After(movePollInterval):
 		}
-		got, err := m.client.GetProjectOrgMove(ctx, connect.NewRequest(&reliantv1.GetProjectOrgMoveRequest{MoveId: move.GetId()}))
+		got, err := m.client.GetProjectOrgMove(ctx, &reliantv1.GetProjectOrgMoveRequest{MoveId: move.GetId()})
 		if err != nil {
 			return nil, fmt.Errorf("reading the move: %w", err)
 		}
-		move = got.Msg.GetMove()
+		move = got.GetMove()
 	}
 	return move, nil
 }
@@ -223,7 +223,7 @@ func moveStateName(s reliantv1.ProjectOrgMoveState) string {
 func moveRefusal(doing string, err error) error {
 	var ce *connect.Error
 	if errors.As(err, &ce) {
-		switch ce.Meta().Get(svcerr.ReasonHeader) {
+		switch svcerr.MetaOf(err).Get(svcerr.ReasonHeader) {
 		case "person_required":
 			return fmt.Errorf("%s: only a person signed in to the Reliant app can move a project, and the CLI login is an access token an agent can use. Move it in the app: Settings → Projects → Danger zone", doing)
 		case "project_moves_disabled":

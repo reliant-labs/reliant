@@ -7,61 +7,118 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ProviderAccountServiceName is the fully-qualified name of the ProviderAccountService service.
 	ProviderAccountServiceName = "reliant.v1.ProviderAccountService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ProviderAccountServiceListProviderAccountsProcedure is the fully-qualified name of the
+	// ProviderAccountServiceListProviderAccountsProcedure is the procedure name of the
 	// ProviderAccountService's ListProviderAccounts RPC.
 	ProviderAccountServiceListProviderAccountsProcedure = "/reliant.v1.ProviderAccountService/ListProviderAccounts"
-	// ProviderAccountServiceUpdateProviderAccountProcedure is the fully-qualified name of the
+	// ProviderAccountServiceUpdateProviderAccountProcedure is the procedure name of the
 	// ProviderAccountService's UpdateProviderAccount RPC.
 	ProviderAccountServiceUpdateProviderAccountProcedure = "/reliant.v1.ProviderAccountService/UpdateProviderAccount"
-	// ProviderAccountServiceReorderProviderAccountsProcedure is the fully-qualified name of the
+	// ProviderAccountServiceReorderProviderAccountsProcedure is the procedure name of the
 	// ProviderAccountService's ReorderProviderAccounts RPC.
 	ProviderAccountServiceReorderProviderAccountsProcedure = "/reliant.v1.ProviderAccountService/ReorderProviderAccounts"
-	// ProviderAccountServiceDeleteProviderAccountProcedure is the fully-qualified name of the
+	// ProviderAccountServiceDeleteProviderAccountProcedure is the procedure name of the
 	// ProviderAccountService's DeleteProviderAccount RPC.
 	ProviderAccountServiceDeleteProviderAccountProcedure = "/reliant.v1.ProviderAccountService/DeleteProviderAccount"
-	// ProviderAccountServiceAddProviderAPIKeyProcedure is the fully-qualified name of the
+	// ProviderAccountServiceAddProviderAPIKeyProcedure is the procedure name of the
 	// ProviderAccountService's AddProviderAPIKey RPC.
 	ProviderAccountServiceAddProviderAPIKeyProcedure = "/reliant.v1.ProviderAccountService/AddProviderAPIKey"
-	// ProviderAccountServiceRefreshProviderAccountUsageProcedure is the fully-qualified name of the
+	// ProviderAccountServiceRefreshProviderAccountUsageProcedure is the procedure name of the
 	// ProviderAccountService's RefreshProviderAccountUsage RPC.
 	ProviderAccountServiceRefreshProviderAccountUsageProcedure = "/reliant.v1.ProviderAccountService/RefreshProviderAccountUsage"
-	// ProviderAccountServiceGetChatProviderAccountProcedure is the fully-qualified name of the
+	// ProviderAccountServiceGetChatProviderAccountProcedure is the procedure name of the
 	// ProviderAccountService's GetChatProviderAccount RPC.
 	ProviderAccountServiceGetChatProviderAccountProcedure = "/reliant.v1.ProviderAccountService/GetChatProviderAccount"
-	// ProviderAccountServiceGetPersonalFundingQuestionProcedure is the fully-qualified name of the
+	// ProviderAccountServiceGetPersonalFundingQuestionProcedure is the procedure name of the
 	// ProviderAccountService's GetPersonalFundingQuestion RPC.
 	ProviderAccountServiceGetPersonalFundingQuestionProcedure = "/reliant.v1.ProviderAccountService/GetPersonalFundingQuestion"
-	// ProviderAccountServiceResolvePersonalFundingChoiceProcedure is the fully-qualified name of the
+	// ProviderAccountServiceResolvePersonalFundingChoiceProcedure is the procedure name of the
 	// ProviderAccountService's ResolvePersonalFundingChoice RPC.
 	ProviderAccountServiceResolvePersonalFundingChoiceProcedure = "/reliant.v1.ProviderAccountService/ResolvePersonalFundingChoice"
+)
+
+var (
+	providerAccountServiceListProviderAccountsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("ListProviderAccounts"),
+			Procedure:  ProviderAccountServiceListProviderAccountsProcedure,
+		}
+	})
+	providerAccountServiceUpdateProviderAccountSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("UpdateProviderAccount"),
+			Procedure:  ProviderAccountServiceUpdateProviderAccountProcedure,
+		}
+	})
+	providerAccountServiceReorderProviderAccountsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("ReorderProviderAccounts"),
+			Procedure:  ProviderAccountServiceReorderProviderAccountsProcedure,
+		}
+	})
+	providerAccountServiceDeleteProviderAccountSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("DeleteProviderAccount"),
+			Procedure:  ProviderAccountServiceDeleteProviderAccountProcedure,
+		}
+	})
+	providerAccountServiceAddProviderAPIKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("AddProviderAPIKey"),
+			Procedure:  ProviderAccountServiceAddProviderAPIKeyProcedure,
+		}
+	})
+	providerAccountServiceRefreshProviderAccountUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("RefreshProviderAccountUsage"),
+			Procedure:  ProviderAccountServiceRefreshProviderAccountUsageProcedure,
+		}
+	})
+	providerAccountServiceGetChatProviderAccountSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("GetChatProviderAccount"),
+			Procedure:  ProviderAccountServiceGetChatProviderAccountProcedure,
+		}
+	})
+	providerAccountServiceGetPersonalFundingQuestionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("GetPersonalFundingQuestion"),
+			Procedure:  ProviderAccountServiceGetPersonalFundingQuestionProcedure,
+		}
+	})
+	providerAccountServiceResolvePersonalFundingChoiceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods().ByName("ResolvePersonalFundingChoice"),
+			Procedure:  ProviderAccountServiceResolvePersonalFundingChoiceProcedure,
+		}
+	})
 )
 
 // ProviderAccountServiceClient is a client for the reliant.v1.ProviderAccountService service.
@@ -70,36 +127,36 @@ type ProviderAccountServiceClient interface {
 	// provider and ordered by priority, each with its derived status and latest
 	// usage windows.
 	// forge:custom — scoped to the caller; joins the latest limit state onto each account
-	ListProviderAccounts(context.Context, *connect.Request[v1.ListProviderAccountsRequest]) (*connect.Response[v1.ListProviderAccountsResponse], error)
+	ListProviderAccounts(context.Context, *v1.ListProviderAccountsRequest) (*v1.ListProviderAccountsResponse, error)
 	// UpdateProviderAccount renames an account and/or pauses it. Unset fields
 	// are left alone. An empty label restores the default (the detected email).
 	// forge:custom — only label and paused are client-writable; status is derived
-	UpdateProviderAccount(context.Context, *connect.Request[v1.UpdateProviderAccountRequest]) (*connect.Response[v1.UpdateProviderAccountResponse], error)
+	UpdateProviderAccount(context.Context, *v1.UpdateProviderAccountRequest) (*v1.UpdateProviderAccountResponse, error)
 	// ReorderProviderAccounts sets the priority order of one provider's
 	// accounts. account_ids must be exactly that provider's accounts.
-	ReorderProviderAccounts(context.Context, *connect.Request[v1.ReorderProviderAccountsRequest]) (*connect.Response[v1.ReorderProviderAccountsResponse], error)
+	ReorderProviderAccounts(context.Context, *v1.ReorderProviderAccountsRequest) (*v1.ReorderProviderAccountsResponse, error)
 	// DeleteProviderAccount removes an account and its stored credential.
 	// forge:custom — also revokes the sealed credential and reassigns threads pinned to it
-	DeleteProviderAccount(context.Context, *connect.Request[v1.DeleteProviderAccountRequest]) (*connect.Response[v1.DeleteProviderAccountResponse], error)
+	DeleteProviderAccount(context.Context, *v1.DeleteProviderAccountRequest) (*v1.DeleteProviderAccountResponse, error)
 	// AddProviderAPIKey adds an API-key account to a provider. A key that is
 	// already stored for that provider is not added twice (created = false).
-	AddProviderAPIKey(context.Context, *connect.Request[v1.AddProviderAPIKeyRequest]) (*connect.Response[v1.AddProviderAPIKeyResponse], error)
+	AddProviderAPIKey(context.Context, *v1.AddProviderAPIKeyRequest) (*v1.AddProviderAPIKeyResponse, error)
 	// RefreshProviderAccountUsage re-reads one account's usage from the
 	// provider. The server throttles it: a refresh inside the throttle window
 	// returns the stored state with throttled = true.
-	RefreshProviderAccountUsage(context.Context, *connect.Request[v1.RefreshProviderAccountUsageRequest]) (*connect.Response[v1.RefreshProviderAccountUsageResponse], error)
+	RefreshProviderAccountUsage(context.Context, *v1.RefreshProviderAccountUsageRequest) (*v1.RefreshProviderAccountUsageResponse, error)
 	// GetChatProviderAccount returns the account the chat's root thread is
 	// currently using for its provider; unset when none is assigned yet. An
 	// account the chat's org owns is returned as a member of the org sees it
 	// (provider, label and status, with funding ORG_KEY): never its key hint.
-	GetChatProviderAccount(context.Context, *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error)
+	GetChatProviderAccount(context.Context, *v1.GetChatProviderAccountRequest) (*v1.GetChatProviderAccountResponse, error)
 	// GetPersonalFundingQuestion returns the chat's open question "continue on
 	// your own account?" (control-plane docs/design/org-provider-accounts.md
 	// §10), if any. Before a chat in an org moves from the org's accounts to
 	// the person's own, it parks and asks once, for every thread of the chat.
 	// The chat's owner only.
 	// forge:custom
-	GetPersonalFundingQuestion(context.Context, *connect.Request[v1.GetPersonalFundingQuestionRequest]) (*connect.Response[v1.GetPersonalFundingQuestionResponse], error)
+	GetPersonalFundingQuestion(context.Context, *v1.GetPersonalFundingQuestionRequest) (*v1.GetPersonalFundingQuestionResponse, error)
 	// ResolvePersonalFundingChoice answers the chat's question. USE_PERSONAL
 	// lets every waiting thread of the chat, sub-agents included, continue on
 	// the person's own account for as long as the answer lasts: until the
@@ -109,134 +166,13 @@ type ProviderAccountServiceClient interface {
 	// for the org (provider.org_funding: use_personal or wait). Person-only, and
 	// the chat's owner only: nothing else can spend the person's own account in
 	// place of the org's.
-	ResolvePersonalFundingChoice(context.Context, *connect.Request[v1.ResolvePersonalFundingChoiceRequest]) (*connect.Response[v1.ResolvePersonalFundingChoiceResponse], error)
+	ResolvePersonalFundingChoice(context.Context, *v1.ResolvePersonalFundingChoiceRequest) (*v1.ResolvePersonalFundingChoiceResponse, error)
 }
 
 // NewProviderAccountServiceClient constructs a client for the reliant.v1.ProviderAccountService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewProviderAccountServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ProviderAccountServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	providerAccountServiceMethods := v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods()
-	return &providerAccountServiceClient{
-		listProviderAccounts: connect.NewClient[v1.ListProviderAccountsRequest, v1.ListProviderAccountsResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceListProviderAccountsProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("ListProviderAccounts")),
-			connect.WithClientOptions(opts...),
-		),
-		updateProviderAccount: connect.NewClient[v1.UpdateProviderAccountRequest, v1.UpdateProviderAccountResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceUpdateProviderAccountProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("UpdateProviderAccount")),
-			connect.WithClientOptions(opts...),
-		),
-		reorderProviderAccounts: connect.NewClient[v1.ReorderProviderAccountsRequest, v1.ReorderProviderAccountsResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceReorderProviderAccountsProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("ReorderProviderAccounts")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteProviderAccount: connect.NewClient[v1.DeleteProviderAccountRequest, v1.DeleteProviderAccountResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceDeleteProviderAccountProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("DeleteProviderAccount")),
-			connect.WithClientOptions(opts...),
-		),
-		addProviderAPIKey: connect.NewClient[v1.AddProviderAPIKeyRequest, v1.AddProviderAPIKeyResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceAddProviderAPIKeyProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("AddProviderAPIKey")),
-			connect.WithClientOptions(opts...),
-		),
-		refreshProviderAccountUsage: connect.NewClient[v1.RefreshProviderAccountUsageRequest, v1.RefreshProviderAccountUsageResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceRefreshProviderAccountUsageProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("RefreshProviderAccountUsage")),
-			connect.WithClientOptions(opts...),
-		),
-		getChatProviderAccount: connect.NewClient[v1.GetChatProviderAccountRequest, v1.GetChatProviderAccountResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceGetChatProviderAccountProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("GetChatProviderAccount")),
-			connect.WithClientOptions(opts...),
-		),
-		getPersonalFundingQuestion: connect.NewClient[v1.GetPersonalFundingQuestionRequest, v1.GetPersonalFundingQuestionResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceGetPersonalFundingQuestionProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("GetPersonalFundingQuestion")),
-			connect.WithClientOptions(opts...),
-		),
-		resolvePersonalFundingChoice: connect.NewClient[v1.ResolvePersonalFundingChoiceRequest, v1.ResolvePersonalFundingChoiceResponse](
-			httpClient,
-			baseURL+ProviderAccountServiceResolvePersonalFundingChoiceProcedure,
-			connect.WithSchema(providerAccountServiceMethods.ByName("ResolvePersonalFundingChoice")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// providerAccountServiceClient implements ProviderAccountServiceClient.
-type providerAccountServiceClient struct {
-	listProviderAccounts         *connect.Client[v1.ListProviderAccountsRequest, v1.ListProviderAccountsResponse]
-	updateProviderAccount        *connect.Client[v1.UpdateProviderAccountRequest, v1.UpdateProviderAccountResponse]
-	reorderProviderAccounts      *connect.Client[v1.ReorderProviderAccountsRequest, v1.ReorderProviderAccountsResponse]
-	deleteProviderAccount        *connect.Client[v1.DeleteProviderAccountRequest, v1.DeleteProviderAccountResponse]
-	addProviderAPIKey            *connect.Client[v1.AddProviderAPIKeyRequest, v1.AddProviderAPIKeyResponse]
-	refreshProviderAccountUsage  *connect.Client[v1.RefreshProviderAccountUsageRequest, v1.RefreshProviderAccountUsageResponse]
-	getChatProviderAccount       *connect.Client[v1.GetChatProviderAccountRequest, v1.GetChatProviderAccountResponse]
-	getPersonalFundingQuestion   *connect.Client[v1.GetPersonalFundingQuestionRequest, v1.GetPersonalFundingQuestionResponse]
-	resolvePersonalFundingChoice *connect.Client[v1.ResolvePersonalFundingChoiceRequest, v1.ResolvePersonalFundingChoiceResponse]
-}
-
-// ListProviderAccounts calls reliant.v1.ProviderAccountService.ListProviderAccounts.
-func (c *providerAccountServiceClient) ListProviderAccounts(ctx context.Context, req *connect.Request[v1.ListProviderAccountsRequest]) (*connect.Response[v1.ListProviderAccountsResponse], error) {
-	return c.listProviderAccounts.CallUnary(ctx, req)
-}
-
-// UpdateProviderAccount calls reliant.v1.ProviderAccountService.UpdateProviderAccount.
-func (c *providerAccountServiceClient) UpdateProviderAccount(ctx context.Context, req *connect.Request[v1.UpdateProviderAccountRequest]) (*connect.Response[v1.UpdateProviderAccountResponse], error) {
-	return c.updateProviderAccount.CallUnary(ctx, req)
-}
-
-// ReorderProviderAccounts calls reliant.v1.ProviderAccountService.ReorderProviderAccounts.
-func (c *providerAccountServiceClient) ReorderProviderAccounts(ctx context.Context, req *connect.Request[v1.ReorderProviderAccountsRequest]) (*connect.Response[v1.ReorderProviderAccountsResponse], error) {
-	return c.reorderProviderAccounts.CallUnary(ctx, req)
-}
-
-// DeleteProviderAccount calls reliant.v1.ProviderAccountService.DeleteProviderAccount.
-func (c *providerAccountServiceClient) DeleteProviderAccount(ctx context.Context, req *connect.Request[v1.DeleteProviderAccountRequest]) (*connect.Response[v1.DeleteProviderAccountResponse], error) {
-	return c.deleteProviderAccount.CallUnary(ctx, req)
-}
-
-// AddProviderAPIKey calls reliant.v1.ProviderAccountService.AddProviderAPIKey.
-func (c *providerAccountServiceClient) AddProviderAPIKey(ctx context.Context, req *connect.Request[v1.AddProviderAPIKeyRequest]) (*connect.Response[v1.AddProviderAPIKeyResponse], error) {
-	return c.addProviderAPIKey.CallUnary(ctx, req)
-}
-
-// RefreshProviderAccountUsage calls reliant.v1.ProviderAccountService.RefreshProviderAccountUsage.
-func (c *providerAccountServiceClient) RefreshProviderAccountUsage(ctx context.Context, req *connect.Request[v1.RefreshProviderAccountUsageRequest]) (*connect.Response[v1.RefreshProviderAccountUsageResponse], error) {
-	return c.refreshProviderAccountUsage.CallUnary(ctx, req)
-}
-
-// GetChatProviderAccount calls reliant.v1.ProviderAccountService.GetChatProviderAccount.
-func (c *providerAccountServiceClient) GetChatProviderAccount(ctx context.Context, req *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error) {
-	return c.getChatProviderAccount.CallUnary(ctx, req)
-}
-
-// GetPersonalFundingQuestion calls reliant.v1.ProviderAccountService.GetPersonalFundingQuestion.
-func (c *providerAccountServiceClient) GetPersonalFundingQuestion(ctx context.Context, req *connect.Request[v1.GetPersonalFundingQuestionRequest]) (*connect.Response[v1.GetPersonalFundingQuestionResponse], error) {
-	return c.getPersonalFundingQuestion.CallUnary(ctx, req)
-}
-
-// ResolvePersonalFundingChoice calls
-// reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice.
-func (c *providerAccountServiceClient) ResolvePersonalFundingChoice(ctx context.Context, req *connect.Request[v1.ResolvePersonalFundingChoiceRequest]) (*connect.Response[v1.ResolvePersonalFundingChoiceResponse], error) {
-	return c.resolvePersonalFundingChoice.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewProviderAccountServiceClient(client *connect.Client) ProviderAccountServiceClient {
+	return &providerAccountServiceClient{client: client}
 }
 
 // ProviderAccountServiceHandler is an implementation of the reliant.v1.ProviderAccountService
@@ -246,36 +182,36 @@ type ProviderAccountServiceHandler interface {
 	// provider and ordered by priority, each with its derived status and latest
 	// usage windows.
 	// forge:custom — scoped to the caller; joins the latest limit state onto each account
-	ListProviderAccounts(context.Context, *connect.Request[v1.ListProviderAccountsRequest]) (*connect.Response[v1.ListProviderAccountsResponse], error)
+	ListProviderAccounts(context.Context, *v1.ListProviderAccountsRequest) (*v1.ListProviderAccountsResponse, error)
 	// UpdateProviderAccount renames an account and/or pauses it. Unset fields
 	// are left alone. An empty label restores the default (the detected email).
 	// forge:custom — only label and paused are client-writable; status is derived
-	UpdateProviderAccount(context.Context, *connect.Request[v1.UpdateProviderAccountRequest]) (*connect.Response[v1.UpdateProviderAccountResponse], error)
+	UpdateProviderAccount(context.Context, *v1.UpdateProviderAccountRequest) (*v1.UpdateProviderAccountResponse, error)
 	// ReorderProviderAccounts sets the priority order of one provider's
 	// accounts. account_ids must be exactly that provider's accounts.
-	ReorderProviderAccounts(context.Context, *connect.Request[v1.ReorderProviderAccountsRequest]) (*connect.Response[v1.ReorderProviderAccountsResponse], error)
+	ReorderProviderAccounts(context.Context, *v1.ReorderProviderAccountsRequest) (*v1.ReorderProviderAccountsResponse, error)
 	// DeleteProviderAccount removes an account and its stored credential.
 	// forge:custom — also revokes the sealed credential and reassigns threads pinned to it
-	DeleteProviderAccount(context.Context, *connect.Request[v1.DeleteProviderAccountRequest]) (*connect.Response[v1.DeleteProviderAccountResponse], error)
+	DeleteProviderAccount(context.Context, *v1.DeleteProviderAccountRequest) (*v1.DeleteProviderAccountResponse, error)
 	// AddProviderAPIKey adds an API-key account to a provider. A key that is
 	// already stored for that provider is not added twice (created = false).
-	AddProviderAPIKey(context.Context, *connect.Request[v1.AddProviderAPIKeyRequest]) (*connect.Response[v1.AddProviderAPIKeyResponse], error)
+	AddProviderAPIKey(context.Context, *v1.AddProviderAPIKeyRequest) (*v1.AddProviderAPIKeyResponse, error)
 	// RefreshProviderAccountUsage re-reads one account's usage from the
 	// provider. The server throttles it: a refresh inside the throttle window
 	// returns the stored state with throttled = true.
-	RefreshProviderAccountUsage(context.Context, *connect.Request[v1.RefreshProviderAccountUsageRequest]) (*connect.Response[v1.RefreshProviderAccountUsageResponse], error)
+	RefreshProviderAccountUsage(context.Context, *v1.RefreshProviderAccountUsageRequest) (*v1.RefreshProviderAccountUsageResponse, error)
 	// GetChatProviderAccount returns the account the chat's root thread is
 	// currently using for its provider; unset when none is assigned yet. An
 	// account the chat's org owns is returned as a member of the org sees it
 	// (provider, label and status, with funding ORG_KEY): never its key hint.
-	GetChatProviderAccount(context.Context, *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error)
+	GetChatProviderAccount(context.Context, *v1.GetChatProviderAccountRequest) (*v1.GetChatProviderAccountResponse, error)
 	// GetPersonalFundingQuestion returns the chat's open question "continue on
 	// your own account?" (control-plane docs/design/org-provider-accounts.md
 	// §10), if any. Before a chat in an org moves from the org's accounts to
 	// the person's own, it parks and asks once, for every thread of the chat.
 	// The chat's owner only.
 	// forge:custom
-	GetPersonalFundingQuestion(context.Context, *connect.Request[v1.GetPersonalFundingQuestionRequest]) (*connect.Response[v1.GetPersonalFundingQuestionResponse], error)
+	GetPersonalFundingQuestion(context.Context, *v1.GetPersonalFundingQuestionRequest) (*v1.GetPersonalFundingQuestionResponse, error)
 	// ResolvePersonalFundingChoice answers the chat's question. USE_PERSONAL
 	// lets every waiting thread of the chat, sub-agents included, continue on
 	// the person's own account for as long as the answer lasts: until the
@@ -285,131 +221,247 @@ type ProviderAccountServiceHandler interface {
 	// for the org (provider.org_funding: use_personal or wait). Person-only, and
 	// the chat's owner only: nothing else can spend the person's own account in
 	// place of the org's.
-	ResolvePersonalFundingChoice(context.Context, *connect.Request[v1.ResolvePersonalFundingChoiceRequest]) (*connect.Response[v1.ResolvePersonalFundingChoiceResponse], error)
+	ResolvePersonalFundingChoice(context.Context, *v1.ResolvePersonalFundingChoiceRequest) (*v1.ResolvePersonalFundingChoiceResponse, error)
 }
 
-// NewProviderAccountServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewProviderAccountServiceHandler(svc ProviderAccountServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	providerAccountServiceMethods := v1.File_reliant_v1_provider_account_proto.Services().ByName("ProviderAccountService").Methods()
-	providerAccountServiceListProviderAccountsHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceListProviderAccountsProcedure,
-		svc.ListProviderAccounts,
-		connect.WithSchema(providerAccountServiceMethods.ByName("ListProviderAccounts")),
-		connect.WithHandlerOptions(opts...),
+// RegisterProviderAccountServiceHandler registers svc as the reliant.v1.ProviderAccountService
+// implementation on server.
+func RegisterProviderAccountServiceHandler(server *connect.Server, svc ProviderAccountServiceHandler) {
+	adapter := providerAccountServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: providerAccountServiceListProviderAccountsSpec(), Handler: adapter.listProviderAccounts},
+		connect.Method{Spec: providerAccountServiceUpdateProviderAccountSpec(), Handler: adapter.updateProviderAccount},
+		connect.Method{Spec: providerAccountServiceReorderProviderAccountsSpec(), Handler: adapter.reorderProviderAccounts},
+		connect.Method{Spec: providerAccountServiceDeleteProviderAccountSpec(), Handler: adapter.deleteProviderAccount},
+		connect.Method{Spec: providerAccountServiceAddProviderAPIKeySpec(), Handler: adapter.addProviderAPIKey},
+		connect.Method{Spec: providerAccountServiceRefreshProviderAccountUsageSpec(), Handler: adapter.refreshProviderAccountUsage},
+		connect.Method{Spec: providerAccountServiceGetChatProviderAccountSpec(), Handler: adapter.getChatProviderAccount},
+		connect.Method{Spec: providerAccountServiceGetPersonalFundingQuestionSpec(), Handler: adapter.getPersonalFundingQuestion},
+		connect.Method{Spec: providerAccountServiceResolvePersonalFundingChoiceSpec(), Handler: adapter.resolvePersonalFundingChoice},
 	)
-	providerAccountServiceUpdateProviderAccountHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceUpdateProviderAccountProcedure,
-		svc.UpdateProviderAccount,
-		connect.WithSchema(providerAccountServiceMethods.ByName("UpdateProviderAccount")),
-		connect.WithHandlerOptions(opts...),
-	)
-	providerAccountServiceReorderProviderAccountsHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceReorderProviderAccountsProcedure,
-		svc.ReorderProviderAccounts,
-		connect.WithSchema(providerAccountServiceMethods.ByName("ReorderProviderAccounts")),
-		connect.WithHandlerOptions(opts...),
-	)
-	providerAccountServiceDeleteProviderAccountHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceDeleteProviderAccountProcedure,
-		svc.DeleteProviderAccount,
-		connect.WithSchema(providerAccountServiceMethods.ByName("DeleteProviderAccount")),
-		connect.WithHandlerOptions(opts...),
-	)
-	providerAccountServiceAddProviderAPIKeyHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceAddProviderAPIKeyProcedure,
-		svc.AddProviderAPIKey,
-		connect.WithSchema(providerAccountServiceMethods.ByName("AddProviderAPIKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	providerAccountServiceRefreshProviderAccountUsageHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceRefreshProviderAccountUsageProcedure,
-		svc.RefreshProviderAccountUsage,
-		connect.WithSchema(providerAccountServiceMethods.ByName("RefreshProviderAccountUsage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	providerAccountServiceGetChatProviderAccountHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceGetChatProviderAccountProcedure,
-		svc.GetChatProviderAccount,
-		connect.WithSchema(providerAccountServiceMethods.ByName("GetChatProviderAccount")),
-		connect.WithHandlerOptions(opts...),
-	)
-	providerAccountServiceGetPersonalFundingQuestionHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceGetPersonalFundingQuestionProcedure,
-		svc.GetPersonalFundingQuestion,
-		connect.WithSchema(providerAccountServiceMethods.ByName("GetPersonalFundingQuestion")),
-		connect.WithHandlerOptions(opts...),
-	)
-	providerAccountServiceResolvePersonalFundingChoiceHandler := connect.NewUnaryHandler(
-		ProviderAccountServiceResolvePersonalFundingChoiceProcedure,
-		svc.ResolvePersonalFundingChoice,
-		connect.WithSchema(providerAccountServiceMethods.ByName("ResolvePersonalFundingChoice")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.ProviderAccountService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ProviderAccountServiceListProviderAccountsProcedure:
-			providerAccountServiceListProviderAccountsHandler.ServeHTTP(w, r)
-		case ProviderAccountServiceUpdateProviderAccountProcedure:
-			providerAccountServiceUpdateProviderAccountHandler.ServeHTTP(w, r)
-		case ProviderAccountServiceReorderProviderAccountsProcedure:
-			providerAccountServiceReorderProviderAccountsHandler.ServeHTTP(w, r)
-		case ProviderAccountServiceDeleteProviderAccountProcedure:
-			providerAccountServiceDeleteProviderAccountHandler.ServeHTTP(w, r)
-		case ProviderAccountServiceAddProviderAPIKeyProcedure:
-			providerAccountServiceAddProviderAPIKeyHandler.ServeHTTP(w, r)
-		case ProviderAccountServiceRefreshProviderAccountUsageProcedure:
-			providerAccountServiceRefreshProviderAccountUsageHandler.ServeHTTP(w, r)
-		case ProviderAccountServiceGetChatProviderAccountProcedure:
-			providerAccountServiceGetChatProviderAccountHandler.ServeHTTP(w, r)
-		case ProviderAccountServiceGetPersonalFundingQuestionProcedure:
-			providerAccountServiceGetPersonalFundingQuestionHandler.ServeHTTP(w, r)
-		case ProviderAccountServiceResolvePersonalFundingChoiceProcedure:
-			providerAccountServiceResolvePersonalFundingChoiceHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedProviderAccountServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedProviderAccountServiceHandler struct{}
 
-func (UnimplementedProviderAccountServiceHandler) ListProviderAccounts(context.Context, *connect.Request[v1.ListProviderAccountsRequest]) (*connect.Response[v1.ListProviderAccountsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.ListProviderAccounts is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) ListProviderAccounts(context.Context, *v1.ListProviderAccountsRequest) (*v1.ListProviderAccountsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.ListProviderAccounts is not implemented")
 }
 
-func (UnimplementedProviderAccountServiceHandler) UpdateProviderAccount(context.Context, *connect.Request[v1.UpdateProviderAccountRequest]) (*connect.Response[v1.UpdateProviderAccountResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.UpdateProviderAccount is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) UpdateProviderAccount(context.Context, *v1.UpdateProviderAccountRequest) (*v1.UpdateProviderAccountResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.UpdateProviderAccount is not implemented")
 }
 
-func (UnimplementedProviderAccountServiceHandler) ReorderProviderAccounts(context.Context, *connect.Request[v1.ReorderProviderAccountsRequest]) (*connect.Response[v1.ReorderProviderAccountsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.ReorderProviderAccounts is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) ReorderProviderAccounts(context.Context, *v1.ReorderProviderAccountsRequest) (*v1.ReorderProviderAccountsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.ReorderProviderAccounts is not implemented")
 }
 
-func (UnimplementedProviderAccountServiceHandler) DeleteProviderAccount(context.Context, *connect.Request[v1.DeleteProviderAccountRequest]) (*connect.Response[v1.DeleteProviderAccountResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.DeleteProviderAccount is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) DeleteProviderAccount(context.Context, *v1.DeleteProviderAccountRequest) (*v1.DeleteProviderAccountResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.DeleteProviderAccount is not implemented")
 }
 
-func (UnimplementedProviderAccountServiceHandler) AddProviderAPIKey(context.Context, *connect.Request[v1.AddProviderAPIKeyRequest]) (*connect.Response[v1.AddProviderAPIKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.AddProviderAPIKey is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) AddProviderAPIKey(context.Context, *v1.AddProviderAPIKeyRequest) (*v1.AddProviderAPIKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.AddProviderAPIKey is not implemented")
 }
 
-func (UnimplementedProviderAccountServiceHandler) RefreshProviderAccountUsage(context.Context, *connect.Request[v1.RefreshProviderAccountUsageRequest]) (*connect.Response[v1.RefreshProviderAccountUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.RefreshProviderAccountUsage is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) RefreshProviderAccountUsage(context.Context, *v1.RefreshProviderAccountUsageRequest) (*v1.RefreshProviderAccountUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.RefreshProviderAccountUsage is not implemented")
 }
 
-func (UnimplementedProviderAccountServiceHandler) GetChatProviderAccount(context.Context, *connect.Request[v1.GetChatProviderAccountRequest]) (*connect.Response[v1.GetChatProviderAccountResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.GetChatProviderAccount is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) GetChatProviderAccount(context.Context, *v1.GetChatProviderAccountRequest) (*v1.GetChatProviderAccountResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.GetChatProviderAccount is not implemented")
 }
 
-func (UnimplementedProviderAccountServiceHandler) GetPersonalFundingQuestion(context.Context, *connect.Request[v1.GetPersonalFundingQuestionRequest]) (*connect.Response[v1.GetPersonalFundingQuestionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.GetPersonalFundingQuestion is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) GetPersonalFundingQuestion(context.Context, *v1.GetPersonalFundingQuestionRequest) (*v1.GetPersonalFundingQuestionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.GetPersonalFundingQuestion is not implemented")
 }
 
-func (UnimplementedProviderAccountServiceHandler) ResolvePersonalFundingChoice(context.Context, *connect.Request[v1.ResolvePersonalFundingChoiceRequest]) (*connect.Response[v1.ResolvePersonalFundingChoiceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice is not implemented"))
+func (UnimplementedProviderAccountServiceHandler) ResolvePersonalFundingChoice(context.Context, *v1.ResolvePersonalFundingChoiceRequest) (*v1.ResolvePersonalFundingChoiceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ProviderAccountService.ResolvePersonalFundingChoice is not implemented")
+}
+
+type providerAccountServiceClient struct {
+	client *connect.Client
+}
+
+func (c *providerAccountServiceClient) ListProviderAccounts(ctx context.Context, req *v1.ListProviderAccountsRequest) (*v1.ListProviderAccountsResponse, error) {
+	var res v1.ListProviderAccountsResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceListProviderAccountsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerAccountServiceClient) UpdateProviderAccount(ctx context.Context, req *v1.UpdateProviderAccountRequest) (*v1.UpdateProviderAccountResponse, error) {
+	var res v1.UpdateProviderAccountResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceUpdateProviderAccountSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerAccountServiceClient) ReorderProviderAccounts(ctx context.Context, req *v1.ReorderProviderAccountsRequest) (*v1.ReorderProviderAccountsResponse, error) {
+	var res v1.ReorderProviderAccountsResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceReorderProviderAccountsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerAccountServiceClient) DeleteProviderAccount(ctx context.Context, req *v1.DeleteProviderAccountRequest) (*v1.DeleteProviderAccountResponse, error) {
+	var res v1.DeleteProviderAccountResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceDeleteProviderAccountSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerAccountServiceClient) AddProviderAPIKey(ctx context.Context, req *v1.AddProviderAPIKeyRequest) (*v1.AddProviderAPIKeyResponse, error) {
+	var res v1.AddProviderAPIKeyResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceAddProviderAPIKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerAccountServiceClient) RefreshProviderAccountUsage(ctx context.Context, req *v1.RefreshProviderAccountUsageRequest) (*v1.RefreshProviderAccountUsageResponse, error) {
+	var res v1.RefreshProviderAccountUsageResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceRefreshProviderAccountUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerAccountServiceClient) GetChatProviderAccount(ctx context.Context, req *v1.GetChatProviderAccountRequest) (*v1.GetChatProviderAccountResponse, error) {
+	var res v1.GetChatProviderAccountResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceGetChatProviderAccountSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerAccountServiceClient) GetPersonalFundingQuestion(ctx context.Context, req *v1.GetPersonalFundingQuestionRequest) (*v1.GetPersonalFundingQuestionResponse, error) {
+	var res v1.GetPersonalFundingQuestionResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceGetPersonalFundingQuestionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *providerAccountServiceClient) ResolvePersonalFundingChoice(ctx context.Context, req *v1.ResolvePersonalFundingChoiceRequest) (*v1.ResolvePersonalFundingChoiceResponse, error) {
+	var res v1.ResolvePersonalFundingChoiceResponse
+	if err := c.client.CallUnary(ctx, providerAccountServiceResolvePersonalFundingChoiceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type providerAccountServiceHandler struct{ svc ProviderAccountServiceHandler }
+
+func (h providerAccountServiceHandler) listProviderAccounts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListProviderAccountsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListProviderAccounts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerAccountServiceHandler) updateProviderAccount(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateProviderAccountRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateProviderAccount(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerAccountServiceHandler) reorderProviderAccounts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReorderProviderAccountsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReorderProviderAccounts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerAccountServiceHandler) deleteProviderAccount(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteProviderAccountRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteProviderAccount(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerAccountServiceHandler) addProviderAPIKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AddProviderAPIKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AddProviderAPIKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerAccountServiceHandler) refreshProviderAccountUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RefreshProviderAccountUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RefreshProviderAccountUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerAccountServiceHandler) getChatProviderAccount(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetChatProviderAccountRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetChatProviderAccount(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerAccountServiceHandler) getPersonalFundingQuestion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPersonalFundingQuestionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPersonalFundingQuestion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h providerAccountServiceHandler) resolvePersonalFundingChoice(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolvePersonalFundingChoiceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolvePersonalFundingChoice(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

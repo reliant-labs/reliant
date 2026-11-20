@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -32,22 +32,22 @@ func TestDeny_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DenyRequest, pb.DenyResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DenyRequest, pb.DenyResponse]{
 		{
 			Name:    "request_id is required",
-			Req:     connect.NewRequest(&pb.DenyRequest{}),
+			Req:     &pb.DenyRequest{},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an unknown approval is not found",
-			Req:     connect.NewRequest(&pb.DenyRequest{RequestId: "a-2"}),
+			Req:     &pb.DenyRequest{RequestId: "a-2"},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's approval is not found",
-			Req:     connect.NewRequest(&pb.DenyRequest{RequestId: "a-1"}),
+			Req:     &pb.DenyRequest{RequestId: "a-1"},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -37,10 +36,10 @@ import (
 // ends a detachment of the pair (UpsertProjectDaemon clears it).
 func (s *Service) AttachProjectToDaemon(
 	ctx context.Context,
-	req *connect.Request[pb.AttachProjectToDaemonRequest],
-) (*connect.Response[pb.AttachProjectToDaemonResponse], error) {
+	req *pb.AttachProjectToDaemonRequest,
+) (*pb.AttachProjectToDaemonResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	projectID, daemonID, path := req.Msg.ProjectId, req.Msg.DaemonId, strings.TrimSpace(req.Msg.Path)
+	projectID, daemonID, path := req.ProjectId, req.DaemonId, strings.TrimSpace(req.Path)
 	if projectID == "" || daemonID == "" || path == "" {
 		return nil, svcerr.InvalidArgument("project_id, daemon_id and path are required")
 	}
@@ -50,8 +49,8 @@ func (s *Service) AttachProjectToDaemon(
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("path must be absolute, got: %q", path))
 	}
 	var defaultBranch *string
-	if req.Msg.DefaultBranch != nil && strings.TrimSpace(*req.Msg.DefaultBranch) != "" {
-		branch := gitref.NormalizeBranchName(*req.Msg.DefaultBranch)
+	if req.DefaultBranch != nil && strings.TrimSpace(*req.DefaultBranch) != "" {
+		branch := gitref.NormalizeBranchName(*req.DefaultBranch)
 		if err := gitref.ValidateBranchName(branch); err != nil {
 			return nil, svcerr.InvalidArgument(err.Error())
 		}
@@ -104,8 +103,8 @@ func (s *Service) AttachProjectToDaemon(
 	projectfacts.LearnForgeName(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, project.ID, path)
 	projectfacts.RefreshForgeApps(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, project.ID, path, 0)
 
-	return connect.NewResponse(&pb.AttachProjectToDaemonResponse{
+	return &pb.AttachProjectToDaemonResponse{
 		ProjectDaemon: s.checkoutProto(ctx, justRecorded(project.ID, daemonID, path, defaultBranch)),
 		Warnings:      warnings,
-	}), nil
+	}, nil
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -16,18 +14,18 @@ import (
 // ListChatPlans lists plans associated with a chat
 func (s *Service) ListChatPlans(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListChatPlansRequest],
-) (*connect.Response[reliantv1.ListChatPlansResponse], error) {
+	req *reliantv1.ListChatPlansRequest,
+) (*reliantv1.ListChatPlansResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// Serves viewers of a shared chat (authz.WithViewerReads).
 	ctx = authz.WithViewerReads(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// The owner, or a viewer of a shared chat.
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -36,7 +34,7 @@ func (s *Service) ListChatPlans(
 	}
 
 	// List plans for the chat (across all threads)
-	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.Msg.ChatId)
+	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list plans"))
 	}
@@ -46,7 +44,7 @@ func (s *Service) ListChatPlans(
 	for i, p := range plans {
 		protoPlan := &reliantv1.ChatPlan{
 			Id:        p.ID,
-			ChatId:    req.Msg.ChatId,
+			ChatId:    req.ChatId,
 			Title:     p.Title,
 			Status:    planproto.PlanStatus(p.Status),
 			CreatedAt: p.CreatedAt.Format(time.RFC3339),
@@ -62,8 +60,8 @@ func (s *Service) ListChatPlans(
 		protoPlans[i] = protoPlan
 	}
 
-	return connect.NewResponse(&reliantv1.ListChatPlansResponse{
+	return &reliantv1.ListChatPlansResponse{
 		Plans: protoPlans,
 		Total: int32(len(plans)),
-	}), nil
+	}, nil
 }

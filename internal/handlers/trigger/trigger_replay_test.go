@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,17 +69,17 @@ func TestPreviewReplay_MapsInputsAndPromptWithoutTheFilter(t *testing.T) {
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
-	resp, err := env.svc.PreviewReplay(env.ctx, connect.NewRequest(&reliantv1.PreviewReplayRequest{
+	resp, err := env.svc.PreviewReplay(env.ctx, &reliantv1.PreviewReplayRequest{
 		ProjectId: env.projectID,
 		Workflow:  "triage",
 		Replay: &reliantv1.ReplayEvent{
 			TriggerName: "new-issue", Kind: "integration", Payload: issuePayloadStruct(t, 7),
 		},
-	}))
+	})
 	require.NoError(t, err)
 
-	assert.EqualValues(t, 7, resp.Msg.GetInputs()["issue_number"].GetNumberValue())
-	assert.Equal(t, "Triage #7.", resp.Msg.GetPrompt())
+	assert.EqualValues(t, 7, resp.GetInputs()["issue_number"].GetNumberValue())
+	assert.Equal(t, "Triage #7.", resp.GetPrompt())
 }
 
 // The edited payload is what is mapped; an event kind a trigger never receives
@@ -101,18 +101,18 @@ func TestPreviewReplay_RefusesWhatItCannotMap(t *testing.T) {
 		"a bad timestamp":            {&reliantv1.ReplayEvent{TriggerName: "new-issue", OccurredAt: "yesterday"}, connect.CodeInvalidArgument, "RFC3339"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := env.svc.PreviewReplay(env.ctx, connect.NewRequest(&reliantv1.PreviewReplayRequest{
+			_, err := env.svc.PreviewReplay(env.ctx, &reliantv1.PreviewReplayRequest{
 				ProjectId: env.projectID, Workflow: "triage", Replay: tc.replay,
-			}))
+			})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err), err.Error())
+			assert.Equal(t, tc.code, svcerr.CodeV2(err), err.Error())
 			assert.Contains(t, err.Error(), tc.reason)
 		})
 	}
 
-	_, err := env.svc.PreviewReplay(env.ctx, connect.NewRequest(&reliantv1.PreviewReplayRequest{ProjectId: env.projectID, Workflow: "triage"}))
+	_, err := env.svc.PreviewReplay(env.ctx, &reliantv1.PreviewReplayRequest{ProjectId: env.projectID, Workflow: "triage"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "replay is required")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "replay is required")
 }
 
 // A workflow the caller does not own does not resolve for them.
@@ -123,10 +123,10 @@ func TestPreviewReplay_ResolvesTheWorkflowForTheCaller(t *testing.T) {
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
 	other := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
-	_, err := env.svc.PreviewReplay(other, connect.NewRequest(&reliantv1.PreviewReplayRequest{
+	_, err := env.svc.PreviewReplay(other, &reliantv1.PreviewReplayRequest{
 		ProjectId: env.projectID, Workflow: "triage",
 		Replay: &reliantv1.ReplayEvent{TriggerName: "new-issue", Kind: "integration", Payload: issuePayloadStruct(t, 7)},
-	}))
+	})
 	require.Error(t, err)
 }
 
@@ -161,20 +161,20 @@ func TestListReplayEvents_ListsTheCallersActivationsEventsNewestFirst(t *testing
 	})
 	require.NoError(t, err)
 
-	resp, err := env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{
+	resp, err := env.svc.ListReplayEvents(env.ctx, &reliantv1.ListReplayEventsRequest{
 		ProjectId: &env.projectID, Workflow: "triage",
-	}))
+	})
 	require.NoError(t, err)
 
 	var gotIDs, gotTriggers []string
-	for _, c := range resp.Msg.GetEvents() {
+	for _, c := range resp.GetEvents() {
 		gotIDs = append(gotIDs, c.GetEvent().GetId())
 		gotTriggers = append(gotTriggers, c.GetTriggerName())
 	}
 	assert.Equal(t, []string{newest, middle, oldest}, gotIDs)
 	assert.Equal(t, []string{"new-issue", "nightly", "new-issue"}, gotTriggers)
-	assert.Equal(t, reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_INTEGRATION, resp.Msg.GetEvents()[0].GetEvent().GetKind())
-	assert.EqualValues(t, 3, resp.Msg.GetEvents()[0].GetEvent().GetPayload().AsMap()["n"])
+	assert.Equal(t, reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_INTEGRATION, resp.GetEvents()[0].GetEvent().GetKind())
+	assert.EqualValues(t, 3, resp.GetEvents()[0].GetEvent().GetPayload().AsMap()["n"])
 }
 
 func TestListReplayEvents_LimitsAndHandlesNoActivations(t *testing.T) {
@@ -183,22 +183,22 @@ func TestListReplayEvents_LimitsAndHandlesNoActivations(t *testing.T) {
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
-	empty, err := env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID, Workflow: "triage"}))
+	empty, err := env.svc.ListReplayEvents(env.ctx, &reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID, Workflow: "triage"})
 	require.NoError(t, err)
-	assert.Empty(t, empty.Msg.GetEvents(), "a workflow nobody enabled has no events, and that is not an error")
+	assert.Empty(t, empty.GetEvents(), "a workflow nobody enabled has no events, and that is not an error")
 
 	nightly := env.create(t, env.activation("nightly", nil))
 	base := time.Date(2026, 10, 20, 9, 0, 0, 0, time.UTC)
 	for i := 0; i < 5; i++ {
 		env.seedReplayEvent(t, nightly.Id, base.Add(time.Duration(i)*time.Hour), core.TriggerEventKindSchedule, map[string]any{})
 	}
-	limited, err := env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID, Workflow: "triage", Limit: 2}))
+	limited, err := env.svc.ListReplayEvents(env.ctx, &reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID, Workflow: "triage", Limit: 2})
 	require.NoError(t, err)
-	assert.Len(t, limited.Msg.GetEvents(), 2)
+	assert.Len(t, limited.GetEvents(), 2)
 
-	_, err = env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID}))
+	_, err = env.svc.ListReplayEvents(env.ctx, &reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "workflow is required")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "workflow is required")
 }
 
 func strPtr(s string) *string { return &s }

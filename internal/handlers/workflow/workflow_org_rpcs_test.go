@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -65,55 +65,55 @@ func TestEveryWorkflowMutationActsInItsOrg(t *testing.T) {
 	var svc *Service
 	calls := map[string]func(ctx context.Context) error{
 		"SaveWorkflow": func(ctx context.Context) error {
-			_, err := svc.SaveWorkflow(ctx, connect.NewRequest(&reliantv1.SaveWorkflowRequest{
+			_, err := svc.SaveWorkflow(ctx, &reliantv1.SaveWorkflowRequest{
 				ProjectId: projectID, DraftId: &draft.ID, Workflow: mustParse(t, edited),
-			}))
+			})
 			return err
 		},
 		"SaveWorkflow over its name": func(ctx context.Context) error {
-			_, err := svc.SaveWorkflow(ctx, connect.NewRequest(&reliantv1.SaveWorkflowRequest{
+			_, err := svc.SaveWorkflow(ctx, &reliantv1.SaveWorkflowRequest{
 				ProjectId: projectID, Workflow: mustParse(t, edited),
-			}))
+			})
 			return err
 		},
 		"DeleteWorkflow": func(ctx context.Context) error {
-			_, err := svc.DeleteWorkflow(ctx, connect.NewRequest(&reliantv1.DeleteWorkflowRequest{ProjectId: projectID, Name: "acme-flow"}))
+			_, err := svc.DeleteWorkflow(ctx, &reliantv1.DeleteWorkflowRequest{ProjectId: projectID, Name: "acme-flow"})
 			return err
 		},
 		"ImportWorkflow": func(ctx context.Context) error {
-			_, err := svc.ImportWorkflow(ctx, connect.NewRequest(&reliantv1.ImportWorkflowRequest{
+			_, err := svc.ImportWorkflow(ctx, &reliantv1.ImportWorkflowRequest{
 				ProjectId: projectID, YamlContent: []byte(edited), Scope: reliantv1.ConfigScope_CONFIG_SCOPE_GLOBAL, Overwrite: true,
-			}))
+			})
 			return err
 		},
 		"SetWorkflowVisibility": func(ctx context.Context) error {
-			_, err := svc.SetWorkflowVisibility(ctx, connect.NewRequest(&reliantv1.SetWorkflowVisibilityRequest{
+			_, err := svc.SetWorkflowVisibility(ctx, &reliantv1.SetWorkflowVisibilityRequest{
 				ProjectId: projectID, Slug: "acme-flow", IsHidden: true,
-			}))
+			})
 			return err
 		},
 		"CopyWorkflow": func(ctx context.Context) error {
-			_, err := svc.CopyWorkflow(ctx, connect.NewRequest(&reliantv1.CopyWorkflowRequest{ProjectId: projectID, SourceSlug: "acme-flow"}))
+			_, err := svc.CopyWorkflow(ctx, &reliantv1.CopyWorkflowRequest{ProjectId: projectID, SourceSlug: "acme-flow"})
 			return err
 		},
 		"CreateWorkflowDraft": func(ctx context.Context) error {
-			_, err := svc.CreateWorkflowDraft(ctx, connect.NewRequest(&reliantv1.CreateWorkflowDraftRequest{
+			_, err := svc.CreateWorkflowDraft(ctx, &reliantv1.CreateWorkflowDraftRequest{
 				ProjectId: projectID, Title: "In Acme", OrgId: &acme,
-			}))
+			})
 			return err
 		},
 		// The caller's own saved workflow is no orphan of acme's; what this
 		// case pins is that a caller outside acme cannot reach it at all.
 		"ForkOrphanedWorkflow": func(ctx context.Context) error {
-			_, err := svc.ForkOrphanedWorkflow(ctx, connect.NewRequest(&reliantv1.ForkOrphanedWorkflowRequest{
+			_, err := svc.ForkOrphanedWorkflow(ctx, &reliantv1.ForkOrphanedWorkflowRequest{
 				WorkflowId: draft.ID, ProjectId: projectID,
-			}))
+			})
 			return err
 		},
 		"SetWorkflowStatus": func(ctx context.Context) error {
-			_, err := svc.SetWorkflowStatus(ctx, connect.NewRequest(&reliantv1.SetWorkflowStatusRequest{
+			_, err := svc.SetWorkflowStatus(ctx, &reliantv1.SetWorkflowStatusRequest{
 				ProjectId: projectID, DraftId: draft.ID, Status: reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
-			}))
+			})
 			return err
 		},
 	}
@@ -153,7 +153,7 @@ func TestEveryWorkflowMutationActsInItsOrg(t *testing.T) {
 		for name, call := range calls {
 			before := snapshot()
 			err := call(caller.ctx)
-			code := svcerr.Code(err)
+			code := svcerr.CodeV2(err)
 			require.Truef(t, code == connect.CodeNotFound || code == connect.CodePermissionDenied || code == connect.CodeAlreadyExists,
 				"%s: %s was not refused for its org: %v", who, name, err)
 			require.Equal(t, before, snapshot(), "%s: %s changed what is stored", who, name)

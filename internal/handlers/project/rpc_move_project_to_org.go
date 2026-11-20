@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -52,8 +51,8 @@ var (
 // key answers the move it made, wherever that move is now.
 func (s *Service) MoveProjectToOrg(
 	ctx context.Context,
-	req *connect.Request[pb.MoveProjectToOrgRequest],
-) (*connect.Response[pb.MoveProjectToOrgResponse], error) {
+	req *pb.MoveProjectToOrgRequest,
+) (*pb.MoveProjectToOrgResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	if !MovesAllowed(s.deps.OrgRollout) || s.deps.Moves == nil {
 		return nil, svcerr.WithReason(svcerr.FailedPrecondition(
@@ -61,7 +60,7 @@ func (s *Service) MoveProjectToOrg(
 	}
 	// A retried request is the move it made, shown as GetProjectOrgMove
 	// would show it.
-	if prior, err := s.deps.Repo.FindProjectOrgMoveByRequest(ctx, userID, req.Msg.GetRequestKey()); err == nil {
+	if prior, err := s.deps.Repo.FindProjectOrgMoveByRequest(ctx, userID, req.GetRequestKey()); err == nil {
 		if !canReadMove(ctx, userID, prior) {
 			return nil, svcerr.NotFound("project move")
 		}
@@ -70,7 +69,7 @@ func (s *Service) MoveProjectToOrg(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the move"))
 	}
 
-	projectID, to := req.Msg.GetProjectId(), req.Msg.GetToOrgId()
+	projectID, to := req.GetProjectId(), req.GetToOrgId()
 	project, err := s.deps.Repo.GetProject(ctx, projectID)
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
@@ -79,7 +78,7 @@ func (s *Service) MoveProjectToOrg(
 	if err != nil {
 		return nil, projectMoveRefusal(ctx, err)
 	}
-	if from != req.Msg.GetExpectedFromOrgId() {
+	if from != req.GetExpectedFromOrgId() {
 		return nil, svcerr.WithReason(svcerr.FailedPrecondition(
 			"the project is no longer in the organization you moved it from; reload and try again"), ReasonOrgChanged)
 	}
@@ -107,7 +106,7 @@ func (s *Service) MoveProjectToOrg(
 		ActorUserID: userID,
 		FromOrgID:   from,
 		ToOrgID:     to,
-		RequestKey:  req.Msg.GetRequestKey(),
+		RequestKey:  req.GetRequestKey(),
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record the move"))
@@ -117,7 +116,7 @@ func (s *Service) MoveProjectToOrg(
 
 // followMove starts the move's saga (a no-op once started) and waits up to
 // moveWait for it to commit or stop, answering the move as it is then.
-func (s *Service) followMove(ctx context.Context, move *core.ProjectOrgMove) (*connect.Response[pb.MoveProjectToOrgResponse], error) {
+func (s *Service) followMove(ctx context.Context, move *core.ProjectOrgMove) (*pb.MoveProjectToOrgResponse, error) {
 	if move.State.Open() {
 		// MoveProjectToOrg refuses before recording a move when Moves is nil;
 		// a move already recorded cannot be started without it either.
@@ -141,7 +140,7 @@ func (s *Service) followMove(ctx context.Context, move *core.ProjectOrgMove) (*c
 		}
 		move = next
 	}
-	return connect.NewResponse(&pb.MoveProjectToOrgResponse{Move: projectOrgMoveProto(move)}), nil
+	return &pb.MoveProjectToOrgResponse{Move: projectOrgMoveProto(move)}, nil
 }
 
 // settled: the move committed (moved, completed) or stopped (aborted).

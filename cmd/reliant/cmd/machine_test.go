@@ -3,13 +3,16 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -32,32 +35,32 @@ type fakeDaemons struct {
 	renamed []string
 }
 
-func (f *fakeDaemons) UpdateDaemon(_ context.Context, req *connect.Request[daemonv1.UpdateDaemonRequest]) (*connect.Response[daemonv1.UpdateDaemonResponse], error) {
-	if req.Msg.GetNewName() == "default" {
-		return nil, connect.NewError(connect.CodeAlreadyExists, errors.New(`a machine named "default" already exists; choose another name`))
+func (f *fakeDaemons) UpdateDaemon(_ context.Context, req *daemonv1.UpdateDaemonRequest) (*daemonv1.UpdateDaemonResponse, error) {
+	if req.GetNewName() == "default" {
+		return nil, connect.NewError(connect.CodeAlreadyExists, `a machine named "default" already exists; choose another name`)
 	}
-	f.renamed = append(f.renamed, req.Msg.GetDaemonId()+"="+req.Msg.GetNewName())
-	return connect.NewResponse(&daemonv1.UpdateDaemonResponse{}), nil
+	f.renamed = append(f.renamed, req.GetDaemonId()+"="+req.GetNewName())
+	return &daemonv1.UpdateDaemonResponse{}, nil
 }
 
-func (f *fakeDaemons) ListDaemons(_ context.Context, req *connect.Request[daemonv1.ListDaemonsRequest]) (*connect.Response[daemonv1.ListDaemonsResponse], error) {
-	f.bearer = req.Header().Get("Authorization")
-	return connect.NewResponse(&daemonv1.ListDaemonsResponse{Daemons: []*controlplanev1.Daemon{
+func (f *fakeDaemons) ListDaemons(ctx context.Context, req *daemonv1.ListDaemonsRequest) (*daemonv1.ListDaemonsResponse, error) {
+	f.bearer = serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")
+	return &daemonv1.ListDaemonsResponse{Daemons: []*controlplanev1.Daemon{
 		{Id: "d-cicd", Name: "cicd", DaemonType: controlplanev1.DaemonType_DAEMON_TYPE_MANAGED,
 			Status: controlplanev1.DaemonStatus_DAEMON_STATUS_SUSPENDED, Size: controlplanev1.DaemonSize_DAEMON_SIZE_XL},
 		{Id: "d-default", Name: "default", DaemonType: controlplanev1.DaemonType_DAEMON_TYPE_MANAGED,
 			Status: controlplanev1.DaemonStatus_DAEMON_STATUS_ACTIVE, Size: controlplanev1.DaemonSize_DAEMON_SIZE_L},
-	}}), nil
+	}}, nil
 }
 
-func (f *fakeDaemons) ResizeDaemon(_ context.Context, req *connect.Request[daemonv1.ResizeDaemonRequest]) (*connect.Response[daemonv1.ResizeDaemonResponse], error) {
-	f.resized = append(f.resized, req.Msg.GetDaemonId()+"="+machineSizeName(req.Msg.GetSize()))
-	return connect.NewResponse(&daemonv1.ResizeDaemonResponse{}), nil
+func (f *fakeDaemons) ResizeDaemon(_ context.Context, req *daemonv1.ResizeDaemonRequest) (*daemonv1.ResizeDaemonResponse, error) {
+	f.resized = append(f.resized, req.GetDaemonId()+"="+machineSizeName(req.GetSize()))
+	return &daemonv1.ResizeDaemonResponse{}, nil
 }
 
-func (f *fakeDaemons) ResumeDaemon(_ context.Context, req *connect.Request[daemonv1.ResumeDaemonRequest]) (*connect.Response[daemonv1.ResumeDaemonResponse], error) {
-	f.resumed = append(f.resumed, req.Msg.GetDaemonId())
-	return connect.NewResponse(&daemonv1.ResumeDaemonResponse{}), nil
+func (f *fakeDaemons) ResumeDaemon(_ context.Context, req *daemonv1.ResumeDaemonRequest) (*daemonv1.ResumeDaemonResponse, error) {
+	f.resumed = append(f.resumed, req.GetDaemonId())
+	return &daemonv1.ResumeDaemonResponse{}, nil
 }
 
 // The CLI finds the control plane the way login does (the API server's RFC
@@ -66,8 +69,9 @@ func TestMachineCommandsCallTheControlPlaneAsTheLogin(t *testing.T) {
 	isolateControlPlaneEnv(t)
 	fake := &fakeDaemons{}
 	mux := http.NewServeMux()
-	path, handler := controlplanev1connect.NewDaemonServiceHandler(fake)
-	mux.Handle(path, handler)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	controlplanev1connect.RegisterDaemonServiceHandler(rpcServer, fake)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	// One origin plays both the API server (metadata) and the control plane.
@@ -128,23 +132,23 @@ type fakeRegistry struct {
 	deleted  []string
 }
 
-func (f *fakeRegistry) ListDaemons(_ context.Context, req *connect.Request[reliantv1.ListDaemonsRequest]) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
-	f.bearer = req.Header().Get("Authorization")
-	return connect.NewResponse(&reliantv1.ListDaemonsResponse{Daemons: []*reliantv1.DaemonInfo{
+func (f *fakeRegistry) ListDaemons(ctx context.Context, req *reliantv1.ListDaemonsRequest) (*reliantv1.ListDaemonsResponse, error) {
+	f.bearer = serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")
+	return &reliantv1.ListDaemonsResponse{Daemons: []*reliantv1.DaemonInfo{
 		{DaemonId: "d-box", Name: "build-box", Hostname: "box.lan", Labels: f.labels["d-box"]},
 		{DaemonId: "d-laptop", Hostname: "laptop", Labels: f.labels["d-laptop"]},
-	}}), nil
+	}}, nil
 }
 
-func (f *fakeRegistry) SetMachineLabels(_ context.Context, req *connect.Request[reliantv1.SetMachineLabelsRequest]) (*connect.Response[reliantv1.SetMachineLabelsResponse], error) {
+func (f *fakeRegistry) SetMachineLabels(_ context.Context, req *reliantv1.SetMachineLabelsRequest) (*reliantv1.SetMachineLabelsResponse, error) {
 	f.setCalls++
-	f.labels[req.Msg.GetDaemonId()] = req.Msg.GetLabels()
-	return connect.NewResponse(&reliantv1.SetMachineLabelsResponse{Daemon: &reliantv1.DaemonInfo{
-		DaemonId: req.Msg.GetDaemonId(), Labels: req.Msg.GetLabels(),
-	}}), nil
+	f.labels[req.GetDaemonId()] = req.GetLabels()
+	return &reliantv1.SetMachineLabelsResponse{Daemon: &reliantv1.DaemonInfo{
+		DaemonId: req.GetDaemonId(), Labels: req.GetLabels(),
+	}}, nil
 }
 
-func (f *fakeRegistry) ListMachinePools(context.Context, *connect.Request[reliantv1.ListMachinePoolsRequest]) (*connect.Response[reliantv1.ListMachinePoolsResponse], error) {
+func (f *fakeRegistry) ListMachinePools(context.Context, *reliantv1.ListMachinePoolsRequest) (*reliantv1.ListMachinePoolsResponse, error) {
 	var out []*reliantv1.MachinePool
 	for _, name := range []string{"gate", "pipeline"} {
 		spec, ok := f.pools[name]
@@ -158,22 +162,22 @@ func (f *fakeRegistry) ListMachinePools(context.Context, *connect.Request[relian
 		}
 		out = append(out, p)
 	}
-	return connect.NewResponse(&reliantv1.ListMachinePoolsResponse{Pools: out}), nil
+	return &reliantv1.ListMachinePoolsResponse{Pools: out}, nil
 }
 
-func (f *fakeRegistry) PutMachinePool(_ context.Context, req *connect.Request[reliantv1.PutMachinePoolRequest]) (*connect.Response[reliantv1.PutMachinePoolResponse], error) {
-	spec := req.Msg.GetPool()
+func (f *fakeRegistry) PutMachinePool(_ context.Context, req *reliantv1.PutMachinePoolRequest) (*reliantv1.PutMachinePoolResponse, error) {
+	spec := req.GetPool()
 	f.puts = append(f.puts, proto.Clone(spec).(*reliantv1.MachinePoolSpec))
 	f.pools[spec.GetName()] = spec
-	return connect.NewResponse(&reliantv1.PutMachinePoolResponse{Pool: &reliantv1.MachinePool{Id: "mp-" + spec.GetName(), Spec: spec}}), nil
+	return &reliantv1.PutMachinePoolResponse{Pool: &reliantv1.MachinePool{Id: "mp-" + spec.GetName(), Spec: spec}}, nil
 }
 
-func (f *fakeRegistry) DeleteMachinePool(_ context.Context, req *connect.Request[reliantv1.DeleteMachinePoolRequest]) (*connect.Response[reliantv1.DeleteMachinePoolResponse], error) {
-	if req.Msg.GetName() == "pipeline" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("a trigger still runs on machine pool pipeline"))
+func (f *fakeRegistry) DeleteMachinePool(_ context.Context, req *reliantv1.DeleteMachinePoolRequest) (*reliantv1.DeleteMachinePoolResponse, error) {
+	if req.GetName() == "pipeline" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "a trigger still runs on machine pool pipeline")
 	}
-	f.deleted = append(f.deleted, req.Msg.GetName())
-	return connect.NewResponse(&reliantv1.DeleteMachinePoolResponse{}), nil
+	f.deleted = append(f.deleted, req.GetName())
+	return &reliantv1.DeleteMachinePoolResponse{}, nil
 }
 
 // label and pool talk to the Reliant API (not the control plane) as the
@@ -189,7 +193,9 @@ func TestMachineLabelAndPoolCommands(t *testing.T) {
 		}},
 	}
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewDaemonRegistryServiceHandler(fake))
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterDaemonRegistryServiceHandler(server, fake)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	t.Setenv(envServerURL, srv.URL)

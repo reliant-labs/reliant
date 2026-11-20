@@ -5,49 +5,82 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/storage_browser/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// StorageBrowserServiceName is the fully-qualified name of the StorageBrowserService service.
 	StorageBrowserServiceName = "controlplane.v1.StorageBrowserService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// StorageBrowserServiceListBrowsableBucketsProcedure is the fully-qualified name of the
+	// StorageBrowserServiceListBrowsableBucketsProcedure is the procedure name of the
 	// StorageBrowserService's ListBrowsableBuckets RPC.
 	StorageBrowserServiceListBrowsableBucketsProcedure = "/controlplane.v1.StorageBrowserService/ListBrowsableBuckets"
-	// StorageBrowserServiceListObjectsProcedure is the fully-qualified name of the
-	// StorageBrowserService's ListObjects RPC.
+	// StorageBrowserServiceListObjectsProcedure is the procedure name of the StorageBrowserService's
+	// ListObjects RPC.
 	StorageBrowserServiceListObjectsProcedure = "/controlplane.v1.StorageBrowserService/ListObjects"
-	// StorageBrowserServiceGetObjectMetadataProcedure is the fully-qualified name of the
+	// StorageBrowserServiceGetObjectMetadataProcedure is the procedure name of the
 	// StorageBrowserService's GetObjectMetadata RPC.
 	StorageBrowserServiceGetObjectMetadataProcedure = "/controlplane.v1.StorageBrowserService/GetObjectMetadata"
-	// StorageBrowserServicePresignObjectDownloadProcedure is the fully-qualified name of the
+	// StorageBrowserServicePresignObjectDownloadProcedure is the procedure name of the
 	// StorageBrowserService's PresignObjectDownload RPC.
 	StorageBrowserServicePresignObjectDownloadProcedure = "/controlplane.v1.StorageBrowserService/PresignObjectDownload"
-	// StorageBrowserServicePreviewObjectProcedure is the fully-qualified name of the
-	// StorageBrowserService's PreviewObject RPC.
+	// StorageBrowserServicePreviewObjectProcedure is the procedure name of the StorageBrowserService's
+	// PreviewObject RPC.
 	StorageBrowserServicePreviewObjectProcedure = "/controlplane.v1.StorageBrowserService/PreviewObject"
+)
+
+var (
+	storageBrowserServiceListBrowsableBucketsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_storage_browser_v1_storage_browser_proto.Services().ByName("StorageBrowserService").Methods().ByName("ListBrowsableBuckets"),
+			Procedure:        StorageBrowserServiceListBrowsableBucketsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	storageBrowserServiceListObjectsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_storage_browser_v1_storage_browser_proto.Services().ByName("StorageBrowserService").Methods().ByName("ListObjects"),
+			Procedure:        StorageBrowserServiceListObjectsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	storageBrowserServiceGetObjectMetadataSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_storage_browser_v1_storage_browser_proto.Services().ByName("StorageBrowserService").Methods().ByName("GetObjectMetadata"),
+			Procedure:        StorageBrowserServiceGetObjectMetadataProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	storageBrowserServicePresignObjectDownloadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_storage_browser_v1_storage_browser_proto.Services().ByName("StorageBrowserService").Methods().ByName("PresignObjectDownload"),
+			Procedure:  StorageBrowserServicePresignObjectDownloadProcedure,
+		}
+	})
+	storageBrowserServicePreviewObjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_storage_browser_v1_storage_browser_proto.Services().ByName("StorageBrowserService").Methods().ByName("PreviewObject"),
+			Procedure:        StorageBrowserServicePreviewObjectProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // StorageBrowserServiceClient is a client for the controlplane.v1.StorageBrowserService service.
@@ -63,7 +96,7 @@ type StorageBrowserServiceClient interface {
 	// ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3),
 	// FailedPrecondition reason "shape_unknown", Unavailable (browsing is not
 	// configured on this server).
-	ListBrowsableBuckets(context.Context, *connect.Request[v1.ListBrowsableBucketsRequest]) (*connect.Response[v1.ListBrowsableBucketsResponse], error)
+	ListBrowsableBuckets(context.Context, *v1.ListBrowsableBucketsRequest) (*v1.ListBrowsableBucketsResponse, error)
 	// ListObjects returns one level of a bucket under prefix: the common
 	// prefixes ("folders") and the objects directly under it, paged, in the
 	// backend's lexical order. The delimiter is always "/": a listing is never
@@ -78,20 +111,20 @@ type StorageBrowserServiceClient interface {
 	// audit_log row, written for every call, is the per-read record.
 	//
 	// ERRORS: every admission step.
-	ListObjects(context.Context, *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error)
+	ListObjects(context.Context, *v1.ListObjectsRequest) (*v1.ListObjectsResponse, error)
 	// GetObjectMetadata returns one object's metadata (a HEAD): size, content
 	// type, last-modified, ETag and user metadata, and which preview the object
 	// qualifies for.
 	//
 	// ERRORS: every admission step.
-	GetObjectMetadata(context.Context, *connect.Request[v1.GetObjectMetadataRequest]) (*connect.Response[v1.GetObjectMetadataResponse], error)
+	GetObjectMetadata(context.Context, *v1.GetObjectMetadataRequest) (*v1.GetObjectMetadataResponse, error)
 	// PresignObjectDownload mints a 5-minute presigned GET for one object, as an
 	// attachment: Content-Disposition attachment with the key's basename, and
 	// response-content-type application/octet-stream whatever the stored type.
 	// Each call is a new URL, a new audit_log row and a new activity event.
 	//
 	// ERRORS: every admission step.
-	PresignObjectDownload(context.Context, *connect.Request[v1.PresignObjectDownloadRequest]) (*connect.Response[v1.PresignObjectDownloadResponse], error)
+	PresignObjectDownload(context.Context, *v1.PresignObjectDownloadRequest) (*v1.PresignObjectDownloadResponse, error)
 	// PreviewObject returns what the console needs to show one object inline.
 	// The server stats the object first and refuses one over its cap:
 	//   - an image (png, jpeg, gif, webp; never SVG) up to 10 MiB: a 2-minute
@@ -104,89 +137,13 @@ type StorageBrowserServiceClient interface {
 	// field says in advance which applies.
 	//
 	// ERRORS: every admission step, plus the two above.
-	PreviewObject(context.Context, *connect.Request[v1.PreviewObjectRequest]) (*connect.Response[v1.PreviewObjectResponse], error)
+	PreviewObject(context.Context, *v1.PreviewObjectRequest) (*v1.PreviewObjectResponse, error)
 }
 
 // NewStorageBrowserServiceClient constructs a client for the controlplane.v1.StorageBrowserService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewStorageBrowserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) StorageBrowserServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	storageBrowserServiceMethods := v1.File_services_storage_browser_v1_storage_browser_proto.Services().ByName("StorageBrowserService").Methods()
-	return &storageBrowserServiceClient{
-		listBrowsableBuckets: connect.NewClient[v1.ListBrowsableBucketsRequest, v1.ListBrowsableBucketsResponse](
-			httpClient,
-			baseURL+StorageBrowserServiceListBrowsableBucketsProcedure,
-			connect.WithSchema(storageBrowserServiceMethods.ByName("ListBrowsableBuckets")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listObjects: connect.NewClient[v1.ListObjectsRequest, v1.ListObjectsResponse](
-			httpClient,
-			baseURL+StorageBrowserServiceListObjectsProcedure,
-			connect.WithSchema(storageBrowserServiceMethods.ByName("ListObjects")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		getObjectMetadata: connect.NewClient[v1.GetObjectMetadataRequest, v1.GetObjectMetadataResponse](
-			httpClient,
-			baseURL+StorageBrowserServiceGetObjectMetadataProcedure,
-			connect.WithSchema(storageBrowserServiceMethods.ByName("GetObjectMetadata")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		presignObjectDownload: connect.NewClient[v1.PresignObjectDownloadRequest, v1.PresignObjectDownloadResponse](
-			httpClient,
-			baseURL+StorageBrowserServicePresignObjectDownloadProcedure,
-			connect.WithSchema(storageBrowserServiceMethods.ByName("PresignObjectDownload")),
-			connect.WithClientOptions(opts...),
-		),
-		previewObject: connect.NewClient[v1.PreviewObjectRequest, v1.PreviewObjectResponse](
-			httpClient,
-			baseURL+StorageBrowserServicePreviewObjectProcedure,
-			connect.WithSchema(storageBrowserServiceMethods.ByName("PreviewObject")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// storageBrowserServiceClient implements StorageBrowserServiceClient.
-type storageBrowserServiceClient struct {
-	listBrowsableBuckets  *connect.Client[v1.ListBrowsableBucketsRequest, v1.ListBrowsableBucketsResponse]
-	listObjects           *connect.Client[v1.ListObjectsRequest, v1.ListObjectsResponse]
-	getObjectMetadata     *connect.Client[v1.GetObjectMetadataRequest, v1.GetObjectMetadataResponse]
-	presignObjectDownload *connect.Client[v1.PresignObjectDownloadRequest, v1.PresignObjectDownloadResponse]
-	previewObject         *connect.Client[v1.PreviewObjectRequest, v1.PreviewObjectResponse]
-}
-
-// ListBrowsableBuckets calls controlplane.v1.StorageBrowserService.ListBrowsableBuckets.
-func (c *storageBrowserServiceClient) ListBrowsableBuckets(ctx context.Context, req *connect.Request[v1.ListBrowsableBucketsRequest]) (*connect.Response[v1.ListBrowsableBucketsResponse], error) {
-	return c.listBrowsableBuckets.CallUnary(ctx, req)
-}
-
-// ListObjects calls controlplane.v1.StorageBrowserService.ListObjects.
-func (c *storageBrowserServiceClient) ListObjects(ctx context.Context, req *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error) {
-	return c.listObjects.CallUnary(ctx, req)
-}
-
-// GetObjectMetadata calls controlplane.v1.StorageBrowserService.GetObjectMetadata.
-func (c *storageBrowserServiceClient) GetObjectMetadata(ctx context.Context, req *connect.Request[v1.GetObjectMetadataRequest]) (*connect.Response[v1.GetObjectMetadataResponse], error) {
-	return c.getObjectMetadata.CallUnary(ctx, req)
-}
-
-// PresignObjectDownload calls controlplane.v1.StorageBrowserService.PresignObjectDownload.
-func (c *storageBrowserServiceClient) PresignObjectDownload(ctx context.Context, req *connect.Request[v1.PresignObjectDownloadRequest]) (*connect.Response[v1.PresignObjectDownloadResponse], error) {
-	return c.presignObjectDownload.CallUnary(ctx, req)
-}
-
-// PreviewObject calls controlplane.v1.StorageBrowserService.PreviewObject.
-func (c *storageBrowserServiceClient) PreviewObject(ctx context.Context, req *connect.Request[v1.PreviewObjectRequest]) (*connect.Response[v1.PreviewObjectResponse], error) {
-	return c.previewObject.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewStorageBrowserServiceClient(client *connect.Client) StorageBrowserServiceClient {
+	return &storageBrowserServiceClient{client: client}
 }
 
 // StorageBrowserServiceHandler is an implementation of the controlplane.v1.StorageBrowserService
@@ -203,7 +160,7 @@ type StorageBrowserServiceHandler interface {
 	// ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3),
 	// FailedPrecondition reason "shape_unknown", Unavailable (browsing is not
 	// configured on this server).
-	ListBrowsableBuckets(context.Context, *connect.Request[v1.ListBrowsableBucketsRequest]) (*connect.Response[v1.ListBrowsableBucketsResponse], error)
+	ListBrowsableBuckets(context.Context, *v1.ListBrowsableBucketsRequest) (*v1.ListBrowsableBucketsResponse, error)
 	// ListObjects returns one level of a bucket under prefix: the common
 	// prefixes ("folders") and the objects directly under it, paged, in the
 	// backend's lexical order. The delimiter is always "/": a listing is never
@@ -218,20 +175,20 @@ type StorageBrowserServiceHandler interface {
 	// audit_log row, written for every call, is the per-read record.
 	//
 	// ERRORS: every admission step.
-	ListObjects(context.Context, *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error)
+	ListObjects(context.Context, *v1.ListObjectsRequest) (*v1.ListObjectsResponse, error)
 	// GetObjectMetadata returns one object's metadata (a HEAD): size, content
 	// type, last-modified, ETag and user metadata, and which preview the object
 	// qualifies for.
 	//
 	// ERRORS: every admission step.
-	GetObjectMetadata(context.Context, *connect.Request[v1.GetObjectMetadataRequest]) (*connect.Response[v1.GetObjectMetadataResponse], error)
+	GetObjectMetadata(context.Context, *v1.GetObjectMetadataRequest) (*v1.GetObjectMetadataResponse, error)
 	// PresignObjectDownload mints a 5-minute presigned GET for one object, as an
 	// attachment: Content-Disposition attachment with the key's basename, and
 	// response-content-type application/octet-stream whatever the stored type.
 	// Each call is a new URL, a new audit_log row and a new activity event.
 	//
 	// ERRORS: every admission step.
-	PresignObjectDownload(context.Context, *connect.Request[v1.PresignObjectDownloadRequest]) (*connect.Response[v1.PresignObjectDownloadResponse], error)
+	PresignObjectDownload(context.Context, *v1.PresignObjectDownloadRequest) (*v1.PresignObjectDownloadResponse, error)
 	// PreviewObject returns what the console needs to show one object inline.
 	// The server stats the object first and refuses one over its cap:
 	//   - an image (png, jpeg, gif, webp; never SVG) up to 10 MiB: a 2-minute
@@ -244,87 +201,147 @@ type StorageBrowserServiceHandler interface {
 	// field says in advance which applies.
 	//
 	// ERRORS: every admission step, plus the two above.
-	PreviewObject(context.Context, *connect.Request[v1.PreviewObjectRequest]) (*connect.Response[v1.PreviewObjectResponse], error)
+	PreviewObject(context.Context, *v1.PreviewObjectRequest) (*v1.PreviewObjectResponse, error)
 }
 
-// NewStorageBrowserServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewStorageBrowserServiceHandler(svc StorageBrowserServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	storageBrowserServiceMethods := v1.File_services_storage_browser_v1_storage_browser_proto.Services().ByName("StorageBrowserService").Methods()
-	storageBrowserServiceListBrowsableBucketsHandler := connect.NewUnaryHandler(
-		StorageBrowserServiceListBrowsableBucketsProcedure,
-		svc.ListBrowsableBuckets,
-		connect.WithSchema(storageBrowserServiceMethods.ByName("ListBrowsableBuckets")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterStorageBrowserServiceHandler registers svc as the controlplane.v1.StorageBrowserService
+// implementation on server.
+func RegisterStorageBrowserServiceHandler(server *connect.Server, svc StorageBrowserServiceHandler) {
+	adapter := storageBrowserServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: storageBrowserServiceListBrowsableBucketsSpec(), Handler: adapter.listBrowsableBuckets},
+		connect.Method{Spec: storageBrowserServiceListObjectsSpec(), Handler: adapter.listObjects},
+		connect.Method{Spec: storageBrowserServiceGetObjectMetadataSpec(), Handler: adapter.getObjectMetadata},
+		connect.Method{Spec: storageBrowserServicePresignObjectDownloadSpec(), Handler: adapter.presignObjectDownload},
+		connect.Method{Spec: storageBrowserServicePreviewObjectSpec(), Handler: adapter.previewObject},
 	)
-	storageBrowserServiceListObjectsHandler := connect.NewUnaryHandler(
-		StorageBrowserServiceListObjectsProcedure,
-		svc.ListObjects,
-		connect.WithSchema(storageBrowserServiceMethods.ByName("ListObjects")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	storageBrowserServiceGetObjectMetadataHandler := connect.NewUnaryHandler(
-		StorageBrowserServiceGetObjectMetadataProcedure,
-		svc.GetObjectMetadata,
-		connect.WithSchema(storageBrowserServiceMethods.ByName("GetObjectMetadata")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	storageBrowserServicePresignObjectDownloadHandler := connect.NewUnaryHandler(
-		StorageBrowserServicePresignObjectDownloadProcedure,
-		svc.PresignObjectDownload,
-		connect.WithSchema(storageBrowserServiceMethods.ByName("PresignObjectDownload")),
-		connect.WithHandlerOptions(opts...),
-	)
-	storageBrowserServicePreviewObjectHandler := connect.NewUnaryHandler(
-		StorageBrowserServicePreviewObjectProcedure,
-		svc.PreviewObject,
-		connect.WithSchema(storageBrowserServiceMethods.ByName("PreviewObject")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.StorageBrowserService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case StorageBrowserServiceListBrowsableBucketsProcedure:
-			storageBrowserServiceListBrowsableBucketsHandler.ServeHTTP(w, r)
-		case StorageBrowserServiceListObjectsProcedure:
-			storageBrowserServiceListObjectsHandler.ServeHTTP(w, r)
-		case StorageBrowserServiceGetObjectMetadataProcedure:
-			storageBrowserServiceGetObjectMetadataHandler.ServeHTTP(w, r)
-		case StorageBrowserServicePresignObjectDownloadProcedure:
-			storageBrowserServicePresignObjectDownloadHandler.ServeHTTP(w, r)
-		case StorageBrowserServicePreviewObjectProcedure:
-			storageBrowserServicePreviewObjectHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedStorageBrowserServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedStorageBrowserServiceHandler struct{}
 
-func (UnimplementedStorageBrowserServiceHandler) ListBrowsableBuckets(context.Context, *connect.Request[v1.ListBrowsableBucketsRequest]) (*connect.Response[v1.ListBrowsableBucketsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.StorageBrowserService.ListBrowsableBuckets is not implemented"))
+func (UnimplementedStorageBrowserServiceHandler) ListBrowsableBuckets(context.Context, *v1.ListBrowsableBucketsRequest) (*v1.ListBrowsableBucketsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.StorageBrowserService.ListBrowsableBuckets is not implemented")
 }
 
-func (UnimplementedStorageBrowserServiceHandler) ListObjects(context.Context, *connect.Request[v1.ListObjectsRequest]) (*connect.Response[v1.ListObjectsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.StorageBrowserService.ListObjects is not implemented"))
+func (UnimplementedStorageBrowserServiceHandler) ListObjects(context.Context, *v1.ListObjectsRequest) (*v1.ListObjectsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.StorageBrowserService.ListObjects is not implemented")
 }
 
-func (UnimplementedStorageBrowserServiceHandler) GetObjectMetadata(context.Context, *connect.Request[v1.GetObjectMetadataRequest]) (*connect.Response[v1.GetObjectMetadataResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.StorageBrowserService.GetObjectMetadata is not implemented"))
+func (UnimplementedStorageBrowserServiceHandler) GetObjectMetadata(context.Context, *v1.GetObjectMetadataRequest) (*v1.GetObjectMetadataResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.StorageBrowserService.GetObjectMetadata is not implemented")
 }
 
-func (UnimplementedStorageBrowserServiceHandler) PresignObjectDownload(context.Context, *connect.Request[v1.PresignObjectDownloadRequest]) (*connect.Response[v1.PresignObjectDownloadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.StorageBrowserService.PresignObjectDownload is not implemented"))
+func (UnimplementedStorageBrowserServiceHandler) PresignObjectDownload(context.Context, *v1.PresignObjectDownloadRequest) (*v1.PresignObjectDownloadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.StorageBrowserService.PresignObjectDownload is not implemented")
 }
 
-func (UnimplementedStorageBrowserServiceHandler) PreviewObject(context.Context, *connect.Request[v1.PreviewObjectRequest]) (*connect.Response[v1.PreviewObjectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.StorageBrowserService.PreviewObject is not implemented"))
+func (UnimplementedStorageBrowserServiceHandler) PreviewObject(context.Context, *v1.PreviewObjectRequest) (*v1.PreviewObjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.StorageBrowserService.PreviewObject is not implemented")
+}
+
+type storageBrowserServiceClient struct {
+	client *connect.Client
+}
+
+func (c *storageBrowserServiceClient) ListBrowsableBuckets(ctx context.Context, req *v1.ListBrowsableBucketsRequest) (*v1.ListBrowsableBucketsResponse, error) {
+	var res v1.ListBrowsableBucketsResponse
+	if err := c.client.CallUnary(ctx, storageBrowserServiceListBrowsableBucketsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *storageBrowserServiceClient) ListObjects(ctx context.Context, req *v1.ListObjectsRequest) (*v1.ListObjectsResponse, error) {
+	var res v1.ListObjectsResponse
+	if err := c.client.CallUnary(ctx, storageBrowserServiceListObjectsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *storageBrowserServiceClient) GetObjectMetadata(ctx context.Context, req *v1.GetObjectMetadataRequest) (*v1.GetObjectMetadataResponse, error) {
+	var res v1.GetObjectMetadataResponse
+	if err := c.client.CallUnary(ctx, storageBrowserServiceGetObjectMetadataSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *storageBrowserServiceClient) PresignObjectDownload(ctx context.Context, req *v1.PresignObjectDownloadRequest) (*v1.PresignObjectDownloadResponse, error) {
+	var res v1.PresignObjectDownloadResponse
+	if err := c.client.CallUnary(ctx, storageBrowserServicePresignObjectDownloadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *storageBrowserServiceClient) PreviewObject(ctx context.Context, req *v1.PreviewObjectRequest) (*v1.PreviewObjectResponse, error) {
+	var res v1.PreviewObjectResponse
+	if err := c.client.CallUnary(ctx, storageBrowserServicePreviewObjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type storageBrowserServiceHandler struct{ svc StorageBrowserServiceHandler }
+
+func (h storageBrowserServiceHandler) listBrowsableBuckets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBrowsableBucketsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBrowsableBuckets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h storageBrowserServiceHandler) listObjects(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListObjectsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListObjects(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h storageBrowserServiceHandler) getObjectMetadata(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetObjectMetadataRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetObjectMetadata(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h storageBrowserServiceHandler) presignObjectDownload(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PresignObjectDownloadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PresignObjectDownload(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h storageBrowserServiceHandler) previewObject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PreviewObjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PreviewObject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

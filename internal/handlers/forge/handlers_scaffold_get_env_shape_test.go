@@ -3,7 +3,7 @@ package forge_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -16,27 +16,27 @@ func TestGetEnvShape_Generated(t *testing.T) {
 
 	svc := newOwnedProjectService(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetForgeEnvShapeRequest, pb.GetForgeEnvShapeResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetForgeEnvShapeRequest, pb.GetForgeEnvShapeResponse]{
 		{
 			Name:    "an anonymous caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.GetForgeEnvShapeRequest{ProjectId: ownProjectID, Env: "dev"}),
+			Req:     &pb.GetForgeEnvShapeRequest{ProjectId: ownProjectID, Env: "dev"},
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "a missing env is invalid",
-			Req:     connect.NewRequest(&pb.GetForgeEnvShapeRequest{ProjectId: ownProjectID}),
+			Req:     &pb.GetForgeEnvShapeRequest{ProjectId: ownProjectID},
 			Ctx:     forge.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a missing project_id is invalid",
-			Req:     connect.NewRequest(&pb.GetForgeEnvShapeRequest{Env: "dev"}),
+			Req:     &pb.GetForgeEnvShapeRequest{Env: "dev"},
 			Ctx:     forge.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "another user's project is not found",
-			Req:     connect.NewRequest(&pb.GetForgeEnvShapeRequest{ProjectId: otherProjectID, Env: "dev"}),
+			Req:     &pb.GetForgeEnvShapeRequest{ProjectId: otherProjectID, Env: "dev"},
 			Ctx:     forge.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

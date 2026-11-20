@@ -8,7 +8,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/ptr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -69,12 +69,12 @@ func TestListStepExecutions_ReturnsTheNodesFullRecord(t *testing.T) {
 
 	service := &Service{deps: Deps{Repo: repo}}
 	list := func(nodePath string) *reliantv1.ListStepExecutionsResponse {
-		resp, err := service.ListStepExecutions(ctx, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{
+		resp, err := service.ListStepExecutions(ctx, &reliantv1.ListStepExecutionsRequest{
 			ChatId:   chatID,
 			NodePath: proto.String(nodePath),
-		}))
+		})
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 
 	summarize := list("summarize").GetStepExecutions()
@@ -105,6 +105,6 @@ func TestListStepExecutions_OtherUsersChatIsNotFound(t *testing.T) {
 	chatID := seedChatForThreadTree(t, repo, ownerCtx, "owner")
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
-	_, err := (&Service{deps: Deps{Repo: repo}}).ListStepExecutions(otherCtx, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: chatID}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	_, err := (&Service{deps: Deps{Repo: repo}}).ListStepExecutions(otherCtx, &reliantv1.ListStepExecutionsRequest{ChatId: chatID})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }

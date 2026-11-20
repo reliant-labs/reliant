@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
@@ -207,7 +207,7 @@ func TestErrorsMapToSentinelsAndKeepTheServerMessage(t *testing.T) {
 	}
 	for _, tc := range cases {
 		f := &fake{getRun: func(*reliantv1.GetRunRequest) (*reliantv1.GetRunResponse, error) {
-			return nil, connect.NewError(tc.code, errors.New("because reasons"))
+			return nil, connect.NewError(tc.code, "because reasons")
 		}}
 		c, srv := f.start(t)
 		_, err := c.Runs.Get(context.Background(), "r1")

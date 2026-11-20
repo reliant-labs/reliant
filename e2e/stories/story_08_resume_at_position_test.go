@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -181,13 +180,13 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 	h.LLM.Append(Turn{Text: "Resumed and finishing up."})
 	modelParam, err := structpb.NewValue(map[string]any{"id": "mock"})
 	require.NoError(t, err)
-	_, err = h.ChatSvc.SendMessage(h.Ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+	_, err = h.ChatSvc.SendMessage(h.Ctx, &reliantv1.SendMessageRequest{
 		ChatId: chatID,
 		Messages: []*reliantv1.InputMessage{
 			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "continue"},
 		},
 		WorkflowParams: map[string]*structpb.Value{"model": modelParam},
-	}))
+	})
 	require.NoError(t, err, "SendMessage after terminate")
 
 	h.WaitTemporalWorkflowDone(workflowID)

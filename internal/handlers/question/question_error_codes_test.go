@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -39,7 +39,7 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Repo: &question.MockRepository{
 				GetQuestionByIDFunc: func(context.Context, string) (*db.Question, error) { return nil, tc.err },
 			}}))
-			_, err := svc.ResolveQuestion(question.AuthedContext(t), connect.NewRequest(&pb.ResolveQuestionRequest{QuestionId: "q-1", Action: "reply"}))
+			_, err := svc.ResolveQuestion(question.AuthedContext(t), &pb.ResolveQuestionRequest{QuestionId: "q-1", Action: "reply"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("ListAsyncQuestions, reading the chat: "+tc.name, func(t *testing.T) {
@@ -47,7 +47,7 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Repo: &question.MockRepository{
 				GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
 			}}))
-			_, err := svc.ListAsyncQuestions(question.AuthedContext(t), connect.NewRequest(&pb.ListAsyncQuestionsRequest{ChatId: "chat-1"}))
+			_, err := svc.ListAsyncQuestions(question.AuthedContext(t), &pb.ListAsyncQuestionsRequest{ChatId: "chat-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("ListPendingQuestions, listing: "+tc.name, func(t *testing.T) {
@@ -59,7 +59,7 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 				},
 			}}))
 			chatID := "chat-1"
-			_, err := svc.ListPendingQuestions(question.AuthedContext(t), connect.NewRequest(&pb.ListPendingQuestionsRequest{ChatId: &chatID}))
+			_, err := svc.ListPendingQuestions(question.AuthedContext(t), &pb.ListPendingQuestionsRequest{ChatId: &chatID})
 			requireClientReads(t, err, tc.want)
 		})
 	}
@@ -68,6 +68,6 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 func requireClientReads(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
-	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+	require.Equal(t, want, svcerr.CodeV2(err), "err = %v", err)
+	require.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -21,25 +21,25 @@ func TestGetPlanByChatId_Generated(t *testing.T) {
 	repo.ListPlansByChatIDFunc = func(context.Context, string) ([]*db.Plan, error) { return nil, nil }
 	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetPlanByChatIdRequest, pb.GetPlanByChatIdResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetPlanByChatIdRequest, pb.GetPlanByChatIdResponse]{
 		{
 			Name:    "unknown chat is not found",
-			Req:     connect.NewRequest(&pb.GetPlanByChatIdRequest{ChatId: missingID}),
+			Req:     &pb.GetPlanByChatIdRequest{ChatId: missingID},
 			Ctx:     plan.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's chat is denied",
-			Req:     connect.NewRequest(&pb.GetPlanByChatIdRequest{ChatId: otherChatID}),
+			Req:     &pb.GetPlanByChatIdRequest{ChatId: otherChatID},
 			Ctx:     plan.AuthedContext(t),
 			WantErr: connect.CodePermissionDenied,
 		},
 		{
 			Name: "a chat with no plan answers an empty response",
-			Req:  connect.NewRequest(&pb.GetPlanByChatIdRequest{ChatId: ownChatID}),
+			Req:  &pb.GetPlanByChatIdRequest{ChatId: ownChatID},
 			Ctx:  plan.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetPlanByChatIdResponse]) {
-				require.Nil(t, resp.Msg.GetPlan())
+			Check: func(t *testing.T, resp *pb.GetPlanByChatIdResponse) {
+				require.Nil(t, resp.GetPlan())
 			},
 		},
 	}, svc.GetPlanByChatId)

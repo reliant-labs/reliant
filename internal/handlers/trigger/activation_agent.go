@@ -11,7 +11,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -331,12 +330,12 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	}
 	row, err := s.activationRow(ctx, user, def, existing)
 	if err != nil {
-		return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("activation settings rejected ("+svcerr.Code(err).String()+")", err)
+		return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("activation settings rejected ("+svcerr.CodeV2(err).String()+")", err)
 	}
 	row.Enabled = def.Enabled == nil || *def.Enabled
 	if operation != tools.ToolPauseTrigger {
 		if err = s.refreshTriggerAccess(ctx, row); err != nil {
-			return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("integration access could not be refreshed ("+svcerr.Code(err).String()+")", err)
+			return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("integration access could not be refreshed ("+svcerr.CodeV2(err).String()+")", err)
 		}
 	}
 	wf, err := launch.ResolveValidatedRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, s.workflowMachine(ctx, user, def)), def.Workflow)
@@ -382,7 +381,7 @@ func (s *Service) prepareAgentActivationDecided(ctx context.Context, user, opera
 	def.ConnectionId = effectiveConnectionID(row)
 	closure, err := s.activationSnapshot(ctx, user, def, wf)
 	if err != nil {
-		return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("workflow dependencies could not be resolved for approval ("+svcerr.Code(err).String()+")", err)
+		return nil, tools.ActivationPreview{}, none, tools.RefuseActivation("workflow dependencies could not be resolved for approval ("+svcerr.CodeV2(err).String()+")", err)
 	}
 	definition := canonicalProto(def)
 	// Volatile names/health are not authorization inputs; configuration and its
@@ -527,7 +526,7 @@ func (s *Service) manageActivationAtomic(ctx context.Context, user, operation st
 		// before the row; should this transaction then roll back, the row
 		// survives without a schedule, which only stops it firing until the
 		// next Sync (DeleteTrigger's own ordering argument).
-		if _, err := s.DeleteTrigger(ctx, connect.NewRequest(&pb.DeleteTriggerRequest{Id: p.TriggerID})); err != nil {
+		if _, err := s.DeleteTrigger(ctx, &pb.DeleteTriggerRequest{Id: p.TriggerID}); err != nil {
 			return tools.TriggerSummary{}, err
 		}
 		return tools.TriggerSummary{ID: p.TriggerID, Name: def.GetName(), Workflow: def.GetWorkflow(), WorkflowTrigger: def.GetWorkflowTrigger(), ProjectID: def.GetProjectId(), DaemonID: def.GetDaemonId(), ConnectionID: def.GetConnectionId()}, nil
@@ -535,22 +534,22 @@ func (s *Service) manageActivationAtomic(ctx context.Context, user, operation st
 	var out *pb.Trigger
 	switch operation {
 	case tools.ToolCreateTriggerActivation:
-		response, e := s.CreateTrigger(ctx, connect.NewRequest(&pb.CreateTriggerRequest{Trigger: def}))
+		response, e := s.CreateTrigger(ctx, &pb.CreateTriggerRequest{Trigger: def})
 		err = e
 		if e == nil {
-			out = response.Msg.Trigger
+			out = response.Trigger
 		}
 	case tools.ToolUpdateTriggerActivation:
-		response, e := s.UpdateTrigger(ctx, connect.NewRequest(&pb.UpdateTriggerRequest{Id: p.TriggerID, Trigger: def}))
+		response, e := s.UpdateTrigger(ctx, &pb.UpdateTriggerRequest{Id: p.TriggerID, Trigger: def})
 		err = e
 		if e == nil {
-			out = response.Msg.Trigger
+			out = response.Trigger
 		}
 	case tools.ToolEnableTrigger, tools.ToolPauseTrigger:
-		response, e := s.SetTriggerEnabled(ctx, connect.NewRequest(&pb.SetTriggerEnabledRequest{Id: p.TriggerID, Enabled: operation == tools.ToolEnableTrigger}))
+		response, e := s.SetTriggerEnabled(ctx, &pb.SetTriggerEnabledRequest{Id: p.TriggerID, Enabled: operation == tools.ToolEnableTrigger})
 		err = e
 		if e == nil {
-			out = response.Msg.Trigger
+			out = response.Trigger
 		}
 	default:
 		return tools.TriggerSummary{}, svcerr.InvalidArgument("unknown activation operation")

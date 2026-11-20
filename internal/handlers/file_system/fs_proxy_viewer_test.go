@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -71,17 +71,17 @@ func TestFileSystemProxy_OutdatedDaemonViewsOnlyTheWorkspace(t *testing.T) {
 
 	content := func(p string) error {
 		_, err := newProxy(t, &outdatedDaemonRouter{}, repo).GetFileContent(fsProxyContext(),
-			connect.NewRequest(&reliantv1.GetFileContentRequest{ProjectId: projectID, Path: p}))
+			&reliantv1.GetFileContentRequest{ProjectId: projectID, Path: p})
 		return err
 	}
 	metadata := func(p string) error {
 		_, err := newProxy(t, &outdatedDaemonRouter{}, repo).GetFileMetadata(fsProxyContext(),
-			connect.NewRequest(&reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: p}))
+			&reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: p})
 		return err
 	}
 	for name, call := range map[string]func(string) error{"GetFileContent": content, "GetFileMetadata": metadata} {
 		err := call(outside)
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "%s(%s) from an outdated daemon: %v", name, outside, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "%s(%s) from an outdated daemon: %v", name, outside, err)
 		assert.NoError(t, call("README.md"), "%s of a workspace file from an outdated daemon", name)
 		assert.NoError(t, call(filepath.Join(base, "README.md")), "%s of an absolute workspace path from an outdated daemon", name)
 	}
@@ -104,19 +104,19 @@ func TestFileSystemProxy_ViewerRefusesCredentialStores(t *testing.T) {
 
 	viewers := map[string]func(context.Context, *Service, string) error{
 		"GetFileContent": func(ctx context.Context, s *Service, p string) error {
-			_, err := s.GetFileContent(ctx, connect.NewRequest(&reliantv1.GetFileContentRequest{ProjectId: projectID, Path: p}))
+			_, err := s.GetFileContent(ctx, &reliantv1.GetFileContentRequest{ProjectId: projectID, Path: p})
 			return err
 		},
 		"GetFileMetadata": func(ctx context.Context, s *Service, p string) error {
-			_, err := s.GetFileMetadata(ctx, connect.NewRequest(&reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: p}))
+			_, err := s.GetFileMetadata(ctx, &reliantv1.GetFileMetadataRequest{ProjectId: projectID, Path: p})
 			return err
 		},
 		"GetFilePreviewInfo": func(ctx context.Context, s *Service, p string) error {
-			_, err := s.GetFilePreviewInfo(ctx, connect.NewRequest(&reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: p}))
+			_, err := s.GetFilePreviewInfo(ctx, &reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: p})
 			return err
 		},
 		"GetFilePreview": func(ctx context.Context, s *Service, p string) error {
-			_, err := s.GetFilePreview(ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{ProjectId: projectID, Path: p}))
+			_, err := s.GetFilePreview(ctx, &reliantv1.GetFilePreviewRequest{ProjectId: projectID, Path: p})
 			return err
 		},
 	}
@@ -125,7 +125,7 @@ func TestFileSystemProxy_ViewerRefusesCredentialStores(t *testing.T) {
 			for _, p := range []string{key, "innocent.txt"} {
 				router := &viewerGuardRouter{}
 				err := call(fsProxyContext(), newProxy(t, router, repo), p)
-				assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "%s(%s): %v", name, p, err)
+				assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "%s(%s): %v", name, p, err)
 
 				var sent struct {
 					ViewerRoot string `json:"viewer_root"`
@@ -137,7 +137,7 @@ func TestFileSystemProxy_ViewerRefusesCredentialStores(t *testing.T) {
 			// A project file is still served (GetFilePreview may refuse the
 			// stub's empty classification; it must not be a refusal).
 			err := call(fsProxyContext(), newProxy(t, &viewerGuardRouter{}, repo), "README.md")
-			assert.NotEqual(t, connect.CodePermissionDenied, svcerr.Code(err), "%s refused a project file: %v", name, err)
+			assert.NotEqual(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "%s refused a project file: %v", name, err)
 		})
 	}
 }
@@ -181,7 +181,7 @@ func TestFileSystemProxy_ViewerExpandsHomeOnTheMachine(t *testing.T) {
 	t.Setenv("HOME", home)
 	preview := func(router *homeRouter, p string) error {
 		_, err := newProxy(t, router, repo).GetFilePreviewInfo(fsProxyContext(),
-			connect.NewRequest(&reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: p}))
+			&reliantv1.GetFilePreviewInfoRequest{ProjectId: projectID, Path: p})
 		return err
 	}
 
@@ -196,7 +196,7 @@ func TestFileSystemProxy_ViewerExpandsHomeOnTheMachine(t *testing.T) {
 
 	router := &homeRouter{home: home}
 	err = preview(router, "~/.ssh/id_rsa")
-	assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "a credential store through ~: %v", err)
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "a credential store through ~: %v", err)
 
 	// Anything else is resolved as before, without asking the machine.
 	router = &homeRouter{home: home}

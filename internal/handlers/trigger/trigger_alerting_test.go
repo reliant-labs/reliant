@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,26 +109,26 @@ func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
 	env, fa := setupAlertingTest(t)
 	id := env.enableOncall(t).Results[0].Activation.GetId()
 
-	_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+	_, err := env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 	require.NoError(t, err)
 	assert.Equal(t, []string{id}, fa.retired, "pausing disconnects")
 
-	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
+	_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true})
 	require.NoError(t, err)
 	assert.Equal(t, []string{id, id}, fa.provisioned, "resuming re-provisions with a fresh token")
 
 	// A resume that cannot connect is refused and the row put back.
 	fa.err = svcerr.WithCause(svcerr.Unavailable("could not connect your organization's alerts right now; try again"), errors.New("control plane down"))
-	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+	_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 	require.NoError(t, err)
-	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "%v", err)
+	_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true})
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "%v", err)
 	stored, err := env.repo.GetTrigger(context.Background(), id)
 	require.NoError(t, err)
 	assert.False(t, stored.Enabled, "an enabled trigger nothing delivers to looks working and is not")
 	fa.err = nil
 
-	_, err = env.svc.DeleteTrigger(env.ctx, connect.NewRequest(&reliantv1.DeleteTriggerRequest{Id: id}))
+	_, err = env.svc.DeleteTrigger(env.ctx, &reliantv1.DeleteTriggerRequest{Id: id})
 	require.NoError(t, err)
 	assert.Equal(t, id, fa.retired[len(fa.retired)-1], "deleting disconnects")
 }
@@ -142,17 +142,17 @@ func TestRotateManagedWebhookReprovisionsWithoutShowingTheToken(t *testing.T) {
 	before, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
 	require.NoError(t, err)
 
-	resp, err := env.svc.RotateWebhookToken(env.ctx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: id}))
+	resp, err := env.svc.RotateWebhookToken(env.ctx, &reliantv1.RotateWebhookTokenRequest{Id: id})
 	require.NoError(t, err)
-	assert.Nil(t, resp.Msg.Webhook)
+	assert.Nil(t, resp.Webhook)
 	assert.Equal(t, []string{id, id}, fa.provisioned)
 
 	// Paused: no receiver to give it to, so the token is replaced in place.
-	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+	_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 	require.NoError(t, err)
-	resp, err = env.svc.RotateWebhookToken(env.ctx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: id}))
+	resp, err = env.svc.RotateWebhookToken(env.ctx, &reliantv1.RotateWebhookTokenRequest{Id: id})
 	require.NoError(t, err)
-	assert.Nil(t, resp.Msg.Webhook)
+	assert.Nil(t, resp.Webhook)
 	assert.Len(t, fa.provisioned, 2, "a paused trigger is not provisioned")
 	after, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
 	require.NoError(t, err)
@@ -178,10 +178,10 @@ func TestAdHocWebhookCannotNameASource(t *testing.T) {
 	t.Parallel()
 
 	env, _ := setupAlertingTest(t)
-	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) {
 			d.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{Source: "alerting"}}
 		}),
-	}))
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "%v", err)
+	})
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "%v", err)
 }

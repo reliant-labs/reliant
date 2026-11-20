@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -41,9 +40,9 @@ func (r *connectedRecorder) build(daemonID string) (daemonwire.Build, bool) {
 func listedDaemon(t *testing.T, registry *daemon_registry.Service, userID, daemonID string) *reliantv1.DaemonInfo {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := registry.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	resp, err := registry.ListDaemons(ctx, &reliantv1.ListDaemonsRequest{})
 	require.NoError(t, err)
-	for _, d := range resp.Msg.GetDaemons() {
+	for _, d := range resp.GetDaemons() {
 		if d.GetDaemonId() == daemonID {
 			return d
 		}

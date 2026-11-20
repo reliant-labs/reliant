@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -108,14 +108,14 @@ func TestSendAgentMessage_QueuesForRunningThread(t *testing.T) {
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
 		Message:  "check the logs before continuing",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
-	assert.Contains(t, resp.Msg.Message, "Queued")
+	require.True(t, resp.Success)
+	assert.Contains(t, resp.Message, "Queued")
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
@@ -137,14 +137,14 @@ func TestSendAgentMessage_UsesClientMessageID(t *testing.T) {
 	clientMessageID := uuid.NewString()
 	service := &Service{deps: Deps{Repo: repo}}
 
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:          fx.chatID,
 		ThreadId:        fx.childThreadID,
 		Message:         "check the logs before continuing",
 		ClientMessageId: &clientMessageID,
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
@@ -175,13 +175,13 @@ func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
 	tc := &signaltest.Recorder{}
 	service := &Service{deps: Deps{Repo: repo, Temporal: tc}, runs: runs.NewService(repo, tc, nil)}
 
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
 		Message:  "stop and check the logs",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	require.Len(t, tc.Signals, 1,
 		"queuing a message must wake the workflow; without this it waits for a child to finish")
@@ -209,13 +209,13 @@ func TestSendAgentMessage_SignalFailureStillQueues(t *testing.T) {
 	tc := &signaltest.Recorder{SignalErr: errors.New("workflow not found")}
 	service := &Service{deps: Deps{Repo: repo, Temporal: tc}, runs: runs.NewService(repo, tc, nil)}
 
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
 		Message:  "still worth queueing",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
@@ -250,15 +250,15 @@ func TestSendAgentMessage_RefusesIdleThread(t *testing.T) {
 	require.Equal(t, 0, before)
 
 	service := &Service{deps: Deps{Repo: repo}}
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
 		Message:  "nobody is listening for this",
-	}))
+	})
 	require.NoError(t, err, "an idle agent is an honest success:false, not a transport error")
-	assert.False(t, resp.Msg.Success)
-	assert.Contains(t, resp.Msg.Message, "isn't currently running")
-	assert.Contains(t, resp.Msg.Message, "Send a normal message",
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.Message, "isn't currently running")
+	assert.Contains(t, resp.Message, "Send a normal message",
 		"the refusal must tell the user what to do instead")
 
 	// The core assertion: nothing was written. A queued row here is a message
@@ -290,13 +290,13 @@ func TestSendAgentMessage_AcceptsAboutToRunThread(t *testing.T) {
 			require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.childThreadID, tc.status))
 
 			service := &Service{deps: Deps{Repo: repo}}
-			resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+			resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 				ChatId:   fx.chatID,
 				ThreadId: fx.childThreadID,
 				Message:  "this will be drained when the loop runs",
-			}))
+			})
 			require.NoError(t, err)
-			require.True(t, resp.Msg.Success, "a run that has not finished still has a next turn")
+			require.True(t, resp.Success, "a run that has not finished still has a next turn")
 
 			queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 			require.NoError(t, err)
@@ -335,11 +335,11 @@ func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
 
 	// Pre-fix, queueing here is refused -- correctly, since nothing is running.
 	service := &Service{deps: Deps{Repo: repo}}
-	idleResp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	idleResp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "between turns",
-	}))
+	})
 	require.NoError(t, err)
-	require.False(t, idleResp.Msg.Success)
+	require.False(t, idleResp.Success)
 
 	// Turn N+1 starts. This is what WorkflowStatusActivity's "started" arm
 	// does: revive the thread, then move the workflow back to running.
@@ -355,14 +355,14 @@ func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
 	require.Nil(t, thread.CompletedAt,
 		"a revived thread must not keep the completed_at of the turn that ended")
 
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.rootThreadID,
 		Message:  "steer the turn that is running right now",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success,
-		"queueing into the running turn must be accepted, got: %s", resp.Msg.Message)
+	require.True(t, resp.Success,
+		"queueing into the running turn must be accepted, got: %s", resp.Message)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
@@ -381,14 +381,14 @@ func TestSendAgentMessage_RejectsCrossChatThread(t *testing.T) {
 	_, otherFx := setupSendAgentMessageFixture(t, repo, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	_, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: otherFx.childThreadID, // belongs to a different chat
 		Message:  "should not be deliverable",
-	}))
+	})
 	require.Error(t, err)
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, otherFx.childThreadID)
@@ -407,14 +407,14 @@ func TestSendAgentMessage_RejectsTerminalThread(t *testing.T) {
 	require.NoError(t, err)
 
 	service := &Service{deps: Deps{Repo: repo}}
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
 		Message:  "too late",
-	}))
+	})
 	require.NoError(t, err, "a finished agent is a normal (non-error) response, matching spawn_send's honesty contract")
-	assert.False(t, resp.Msg.Success)
-	assert.Contains(t, resp.Msg.Message, "already finished")
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.Message, "already finished")
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
@@ -431,14 +431,14 @@ func TestSendAgentMessage_WrongOwner(t *testing.T) {
 	ctxB := context.WithValue(context.Background(), auth.UserIDContextKey, "user-b")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SendAgentMessage(ctxB, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	_, err := service.SendAgentMessage(ctxB, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
 		Message:  "not yours to send",
-	}))
+	})
 	require.Error(t, err)
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -451,17 +451,17 @@ func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *t
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	_, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "first",
-	}))
+	})
 	require.NoError(t, err)
-	_, err = service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	_, err = service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "second",
-	}))
+	})
 	require.NoError(t, err)
-	_, err = service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	_, err = service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "delivered before list",
-	}))
+	})
 	require.NoError(t, err)
 
 	// Deliver the third message before listing -- it must be excluded, and
@@ -474,15 +474,15 @@ func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *t
 	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{all[2].ID}, time.Now(), savedMsg.ID)
 	require.NoError(t, markErr)
 
-	resp, err := service.ListQueuedAgentMessages(ctx, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
+	resp, err := service.ListQueuedAgentMessages(ctx, &reliantv1.ListQueuedAgentMessagesRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID,
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Messages, 2)
-	assert.Equal(t, "first", resp.Msg.Messages[0].Body)
-	assert.Equal(t, "second", resp.Msg.Messages[1].Body)
-	assert.Equal(t, core.AgentMessageKindHumanMessage, resp.Msg.Messages[0].SenderKind)
-	assert.NotEmpty(t, resp.Msg.Messages[0].CreatedAt)
+	require.Len(t, resp.Messages, 2)
+	assert.Equal(t, "first", resp.Messages[0].Body)
+	assert.Equal(t, "second", resp.Messages[1].Body)
+	assert.Equal(t, core.AgentMessageKindHumanMessage, resp.Messages[0].SenderKind)
+	assert.NotEmpty(t, resp.Messages[0].CreatedAt)
 }
 
 func TestListQueuedAgentMessages_RejectsCrossChatThread(t *testing.T) {
@@ -495,12 +495,12 @@ func TestListQueuedAgentMessages_RejectsCrossChatThread(t *testing.T) {
 	_, otherFx := setupSendAgentMessageFixture(t, repo, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.ListQueuedAgentMessages(ctx, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
+	_, err := service.ListQueuedAgentMessages(ctx, &reliantv1.ListQueuedAgentMessagesRequest{
 		ChatId: fx.chatID, ThreadId: otherFx.childThreadID,
-	}))
+	})
 	require.Error(t, err)
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -514,12 +514,12 @@ func TestListQueuedAgentMessages_WrongOwner(t *testing.T) {
 	ctxB := context.WithValue(context.Background(), auth.UserIDContextKey, "user-b")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.ListQueuedAgentMessages(ctxB, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
+	_, err := service.ListQueuedAgentMessages(ctxB, &reliantv1.ListQueuedAgentMessagesRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID,
-	}))
+	})
 	require.Error(t, err)
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -532,20 +532,20 @@ func TestCancelQueuedAgentMessage_RemovesQueuedMessage(t *testing.T) {
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	_, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "cancel me",
-	}))
+	})
 	require.NoError(t, err)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 
-	resp, err := service.CancelQueuedAgentMessage(ctx, connect.NewRequest(&reliantv1.CancelQueuedAgentMessageRequest{
+	resp, err := service.CancelQueuedAgentMessage(ctx, &reliantv1.CancelQueuedAgentMessageRequest{
 		ChatId: fx.chatID, MessageId: queued[0].ID,
-	}))
+	})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Success)
+	assert.True(t, resp.Success)
 
 	after, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
@@ -561,9 +561,9 @@ func TestCancelQueuedAgentMessage_AlreadyDeliveredReturnsFailureAndKeepsRow(t *t
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	_, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "already delivered",
-	}))
+	})
 	require.NoError(t, err)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
@@ -577,12 +577,12 @@ func TestCancelQueuedAgentMessage_AlreadyDeliveredReturnsFailureAndKeepsRow(t *t
 	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{msgID}, time.Now(), savedMsg.ID)
 	require.NoError(t, markErr)
 
-	resp, err := service.CancelQueuedAgentMessage(ctx, connect.NewRequest(&reliantv1.CancelQueuedAgentMessageRequest{
+	resp, err := service.CancelQueuedAgentMessage(ctx, &reliantv1.CancelQueuedAgentMessageRequest{
 		ChatId: fx.chatID, MessageId: msgID,
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Success, "an already-delivered message must never be reported as cancelled")
-	assert.Contains(t, resp.Msg.Message, "Already delivered")
+	assert.False(t, resp.Success, "an already-delivered message must never be reported as cancelled")
+	assert.Contains(t, resp.Message, "Already delivered")
 
 	// The row must still exist and stay delivered -- cancel must not delete
 	// a delivered row, since delivered_message_id links it into the transcript.
@@ -601,9 +601,9 @@ func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "user-a")
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	_, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "protect me",
-	}))
+	})
 	require.NoError(t, err)
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
@@ -612,12 +612,12 @@ func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 	// Wrong owner: user-b doesn't own fx.chatID, so the chat-ownership check
 	// itself must reject before even looking at the message.
 	ctxB := context.WithValue(context.Background(), auth.UserIDContextKey, "user-b")
-	_, err = service.CancelQueuedAgentMessage(ctxB, connect.NewRequest(&reliantv1.CancelQueuedAgentMessageRequest{
+	_, err = service.CancelQueuedAgentMessage(ctxB, &reliantv1.CancelQueuedAgentMessageRequest{
 		ChatId: fx.chatID, MessageId: queued[0].ID,
-	}))
+	})
 	require.Error(t, err)
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 
 	// Cross-chat: caller owns a different chat, but tries to cancel a
@@ -625,11 +625,11 @@ func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 	// this comes back as an honest success:false, not an error -- same
 	// "already delivered" style receipt, since the row is simply untouched.
 	_, otherFx := setupSendAgentMessageFixture(t, repo, "user-a")
-	crossResp, err := service.CancelQueuedAgentMessage(ctx, connect.NewRequest(&reliantv1.CancelQueuedAgentMessageRequest{
+	crossResp, err := service.CancelQueuedAgentMessage(ctx, &reliantv1.CancelQueuedAgentMessageRequest{
 		ChatId: otherFx.chatID, MessageId: queued[0].ID,
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, crossResp.Msg.Success, "a message_id from a different chat must never be cancellable")
+	assert.False(t, crossResp.Success, "a message_id from a different chat must never be cancellable")
 
 	// The message must still be queued after both rejected attempts.
 	after, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
@@ -653,10 +653,10 @@ func TestSendAgentMessage_MissingFields(t *testing.T) {
 		{ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "   "},
 	}
 	for _, req := range cases {
-		_, err := service.SendAgentMessage(ctx, connect.NewRequest(req))
+		_, err := service.SendAgentMessage(ctx, req)
 		require.Error(t, err)
 		require.Error(t, err)
-		connectErr := svcerr.ToConnect(err)
+		connectErr := svcerr.ToConnectV2(err)
 		assert.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
 	}
 }

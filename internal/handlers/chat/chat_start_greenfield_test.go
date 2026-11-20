@@ -7,7 +7,6 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -92,7 +91,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	}
 
 	type outcome struct {
-		resp *connect.Response[reliantv1.StartChatResponse]
+		resp *reliantv1.StartChatResponse
 		err  error
 	}
 	done := make(chan outcome, 1)
@@ -111,7 +110,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 			"the request path must return once the chat is committed and the run accepted")
 	}
 	require.NoError(t, got.err)
-	require.NotNil(t, got.resp.Msg.GetChat())
+	require.NotNil(t, got.resp.GetChat())
 
 	assert.Zero(t, router.probeCount(),
 		"StartChat must not reach the daemon for the greenfield probe at all")

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -77,9 +75,9 @@ func (s *Service) nodeToolOptions() []*reliantv1.NodeFieldOption {
 // ListNodes returns all workflow nodes available for the builder
 func (s *Service) ListNodes(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListNodesRequest],
-) (*connect.Response[reliantv1.ListNodesResponse], error) {
-	category := req.Msg.GetCategory()
+	req *reliantv1.ListNodesRequest,
+) (*reliantv1.ListNodesResponse, error) {
+	category := req.GetCategory()
 
 	// Get only nodes visible in the workflow builder
 	// Uses reflection-based schema - activities must implement ActivityWithMetadata
@@ -184,5 +182,5 @@ func (s *Service) ListNodes(
 		Nodes:      nodeResponses,
 		Categories: categoryInfos,
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

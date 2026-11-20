@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -363,7 +362,7 @@ func (g *outboxGateway) state(id string) toolexec.ToolRequestState {
 	return g.states[id]
 }
 
-func (g *outboxGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (g *outboxGateway) ConnectDaemon(ctx context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	if _, err := stream.Receive(); err != nil {
 		return err
 	}

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -136,13 +135,13 @@ func TestGetWorkflowExecutions_IncludesInlineForkThreadWithoutWorkflowRow(t *tes
 	})
 
 	service := &Service{deps: Deps{Repo: repo}}
-	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
+	resp, err := service.GetWorkflowExecutions(ctx, &reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
-	}))
+	})
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.Msg.AllRootWorkflows)
+	require.NotEmpty(t, resp.AllRootWorkflows)
 
-	byThread := collectThreads(resp.Msg.AllRootWorkflows[0])
+	byThread := collectThreads(resp.AllRootWorkflows[0])
 
 	forkNode, ok := byThread[forkThreadID]
 	require.True(t, ok,
@@ -232,13 +231,13 @@ func TestGetWorkflowExecutions_PreservesSpawnAndNodeOriginDistinction(t *testing
 	})
 
 	service := &Service{deps: Deps{Repo: repo}}
-	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
+	resp, err := service.GetWorkflowExecutions(ctx, &reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: chatID,
-	}))
+	})
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.Msg.AllRootWorkflows)
+	require.NotEmpty(t, resp.AllRootWorkflows)
 
-	byThread := collectThreads(resp.Msg.AllRootWorkflows[0])
+	byThread := collectThreads(resp.AllRootWorkflows[0])
 
 	originByThread := map[string]string{}
 	for id, node := range byThread {

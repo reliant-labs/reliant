@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -130,10 +130,10 @@ func TestForgeService_TopologyIsAskedOfAnotherCheckoutWhenTheMachineIsAsleep(t *
 	}
 
 	res, err := newForgeService(router, repo).GetTopology(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"}))
+		&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"})
 
 	require.NoError(t, err)
-	assert.True(t, res.Msg.GetMeta().GetIsForgeProject())
+	assert.True(t, res.GetMeta().GetIsForgeProject())
 	assert.Equal(t, []string{"mac-a", "mac-b", "cloud"}, router.asked,
 		"the project's own checkouts first, then the other project's; the asleep mac-a is asked once")
 	assert.Equal(t, cloudPath, sentProjectPath(t, router), "the answering machine is sent its own path")
@@ -164,7 +164,7 @@ func TestForgeService_FallbackStaysWithinTheForgeProjectAndTheCallersMachines(t 
 
 	err := topology(newForgeService(router, repo))
 
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "nothing else could answer: the machine's own state is the answer")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "nothing else could answer: the machine's own state is the answer")
 	assert.Equal(t, []string{"mac"}, router.asked)
 }
 
@@ -179,7 +179,7 @@ func TestForgeService_AnUnnamedProjectFallsBackOnlyToItsOwnCheckouts(t *testing.
 
 	err := topology(newForgeService(router, repo))
 
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 	assert.Equal(t, []string{"mac", "cloud"}, router.asked)
 }
 
@@ -196,7 +196,7 @@ func TestForgeService_AnAnsweredFailureIsNotRetriedElsewhere(t *testing.T) {
 
 	err := topology(newForgeService(router, repo))
 
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Equal(t, []string{"mac"}, router.asked)
 }
 
@@ -219,23 +219,23 @@ func TestForgeService_OnlyForgeProjectReadsFallBack(t *testing.T) {
 		fallsBack bool
 	}{
 		{"GetTopology", func(s *Service) error {
-			_, err := s.GetTopology(authedCtx(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"}))
+			_, err := s.GetTopology(authedCtx(), &reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"})
 			return err
 		}, true},
 		{"GetEnvStatus", func(s *Service) error {
-			_, err := s.GetEnvStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "proj-1", Env: "dev"}))
+			_, err := s.GetEnvStatus(authedCtx(), &reliantv1.GetForgeEnvStatusRequest{ProjectId: "proj-1", Env: "dev"})
 			return err
 		}, false},
 		{"VerifyEnv", func(s *Service) error {
-			_, err := s.VerifyEnv(authedCtx(), connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "proj-1", Env: "dev"}))
+			_, err := s.VerifyEnv(authedCtx(), &reliantv1.VerifyForgeEnvRequest{ProjectId: "proj-1", Env: "dev"})
 			return err
 		}, false},
 		{"ListSecrets", func(s *Service) error {
-			_, err := s.ListSecrets(authedCtx(), connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "proj-1", Env: "prod"}))
+			_, err := s.ListSecrets(authedCtx(), &reliantv1.ListForgeSecretsRequest{ProjectId: "proj-1", Env: "prod"})
 			return err
 		}, false},
 		{"GetDeployStatus", func(s *Service) error {
-			_, err := s.GetDeployStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{ProjectId: "proj-1", Handle: "h-1"}))
+			_, err := s.GetDeployStatus(authedCtx(), &reliantv1.GetForgeDeployStatusRequest{ProjectId: "proj-1", Handle: "h-1"})
 			return err
 		}, false},
 	}
@@ -248,7 +248,7 @@ func TestForgeService_OnlyForgeProjectReadsFallBack(t *testing.T) {
 				assert.Equal(t, []string{"mac", "cloud"}, router.asked)
 				return
 			}
-			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+			assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 			assert.Equal(t, []string{"mac"}, router.asked)
 		})
 	}
@@ -279,7 +279,7 @@ func TestForgeService_ASameNamedProjectOfAnotherRepositoryNeverAnswers(t *testin
 
 			err := topology(newForgeService(router, repo))
 
-			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "the requested project's own machine is the answer")
+			assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "the requested project's own machine is the answer")
 			assert.Equal(t, []string{"mac"}, router.asked)
 		})
 	}
@@ -312,7 +312,7 @@ func TestForgeService_ARemoteThatMayBeAnotherRepositoryNeverAnswers(t *testing.T
 
 			err := topology(newForgeService(router, repo))
 
-			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+			assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 			assert.Equal(t, []string{"mac"}, router.asked)
 		})
 	}
@@ -329,7 +329,7 @@ func TestForgeService_AProjectWithNoRemoteFallsBackOnlyToItsOwnCheckouts(t *test
 
 	err := topology(newForgeService(router, repo))
 
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 	assert.Equal(t, []string{"mac"}, router.asked)
 }
 

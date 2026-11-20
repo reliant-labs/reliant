@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -26,16 +26,16 @@ func TestDeleteConnection_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteConnectionRequest, pb.DeleteConnectionResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DeleteConnectionRequest, pb.DeleteConnectionResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.DeleteConnectionRequest{Id: "c-1"}),
+			Req:     &pb.DeleteConnectionRequest{Id: "c-1"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "a connection the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.DeleteConnectionRequest{Id: "c-1"}),
+			Req:     &pb.DeleteConnectionRequest{Id: "c-1"},
 			Ctx:     connection.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

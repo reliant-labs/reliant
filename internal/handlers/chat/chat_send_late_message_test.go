@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -197,8 +196,8 @@ func TestSendMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
 	require.NotNil(t, started[0].input.Resume)
 	assert.True(t, started[0].input.Resume.RecoveryOnly, "recovery-only startup must execute graph setup before its loop")
 	assert.True(t, started[0].input.Resume.ResumeAllStopped, "the root message also resumes unfinished siblings")
-	assert.Equal(t, "run-new", resp.Msg.RunId)
-	assert.True(t, resp.Msg.Queued, "the row is still queued; the new run's first turn drains it")
+	assert.Equal(t, "run-new", resp.RunId)
+	assert.True(t, resp.Queued, "the row is still queued; the new run's first turn drains it")
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread must be revived before the run starts, or the sweep can mark the row undelivered in between")
 
@@ -277,13 +276,13 @@ func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T
 		threadStatusAtStart = thread.Status
 	}
 
-	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.rootThreadID,
 		Message:  "queued as it finished",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success, resp.Msg.Message)
+	require.True(t, resp.Success, resp.Message)
 
 	started := temporal.runsStarted()
 	require.Len(t, started, 1, "STRANDED: the row was left queued for a run that had closed, and no run started")
@@ -348,14 +347,14 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 				threadStatusAtStart = thread.Status
 			}
 
-			resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+			resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 				ChatId:   fx.chatID,
 				ThreadId: fx.rootThreadID,
 				Message:  "sent as the reply ended",
-			}))
+			})
 			require.NoError(t, err)
-			require.True(t, resp.Msg.Success,
-				"SENT TWICE: refused, so the message stays in the composer until the user sends it again: %s", resp.Msg.Message)
+			require.True(t, resp.Success,
+				"SENT TWICE: refused, so the message stays in the composer until the user sends it again: %s", resp.Message)
 
 			started := temporal.runsStarted()
 			require.Len(t, started, 1, "no run was started for the message")
@@ -396,11 +395,11 @@ func TestSendAgentMessage_CompletedMainRunStillFinishingTakesTheWake(t *testing.
 	require.NoError(t, err)
 	temporal := &closingRunTemporalClient{lastInputs: map[string]interface{}{"model": map[string]interface{}{"id": "mock"}}}
 
-	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "sent as it finishes",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success, resp.Msg.Message)
+	require.True(t, resp.Success, resp.Message)
 	assert.Empty(t, temporal.runsStarted(), "a run that will read the wake must not be replaced")
 	assert.Equal(t, 1, temporal.wakes)
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
@@ -423,11 +422,11 @@ func TestSendAgentMessage_FailedMainRunIsStillRefused(t *testing.T) {
 	require.NoError(t, err)
 	temporal := &closingRunTemporalClient{closed: true, lastInputs: map[string]interface{}{"model": map[string]interface{}{"id": "mock"}}}
 
-	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "after a failure",
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Success)
+	assert.False(t, resp.Success)
 	assert.Empty(t, temporal.runsStarted())
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
@@ -445,12 +444,12 @@ func TestSendAgentMessage_RunThatClosesAndCannotBeRestartedIsRefusedHonestly(t *
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
 	temporal := &closingRunTemporalClient{closeOnWake: true, startErr: errors.New("temporal unavailable")}
 
-	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "queued as it finished",
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Success)
-	assert.Contains(t, resp.Msg.Message, "Send it as a normal message")
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.Message, "Send it as a normal message")
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "nothing is left queued behind a refusal")

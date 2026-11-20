@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -109,7 +109,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 
 			_, err := service.SendMessage(ctx, sendWithUnknownModel(t, fx.chatID, "continue"))
 			require.Error(t, err, "a model the registry does not know must be refused")
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 			assert.Contains(t, err.Error(), retiredModelID,
 				"the refusal must name the model the user has to change")
 
@@ -157,9 +157,9 @@ const retiredModelID = "gpt-4.1-retired@codex"
 
 // sendWithUnknownModel is the composer's send while it still holds a model
 // the registry no longer knows.
-func sendWithUnknownModel(t *testing.T, chatID, content string) *connect.Request[reliantv1.SendMessageRequest] {
+func sendWithUnknownModel(t *testing.T, chatID, content string) *reliantv1.SendMessageRequest {
 	t.Helper()
-	return connect.NewRequest(&reliantv1.SendMessageRequest{
+	return &reliantv1.SendMessageRequest{
 		ChatId: chatID,
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -171,7 +171,7 @@ func sendWithUnknownModel(t *testing.T, chatID, content string) *connect.Request
 				"tags": []interface{}{"flagship"},
 			}),
 		},
-	})
+	}
 }
 
 // rejectedSendTemporalClient records signals (via wakeTestTemporalClient) and

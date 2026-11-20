@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
@@ -39,7 +39,7 @@ func (c *absorbTestTemporalClient) DescribeWorkflowExecution(
 	_ context.Context, workflowID, _ string,
 ) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	if !c.exists {
-		return nil, connect.NewError(connect.CodeNotFound, assertNotFound{})
+		return nil, connect.NewError(connect.CodeNotFound, assertNotFound{}.Error()).WithCause(assertNotFound{})
 	}
 	return &workflowservice.DescribeWorkflowExecutionResponse{
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
@@ -126,9 +126,9 @@ func setupAbsorbFixture(t *testing.T, repo *db.Repo, userID string, status db.Wo
 
 // sendMessageRequest builds a SendMessage for the chat's own root thread with a
 // mock model, so validateWorkflowInputs does not need real provider keys.
-func sendMessageRequest(t *testing.T, chatID, content string) *connect.Request[reliantv1.SendMessageRequest] {
+func sendMessageRequest(t *testing.T, chatID, content string) *reliantv1.SendMessageRequest {
 	t.Helper()
-	return connect.NewRequest(&reliantv1.SendMessageRequest{
+	return &reliantv1.SendMessageRequest{
 		ChatId: chatID,
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -137,7 +137,7 @@ func sendMessageRequest(t *testing.T, chatID, content string) *connect.Request[r
 		WorkflowParams: map[string]*structpb.Value{
 			"model": mustStructValue(t, map[string]interface{}{"id": "mock"}),
 		},
-	})
+	}
 }
 
 // transcriptBodies returns every message body in the chat, in the seq order the
@@ -186,8 +186,8 @@ func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
 
 	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "typed last"))
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.Msg.MessageId)
-	assert.False(t, resp.Msg.Queued, "a new run's message is saved to history, not queued")
+	require.NotEmpty(t, resp.MessageId)
+	assert.False(t, resp.Queued, "a new run's message is saved to history, not queued")
 
 	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID),
 		"SendMessage must not duplicate call_llm's mailbox delivery")
@@ -224,13 +224,13 @@ func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
 
 	// No workflow params: a running send with params would signal the live
 	// workflow, which is a different code path than the one under test.
-	_, err := service.SendMessage(ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+	_, err := service.SendMessage(ctx, &reliantv1.SendMessageRequest{
 		ChatId: fx.chatID,
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
 			Content: "sent while running",
 		}},
-	}))
+	})
 	require.NoError(t, err)
 
 	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
@@ -266,7 +266,7 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 
 	req := sendMessageRequest(t, fx.chatID, "one more thing")
 	clientID := uuid.NewString()
-	req.Msg.ClientMessageId = &clientID
+	req.ClientMessageId = &clientID
 	resp, err := service.SendMessage(ctx, req)
 	require.NoError(t, err)
 
@@ -276,10 +276,10 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, "one more thing", queued[0].Body)
-	assert.True(t, resp.Msg.Queued, "the receipt says the message was queued, not saved")
+	assert.True(t, resp.Queued, "the receipt says the message was queued, not saved")
 	assert.Equal(t, clientID, queued[0].ID,
 		"the queued row carries the id the client chose, so its optimistic copy and the row are one item")
-	assert.Equal(t, clientID, resp.Msg.MessageId, "the receipt names the queued message")
+	assert.Equal(t, clientID, resp.MessageId, "the receipt names the queued message")
 }
 
 // A client id that is not a UUID cannot name a row. The id is the message's
@@ -299,10 +299,10 @@ func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
 
 	req := sendMessageRequest(t, fx.chatID, "steer")
 	bad := "not-a-uuid"
-	req.Msg.ClientMessageId = &bad
+	req.ClientMessageId = &bad
 	_, err := service.SendMessage(ctx, req)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
@@ -381,13 +381,13 @@ func TestSendMessage_PausedResumeLeavesMailboxForCallLLM(t *testing.T) {
 	// then; recover and assert on what it persisted.
 	func() {
 		defer func() { _ = recover() }()
-		_, _ = service.SendMessage(ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+		_, _ = service.SendMessage(ctx, &reliantv1.SendMessageRequest{
 			ChatId: fx.chatID,
 			Messages: []*reliantv1.InputMessage{{
 				Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
 				Content: "resume now",
 			}},
-		}))
+		})
 	}()
 
 	assert.Equal(t, []string{"resume now"}, transcriptBodies(t, ctx, repo, fx.chatID),

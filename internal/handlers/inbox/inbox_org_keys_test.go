@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/tdd"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -54,19 +55,20 @@ func orgKeyEnv(t *testing.T, lister *MockOrgLister, keys ...core.ProviderAccount
 
 func listOrgKeys(t *testing.T, svc *Service, ctx context.Context, jwt string) ([]*reliantv1.InboxItem, *reliantv1.ListInboxResponse) {
 	t.Helper()
-	req := connect.NewRequest(&reliantv1.ListInboxRequest{})
+	req := &reliantv1.ListInboxRequest{}
+	info := &connect.CallInfo{}
 	if jwt != "" {
-		req.Header().Set("Authorization", "Bearer "+jwt)
+		info.RequestHeader().Set("Authorization", "Bearer "+jwt)
 	}
-	resp, err := svc.ListInbox(ctx, req)
+	resp, err := tdd.CallV2(ctx, svc.ListInbox, req, info)
 	require.NoError(t, err)
 	var got []*reliantv1.InboxItem
-	for _, it := range resp.Msg.Items {
+	for _, it := range resp.Items {
 		if it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED {
 			got = append(got, it)
 		}
 	}
-	return got, resp.Msg
+	return got, resp
 }
 
 // A rejected org key (org-provider-accounts §4.7) reaches the org's owners and

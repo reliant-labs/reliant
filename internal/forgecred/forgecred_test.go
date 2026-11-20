@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/wirecheck"
 )
 
 // fakeExchanger answers per server and counts calls.
@@ -142,8 +144,8 @@ func TestMint_TriesSessionsInOrderAndClassifies(t *testing.T) {
 		{Server: "https://api.good.com", Token: "rlat_good_GGGG", Kind: "daemon", Account: "acct-2"},
 	}
 	ex := &fakeExchanger{ttl: time.Hour, refuse: map[string]error{
-		"https://api.other.com":  connect.NewError(connect.CodeFailedPrecondition, errors.New("tokens from this server are valid at https://admin.other.com")),
-		"https://api.narrow.com": connect.NewError(connect.CodePermissionDenied, errors.New("cannot authorize deploy:write")),
+		"https://api.other.com":  connect.NewError(connect.CodeFailedPrecondition, "tokens from this server are valid at https://admin.other.com"),
+		"https://api.narrow.com": connect.NewError(connect.CodePermissionDenied, "cannot authorize deploy:write"),
 	}}
 	h := newTestHelper(t, sessions, ex, &clock)
 	tok, err := h.Mint(context.Background(), req)
@@ -172,7 +174,7 @@ func TestMint_TriesSessionsInOrderAndClassifies(t *testing.T) {
 func TestMint_OldServerIsNamedAsSuch(t *testing.T) {
 	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
 	ex := &fakeExchanger{ttl: time.Hour, refuse: map[string]error{
-		"https://api.example.com": connect.NewError(connect.CodeUnimplemented, errors.New("404 page not found")),
+		"https://api.example.com": connect.NewError(connect.CodeUnimplemented, "404 page not found"),
 	}}
 	h := newTestHelper(t, []Session{{Server: "https://api.example.com", Token: "rlat_s_SSSS", Kind: "cli"}}, ex, &clock)
 	_, err := h.Mint(context.Background(), req)
@@ -196,11 +198,14 @@ func TestForgetServer(t *testing.T) {
 	}
 }
 
-func scopeRefusal(scopes string) error {
-	ce := connect.NewError(connect.CodePermissionDenied, errors.New("this Reliant credential cannot authorize deploy:write"))
-	ce.Meta().Set(svcerr.ReasonHeader, fat.ReasonScopeMissing)
-	ce.Meta().Set(fat.ScopesHeader, scopes)
-	return ce
+// scopeRefusal is the scope_missing denial as the exchanger's client receives
+// it off the wire, its reason and scopes in the response metadata.
+func scopeRefusal(t *testing.T, scopes string) error {
+	t.Helper()
+	refusal := svcerr.WithMetadata(svcerr.WithReason(
+		connect.NewError(connect.CodePermissionDenied, "this Reliant credential cannot authorize deploy:write"),
+		fat.ReasonScopeMissing), fat.ScopesHeader, scopes)
+	return wirecheck.ClientError(t, refusal)
 }
 
 // A denial the server explained as scope_missing reaches forge in structure —
@@ -215,9 +220,9 @@ func TestMint_DenialCarriesTheServersScopeMissing(t *testing.T) {
 		{Server: "https://api.other.com", Token: "rlat_o_OOOO", Kind: "cli"},
 	}
 	ex := &fakeExchanger{ttl: time.Hour, refuse: map[string]error{
-		"https://api.a.com":     scopeRefusal("deploy:write"),
-		"https://api.b.com":     scopeRefusal("deploy:write,secret:read"),
-		"https://api.other.com": connect.NewError(connect.CodeFailedPrecondition, errors.New("not this control plane")),
+		"https://api.a.com":     scopeRefusal(t, "deploy:write"),
+		"https://api.b.com":     scopeRefusal(t, "deploy:write,secret:read"),
+		"https://api.other.com": connect.NewError(connect.CodeFailedPrecondition, "not this control plane"),
 	}}
 	h := newTestHelper(t, sessions, ex, &clock)
 	_, err := h.Mint(context.Background(), req)
@@ -237,7 +242,7 @@ func TestMint_DenialCarriesTheServersScopeMissing(t *testing.T) {
 	}
 
 	// One denial for another reason makes "ask for a grant" a guess: no reason.
-	ex.refuse["https://api.b.com"] = connect.NewError(connect.CodeUnauthenticated, errors.New("session expired"))
+	ex.refuse["https://api.b.com"] = connect.NewError(connect.CodeUnauthenticated, "session expired")
 	clock = clock.Add(2 * time.Hour)
 	_, err = h.Mint(context.Background(), req)
 	if !errors.As(err, &he) || he.Reason != "" || he.Scopes != nil {

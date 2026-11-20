@@ -11,279 +11,316 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/llm_gateway/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// LLMGatewayServiceName is the fully-qualified name of the LLMGatewayService service.
 	LLMGatewayServiceName = "controlplane.v1.LLMGatewayService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// LLMGatewayServiceCreateLLMKeyProcedure is the fully-qualified name of the LLMGatewayService's
+	// LLMGatewayServiceCreateLLMKeyProcedure is the procedure name of the LLMGatewayService's
 	// CreateLLMKey RPC.
 	LLMGatewayServiceCreateLLMKeyProcedure = "/controlplane.v1.LLMGatewayService/CreateLLMKey"
-	// LLMGatewayServiceListLLMKeysProcedure is the fully-qualified name of the LLMGatewayService's
+	// LLMGatewayServiceListLLMKeysProcedure is the procedure name of the LLMGatewayService's
 	// ListLLMKeys RPC.
 	LLMGatewayServiceListLLMKeysProcedure = "/controlplane.v1.LLMGatewayService/ListLLMKeys"
-	// LLMGatewayServiceGetLLMKeyProcedure is the fully-qualified name of the LLMGatewayService's
-	// GetLLMKey RPC.
+	// LLMGatewayServiceGetLLMKeyProcedure is the procedure name of the LLMGatewayService's GetLLMKey
+	// RPC.
 	LLMGatewayServiceGetLLMKeyProcedure = "/controlplane.v1.LLMGatewayService/GetLLMKey"
-	// LLMGatewayServiceRevokeLLMKeyProcedure is the fully-qualified name of the LLMGatewayService's
+	// LLMGatewayServiceRevokeLLMKeyProcedure is the procedure name of the LLMGatewayService's
 	// RevokeLLMKey RPC.
 	LLMGatewayServiceRevokeLLMKeyProcedure = "/controlplane.v1.LLMGatewayService/RevokeLLMKey"
-	// LLMGatewayServiceRotateLLMKeyProcedure is the fully-qualified name of the LLMGatewayService's
+	// LLMGatewayServiceRotateLLMKeyProcedure is the procedure name of the LLMGatewayService's
 	// RotateLLMKey RPC.
 	LLMGatewayServiceRotateLLMKeyProcedure = "/controlplane.v1.LLMGatewayService/RotateLLMKey"
-	// LLMGatewayServiceGetLLMSpendProcedure is the fully-qualified name of the LLMGatewayService's
+	// LLMGatewayServiceGetLLMSpendProcedure is the procedure name of the LLMGatewayService's
 	// GetLLMSpend RPC.
 	LLMGatewayServiceGetLLMSpendProcedure = "/controlplane.v1.LLMGatewayService/GetLLMSpend"
-	// LLMGatewayServiceListAvailableModelsProcedure is the fully-qualified name of the
-	// LLMGatewayService's ListAvailableModels RPC.
+	// LLMGatewayServiceListAvailableModelsProcedure is the procedure name of the LLMGatewayService's
+	// ListAvailableModels RPC.
 	LLMGatewayServiceListAvailableModelsProcedure = "/controlplane.v1.LLMGatewayService/ListAvailableModels"
+)
+
+var (
+	lLMGatewayServiceCreateLLMKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods().ByName("CreateLLMKey"),
+			Procedure:  LLMGatewayServiceCreateLLMKeyProcedure,
+		}
+	})
+	lLMGatewayServiceListLLMKeysSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods().ByName("ListLLMKeys"),
+			Procedure:  LLMGatewayServiceListLLMKeysProcedure,
+		}
+	})
+	lLMGatewayServiceGetLLMKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods().ByName("GetLLMKey"),
+			Procedure:  LLMGatewayServiceGetLLMKeyProcedure,
+		}
+	})
+	lLMGatewayServiceRevokeLLMKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods().ByName("RevokeLLMKey"),
+			Procedure:  LLMGatewayServiceRevokeLLMKeyProcedure,
+		}
+	})
+	lLMGatewayServiceRotateLLMKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods().ByName("RotateLLMKey"),
+			Procedure:  LLMGatewayServiceRotateLLMKeyProcedure,
+		}
+	})
+	lLMGatewayServiceGetLLMSpendSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods().ByName("GetLLMSpend"),
+			Procedure:  LLMGatewayServiceGetLLMSpendProcedure,
+		}
+	})
+	lLMGatewayServiceListAvailableModelsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods().ByName("ListAvailableModels"),
+			Procedure:  LLMGatewayServiceListAvailableModelsProcedure,
+		}
+	})
 )
 
 // LLMGatewayServiceClient is a client for the controlplane.v1.LLMGatewayService service.
 type LLMGatewayServiceClient interface {
-	CreateLLMKey(context.Context, *connect.Request[v1.CreateLLMKeyRequest]) (*connect.Response[v1.CreateLLMKeyResponse], error)
-	ListLLMKeys(context.Context, *connect.Request[v1.ListLLMKeysRequest]) (*connect.Response[v1.ListLLMKeysResponse], error)
-	GetLLMKey(context.Context, *connect.Request[v1.GetLLMKeyRequest]) (*connect.Response[v1.GetLLMKeyResponse], error)
-	RevokeLLMKey(context.Context, *connect.Request[v1.RevokeLLMKeyRequest]) (*connect.Response[v1.RevokeLLMKeyResponse], error)
-	RotateLLMKey(context.Context, *connect.Request[v1.RotateLLMKeyRequest]) (*connect.Response[v1.RotateLLMKeyResponse], error)
-	GetLLMSpend(context.Context, *connect.Request[v1.GetLLMSpendRequest]) (*connect.Response[v1.GetLLMSpendResponse], error)
-	ListAvailableModels(context.Context, *connect.Request[v1.ListAvailableModelsRequest]) (*connect.Response[v1.ListAvailableModelsResponse], error)
+	CreateLLMKey(context.Context, *v1.CreateLLMKeyRequest) (*v1.CreateLLMKeyResponse, error)
+	ListLLMKeys(context.Context, *v1.ListLLMKeysRequest) (*v1.ListLLMKeysResponse, error)
+	GetLLMKey(context.Context, *v1.GetLLMKeyRequest) (*v1.GetLLMKeyResponse, error)
+	RevokeLLMKey(context.Context, *v1.RevokeLLMKeyRequest) (*v1.RevokeLLMKeyResponse, error)
+	RotateLLMKey(context.Context, *v1.RotateLLMKeyRequest) (*v1.RotateLLMKeyResponse, error)
+	GetLLMSpend(context.Context, *v1.GetLLMSpendRequest) (*v1.GetLLMSpendResponse, error)
+	ListAvailableModels(context.Context, *v1.ListAvailableModelsRequest) (*v1.ListAvailableModelsResponse, error)
 }
 
 // NewLLMGatewayServiceClient constructs a client for the controlplane.v1.LLMGatewayService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewLLMGatewayServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) LLMGatewayServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	lLMGatewayServiceMethods := v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods()
-	return &lLMGatewayServiceClient{
-		createLLMKey: connect.NewClient[v1.CreateLLMKeyRequest, v1.CreateLLMKeyResponse](
-			httpClient,
-			baseURL+LLMGatewayServiceCreateLLMKeyProcedure,
-			connect.WithSchema(lLMGatewayServiceMethods.ByName("CreateLLMKey")),
-			connect.WithClientOptions(opts...),
-		),
-		listLLMKeys: connect.NewClient[v1.ListLLMKeysRequest, v1.ListLLMKeysResponse](
-			httpClient,
-			baseURL+LLMGatewayServiceListLLMKeysProcedure,
-			connect.WithSchema(lLMGatewayServiceMethods.ByName("ListLLMKeys")),
-			connect.WithClientOptions(opts...),
-		),
-		getLLMKey: connect.NewClient[v1.GetLLMKeyRequest, v1.GetLLMKeyResponse](
-			httpClient,
-			baseURL+LLMGatewayServiceGetLLMKeyProcedure,
-			connect.WithSchema(lLMGatewayServiceMethods.ByName("GetLLMKey")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeLLMKey: connect.NewClient[v1.RevokeLLMKeyRequest, v1.RevokeLLMKeyResponse](
-			httpClient,
-			baseURL+LLMGatewayServiceRevokeLLMKeyProcedure,
-			connect.WithSchema(lLMGatewayServiceMethods.ByName("RevokeLLMKey")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateLLMKey: connect.NewClient[v1.RotateLLMKeyRequest, v1.RotateLLMKeyResponse](
-			httpClient,
-			baseURL+LLMGatewayServiceRotateLLMKeyProcedure,
-			connect.WithSchema(lLMGatewayServiceMethods.ByName("RotateLLMKey")),
-			connect.WithClientOptions(opts...),
-		),
-		getLLMSpend: connect.NewClient[v1.GetLLMSpendRequest, v1.GetLLMSpendResponse](
-			httpClient,
-			baseURL+LLMGatewayServiceGetLLMSpendProcedure,
-			connect.WithSchema(lLMGatewayServiceMethods.ByName("GetLLMSpend")),
-			connect.WithClientOptions(opts...),
-		),
-		listAvailableModels: connect.NewClient[v1.ListAvailableModelsRequest, v1.ListAvailableModelsResponse](
-			httpClient,
-			baseURL+LLMGatewayServiceListAvailableModelsProcedure,
-			connect.WithSchema(lLMGatewayServiceMethods.ByName("ListAvailableModels")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// lLMGatewayServiceClient implements LLMGatewayServiceClient.
-type lLMGatewayServiceClient struct {
-	createLLMKey        *connect.Client[v1.CreateLLMKeyRequest, v1.CreateLLMKeyResponse]
-	listLLMKeys         *connect.Client[v1.ListLLMKeysRequest, v1.ListLLMKeysResponse]
-	getLLMKey           *connect.Client[v1.GetLLMKeyRequest, v1.GetLLMKeyResponse]
-	revokeLLMKey        *connect.Client[v1.RevokeLLMKeyRequest, v1.RevokeLLMKeyResponse]
-	rotateLLMKey        *connect.Client[v1.RotateLLMKeyRequest, v1.RotateLLMKeyResponse]
-	getLLMSpend         *connect.Client[v1.GetLLMSpendRequest, v1.GetLLMSpendResponse]
-	listAvailableModels *connect.Client[v1.ListAvailableModelsRequest, v1.ListAvailableModelsResponse]
-}
-
-// CreateLLMKey calls controlplane.v1.LLMGatewayService.CreateLLMKey.
-func (c *lLMGatewayServiceClient) CreateLLMKey(ctx context.Context, req *connect.Request[v1.CreateLLMKeyRequest]) (*connect.Response[v1.CreateLLMKeyResponse], error) {
-	return c.createLLMKey.CallUnary(ctx, req)
-}
-
-// ListLLMKeys calls controlplane.v1.LLMGatewayService.ListLLMKeys.
-func (c *lLMGatewayServiceClient) ListLLMKeys(ctx context.Context, req *connect.Request[v1.ListLLMKeysRequest]) (*connect.Response[v1.ListLLMKeysResponse], error) {
-	return c.listLLMKeys.CallUnary(ctx, req)
-}
-
-// GetLLMKey calls controlplane.v1.LLMGatewayService.GetLLMKey.
-func (c *lLMGatewayServiceClient) GetLLMKey(ctx context.Context, req *connect.Request[v1.GetLLMKeyRequest]) (*connect.Response[v1.GetLLMKeyResponse], error) {
-	return c.getLLMKey.CallUnary(ctx, req)
-}
-
-// RevokeLLMKey calls controlplane.v1.LLMGatewayService.RevokeLLMKey.
-func (c *lLMGatewayServiceClient) RevokeLLMKey(ctx context.Context, req *connect.Request[v1.RevokeLLMKeyRequest]) (*connect.Response[v1.RevokeLLMKeyResponse], error) {
-	return c.revokeLLMKey.CallUnary(ctx, req)
-}
-
-// RotateLLMKey calls controlplane.v1.LLMGatewayService.RotateLLMKey.
-func (c *lLMGatewayServiceClient) RotateLLMKey(ctx context.Context, req *connect.Request[v1.RotateLLMKeyRequest]) (*connect.Response[v1.RotateLLMKeyResponse], error) {
-	return c.rotateLLMKey.CallUnary(ctx, req)
-}
-
-// GetLLMSpend calls controlplane.v1.LLMGatewayService.GetLLMSpend.
-func (c *lLMGatewayServiceClient) GetLLMSpend(ctx context.Context, req *connect.Request[v1.GetLLMSpendRequest]) (*connect.Response[v1.GetLLMSpendResponse], error) {
-	return c.getLLMSpend.CallUnary(ctx, req)
-}
-
-// ListAvailableModels calls controlplane.v1.LLMGatewayService.ListAvailableModels.
-func (c *lLMGatewayServiceClient) ListAvailableModels(ctx context.Context, req *connect.Request[v1.ListAvailableModelsRequest]) (*connect.Response[v1.ListAvailableModelsResponse], error) {
-	return c.listAvailableModels.CallUnary(ctx, req)
+// Multiple service clients may share a single connect.Client.
+func NewLLMGatewayServiceClient(client *connect.Client) LLMGatewayServiceClient {
+	return &lLMGatewayServiceClient{client: client}
 }
 
 // LLMGatewayServiceHandler is an implementation of the controlplane.v1.LLMGatewayService service.
 type LLMGatewayServiceHandler interface {
-	CreateLLMKey(context.Context, *connect.Request[v1.CreateLLMKeyRequest]) (*connect.Response[v1.CreateLLMKeyResponse], error)
-	ListLLMKeys(context.Context, *connect.Request[v1.ListLLMKeysRequest]) (*connect.Response[v1.ListLLMKeysResponse], error)
-	GetLLMKey(context.Context, *connect.Request[v1.GetLLMKeyRequest]) (*connect.Response[v1.GetLLMKeyResponse], error)
-	RevokeLLMKey(context.Context, *connect.Request[v1.RevokeLLMKeyRequest]) (*connect.Response[v1.RevokeLLMKeyResponse], error)
-	RotateLLMKey(context.Context, *connect.Request[v1.RotateLLMKeyRequest]) (*connect.Response[v1.RotateLLMKeyResponse], error)
-	GetLLMSpend(context.Context, *connect.Request[v1.GetLLMSpendRequest]) (*connect.Response[v1.GetLLMSpendResponse], error)
-	ListAvailableModels(context.Context, *connect.Request[v1.ListAvailableModelsRequest]) (*connect.Response[v1.ListAvailableModelsResponse], error)
+	CreateLLMKey(context.Context, *v1.CreateLLMKeyRequest) (*v1.CreateLLMKeyResponse, error)
+	ListLLMKeys(context.Context, *v1.ListLLMKeysRequest) (*v1.ListLLMKeysResponse, error)
+	GetLLMKey(context.Context, *v1.GetLLMKeyRequest) (*v1.GetLLMKeyResponse, error)
+	RevokeLLMKey(context.Context, *v1.RevokeLLMKeyRequest) (*v1.RevokeLLMKeyResponse, error)
+	RotateLLMKey(context.Context, *v1.RotateLLMKeyRequest) (*v1.RotateLLMKeyResponse, error)
+	GetLLMSpend(context.Context, *v1.GetLLMSpendRequest) (*v1.GetLLMSpendResponse, error)
+	ListAvailableModels(context.Context, *v1.ListAvailableModelsRequest) (*v1.ListAvailableModelsResponse, error)
 }
 
-// NewLLMGatewayServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewLLMGatewayServiceHandler(svc LLMGatewayServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	lLMGatewayServiceMethods := v1.File_services_llm_gateway_v1_llm_gateway_proto.Services().ByName("LLMGatewayService").Methods()
-	lLMGatewayServiceCreateLLMKeyHandler := connect.NewUnaryHandler(
-		LLMGatewayServiceCreateLLMKeyProcedure,
-		svc.CreateLLMKey,
-		connect.WithSchema(lLMGatewayServiceMethods.ByName("CreateLLMKey")),
-		connect.WithHandlerOptions(opts...),
+// RegisterLLMGatewayServiceHandler registers svc as the controlplane.v1.LLMGatewayService
+// implementation on server.
+func RegisterLLMGatewayServiceHandler(server *connect.Server, svc LLMGatewayServiceHandler) {
+	adapter := lLMGatewayServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: lLMGatewayServiceCreateLLMKeySpec(), Handler: adapter.createLLMKey},
+		connect.Method{Spec: lLMGatewayServiceListLLMKeysSpec(), Handler: adapter.listLLMKeys},
+		connect.Method{Spec: lLMGatewayServiceGetLLMKeySpec(), Handler: adapter.getLLMKey},
+		connect.Method{Spec: lLMGatewayServiceRevokeLLMKeySpec(), Handler: adapter.revokeLLMKey},
+		connect.Method{Spec: lLMGatewayServiceRotateLLMKeySpec(), Handler: adapter.rotateLLMKey},
+		connect.Method{Spec: lLMGatewayServiceGetLLMSpendSpec(), Handler: adapter.getLLMSpend},
+		connect.Method{Spec: lLMGatewayServiceListAvailableModelsSpec(), Handler: adapter.listAvailableModels},
 	)
-	lLMGatewayServiceListLLMKeysHandler := connect.NewUnaryHandler(
-		LLMGatewayServiceListLLMKeysProcedure,
-		svc.ListLLMKeys,
-		connect.WithSchema(lLMGatewayServiceMethods.ByName("ListLLMKeys")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lLMGatewayServiceGetLLMKeyHandler := connect.NewUnaryHandler(
-		LLMGatewayServiceGetLLMKeyProcedure,
-		svc.GetLLMKey,
-		connect.WithSchema(lLMGatewayServiceMethods.ByName("GetLLMKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lLMGatewayServiceRevokeLLMKeyHandler := connect.NewUnaryHandler(
-		LLMGatewayServiceRevokeLLMKeyProcedure,
-		svc.RevokeLLMKey,
-		connect.WithSchema(lLMGatewayServiceMethods.ByName("RevokeLLMKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lLMGatewayServiceRotateLLMKeyHandler := connect.NewUnaryHandler(
-		LLMGatewayServiceRotateLLMKeyProcedure,
-		svc.RotateLLMKey,
-		connect.WithSchema(lLMGatewayServiceMethods.ByName("RotateLLMKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lLMGatewayServiceGetLLMSpendHandler := connect.NewUnaryHandler(
-		LLMGatewayServiceGetLLMSpendProcedure,
-		svc.GetLLMSpend,
-		connect.WithSchema(lLMGatewayServiceMethods.ByName("GetLLMSpend")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lLMGatewayServiceListAvailableModelsHandler := connect.NewUnaryHandler(
-		LLMGatewayServiceListAvailableModelsProcedure,
-		svc.ListAvailableModels,
-		connect.WithSchema(lLMGatewayServiceMethods.ByName("ListAvailableModels")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.LLMGatewayService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case LLMGatewayServiceCreateLLMKeyProcedure:
-			lLMGatewayServiceCreateLLMKeyHandler.ServeHTTP(w, r)
-		case LLMGatewayServiceListLLMKeysProcedure:
-			lLMGatewayServiceListLLMKeysHandler.ServeHTTP(w, r)
-		case LLMGatewayServiceGetLLMKeyProcedure:
-			lLMGatewayServiceGetLLMKeyHandler.ServeHTTP(w, r)
-		case LLMGatewayServiceRevokeLLMKeyProcedure:
-			lLMGatewayServiceRevokeLLMKeyHandler.ServeHTTP(w, r)
-		case LLMGatewayServiceRotateLLMKeyProcedure:
-			lLMGatewayServiceRotateLLMKeyHandler.ServeHTTP(w, r)
-		case LLMGatewayServiceGetLLMSpendProcedure:
-			lLMGatewayServiceGetLLMSpendHandler.ServeHTTP(w, r)
-		case LLMGatewayServiceListAvailableModelsProcedure:
-			lLMGatewayServiceListAvailableModelsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedLLMGatewayServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedLLMGatewayServiceHandler struct{}
 
-func (UnimplementedLLMGatewayServiceHandler) CreateLLMKey(context.Context, *connect.Request[v1.CreateLLMKeyRequest]) (*connect.Response[v1.CreateLLMKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.LLMGatewayService.CreateLLMKey is not implemented"))
+func (UnimplementedLLMGatewayServiceHandler) CreateLLMKey(context.Context, *v1.CreateLLMKeyRequest) (*v1.CreateLLMKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.LLMGatewayService.CreateLLMKey is not implemented")
 }
 
-func (UnimplementedLLMGatewayServiceHandler) ListLLMKeys(context.Context, *connect.Request[v1.ListLLMKeysRequest]) (*connect.Response[v1.ListLLMKeysResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.LLMGatewayService.ListLLMKeys is not implemented"))
+func (UnimplementedLLMGatewayServiceHandler) ListLLMKeys(context.Context, *v1.ListLLMKeysRequest) (*v1.ListLLMKeysResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.LLMGatewayService.ListLLMKeys is not implemented")
 }
 
-func (UnimplementedLLMGatewayServiceHandler) GetLLMKey(context.Context, *connect.Request[v1.GetLLMKeyRequest]) (*connect.Response[v1.GetLLMKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.LLMGatewayService.GetLLMKey is not implemented"))
+func (UnimplementedLLMGatewayServiceHandler) GetLLMKey(context.Context, *v1.GetLLMKeyRequest) (*v1.GetLLMKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.LLMGatewayService.GetLLMKey is not implemented")
 }
 
-func (UnimplementedLLMGatewayServiceHandler) RevokeLLMKey(context.Context, *connect.Request[v1.RevokeLLMKeyRequest]) (*connect.Response[v1.RevokeLLMKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.LLMGatewayService.RevokeLLMKey is not implemented"))
+func (UnimplementedLLMGatewayServiceHandler) RevokeLLMKey(context.Context, *v1.RevokeLLMKeyRequest) (*v1.RevokeLLMKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.LLMGatewayService.RevokeLLMKey is not implemented")
 }
 
-func (UnimplementedLLMGatewayServiceHandler) RotateLLMKey(context.Context, *connect.Request[v1.RotateLLMKeyRequest]) (*connect.Response[v1.RotateLLMKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.LLMGatewayService.RotateLLMKey is not implemented"))
+func (UnimplementedLLMGatewayServiceHandler) RotateLLMKey(context.Context, *v1.RotateLLMKeyRequest) (*v1.RotateLLMKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.LLMGatewayService.RotateLLMKey is not implemented")
 }
 
-func (UnimplementedLLMGatewayServiceHandler) GetLLMSpend(context.Context, *connect.Request[v1.GetLLMSpendRequest]) (*connect.Response[v1.GetLLMSpendResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.LLMGatewayService.GetLLMSpend is not implemented"))
+func (UnimplementedLLMGatewayServiceHandler) GetLLMSpend(context.Context, *v1.GetLLMSpendRequest) (*v1.GetLLMSpendResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.LLMGatewayService.GetLLMSpend is not implemented")
 }
 
-func (UnimplementedLLMGatewayServiceHandler) ListAvailableModels(context.Context, *connect.Request[v1.ListAvailableModelsRequest]) (*connect.Response[v1.ListAvailableModelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.LLMGatewayService.ListAvailableModels is not implemented"))
+func (UnimplementedLLMGatewayServiceHandler) ListAvailableModels(context.Context, *v1.ListAvailableModelsRequest) (*v1.ListAvailableModelsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.LLMGatewayService.ListAvailableModels is not implemented")
+}
+
+type lLMGatewayServiceClient struct {
+	client *connect.Client
+}
+
+func (c *lLMGatewayServiceClient) CreateLLMKey(ctx context.Context, req *v1.CreateLLMKeyRequest) (*v1.CreateLLMKeyResponse, error) {
+	var res v1.CreateLLMKeyResponse
+	if err := c.client.CallUnary(ctx, lLMGatewayServiceCreateLLMKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lLMGatewayServiceClient) ListLLMKeys(ctx context.Context, req *v1.ListLLMKeysRequest) (*v1.ListLLMKeysResponse, error) {
+	var res v1.ListLLMKeysResponse
+	if err := c.client.CallUnary(ctx, lLMGatewayServiceListLLMKeysSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lLMGatewayServiceClient) GetLLMKey(ctx context.Context, req *v1.GetLLMKeyRequest) (*v1.GetLLMKeyResponse, error) {
+	var res v1.GetLLMKeyResponse
+	if err := c.client.CallUnary(ctx, lLMGatewayServiceGetLLMKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lLMGatewayServiceClient) RevokeLLMKey(ctx context.Context, req *v1.RevokeLLMKeyRequest) (*v1.RevokeLLMKeyResponse, error) {
+	var res v1.RevokeLLMKeyResponse
+	if err := c.client.CallUnary(ctx, lLMGatewayServiceRevokeLLMKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lLMGatewayServiceClient) RotateLLMKey(ctx context.Context, req *v1.RotateLLMKeyRequest) (*v1.RotateLLMKeyResponse, error) {
+	var res v1.RotateLLMKeyResponse
+	if err := c.client.CallUnary(ctx, lLMGatewayServiceRotateLLMKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lLMGatewayServiceClient) GetLLMSpend(ctx context.Context, req *v1.GetLLMSpendRequest) (*v1.GetLLMSpendResponse, error) {
+	var res v1.GetLLMSpendResponse
+	if err := c.client.CallUnary(ctx, lLMGatewayServiceGetLLMSpendSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lLMGatewayServiceClient) ListAvailableModels(ctx context.Context, req *v1.ListAvailableModelsRequest) (*v1.ListAvailableModelsResponse, error) {
+	var res v1.ListAvailableModelsResponse
+	if err := c.client.CallUnary(ctx, lLMGatewayServiceListAvailableModelsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type lLMGatewayServiceHandler struct{ svc LLMGatewayServiceHandler }
+
+func (h lLMGatewayServiceHandler) createLLMKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateLLMKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateLLMKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lLMGatewayServiceHandler) listLLMKeys(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListLLMKeysRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListLLMKeys(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lLMGatewayServiceHandler) getLLMKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetLLMKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetLLMKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lLMGatewayServiceHandler) revokeLLMKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeLLMKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeLLMKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lLMGatewayServiceHandler) rotateLLMKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RotateLLMKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RotateLLMKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lLMGatewayServiceHandler) getLLMSpend(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetLLMSpendRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetLLMSpend(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lLMGatewayServiceHandler) listAvailableModels(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAvailableModelsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAvailableModels(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

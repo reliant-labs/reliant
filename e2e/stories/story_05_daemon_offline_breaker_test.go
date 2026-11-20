@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -103,18 +102,18 @@ func TestStory05_DaemonOfflineCircuitBreakerPausesAndResumes(t *testing.T) {
 	// The user-facing pause message is delivered as an error chat_update
 	// (WorkflowError activity → chat_updates → per-chat websocket). Read it
 	// through the production GetChatUpdates handler.
-	updatesResp, err := h.ChatSvc.GetChatUpdates(h.Ctx, connect.NewRequest(&reliantv1.GetChatUpdatesRequest{
+	updatesResp, err := h.ChatSvc.GetChatUpdates(h.Ctx, &reliantv1.GetChatUpdatesRequest{
 		ChatId: chatID,
-	}))
+	})
 	require.NoError(t, err)
 	var pauseMsgSeen bool
-	for _, u := range updatesResp.Msg.Updates {
+	for _, u := range updatesResp.Updates {
 		// UpdateType is the proto enum string (CHAT_UPDATE_TYPE_ERROR).
 		if strings.Contains(u.UpdateType, "ERROR") && strings.Contains(u.Data, v2.DaemonOfflinePauseMessage) {
 			pauseMsgSeen = true
 		}
 	}
-	require.True(t, pauseMsgSeen, `chat updates must contain the daemon-offline pause notice; got %d updates`, len(updatesResp.Msg.Updates))
+	require.True(t, pauseMsgSeen, `chat updates must contain the daemon-offline pause notice; got %d updates`, len(updatesResp.Updates))
 
 	// Exactly 3 LLM turns were burned before pausing — the breaker's whole
 	// point is bounding this.

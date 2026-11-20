@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -21,25 +21,25 @@ func TestRemoveRepo_Generated(t *testing.T) {
 	store.DeleteRepoFunc = func(context.Context, string) error { return nil }
 	svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RemoveRepoRequest, pb.RemoveRepoResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.RemoveRepoRequest, pb.RemoveRepoResponse]{
 		{
 			Name:    "an unknown repo is not found",
-			Req:     connect.NewRequest(&pb.RemoveRepoRequest{RepoId: "r-2"}),
+			Req:     &pb.RemoveRepoRequest{RepoId: "r-2"},
 			Ctx:     repo.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's repo is not found",
-			Req:     connect.NewRequest(&pb.RemoveRepoRequest{RepoId: "r-1"}),
+			Req:     &pb.RemoveRepoRequest{RepoId: "r-1"},
 			Ctx:     repo.AuthedContext(t, testkit.WithUserID("someone-else")),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the caller's repo is removed",
-			Req:  connect.NewRequest(&pb.RemoveRepoRequest{RepoId: "r-1"}),
+			Req:  &pb.RemoveRepoRequest{RepoId: "r-1"},
 			Ctx:  repo.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.RemoveRepoResponse]) {
-				if !resp.Msg.GetSuccess() {
+			Check: func(t *testing.T, resp *pb.RemoveRepoResponse) {
+				if !resp.GetSuccess() {
 					t.Fatal("success = false")
 				}
 				if n := store.CallCount("DeleteRepo"); n != 1 {

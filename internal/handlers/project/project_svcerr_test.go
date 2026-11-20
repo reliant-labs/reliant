@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,8 +48,8 @@ func storeFailures(notFound error) []struct {
 func requireCode(t *testing.T, err error, code connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	assert.Equal(t, code, svcerr.Code(err), "err = %v", err)
-	assert.NotContains(t, svcerr.ToConnect(err).Message(), "secret", "the store's text must not reach the client")
+	assert.Equal(t, code, svcerr.CodeV2(err), "err = %v", err)
+	assert.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret", "the store's text must not reach the client")
 }
 
 // ListProjects answered Internal for every store error, a deadline included,
@@ -62,10 +62,10 @@ func TestListProjects_StoreErrorClasses(t *testing.T) {
 			svc := newService(t, &project.MockRepository{
 				ListProjectsFunc: func(context.Context, db.ProjectFilters) ([]*db.Project, error) { return nil, tc.err },
 			}, nil)
-			_, err := svc.ListProjects(project.AuthedContext(t), connect.NewRequest(&pb.ListProjectsRequest{}))
+			_, err := svc.ListProjects(project.AuthedContext(t), &pb.ListProjectsRequest{})
 			requireCode(t, err, tc.code)
 			if tc.code == connect.CodeInternal {
-				assert.Equal(t, "failed to list projects", svcerr.ToConnect(err).Message())
+				assert.Equal(t, "failed to list projects", svcerr.ToConnectV2(err).Message())
 			}
 		})
 	}
@@ -82,7 +82,7 @@ func TestProjectOwnership_StoreErrorClasses(t *testing.T) {
 			svc := newService(t, &project.MockRepository{
 				GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) { return nil, tc.err },
 			}, nil)
-			_, err := svc.GetProjectMetadata(project.AuthedContext(t), connect.NewRequest(&pb.GetProjectMetadataRequest{ProjectId: "p-1"}))
+			_, err := svc.GetProjectMetadata(project.AuthedContext(t), &pb.GetProjectMetadataRequest{ProjectId: "p-1"})
 			requireCode(t, err, tc.code)
 		})
 	}
@@ -98,7 +98,7 @@ func TestGetProject_StoreErrorClasses(t *testing.T) {
 			store := ownedProjectRepo(t)
 			store.GetProjectFunc = func(context.Context, string) (*db.Project, error) { return nil, tc.err }
 			_, err := newService(t, store, nil).GetProjectMetadata(project.AuthedContext(t),
-				connect.NewRequest(&pb.GetProjectMetadataRequest{ProjectId: "p-1"}))
+				&pb.GetProjectMetadataRequest{ProjectId: "p-1"})
 			requireCode(t, err, tc.code)
 		})
 	}
@@ -116,7 +116,7 @@ func TestRemoveProjectFromDaemon_OnlyAMissNotAnOutageIsSuccess(t *testing.T) {
 				GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) { return nil, tc.err },
 			}, nil)
 			_, err := svc.RemoveProjectFromDaemon(project.AuthedContext(t),
-				connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+				&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 			if tc.code == connect.CodeNotFound {
 				require.NoError(t, err, "nothing to remove is success")
 				return
@@ -146,9 +146,9 @@ func TestRemoveProjectFromDaemon_AnOfflineMachineIsRefusedWithTheWayOut(t *testi
 			}
 			svc := newService(t, store, fakeDaemon(func(string, []byte) ([]byte, error) { return nil, offline }))
 			_, err := svc.RemoveProjectFromDaemon(project.AuthedContext(t),
-				connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+				&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 			requireCode(t, err, connect.CodeUnavailable)
-			msg := svcerr.ToConnect(err).Message()
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.Contains(t, msg, "bring it online")
 			assert.Contains(t, msg, "remove the machine")
 			assert.NotContains(t, msg, "nats", "the transport's words stay off the wire")
@@ -197,10 +197,10 @@ func TestProjectDaemonCommand_KeepsDaemonTextWithholdsTransportText(t *testing.T
 				PlacementDaemonIDFunc: func(_ context.Context, _, id string) (string, error) { return id, nil },
 			}
 			_, err := newService(t, store, router).GetProjectGitInfo(project.AuthedContext(t),
-				connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1"}))
+				&pb.GetProjectGitInfoRequest{ProjectId: "p-1"})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err), "err = %v", err)
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.code, svcerr.CodeV2(err), "err = %v", err)
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.Contains(t, msg, tc.contains)
 			if tc.withheld != "" {
 				assert.NotContains(t, msg, tc.withheld)
@@ -233,16 +233,16 @@ func TestProjectService_OnTheWire(t *testing.T) {
 	}
 	_, client := project.NewTestProjectServer(t, project.WithProjectDeps(project.Deps{Repo: store, Router: router}))
 
-	_, err := client.CreateProject(context.Background(), connect.NewRequest(&pb.CreateProjectRequest{
+	_, err := client.CreateProject(context.Background(), &pb.CreateProjectRequest{
 		Name: "proj", Path: "/work",
-	}))
+	})
 	// A client's error is a *connect.Error already: svcerr reads it as it is.
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err), "err = %v", err)
-	assert.Equal(t, "a project already exists at this path", svcerr.ToConnect(err).Message(),
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err), "err = %v", err)
+	assert.Equal(t, "a project already exists at this path", svcerr.ToConnectV2(err).Message(),
 		"the web's find-or-create keys on \"already exists\"")
 
-	_, err = client.ListProjects(context.Background(), connect.NewRequest(&pb.ListProjectsRequest{}))
+	_, err = client.ListProjects(context.Background(), &pb.ListProjectsRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err), "err = %v", err)
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(err), "err = %v", err)
 }

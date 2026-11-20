@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -42,27 +41,27 @@ import (
 //     workspacecreate.ExistingCheckout) and the row ends FAILED.
 func (s *Service) ImportWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ImportWorktreeRequest],
-) (*connect.Response[reliantv1.ImportWorktreeResponse], error) {
+	req *reliantv1.ImportWorktreeRequest,
+) (*reliantv1.ImportWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.Path == "" {
+	if req.Path == "" {
 		return nil, svcerr.InvalidArgument("path is required")
 	}
-	if req.Msg.ProjectId == "" {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 	// An empty registry is reconciled against the machine the import would
 	// be placed on; a populated one reaches no daemon before confirm_move.
 	place := func() (placed, error) {
-		placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, req.Msg.DaemonId, "import")
+		placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.ChatId, nil, req.DaemonId, "import")
 		if err != nil {
 			return placed{}, err
 		}
@@ -78,8 +77,8 @@ func (s *Service) ImportWorktree(
 	}
 	var repo *core.Repo
 	switch {
-	case req.Msg.RepoId != "":
-		if repo = byID[req.Msg.RepoId]; repo == nil {
+	case req.RepoId != "":
+		if repo = byID[req.RepoId]; repo == nil {
 			return nil, svcerr.WithMessage(svcerr.ErrNotFound, "repo not in project")
 		}
 	case len(repos) == 1:
@@ -88,7 +87,7 @@ func (s *Service) ImportWorktree(
 		return nil, svcerr.InvalidArgument("repo_id is required in multi-repo projects")
 	}
 	moves := importMoves(byID)
-	if moves && !req.Msg.ConfirmMove {
+	if moves && !req.ConfirmMove {
 		return nil, svcerr.InvalidArgument("importing this worktree moves its directory into a new workspace; confirm the move (confirm_move) to continue")
 	}
 
@@ -115,7 +114,7 @@ func (s *Service) ImportWorktree(
 	if err := s.sendToMachine(ctx, userID, placement, "worktree.discover_repos", payload, &found, worktreeReadCommandTimeoutMs); err != nil {
 		return nil, importWorktreeError("validate path", err)
 	}
-	want := filepath.Clean(req.Msg.Path)
+	want := filepath.Clean(req.Path)
 	var entry *discoveredEntry
 	for i := range found.Worktrees {
 		if !found.Worktrees[i].Prunable && filepath.Clean(found.Worktrees[i].Path) == want {
@@ -124,19 +123,19 @@ func (s *Service) ImportWorktree(
 		}
 	}
 	if entry == nil {
-		return nil, svcerr.InvalidArgument(fmt.Sprintf("%s is not an untracked linked worktree of repo '%s'; refresh the list and try again", req.Msg.Path, repo.Name))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("%s is not an untracked linked worktree of repo '%s'; refresh the list and try again", req.Path, repo.Name))
 	}
 	if entry.Branch == "" {
 		return nil, svcerr.FailedPrecondition(fmt.Sprintf("%s has a detached HEAD, so there is no branch to adopt; create one in it first (git switch -c <branch>) and try again", entry.Path))
 	}
 
 	name := entry.Name
-	if req.Msg.Name != nil && *req.Msg.Name != "" {
-		name = *req.Msg.Name
+	if req.Name != nil && *req.Name != "" {
+		name = *req.Name
 	}
 	var chatID *string
-	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
-		chatID = req.Msg.ChatId
+	if req.ChatId != nil && *req.ChatId != "" {
+		chatID = req.ChatId
 	}
 	createReq := workspacecreate.Request{
 		Project:       project,
@@ -169,7 +168,7 @@ func (s *Service) ImportWorktree(
 			return nil, importWorktreeError("import worktree", err)
 		}
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
-		return connect.NewResponse(&reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}), nil
+		return &reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}, nil
 	}
 
 	var moved struct {
@@ -212,7 +211,7 @@ func (s *Service) ImportWorktree(
 		defer cancel()
 		s.finishWorktreeCreate(bgCtx, userID, placement, createReq, &pending)
 	}()
-	return connect.NewResponse(&reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}), nil
+	return &reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}, nil
 }
 
 // importWorktreeError is the error a failed ImportWorktree step returns:
@@ -337,29 +336,29 @@ func staleToProto(e discoveredEntry, byID map[string]*core.Repo) *reliantv1.Stal
 // read-only.
 func (s *Service) DiscoverWorktrees(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DiscoverWorktreesRequest],
-) (*connect.Response[reliantv1.DiscoverWorktreesResponse], error) {
+	req *reliantv1.DiscoverWorktreesRequest,
+) (*reliantv1.DiscoverWorktreesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ProjectId == "" {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 	// A background poll (the sidebar hint) never wakes a suspended machine:
 	// it answers Unavailable and the hint stays hidden.
-	if req.Msg.Background {
+	if req.Background {
 		ctx = machinewake.Suppress(ctx)
 	}
 
 	// The same machine a new workspace for this project would be placed on,
 	// and the project's checkout there.
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.Msg.DaemonId, "discover")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.DaemonId, "discover")
 	if err != nil {
 		return nil, err
 	}
@@ -385,7 +384,7 @@ func (s *Service) DiscoverWorktrees(
 		if machinewake.IsWaking(err) {
 			return nil, err
 		}
-		if req.Msg.Background && daemonerr.Unreachable(err) {
+		if req.Background && daemonerr.Unreachable(err) {
 			return nil, svcerr.Unavailable("your machine is not connected")
 		}
 		return nil, daemonerr.Error("list git worktrees", err)
@@ -413,28 +412,28 @@ func (s *Service) DiscoverWorktrees(
 		}
 		out.Discovered = append(out.Discovered, d)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // PruneWorktrees removes git's records of the project's worktrees whose
 // directories no longer exist. Only an explicit request does this.
 func (s *Service) PruneWorktrees(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PruneWorktreesRequest],
-) (*connect.Response[reliantv1.PruneWorktreesResponse], error) {
+	req *reliantv1.PruneWorktreesRequest,
+) (*reliantv1.PruneWorktreesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ProjectId == "" {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
-	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.Msg.DaemonId, "prune")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, req.DaemonId, "prune")
 	if err != nil {
 		return nil, err
 	}
@@ -470,5 +469,5 @@ func (s *Service) PruneWorktrees(
 	if len(out.Pruned) == 0 {
 		activity.Skip(ctx) // git had no stale records: nothing was pruned
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

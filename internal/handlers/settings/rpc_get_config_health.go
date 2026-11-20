@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/reliant/internal/auth"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -22,8 +20,8 @@ import (
 // Collects errors from preset, workflow, and MCP loading.
 func (s *Service) GetConfigHealth(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetConfigHealthRequest],
-) (*connect.Response[reliantv1.GetConfigHealthResponse], error) {
+	req *reliantv1.GetConfigHealthRequest,
+) (*reliantv1.GetConfigHealthResponse, error) {
 	collector := validation.Global()
 
 	// Get all errors from the collector
@@ -49,10 +47,10 @@ func (s *Service) GetConfigHealth(
 	}
 
 	// Apply type filter if specified
-	if req.Msg.TypeFilter != nil && *req.Msg.TypeFilter != "" {
+	if req.TypeFilter != nil && *req.TypeFilter != "" {
 		filtered := make([]*validation.Error, 0)
 		for _, err := range errors {
-			if string(err.Category) == *req.Msg.TypeFilter {
+			if string(err.Category) == *req.TypeFilter {
 				filtered = append(filtered, err)
 			}
 		}
@@ -95,9 +93,9 @@ func (s *Service) GetConfigHealth(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetConfigHealthResponse{
+	return &reliantv1.GetConfigHealthResponse{
 		Errors:       protoErrors,
 		ErrorCount:   errorCount,
 		WarningCount: warningCount,
-	}), nil
+	}, nil
 }

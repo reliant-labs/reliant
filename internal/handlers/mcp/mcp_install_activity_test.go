@@ -9,8 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/reliant-labs/forge/pkg/activity"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	mcp "github.com/reliant-labs/reliant/internal/handlers/mcp"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 type installPrincipal struct{}
@@ -31,7 +35,7 @@ func installActivityClient(t *testing.T, svc *mcp.Service) (reliantv1connect.MCP
 	t.Helper()
 	var mu sync.Mutex
 	var events []activity.Event
-	ic, err := activity.Interceptor(activity.Deps{
+	ic, err := activity.InterceptorV2(activity.Deps{
 		Principal: installPrincipal{},
 		Writer: activity.WriterFunc(func(_ context.Context, ev activity.Event) error {
 			mu.Lock()
@@ -41,16 +45,18 @@ func installActivityClient(t *testing.T, svc *mcp.Service) (reliantv1connect.MCP
 		}),
 	})
 	require.NoError(t, err)
-	authed := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			return next(context.WithValue(ctx, auth.UserIDContextKey, "test-user"), req)
+	authed := func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(context.WithValue(ctx, auth.UserIDContextKey, "test-user"), spec, stream)
 		}
-	})
+	}
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewMCPServiceHandler(svc, connect.WithInterceptors(authed, ic)))
+	server := connect.NewServer(svcerr.InterceptorV2(), authed, ic)
+	reliantv1connect.RegisterMCPServiceHandler(server, svc)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return reliantv1connect.NewMCPServiceClient(srv.Client(), srv.URL), func() []activity.Event {
+	return reliantv1connect.NewMCPServiceClient(rpcclient.New(srv.Client(), srv.URL, nil)), func() []activity.Event {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]activity.Event(nil), events...)
@@ -160,14 +166,14 @@ func TestInstallServer_ActivityMatchesPersistedOutcome(t *testing.T) {
 			if tt.preflight {
 				command = ""
 			}
-			resp, err := client.InstallServer(context.Background(), connect.NewRequest(&reliantv1.InstallServerRequest{
+			resp, err := client.InstallServer(context.Background(), &reliantv1.InstallServerRequest{
 				ProjectId: "p-1", Name: name, Scope: reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT,
 				Config: &reliantv1.MCPServerConfig{Command: command,
 					Env: []string{"GITHUB_PERSONAL_ACCESS_TOKEN=" + secret}},
-			}))
+			})
 			require.NoError(t, err, "partial failures remain recoverable responses, not RPC errors that suppress activity")
-			assert.Equal(t, tt.noBundle && !tt.startupFails, resp.Msg.Success)
-			assert.NotContains(t, resp.Msg.Message, secret)
+			assert.Equal(t, tt.noBundle && !tt.startupFails, resp.Success)
+			assert.NotContains(t, resp.Message, secret)
 
 			stateMu.Lock()
 			defer stateMu.Unlock()
@@ -195,13 +201,13 @@ func TestInstallServer_ActivityMatchesPersistedOutcome(t *testing.T) {
 				assert.Equal(t, 1, bundles)
 				assert.Zero(t, starts)
 				if tt.daemonRollbackFails || tt.storeRollbackFails {
-					assert.Contains(t, resp.Msg.Message, "rollback could not be confirmed")
-					assert.NotContains(t, resp.Msg.Message, "MCP install rolled back.")
+					assert.Contains(t, resp.Message, "rollback could not be confirmed")
+					assert.NotContains(t, resp.Message, "MCP install rolled back.")
 				} else {
-					assert.Contains(t, resp.Msg.Message, "MCP install rolled back.")
+					assert.Contains(t, resp.Message, "MCP install rolled back.")
 				}
 				if !tt.bundleTransportFail {
-					assert.Contains(t, resp.Msg.Message, "skill bundle rejected", "preserve the original daemon-reported failure")
+					assert.Contains(t, resp.Message, "skill bundle rejected", "preserve the original daemon-reported failure")
 				}
 			}
 			wantDaemonChanged := !tt.preflight && (tt.noBundle || tt.daemonRollbackFails)

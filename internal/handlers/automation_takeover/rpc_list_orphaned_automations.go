@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -22,10 +21,10 @@ import (
 // connection and event payloads, and a rendered trigger carries no secret.
 func (s *Service) ListOrphanedAutomations(
 	ctx context.Context,
-	req *connect.Request[pb.ListOrphanedAutomationsRequest],
-) (*connect.Response[pb.ListOrphanedAutomationsResponse], error) {
+	req *pb.ListOrphanedAutomationsRequest,
+) (*pb.ListOrphanedAutomationsResponse, error) {
 	callerID := auth.MustGetUserID(ctx)
-	orgID := strings.TrimSpace(req.Msg.GetOrgId())
+	orgID := strings.TrimSpace(req.GetOrgId())
 	if orgID == "" {
 		return nil, svcerr.InvalidArgument("org_id is required")
 	}
@@ -104,5 +103,5 @@ func (s *Service) ListOrphanedAutomations(
 			Status:        string(d.Status),
 		})
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

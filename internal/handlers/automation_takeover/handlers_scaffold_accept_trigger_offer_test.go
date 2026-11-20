@@ -41,7 +41,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -66,10 +66,10 @@ func TestAcceptTriggerOffer_Generated(t *testing.T) {
 		},
 	}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.AcceptTriggerOfferRequest, pb.AcceptTriggerOfferResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.AcceptTriggerOfferRequest, pb.AcceptTriggerOfferResponse]{
 		{
 			Name:    "an unknown offer is not found",
-			Req:     connect.NewRequest(&pb.AcceptTriggerOfferRequest{OfferId: "missing"}),
+			Req:     &pb.AcceptTriggerOfferRequest{OfferId: "missing"},
 			Ctx:     automation_takeover.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

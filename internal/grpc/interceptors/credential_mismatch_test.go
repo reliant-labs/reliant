@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -32,11 +32,11 @@ func TestCredentialMismatchNamesTheOrgAndTheFix(t *testing.T) {
 	}
 
 	err := credentialMismatch(ctx, svcerr.NotFound("chat"))
-	if code := svcerr.Code(err); code != connect.CodePermissionDenied {
+	if code := svcerr.CodeV2(err); code != connect.CodePermissionDenied {
 		t.Fatalf("code %v, want PermissionDenied: %v", code, err)
 	}
 	var cerr *connect.Error
-	if !errors.As(err, &cerr) || cerr.Meta().Get(svcerr.ReasonHeader) != orgs.ReasonOrgMismatch {
+	if !errors.As(err, &cerr) || svcerr.MetaOf(err).Get(svcerr.ReasonHeader) != orgs.ReasonOrgMismatch {
 		t.Fatalf("want reason %q: %v", orgs.ReasonOrgMismatch, err)
 	}
 	for _, want := range []string{"home", "acme", "reliant auth login", "forge login --org acme"} {
@@ -45,10 +45,10 @@ func TestCredentialMismatchNamesTheOrgAndTheFix(t *testing.T) {
 		}
 	}
 
-	if got := credentialMismatch(ctx, svcerr.InvalidArgument("bad")); svcerr.Code(got) != connect.CodeInvalidArgument {
+	if got := credentialMismatch(ctx, svcerr.InvalidArgument("bad")); svcerr.CodeV2(got) != connect.CodeInvalidArgument {
 		t.Fatalf("an unrelated error was rewritten: %v", got)
 	}
-	if got := credentialMismatch(authz.WithCredentialOrg(base, "home"), svcerr.NotFound("chat")); svcerr.Code(got) != connect.CodeNotFound {
+	if got := credentialMismatch(authz.WithCredentialOrg(base, "home"), svcerr.NotFound("chat")); svcerr.CodeV2(got) != connect.CodeNotFound {
 		t.Fatalf("a NotFound with no credential refusal was rewritten: %v", got)
 	}
 	if credentialMismatch(ctx, nil) != nil {

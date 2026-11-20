@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -29,10 +29,10 @@ func TestListProcesses_Generated(t *testing.T) {
 
 	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: listNoWorktreeRepo{}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListPackageProcessesRequest, pb.ListPackageProcessesResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListPackageProcessesRequest, pb.ListPackageProcessesResponse]{
 		{
 			Name:    "an unknown worktree is not found",
-			Req:     connect.NewRequest(&pb.ListPackageProcessesRequest{WorktreeId: ptr.Of("wt-missing")}),
+			Req:     &pb.ListPackageProcessesRequest{WorktreeId: ptr.Of("wt-missing")},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,10 +42,10 @@ func (r *fsMissingDirRouter) ResolveDaemonID(context.Context, string) (string, e
 
 func checkoutMissingDetail(t *testing.T, err error) *reliantv1.ProjectCheckoutMissing {
 	t.Helper()
-	cerr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	cerr := svcerr.ToConnectV2(err) // the wire form svcerr.Interceptor sends
 	require.True(t, cerr != nil, "want a connect error, got %v", err)
 	for _, d := range cerr.Details() {
-		v, verr := d.Value()
+		v, verr := connectproto.UnmarshalErrorDetail(d)
 		if verr != nil {
 			continue
 		}
@@ -71,10 +72,10 @@ func TestFileSystemProxy_GetFileTree_QueuedCloneIsCloningNotInternal(t *testing.
 	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, projectID, "2aab1465", base, nil, "clone:"+projectID+":2aab1465"))
 
 	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
-	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"}))
+	_, err := svc.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"})
 	require.Error(t, err)
 	// Known from the machine's own record before any command is sent.
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a clone landing on this machine is a state, not INTERNAL")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "a clone landing on this machine is a state, not INTERNAL")
 
 	d := checkoutMissingDetail(t, err)
 	assert.Equal(t, reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING, d.GetState())
@@ -100,9 +101,9 @@ func TestFileSystemProxy_GetFileTree_ProjectNotOnThisMachineIsAbsent(t *testing.
 	require.NoError(t, repo.UpsertQueuedProjectDaemon(ctx, projectID, "old-machine", base, nil, "clone:"+projectID+":old-machine"))
 
 	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
-	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID}))
+	_, err := svc.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 
 	d := checkoutMissingDetail(t, err)
 	assert.Equal(t, reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT, d.GetState())
@@ -119,14 +120,14 @@ func TestFileSystemProxy_GetFileTree_MissingSubdirStaysAsItWas(t *testing.T) {
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: "2aab1465", UserID: fsProxyTestUser}))
 	require.NoError(t, repo.UpsertProjectDaemon(context.Background(), projectID, "2aab1465", base, nil))
 	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
-	_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "pkg"}))
+	_, err := svc.GetFileTree(fsProxyContext(), &reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "pkg"})
 	require.Error(t, err)
-	cerr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	cerr := svcerr.ToConnectV2(err) // the wire form svcerr.Interceptor sends
 	require.True(t, cerr != nil)
 	assert.Empty(t, cerr.Details(), "a missing subdirectory must not be reported as a missing checkout")
 	// ...but it is still the state of the user's disk, not a server fault:
 	// as INTERNAL it was reported to Sentry by the server and the browser.
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }
 
 // ELECTRON-9Y: the client names the project's MAIN worktree when the user is on
@@ -144,11 +145,11 @@ func TestFileSystemProxy_GetFileTree_MissingRootViaMainWorktreeIsACheckoutState(
 	}))
 
 	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
-	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, WorktreeId: &mainID}))
+	_, err := svc.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID, WorktreeId: &mainID})
 	require.Error(t, err)
 	// The main row is the main checkout ON THE REQUEST'S MACHINE, which has
 	// none: refused with the detail, never sent at the creation path.
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	d := checkoutMissingDetail(t, err)
 	assert.Equal(t, reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT, d.GetState())
 }
@@ -184,7 +185,7 @@ func TestFileSystemProxy_SendCommand_ClassifiesMissingPath(t *testing.T) {
 			var resp struct{}
 			err := svc.sendCommand(fsProxyContext(), fsProxyTestUser, machinewake.Target{}, "fs.read_file", map[string]any{}, &resp, 1000)
 			require.Error(t, err)
-			assert.Equal(t, tc.want, svcerr.Code(err))
+			assert.Equal(t, tc.want, svcerr.CodeV2(err))
 		})
 	}
 }

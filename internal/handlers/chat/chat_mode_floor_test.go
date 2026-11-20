@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,10 +72,10 @@ func orgChatFixture(t *testing.T, repo *db.Repo, org string) (context.Context, s
 
 // plainMessage is a send with no params at all: the path that used to carry
 // no input update to the run.
-func plainMessage(chatID string) *connect.Request[reliantv1.SendMessageRequest] {
-	return connect.NewRequest(&reliantv1.SendMessageRequest{ChatId: chatID, Messages: []*reliantv1.InputMessage{{
+func plainMessage(chatID string) *reliantv1.SendMessageRequest {
+	return &reliantv1.SendMessageRequest{ChatId: chatID, Messages: []*reliantv1.InputMessage{{
 		Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "carry on",
-	}}})
+	}}}
 }
 
 // stateUpdateModes are the modes the send's update_workflow_state signals set.
@@ -166,5 +166,5 @@ func TestWithLiveModeFloor_UnknownModeRefusesTheSend(t *testing.T) {
 	update, err := service.withLiveModeFloor(ctx, "floor-user", chat, "builtin://no-such-workflow", nil)
 	require.Error(t, err)
 	assert.Nil(t, update)
-	assert.Equal(t, connect.CodeUnavailable, svcerr.ToConnect(err).Code())
+	assert.Equal(t, connect.CodeUnavailable, svcerr.ToConnectV2(err).Code())
 }

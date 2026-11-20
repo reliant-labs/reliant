@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -40,12 +40,12 @@ func TestDisconnectDaemonEndsOnlyTheNamedStream(t *testing.T) {
 
 	select {
 	case err := <-handlerErr:
-		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "got %v", err)
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err), "got %v", err)
 		require.Contains(t, err.Error(), "credential revoked", "the daemon is told why")
 	case <-time.After(5 * time.Second):
 		t.Fatal("the disconnected daemon's stream handler did not return")
 	}
-	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(revoked.closedReason()),
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(revoked.closedReason()),
 		"teardown must not overwrite the reason with an ordinary close")
 
 	_, _, held := svc.DaemonStatus(revoked.daemonID)
@@ -94,7 +94,7 @@ func TestDisconnectDaemonLeavesOutboundStreams(t *testing.T) {
 // which would stop the daemon for good.
 func TestAuthorityRevokedErrorIsRecoverableUnauthenticated(t *testing.T) {
 	err := errAuthorityRevoked("")
-	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 	require.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
 	require.Contains(t, err.Error(), "access revoked", "an empty reason still says what happened")
 }

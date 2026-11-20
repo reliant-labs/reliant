@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -44,7 +44,7 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo.GetProjectWithUserCheckFunc = func(context.Context, string, string) (*db.Project, error) { return nil, tc.err }
 			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo}))
 			projectID := ownProjectID
-			_, err := svc.ListScenarios(scenario.AuthedContext(t), connect.NewRequest(&pb.ListScenariosRequest{ProjectId: &projectID, WorkflowSlug: ownWorkflowSlug}))
+			_, err := svc.ListScenarios(scenario.AuthedContext(t), &pb.ListScenariosRequest{ProjectId: &projectID, WorkflowSlug: ownWorkflowSlug})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("CreateScenario, reading the workflow: "+tc.name, func(t *testing.T) {
@@ -52,9 +52,9 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := newScenarioRepo(&fixture{})
 			repo.GetWorkflowDraftBySlugFunc = func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, tc.err }
 			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo}))
-			_, err := svc.CreateScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.CreateScenarioRequest{
+			_, err := svc.CreateScenario(scenario.AuthedContext(t), &pb.CreateScenarioRequest{
 				WorkflowSlug: ownWorkflowSlug, Scenario: &pb.ScenarioDefinition{Name: "s"},
-			}))
+			})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("DeleteScenario, reading the scenario: "+tc.name, func(t *testing.T) {
@@ -62,7 +62,7 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := newScenarioRepo(&fixture{})
 			repo.GetWorkflowScenarioFunc = func(context.Context, string) (*db.WorkflowScenario, error) { return nil, tc.err }
 			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo}))
-			_, err := svc.DeleteScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.DeleteScenarioRequest{ScenarioId: ownScenarioID}))
+			_, err := svc.DeleteScenario(scenario.AuthedContext(t), &pb.DeleteScenarioRequest{ScenarioId: ownScenarioID})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("DeleteScenario, deleting: "+tc.name, func(t *testing.T) {
@@ -70,7 +70,7 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := newScenarioRepo(&fixture{})
 			repo.DeleteWorkflowScenarioFunc = func(context.Context, string) error { return tc.err }
 			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: repo}))
-			_, err := svc.DeleteScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.DeleteScenarioRequest{ScenarioId: ownScenarioID}))
+			_, err := svc.DeleteScenario(scenario.AuthedContext(t), &pb.DeleteScenarioRequest{ScenarioId: ownScenarioID})
 			requireClientReads(t, err, tc.want)
 		})
 	}
@@ -106,11 +106,11 @@ func TestUploadScenario_DaemonFailureCodes(t *testing.T) {
 				Repo:   newScenarioRepo(&fixture{}),
 				Router: failingSender(tc.err),
 			}))
-			_, err := svc.UploadScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.UploadScenarioRequest{
+			_, err := svc.UploadScenario(scenario.AuthedContext(t), &pb.UploadScenarioRequest{
 				ProjectId: ownProjectID, WorkflowSlug: ownWorkflowSlug, Filename: "drafts.yaml", YamlContent: fixtureScenario,
-			}))
+			})
 			requireClientReads(t, err, tc.want)
-			msg := svcerr.ToConnect(err).Message()
+			msg := svcerr.ToConnectV2(err).Message()
 			require.True(t, strings.Contains(msg, tc.contains), "message %q lacks %q", msg, tc.contains)
 		})
 	}
@@ -122,11 +122,11 @@ func TestUploadScenario_InvalidYAMLKeepsTheParserText(t *testing.T) {
 	t.Parallel()
 
 	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Router: &scenario.MockSender{}}))
-	_, err := svc.UploadScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.UploadScenarioRequest{
+	_, err := svc.UploadScenario(scenario.AuthedContext(t), &pb.UploadScenarioRequest{
 		ProjectId: ownProjectID, WorkflowSlug: ownWorkflowSlug, Filename: "drafts.yaml", YamlContent: "events: [",
-	}))
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-	msg := svcerr.ToConnect(err).Message()
+	})
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
+	msg := svcerr.ToConnectV2(err).Message()
 	require.True(t, strings.HasPrefix(msg, "invalid scenario YAML: "), "message = %q", msg)
 	require.Greater(t, len(msg), len("invalid scenario YAML: "), "the parser's reason is kept")
 }
@@ -134,6 +134,6 @@ func TestUploadScenario_InvalidYAMLKeepsTheParserText(t *testing.T) {
 func requireClientReads(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
-	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+	require.Equal(t, want, svcerr.CodeV2(err), "err = %v", err)
+	require.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 }

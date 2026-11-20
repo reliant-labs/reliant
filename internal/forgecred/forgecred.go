@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
 	"github.com/reliant-labs/forge/pkg/credentials"
@@ -162,13 +162,14 @@ func reasonOf(err error) string {
 }
 
 // structuredRefusal is the exchange's reason and scopes, read off the Connect
-// error's metadata.
+// error's metadata (svcerr.MetaOf: the exchanger's client must carry svcerr.ClientInterceptorV2, as rpcclient's does).
 func structuredRefusal(err error) (string, []string) {
 	var ce *connect.Error
 	if !errors.As(err, &ce) {
 		return "", nil
 	}
-	return strings.TrimSpace(ce.Meta().Get(svcerr.ReasonHeader)), fat.ParseScopesHeader(ce.Meta().Get(fat.ScopesHeader))
+	meta := svcerr.MetaOf(err)
+	return strings.TrimSpace(meta.Get(svcerr.ReasonHeader)), fat.ParseScopesHeader(meta.Get(fat.ScopesHeader))
 }
 
 // refusal turns every candidate's failure into one answer for forge.

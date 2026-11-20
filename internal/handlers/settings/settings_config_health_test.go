@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/accesstoken"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -27,9 +26,9 @@ func TestGetConfigHealth_ReportsStaleReliantKey(t *testing.T) {
 	ctx := newSettingsServiceTestContext()
 
 	find := func() *reliantv1.ConfigError {
-		resp, err := svc.GetConfigHealth(ctx, connect.NewRequest(&reliantv1.GetConfigHealthRequest{}))
+		resp, err := svc.GetConfigHealth(ctx, &reliantv1.GetConfigHealthRequest{})
 		require.NoError(t, err)
-		for _, e := range resp.Msg.Errors {
+		for _, e := range resp.Errors {
 			if e.Source == "provider:reliant" {
 				return e
 			}
@@ -64,9 +63,9 @@ func TestGetConfigHealth_HealsLegacyKeyAndReportsOnlyOnFailure(t *testing.T) {
 	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 	reliantError := func() *reliantv1.ConfigError {
-		resp, err := svc.GetConfigHealth(ctx, connect.NewRequest(&reliantv1.GetConfigHealthRequest{}))
+		resp, err := svc.GetConfigHealth(ctx, &reliantv1.GetConfigHealthRequest{})
 		require.NoError(t, err)
-		for _, e := range resp.Msg.Errors {
+		for _, e := range resp.Errors {
 			if e.Source == "provider:reliant" {
 				return e
 			}

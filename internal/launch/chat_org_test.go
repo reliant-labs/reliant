@@ -3,7 +3,7 @@ package launch
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -28,7 +28,7 @@ func TestChatOrg(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := chatOrg(tc.spec, tc.project)
 			if tc.refused {
-				if svcerr.Code(err) != connect.CodeFailedPrecondition {
+				if svcerr.CodeV2(err) != connect.CodeFailedPrecondition {
 					t.Fatalf("err = %v, want FailedPrecondition", err)
 				}
 				return

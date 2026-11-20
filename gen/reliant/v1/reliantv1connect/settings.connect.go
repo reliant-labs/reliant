@@ -7,1102 +7,1337 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SettingsServiceName is the fully-qualified name of the SettingsService service.
 	SettingsServiceName = "reliant.v1.SettingsService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SettingsServiceCreateSettingProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceCreateSettingProcedure is the procedure name of the SettingsService's
 	// CreateSetting RPC.
 	SettingsServiceCreateSettingProcedure = "/reliant.v1.SettingsService/CreateSetting"
-	// SettingsServiceListSettingsProcedure is the fully-qualified name of the SettingsService's
-	// ListSettings RPC.
+	// SettingsServiceListSettingsProcedure is the procedure name of the SettingsService's ListSettings
+	// RPC.
 	SettingsServiceListSettingsProcedure = "/reliant.v1.SettingsService/ListSettings"
-	// SettingsServiceGetSettingProcedure is the fully-qualified name of the SettingsService's
-	// GetSetting RPC.
+	// SettingsServiceGetSettingProcedure is the procedure name of the SettingsService's GetSetting RPC.
 	SettingsServiceGetSettingProcedure = "/reliant.v1.SettingsService/GetSetting"
-	// SettingsServiceUpdateSettingProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceUpdateSettingProcedure is the procedure name of the SettingsService's
 	// UpdateSetting RPC.
 	SettingsServiceUpdateSettingProcedure = "/reliant.v1.SettingsService/UpdateSetting"
-	// SettingsServiceDeleteSettingProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceDeleteSettingProcedure is the procedure name of the SettingsService's
 	// DeleteSetting RPC.
 	SettingsServiceDeleteSettingProcedure = "/reliant.v1.SettingsService/DeleteSetting"
-	// SettingsServiceBatchUpsertSettingsProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceBatchUpsertSettingsProcedure is the procedure name of the SettingsService's
 	// BatchUpsertSettings RPC.
 	SettingsServiceBatchUpsertSettingsProcedure = "/reliant.v1.SettingsService/BatchUpsertSettings"
-	// SettingsServiceGetShortcutsProcedure is the fully-qualified name of the SettingsService's
-	// GetShortcuts RPC.
+	// SettingsServiceGetShortcutsProcedure is the procedure name of the SettingsService's GetShortcuts
+	// RPC.
 	SettingsServiceGetShortcutsProcedure = "/reliant.v1.SettingsService/GetShortcuts"
-	// SettingsServiceUpdateShortcutsProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceUpdateShortcutsProcedure is the procedure name of the SettingsService's
 	// UpdateShortcuts RPC.
 	SettingsServiceUpdateShortcutsProcedure = "/reliant.v1.SettingsService/UpdateShortcuts"
-	// SettingsServiceGetPreferencesProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceGetPreferencesProcedure is the procedure name of the SettingsService's
 	// GetPreferences RPC.
 	SettingsServiceGetPreferencesProcedure = "/reliant.v1.SettingsService/GetPreferences"
-	// SettingsServiceUpdatePreferencesProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceUpdatePreferencesProcedure is the procedure name of the SettingsService's
 	// UpdatePreferences RPC.
 	SettingsServiceUpdatePreferencesProcedure = "/reliant.v1.SettingsService/UpdatePreferences"
-	// SettingsServiceSetHiddenItemProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceSetHiddenItemProcedure is the procedure name of the SettingsService's
 	// SetHiddenItem RPC.
 	SettingsServiceSetHiddenItemProcedure = "/reliant.v1.SettingsService/SetHiddenItem"
-	// SettingsServiceGetPromptsProcedure is the fully-qualified name of the SettingsService's
-	// GetPrompts RPC.
+	// SettingsServiceGetPromptsProcedure is the procedure name of the SettingsService's GetPrompts RPC.
 	SettingsServiceGetPromptsProcedure = "/reliant.v1.SettingsService/GetPrompts"
-	// SettingsServiceSavePromptsProcedure is the fully-qualified name of the SettingsService's
-	// SavePrompts RPC.
+	// SettingsServiceSavePromptsProcedure is the procedure name of the SettingsService's SavePrompts
+	// RPC.
 	SettingsServiceSavePromptsProcedure = "/reliant.v1.SettingsService/SavePrompts"
-	// SettingsServiceGetProviderStatusesProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceGetProviderStatusesProcedure is the procedure name of the SettingsService's
 	// GetProviderStatuses RPC.
 	SettingsServiceGetProviderStatusesProcedure = "/reliant.v1.SettingsService/GetProviderStatuses"
-	// SettingsServiceValidateProviderAPIKeyProcedure is the fully-qualified name of the
-	// SettingsService's ValidateProviderAPIKey RPC.
+	// SettingsServiceValidateProviderAPIKeyProcedure is the procedure name of the SettingsService's
+	// ValidateProviderAPIKey RPC.
 	SettingsServiceValidateProviderAPIKeyProcedure = "/reliant.v1.SettingsService/ValidateProviderAPIKey"
-	// SettingsServiceSyncReliantProviderProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceSyncReliantProviderProcedure is the procedure name of the SettingsService's
 	// SyncReliantProvider RPC.
 	SettingsServiceSyncReliantProviderProcedure = "/reliant.v1.SettingsService/SyncReliantProvider"
-	// SettingsServiceCompleteCodexOAuthProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceCompleteCodexOAuthProcedure is the procedure name of the SettingsService's
 	// CompleteCodexOAuth RPC.
 	SettingsServiceCompleteCodexOAuthProcedure = "/reliant.v1.SettingsService/CompleteCodexOAuth"
-	// SettingsServiceCompleteClaudeOAuthProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceCompleteClaudeOAuthProcedure is the procedure name of the SettingsService's
 	// CompleteClaudeOAuth RPC.
 	SettingsServiceCompleteClaudeOAuthProcedure = "/reliant.v1.SettingsService/CompleteClaudeOAuth"
-	// SettingsServiceCompleteAntigravityOAuthProcedure is the fully-qualified name of the
-	// SettingsService's CompleteAntigravityOAuth RPC.
+	// SettingsServiceCompleteAntigravityOAuthProcedure is the procedure name of the SettingsService's
+	// CompleteAntigravityOAuth RPC.
 	SettingsServiceCompleteAntigravityOAuthProcedure = "/reliant.v1.SettingsService/CompleteAntigravityOAuth"
-	// SettingsServiceStartCopilotDeviceAuthProcedure is the fully-qualified name of the
-	// SettingsService's StartCopilotDeviceAuth RPC.
+	// SettingsServiceStartCopilotDeviceAuthProcedure is the procedure name of the SettingsService's
+	// StartCopilotDeviceAuth RPC.
 	SettingsServiceStartCopilotDeviceAuthProcedure = "/reliant.v1.SettingsService/StartCopilotDeviceAuth"
-	// SettingsServicePollCopilotDeviceAuthProcedure is the fully-qualified name of the
-	// SettingsService's PollCopilotDeviceAuth RPC.
+	// SettingsServicePollCopilotDeviceAuthProcedure is the procedure name of the SettingsService's
+	// PollCopilotDeviceAuth RPC.
 	SettingsServicePollCopilotDeviceAuthProcedure = "/reliant.v1.SettingsService/PollCopilotDeviceAuth"
-	// SettingsServiceGetPrivacySettingsProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceGetPrivacySettingsProcedure is the procedure name of the SettingsService's
 	// GetPrivacySettings RPC.
 	SettingsServiceGetPrivacySettingsProcedure = "/reliant.v1.SettingsService/GetPrivacySettings"
-	// SettingsServiceUpdatePrivacySettingsProcedure is the fully-qualified name of the
-	// SettingsService's UpdatePrivacySettings RPC.
+	// SettingsServiceUpdatePrivacySettingsProcedure is the procedure name of the SettingsService's
+	// UpdatePrivacySettings RPC.
 	SettingsServiceUpdatePrivacySettingsProcedure = "/reliant.v1.SettingsService/UpdatePrivacySettings"
-	// SettingsServiceTrackPageVisitedProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceTrackPageVisitedProcedure is the procedure name of the SettingsService's
 	// TrackPageVisited RPC.
 	SettingsServiceTrackPageVisitedProcedure = "/reliant.v1.SettingsService/TrackPageVisited"
-	// SettingsServiceTrackOnboardingEventProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceTrackOnboardingEventProcedure is the procedure name of the SettingsService's
 	// TrackOnboardingEvent RPC.
 	SettingsServiceTrackOnboardingEventProcedure = "/reliant.v1.SettingsService/TrackOnboardingEvent"
-	// SettingsServiceInstallSkillProcedure is the fully-qualified name of the SettingsService's
-	// InstallSkill RPC.
+	// SettingsServiceInstallSkillProcedure is the procedure name of the SettingsService's InstallSkill
+	// RPC.
 	SettingsServiceInstallSkillProcedure = "/reliant.v1.SettingsService/InstallSkill"
-	// SettingsServiceListInstalledSkillsProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceListInstalledSkillsProcedure is the procedure name of the SettingsService's
 	// ListInstalledSkills RPC.
 	SettingsServiceListInstalledSkillsProcedure = "/reliant.v1.SettingsService/ListInstalledSkills"
-	// SettingsServiceGetInstalledSkillDefinitionProcedure is the fully-qualified name of the
+	// SettingsServiceGetInstalledSkillDefinitionProcedure is the procedure name of the
 	// SettingsService's GetInstalledSkillDefinition RPC.
 	SettingsServiceGetInstalledSkillDefinitionProcedure = "/reliant.v1.SettingsService/GetInstalledSkillDefinition"
-	// SettingsServiceSetSkillEnabledProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceSetSkillEnabledProcedure is the procedure name of the SettingsService's
 	// SetSkillEnabled RPC.
 	SettingsServiceSetSkillEnabledProcedure = "/reliant.v1.SettingsService/SetSkillEnabled"
-	// SettingsServiceListRecommendedSkillsProcedure is the fully-qualified name of the
-	// SettingsService's ListRecommendedSkills RPC.
+	// SettingsServiceListRecommendedSkillsProcedure is the procedure name of the SettingsService's
+	// ListRecommendedSkills RPC.
 	SettingsServiceListRecommendedSkillsProcedure = "/reliant.v1.SettingsService/ListRecommendedSkills"
-	// SettingsServiceDeleteGlobalSkillProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceDeleteGlobalSkillProcedure is the procedure name of the SettingsService's
 	// DeleteGlobalSkill RPC.
 	SettingsServiceDeleteGlobalSkillProcedure = "/reliant.v1.SettingsService/DeleteGlobalSkill"
-	// SettingsServiceGetConfigHealthProcedure is the fully-qualified name of the SettingsService's
+	// SettingsServiceGetConfigHealthProcedure is the procedure name of the SettingsService's
 	// GetConfigHealth RPC.
 	SettingsServiceGetConfigHealthProcedure = "/reliant.v1.SettingsService/GetConfigHealth"
+)
+
+var (
+	settingsServiceCreateSettingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("CreateSetting"),
+			Procedure:  SettingsServiceCreateSettingProcedure,
+		}
+	})
+	settingsServiceListSettingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("ListSettings"),
+			Procedure:  SettingsServiceListSettingsProcedure,
+		}
+	})
+	settingsServiceGetSettingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("GetSetting"),
+			Procedure:  SettingsServiceGetSettingProcedure,
+		}
+	})
+	settingsServiceUpdateSettingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("UpdateSetting"),
+			Procedure:  SettingsServiceUpdateSettingProcedure,
+		}
+	})
+	settingsServiceDeleteSettingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("DeleteSetting"),
+			Procedure:  SettingsServiceDeleteSettingProcedure,
+		}
+	})
+	settingsServiceBatchUpsertSettingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("BatchUpsertSettings"),
+			Procedure:  SettingsServiceBatchUpsertSettingsProcedure,
+		}
+	})
+	settingsServiceGetShortcutsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("GetShortcuts"),
+			Procedure:  SettingsServiceGetShortcutsProcedure,
+		}
+	})
+	settingsServiceUpdateShortcutsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("UpdateShortcuts"),
+			Procedure:  SettingsServiceUpdateShortcutsProcedure,
+		}
+	})
+	settingsServiceGetPreferencesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("GetPreferences"),
+			Procedure:  SettingsServiceGetPreferencesProcedure,
+		}
+	})
+	settingsServiceUpdatePreferencesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("UpdatePreferences"),
+			Procedure:  SettingsServiceUpdatePreferencesProcedure,
+		}
+	})
+	settingsServiceSetHiddenItemSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("SetHiddenItem"),
+			Procedure:  SettingsServiceSetHiddenItemProcedure,
+		}
+	})
+	settingsServiceGetPromptsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("GetPrompts"),
+			Procedure:  SettingsServiceGetPromptsProcedure,
+		}
+	})
+	settingsServiceSavePromptsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("SavePrompts"),
+			Procedure:  SettingsServiceSavePromptsProcedure,
+		}
+	})
+	settingsServiceGetProviderStatusesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("GetProviderStatuses"),
+			Procedure:  SettingsServiceGetProviderStatusesProcedure,
+		}
+	})
+	settingsServiceValidateProviderAPIKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("ValidateProviderAPIKey"),
+			Procedure:  SettingsServiceValidateProviderAPIKeyProcedure,
+		}
+	})
+	settingsServiceSyncReliantProviderSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("SyncReliantProvider"),
+			Procedure:  SettingsServiceSyncReliantProviderProcedure,
+		}
+	})
+	settingsServiceCompleteCodexOAuthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("CompleteCodexOAuth"),
+			Procedure:  SettingsServiceCompleteCodexOAuthProcedure,
+		}
+	})
+	settingsServiceCompleteClaudeOAuthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("CompleteClaudeOAuth"),
+			Procedure:  SettingsServiceCompleteClaudeOAuthProcedure,
+		}
+	})
+	settingsServiceCompleteAntigravityOAuthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("CompleteAntigravityOAuth"),
+			Procedure:  SettingsServiceCompleteAntigravityOAuthProcedure,
+		}
+	})
+	settingsServiceStartCopilotDeviceAuthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("StartCopilotDeviceAuth"),
+			Procedure:  SettingsServiceStartCopilotDeviceAuthProcedure,
+		}
+	})
+	settingsServicePollCopilotDeviceAuthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("PollCopilotDeviceAuth"),
+			Procedure:  SettingsServicePollCopilotDeviceAuthProcedure,
+		}
+	})
+	settingsServiceGetPrivacySettingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("GetPrivacySettings"),
+			Procedure:  SettingsServiceGetPrivacySettingsProcedure,
+		}
+	})
+	settingsServiceUpdatePrivacySettingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("UpdatePrivacySettings"),
+			Procedure:  SettingsServiceUpdatePrivacySettingsProcedure,
+		}
+	})
+	settingsServiceTrackPageVisitedSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("TrackPageVisited"),
+			Procedure:  SettingsServiceTrackPageVisitedProcedure,
+		}
+	})
+	settingsServiceTrackOnboardingEventSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("TrackOnboardingEvent"),
+			Procedure:  SettingsServiceTrackOnboardingEventProcedure,
+		}
+	})
+	settingsServiceInstallSkillSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("InstallSkill"),
+			Procedure:  SettingsServiceInstallSkillProcedure,
+		}
+	})
+	settingsServiceListInstalledSkillsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("ListInstalledSkills"),
+			Procedure:  SettingsServiceListInstalledSkillsProcedure,
+		}
+	})
+	settingsServiceGetInstalledSkillDefinitionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("GetInstalledSkillDefinition"),
+			Procedure:  SettingsServiceGetInstalledSkillDefinitionProcedure,
+		}
+	})
+	settingsServiceSetSkillEnabledSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("SetSkillEnabled"),
+			Procedure:  SettingsServiceSetSkillEnabledProcedure,
+		}
+	})
+	settingsServiceListRecommendedSkillsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("ListRecommendedSkills"),
+			Procedure:  SettingsServiceListRecommendedSkillsProcedure,
+		}
+	})
+	settingsServiceDeleteGlobalSkillSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("DeleteGlobalSkill"),
+			Procedure:  SettingsServiceDeleteGlobalSkillProcedure,
+		}
+	})
+	settingsServiceGetConfigHealthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods().ByName("GetConfigHealth"),
+			Procedure:  SettingsServiceGetConfigHealthProcedure,
+		}
+	})
 )
 
 // SettingsServiceClient is a client for the reliant.v1.SettingsService service.
 type SettingsServiceClient interface {
 	// CreateSetting creates a new setting
 	// forge:custom — an upsert keyed by the caller, project and key, which notifies config health
-	CreateSetting(context.Context, *connect.Request[v1.CreateSettingRequest]) (*connect.Response[v1.CreateSettingResponse], error)
+	CreateSetting(context.Context, *v1.CreateSettingRequest) (*v1.CreateSettingResponse, error)
 	// ListSettings lists all settings for the current user
 	// forge:custom — scoped to the caller and an optional project, never a table-wide list
-	ListSettings(context.Context, *connect.Request[v1.ListSettingsRequest]) (*connect.Response[v1.ListSettingsResponse], error)
+	ListSettings(context.Context, *v1.ListSettingsRequest) (*v1.ListSettingsResponse, error)
 	// GetSetting retrieves a setting by key
 	// forge:custom — looks a key up in the caller's scope, and answers an empty response when it is unset
-	GetSetting(context.Context, *connect.Request[v1.GetSettingRequest]) (*connect.Response[v1.GetSettingResponse], error)
+	GetSetting(context.Context, *v1.GetSettingRequest) (*v1.GetSettingResponse, error)
 	// UpdateSetting updates an existing setting
 	// forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
-	UpdateSetting(context.Context, *connect.Request[v1.UpdateSettingRequest]) (*connect.Response[v1.UpdateSettingResponse], error)
+	UpdateSetting(context.Context, *v1.UpdateSettingRequest) (*v1.UpdateSettingResponse, error)
 	// DeleteSetting deletes a setting by key
 	// forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
-	DeleteSetting(context.Context, *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error)
+	DeleteSetting(context.Context, *v1.DeleteSettingRequest) (*v1.DeleteSettingResponse, error)
 	// BatchUpsertSettings writes many settings in one round trip.
 	//
 	// Each entry is an upsert with the same semantics as CreateSetting (which is
 	// itself an upsert server-side), so callers do not have to know whether a key
 	// already exists. Writers that previously fired one RPC per key — the tour's
 	// three-key save, the tool-call category toggles — now issue one.
-	BatchUpsertSettings(context.Context, *connect.Request[v1.BatchUpsertSettingsRequest]) (*connect.Response[v1.BatchUpsertSettingsResponse], error)
+	BatchUpsertSettings(context.Context, *v1.BatchUpsertSettingsRequest) (*v1.BatchUpsertSettingsResponse, error)
 	// GetShortcuts retrieves user keyboard shortcuts
-	GetShortcuts(context.Context, *connect.Request[v1.GetShortcutsRequest]) (*connect.Response[v1.GetShortcutsResponse], error)
+	GetShortcuts(context.Context, *v1.GetShortcutsRequest) (*v1.GetShortcutsResponse, error)
 	// UpdateShortcuts updates user keyboard shortcuts
-	UpdateShortcuts(context.Context, *connect.Request[v1.UpdateShortcutsRequest]) (*connect.Response[v1.UpdateShortcutsResponse], error)
+	UpdateShortcuts(context.Context, *v1.UpdateShortcutsRequest) (*v1.UpdateShortcutsResponse, error)
 	// GetPreferences retrieves user preferences
-	GetPreferences(context.Context, *connect.Request[v1.GetPreferencesRequest]) (*connect.Response[v1.GetPreferencesResponse], error)
+	GetPreferences(context.Context, *v1.GetPreferencesRequest) (*v1.GetPreferencesResponse, error)
 	// UpdatePreferences updates user preferences
-	UpdatePreferences(context.Context, *connect.Request[v1.UpdatePreferencesRequest]) (*connect.Response[v1.UpdatePreferencesResponse], error)
+	UpdatePreferences(context.Context, *v1.UpdatePreferencesRequest) (*v1.UpdatePreferencesResponse, error)
 	// SetHiddenItem toggles the hidden state of a workflow or preset
-	SetHiddenItem(context.Context, *connect.Request[v1.SetHiddenItemRequest]) (*connect.Response[v1.SetHiddenItemResponse], error)
+	SetHiddenItem(context.Context, *v1.SetHiddenItemRequest) (*v1.SetHiddenItemResponse, error)
 	// GetPrompts retrieves global user prompts
-	GetPrompts(context.Context, *connect.Request[v1.GetPromptsRequest]) (*connect.Response[v1.GetPromptsResponse], error)
+	GetPrompts(context.Context, *v1.GetPromptsRequest) (*v1.GetPromptsResponse, error)
 	// SavePrompts saves global user prompts
-	SavePrompts(context.Context, *connect.Request[v1.SavePromptsRequest]) (*connect.Response[v1.SavePromptsResponse], error)
+	SavePrompts(context.Context, *v1.SavePromptsRequest) (*v1.SavePromptsResponse, error)
 	// GetProviderStatuses retrieves configuration status of all providers
-	GetProviderStatuses(context.Context, *connect.Request[v1.GetProviderStatusesRequest]) (*connect.Response[v1.GetProviderStatusesResponse], error)
+	GetProviderStatuses(context.Context, *v1.GetProviderStatusesRequest) (*v1.GetProviderStatusesResponse, error)
 	// ValidateProviderAPIKey validates an API key for a provider
-	ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error)
+	ValidateProviderAPIKey(context.Context, *v1.ValidateProviderAPIKeyRequest) (*v1.ValidateProviderAPIKeyResponse, error)
 	// SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
-	SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error)
+	SyncReliantProvider(context.Context, *v1.SyncReliantProviderRequest) (*v1.SyncReliantProviderResponse, error)
 	// CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Codex as connected for the current user.
-	CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error)
+	CompleteCodexOAuth(context.Context, *v1.CompleteCodexOAuthRequest) (*v1.CompleteCodexOAuthResponse, error)
 	// CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Claude as connected for the current user.
-	CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error)
+	CompleteClaudeOAuth(context.Context, *v1.CompleteClaudeOAuthRequest) (*v1.CompleteClaudeOAuthResponse, error)
 	// CompleteAntigravityOAuth exchanges an OAuth authorization code + PKCE
 	// verifier and marks Antigravity as connected for the current user.
-	CompleteAntigravityOAuth(context.Context, *connect.Request[v1.CompleteAntigravityOAuthRequest]) (*connect.Response[v1.CompleteAntigravityOAuthResponse], error)
+	CompleteAntigravityOAuth(context.Context, *v1.CompleteAntigravityOAuthRequest) (*v1.CompleteAntigravityOAuthResponse, error)
 	// StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow
 	// and returns the device/user codes plus polling parameters. The frontend
 	// drives polling via PollCopilotDeviceAuth.
-	StartCopilotDeviceAuth(context.Context, *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error)
+	StartCopilotDeviceAuth(context.Context, *v1.StartCopilotDeviceAuthRequest) (*v1.StartCopilotDeviceAuthResponse, error)
 	// PollCopilotDeviceAuth polls GitHub for completion of a device-authorization
 	// flow. On AUTHORIZED the backend stores the Copilot credential for the
 	// current user.
-	PollCopilotDeviceAuth(context.Context, *connect.Request[v1.PollCopilotDeviceAuthRequest]) (*connect.Response[v1.PollCopilotDeviceAuthResponse], error)
+	PollCopilotDeviceAuth(context.Context, *v1.PollCopilotDeviceAuthRequest) (*v1.PollCopilotDeviceAuthResponse, error)
 	// GetPrivacySettings retrieves user privacy settings
-	GetPrivacySettings(context.Context, *connect.Request[v1.GetPrivacySettingsRequest]) (*connect.Response[v1.GetPrivacySettingsResponse], error)
+	GetPrivacySettings(context.Context, *v1.GetPrivacySettingsRequest) (*v1.GetPrivacySettingsResponse, error)
 	// UpdatePrivacySettings updates user privacy settings
-	UpdatePrivacySettings(context.Context, *connect.Request[v1.UpdatePrivacySettingsRequest]) (*connect.Response[v1.UpdatePrivacySettingsResponse], error)
+	UpdatePrivacySettings(context.Context, *v1.UpdatePrivacySettingsRequest) (*v1.UpdatePrivacySettingsResponse, error)
 	// TrackPageVisited tracks a page visit for analytics
-	TrackPageVisited(context.Context, *connect.Request[v1.TrackPageVisitedRequest]) (*connect.Response[v1.TrackPageVisitedResponse], error)
+	TrackPageVisited(context.Context, *v1.TrackPageVisitedRequest) (*v1.TrackPageVisitedResponse, error)
 	// TrackOnboardingEvent tracks an onboarding flow event
-	TrackOnboardingEvent(context.Context, *connect.Request[v1.TrackOnboardingEventRequest]) (*connect.Response[v1.TrackOnboardingEventResponse], error)
+	TrackOnboardingEvent(context.Context, *v1.TrackOnboardingEventRequest) (*v1.TrackOnboardingEventResponse, error)
 	// InstallSkill installs or previews installation of a skill into Reliant-managed paths.
-	InstallSkill(context.Context, *connect.Request[v1.InstallSkillRequest]) (*connect.Response[v1.InstallSkillResponse], error)
+	InstallSkill(context.Context, *v1.InstallSkillRequest) (*v1.InstallSkillResponse, error)
 	// ListInstalledSkills returns installed skills discovered across project and global Reliant roots.
-	ListInstalledSkills(context.Context, *connect.Request[v1.ListInstalledSkillsRequest]) (*connect.Response[v1.ListInstalledSkillsResponse], error)
+	ListInstalledSkills(context.Context, *v1.ListInstalledSkillsRequest) (*v1.ListInstalledSkillsResponse, error)
 	// GetInstalledSkillDefinition returns full SKILL.md content plus any packaged image assets for a discovered skill summary entry.
-	GetInstalledSkillDefinition(context.Context, *connect.Request[v1.GetInstalledSkillDefinitionRequest]) (*connect.Response[v1.GetInstalledSkillDefinitionResponse], error)
+	GetInstalledSkillDefinition(context.Context, *v1.GetInstalledSkillDefinitionRequest) (*v1.GetInstalledSkillDefinitionResponse, error)
 	// SetSkillEnabled toggles whether an installed skill definition path participates in discovery.
-	SetSkillEnabled(context.Context, *connect.Request[v1.SetSkillEnabledRequest]) (*connect.Response[v1.SetSkillEnabledResponse], error)
+	SetSkillEnabled(context.Context, *v1.SetSkillEnabledRequest) (*v1.SetSkillEnabledResponse, error)
 	// ListRecommendedSkills returns backend-defined recommended skills.
-	ListRecommendedSkills(context.Context, *connect.Request[v1.ListRecommendedSkillsRequest]) (*connect.Response[v1.ListRecommendedSkillsResponse], error)
+	ListRecommendedSkills(context.Context, *v1.ListRecommendedSkillsRequest) (*v1.ListRecommendedSkillsResponse, error)
 	// DeleteGlobalSkill deletes a skill directory under ~/.reliant/skills.
-	DeleteGlobalSkill(context.Context, *connect.Request[v1.DeleteGlobalSkillRequest]) (*connect.Response[v1.DeleteGlobalSkillResponse], error)
+	DeleteGlobalSkill(context.Context, *v1.DeleteGlobalSkillRequest) (*v1.DeleteGlobalSkillResponse, error)
 	// GetConfigHealth retrieves configuration errors and warnings
-	GetConfigHealth(context.Context, *connect.Request[v1.GetConfigHealthRequest]) (*connect.Response[v1.GetConfigHealthResponse], error)
+	GetConfigHealth(context.Context, *v1.GetConfigHealthRequest) (*v1.GetConfigHealthResponse, error)
 }
 
-// NewSettingsServiceClient constructs a client for the reliant.v1.SettingsService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SettingsServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	settingsServiceMethods := v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods()
-	return &settingsServiceClient{
-		createSetting: connect.NewClient[v1.CreateSettingRequest, v1.CreateSettingResponse](
-			httpClient,
-			baseURL+SettingsServiceCreateSettingProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("CreateSetting")),
-			connect.WithClientOptions(opts...),
-		),
-		listSettings: connect.NewClient[v1.ListSettingsRequest, v1.ListSettingsResponse](
-			httpClient,
-			baseURL+SettingsServiceListSettingsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("ListSettings")),
-			connect.WithClientOptions(opts...),
-		),
-		getSetting: connect.NewClient[v1.GetSettingRequest, v1.GetSettingResponse](
-			httpClient,
-			baseURL+SettingsServiceGetSettingProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("GetSetting")),
-			connect.WithClientOptions(opts...),
-		),
-		updateSetting: connect.NewClient[v1.UpdateSettingRequest, v1.UpdateSettingResponse](
-			httpClient,
-			baseURL+SettingsServiceUpdateSettingProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("UpdateSetting")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteSetting: connect.NewClient[v1.DeleteSettingRequest, v1.DeleteSettingResponse](
-			httpClient,
-			baseURL+SettingsServiceDeleteSettingProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("DeleteSetting")),
-			connect.WithClientOptions(opts...),
-		),
-		batchUpsertSettings: connect.NewClient[v1.BatchUpsertSettingsRequest, v1.BatchUpsertSettingsResponse](
-			httpClient,
-			baseURL+SettingsServiceBatchUpsertSettingsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("BatchUpsertSettings")),
-			connect.WithClientOptions(opts...),
-		),
-		getShortcuts: connect.NewClient[v1.GetShortcutsRequest, v1.GetShortcutsResponse](
-			httpClient,
-			baseURL+SettingsServiceGetShortcutsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("GetShortcuts")),
-			connect.WithClientOptions(opts...),
-		),
-		updateShortcuts: connect.NewClient[v1.UpdateShortcutsRequest, v1.UpdateShortcutsResponse](
-			httpClient,
-			baseURL+SettingsServiceUpdateShortcutsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("UpdateShortcuts")),
-			connect.WithClientOptions(opts...),
-		),
-		getPreferences: connect.NewClient[v1.GetPreferencesRequest, v1.GetPreferencesResponse](
-			httpClient,
-			baseURL+SettingsServiceGetPreferencesProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("GetPreferences")),
-			connect.WithClientOptions(opts...),
-		),
-		updatePreferences: connect.NewClient[v1.UpdatePreferencesRequest, v1.UpdatePreferencesResponse](
-			httpClient,
-			baseURL+SettingsServiceUpdatePreferencesProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("UpdatePreferences")),
-			connect.WithClientOptions(opts...),
-		),
-		setHiddenItem: connect.NewClient[v1.SetHiddenItemRequest, v1.SetHiddenItemResponse](
-			httpClient,
-			baseURL+SettingsServiceSetHiddenItemProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("SetHiddenItem")),
-			connect.WithClientOptions(opts...),
-		),
-		getPrompts: connect.NewClient[v1.GetPromptsRequest, v1.GetPromptsResponse](
-			httpClient,
-			baseURL+SettingsServiceGetPromptsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("GetPrompts")),
-			connect.WithClientOptions(opts...),
-		),
-		savePrompts: connect.NewClient[v1.SavePromptsRequest, v1.SavePromptsResponse](
-			httpClient,
-			baseURL+SettingsServiceSavePromptsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("SavePrompts")),
-			connect.WithClientOptions(opts...),
-		),
-		getProviderStatuses: connect.NewClient[v1.GetProviderStatusesRequest, v1.GetProviderStatusesResponse](
-			httpClient,
-			baseURL+SettingsServiceGetProviderStatusesProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("GetProviderStatuses")),
-			connect.WithClientOptions(opts...),
-		),
-		validateProviderAPIKey: connect.NewClient[v1.ValidateProviderAPIKeyRequest, v1.ValidateProviderAPIKeyResponse](
-			httpClient,
-			baseURL+SettingsServiceValidateProviderAPIKeyProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("ValidateProviderAPIKey")),
-			connect.WithClientOptions(opts...),
-		),
-		syncReliantProvider: connect.NewClient[v1.SyncReliantProviderRequest, v1.SyncReliantProviderResponse](
-			httpClient,
-			baseURL+SettingsServiceSyncReliantProviderProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("SyncReliantProvider")),
-			connect.WithClientOptions(opts...),
-		),
-		completeCodexOAuth: connect.NewClient[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse](
-			httpClient,
-			baseURL+SettingsServiceCompleteCodexOAuthProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("CompleteCodexOAuth")),
-			connect.WithClientOptions(opts...),
-		),
-		completeClaudeOAuth: connect.NewClient[v1.CompleteClaudeOAuthRequest, v1.CompleteClaudeOAuthResponse](
-			httpClient,
-			baseURL+SettingsServiceCompleteClaudeOAuthProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("CompleteClaudeOAuth")),
-			connect.WithClientOptions(opts...),
-		),
-		completeAntigravityOAuth: connect.NewClient[v1.CompleteAntigravityOAuthRequest, v1.CompleteAntigravityOAuthResponse](
-			httpClient,
-			baseURL+SettingsServiceCompleteAntigravityOAuthProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("CompleteAntigravityOAuth")),
-			connect.WithClientOptions(opts...),
-		),
-		startCopilotDeviceAuth: connect.NewClient[v1.StartCopilotDeviceAuthRequest, v1.StartCopilotDeviceAuthResponse](
-			httpClient,
-			baseURL+SettingsServiceStartCopilotDeviceAuthProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("StartCopilotDeviceAuth")),
-			connect.WithClientOptions(opts...),
-		),
-		pollCopilotDeviceAuth: connect.NewClient[v1.PollCopilotDeviceAuthRequest, v1.PollCopilotDeviceAuthResponse](
-			httpClient,
-			baseURL+SettingsServicePollCopilotDeviceAuthProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("PollCopilotDeviceAuth")),
-			connect.WithClientOptions(opts...),
-		),
-		getPrivacySettings: connect.NewClient[v1.GetPrivacySettingsRequest, v1.GetPrivacySettingsResponse](
-			httpClient,
-			baseURL+SettingsServiceGetPrivacySettingsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("GetPrivacySettings")),
-			connect.WithClientOptions(opts...),
-		),
-		updatePrivacySettings: connect.NewClient[v1.UpdatePrivacySettingsRequest, v1.UpdatePrivacySettingsResponse](
-			httpClient,
-			baseURL+SettingsServiceUpdatePrivacySettingsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("UpdatePrivacySettings")),
-			connect.WithClientOptions(opts...),
-		),
-		trackPageVisited: connect.NewClient[v1.TrackPageVisitedRequest, v1.TrackPageVisitedResponse](
-			httpClient,
-			baseURL+SettingsServiceTrackPageVisitedProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("TrackPageVisited")),
-			connect.WithClientOptions(opts...),
-		),
-		trackOnboardingEvent: connect.NewClient[v1.TrackOnboardingEventRequest, v1.TrackOnboardingEventResponse](
-			httpClient,
-			baseURL+SettingsServiceTrackOnboardingEventProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("TrackOnboardingEvent")),
-			connect.WithClientOptions(opts...),
-		),
-		installSkill: connect.NewClient[v1.InstallSkillRequest, v1.InstallSkillResponse](
-			httpClient,
-			baseURL+SettingsServiceInstallSkillProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("InstallSkill")),
-			connect.WithClientOptions(opts...),
-		),
-		listInstalledSkills: connect.NewClient[v1.ListInstalledSkillsRequest, v1.ListInstalledSkillsResponse](
-			httpClient,
-			baseURL+SettingsServiceListInstalledSkillsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("ListInstalledSkills")),
-			connect.WithClientOptions(opts...),
-		),
-		getInstalledSkillDefinition: connect.NewClient[v1.GetInstalledSkillDefinitionRequest, v1.GetInstalledSkillDefinitionResponse](
-			httpClient,
-			baseURL+SettingsServiceGetInstalledSkillDefinitionProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("GetInstalledSkillDefinition")),
-			connect.WithClientOptions(opts...),
-		),
-		setSkillEnabled: connect.NewClient[v1.SetSkillEnabledRequest, v1.SetSkillEnabledResponse](
-			httpClient,
-			baseURL+SettingsServiceSetSkillEnabledProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("SetSkillEnabled")),
-			connect.WithClientOptions(opts...),
-		),
-		listRecommendedSkills: connect.NewClient[v1.ListRecommendedSkillsRequest, v1.ListRecommendedSkillsResponse](
-			httpClient,
-			baseURL+SettingsServiceListRecommendedSkillsProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("ListRecommendedSkills")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteGlobalSkill: connect.NewClient[v1.DeleteGlobalSkillRequest, v1.DeleteGlobalSkillResponse](
-			httpClient,
-			baseURL+SettingsServiceDeleteGlobalSkillProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("DeleteGlobalSkill")),
-			connect.WithClientOptions(opts...),
-		),
-		getConfigHealth: connect.NewClient[v1.GetConfigHealthRequest, v1.GetConfigHealthResponse](
-			httpClient,
-			baseURL+SettingsServiceGetConfigHealthProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("GetConfigHealth")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// settingsServiceClient implements SettingsServiceClient.
-type settingsServiceClient struct {
-	createSetting               *connect.Client[v1.CreateSettingRequest, v1.CreateSettingResponse]
-	listSettings                *connect.Client[v1.ListSettingsRequest, v1.ListSettingsResponse]
-	getSetting                  *connect.Client[v1.GetSettingRequest, v1.GetSettingResponse]
-	updateSetting               *connect.Client[v1.UpdateSettingRequest, v1.UpdateSettingResponse]
-	deleteSetting               *connect.Client[v1.DeleteSettingRequest, v1.DeleteSettingResponse]
-	batchUpsertSettings         *connect.Client[v1.BatchUpsertSettingsRequest, v1.BatchUpsertSettingsResponse]
-	getShortcuts                *connect.Client[v1.GetShortcutsRequest, v1.GetShortcutsResponse]
-	updateShortcuts             *connect.Client[v1.UpdateShortcutsRequest, v1.UpdateShortcutsResponse]
-	getPreferences              *connect.Client[v1.GetPreferencesRequest, v1.GetPreferencesResponse]
-	updatePreferences           *connect.Client[v1.UpdatePreferencesRequest, v1.UpdatePreferencesResponse]
-	setHiddenItem               *connect.Client[v1.SetHiddenItemRequest, v1.SetHiddenItemResponse]
-	getPrompts                  *connect.Client[v1.GetPromptsRequest, v1.GetPromptsResponse]
-	savePrompts                 *connect.Client[v1.SavePromptsRequest, v1.SavePromptsResponse]
-	getProviderStatuses         *connect.Client[v1.GetProviderStatusesRequest, v1.GetProviderStatusesResponse]
-	validateProviderAPIKey      *connect.Client[v1.ValidateProviderAPIKeyRequest, v1.ValidateProviderAPIKeyResponse]
-	syncReliantProvider         *connect.Client[v1.SyncReliantProviderRequest, v1.SyncReliantProviderResponse]
-	completeCodexOAuth          *connect.Client[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse]
-	completeClaudeOAuth         *connect.Client[v1.CompleteClaudeOAuthRequest, v1.CompleteClaudeOAuthResponse]
-	completeAntigravityOAuth    *connect.Client[v1.CompleteAntigravityOAuthRequest, v1.CompleteAntigravityOAuthResponse]
-	startCopilotDeviceAuth      *connect.Client[v1.StartCopilotDeviceAuthRequest, v1.StartCopilotDeviceAuthResponse]
-	pollCopilotDeviceAuth       *connect.Client[v1.PollCopilotDeviceAuthRequest, v1.PollCopilotDeviceAuthResponse]
-	getPrivacySettings          *connect.Client[v1.GetPrivacySettingsRequest, v1.GetPrivacySettingsResponse]
-	updatePrivacySettings       *connect.Client[v1.UpdatePrivacySettingsRequest, v1.UpdatePrivacySettingsResponse]
-	trackPageVisited            *connect.Client[v1.TrackPageVisitedRequest, v1.TrackPageVisitedResponse]
-	trackOnboardingEvent        *connect.Client[v1.TrackOnboardingEventRequest, v1.TrackOnboardingEventResponse]
-	installSkill                *connect.Client[v1.InstallSkillRequest, v1.InstallSkillResponse]
-	listInstalledSkills         *connect.Client[v1.ListInstalledSkillsRequest, v1.ListInstalledSkillsResponse]
-	getInstalledSkillDefinition *connect.Client[v1.GetInstalledSkillDefinitionRequest, v1.GetInstalledSkillDefinitionResponse]
-	setSkillEnabled             *connect.Client[v1.SetSkillEnabledRequest, v1.SetSkillEnabledResponse]
-	listRecommendedSkills       *connect.Client[v1.ListRecommendedSkillsRequest, v1.ListRecommendedSkillsResponse]
-	deleteGlobalSkill           *connect.Client[v1.DeleteGlobalSkillRequest, v1.DeleteGlobalSkillResponse]
-	getConfigHealth             *connect.Client[v1.GetConfigHealthRequest, v1.GetConfigHealthResponse]
-}
-
-// CreateSetting calls reliant.v1.SettingsService.CreateSetting.
-func (c *settingsServiceClient) CreateSetting(ctx context.Context, req *connect.Request[v1.CreateSettingRequest]) (*connect.Response[v1.CreateSettingResponse], error) {
-	return c.createSetting.CallUnary(ctx, req)
-}
-
-// ListSettings calls reliant.v1.SettingsService.ListSettings.
-func (c *settingsServiceClient) ListSettings(ctx context.Context, req *connect.Request[v1.ListSettingsRequest]) (*connect.Response[v1.ListSettingsResponse], error) {
-	return c.listSettings.CallUnary(ctx, req)
-}
-
-// GetSetting calls reliant.v1.SettingsService.GetSetting.
-func (c *settingsServiceClient) GetSetting(ctx context.Context, req *connect.Request[v1.GetSettingRequest]) (*connect.Response[v1.GetSettingResponse], error) {
-	return c.getSetting.CallUnary(ctx, req)
-}
-
-// UpdateSetting calls reliant.v1.SettingsService.UpdateSetting.
-func (c *settingsServiceClient) UpdateSetting(ctx context.Context, req *connect.Request[v1.UpdateSettingRequest]) (*connect.Response[v1.UpdateSettingResponse], error) {
-	return c.updateSetting.CallUnary(ctx, req)
-}
-
-// DeleteSetting calls reliant.v1.SettingsService.DeleteSetting.
-func (c *settingsServiceClient) DeleteSetting(ctx context.Context, req *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error) {
-	return c.deleteSetting.CallUnary(ctx, req)
-}
-
-// BatchUpsertSettings calls reliant.v1.SettingsService.BatchUpsertSettings.
-func (c *settingsServiceClient) BatchUpsertSettings(ctx context.Context, req *connect.Request[v1.BatchUpsertSettingsRequest]) (*connect.Response[v1.BatchUpsertSettingsResponse], error) {
-	return c.batchUpsertSettings.CallUnary(ctx, req)
-}
-
-// GetShortcuts calls reliant.v1.SettingsService.GetShortcuts.
-func (c *settingsServiceClient) GetShortcuts(ctx context.Context, req *connect.Request[v1.GetShortcutsRequest]) (*connect.Response[v1.GetShortcutsResponse], error) {
-	return c.getShortcuts.CallUnary(ctx, req)
-}
-
-// UpdateShortcuts calls reliant.v1.SettingsService.UpdateShortcuts.
-func (c *settingsServiceClient) UpdateShortcuts(ctx context.Context, req *connect.Request[v1.UpdateShortcutsRequest]) (*connect.Response[v1.UpdateShortcutsResponse], error) {
-	return c.updateShortcuts.CallUnary(ctx, req)
-}
-
-// GetPreferences calls reliant.v1.SettingsService.GetPreferences.
-func (c *settingsServiceClient) GetPreferences(ctx context.Context, req *connect.Request[v1.GetPreferencesRequest]) (*connect.Response[v1.GetPreferencesResponse], error) {
-	return c.getPreferences.CallUnary(ctx, req)
-}
-
-// UpdatePreferences calls reliant.v1.SettingsService.UpdatePreferences.
-func (c *settingsServiceClient) UpdatePreferences(ctx context.Context, req *connect.Request[v1.UpdatePreferencesRequest]) (*connect.Response[v1.UpdatePreferencesResponse], error) {
-	return c.updatePreferences.CallUnary(ctx, req)
-}
-
-// SetHiddenItem calls reliant.v1.SettingsService.SetHiddenItem.
-func (c *settingsServiceClient) SetHiddenItem(ctx context.Context, req *connect.Request[v1.SetHiddenItemRequest]) (*connect.Response[v1.SetHiddenItemResponse], error) {
-	return c.setHiddenItem.CallUnary(ctx, req)
-}
-
-// GetPrompts calls reliant.v1.SettingsService.GetPrompts.
-func (c *settingsServiceClient) GetPrompts(ctx context.Context, req *connect.Request[v1.GetPromptsRequest]) (*connect.Response[v1.GetPromptsResponse], error) {
-	return c.getPrompts.CallUnary(ctx, req)
-}
-
-// SavePrompts calls reliant.v1.SettingsService.SavePrompts.
-func (c *settingsServiceClient) SavePrompts(ctx context.Context, req *connect.Request[v1.SavePromptsRequest]) (*connect.Response[v1.SavePromptsResponse], error) {
-	return c.savePrompts.CallUnary(ctx, req)
-}
-
-// GetProviderStatuses calls reliant.v1.SettingsService.GetProviderStatuses.
-func (c *settingsServiceClient) GetProviderStatuses(ctx context.Context, req *connect.Request[v1.GetProviderStatusesRequest]) (*connect.Response[v1.GetProviderStatusesResponse], error) {
-	return c.getProviderStatuses.CallUnary(ctx, req)
-}
-
-// ValidateProviderAPIKey calls reliant.v1.SettingsService.ValidateProviderAPIKey.
-func (c *settingsServiceClient) ValidateProviderAPIKey(ctx context.Context, req *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error) {
-	return c.validateProviderAPIKey.CallUnary(ctx, req)
-}
-
-// SyncReliantProvider calls reliant.v1.SettingsService.SyncReliantProvider.
-func (c *settingsServiceClient) SyncReliantProvider(ctx context.Context, req *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error) {
-	return c.syncReliantProvider.CallUnary(ctx, req)
-}
-
-// CompleteCodexOAuth calls reliant.v1.SettingsService.CompleteCodexOAuth.
-func (c *settingsServiceClient) CompleteCodexOAuth(ctx context.Context, req *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error) {
-	return c.completeCodexOAuth.CallUnary(ctx, req)
-}
-
-// CompleteClaudeOAuth calls reliant.v1.SettingsService.CompleteClaudeOAuth.
-func (c *settingsServiceClient) CompleteClaudeOAuth(ctx context.Context, req *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error) {
-	return c.completeClaudeOAuth.CallUnary(ctx, req)
-}
-
-// CompleteAntigravityOAuth calls reliant.v1.SettingsService.CompleteAntigravityOAuth.
-func (c *settingsServiceClient) CompleteAntigravityOAuth(ctx context.Context, req *connect.Request[v1.CompleteAntigravityOAuthRequest]) (*connect.Response[v1.CompleteAntigravityOAuthResponse], error) {
-	return c.completeAntigravityOAuth.CallUnary(ctx, req)
-}
-
-// StartCopilotDeviceAuth calls reliant.v1.SettingsService.StartCopilotDeviceAuth.
-func (c *settingsServiceClient) StartCopilotDeviceAuth(ctx context.Context, req *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error) {
-	return c.startCopilotDeviceAuth.CallUnary(ctx, req)
-}
-
-// PollCopilotDeviceAuth calls reliant.v1.SettingsService.PollCopilotDeviceAuth.
-func (c *settingsServiceClient) PollCopilotDeviceAuth(ctx context.Context, req *connect.Request[v1.PollCopilotDeviceAuthRequest]) (*connect.Response[v1.PollCopilotDeviceAuthResponse], error) {
-	return c.pollCopilotDeviceAuth.CallUnary(ctx, req)
-}
-
-// GetPrivacySettings calls reliant.v1.SettingsService.GetPrivacySettings.
-func (c *settingsServiceClient) GetPrivacySettings(ctx context.Context, req *connect.Request[v1.GetPrivacySettingsRequest]) (*connect.Response[v1.GetPrivacySettingsResponse], error) {
-	return c.getPrivacySettings.CallUnary(ctx, req)
-}
-
-// UpdatePrivacySettings calls reliant.v1.SettingsService.UpdatePrivacySettings.
-func (c *settingsServiceClient) UpdatePrivacySettings(ctx context.Context, req *connect.Request[v1.UpdatePrivacySettingsRequest]) (*connect.Response[v1.UpdatePrivacySettingsResponse], error) {
-	return c.updatePrivacySettings.CallUnary(ctx, req)
-}
-
-// TrackPageVisited calls reliant.v1.SettingsService.TrackPageVisited.
-func (c *settingsServiceClient) TrackPageVisited(ctx context.Context, req *connect.Request[v1.TrackPageVisitedRequest]) (*connect.Response[v1.TrackPageVisitedResponse], error) {
-	return c.trackPageVisited.CallUnary(ctx, req)
-}
-
-// TrackOnboardingEvent calls reliant.v1.SettingsService.TrackOnboardingEvent.
-func (c *settingsServiceClient) TrackOnboardingEvent(ctx context.Context, req *connect.Request[v1.TrackOnboardingEventRequest]) (*connect.Response[v1.TrackOnboardingEventResponse], error) {
-	return c.trackOnboardingEvent.CallUnary(ctx, req)
-}
-
-// InstallSkill calls reliant.v1.SettingsService.InstallSkill.
-func (c *settingsServiceClient) InstallSkill(ctx context.Context, req *connect.Request[v1.InstallSkillRequest]) (*connect.Response[v1.InstallSkillResponse], error) {
-	return c.installSkill.CallUnary(ctx, req)
-}
-
-// ListInstalledSkills calls reliant.v1.SettingsService.ListInstalledSkills.
-func (c *settingsServiceClient) ListInstalledSkills(ctx context.Context, req *connect.Request[v1.ListInstalledSkillsRequest]) (*connect.Response[v1.ListInstalledSkillsResponse], error) {
-	return c.listInstalledSkills.CallUnary(ctx, req)
-}
-
-// GetInstalledSkillDefinition calls reliant.v1.SettingsService.GetInstalledSkillDefinition.
-func (c *settingsServiceClient) GetInstalledSkillDefinition(ctx context.Context, req *connect.Request[v1.GetInstalledSkillDefinitionRequest]) (*connect.Response[v1.GetInstalledSkillDefinitionResponse], error) {
-	return c.getInstalledSkillDefinition.CallUnary(ctx, req)
-}
-
-// SetSkillEnabled calls reliant.v1.SettingsService.SetSkillEnabled.
-func (c *settingsServiceClient) SetSkillEnabled(ctx context.Context, req *connect.Request[v1.SetSkillEnabledRequest]) (*connect.Response[v1.SetSkillEnabledResponse], error) {
-	return c.setSkillEnabled.CallUnary(ctx, req)
-}
-
-// ListRecommendedSkills calls reliant.v1.SettingsService.ListRecommendedSkills.
-func (c *settingsServiceClient) ListRecommendedSkills(ctx context.Context, req *connect.Request[v1.ListRecommendedSkillsRequest]) (*connect.Response[v1.ListRecommendedSkillsResponse], error) {
-	return c.listRecommendedSkills.CallUnary(ctx, req)
-}
-
-// DeleteGlobalSkill calls reliant.v1.SettingsService.DeleteGlobalSkill.
-func (c *settingsServiceClient) DeleteGlobalSkill(ctx context.Context, req *connect.Request[v1.DeleteGlobalSkillRequest]) (*connect.Response[v1.DeleteGlobalSkillResponse], error) {
-	return c.deleteGlobalSkill.CallUnary(ctx, req)
-}
-
-// GetConfigHealth calls reliant.v1.SettingsService.GetConfigHealth.
-func (c *settingsServiceClient) GetConfigHealth(ctx context.Context, req *connect.Request[v1.GetConfigHealthRequest]) (*connect.Response[v1.GetConfigHealthResponse], error) {
-	return c.getConfigHealth.CallUnary(ctx, req)
+// NewSettingsServiceClient constructs a client for the reliant.v1.SettingsService service. Multiple
+// service clients may share a single connect.Client.
+func NewSettingsServiceClient(client *connect.Client) SettingsServiceClient {
+	return &settingsServiceClient{client: client}
 }
 
 // SettingsServiceHandler is an implementation of the reliant.v1.SettingsService service.
 type SettingsServiceHandler interface {
 	// CreateSetting creates a new setting
 	// forge:custom — an upsert keyed by the caller, project and key, which notifies config health
-	CreateSetting(context.Context, *connect.Request[v1.CreateSettingRequest]) (*connect.Response[v1.CreateSettingResponse], error)
+	CreateSetting(context.Context, *v1.CreateSettingRequest) (*v1.CreateSettingResponse, error)
 	// ListSettings lists all settings for the current user
 	// forge:custom — scoped to the caller and an optional project, never a table-wide list
-	ListSettings(context.Context, *connect.Request[v1.ListSettingsRequest]) (*connect.Response[v1.ListSettingsResponse], error)
+	ListSettings(context.Context, *v1.ListSettingsRequest) (*v1.ListSettingsResponse, error)
 	// GetSetting retrieves a setting by key
 	// forge:custom — looks a key up in the caller's scope, and answers an empty response when it is unset
-	GetSetting(context.Context, *connect.Request[v1.GetSettingRequest]) (*connect.Response[v1.GetSettingResponse], error)
+	GetSetting(context.Context, *v1.GetSettingRequest) (*v1.GetSettingResponse, error)
 	// UpdateSetting updates an existing setting
 	// forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
-	UpdateSetting(context.Context, *connect.Request[v1.UpdateSettingRequest]) (*connect.Response[v1.UpdateSettingResponse], error)
+	UpdateSetting(context.Context, *v1.UpdateSettingRequest) (*v1.UpdateSettingResponse, error)
 	// DeleteSetting deletes a setting by key
 	// forge:custom — addressed by key in the caller's scope rather than by id, and notifies config health
-	DeleteSetting(context.Context, *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error)
+	DeleteSetting(context.Context, *v1.DeleteSettingRequest) (*v1.DeleteSettingResponse, error)
 	// BatchUpsertSettings writes many settings in one round trip.
 	//
 	// Each entry is an upsert with the same semantics as CreateSetting (which is
 	// itself an upsert server-side), so callers do not have to know whether a key
 	// already exists. Writers that previously fired one RPC per key — the tour's
 	// three-key save, the tool-call category toggles — now issue one.
-	BatchUpsertSettings(context.Context, *connect.Request[v1.BatchUpsertSettingsRequest]) (*connect.Response[v1.BatchUpsertSettingsResponse], error)
+	BatchUpsertSettings(context.Context, *v1.BatchUpsertSettingsRequest) (*v1.BatchUpsertSettingsResponse, error)
 	// GetShortcuts retrieves user keyboard shortcuts
-	GetShortcuts(context.Context, *connect.Request[v1.GetShortcutsRequest]) (*connect.Response[v1.GetShortcutsResponse], error)
+	GetShortcuts(context.Context, *v1.GetShortcutsRequest) (*v1.GetShortcutsResponse, error)
 	// UpdateShortcuts updates user keyboard shortcuts
-	UpdateShortcuts(context.Context, *connect.Request[v1.UpdateShortcutsRequest]) (*connect.Response[v1.UpdateShortcutsResponse], error)
+	UpdateShortcuts(context.Context, *v1.UpdateShortcutsRequest) (*v1.UpdateShortcutsResponse, error)
 	// GetPreferences retrieves user preferences
-	GetPreferences(context.Context, *connect.Request[v1.GetPreferencesRequest]) (*connect.Response[v1.GetPreferencesResponse], error)
+	GetPreferences(context.Context, *v1.GetPreferencesRequest) (*v1.GetPreferencesResponse, error)
 	// UpdatePreferences updates user preferences
-	UpdatePreferences(context.Context, *connect.Request[v1.UpdatePreferencesRequest]) (*connect.Response[v1.UpdatePreferencesResponse], error)
+	UpdatePreferences(context.Context, *v1.UpdatePreferencesRequest) (*v1.UpdatePreferencesResponse, error)
 	// SetHiddenItem toggles the hidden state of a workflow or preset
-	SetHiddenItem(context.Context, *connect.Request[v1.SetHiddenItemRequest]) (*connect.Response[v1.SetHiddenItemResponse], error)
+	SetHiddenItem(context.Context, *v1.SetHiddenItemRequest) (*v1.SetHiddenItemResponse, error)
 	// GetPrompts retrieves global user prompts
-	GetPrompts(context.Context, *connect.Request[v1.GetPromptsRequest]) (*connect.Response[v1.GetPromptsResponse], error)
+	GetPrompts(context.Context, *v1.GetPromptsRequest) (*v1.GetPromptsResponse, error)
 	// SavePrompts saves global user prompts
-	SavePrompts(context.Context, *connect.Request[v1.SavePromptsRequest]) (*connect.Response[v1.SavePromptsResponse], error)
+	SavePrompts(context.Context, *v1.SavePromptsRequest) (*v1.SavePromptsResponse, error)
 	// GetProviderStatuses retrieves configuration status of all providers
-	GetProviderStatuses(context.Context, *connect.Request[v1.GetProviderStatusesRequest]) (*connect.Response[v1.GetProviderStatusesResponse], error)
+	GetProviderStatuses(context.Context, *v1.GetProviderStatusesRequest) (*v1.GetProviderStatusesResponse, error)
 	// ValidateProviderAPIKey validates an API key for a provider
-	ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error)
+	ValidateProviderAPIKey(context.Context, *v1.ValidateProviderAPIKeyRequest) (*v1.ValidateProviderAPIKeyResponse, error)
 	// SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
-	SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error)
+	SyncReliantProvider(context.Context, *v1.SyncReliantProviderRequest) (*v1.SyncReliantProviderResponse, error)
 	// CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Codex as connected for the current user.
-	CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error)
+	CompleteCodexOAuth(context.Context, *v1.CompleteCodexOAuthRequest) (*v1.CompleteCodexOAuthResponse, error)
 	// CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Claude as connected for the current user.
-	CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error)
+	CompleteClaudeOAuth(context.Context, *v1.CompleteClaudeOAuthRequest) (*v1.CompleteClaudeOAuthResponse, error)
 	// CompleteAntigravityOAuth exchanges an OAuth authorization code + PKCE
 	// verifier and marks Antigravity as connected for the current user.
-	CompleteAntigravityOAuth(context.Context, *connect.Request[v1.CompleteAntigravityOAuthRequest]) (*connect.Response[v1.CompleteAntigravityOAuthResponse], error)
+	CompleteAntigravityOAuth(context.Context, *v1.CompleteAntigravityOAuthRequest) (*v1.CompleteAntigravityOAuthResponse, error)
 	// StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow
 	// and returns the device/user codes plus polling parameters. The frontend
 	// drives polling via PollCopilotDeviceAuth.
-	StartCopilotDeviceAuth(context.Context, *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error)
+	StartCopilotDeviceAuth(context.Context, *v1.StartCopilotDeviceAuthRequest) (*v1.StartCopilotDeviceAuthResponse, error)
 	// PollCopilotDeviceAuth polls GitHub for completion of a device-authorization
 	// flow. On AUTHORIZED the backend stores the Copilot credential for the
 	// current user.
-	PollCopilotDeviceAuth(context.Context, *connect.Request[v1.PollCopilotDeviceAuthRequest]) (*connect.Response[v1.PollCopilotDeviceAuthResponse], error)
+	PollCopilotDeviceAuth(context.Context, *v1.PollCopilotDeviceAuthRequest) (*v1.PollCopilotDeviceAuthResponse, error)
 	// GetPrivacySettings retrieves user privacy settings
-	GetPrivacySettings(context.Context, *connect.Request[v1.GetPrivacySettingsRequest]) (*connect.Response[v1.GetPrivacySettingsResponse], error)
+	GetPrivacySettings(context.Context, *v1.GetPrivacySettingsRequest) (*v1.GetPrivacySettingsResponse, error)
 	// UpdatePrivacySettings updates user privacy settings
-	UpdatePrivacySettings(context.Context, *connect.Request[v1.UpdatePrivacySettingsRequest]) (*connect.Response[v1.UpdatePrivacySettingsResponse], error)
+	UpdatePrivacySettings(context.Context, *v1.UpdatePrivacySettingsRequest) (*v1.UpdatePrivacySettingsResponse, error)
 	// TrackPageVisited tracks a page visit for analytics
-	TrackPageVisited(context.Context, *connect.Request[v1.TrackPageVisitedRequest]) (*connect.Response[v1.TrackPageVisitedResponse], error)
+	TrackPageVisited(context.Context, *v1.TrackPageVisitedRequest) (*v1.TrackPageVisitedResponse, error)
 	// TrackOnboardingEvent tracks an onboarding flow event
-	TrackOnboardingEvent(context.Context, *connect.Request[v1.TrackOnboardingEventRequest]) (*connect.Response[v1.TrackOnboardingEventResponse], error)
+	TrackOnboardingEvent(context.Context, *v1.TrackOnboardingEventRequest) (*v1.TrackOnboardingEventResponse, error)
 	// InstallSkill installs or previews installation of a skill into Reliant-managed paths.
-	InstallSkill(context.Context, *connect.Request[v1.InstallSkillRequest]) (*connect.Response[v1.InstallSkillResponse], error)
+	InstallSkill(context.Context, *v1.InstallSkillRequest) (*v1.InstallSkillResponse, error)
 	// ListInstalledSkills returns installed skills discovered across project and global Reliant roots.
-	ListInstalledSkills(context.Context, *connect.Request[v1.ListInstalledSkillsRequest]) (*connect.Response[v1.ListInstalledSkillsResponse], error)
+	ListInstalledSkills(context.Context, *v1.ListInstalledSkillsRequest) (*v1.ListInstalledSkillsResponse, error)
 	// GetInstalledSkillDefinition returns full SKILL.md content plus any packaged image assets for a discovered skill summary entry.
-	GetInstalledSkillDefinition(context.Context, *connect.Request[v1.GetInstalledSkillDefinitionRequest]) (*connect.Response[v1.GetInstalledSkillDefinitionResponse], error)
+	GetInstalledSkillDefinition(context.Context, *v1.GetInstalledSkillDefinitionRequest) (*v1.GetInstalledSkillDefinitionResponse, error)
 	// SetSkillEnabled toggles whether an installed skill definition path participates in discovery.
-	SetSkillEnabled(context.Context, *connect.Request[v1.SetSkillEnabledRequest]) (*connect.Response[v1.SetSkillEnabledResponse], error)
+	SetSkillEnabled(context.Context, *v1.SetSkillEnabledRequest) (*v1.SetSkillEnabledResponse, error)
 	// ListRecommendedSkills returns backend-defined recommended skills.
-	ListRecommendedSkills(context.Context, *connect.Request[v1.ListRecommendedSkillsRequest]) (*connect.Response[v1.ListRecommendedSkillsResponse], error)
+	ListRecommendedSkills(context.Context, *v1.ListRecommendedSkillsRequest) (*v1.ListRecommendedSkillsResponse, error)
 	// DeleteGlobalSkill deletes a skill directory under ~/.reliant/skills.
-	DeleteGlobalSkill(context.Context, *connect.Request[v1.DeleteGlobalSkillRequest]) (*connect.Response[v1.DeleteGlobalSkillResponse], error)
+	DeleteGlobalSkill(context.Context, *v1.DeleteGlobalSkillRequest) (*v1.DeleteGlobalSkillResponse, error)
 	// GetConfigHealth retrieves configuration errors and warnings
-	GetConfigHealth(context.Context, *connect.Request[v1.GetConfigHealthRequest]) (*connect.Response[v1.GetConfigHealthResponse], error)
+	GetConfigHealth(context.Context, *v1.GetConfigHealthRequest) (*v1.GetConfigHealthResponse, error)
 }
 
-// NewSettingsServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	settingsServiceMethods := v1.File_reliant_v1_settings_proto.Services().ByName("SettingsService").Methods()
-	settingsServiceCreateSettingHandler := connect.NewUnaryHandler(
-		SettingsServiceCreateSettingProcedure,
-		svc.CreateSetting,
-		connect.WithSchema(settingsServiceMethods.ByName("CreateSetting")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSettingsServiceHandler registers svc as the reliant.v1.SettingsService implementation on
+// server.
+func RegisterSettingsServiceHandler(server *connect.Server, svc SettingsServiceHandler) {
+	adapter := settingsServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: settingsServiceCreateSettingSpec(), Handler: adapter.createSetting},
+		connect.Method{Spec: settingsServiceListSettingsSpec(), Handler: adapter.listSettings},
+		connect.Method{Spec: settingsServiceGetSettingSpec(), Handler: adapter.getSetting},
+		connect.Method{Spec: settingsServiceUpdateSettingSpec(), Handler: adapter.updateSetting},
+		connect.Method{Spec: settingsServiceDeleteSettingSpec(), Handler: adapter.deleteSetting},
+		connect.Method{Spec: settingsServiceBatchUpsertSettingsSpec(), Handler: adapter.batchUpsertSettings},
+		connect.Method{Spec: settingsServiceGetShortcutsSpec(), Handler: adapter.getShortcuts},
+		connect.Method{Spec: settingsServiceUpdateShortcutsSpec(), Handler: adapter.updateShortcuts},
+		connect.Method{Spec: settingsServiceGetPreferencesSpec(), Handler: adapter.getPreferences},
+		connect.Method{Spec: settingsServiceUpdatePreferencesSpec(), Handler: adapter.updatePreferences},
+		connect.Method{Spec: settingsServiceSetHiddenItemSpec(), Handler: adapter.setHiddenItem},
+		connect.Method{Spec: settingsServiceGetPromptsSpec(), Handler: adapter.getPrompts},
+		connect.Method{Spec: settingsServiceSavePromptsSpec(), Handler: adapter.savePrompts},
+		connect.Method{Spec: settingsServiceGetProviderStatusesSpec(), Handler: adapter.getProviderStatuses},
+		connect.Method{Spec: settingsServiceValidateProviderAPIKeySpec(), Handler: adapter.validateProviderAPIKey},
+		connect.Method{Spec: settingsServiceSyncReliantProviderSpec(), Handler: adapter.syncReliantProvider},
+		connect.Method{Spec: settingsServiceCompleteCodexOAuthSpec(), Handler: adapter.completeCodexOAuth},
+		connect.Method{Spec: settingsServiceCompleteClaudeOAuthSpec(), Handler: adapter.completeClaudeOAuth},
+		connect.Method{Spec: settingsServiceCompleteAntigravityOAuthSpec(), Handler: adapter.completeAntigravityOAuth},
+		connect.Method{Spec: settingsServiceStartCopilotDeviceAuthSpec(), Handler: adapter.startCopilotDeviceAuth},
+		connect.Method{Spec: settingsServicePollCopilotDeviceAuthSpec(), Handler: adapter.pollCopilotDeviceAuth},
+		connect.Method{Spec: settingsServiceGetPrivacySettingsSpec(), Handler: adapter.getPrivacySettings},
+		connect.Method{Spec: settingsServiceUpdatePrivacySettingsSpec(), Handler: adapter.updatePrivacySettings},
+		connect.Method{Spec: settingsServiceTrackPageVisitedSpec(), Handler: adapter.trackPageVisited},
+		connect.Method{Spec: settingsServiceTrackOnboardingEventSpec(), Handler: adapter.trackOnboardingEvent},
+		connect.Method{Spec: settingsServiceInstallSkillSpec(), Handler: adapter.installSkill},
+		connect.Method{Spec: settingsServiceListInstalledSkillsSpec(), Handler: adapter.listInstalledSkills},
+		connect.Method{Spec: settingsServiceGetInstalledSkillDefinitionSpec(), Handler: adapter.getInstalledSkillDefinition},
+		connect.Method{Spec: settingsServiceSetSkillEnabledSpec(), Handler: adapter.setSkillEnabled},
+		connect.Method{Spec: settingsServiceListRecommendedSkillsSpec(), Handler: adapter.listRecommendedSkills},
+		connect.Method{Spec: settingsServiceDeleteGlobalSkillSpec(), Handler: adapter.deleteGlobalSkill},
+		connect.Method{Spec: settingsServiceGetConfigHealthSpec(), Handler: adapter.getConfigHealth},
 	)
-	settingsServiceListSettingsHandler := connect.NewUnaryHandler(
-		SettingsServiceListSettingsProcedure,
-		svc.ListSettings,
-		connect.WithSchema(settingsServiceMethods.ByName("ListSettings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceGetSettingHandler := connect.NewUnaryHandler(
-		SettingsServiceGetSettingProcedure,
-		svc.GetSetting,
-		connect.WithSchema(settingsServiceMethods.ByName("GetSetting")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceUpdateSettingHandler := connect.NewUnaryHandler(
-		SettingsServiceUpdateSettingProcedure,
-		svc.UpdateSetting,
-		connect.WithSchema(settingsServiceMethods.ByName("UpdateSetting")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceDeleteSettingHandler := connect.NewUnaryHandler(
-		SettingsServiceDeleteSettingProcedure,
-		svc.DeleteSetting,
-		connect.WithSchema(settingsServiceMethods.ByName("DeleteSetting")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceBatchUpsertSettingsHandler := connect.NewUnaryHandler(
-		SettingsServiceBatchUpsertSettingsProcedure,
-		svc.BatchUpsertSettings,
-		connect.WithSchema(settingsServiceMethods.ByName("BatchUpsertSettings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceGetShortcutsHandler := connect.NewUnaryHandler(
-		SettingsServiceGetShortcutsProcedure,
-		svc.GetShortcuts,
-		connect.WithSchema(settingsServiceMethods.ByName("GetShortcuts")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceUpdateShortcutsHandler := connect.NewUnaryHandler(
-		SettingsServiceUpdateShortcutsProcedure,
-		svc.UpdateShortcuts,
-		connect.WithSchema(settingsServiceMethods.ByName("UpdateShortcuts")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceGetPreferencesHandler := connect.NewUnaryHandler(
-		SettingsServiceGetPreferencesProcedure,
-		svc.GetPreferences,
-		connect.WithSchema(settingsServiceMethods.ByName("GetPreferences")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceUpdatePreferencesHandler := connect.NewUnaryHandler(
-		SettingsServiceUpdatePreferencesProcedure,
-		svc.UpdatePreferences,
-		connect.WithSchema(settingsServiceMethods.ByName("UpdatePreferences")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceSetHiddenItemHandler := connect.NewUnaryHandler(
-		SettingsServiceSetHiddenItemProcedure,
-		svc.SetHiddenItem,
-		connect.WithSchema(settingsServiceMethods.ByName("SetHiddenItem")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceGetPromptsHandler := connect.NewUnaryHandler(
-		SettingsServiceGetPromptsProcedure,
-		svc.GetPrompts,
-		connect.WithSchema(settingsServiceMethods.ByName("GetPrompts")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceSavePromptsHandler := connect.NewUnaryHandler(
-		SettingsServiceSavePromptsProcedure,
-		svc.SavePrompts,
-		connect.WithSchema(settingsServiceMethods.ByName("SavePrompts")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceGetProviderStatusesHandler := connect.NewUnaryHandler(
-		SettingsServiceGetProviderStatusesProcedure,
-		svc.GetProviderStatuses,
-		connect.WithSchema(settingsServiceMethods.ByName("GetProviderStatuses")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceValidateProviderAPIKeyHandler := connect.NewUnaryHandler(
-		SettingsServiceValidateProviderAPIKeyProcedure,
-		svc.ValidateProviderAPIKey,
-		connect.WithSchema(settingsServiceMethods.ByName("ValidateProviderAPIKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceSyncReliantProviderHandler := connect.NewUnaryHandler(
-		SettingsServiceSyncReliantProviderProcedure,
-		svc.SyncReliantProvider,
-		connect.WithSchema(settingsServiceMethods.ByName("SyncReliantProvider")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceCompleteCodexOAuthHandler := connect.NewUnaryHandler(
-		SettingsServiceCompleteCodexOAuthProcedure,
-		svc.CompleteCodexOAuth,
-		connect.WithSchema(settingsServiceMethods.ByName("CompleteCodexOAuth")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceCompleteClaudeOAuthHandler := connect.NewUnaryHandler(
-		SettingsServiceCompleteClaudeOAuthProcedure,
-		svc.CompleteClaudeOAuth,
-		connect.WithSchema(settingsServiceMethods.ByName("CompleteClaudeOAuth")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceCompleteAntigravityOAuthHandler := connect.NewUnaryHandler(
-		SettingsServiceCompleteAntigravityOAuthProcedure,
-		svc.CompleteAntigravityOAuth,
-		connect.WithSchema(settingsServiceMethods.ByName("CompleteAntigravityOAuth")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceStartCopilotDeviceAuthHandler := connect.NewUnaryHandler(
-		SettingsServiceStartCopilotDeviceAuthProcedure,
-		svc.StartCopilotDeviceAuth,
-		connect.WithSchema(settingsServiceMethods.ByName("StartCopilotDeviceAuth")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServicePollCopilotDeviceAuthHandler := connect.NewUnaryHandler(
-		SettingsServicePollCopilotDeviceAuthProcedure,
-		svc.PollCopilotDeviceAuth,
-		connect.WithSchema(settingsServiceMethods.ByName("PollCopilotDeviceAuth")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceGetPrivacySettingsHandler := connect.NewUnaryHandler(
-		SettingsServiceGetPrivacySettingsProcedure,
-		svc.GetPrivacySettings,
-		connect.WithSchema(settingsServiceMethods.ByName("GetPrivacySettings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceUpdatePrivacySettingsHandler := connect.NewUnaryHandler(
-		SettingsServiceUpdatePrivacySettingsProcedure,
-		svc.UpdatePrivacySettings,
-		connect.WithSchema(settingsServiceMethods.ByName("UpdatePrivacySettings")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceTrackPageVisitedHandler := connect.NewUnaryHandler(
-		SettingsServiceTrackPageVisitedProcedure,
-		svc.TrackPageVisited,
-		connect.WithSchema(settingsServiceMethods.ByName("TrackPageVisited")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceTrackOnboardingEventHandler := connect.NewUnaryHandler(
-		SettingsServiceTrackOnboardingEventProcedure,
-		svc.TrackOnboardingEvent,
-		connect.WithSchema(settingsServiceMethods.ByName("TrackOnboardingEvent")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceInstallSkillHandler := connect.NewUnaryHandler(
-		SettingsServiceInstallSkillProcedure,
-		svc.InstallSkill,
-		connect.WithSchema(settingsServiceMethods.ByName("InstallSkill")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceListInstalledSkillsHandler := connect.NewUnaryHandler(
-		SettingsServiceListInstalledSkillsProcedure,
-		svc.ListInstalledSkills,
-		connect.WithSchema(settingsServiceMethods.ByName("ListInstalledSkills")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceGetInstalledSkillDefinitionHandler := connect.NewUnaryHandler(
-		SettingsServiceGetInstalledSkillDefinitionProcedure,
-		svc.GetInstalledSkillDefinition,
-		connect.WithSchema(settingsServiceMethods.ByName("GetInstalledSkillDefinition")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceSetSkillEnabledHandler := connect.NewUnaryHandler(
-		SettingsServiceSetSkillEnabledProcedure,
-		svc.SetSkillEnabled,
-		connect.WithSchema(settingsServiceMethods.ByName("SetSkillEnabled")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceListRecommendedSkillsHandler := connect.NewUnaryHandler(
-		SettingsServiceListRecommendedSkillsProcedure,
-		svc.ListRecommendedSkills,
-		connect.WithSchema(settingsServiceMethods.ByName("ListRecommendedSkills")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceDeleteGlobalSkillHandler := connect.NewUnaryHandler(
-		SettingsServiceDeleteGlobalSkillProcedure,
-		svc.DeleteGlobalSkill,
-		connect.WithSchema(settingsServiceMethods.ByName("DeleteGlobalSkill")),
-		connect.WithHandlerOptions(opts...),
-	)
-	settingsServiceGetConfigHealthHandler := connect.NewUnaryHandler(
-		SettingsServiceGetConfigHealthProcedure,
-		svc.GetConfigHealth,
-		connect.WithSchema(settingsServiceMethods.ByName("GetConfigHealth")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.SettingsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SettingsServiceCreateSettingProcedure:
-			settingsServiceCreateSettingHandler.ServeHTTP(w, r)
-		case SettingsServiceListSettingsProcedure:
-			settingsServiceListSettingsHandler.ServeHTTP(w, r)
-		case SettingsServiceGetSettingProcedure:
-			settingsServiceGetSettingHandler.ServeHTTP(w, r)
-		case SettingsServiceUpdateSettingProcedure:
-			settingsServiceUpdateSettingHandler.ServeHTTP(w, r)
-		case SettingsServiceDeleteSettingProcedure:
-			settingsServiceDeleteSettingHandler.ServeHTTP(w, r)
-		case SettingsServiceBatchUpsertSettingsProcedure:
-			settingsServiceBatchUpsertSettingsHandler.ServeHTTP(w, r)
-		case SettingsServiceGetShortcutsProcedure:
-			settingsServiceGetShortcutsHandler.ServeHTTP(w, r)
-		case SettingsServiceUpdateShortcutsProcedure:
-			settingsServiceUpdateShortcutsHandler.ServeHTTP(w, r)
-		case SettingsServiceGetPreferencesProcedure:
-			settingsServiceGetPreferencesHandler.ServeHTTP(w, r)
-		case SettingsServiceUpdatePreferencesProcedure:
-			settingsServiceUpdatePreferencesHandler.ServeHTTP(w, r)
-		case SettingsServiceSetHiddenItemProcedure:
-			settingsServiceSetHiddenItemHandler.ServeHTTP(w, r)
-		case SettingsServiceGetPromptsProcedure:
-			settingsServiceGetPromptsHandler.ServeHTTP(w, r)
-		case SettingsServiceSavePromptsProcedure:
-			settingsServiceSavePromptsHandler.ServeHTTP(w, r)
-		case SettingsServiceGetProviderStatusesProcedure:
-			settingsServiceGetProviderStatusesHandler.ServeHTTP(w, r)
-		case SettingsServiceValidateProviderAPIKeyProcedure:
-			settingsServiceValidateProviderAPIKeyHandler.ServeHTTP(w, r)
-		case SettingsServiceSyncReliantProviderProcedure:
-			settingsServiceSyncReliantProviderHandler.ServeHTTP(w, r)
-		case SettingsServiceCompleteCodexOAuthProcedure:
-			settingsServiceCompleteCodexOAuthHandler.ServeHTTP(w, r)
-		case SettingsServiceCompleteClaudeOAuthProcedure:
-			settingsServiceCompleteClaudeOAuthHandler.ServeHTTP(w, r)
-		case SettingsServiceCompleteAntigravityOAuthProcedure:
-			settingsServiceCompleteAntigravityOAuthHandler.ServeHTTP(w, r)
-		case SettingsServiceStartCopilotDeviceAuthProcedure:
-			settingsServiceStartCopilotDeviceAuthHandler.ServeHTTP(w, r)
-		case SettingsServicePollCopilotDeviceAuthProcedure:
-			settingsServicePollCopilotDeviceAuthHandler.ServeHTTP(w, r)
-		case SettingsServiceGetPrivacySettingsProcedure:
-			settingsServiceGetPrivacySettingsHandler.ServeHTTP(w, r)
-		case SettingsServiceUpdatePrivacySettingsProcedure:
-			settingsServiceUpdatePrivacySettingsHandler.ServeHTTP(w, r)
-		case SettingsServiceTrackPageVisitedProcedure:
-			settingsServiceTrackPageVisitedHandler.ServeHTTP(w, r)
-		case SettingsServiceTrackOnboardingEventProcedure:
-			settingsServiceTrackOnboardingEventHandler.ServeHTTP(w, r)
-		case SettingsServiceInstallSkillProcedure:
-			settingsServiceInstallSkillHandler.ServeHTTP(w, r)
-		case SettingsServiceListInstalledSkillsProcedure:
-			settingsServiceListInstalledSkillsHandler.ServeHTTP(w, r)
-		case SettingsServiceGetInstalledSkillDefinitionProcedure:
-			settingsServiceGetInstalledSkillDefinitionHandler.ServeHTTP(w, r)
-		case SettingsServiceSetSkillEnabledProcedure:
-			settingsServiceSetSkillEnabledHandler.ServeHTTP(w, r)
-		case SettingsServiceListRecommendedSkillsProcedure:
-			settingsServiceListRecommendedSkillsHandler.ServeHTTP(w, r)
-		case SettingsServiceDeleteGlobalSkillProcedure:
-			settingsServiceDeleteGlobalSkillHandler.ServeHTTP(w, r)
-		case SettingsServiceGetConfigHealthProcedure:
-			settingsServiceGetConfigHealthHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSettingsServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSettingsServiceHandler struct{}
 
-func (UnimplementedSettingsServiceHandler) CreateSetting(context.Context, *connect.Request[v1.CreateSettingRequest]) (*connect.Response[v1.CreateSettingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.CreateSetting is not implemented"))
+func (UnimplementedSettingsServiceHandler) CreateSetting(context.Context, *v1.CreateSettingRequest) (*v1.CreateSettingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.CreateSetting is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) ListSettings(context.Context, *connect.Request[v1.ListSettingsRequest]) (*connect.Response[v1.ListSettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.ListSettings is not implemented"))
+func (UnimplementedSettingsServiceHandler) ListSettings(context.Context, *v1.ListSettingsRequest) (*v1.ListSettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.ListSettings is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) GetSetting(context.Context, *connect.Request[v1.GetSettingRequest]) (*connect.Response[v1.GetSettingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetSetting is not implemented"))
+func (UnimplementedSettingsServiceHandler) GetSetting(context.Context, *v1.GetSettingRequest) (*v1.GetSettingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.GetSetting is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) UpdateSetting(context.Context, *connect.Request[v1.UpdateSettingRequest]) (*connect.Response[v1.UpdateSettingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.UpdateSetting is not implemented"))
+func (UnimplementedSettingsServiceHandler) UpdateSetting(context.Context, *v1.UpdateSettingRequest) (*v1.UpdateSettingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.UpdateSetting is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) DeleteSetting(context.Context, *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.DeleteSetting is not implemented"))
+func (UnimplementedSettingsServiceHandler) DeleteSetting(context.Context, *v1.DeleteSettingRequest) (*v1.DeleteSettingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.DeleteSetting is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) BatchUpsertSettings(context.Context, *connect.Request[v1.BatchUpsertSettingsRequest]) (*connect.Response[v1.BatchUpsertSettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.BatchUpsertSettings is not implemented"))
+func (UnimplementedSettingsServiceHandler) BatchUpsertSettings(context.Context, *v1.BatchUpsertSettingsRequest) (*v1.BatchUpsertSettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.BatchUpsertSettings is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) GetShortcuts(context.Context, *connect.Request[v1.GetShortcutsRequest]) (*connect.Response[v1.GetShortcutsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetShortcuts is not implemented"))
+func (UnimplementedSettingsServiceHandler) GetShortcuts(context.Context, *v1.GetShortcutsRequest) (*v1.GetShortcutsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.GetShortcuts is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) UpdateShortcuts(context.Context, *connect.Request[v1.UpdateShortcutsRequest]) (*connect.Response[v1.UpdateShortcutsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.UpdateShortcuts is not implemented"))
+func (UnimplementedSettingsServiceHandler) UpdateShortcuts(context.Context, *v1.UpdateShortcutsRequest) (*v1.UpdateShortcutsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.UpdateShortcuts is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) GetPreferences(context.Context, *connect.Request[v1.GetPreferencesRequest]) (*connect.Response[v1.GetPreferencesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetPreferences is not implemented"))
+func (UnimplementedSettingsServiceHandler) GetPreferences(context.Context, *v1.GetPreferencesRequest) (*v1.GetPreferencesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.GetPreferences is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) UpdatePreferences(context.Context, *connect.Request[v1.UpdatePreferencesRequest]) (*connect.Response[v1.UpdatePreferencesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.UpdatePreferences is not implemented"))
+func (UnimplementedSettingsServiceHandler) UpdatePreferences(context.Context, *v1.UpdatePreferencesRequest) (*v1.UpdatePreferencesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.UpdatePreferences is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) SetHiddenItem(context.Context, *connect.Request[v1.SetHiddenItemRequest]) (*connect.Response[v1.SetHiddenItemResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.SetHiddenItem is not implemented"))
+func (UnimplementedSettingsServiceHandler) SetHiddenItem(context.Context, *v1.SetHiddenItemRequest) (*v1.SetHiddenItemResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.SetHiddenItem is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) GetPrompts(context.Context, *connect.Request[v1.GetPromptsRequest]) (*connect.Response[v1.GetPromptsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetPrompts is not implemented"))
+func (UnimplementedSettingsServiceHandler) GetPrompts(context.Context, *v1.GetPromptsRequest) (*v1.GetPromptsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.GetPrompts is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) SavePrompts(context.Context, *connect.Request[v1.SavePromptsRequest]) (*connect.Response[v1.SavePromptsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.SavePrompts is not implemented"))
+func (UnimplementedSettingsServiceHandler) SavePrompts(context.Context, *v1.SavePromptsRequest) (*v1.SavePromptsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.SavePrompts is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) GetProviderStatuses(context.Context, *connect.Request[v1.GetProviderStatusesRequest]) (*connect.Response[v1.GetProviderStatusesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetProviderStatuses is not implemented"))
+func (UnimplementedSettingsServiceHandler) GetProviderStatuses(context.Context, *v1.GetProviderStatusesRequest) (*v1.GetProviderStatusesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.GetProviderStatuses is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.ValidateProviderAPIKey is not implemented"))
+func (UnimplementedSettingsServiceHandler) ValidateProviderAPIKey(context.Context, *v1.ValidateProviderAPIKeyRequest) (*v1.ValidateProviderAPIKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.ValidateProviderAPIKey is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.SyncReliantProvider is not implemented"))
+func (UnimplementedSettingsServiceHandler) SyncReliantProvider(context.Context, *v1.SyncReliantProviderRequest) (*v1.SyncReliantProviderResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.SyncReliantProvider is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.CompleteCodexOAuth is not implemented"))
+func (UnimplementedSettingsServiceHandler) CompleteCodexOAuth(context.Context, *v1.CompleteCodexOAuthRequest) (*v1.CompleteCodexOAuthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.CompleteCodexOAuth is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.CompleteClaudeOAuth is not implemented"))
+func (UnimplementedSettingsServiceHandler) CompleteClaudeOAuth(context.Context, *v1.CompleteClaudeOAuthRequest) (*v1.CompleteClaudeOAuthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.CompleteClaudeOAuth is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) CompleteAntigravityOAuth(context.Context, *connect.Request[v1.CompleteAntigravityOAuthRequest]) (*connect.Response[v1.CompleteAntigravityOAuthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.CompleteAntigravityOAuth is not implemented"))
+func (UnimplementedSettingsServiceHandler) CompleteAntigravityOAuth(context.Context, *v1.CompleteAntigravityOAuthRequest) (*v1.CompleteAntigravityOAuthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.CompleteAntigravityOAuth is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) StartCopilotDeviceAuth(context.Context, *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.StartCopilotDeviceAuth is not implemented"))
+func (UnimplementedSettingsServiceHandler) StartCopilotDeviceAuth(context.Context, *v1.StartCopilotDeviceAuthRequest) (*v1.StartCopilotDeviceAuthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.StartCopilotDeviceAuth is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) PollCopilotDeviceAuth(context.Context, *connect.Request[v1.PollCopilotDeviceAuthRequest]) (*connect.Response[v1.PollCopilotDeviceAuthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.PollCopilotDeviceAuth is not implemented"))
+func (UnimplementedSettingsServiceHandler) PollCopilotDeviceAuth(context.Context, *v1.PollCopilotDeviceAuthRequest) (*v1.PollCopilotDeviceAuthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.PollCopilotDeviceAuth is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) GetPrivacySettings(context.Context, *connect.Request[v1.GetPrivacySettingsRequest]) (*connect.Response[v1.GetPrivacySettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetPrivacySettings is not implemented"))
+func (UnimplementedSettingsServiceHandler) GetPrivacySettings(context.Context, *v1.GetPrivacySettingsRequest) (*v1.GetPrivacySettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.GetPrivacySettings is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) UpdatePrivacySettings(context.Context, *connect.Request[v1.UpdatePrivacySettingsRequest]) (*connect.Response[v1.UpdatePrivacySettingsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.UpdatePrivacySettings is not implemented"))
+func (UnimplementedSettingsServiceHandler) UpdatePrivacySettings(context.Context, *v1.UpdatePrivacySettingsRequest) (*v1.UpdatePrivacySettingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.UpdatePrivacySettings is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) TrackPageVisited(context.Context, *connect.Request[v1.TrackPageVisitedRequest]) (*connect.Response[v1.TrackPageVisitedResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.TrackPageVisited is not implemented"))
+func (UnimplementedSettingsServiceHandler) TrackPageVisited(context.Context, *v1.TrackPageVisitedRequest) (*v1.TrackPageVisitedResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.TrackPageVisited is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) TrackOnboardingEvent(context.Context, *connect.Request[v1.TrackOnboardingEventRequest]) (*connect.Response[v1.TrackOnboardingEventResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.TrackOnboardingEvent is not implemented"))
+func (UnimplementedSettingsServiceHandler) TrackOnboardingEvent(context.Context, *v1.TrackOnboardingEventRequest) (*v1.TrackOnboardingEventResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.TrackOnboardingEvent is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) InstallSkill(context.Context, *connect.Request[v1.InstallSkillRequest]) (*connect.Response[v1.InstallSkillResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.InstallSkill is not implemented"))
+func (UnimplementedSettingsServiceHandler) InstallSkill(context.Context, *v1.InstallSkillRequest) (*v1.InstallSkillResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.InstallSkill is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) ListInstalledSkills(context.Context, *connect.Request[v1.ListInstalledSkillsRequest]) (*connect.Response[v1.ListInstalledSkillsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.ListInstalledSkills is not implemented"))
+func (UnimplementedSettingsServiceHandler) ListInstalledSkills(context.Context, *v1.ListInstalledSkillsRequest) (*v1.ListInstalledSkillsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.ListInstalledSkills is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) GetInstalledSkillDefinition(context.Context, *connect.Request[v1.GetInstalledSkillDefinitionRequest]) (*connect.Response[v1.GetInstalledSkillDefinitionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetInstalledSkillDefinition is not implemented"))
+func (UnimplementedSettingsServiceHandler) GetInstalledSkillDefinition(context.Context, *v1.GetInstalledSkillDefinitionRequest) (*v1.GetInstalledSkillDefinitionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.GetInstalledSkillDefinition is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) SetSkillEnabled(context.Context, *connect.Request[v1.SetSkillEnabledRequest]) (*connect.Response[v1.SetSkillEnabledResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.SetSkillEnabled is not implemented"))
+func (UnimplementedSettingsServiceHandler) SetSkillEnabled(context.Context, *v1.SetSkillEnabledRequest) (*v1.SetSkillEnabledResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.SetSkillEnabled is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) ListRecommendedSkills(context.Context, *connect.Request[v1.ListRecommendedSkillsRequest]) (*connect.Response[v1.ListRecommendedSkillsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.ListRecommendedSkills is not implemented"))
+func (UnimplementedSettingsServiceHandler) ListRecommendedSkills(context.Context, *v1.ListRecommendedSkillsRequest) (*v1.ListRecommendedSkillsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.ListRecommendedSkills is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) DeleteGlobalSkill(context.Context, *connect.Request[v1.DeleteGlobalSkillRequest]) (*connect.Response[v1.DeleteGlobalSkillResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.DeleteGlobalSkill is not implemented"))
+func (UnimplementedSettingsServiceHandler) DeleteGlobalSkill(context.Context, *v1.DeleteGlobalSkillRequest) (*v1.DeleteGlobalSkillResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.DeleteGlobalSkill is not implemented")
 }
 
-func (UnimplementedSettingsServiceHandler) GetConfigHealth(context.Context, *connect.Request[v1.GetConfigHealthRequest]) (*connect.Response[v1.GetConfigHealthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.GetConfigHealth is not implemented"))
+func (UnimplementedSettingsServiceHandler) GetConfigHealth(context.Context, *v1.GetConfigHealthRequest) (*v1.GetConfigHealthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SettingsService.GetConfigHealth is not implemented")
+}
+
+type settingsServiceClient struct {
+	client *connect.Client
+}
+
+func (c *settingsServiceClient) CreateSetting(ctx context.Context, req *v1.CreateSettingRequest) (*v1.CreateSettingResponse, error) {
+	var res v1.CreateSettingResponse
+	if err := c.client.CallUnary(ctx, settingsServiceCreateSettingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) ListSettings(ctx context.Context, req *v1.ListSettingsRequest) (*v1.ListSettingsResponse, error) {
+	var res v1.ListSettingsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceListSettingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) GetSetting(ctx context.Context, req *v1.GetSettingRequest) (*v1.GetSettingResponse, error) {
+	var res v1.GetSettingResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetSettingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) UpdateSetting(ctx context.Context, req *v1.UpdateSettingRequest) (*v1.UpdateSettingResponse, error) {
+	var res v1.UpdateSettingResponse
+	if err := c.client.CallUnary(ctx, settingsServiceUpdateSettingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) DeleteSetting(ctx context.Context, req *v1.DeleteSettingRequest) (*v1.DeleteSettingResponse, error) {
+	var res v1.DeleteSettingResponse
+	if err := c.client.CallUnary(ctx, settingsServiceDeleteSettingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) BatchUpsertSettings(ctx context.Context, req *v1.BatchUpsertSettingsRequest) (*v1.BatchUpsertSettingsResponse, error) {
+	var res v1.BatchUpsertSettingsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceBatchUpsertSettingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) GetShortcuts(ctx context.Context, req *v1.GetShortcutsRequest) (*v1.GetShortcutsResponse, error) {
+	var res v1.GetShortcutsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetShortcutsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) UpdateShortcuts(ctx context.Context, req *v1.UpdateShortcutsRequest) (*v1.UpdateShortcutsResponse, error) {
+	var res v1.UpdateShortcutsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceUpdateShortcutsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) GetPreferences(ctx context.Context, req *v1.GetPreferencesRequest) (*v1.GetPreferencesResponse, error) {
+	var res v1.GetPreferencesResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetPreferencesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) UpdatePreferences(ctx context.Context, req *v1.UpdatePreferencesRequest) (*v1.UpdatePreferencesResponse, error) {
+	var res v1.UpdatePreferencesResponse
+	if err := c.client.CallUnary(ctx, settingsServiceUpdatePreferencesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) SetHiddenItem(ctx context.Context, req *v1.SetHiddenItemRequest) (*v1.SetHiddenItemResponse, error) {
+	var res v1.SetHiddenItemResponse
+	if err := c.client.CallUnary(ctx, settingsServiceSetHiddenItemSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) GetPrompts(ctx context.Context, req *v1.GetPromptsRequest) (*v1.GetPromptsResponse, error) {
+	var res v1.GetPromptsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetPromptsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) SavePrompts(ctx context.Context, req *v1.SavePromptsRequest) (*v1.SavePromptsResponse, error) {
+	var res v1.SavePromptsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceSavePromptsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) GetProviderStatuses(ctx context.Context, req *v1.GetProviderStatusesRequest) (*v1.GetProviderStatusesResponse, error) {
+	var res v1.GetProviderStatusesResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetProviderStatusesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) ValidateProviderAPIKey(ctx context.Context, req *v1.ValidateProviderAPIKeyRequest) (*v1.ValidateProviderAPIKeyResponse, error) {
+	var res v1.ValidateProviderAPIKeyResponse
+	if err := c.client.CallUnary(ctx, settingsServiceValidateProviderAPIKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) SyncReliantProvider(ctx context.Context, req *v1.SyncReliantProviderRequest) (*v1.SyncReliantProviderResponse, error) {
+	var res v1.SyncReliantProviderResponse
+	if err := c.client.CallUnary(ctx, settingsServiceSyncReliantProviderSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) CompleteCodexOAuth(ctx context.Context, req *v1.CompleteCodexOAuthRequest) (*v1.CompleteCodexOAuthResponse, error) {
+	var res v1.CompleteCodexOAuthResponse
+	if err := c.client.CallUnary(ctx, settingsServiceCompleteCodexOAuthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) CompleteClaudeOAuth(ctx context.Context, req *v1.CompleteClaudeOAuthRequest) (*v1.CompleteClaudeOAuthResponse, error) {
+	var res v1.CompleteClaudeOAuthResponse
+	if err := c.client.CallUnary(ctx, settingsServiceCompleteClaudeOAuthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) CompleteAntigravityOAuth(ctx context.Context, req *v1.CompleteAntigravityOAuthRequest) (*v1.CompleteAntigravityOAuthResponse, error) {
+	var res v1.CompleteAntigravityOAuthResponse
+	if err := c.client.CallUnary(ctx, settingsServiceCompleteAntigravityOAuthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) StartCopilotDeviceAuth(ctx context.Context, req *v1.StartCopilotDeviceAuthRequest) (*v1.StartCopilotDeviceAuthResponse, error) {
+	var res v1.StartCopilotDeviceAuthResponse
+	if err := c.client.CallUnary(ctx, settingsServiceStartCopilotDeviceAuthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) PollCopilotDeviceAuth(ctx context.Context, req *v1.PollCopilotDeviceAuthRequest) (*v1.PollCopilotDeviceAuthResponse, error) {
+	var res v1.PollCopilotDeviceAuthResponse
+	if err := c.client.CallUnary(ctx, settingsServicePollCopilotDeviceAuthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) GetPrivacySettings(ctx context.Context, req *v1.GetPrivacySettingsRequest) (*v1.GetPrivacySettingsResponse, error) {
+	var res v1.GetPrivacySettingsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetPrivacySettingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) UpdatePrivacySettings(ctx context.Context, req *v1.UpdatePrivacySettingsRequest) (*v1.UpdatePrivacySettingsResponse, error) {
+	var res v1.UpdatePrivacySettingsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceUpdatePrivacySettingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) TrackPageVisited(ctx context.Context, req *v1.TrackPageVisitedRequest) (*v1.TrackPageVisitedResponse, error) {
+	var res v1.TrackPageVisitedResponse
+	if err := c.client.CallUnary(ctx, settingsServiceTrackPageVisitedSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) TrackOnboardingEvent(ctx context.Context, req *v1.TrackOnboardingEventRequest) (*v1.TrackOnboardingEventResponse, error) {
+	var res v1.TrackOnboardingEventResponse
+	if err := c.client.CallUnary(ctx, settingsServiceTrackOnboardingEventSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) InstallSkill(ctx context.Context, req *v1.InstallSkillRequest) (*v1.InstallSkillResponse, error) {
+	var res v1.InstallSkillResponse
+	if err := c.client.CallUnary(ctx, settingsServiceInstallSkillSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) ListInstalledSkills(ctx context.Context, req *v1.ListInstalledSkillsRequest) (*v1.ListInstalledSkillsResponse, error) {
+	var res v1.ListInstalledSkillsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceListInstalledSkillsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) GetInstalledSkillDefinition(ctx context.Context, req *v1.GetInstalledSkillDefinitionRequest) (*v1.GetInstalledSkillDefinitionResponse, error) {
+	var res v1.GetInstalledSkillDefinitionResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetInstalledSkillDefinitionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) SetSkillEnabled(ctx context.Context, req *v1.SetSkillEnabledRequest) (*v1.SetSkillEnabledResponse, error) {
+	var res v1.SetSkillEnabledResponse
+	if err := c.client.CallUnary(ctx, settingsServiceSetSkillEnabledSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) ListRecommendedSkills(ctx context.Context, req *v1.ListRecommendedSkillsRequest) (*v1.ListRecommendedSkillsResponse, error) {
+	var res v1.ListRecommendedSkillsResponse
+	if err := c.client.CallUnary(ctx, settingsServiceListRecommendedSkillsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) DeleteGlobalSkill(ctx context.Context, req *v1.DeleteGlobalSkillRequest) (*v1.DeleteGlobalSkillResponse, error) {
+	var res v1.DeleteGlobalSkillResponse
+	if err := c.client.CallUnary(ctx, settingsServiceDeleteGlobalSkillSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *settingsServiceClient) GetConfigHealth(ctx context.Context, req *v1.GetConfigHealthRequest) (*v1.GetConfigHealthResponse, error) {
+	var res v1.GetConfigHealthResponse
+	if err := c.client.CallUnary(ctx, settingsServiceGetConfigHealthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type settingsServiceHandler struct{ svc SettingsServiceHandler }
+
+func (h settingsServiceHandler) createSetting(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateSettingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateSetting(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) listSettings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSettings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) getSetting(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSettingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSetting(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) updateSetting(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateSettingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateSetting(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) deleteSetting(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteSettingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteSetting(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) batchUpsertSettings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BatchUpsertSettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BatchUpsertSettings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) getShortcuts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetShortcutsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetShortcuts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) updateShortcuts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateShortcutsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateShortcuts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) getPreferences(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPreferencesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPreferences(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) updatePreferences(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdatePreferencesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdatePreferences(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) setHiddenItem(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetHiddenItemRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetHiddenItem(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) getPrompts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPromptsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPrompts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) savePrompts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SavePromptsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SavePrompts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) getProviderStatuses(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetProviderStatusesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetProviderStatuses(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) validateProviderAPIKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ValidateProviderAPIKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ValidateProviderAPIKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) syncReliantProvider(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SyncReliantProviderRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SyncReliantProvider(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) completeCodexOAuth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteCodexOAuthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteCodexOAuth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) completeClaudeOAuth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteClaudeOAuthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteClaudeOAuth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) completeAntigravityOAuth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteAntigravityOAuthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteAntigravityOAuth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) startCopilotDeviceAuth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartCopilotDeviceAuthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartCopilotDeviceAuth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) pollCopilotDeviceAuth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PollCopilotDeviceAuthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PollCopilotDeviceAuth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) getPrivacySettings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPrivacySettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPrivacySettings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) updatePrivacySettings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdatePrivacySettingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdatePrivacySettings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) trackPageVisited(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TrackPageVisitedRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TrackPageVisited(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) trackOnboardingEvent(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TrackOnboardingEventRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TrackOnboardingEvent(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) installSkill(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InstallSkillRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InstallSkill(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) listInstalledSkills(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListInstalledSkillsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListInstalledSkills(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) getInstalledSkillDefinition(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetInstalledSkillDefinitionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetInstalledSkillDefinition(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) setSkillEnabled(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetSkillEnabledRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetSkillEnabled(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) listRecommendedSkills(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListRecommendedSkillsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListRecommendedSkills(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) deleteGlobalSkill(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteGlobalSkillRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteGlobalSkill(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h settingsServiceHandler) getConfigHealth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetConfigHealthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetConfigHealth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

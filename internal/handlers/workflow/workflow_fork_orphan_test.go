@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -71,18 +71,18 @@ func TestForkOrphanedWorkflow(t *testing.T) {
 	adasProject := project("ada")
 	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
 	fork := func(ctx context.Context, id, projectID string) (*reliantv1.ForkOrphanedWorkflowResponse, error) {
-		resp, err := svc.ForkOrphanedWorkflow(ctx, connect.NewRequest(&reliantv1.ForkOrphanedWorkflowRequest{WorkflowId: id, ProjectId: projectID}))
+		resp, err := svc.ForkOrphanedWorkflow(ctx, &reliantv1.ForkOrphanedWorkflowRequest{WorkflowId: id, ProjectId: projectID})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg, nil
+		return resp, nil
 	}
-	reason := func(err error) string { return svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader) }
+	reason := func(err error) string { return svcerr.MetaOf(err).Get(svcerr.ReasonHeader) }
 
 	_, err := fork(as("bob"), orphan.ID, project("bob"))
 	assert.Equal(t, orgtakeover.ReasonOrgAdminRequired, reason(err), "a member who is not an admin: %v", err)
 	_, err = fork(as("olga"), orphan.ID, adasProject)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "an outsider cannot tell it exists")
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "an outsider cannot tell it exists")
 	_, err = fork(as("ada"), livs.ID, adasProject)
 	assert.Equal(t, ReasonWorkflowNotOrphaned, reason(err), "a live member's workflow is theirs")
 

@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -17,11 +15,11 @@ import (
 // named org's (orgs.ListScope), or every org's when it names none.
 func (s *Service) ListArchivedChats(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListArchivedChatsRequest],
-) (*connect.Response[reliantv1.ListArchivedChatsResponse], error) {
+	req *reliantv1.ListArchivedChatsRequest,
+) (*reliantv1.ListArchivedChatsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -48,8 +46,8 @@ func (s *Service) ListArchivedChats(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.ListArchivedChatsResponse{
+	return &reliantv1.ListArchivedChatsResponse{
 		Chats: protoChats,
 		Total: int32(len(protoChats)),
-	}), nil
+	}, nil
 }

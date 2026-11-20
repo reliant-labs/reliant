@@ -3,8 +3,6 @@ package question
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -35,18 +33,18 @@ import (
 // RPC (GetWorkflowExecutions, GetChatUpdates) already verifies.
 func (s *Service) ListPendingQuestions(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListPendingQuestionsRequest],
-) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
+	req *reliantv1.ListPendingQuestionsRequest,
+) (*reliantv1.ListPendingQuestionsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == nil {
+	if req.ChatId == nil {
 		questions, err := s.pendingQuestionsOfUser(ctx, userID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list pending questions"))
 		}
-		return connect.NewResponse(&reliantv1.ListPendingQuestionsResponse{Questions: questionsToProto(questions, authz.AccessOwner)}), nil
+		return &reliantv1.ListPendingQuestionsResponse{Questions: questionsToProto(questions, authz.AccessOwner)}, nil
 	}
-	chatID := req.Msg.GetChatId()
+	chatID := req.GetChatId()
 	if chatID == "" {
 		return nil, svcerr.InvalidArgument("chat_id, when set, must not be empty")
 	}
@@ -65,7 +63,7 @@ func (s *Service) ListPendingQuestions(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list pending questions"))
 	}
-	return connect.NewResponse(&reliantv1.ListPendingQuestionsResponse{Questions: questionsToProto(questions, access)}), nil
+	return &reliantv1.ListPendingQuestionsResponse{Questions: questionsToProto(questions, access)}, nil
 }
 
 // pendingQuestionsOfUser is every answerable pending question of the caller.

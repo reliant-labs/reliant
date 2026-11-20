@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -31,22 +31,22 @@ func TestBatchApprove_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.BatchApproveRequest, pb.BatchApproveResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.BatchApproveRequest, pb.BatchApproveResponse]{
 		{
 			Name:    "request_ids is required",
-			Req:     connect.NewRequest(&pb.BatchApproveRequest{}),
+			Req:     &pb.BatchApproveRequest{},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an unknown approval is not found",
-			Req:     connect.NewRequest(&pb.BatchApproveRequest{RequestIds: []string{"a-2"}}),
+			Req:     &pb.BatchApproveRequest{RequestIds: []string{"a-2"}},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's approval is not found",
-			Req:     connect.NewRequest(&pb.BatchApproveRequest{RequestIds: []string{"a-1"}}),
+			Req:     &pb.BatchApproveRequest{RequestIds: []string{"a-1"}},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -49,9 +48,9 @@ func TestGetWorkflow_AgreesWithRunResolution(t *testing.T) {
 	require.NoError(t, err)
 
 	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo}))
-	got, err := svc.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{Name: "shared-flow", ProjectId: projectID}))
+	got, err := svc.GetWorkflow(ctx, &reliantv1.GetWorkflowRequest{Name: "shared-flow", ProjectId: projectID})
 	require.NoError(t, err)
-	require.Equal(t, string(run.Source), got.Msg.Source)
-	require.Equal(t, "user", got.Msg.Source)
-	require.Equal(t, string(run.YAML), got.Msg.YamlDefinition)
+	require.Equal(t, string(run.Source), got.Source)
+	require.Equal(t, "user", got.Source)
+	require.Equal(t, string(run.YAML), got.YamlDefinition)
 }

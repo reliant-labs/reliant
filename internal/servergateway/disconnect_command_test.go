@@ -7,16 +7,17 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net"
-	"net/http"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats-server/v2/server"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/stretchr/testify/require"
 
@@ -26,6 +27,7 @@ import (
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
@@ -56,8 +58,8 @@ func startDisconnectGateway(t *testing.T) *disconnectGateway {
 	listener, err := grpcserver.NewDaemonListener(grpcserver.DaemonListenerDeps{
 		BindAddress: "127.0.0.1",
 		Chain:       chain,
-		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
-			svc.Register(mux, opts...)
+		Routes: serverkit.RoutesFuncV2(func(mux *mountkit.MuxV2) []string {
+			mux.Register(svc.RegisterV2)
 			return []string{reliantv1connect.ToolsDaemonServiceName}
 		}),
 	})
@@ -98,7 +100,7 @@ func startDisconnectGateway(t *testing.T) *disconnectGateway {
 // attach mints a credential bound to a fresh daemon id and opens that
 // daemon's stream, returning the id and the stream once the gateway has
 // acknowledged the registration.
-func (g *disconnectGateway) attach(t *testing.T, userID string) (string, *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage]) {
+func (g *disconnectGateway) attach(t *testing.T, userID string) (string, reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream) {
 	t.Helper()
 	daemonID := uuid.NewString()
 	minted, err := g.authority.MintForUser(context.Background(), tokenauthority.MintRequest{
@@ -111,12 +113,14 @@ func (g *disconnectGateway) attach(t *testing.T, userID string) (string, *connec
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	client := reliantv1connect.NewToolsDaemonServiceClient(h2cClient(), g.url, connect.WithGRPC())
-	stream := client.ConnectDaemon(ctx)
-	stream.RequestHeader().Set("Authorization", "Bearer "+minted.Plaintext)
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+minted.Plaintext)
+	client := reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(h2cClient(), g.url, []connecthttp.Option{connecthttp.WithGRPC()}))
+	stream, err := client.ConnectDaemon(ctx)
+	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 	})
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: &reliantv1.DaemonRegister{Hostname: "host-" + daemonID[:8], Platform: "linux", DaemonType: "local"},
@@ -141,7 +145,7 @@ func (g *disconnectGateway) publish(t *testing.T, cmd daemonwire.DisconnectComma
 
 // streamEnd receives until the stream ends and returns how it ended, skipping
 // the heartbeats and link probes the gateway sends meanwhile.
-func streamEnd(t *testing.T, stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage]) <-chan error {
+func streamEnd(t *testing.T, stream reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream) <-chan error {
 	t.Helper()
 	ended := make(chan error, 1)
 	go func() {

@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,18 +72,18 @@ func TestListChats_CarriesEachChatsWorktreeSummary(t *testing.T) {
 	onFeature2 := seedListChatsChat(t, ctx, repo, projectID, &feature.ID, "also on feature")
 	onArchived := seedListChatsChat(t, ctx, repo, projectID, &archived.ID, "on archived worktree")
 
-	resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+	resp, err := svc.ListChats(ctx, &reliantv1.ListChatsRequest{ProjectId: projectID})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Chats, 5)
+	require.Len(t, resp.Chats, 5)
 
 	byID := map[string]*reliantv1.Chat{}
-	for _, c := range resp.Msg.Chats {
+	for _, c := range resp.Chats {
 		byID[c.Id] = c
 	}
 
 	t.Run("main worktree is carried even for a chat with no worktree", func(t *testing.T) {
-		require.Len(t, resp.Msg.MainWorktrees, 1, "a project-scoped list carries that project's main workspace only")
-		main := resp.Msg.MainWorktrees[0]
+		require.Len(t, resp.MainWorktrees, 1, "a project-scoped list carries that project's main workspace only")
+		main := resp.MainWorktrees[0]
 		assert.Equal(t, mainID, main.Id)
 		assert.True(t, main.IsMain)
 		assert.Equal(t, "main", main.Name)
@@ -130,12 +129,12 @@ func TestListChats_NoWorktreesYieldsNoSummaries(t *testing.T) {
 	projectID, _ := newInvariantTestProject(t, ctx, repo, false)
 	id := seedListChatsChat(t, ctx, repo, projectID, nil, "lonely")
 
-	resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+	resp, err := svc.ListChats(ctx, &reliantv1.ListChatsRequest{ProjectId: projectID})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Chats, 1)
-	assert.Equal(t, id, resp.Msg.Chats[0].Id)
-	assert.Nil(t, resp.Msg.Chats[0].Worktree)
-	assert.Empty(t, resp.Msg.MainWorktrees, "a project with no main worktree row reports none")
+	require.Len(t, resp.Chats, 1)
+	assert.Equal(t, id, resp.Chats[0].Id)
+	assert.Nil(t, resp.Chats[0].Worktree)
+	assert.Empty(t, resp.MainWorktrees, "a project with no main worktree row reports none")
 }
 
 func TestListChats_DoesNotLeakAnotherUsersMainWorktree(t *testing.T) {
@@ -149,10 +148,10 @@ func TestListChats_DoesNotLeakAnotherUsersMainWorktree(t *testing.T) {
 
 	projectID, _ := newInvariantTestProject(t, owner, repo, true)
 
-	resp, err := svc.ListChats(intruder, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+	resp, err := svc.ListChats(intruder, &reliantv1.ListChatsRequest{ProjectId: projectID})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.Chats)
-	assert.Empty(t, resp.Msg.MainWorktrees, "another user's project must not disclose its main workspace")
+	assert.Empty(t, resp.Chats)
+	assert.Empty(t, resp.MainWorktrees, "another user's project must not disclose its main workspace")
 }
 
 // projectReadCounter is the real repository, counting the project reads a
@@ -200,16 +199,16 @@ func TestListChats_ReadsTheMainWorkspacesProjectsInOneQuery(t *testing.T) {
 	_, err = repo.ScheduleProjectDeletion(ctx, doomed, "test-user", time.Now().Add(time.Hour), doomedProject.Decision())
 	require.NoError(t, err)
 
-	resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{}))
+	resp, err := svc.ListChats(ctx, &reliantv1.ListChatsRequest{})
 	require.NoError(t, err)
 
 	gotMains := map[string]string{}
-	for _, w := range resp.Msg.MainWorktrees {
+	for _, w := range resp.MainWorktrees {
 		gotMains[w.Id] = w.ProjectId
 	}
 	assert.Equal(t, wantMains, gotMains, "every readable project's main workspace, and no other")
 	assert.NotContains(t, gotMains, doomedMain)
-	assert.Len(t, resp.Msg.Chats, projects)
+	assert.Len(t, resp.Chats, projects)
 
 	assert.Equal(t, int32(0), counter.gets.Load(), "no project is read one at a time")
 	assert.Equal(t, int32(1), counter.lists.Load(), "the projects are read in one query")
@@ -244,11 +243,11 @@ func TestListChats_AllProjectsSpansTheCallersProjectsOnly(t *testing.T) {
 		UserID: "someone-else", State: 2, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{}))
+	resp, err := svc.ListChats(ctx, &reliantv1.ListChatsRequest{})
 	require.NoError(t, err)
 
 	chatIDs := map[string]string{}
-	for _, c := range resp.Msg.Chats {
+	for _, c := range resp.Chats {
 		chatIDs[c.Id] = c.ProjectId
 	}
 	assert.Equal(t, projectA, chatIDs[inA])
@@ -256,7 +255,7 @@ func TestListChats_AllProjectsSpansTheCallersProjectsOnly(t *testing.T) {
 	assert.NotContains(t, chatIDs, foreignChat, "another user's chat must not be listed")
 
 	mains := map[string]string{}
-	for _, w := range resp.Msg.MainWorktrees {
+	for _, w := range resp.MainWorktrees {
 		mains[w.Id] = w.ProjectId
 	}
 	assert.Equal(t, projectA, mains[mainA])

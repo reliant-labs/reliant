@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -77,13 +77,13 @@ func TestActivationProjectsTheScopeFromItsParams(t *testing.T) {
 
 	update := func(repos ...string) {
 		t.Helper()
-		_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+		_, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 			Id: created.GetId(),
 			Trigger: env.activation("pr", func(d *reliantv1.TriggerDefinition) {
 				d.ConnectionId = &conn.ID
 				d.Params = reposParam(t, repos...)
 			}),
-		}))
+		})
 		require.NoError(t, err)
 	}
 	update("acme/api")
@@ -108,11 +108,11 @@ func TestActivationWithoutParamsProjectsAnEmptyScope(t *testing.T) {
 		"    required: true\n    min_items: 1\n", "    default: []\n", 1))
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
 
-	created, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	created, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: env.activation("pr", func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &conn.ID }),
-	}))
+	})
 	require.NoError(t, err)
-	cfg := env.storedScope(t, created.Msg.GetTrigger().GetId())
+	cfg := env.storedScope(t, created.GetTrigger().GetId())
 	assert.Equal(t, map[string][]string{"repository": {}}, cfg.MatchAny)
 	assert.False(t, matches(cfg, "acme/app"), "an empty scope never fires")
 }
@@ -125,11 +125,11 @@ func TestRequiredScopeInputCannotBeLeftOutOfAnActivation(t *testing.T) {
 	env.saveWorkflow(t, "triage", scopedActivationYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
 
-	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: env.activation("pr", func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &conn.ID }),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "repos is required")
 }
 

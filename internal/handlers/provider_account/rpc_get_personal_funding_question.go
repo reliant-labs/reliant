@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -16,13 +15,13 @@ import (
 // none. The chat's owner only: another user's chat, or none, is NotFound.
 func (s *Service) GetPersonalFundingQuestion(
 	ctx context.Context,
-	req *connect.Request[pb.GetPersonalFundingQuestionRequest],
-) (*connect.Response[pb.GetPersonalFundingQuestionResponse], error) {
+	req *pb.GetPersonalFundingQuestionRequest,
+) (*pb.GetPersonalFundingQuestionResponse, error) {
 	userID, err := callerID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	chatID := req.Msg.GetChatId()
+	chatID := req.GetChatId()
 	if chatID == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("chat_id is required"))
 	}
@@ -35,9 +34,9 @@ func (s *Service) GetPersonalFundingQuestion(
 	}
 	// The row is the chat's, written for its owner, whom the check above is.
 	if q == nil {
-		return connect.NewResponse(&pb.GetPersonalFundingQuestionResponse{}), nil
+		return &pb.GetPersonalFundingQuestionResponse{}, nil
 	}
-	return connect.NewResponse(&pb.GetPersonalFundingQuestionResponse{Question: personalFundingProto(q)}), nil
+	return &pb.GetPersonalFundingQuestionResponse{Question: personalFundingProto(q)}, nil
 }
 
 // personalFundingProto is the wire form of a chat's question.

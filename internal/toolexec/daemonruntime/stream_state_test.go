@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -26,7 +28,7 @@ type ackingGateway struct {
 	reliantv1connect.UnimplementedToolsDaemonServiceHandler
 }
 
-func (g *ackingGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (g *ackingGateway) ConnectDaemon(ctx context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	if _, err := stream.Receive(); err != nil {
 		return err
 	}
@@ -100,7 +102,9 @@ func TestDaemonRecordsStreamEstablishedOnRegistrationAck(t *testing.T) {
 	dataDir := t.TempDir()
 
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(&ackingGateway{}))
+	server := connect.NewServer()
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, &ackingGateway{})
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()
@@ -122,7 +126,9 @@ func TestDaemonConnectsToGRPCSchemeGateway(t *testing.T) {
 	dataDir := t.TempDir()
 
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(&ackingGateway{}))
+	server := connect.NewServer()
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, &ackingGateway{})
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()

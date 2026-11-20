@@ -3,8 +3,6 @@ package settings
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -12,29 +10,29 @@ import (
 )
 
 // GetSetting retrieves a setting by key
-func (s *Service) GetSetting(ctx context.Context, req *connect.Request[reliantv1.GetSettingRequest]) (*connect.Response[reliantv1.GetSettingResponse], error) {
+func (s *Service) GetSetting(ctx context.Context, req *reliantv1.GetSettingRequest) (*reliantv1.GetSettingResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.Key == "" {
+	if req.Key == "" {
 		return nil, svcerr.InvalidArgument("key is required")
 	}
 
 	var projectID *string
-	if req.Msg.ProjectId != nil {
-		projectID = req.Msg.ProjectId
+	if req.ProjectId != nil {
+		projectID = req.ProjectId
 	}
 
-	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Msg.Key)
+	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Key)
 	if err != nil {
 		// Return empty response instead of error for missing settings.
 		// This prevents frontend callers from throwing when a setting
 		// simply hasn't been created yet.
-		return connect.NewResponse(&reliantv1.GetSettingResponse{
+		return &reliantv1.GetSettingResponse{
 			Setting: nil,
-		}), nil
+		}, nil
 	}
 
-	return connect.NewResponse(&reliantv1.GetSettingResponse{
+	return &reliantv1.GetSettingResponse{
 		Setting: settingToProto(setting),
-	}), nil
+	}, nil
 }

@@ -3,7 +3,7 @@ package message_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,22 +20,22 @@ func TestGetMessage_Generated(t *testing.T) {
 
 	svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: foreignMessageRepo{}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetMessageRequest, pb.GetMessageResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetMessageRequest, pb.GetMessageResponse]{
 		{
 			Name:    "message_id is required",
-			Req:     connect.NewRequest(&pb.GetMessageRequest{}),
+			Req:     &pb.GetMessageRequest{},
 			Ctx:     message.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown message is not found",
-			Req:     connect.NewRequest(&pb.GetMessageRequest{MessageId: "msg-unknown"}),
+			Req:     &pb.GetMessageRequest{MessageId: "msg-unknown"},
 			Ctx:     message.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's message is not found",
-			Req:     connect.NewRequest(&pb.GetMessageRequest{MessageId: foreignMessageID}),
+			Req:     &pb.GetMessageRequest{MessageId: foreignMessageID},
 			Ctx:     message.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

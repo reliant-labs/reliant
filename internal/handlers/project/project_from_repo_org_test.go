@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,9 +50,9 @@ func TestCreateProjectFromRepo_AuthorizesTheMachineBeforeTheClone(t *testing.T) 
 		t.Helper()
 		cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{ClonedPath: "/home/workspace/projects/w-" + uuid.NewString(), Queued: true}}
 		svc := NewTestProject(t, WithProjectDeps(Deps{Repo: r, Router: &createProjectRowRouter{resolveID: daemonID}, ControlPlane: cp, Orgs: resolver}))
-		_, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		_, err := svc.CreateProjectFromRepo(ctx, &reliantv1.CreateProjectFromRepoRequest{
 			CloneUrl: "https://github.com/acme/w-" + uuid.NewString() + ".git", DaemonId: daemonID, OrgId: &org,
-		}))
+		})
 		return cp, err
 	}
 

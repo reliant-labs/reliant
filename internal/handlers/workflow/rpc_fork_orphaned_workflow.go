@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -32,10 +31,10 @@ const ReasonWorkflowNotOrphaned = "automation_not_orphaned"
 // org, and one of an org the caller is not a live member of are NotFound.
 func (s *Service) ForkOrphanedWorkflow(
 	ctx context.Context,
-	req *connect.Request[pb.ForkOrphanedWorkflowRequest],
-) (*connect.Response[pb.ForkOrphanedWorkflowResponse], error) {
+	req *pb.ForkOrphanedWorkflowRequest,
+) (*pb.ForkOrphanedWorkflowResponse, error) {
 	callerID := auth.MustGetUserID(ctx)
-	src, err := s.deps.Repo.GetWorkflowDraft(ctx, req.Msg.GetWorkflowId())
+	src, err := s.deps.Repo.GetWorkflowDraft(ctx, req.GetWorkflowId())
 	if svcerr.IsNotFound(err) {
 		return nil, svcerr.NotFound("workflow")
 	}
@@ -63,7 +62,7 @@ func (s *Service) ForkOrphanedWorkflow(
 		return nil, svcerr.WithReason(svcerr.FailedPrecondition(
 			"this workflow's creator is a member of its organization, so it is theirs: ask them to share or copy it"), ReasonWorkflowNotOrphaned)
 	}
-	if err := s.projectBelongsToUser(ctx, req.Msg.GetProjectId(), callerID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.GetProjectId(), callerID); err != nil {
 		return nil, err
 	}
 
@@ -72,14 +71,14 @@ func (s *Service) ForkOrphanedWorkflow(
 		return nil, svcerr.WithCause(svcerr.FailedPrecondition(
 			"this workflow's definition does not parse, so it cannot be forked; copy its definition from the list into a new workflow instead"), err)
 	}
-	title := strings.TrimSpace(req.Msg.GetNewName())
+	title := strings.TrimSpace(req.GetNewName())
 	if title == "" {
 		title = strings.TrimSpace(wf.GetTitle())
 	}
 	if title == "" {
 		title = src.Name
 	}
-	slug, title, err := s.uniqueNewWorkflowSlug(ctx, callerID, req.Msg.GetProjectId(), title)
+	slug, title, err := s.uniqueNewWorkflowSlug(ctx, callerID, req.GetProjectId(), title)
 	if err != nil {
 		return nil, err
 	}
@@ -112,5 +111,5 @@ func (s *Service) ForkOrphanedWorkflow(
 	if err := s.deps.Repo.CreateWorkflowDraft(ctx, fork); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to fork workflow"))
 	}
-	return connect.NewResponse(&pb.ForkOrphanedWorkflowResponse{Id: fork.ID, Slug: slug, Name: title}), nil
+	return &pb.ForkOrphanedWorkflowResponse{Id: fork.ID, Slug: slug, Name: title}, nil
 }

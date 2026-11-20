@@ -5,12 +5,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -33,14 +33,14 @@ const defaultGitProvider = "github"
 // token. It authenticates its own bearer, uncached, and admits only a daemon
 // credential. The token is passed through: never stored, cached or logged here.
 func (s *Service) GetGitToken(
-	ctx context.Context, req *connect.Request[reliantv1.GetGitTokenRequest],
-) (*connect.Response[reliantv1.GetGitTokenResponse], error) {
-	subject, err := s.daemonCredential(ctx, req.Header())
+	ctx context.Context, req *reliantv1.GetGitTokenRequest,
+) (*reliantv1.GetGitTokenResponse, error) {
+	subject, err := s.daemonCredential(ctx, serverkit.CallInfoV2(ctx).RequestHeader())
 	if err != nil {
 		return nil, err
 	}
 	userID := subject.ActingUserID
-	provider := strings.ToLower(strings.TrimSpace(req.Msg.GetProvider()))
+	provider := strings.ToLower(strings.TrimSpace(req.GetProvider()))
 	if provider == "" {
 		provider = defaultGitProvider
 	}
@@ -81,12 +81,12 @@ func (s *Service) GetGitToken(
 		resp.ExpiresAt = tok.ExpiresAt.UTC().Format(time.RFC3339)
 	}
 	slog.InfoContext(ctx, "git token issued", "user_id", userID, "provider", provider, "outcome", "ok")
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // daemonCredential authenticates the bearer against the authority, uncached,
 // and admits only a live daemon credential acting as a user.
-func (s *Service) daemonCredential(ctx context.Context, header http.Header) (*fat.Principal, error) {
+func (s *Service) daemonCredential(ctx context.Context, header *connect.Header) (*fat.Principal, error) {
 	bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
 	bearer = strings.TrimSpace(bearer)
 	if !ok || !auth.IsAccessTokenFormat(bearer) {

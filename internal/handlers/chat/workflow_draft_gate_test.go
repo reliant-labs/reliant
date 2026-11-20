@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -49,11 +48,11 @@ nodes:
 
 	t.Run("StartChat", func(t *testing.T) {
 		chatService := &Service{deps: Deps{Repo: repo}}
-		_, err := chatService.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+		_, err := chatService.StartChat(ctx, &reliantv1.StartChatRequest{
 			ProjectId: projectID,
 			Workflow:  "gate-draft",
 			Messages:  []*reliantv1.InputMessage{{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "hello"}},
-		}))
+		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "is a draft")
 		chats, listErr := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,14 +56,14 @@ func (e *triggerTestEnv) orgProject(t *testing.T, orgID *string) string {
 }
 
 func (e *triggerTestEnv) createIn(ctx context.Context, projectID string, org *string) (*reliantv1.Trigger, error) {
-	resp, err := e.svc.CreateTrigger(ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	resp, err := e.svc.CreateTrigger(ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: e.definition(func(d *reliantv1.TriggerDefinition) { d.ProjectId = projectID }),
 		OrgId:   org,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg.GetTrigger(), nil
+	return resp.GetTrigger(), nil
 }
 
 func (e *triggerTestEnv) userTriggers(t *testing.T) []*core.Trigger {
@@ -76,9 +76,9 @@ func (e *triggerTestEnv) userTriggers(t *testing.T) []*core.Trigger {
 func requireDenied(t *testing.T, err error, code connect.Code, reason string) {
 	t.Helper()
 	require.Error(t, err)
-	assert.Equal(t, code, svcerr.Code(err), "error: %v", err)
+	assert.Equal(t, code, svcerr.CodeV2(err), "error: %v", err)
 	if reason != "" {
-		assert.Equal(t, reason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader), "error: %v", err)
+		assert.Equal(t, reason, svcerr.MetaOf(err).Get(svcerr.ReasonHeader), "error: %v", err)
 	}
 }
 
@@ -134,10 +134,10 @@ func TestUpdateTrigger_StaysInItsOrg(t *testing.T) {
 	legacyProject := env.orgProject(t, nil)
 
 	move := func(id, projectID string) error {
-		_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+		_, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 			Id:      id,
 			Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.ProjectId = projectID }),
-		}))
+		})
 		return err
 	}
 	stored := func(id string) *core.Trigger {
@@ -192,13 +192,13 @@ func TestUpdateTrigger_ActsInTheTriggersOrg(t *testing.T) {
 	require.NoError(t, err)
 
 	update := func(ctx context.Context, projectID string) error {
-		_, err := env.svc.UpdateTrigger(ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+		_, err := env.svc.UpdateTrigger(ctx, &reliantv1.UpdateTriggerRequest{
 			Id: created.GetId(),
 			Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 				d.ProjectId = projectID
 				d.Message = "Reconfigured."
 			}),
-		}))
+		})
 		return err
 	}
 	unchanged := func() {
@@ -239,17 +239,17 @@ func TestListTriggers_LeavesOutALeftOrgsTriggers(t *testing.T) {
 	removed := orgs.New(leftAcmeSource{})
 	env.configure(t, func(d *Deps) { d.Orgs = removed })
 	ctx := authz.WithMembership(context.WithValue(context.Background(), auth.UserIDContextKey, env.userID), removed)
-	listed, err := env.svc.ListTriggers(ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	listed, err := env.svc.ListTriggers(ctx, &reliantv1.ListTriggersRequest{})
 	require.NoError(t, err)
 	var ids []string
-	for _, tr := range listed.Msg.GetTriggers() {
+	for _, tr := range listed.GetTriggers() {
 		ids = append(ids, tr.GetId())
 	}
 	require.Contains(t, ids, homeTrigger.GetId())
 	require.NotContains(t, ids, acmeTrigger.GetId(), "a left org's trigger, no org_id named")
 
 	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: acme, ActingUserID: env.userID})
-	_, err = env.svc.ListTriggers(machine, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	_, err = env.svc.ListTriggers(machine, &reliantv1.ListTriggersRequest{})
 	requireDenied(t, err, connect.CodePermissionDenied, orgs.ReasonNotOrgMember)
 }
 
@@ -313,13 +313,13 @@ func TestUpdateTrigger_ABackfillBetweenDecisionAndWriteIsRefused(t *testing.T) {
 		d.Repo = backfillBeforeWrite{Repository: d.Repo, repo: env.repo, userID: env.userID, org: "acme"}
 	})
 	update := func(tr *core.Trigger, projectID string) error {
-		_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+		_, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 			Id: tr.ID,
 			Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 				d.ProjectId = projectID
 				d.Message = "Reconfigured."
 			}),
-		}))
+		})
 		return err
 	}
 	refused := func(name string, tr *core.Trigger, projectID string) {
@@ -370,10 +370,10 @@ func TestUpdateTrigger_ABackfillAfterAnEmptyDecisionIsRefused(t *testing.T) {
 	env.configure(t, func(d *Deps) {
 		d.Repo = backfillBeforeWrite{Repository: d.Repo, repo: env.repo, userID: env.userID, org: "acme"}
 	})
-	_, err = env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	_, err = env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id:      created.GetId(),
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.ProjectId = to }),
-	}))
+	})
 	requireDenied(t, err, connect.CodeFailedPrecondition, "")
 	after, err := env.repo.GetTrigger(context.Background(), created.GetId())
 	require.NoError(t, err)

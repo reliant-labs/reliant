@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/cliauth"
@@ -34,10 +35,23 @@ func mintSession(t *testing.T, authority tokenauthority.Authority, userID string
 	return minted.Plaintext
 }
 
-func exchangeReq(bearer string, msg *reliantv1.ExchangeTokenRequest) *connect.Request[reliantv1.ExchangeTokenRequest] {
-	r := connect.NewRequest(msg)
-	r.Header().Set("Authorization", "Bearer "+bearer)
-	return r
+// bearerInfo is the CallInfo of a call that presents bearer as its
+// Authorization header ("" for none), for tdd.CallV2: the handler reads it as
+// it does behind the API listener.
+func bearerInfo(bearer string) *connect.CallInfo {
+	info := &connect.CallInfo{}
+	if bearer != "" {
+		info.RequestHeader().Set("Authorization", "Bearer "+bearer)
+	}
+	return info
+}
+
+// clientBearer is ctx for a client call that presents bearer as its
+// Authorization header.
+func clientBearer(ctx context.Context, bearer string) context.Context {
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+bearer)
+	return ctx
 }
 
 var fullDaemon = []fat.Scope{
@@ -56,13 +70,13 @@ func TestExchangeToken_InheritsBindingAndNarrows(t *testing.T) {
 		Scopes: fullDaemon, Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-1"},
 	})
 
-	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+	resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{
 		Audience: testControlPlane, Scopes: []string{"deploy:read"},
-	}))
+	}, bearerInfo(bearer))
 	if err != nil {
 		t.Fatalf("ExchangeToken: %v", err)
 	}
-	p, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	p, err := authority.Introspect(context.Background(), resp.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,11 +113,11 @@ func TestExchangeToken_NeverOutlivesItsParent(t *testing.T) {
 	soon := time.Now().Add(10 * time.Minute)
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon, ExpiresAt: &soon})
 
-	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	p, err := authority.Introspect(context.Background(), resp.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,11 +134,11 @@ func TestExchangeToken_EphemeralParentMakesAnEphemeralChild(t *testing.T) {
 		Scopes: fullDaemon, Ephemeral: true, ExpiresAt: &end,
 		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "desktop-run"},
 	})
-	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, err := authority.Introspect(context.Background(), resp.Msg.GetToken()); err != nil || !p.Ephemeral {
+	if p, err := authority.Introspect(context.Background(), resp.GetToken()); err != nil || !p.Ephemeral {
 		t.Fatalf("child of an ephemeral session must die with it: %+v %v", p, err)
 	}
 }
@@ -148,12 +162,12 @@ func TestExchangeToken_Audience(t *testing.T) {
 		authority := tokenauthority.NewMemory()
 		svc := newTokenService(t, authority, TokenControlPlane{Issuer: tc.issuer})
 		bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
-		_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: tc.audience}))
+		_, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: tc.audience}, bearerInfo(bearer))
 		if tc.ok && err != nil {
 			t.Errorf("issuer %s, audience %q: %v", tc.issuer, tc.audience, err)
 		}
 		if !tc.ok {
-			if svcerr.Code(err) != connect.CodeFailedPrecondition {
+			if svcerr.CodeV2(err) != connect.CodeFailedPrecondition {
 				t.Errorf("issuer %s, audience %q: err = %v, want FailedPrecondition", tc.issuer, tc.audience, err)
 			}
 			if n := len(listNames(t, authority, "user-1")); n != 1 {
@@ -167,8 +181,8 @@ func TestExchangeToken_SelfHostedIssuesNothing(t *testing.T) {
 	authority := tokenauthority.NewMemory()
 	svc := newTokenService(t, authority, TokenControlPlane{})
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
-	_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
-	if svcerr.Code(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "no control plane") {
+	_, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
+	if svcerr.CodeV2(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "no control plane") {
 		t.Fatalf("err = %v, want FailedPrecondition naming the missing control plane", err)
 	}
 }
@@ -194,11 +208,11 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 		{scopes: []string{"runs:start", "runs:read", "runs:control", "triggers:fire", "triggers:manage"}, code: connect.CodeInvalidArgument},
 		{scopes: []string{"deploy:wrIte"}, code: connect.CodeInvalidArgument},
 	} {
-		resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+		resp, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{
 			Audience: testControlPlane, Scopes: tc.scopes,
-		}))
+		}, bearerInfo(bearer))
 		if tc.code != 0 {
-			if svcerr.Code(err) != tc.code {
+			if svcerr.CodeV2(err) != tc.code {
 				t.Errorf("scopes %v: err = %v, want %v", tc.scopes, err, tc.code)
 			}
 			continue
@@ -207,8 +221,8 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 			t.Errorf("scopes %v: %v", tc.scopes, err)
 			continue
 		}
-		if strings.Join(resp.Msg.GetScopes(), ",") != strings.Join(tc.want, ",") {
-			t.Errorf("scopes %v: granted %v, want %v", tc.scopes, resp.Msg.GetScopes(), tc.want)
+		if strings.Join(resp.GetScopes(), ",") != strings.Join(tc.want, ",") {
+			t.Errorf("scopes %v: granted %v, want %v", tc.scopes, resp.GetScopes(), tc.want)
 		}
 	}
 }
@@ -262,19 +276,16 @@ func TestExchangeToken_RefusesNonSessionCallers(t *testing.T) {
 	}
 	// It does act as user-1 in Memory (acting user = minting user), but holds
 	// no session scope: it is a deploy token, not a Reliant session.
-	_, err = svc.ExchangeToken(ctx, exchangeReq(orgToken.Plaintext, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
-	if svcerr.Code(err) != connect.CodePermissionDenied {
+	_, err = tdd.CallV2(ctx, svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(orgToken.Plaintext))
+	if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 		t.Errorf("a non-session token: err = %v, want PermissionDenied", err)
 	}
 
 	// No bearer at all, or a JWT-shaped one.
-	for _, header := range []string{"", "Bearer eyJhbGciOi.not.an-rlat"} {
-		r := connect.NewRequest(&reliantv1.ExchangeTokenRequest{Audience: testControlPlane})
-		if header != "" {
-			r.Header().Set("Authorization", header)
-		}
-		if _, err := svc.ExchangeToken(ctx, r); svcerr.Code(err) != connect.CodeUnauthenticated {
-			t.Errorf("header %q: err = %v, want Unauthenticated", header, err)
+	for _, bearer := range []string{"", "eyJhbGciOi.not.an-rlat"} {
+		r := &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}
+		if _, err := tdd.CallV2(ctx, svc.ExchangeToken, r, bearerInfo(bearer)); svcerr.CodeV2(err) != connect.CodeUnauthenticated {
+			t.Errorf("bearer %q: err = %v, want Unauthenticated", bearer, err)
 		}
 	}
 
@@ -284,7 +295,7 @@ func TestExchangeToken_RefusesNonSessionCallers(t *testing.T) {
 	if err := authority.RevokeForUser(ctx, "user-1", p.TokenID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ExchangeToken(ctx, exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane})); svcerr.Code(err) != connect.CodeUnauthenticated {
+	if _, err := tdd.CallV2(ctx, svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer)); svcerr.CodeV2(err) != connect.CodeUnauthenticated {
 		t.Errorf("revoked: err = %v, want Unauthenticated", err)
 	}
 }
@@ -311,8 +322,8 @@ func TestExchangeToken_NeverCrossesOrgs(t *testing.T) {
 	bearer := mintSession(t, mem, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
 	svc := newTokenService(t, orgShiftAuthority{Memory: mem, parentToken: bearer}, TokenControlPlane{Issuer: testControlPlane})
 
-	_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
-	if svcerr.Code(err) != connect.CodeFailedPrecondition {
+	_, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}, bearerInfo(bearer))
+	if svcerr.CodeV2(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("err = %v, want FailedPrecondition", err)
 	}
 	// The mis-scoped token was revoked, leaving only the parent live.
@@ -348,15 +359,15 @@ func TestCreateToken_DaemonAsksForDaemonConnectAlone(t *testing.T) {
 	if len(authority.asked) != 1 || !reflect.DeepEqual(authority.asked[0], []fat.Scope{fat.ScopeDaemonConnect}) {
 		t.Fatalf("a daemon mint asked for %v, want [daemon:connect]", authority.asked)
 	}
-	p, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	p, err := authority.Introspect(context.Background(), resp.GetToken())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(resp.Msg.GetInfo().GetScopes(), ",") != p.Scopes.String() {
-		t.Errorf("response scopes %v != stored %s", resp.Msg.GetInfo().GetScopes(), p.Scopes)
+	if strings.Join(resp.GetInfo().GetScopes(), ",") != p.Scopes.String() {
+		t.Errorf("response scopes %v != stored %s", resp.GetInfo().GetScopes(), p.Scopes)
 	}
-	if resp.Msg.GetInfo().GetKind() != reliantv1.TokenKind_TOKEN_KIND_DAEMON {
-		t.Errorf("kind = %v", resp.Msg.GetInfo().GetKind())
+	if resp.GetInfo().GetKind() != reliantv1.TokenKind_TOKEN_KIND_DAEMON {
+		t.Errorf("kind = %v", resp.GetInfo().GetKind())
 	}
 }
 
@@ -429,11 +440,11 @@ func TestExchangeToken_WildcardHandsOnEnvironmentBindableScopes(t *testing.T) {
 			bearer := mintSession(t, rec.Memory, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
 			svc := newTokenService(t, wildcardAuthority{recordingMint: rec, parentToken: bearer, resolved: resolved, all: tc.all},
 				TokenControlPlane{Issuer: testControlPlane})
-			_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+			_, err := tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{
 				Audience: testControlPlane, Scopes: tc.ask,
-			}))
+			}, bearerInfo(bearer))
 			if tc.code != 0 {
-				if svcerr.Code(err) != tc.code {
+				if svcerr.CodeV2(err) != tc.code {
 					t.Fatalf("err = %v, want %v", err, tc.code)
 				}
 				if len(rec.asked) != 0 {

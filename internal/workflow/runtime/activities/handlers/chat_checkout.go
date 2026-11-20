@@ -120,7 +120,7 @@ func (c callCheckout) path(runPath, branchWorktreePath string) string {
 // chat's machine or clone the project. (Each call does re-check, so once the
 // user has acted the next turn just works.)
 func missingRefusal(err error) string {
-	return svcerr.ToConnect(err).Message() + ". No machine tools ran. Retrying will not help: stop calling tools that need the machine, " +
+	return svcerr.ToConnectV2(err).Message() + ". No machine tools ran. Retrying will not help: stop calling tools that need the machine, " +
 		"tell the user exactly this, and ask them to switch this chat's machine or clone the project; it works on the next turn once they have."
 }
 

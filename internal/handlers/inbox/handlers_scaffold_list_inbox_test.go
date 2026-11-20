@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -23,16 +23,16 @@ func TestListInbox_Generated(t *testing.T) {
 	svc := inbox.NewTestInbox(t)
 	negative := int32(-1)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListInboxRequest, pb.ListInboxResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListInboxRequest, pb.ListInboxResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.ListInboxRequest{}),
+			Req:     &pb.ListInboxRequest{},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "a negative limit is rejected",
-			Req:     connect.NewRequest(&pb.ListInboxRequest{Limit: &negative}),
+			Req:     &pb.ListInboxRequest{Limit: &negative},
 			Ctx:     inbox.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

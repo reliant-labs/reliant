@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -25,13 +24,13 @@ import (
 // be enumerated.
 func (s *Service) RefreshProviderAccountUsage(
 	ctx context.Context,
-	req *connect.Request[pb.RefreshProviderAccountUsageRequest],
-) (*connect.Response[pb.RefreshProviderAccountUsageResponse], error) {
+	req *pb.RefreshProviderAccountUsageRequest,
+) (*pb.RefreshProviderAccountUsageResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.Wrap(svcerr.Unauthenticated("user ID not found in context"))
 	}
-	accountID := req.Msg.GetAccountId()
+	accountID := req.GetAccountId()
 	if accountID == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("account_id is required"))
 	}
@@ -46,8 +45,8 @@ func (s *Service) RefreshProviderAccountUsage(
 		}
 		return nil, svcerr.Wrap(err)
 	}
-	return connect.NewResponse(&pb.RefreshProviderAccountUsageResponse{
+	return &pb.RefreshProviderAccountUsageResponse{
 		Account:   accountlimits.ProtoAccount(res.Account, res.Limits, time.Now()),
 		Throttled: res.Throttled,
-	}), nil
+	}, nil
 }

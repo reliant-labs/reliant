@@ -3,8 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -14,15 +12,15 @@ import (
 // DeleteChat permanently deletes an archived chat; one that is not archived is refused.
 func (s *Service) DeleteChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteChatRequest],
-) (*connect.Response[reliantv1.DeleteChatResponse], error) {
+	req *reliantv1.DeleteChatRequest,
+) (*reliantv1.DeleteChatResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	chat, err := s.getChatForUser(ctx, req.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -41,13 +39,13 @@ func (s *Service) DeleteChat(
 		_ = s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
 	}
 
-	if err := s.deps.Repo.DeleteChat(ctx, req.Msg.ChatId); err != nil {
+	if err := s.deps.Repo.DeleteChat(ctx, req.ChatId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to permanently delete chat"))
 	}
 
-	return connect.NewResponse(&reliantv1.DeleteChatResponse{
+	return &reliantv1.DeleteChatResponse{
 		Success:            true,
 		Message:            "Chat permanently deleted",
 		PermanentlyDeleted: true,
-	}), nil
+	}, nil
 }

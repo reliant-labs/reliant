@@ -3,7 +3,7 @@ package tools_daemon_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -18,10 +18,10 @@ func TestReportToolResult_Generated(t *testing.T) {
 	t.Parallel()
 
 	svc := tools_daemon.NewTestToolsDaemon(t)
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ReportToolResultRequest, pb.ReportToolResultResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ReportToolResultRequest, pb.ReportToolResultResponse]{
 		{
 			Name:    "retired in favour of the bidi stream",
-			Req:     connect.NewRequest(&pb.ReportToolResultRequest{}),
+			Req:     &pb.ReportToolResultRequest{},
 			Ctx:     tools_daemon.AuthedContext(t),
 			WantErr: connect.CodeUnimplemented,
 		},

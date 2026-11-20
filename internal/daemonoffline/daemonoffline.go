@@ -15,7 +15,7 @@ package daemonoffline
 import (
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -68,7 +68,7 @@ func IsError(err error) bool {
 	}
 
 	if svcerr.IsClassified(err) {
-		return svcerr.Code(err) == connect.CodeUnavailable
+		return svcerr.CodeV2(err) == connect.CodeUnavailable
 	}
 
 	// Nothing classified in the chain — accept on substring alone.

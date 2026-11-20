@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -48,37 +49,37 @@ func TestPersonalFundingQuestion_ReadAndAnswer(t *testing.T) {
 		PersonalAccountLabel: "me@example.com", OrgResetAt: &reset}, asked)
 	require.NoError(t, err)
 
-	got, err := e.svc.GetPersonalFundingQuestion(as(user), connect.NewRequest(&pb.GetPersonalFundingQuestionRequest{ChatId: chat}))
+	got, err := e.svc.GetPersonalFundingQuestion(as(user), &pb.GetPersonalFundingQuestionRequest{ChatId: chat})
 	require.NoError(t, err)
-	q := got.Msg.GetQuestion()
+	q := got.GetQuestion()
 	require.NotNil(t, q)
 	assert.Equal(t, pb.PersonalFundingQuestion_REASON_LIMITED, q.Reason)
 	assert.Equal(t, pb.PersonalFundingQuestion_STATE_ASKED, q.State)
 	assert.Equal(t, "org-acme", q.OrgId)
 	assert.Equal(t, reset.Format(time.RFC3339), q.GetOrgResetAt())
 
-	_, err = e.svc.GetPersonalFundingQuestion(as("someone-else"), connect.NewRequest(&pb.GetPersonalFundingQuestionRequest{ChatId: chat}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "another user's chat")
+	_, err = e.svc.GetPersonalFundingQuestion(as("someone-else"), &pb.GetPersonalFundingQuestionRequest{ChatId: chat})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "another user's chat")
 
 	answer := func(ctx context.Context, choice pb.ResolvePersonalFundingChoiceRequest_Choice, remember bool) (*pb.ResolvePersonalFundingChoiceResponse, error) {
-		resp, err := e.svc.ResolvePersonalFundingChoice(ctx, connect.NewRequest(&pb.ResolvePersonalFundingChoiceRequest{
-			ChatId: chat, Choice: choice, Remember: remember}))
+		resp, err := e.svc.ResolvePersonalFundingChoice(ctx, &pb.ResolvePersonalFundingChoiceRequest{
+			ChatId: chat, Choice: choice, Remember: remember})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg, nil
+		return resp, nil
 	}
 
 	// Person-only: a CLI login or access token cannot spend the person's money.
 	_, err = answer(as(user), pb.ResolvePersonalFundingChoiceRequest_CHOICE_USE_PERSONAL, false)
-	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	_, err = answer(auth.WithCredential(as(user), auth.CredentialAccessToken), pb.ResolvePersonalFundingChoiceRequest_CHOICE_USE_PERSONAL, false)
-	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	// The chat's owner only.
 	_, err = answer(asPerson("someone-else"), pb.ResolvePersonalFundingChoiceRequest_CHOICE_USE_PERSONAL, false)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	_, err = answer(asPerson(user), pb.ResolvePersonalFundingChoiceRequest_CHOICE_UNSPECIFIED, false)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Empty(t, waker.users, "nothing refused woke anything")
 
 	// Keep waiting, remembered: the setting says wait for the org.
@@ -103,14 +104,14 @@ func TestPersonalFundingQuestion_ReadAndAnswer(t *testing.T) {
 
 	// Answered: nothing is open to answer again.
 	_, err = answer(asPerson(user), pb.ResolvePersonalFundingChoiceRequest_CHOICE_KEEP_WAITING, false)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 }
 
 func TestPersonalFundingQuestion_NoneIsUnset(t *testing.T) {
 	e := newEnv(t)
 	const user = "u-funding-none"
 	chat, _ := seedChat(t, e.repo, user)
-	got, err := e.svc.GetPersonalFundingQuestion(as(user), connect.NewRequest(&pb.GetPersonalFundingQuestionRequest{ChatId: chat}))
+	got, err := e.svc.GetPersonalFundingQuestion(as(user), &pb.GetPersonalFundingQuestionRequest{ChatId: chat})
 	require.NoError(t, err)
-	assert.Nil(t, got.Msg.Question)
+	assert.Nil(t, got.Question)
 }

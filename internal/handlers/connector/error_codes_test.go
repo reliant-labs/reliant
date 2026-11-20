@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,10 +32,10 @@ func TestConnectorStoreErrorCodes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			grants := &StubGrants{ListGrantsByUserFunc: func(context.Context, string) ([]*connectorgrant.Grant, error) { return nil, c.err }}
 			svc := NewTestConnector(t, WithConnectorDeps(Deps{Grants: grants}), WithPlaceholderDeps())
-			_, err := svc.ListConnectors(AuthedContext(t), connect.NewRequest(&reliantv1.ListConnectorsRequest{}))
+			_, err := svc.ListConnectors(AuthedContext(t), &reliantv1.ListConnectorsRequest{})
 			require.Error(t, err)
-			assert.Equal(t, c.code, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, c.code, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.NotContains(t, msg, "secret")
 			if c.msg != "" {
 				assert.Equal(t, c.msg, msg)
@@ -48,13 +48,13 @@ func TestConnectorStoreErrorCodes(t *testing.T) {
 // the person, and a missing principal is Unauthenticated.
 func TestConnectorErrorsOnTheWire(t *testing.T) {
 	_, client := NewTestConnectorServer(t, WithPlaceholderDeps())
-	_, err := client.CreateConnector(context.Background(), connect.NewRequest(&reliantv1.CreateConnectorRequest{}))
+	_, err := client.CreateConnector(context.Background(), &reliantv1.CreateConnectorRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-	assert.Equal(t, "a connector must be bound to a specific workspace", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
+	assert.Equal(t, "a connector must be bound to a specific workspace", svcerr.ToConnectV2(err).Message())
 
 	_, anon := NewTestConnectorServer(t, WithPlaceholderDeps(), WithoutPrincipal())
-	_, err = anon.ListConnectors(context.Background(), connect.NewRequest(&reliantv1.ListConnectorsRequest{}))
+	_, err = anon.ListConnectors(context.Background(), &reliantv1.ListConnectorsRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 }

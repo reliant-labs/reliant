@@ -3,7 +3,7 @@ package run_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,22 +20,22 @@ func TestStartRun_Generated(t *testing.T) {
 	// No session or project exists (emptyRunRepo).
 	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo()}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.StartRunRequest, pb.StartRunResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.StartRunRequest, pb.StartRunResponse]{
 		{
 			Name:    "workflow is required",
-			Req:     connect.NewRequest(&pb.StartRunRequest{}),
+			Req:     &pb.StartRunRequest{},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown session is not found",
-			Req:     connect.NewRequest(&pb.StartRunRequest{Workflow: "builtin://agent", SessionId: "chat-1"}),
+			Req:     &pb.StartRunRequest{Workflow: "builtin://agent", SessionId: "chat-1"},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "no session and no project to host one",
-			Req:     connect.NewRequest(&pb.StartRunRequest{Workflow: "builtin://agent"}),
+			Req:     &pb.StartRunRequest{Workflow: "builtin://agent"},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeFailedPrecondition,
 		},

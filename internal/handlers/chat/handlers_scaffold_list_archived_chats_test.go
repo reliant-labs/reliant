@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -33,20 +33,20 @@ func TestListArchivedChats_Generated(t *testing.T) {
 	}
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListArchivedChatsRequest, pb.ListArchivedChatsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListArchivedChatsRequest, pb.ListArchivedChatsResponse]{
 		{
 			Name: "the caller's archived chats, with their worktree",
-			Req:  connect.NewRequest(&pb.ListArchivedChatsRequest{}),
+			Req:  &pb.ListArchivedChatsRequest{},
 			Ctx:  chat.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListArchivedChatsResponse]) {
-				require.Len(t, resp.Msg.GetChats(), 1)
-				require.Equal(t, archivedChatID, resp.Msg.GetChats()[0].GetChat().GetId())
-				require.Equal(t, "feature-x", resp.Msg.GetChats()[0].GetWorktreeName())
+			Check: func(t *testing.T, resp *pb.ListArchivedChatsResponse) {
+				require.Len(t, resp.GetChats(), 1)
+				require.Equal(t, archivedChatID, resp.GetChats()[0].GetChat().GetId())
+				require.Equal(t, "feature-x", resp.GetChats()[0].GetWorktreeName())
 			},
 		},
 		{
 			Name:    "a store failure is internal",
-			Req:     connect.NewRequest(&pb.ListArchivedChatsRequest{}),
+			Req:     &pb.ListArchivedChatsRequest{},
 			Ctx:     chat.AuthedContext(t, testkit.WithUserID("other-user")),
 			WantErr: connect.CodeInternal,
 		},

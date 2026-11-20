@@ -40,7 +40,7 @@ package project_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -60,10 +60,10 @@ func TestAttachProjectToDaemon_Generated(t *testing.T) {
 	// with project.WithProjectDeps(...), or per-row via Case.Setup.
 	svc := project.NewTestProject(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.AttachProjectToDaemonRequest, pb.AttachProjectToDaemonResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.AttachProjectToDaemonRequest, pb.AttachProjectToDaemonResponse]{
 		{
 			Name:    "missing_ids",
-			Req:     connect.NewRequest(&pb.AttachProjectToDaemonRequest{}),
+			Req:     &pb.AttachProjectToDaemonRequest{},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

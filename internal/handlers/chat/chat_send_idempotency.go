@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -186,7 +185,7 @@ func sameStrings(a, b []string) bool {
 
 // replayResponse is the receipt for a send that was already accepted: the
 // message id the first receipt carried, and the chat's run as it stands.
-func replayResponse(chat *db.Chat, prior *priorSend) *connect.Response[reliantv1.SendMessageResponse] {
+func replayResponse(chat *db.Chat, prior *priorSend) *reliantv1.SendMessageResponse {
 	resp := &reliantv1.SendMessageResponse{
 		ChatId:     chat.ID,
 		WorkflowId: chat.MainThreadID(),
@@ -197,14 +196,14 @@ func replayResponse(chat *db.Chat, prior *priorSend) *connect.Response[reliantv1
 	if chat.RunID != nil {
 		resp.RunId = *chat.RunID
 	}
-	return connect.NewResponse(resp)
+	return resp
 }
 
 // priorSendOrReplay is SendMessage's first look at a send that carries an id,
 // taken inside the run-control lock so a twin that is still finishing has
 // committed by the time this reads. It returns the earlier send (nil when this
 // is the first), or a response when the send is already complete.
-func (s *Service) priorSendOrReplay(ctx context.Context, chat *db.Chat, id, userContent string, attachments []string) (*priorSend, *connect.Response[reliantv1.SendMessageResponse], error) {
+func (s *Service) priorSendOrReplay(ctx context.Context, chat *db.Chat, id, userContent string, attachments []string) (*priorSend, *reliantv1.SendMessageResponse, error) {
 	prior, err := s.findPriorSend(ctx, chat, id, userContent, attachments)
 	if err != nil {
 		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to check for an earlier send"))

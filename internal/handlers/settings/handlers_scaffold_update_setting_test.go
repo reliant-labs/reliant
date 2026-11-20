@@ -3,7 +3,7 @@ package settings_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -21,25 +21,25 @@ func TestUpdateSetting_Generated(t *testing.T) {
 	}
 	svc := newSettingsService(t, stored.repo())
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdateSettingRequest, pb.UpdateSettingResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.UpdateSettingRequest, pb.UpdateSettingResponse]{
 		{
 			Name:    "key is required",
-			Req:     connect.NewRequest(&pb.UpdateSettingRequest{Value: ptr.Of("light")}),
+			Req:     &pb.UpdateSettingRequest{Value: ptr.Of("light")},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an unset key is not found",
-			Req:     connect.NewRequest(&pb.UpdateSettingRequest{Key: "unset", Value: ptr.Of("light")}),
+			Req:     &pb.UpdateSettingRequest{Key: "unset", Value: ptr.Of("light")},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "only the fields set change",
-			Req:  connect.NewRequest(&pb.UpdateSettingRequest{Key: "theme", Value: ptr.Of("light")}),
+			Req:  &pb.UpdateSettingRequest{Key: "theme", Value: ptr.Of("light")},
 			Ctx:  settings.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.UpdateSettingResponse]) {
-				require.Equal(t, "light", resp.Msg.GetSetting().GetValue())
+			Check: func(t *testing.T, resp *pb.UpdateSettingResponse) {
+				require.Equal(t, "light", resp.GetSetting().GetValue())
 				require.Equal(t, "string", stored["theme"].ValueType)
 				require.Equal(t, "light", stored["theme"].Value)
 			},

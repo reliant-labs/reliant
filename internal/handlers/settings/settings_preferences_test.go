@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -66,10 +65,10 @@ func TestSettingsService_GetPreferences_ReturnsDefaultsWhenNothingIsStored(t *te
 	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
-	resp, err := svc.GetPreferences(ctx, connect.NewRequest(&reliantv1.GetPreferencesRequest{}))
+	resp, err := svc.GetPreferences(ctx, &reliantv1.GetPreferencesRequest{})
 	require.NoError(t, err)
 
-	msg := resp.Msg
+	msg := resp
 	assert.True(t, msg.StreamingEnabled, "streaming defaults on")
 	assert.Equal(t, "ask_me", msg.WorktreeArchiveMode)
 	assert.False(t, msg.WorktreeDefaultDeleteBranch)
@@ -99,10 +98,10 @@ func TestSettingsService_GetPreferences_ReturnsStoredValues(t *testing.T) {
 	writeUserSetting(t, ctx, repo, "ui.hide_builtin_workflows", "true")
 	writeUserSetting(t, ctx, repo, "ui.hide_builtin_presets", "true")
 
-	resp, err := svc.GetPreferences(ctx, connect.NewRequest(&reliantv1.GetPreferencesRequest{}))
+	resp, err := svc.GetPreferences(ctx, &reliantv1.GetPreferencesRequest{})
 	require.NoError(t, err)
 
-	msg := resp.Msg
+	msg := resp
 	assert.False(t, msg.StreamingEnabled)
 	assert.Equal(t, "always", msg.WorktreeArchiveMode)
 	assert.True(t, msg.WorktreeDefaultDeleteBranch)
@@ -131,10 +130,10 @@ func TestSettingsService_GetPreferences_UnparseableValuesFallBackToDefaults(t *t
 	// Anything other than "true" is false for the boolean preferences.
 	writeUserSetting(t, ctx, repo, "features.streaming_enabled", "yes")
 
-	resp, err := svc.GetPreferences(ctx, connect.NewRequest(&reliantv1.GetPreferencesRequest{}))
+	resp, err := svc.GetPreferences(ctx, &reliantv1.GetPreferencesRequest{})
 	require.NoError(t, err)
 
-	msg := resp.Msg
+	msg := resp
 	assert.Equal(t, reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT, msg.DefaultMcpScope)
 	assert.Equal(t, reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT, msg.DefaultWorkflowScope)
 	assert.Equal(t, workflow.DefaultWorkflow, msg.DefaultWorkflow)
@@ -159,10 +158,10 @@ func TestSettingsService_GetPreferences_AdditionalStripsPrefixAndExcludesDedicat
 	// and is dropped.
 	writeUserSetting(t, ctx, repo, "preference.", "x")
 
-	resp, err := svc.GetPreferences(ctx, connect.NewRequest(&reliantv1.GetPreferencesRequest{}))
+	resp, err := svc.GetPreferences(ctx, &reliantv1.GetPreferencesRequest{})
 	require.NoError(t, err)
 
-	assert.Equal(t, map[string]string{"theme": "dark"}, resp.Msg.Additional)
+	assert.Equal(t, map[string]string{"theme": "dark"}, resp.Additional)
 }
 
 // Project-scoped rows must NOT satisfy a user-global preference read: every
@@ -178,11 +177,11 @@ func TestSettingsService_GetPreferences_IgnoresProjectScopedRows(t *testing.T) {
 	writeSetting(t, ctx, repo, &projectID, "worktree.archive_cleanup_mode", "always")
 	writeSetting(t, ctx, repo, &projectID, "preference.theme", "dark")
 
-	resp, err := svc.GetPreferences(ctx, connect.NewRequest(&reliantv1.GetPreferencesRequest{}))
+	resp, err := svc.GetPreferences(ctx, &reliantv1.GetPreferencesRequest{})
 	require.NoError(t, err)
 
-	assert.Equal(t, "ask_me", resp.Msg.WorktreeArchiveMode, "project-scoped row must not win a user-global read")
-	assert.Empty(t, resp.Msg.Additional, "project-scoped preference.* must not appear in the user-global response")
+	assert.Equal(t, "ask_me", resp.WorktreeArchiveMode, "project-scoped row must not win a user-global read")
+	assert.Empty(t, resp.Additional, "project-scoped preference.* must not appear in the user-global response")
 }
 
 // The typed preferences all come from one user-global scope, so they must be
@@ -199,10 +198,10 @@ func TestSettingsService_GetPreferences_ReadsSettingsInOneQuery(t *testing.T) {
 	writeUserSetting(t, ctx, base, "features.streaming_enabled", "false")
 	writeUserSetting(t, ctx, base, "preference.theme", "dark")
 
-	resp, err := svc.GetPreferences(ctx, connect.NewRequest(&reliantv1.GetPreferencesRequest{}))
+	resp, err := svc.GetPreferences(ctx, &reliantv1.GetPreferencesRequest{})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.StreamingEnabled)
-	assert.Equal(t, map[string]string{"theme": "dark"}, resp.Msg.Additional)
+	assert.False(t, resp.StreamingEnabled)
+	assert.Equal(t, map[string]string{"theme": "dark"}, resp.Additional)
 
 	assert.Equal(t, int32(0), repo.getSettingCalls.Load(), "no per-key GetSetting round trips")
 	assert.Equal(t, int32(1), repo.listSettingsCalls.Load(), "exactly one settings query")

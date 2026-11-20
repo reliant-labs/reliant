@@ -4,16 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -39,64 +35,67 @@ const (
 // membership m.
 func sharedStreams(t *testing.T, svc *Service, m authz.Membership) reliantv1connect.StreamingServiceClient {
 	t.Helper()
-	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cred := auth.CredentialSession
-		if r.Header.Get(testCredentialHeader) == "access-token" {
-			cred = auth.CredentialAccessToken
-		}
-		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get(testUserHeader))
-		ctx = auth.WithCredential(authz.WithMembership(ctx, m), cred)
-		handler.ServeHTTP(w, r.WithContext(ctx))
-	}))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.Start()
-	t.Cleanup(srv.Close)
-	return reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL)
+	return serveStreaming(t, svc, func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cred := auth.CredentialSession
+			if r.Header.Get(testCredentialHeader) == "access-token" {
+				cred = auth.CredentialAccessToken
+			}
+			ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get(testUserHeader))
+			ctx = auth.WithCredential(authz.WithMembership(ctx, m), cred)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
 }
 
-// as is req sent by userID.
-func as[T any](userID string, msg *T) *connect.Request[T] {
-	req := connect.NewRequest(msg)
-	req.Header().Set(testUserHeader, userID)
-	return req
+// as is ctx for a call userID sends through a person's session.
+func as(ctx context.Context, userID string) context.Context {
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(testUserHeader, userID)
+	return ctx
+}
+
+// asAgent is ctx for a call userID sends through an agent's CLI login.
+func asAgent(ctx context.Context, userID string) context.Context {
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set(testUserHeader, userID)
+	info.RequestHeader().Set(testCredentialHeader, "access-token")
+	return ctx
 }
 
 // openChatStream opens userID's stream of chatID and waits for its initial
-// sync to end, returning the frames up to and including caught_up and the
-// channel of the rest.
-func openChatStream(t *testing.T, client reliantv1connect.StreamingServiceClient, userID string, msg *reliantv1.StreamChatUpdatesRequest) ([]*reliantv1.ChatStreamEvent, <-chan *reliantv1.ChatStreamEvent, *connect.ServerStreamForClient[reliantv1.ChatStreamEvent]) {
+// sync to end, returning the frames up to and including caught_up, the
+// channel of the rest and the stream's end (receiveAll).
+func openChatStream(t *testing.T, client reliantv1connect.StreamingServiceClient, userID string, msg *reliantv1.StreamChatUpdatesRequest) ([]*reliantv1.ChatStreamEvent, <-chan *reliantv1.ChatStreamEvent, func() error) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := client.StreamChatUpdates(ctx, as(userID, msg))
+	stream, err := client.StreamChatUpdates(as(ctx, userID), msg)
 	require.NoError(t, err)
-	events := receiveAll(t, stream)
+	events, streamErr := receiveAll(t, stream)
 	var sync []*reliantv1.ChatStreamEvent
 	for {
 		ev, open := <-events
-		if !open { // stream.Err() only once receiveAll has stopped: it races Receive
-			t.Fatalf("the stream ended before its initial sync: %v", stream.Err())
+		if !open { // streamErr() only once receiveAll has stopped: it races Receive
+			t.Fatalf("the stream ended before its initial sync: %v", streamErr())
 		}
 		sync = append(sync, ev)
 		if ev.GetCaughtUp() != nil {
-			return sync, events, stream
+			return sync, events, streamErr
 		}
 	}
 }
 
 // requireEndsNotFound waits for the stream to end with no further frame (a
 // heartbeat aside) and requires it ended as an open would refuse it.
-func requireEndsNotFound(t *testing.T, events <-chan *reliantv1.ChatStreamEvent, stream *connect.ServerStreamForClient[reliantv1.ChatStreamEvent], why string) {
+func requireEndsNotFound(t *testing.T, events <-chan *reliantv1.ChatStreamEvent, streamErr func() error, why string) {
 	t.Helper()
 	for ev := range events {
 		if ev.GetHeartbeat() == nil {
 			t.Fatalf("a frame after %s: %v", why, ev)
 		}
 	}
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()), "%s: %v", why, stream.Err())
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(streamErr()), "%s: %v", why, streamErr())
 }
 
 func newSharedChatService(t *testing.T) (*viewertest.Fixture, *Service) {
@@ -145,12 +144,13 @@ func TestStreamChatUpdates_AViewersSnapshotCarriesNoToolResult(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := client.StreamChatUpdates(ctx, as(f.OutsiderID, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID}))
+	stream, err := client.StreamChatUpdates(as(ctx, f.OutsiderID), &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID})
 	require.NoError(t, err)
-	for range receiveAll(t, stream) {
+	events, streamErr := receiveAll(t, stream)
+	for range events {
 		t.Fatal("an outsider is sent nothing of a chat shared with another org")
 	}
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()))
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(streamErr()))
 }
 
 // Its owner making a shared chat private ends a viewer's open stream within
@@ -159,7 +159,7 @@ func TestStreamChatUpdates_AViewersSnapshotCarriesNoToolResult(t *testing.T) {
 func TestStreamChatUpdates_UnshareEndsAViewersStream(t *testing.T) {
 	f, svc := newSharedChatService(t)
 	client := sharedStreams(t, svc, f.Membership)
-	_, events, stream := openChatStream(t, client, f.ViewerID, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID})
+	_, events, streamErr := openChatStream(t, client, f.ViewerID, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID})
 
 	changed, err := f.Repo.ApplyShareChange(context.Background(), core.ShareChange{
 		Kind: core.ShareKindChat, ResourceID: f.ChatID, OrgID: viewertest.OrgID, OwnerUserID: f.OwnerID,
@@ -168,7 +168,7 @@ func TestStreamChatUpdates_UnshareEndsAViewersStream(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, changed)
 
-	requireEndsNotFound(t, events, stream, "the unshare")
+	requireEndsNotFound(t, events, streamErr, "the unshare")
 }
 
 // A viewer removed from the org loses an open stream within one
@@ -178,14 +178,14 @@ func TestStreamChatUpdates_RemovalEndsAViewersStream(t *testing.T) {
 	f, svc := newSharedChatService(t)
 	membership := &switchableMembership{}
 	client := sharedStreams(t, svc, membership)
-	_, events, stream := openChatStream(t, client, f.ViewerID, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID})
+	_, events, streamErr := openChatStream(t, client, f.ViewerID, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID})
 
 	asked := membership.asked.Load()
 	require.Eventually(t, func() bool { return membership.asked.Load() >= asked+3 }, 10*time.Second, time.Millisecond,
 		"the open stream never re-asked the membership")
 	membership.removed.Store(true)
 
-	requireEndsNotFound(t, events, stream, "the removal")
+	requireEndsNotFound(t, events, streamErr, "the removal")
 }
 
 // Every frame a viewer is sent after the snapshot is shaped by the same rule

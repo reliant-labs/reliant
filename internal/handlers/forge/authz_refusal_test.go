@@ -4,7 +4,7 @@ package forge
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +56,7 @@ func TestForgeService_PlanDeploy_AuthzRefusalOnTheWire(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			router := &forgeTestRouter{reply: deployReply(t, tc.report, map[string]any{"exit_code": 1})}
 			_, err := newForgeTestService(router).PlanDeploy(authedCtx(),
-				connect.NewRequest(&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"}))
+				&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"})
 			wirecheck.Assert(t, err, tc.want)
 		})
 	}
@@ -72,8 +72,8 @@ func TestForgeService_PlanDeploy_OtherFailuresStayData(t *testing.T) {
 	} {
 		router := &forgeTestRouter{reply: deployReply(t, report, map[string]any{"exit_code": 1})}
 		resp, err := newForgeTestService(router).PlanDeploy(authedCtx(),
-			connect.NewRequest(&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.PlanForgeDeployRequest{ProjectId: "p", Env: "prod"})
 		require.NoError(t, err, report)
-		assert.JSONEq(t, report, resp.Msg.ReportJson)
+		assert.JSONEq(t, report, resp.ReportJson)
 	}
 }

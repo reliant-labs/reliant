@@ -7,108 +7,188 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// WorkflowServiceName is the fully-qualified name of the WorkflowService service.
 	WorkflowServiceName = "reliant.v1.WorkflowService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// WorkflowServiceListWorkflowsProcedure is the fully-qualified name of the WorkflowService's
+	// WorkflowServiceListWorkflowsProcedure is the procedure name of the WorkflowService's
 	// ListWorkflows RPC.
 	WorkflowServiceListWorkflowsProcedure = "/reliant.v1.WorkflowService/ListWorkflows"
-	// WorkflowServiceSaveWorkflowProcedure is the fully-qualified name of the WorkflowService's
-	// SaveWorkflow RPC.
+	// WorkflowServiceSaveWorkflowProcedure is the procedure name of the WorkflowService's SaveWorkflow
+	// RPC.
 	WorkflowServiceSaveWorkflowProcedure = "/reliant.v1.WorkflowService/SaveWorkflow"
-	// WorkflowServiceGetWorkflowProcedure is the fully-qualified name of the WorkflowService's
-	// GetWorkflow RPC.
+	// WorkflowServiceGetWorkflowProcedure is the procedure name of the WorkflowService's GetWorkflow
+	// RPC.
 	WorkflowServiceGetWorkflowProcedure = "/reliant.v1.WorkflowService/GetWorkflow"
-	// WorkflowServiceDeleteWorkflowProcedure is the fully-qualified name of the WorkflowService's
+	// WorkflowServiceDeleteWorkflowProcedure is the procedure name of the WorkflowService's
 	// DeleteWorkflow RPC.
 	WorkflowServiceDeleteWorkflowProcedure = "/reliant.v1.WorkflowService/DeleteWorkflow"
-	// WorkflowServiceValidateWorkflowProcedure is the fully-qualified name of the WorkflowService's
+	// WorkflowServiceValidateWorkflowProcedure is the procedure name of the WorkflowService's
 	// ValidateWorkflow RPC.
 	WorkflowServiceValidateWorkflowProcedure = "/reliant.v1.WorkflowService/ValidateWorkflow"
-	// WorkflowServiceImportWorkflowProcedure is the fully-qualified name of the WorkflowService's
+	// WorkflowServiceImportWorkflowProcedure is the procedure name of the WorkflowService's
 	// ImportWorkflow RPC.
 	WorkflowServiceImportWorkflowProcedure = "/reliant.v1.WorkflowService/ImportWorkflow"
-	// WorkflowServiceExportWorkflowProcedure is the fully-qualified name of the WorkflowService's
+	// WorkflowServiceExportWorkflowProcedure is the procedure name of the WorkflowService's
 	// ExportWorkflow RPC.
 	WorkflowServiceExportWorkflowProcedure = "/reliant.v1.WorkflowService/ExportWorkflow"
-	// WorkflowServiceSetWorkflowVisibilityProcedure is the fully-qualified name of the
-	// WorkflowService's SetWorkflowVisibility RPC.
+	// WorkflowServiceSetWorkflowVisibilityProcedure is the procedure name of the WorkflowService's
+	// SetWorkflowVisibility RPC.
 	WorkflowServiceSetWorkflowVisibilityProcedure = "/reliant.v1.WorkflowService/SetWorkflowVisibility"
-	// WorkflowServiceCopyWorkflowProcedure is the fully-qualified name of the WorkflowService's
-	// CopyWorkflow RPC.
+	// WorkflowServiceCopyWorkflowProcedure is the procedure name of the WorkflowService's CopyWorkflow
+	// RPC.
 	WorkflowServiceCopyWorkflowProcedure = "/reliant.v1.WorkflowService/CopyWorkflow"
-	// WorkflowServiceCreateWorkflowDraftProcedure is the fully-qualified name of the WorkflowService's
+	// WorkflowServiceCreateWorkflowDraftProcedure is the procedure name of the WorkflowService's
 	// CreateWorkflowDraft RPC.
 	WorkflowServiceCreateWorkflowDraftProcedure = "/reliant.v1.WorkflowService/CreateWorkflowDraft"
-	// WorkflowServiceSetWorkflowStatusProcedure is the fully-qualified name of the WorkflowService's
+	// WorkflowServiceSetWorkflowStatusProcedure is the procedure name of the WorkflowService's
 	// SetWorkflowStatus RPC.
 	WorkflowServiceSetWorkflowStatusProcedure = "/reliant.v1.WorkflowService/SetWorkflowStatus"
-	// WorkflowServiceForkOrphanedWorkflowProcedure is the fully-qualified name of the WorkflowService's
+	// WorkflowServiceForkOrphanedWorkflowProcedure is the procedure name of the WorkflowService's
 	// ForkOrphanedWorkflow RPC.
 	WorkflowServiceForkOrphanedWorkflowProcedure = "/reliant.v1.WorkflowService/ForkOrphanedWorkflow"
+)
+
+var (
+	workflowServiceListWorkflowsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("ListWorkflows"),
+			Procedure:  WorkflowServiceListWorkflowsProcedure,
+		}
+	})
+	workflowServiceSaveWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("SaveWorkflow"),
+			Procedure:  WorkflowServiceSaveWorkflowProcedure,
+		}
+	})
+	workflowServiceGetWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("GetWorkflow"),
+			Procedure:  WorkflowServiceGetWorkflowProcedure,
+		}
+	})
+	workflowServiceDeleteWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("DeleteWorkflow"),
+			Procedure:  WorkflowServiceDeleteWorkflowProcedure,
+		}
+	})
+	workflowServiceValidateWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("ValidateWorkflow"),
+			Procedure:        WorkflowServiceValidateWorkflowProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	workflowServiceImportWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("ImportWorkflow"),
+			Procedure:  WorkflowServiceImportWorkflowProcedure,
+		}
+	})
+	workflowServiceExportWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("ExportWorkflow"),
+			Procedure:        WorkflowServiceExportWorkflowProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	workflowServiceSetWorkflowVisibilitySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("SetWorkflowVisibility"),
+			Procedure:  WorkflowServiceSetWorkflowVisibilityProcedure,
+		}
+	})
+	workflowServiceCopyWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("CopyWorkflow"),
+			Procedure:  WorkflowServiceCopyWorkflowProcedure,
+		}
+	})
+	workflowServiceCreateWorkflowDraftSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("CreateWorkflowDraft"),
+			Procedure:  WorkflowServiceCreateWorkflowDraftProcedure,
+		}
+	})
+	workflowServiceSetWorkflowStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("SetWorkflowStatus"),
+			Procedure:  WorkflowServiceSetWorkflowStatusProcedure,
+		}
+	})
+	workflowServiceForkOrphanedWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods().ByName("ForkOrphanedWorkflow"),
+			Procedure:  WorkflowServiceForkOrphanedWorkflowProcedure,
+		}
+	})
 )
 
 // WorkflowServiceClient is a client for the reliant.v1.WorkflowService service.
 type WorkflowServiceClient interface {
 	// ListWorkflows returns all available workflows from DB + builtins
 	// forge:custom — merges builtin, project and the caller's own workflow definitions for one project
-	ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error)
+	ListWorkflows(context.Context, *v1.ListWorkflowsRequest) (*v1.ListWorkflowsResponse, error)
 	// SaveWorkflow creates or updates a workflow in the database.
 	// A draft is stored as-is (validation findings are returned, not enforced);
 	// a complete workflow must pass validation or nothing is stored.
-	SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error)
+	SaveWorkflow(context.Context, *v1.SaveWorkflowRequest) (*v1.SaveWorkflowResponse, error)
 	// GetWorkflow returns a specific workflow by slug
 	// forge:custom — resolves a workflow definition by slug across builtin, project and user sources
-	GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error)
+	GetWorkflow(context.Context, *v1.GetWorkflowRequest) (*v1.GetWorkflowResponse, error)
 	// DeleteWorkflow deletes a workflow from the database
 	// forge:custom — deletes the caller's workflow draft by the slug of its name
-	DeleteWorkflow(context.Context, *connect.Request[v1.DeleteWorkflowRequest]) (*connect.Response[v1.DeleteWorkflowResponse], error)
+	DeleteWorkflow(context.Context, *v1.DeleteWorkflowRequest) (*v1.DeleteWorkflowResponse, error)
 	// ValidateWorkflow validates a workflow without saving it. It only reads,
 	// and says so with NO_SIDE_EFFECTS: forge then generates a query hook for
 	// it rather than a mutation that invalidates every workflow read.
-	ValidateWorkflow(context.Context, *connect.Request[v1.ValidateWorkflowRequest]) (*connect.Response[v1.ValidateWorkflowResponse], error)
+	ValidateWorkflow(context.Context, *v1.ValidateWorkflowRequest) (*v1.ValidateWorkflowResponse, error)
 	// ImportWorkflow imports a workflow from YAML into the database
-	ImportWorkflow(context.Context, *connect.Request[v1.ImportWorkflowRequest]) (*connect.Response[v1.ImportWorkflowResponse], error)
+	ImportWorkflow(context.Context, *v1.ImportWorkflowRequest) (*v1.ImportWorkflowResponse, error)
 	// ExportWorkflow exports a workflow from the database as YAML. A read
 	// (NO_SIDE_EFFECTS), like ValidateWorkflow.
-	ExportWorkflow(context.Context, *connect.Request[v1.ExportWorkflowRequest]) (*connect.Response[v1.ExportWorkflowResponse], error)
+	ExportWorkflow(context.Context, *v1.ExportWorkflowRequest) (*v1.ExportWorkflowResponse, error)
 	// SetWorkflowVisibility toggles the hidden status of a workflow
-	SetWorkflowVisibility(context.Context, *connect.Request[v1.SetWorkflowVisibilityRequest]) (*connect.Response[v1.SetWorkflowVisibilityResponse], error)
+	SetWorkflowVisibility(context.Context, *v1.SetWorkflowVisibilityRequest) (*v1.SetWorkflowVisibilityResponse, error)
 	// CopyWorkflow creates a copy of an existing workflow with a new unique name
 	// The copy is saved to the user's DB with forked_from set to track origin
-	CopyWorkflow(context.Context, *connect.Request[v1.CopyWorkflowRequest]) (*connect.Response[v1.CopyWorkflowResponse], error)
+	CopyWorkflow(context.Context, *v1.CopyWorkflowRequest) (*v1.CopyWorkflowResponse, error)
 	// CreateWorkflowDraft creates an empty draft for the workflow builder
 	// Called when user clicks "New Workflow" so the canvas has a draft to edit
-	CreateWorkflowDraft(context.Context, *connect.Request[v1.CreateWorkflowDraftRequest]) (*connect.Response[v1.CreateWorkflowDraftResponse], error)
+	CreateWorkflowDraft(context.Context, *v1.CreateWorkflowDraftRequest) (*v1.CreateWorkflowDraftResponse, error)
 	// SetWorkflowStatus moves a stored workflow between draft and complete.
 	// Marking complete validates the current definition and is rejected (with
 	// the errors) when it is invalid; moving to draft always succeeds.
-	SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error)
+	SetWorkflowStatus(context.Context, *v1.SetWorkflowStatusRequest) (*v1.SetWorkflowStatusResponse, error)
 	// ForkOrphanedWorkflow copies a saved workflow whose creator left its
 	// organization into one of the caller's own, in the same org, with
 	// forked_from naming the original (TriggerService.ListOrphanedAutomations
@@ -117,209 +197,51 @@ type WorkflowServiceClient interface {
 	// admin or owner, read fresh, signed in as a person); the fork keeps the
 	// original's status when its definition validates for the caller, else it
 	// is a draft. control-plane docs/design/org-sharing.md §8.3.
-	ForkOrphanedWorkflow(context.Context, *connect.Request[v1.ForkOrphanedWorkflowRequest]) (*connect.Response[v1.ForkOrphanedWorkflowResponse], error)
+	ForkOrphanedWorkflow(context.Context, *v1.ForkOrphanedWorkflowRequest) (*v1.ForkOrphanedWorkflowResponse, error)
 }
 
-// NewWorkflowServiceClient constructs a client for the reliant.v1.WorkflowService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorkflowServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	workflowServiceMethods := v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods()
-	return &workflowServiceClient{
-		listWorkflows: connect.NewClient[v1.ListWorkflowsRequest, v1.ListWorkflowsResponse](
-			httpClient,
-			baseURL+WorkflowServiceListWorkflowsProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("ListWorkflows")),
-			connect.WithClientOptions(opts...),
-		),
-		saveWorkflow: connect.NewClient[v1.SaveWorkflowRequest, v1.SaveWorkflowResponse](
-			httpClient,
-			baseURL+WorkflowServiceSaveWorkflowProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("SaveWorkflow")),
-			connect.WithClientOptions(opts...),
-		),
-		getWorkflow: connect.NewClient[v1.GetWorkflowRequest, v1.GetWorkflowResponse](
-			httpClient,
-			baseURL+WorkflowServiceGetWorkflowProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("GetWorkflow")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteWorkflow: connect.NewClient[v1.DeleteWorkflowRequest, v1.DeleteWorkflowResponse](
-			httpClient,
-			baseURL+WorkflowServiceDeleteWorkflowProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("DeleteWorkflow")),
-			connect.WithClientOptions(opts...),
-		),
-		validateWorkflow: connect.NewClient[v1.ValidateWorkflowRequest, v1.ValidateWorkflowResponse](
-			httpClient,
-			baseURL+WorkflowServiceValidateWorkflowProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("ValidateWorkflow")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		importWorkflow: connect.NewClient[v1.ImportWorkflowRequest, v1.ImportWorkflowResponse](
-			httpClient,
-			baseURL+WorkflowServiceImportWorkflowProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("ImportWorkflow")),
-			connect.WithClientOptions(opts...),
-		),
-		exportWorkflow: connect.NewClient[v1.ExportWorkflowRequest, v1.ExportWorkflowResponse](
-			httpClient,
-			baseURL+WorkflowServiceExportWorkflowProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("ExportWorkflow")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		setWorkflowVisibility: connect.NewClient[v1.SetWorkflowVisibilityRequest, v1.SetWorkflowVisibilityResponse](
-			httpClient,
-			baseURL+WorkflowServiceSetWorkflowVisibilityProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("SetWorkflowVisibility")),
-			connect.WithClientOptions(opts...),
-		),
-		copyWorkflow: connect.NewClient[v1.CopyWorkflowRequest, v1.CopyWorkflowResponse](
-			httpClient,
-			baseURL+WorkflowServiceCopyWorkflowProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("CopyWorkflow")),
-			connect.WithClientOptions(opts...),
-		),
-		createWorkflowDraft: connect.NewClient[v1.CreateWorkflowDraftRequest, v1.CreateWorkflowDraftResponse](
-			httpClient,
-			baseURL+WorkflowServiceCreateWorkflowDraftProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("CreateWorkflowDraft")),
-			connect.WithClientOptions(opts...),
-		),
-		setWorkflowStatus: connect.NewClient[v1.SetWorkflowStatusRequest, v1.SetWorkflowStatusResponse](
-			httpClient,
-			baseURL+WorkflowServiceSetWorkflowStatusProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("SetWorkflowStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		forkOrphanedWorkflow: connect.NewClient[v1.ForkOrphanedWorkflowRequest, v1.ForkOrphanedWorkflowResponse](
-			httpClient,
-			baseURL+WorkflowServiceForkOrphanedWorkflowProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("ForkOrphanedWorkflow")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// workflowServiceClient implements WorkflowServiceClient.
-type workflowServiceClient struct {
-	listWorkflows         *connect.Client[v1.ListWorkflowsRequest, v1.ListWorkflowsResponse]
-	saveWorkflow          *connect.Client[v1.SaveWorkflowRequest, v1.SaveWorkflowResponse]
-	getWorkflow           *connect.Client[v1.GetWorkflowRequest, v1.GetWorkflowResponse]
-	deleteWorkflow        *connect.Client[v1.DeleteWorkflowRequest, v1.DeleteWorkflowResponse]
-	validateWorkflow      *connect.Client[v1.ValidateWorkflowRequest, v1.ValidateWorkflowResponse]
-	importWorkflow        *connect.Client[v1.ImportWorkflowRequest, v1.ImportWorkflowResponse]
-	exportWorkflow        *connect.Client[v1.ExportWorkflowRequest, v1.ExportWorkflowResponse]
-	setWorkflowVisibility *connect.Client[v1.SetWorkflowVisibilityRequest, v1.SetWorkflowVisibilityResponse]
-	copyWorkflow          *connect.Client[v1.CopyWorkflowRequest, v1.CopyWorkflowResponse]
-	createWorkflowDraft   *connect.Client[v1.CreateWorkflowDraftRequest, v1.CreateWorkflowDraftResponse]
-	setWorkflowStatus     *connect.Client[v1.SetWorkflowStatusRequest, v1.SetWorkflowStatusResponse]
-	forkOrphanedWorkflow  *connect.Client[v1.ForkOrphanedWorkflowRequest, v1.ForkOrphanedWorkflowResponse]
-}
-
-// ListWorkflows calls reliant.v1.WorkflowService.ListWorkflows.
-func (c *workflowServiceClient) ListWorkflows(ctx context.Context, req *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error) {
-	return c.listWorkflows.CallUnary(ctx, req)
-}
-
-// SaveWorkflow calls reliant.v1.WorkflowService.SaveWorkflow.
-func (c *workflowServiceClient) SaveWorkflow(ctx context.Context, req *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error) {
-	return c.saveWorkflow.CallUnary(ctx, req)
-}
-
-// GetWorkflow calls reliant.v1.WorkflowService.GetWorkflow.
-func (c *workflowServiceClient) GetWorkflow(ctx context.Context, req *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error) {
-	return c.getWorkflow.CallUnary(ctx, req)
-}
-
-// DeleteWorkflow calls reliant.v1.WorkflowService.DeleteWorkflow.
-func (c *workflowServiceClient) DeleteWorkflow(ctx context.Context, req *connect.Request[v1.DeleteWorkflowRequest]) (*connect.Response[v1.DeleteWorkflowResponse], error) {
-	return c.deleteWorkflow.CallUnary(ctx, req)
-}
-
-// ValidateWorkflow calls reliant.v1.WorkflowService.ValidateWorkflow.
-func (c *workflowServiceClient) ValidateWorkflow(ctx context.Context, req *connect.Request[v1.ValidateWorkflowRequest]) (*connect.Response[v1.ValidateWorkflowResponse], error) {
-	return c.validateWorkflow.CallUnary(ctx, req)
-}
-
-// ImportWorkflow calls reliant.v1.WorkflowService.ImportWorkflow.
-func (c *workflowServiceClient) ImportWorkflow(ctx context.Context, req *connect.Request[v1.ImportWorkflowRequest]) (*connect.Response[v1.ImportWorkflowResponse], error) {
-	return c.importWorkflow.CallUnary(ctx, req)
-}
-
-// ExportWorkflow calls reliant.v1.WorkflowService.ExportWorkflow.
-func (c *workflowServiceClient) ExportWorkflow(ctx context.Context, req *connect.Request[v1.ExportWorkflowRequest]) (*connect.Response[v1.ExportWorkflowResponse], error) {
-	return c.exportWorkflow.CallUnary(ctx, req)
-}
-
-// SetWorkflowVisibility calls reliant.v1.WorkflowService.SetWorkflowVisibility.
-func (c *workflowServiceClient) SetWorkflowVisibility(ctx context.Context, req *connect.Request[v1.SetWorkflowVisibilityRequest]) (*connect.Response[v1.SetWorkflowVisibilityResponse], error) {
-	return c.setWorkflowVisibility.CallUnary(ctx, req)
-}
-
-// CopyWorkflow calls reliant.v1.WorkflowService.CopyWorkflow.
-func (c *workflowServiceClient) CopyWorkflow(ctx context.Context, req *connect.Request[v1.CopyWorkflowRequest]) (*connect.Response[v1.CopyWorkflowResponse], error) {
-	return c.copyWorkflow.CallUnary(ctx, req)
-}
-
-// CreateWorkflowDraft calls reliant.v1.WorkflowService.CreateWorkflowDraft.
-func (c *workflowServiceClient) CreateWorkflowDraft(ctx context.Context, req *connect.Request[v1.CreateWorkflowDraftRequest]) (*connect.Response[v1.CreateWorkflowDraftResponse], error) {
-	return c.createWorkflowDraft.CallUnary(ctx, req)
-}
-
-// SetWorkflowStatus calls reliant.v1.WorkflowService.SetWorkflowStatus.
-func (c *workflowServiceClient) SetWorkflowStatus(ctx context.Context, req *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error) {
-	return c.setWorkflowStatus.CallUnary(ctx, req)
-}
-
-// ForkOrphanedWorkflow calls reliant.v1.WorkflowService.ForkOrphanedWorkflow.
-func (c *workflowServiceClient) ForkOrphanedWorkflow(ctx context.Context, req *connect.Request[v1.ForkOrphanedWorkflowRequest]) (*connect.Response[v1.ForkOrphanedWorkflowResponse], error) {
-	return c.forkOrphanedWorkflow.CallUnary(ctx, req)
+// NewWorkflowServiceClient constructs a client for the reliant.v1.WorkflowService service. Multiple
+// service clients may share a single connect.Client.
+func NewWorkflowServiceClient(client *connect.Client) WorkflowServiceClient {
+	return &workflowServiceClient{client: client}
 }
 
 // WorkflowServiceHandler is an implementation of the reliant.v1.WorkflowService service.
 type WorkflowServiceHandler interface {
 	// ListWorkflows returns all available workflows from DB + builtins
 	// forge:custom — merges builtin, project and the caller's own workflow definitions for one project
-	ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error)
+	ListWorkflows(context.Context, *v1.ListWorkflowsRequest) (*v1.ListWorkflowsResponse, error)
 	// SaveWorkflow creates or updates a workflow in the database.
 	// A draft is stored as-is (validation findings are returned, not enforced);
 	// a complete workflow must pass validation or nothing is stored.
-	SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error)
+	SaveWorkflow(context.Context, *v1.SaveWorkflowRequest) (*v1.SaveWorkflowResponse, error)
 	// GetWorkflow returns a specific workflow by slug
 	// forge:custom — resolves a workflow definition by slug across builtin, project and user sources
-	GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error)
+	GetWorkflow(context.Context, *v1.GetWorkflowRequest) (*v1.GetWorkflowResponse, error)
 	// DeleteWorkflow deletes a workflow from the database
 	// forge:custom — deletes the caller's workflow draft by the slug of its name
-	DeleteWorkflow(context.Context, *connect.Request[v1.DeleteWorkflowRequest]) (*connect.Response[v1.DeleteWorkflowResponse], error)
+	DeleteWorkflow(context.Context, *v1.DeleteWorkflowRequest) (*v1.DeleteWorkflowResponse, error)
 	// ValidateWorkflow validates a workflow without saving it. It only reads,
 	// and says so with NO_SIDE_EFFECTS: forge then generates a query hook for
 	// it rather than a mutation that invalidates every workflow read.
-	ValidateWorkflow(context.Context, *connect.Request[v1.ValidateWorkflowRequest]) (*connect.Response[v1.ValidateWorkflowResponse], error)
+	ValidateWorkflow(context.Context, *v1.ValidateWorkflowRequest) (*v1.ValidateWorkflowResponse, error)
 	// ImportWorkflow imports a workflow from YAML into the database
-	ImportWorkflow(context.Context, *connect.Request[v1.ImportWorkflowRequest]) (*connect.Response[v1.ImportWorkflowResponse], error)
+	ImportWorkflow(context.Context, *v1.ImportWorkflowRequest) (*v1.ImportWorkflowResponse, error)
 	// ExportWorkflow exports a workflow from the database as YAML. A read
 	// (NO_SIDE_EFFECTS), like ValidateWorkflow.
-	ExportWorkflow(context.Context, *connect.Request[v1.ExportWorkflowRequest]) (*connect.Response[v1.ExportWorkflowResponse], error)
+	ExportWorkflow(context.Context, *v1.ExportWorkflowRequest) (*v1.ExportWorkflowResponse, error)
 	// SetWorkflowVisibility toggles the hidden status of a workflow
-	SetWorkflowVisibility(context.Context, *connect.Request[v1.SetWorkflowVisibilityRequest]) (*connect.Response[v1.SetWorkflowVisibilityResponse], error)
+	SetWorkflowVisibility(context.Context, *v1.SetWorkflowVisibilityRequest) (*v1.SetWorkflowVisibilityResponse, error)
 	// CopyWorkflow creates a copy of an existing workflow with a new unique name
 	// The copy is saved to the user's DB with forked_from set to track origin
-	CopyWorkflow(context.Context, *connect.Request[v1.CopyWorkflowRequest]) (*connect.Response[v1.CopyWorkflowResponse], error)
+	CopyWorkflow(context.Context, *v1.CopyWorkflowRequest) (*v1.CopyWorkflowResponse, error)
 	// CreateWorkflowDraft creates an empty draft for the workflow builder
 	// Called when user clicks "New Workflow" so the canvas has a draft to edit
-	CreateWorkflowDraft(context.Context, *connect.Request[v1.CreateWorkflowDraftRequest]) (*connect.Response[v1.CreateWorkflowDraftResponse], error)
+	CreateWorkflowDraft(context.Context, *v1.CreateWorkflowDraftRequest) (*v1.CreateWorkflowDraftResponse, error)
 	// SetWorkflowStatus moves a stored workflow between draft and complete.
 	// Marking complete validates the current definition and is rejected (with
 	// the errors) when it is invalid; moving to draft always succeeds.
-	SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error)
+	SetWorkflowStatus(context.Context, *v1.SetWorkflowStatusRequest) (*v1.SetWorkflowStatusResponse, error)
 	// ForkOrphanedWorkflow copies a saved workflow whose creator left its
 	// organization into one of the caller's own, in the same org, with
 	// forked_from naming the original (TriggerService.ListOrphanedAutomations
@@ -328,169 +250,322 @@ type WorkflowServiceHandler interface {
 	// admin or owner, read fresh, signed in as a person); the fork keeps the
 	// original's status when its definition validates for the caller, else it
 	// is a draft. control-plane docs/design/org-sharing.md §8.3.
-	ForkOrphanedWorkflow(context.Context, *connect.Request[v1.ForkOrphanedWorkflowRequest]) (*connect.Response[v1.ForkOrphanedWorkflowResponse], error)
+	ForkOrphanedWorkflow(context.Context, *v1.ForkOrphanedWorkflowRequest) (*v1.ForkOrphanedWorkflowResponse, error)
 }
 
-// NewWorkflowServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	workflowServiceMethods := v1.File_reliant_v1_workflow_proto.Services().ByName("WorkflowService").Methods()
-	workflowServiceListWorkflowsHandler := connect.NewUnaryHandler(
-		WorkflowServiceListWorkflowsProcedure,
-		svc.ListWorkflows,
-		connect.WithSchema(workflowServiceMethods.ByName("ListWorkflows")),
-		connect.WithHandlerOptions(opts...),
+// RegisterWorkflowServiceHandler registers svc as the reliant.v1.WorkflowService implementation on
+// server.
+func RegisterWorkflowServiceHandler(server *connect.Server, svc WorkflowServiceHandler) {
+	adapter := workflowServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: workflowServiceListWorkflowsSpec(), Handler: adapter.listWorkflows},
+		connect.Method{Spec: workflowServiceSaveWorkflowSpec(), Handler: adapter.saveWorkflow},
+		connect.Method{Spec: workflowServiceGetWorkflowSpec(), Handler: adapter.getWorkflow},
+		connect.Method{Spec: workflowServiceDeleteWorkflowSpec(), Handler: adapter.deleteWorkflow},
+		connect.Method{Spec: workflowServiceValidateWorkflowSpec(), Handler: adapter.validateWorkflow},
+		connect.Method{Spec: workflowServiceImportWorkflowSpec(), Handler: adapter.importWorkflow},
+		connect.Method{Spec: workflowServiceExportWorkflowSpec(), Handler: adapter.exportWorkflow},
+		connect.Method{Spec: workflowServiceSetWorkflowVisibilitySpec(), Handler: adapter.setWorkflowVisibility},
+		connect.Method{Spec: workflowServiceCopyWorkflowSpec(), Handler: adapter.copyWorkflow},
+		connect.Method{Spec: workflowServiceCreateWorkflowDraftSpec(), Handler: adapter.createWorkflowDraft},
+		connect.Method{Spec: workflowServiceSetWorkflowStatusSpec(), Handler: adapter.setWorkflowStatus},
+		connect.Method{Spec: workflowServiceForkOrphanedWorkflowSpec(), Handler: adapter.forkOrphanedWorkflow},
 	)
-	workflowServiceSaveWorkflowHandler := connect.NewUnaryHandler(
-		WorkflowServiceSaveWorkflowProcedure,
-		svc.SaveWorkflow,
-		connect.WithSchema(workflowServiceMethods.ByName("SaveWorkflow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceGetWorkflowHandler := connect.NewUnaryHandler(
-		WorkflowServiceGetWorkflowProcedure,
-		svc.GetWorkflow,
-		connect.WithSchema(workflowServiceMethods.ByName("GetWorkflow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceDeleteWorkflowHandler := connect.NewUnaryHandler(
-		WorkflowServiceDeleteWorkflowProcedure,
-		svc.DeleteWorkflow,
-		connect.WithSchema(workflowServiceMethods.ByName("DeleteWorkflow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceValidateWorkflowHandler := connect.NewUnaryHandler(
-		WorkflowServiceValidateWorkflowProcedure,
-		svc.ValidateWorkflow,
-		connect.WithSchema(workflowServiceMethods.ByName("ValidateWorkflow")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceImportWorkflowHandler := connect.NewUnaryHandler(
-		WorkflowServiceImportWorkflowProcedure,
-		svc.ImportWorkflow,
-		connect.WithSchema(workflowServiceMethods.ByName("ImportWorkflow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceExportWorkflowHandler := connect.NewUnaryHandler(
-		WorkflowServiceExportWorkflowProcedure,
-		svc.ExportWorkflow,
-		connect.WithSchema(workflowServiceMethods.ByName("ExportWorkflow")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceSetWorkflowVisibilityHandler := connect.NewUnaryHandler(
-		WorkflowServiceSetWorkflowVisibilityProcedure,
-		svc.SetWorkflowVisibility,
-		connect.WithSchema(workflowServiceMethods.ByName("SetWorkflowVisibility")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceCopyWorkflowHandler := connect.NewUnaryHandler(
-		WorkflowServiceCopyWorkflowProcedure,
-		svc.CopyWorkflow,
-		connect.WithSchema(workflowServiceMethods.ByName("CopyWorkflow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceCreateWorkflowDraftHandler := connect.NewUnaryHandler(
-		WorkflowServiceCreateWorkflowDraftProcedure,
-		svc.CreateWorkflowDraft,
-		connect.WithSchema(workflowServiceMethods.ByName("CreateWorkflowDraft")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceSetWorkflowStatusHandler := connect.NewUnaryHandler(
-		WorkflowServiceSetWorkflowStatusProcedure,
-		svc.SetWorkflowStatus,
-		connect.WithSchema(workflowServiceMethods.ByName("SetWorkflowStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceForkOrphanedWorkflowHandler := connect.NewUnaryHandler(
-		WorkflowServiceForkOrphanedWorkflowProcedure,
-		svc.ForkOrphanedWorkflow,
-		connect.WithSchema(workflowServiceMethods.ByName("ForkOrphanedWorkflow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.WorkflowService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case WorkflowServiceListWorkflowsProcedure:
-			workflowServiceListWorkflowsHandler.ServeHTTP(w, r)
-		case WorkflowServiceSaveWorkflowProcedure:
-			workflowServiceSaveWorkflowHandler.ServeHTTP(w, r)
-		case WorkflowServiceGetWorkflowProcedure:
-			workflowServiceGetWorkflowHandler.ServeHTTP(w, r)
-		case WorkflowServiceDeleteWorkflowProcedure:
-			workflowServiceDeleteWorkflowHandler.ServeHTTP(w, r)
-		case WorkflowServiceValidateWorkflowProcedure:
-			workflowServiceValidateWorkflowHandler.ServeHTTP(w, r)
-		case WorkflowServiceImportWorkflowProcedure:
-			workflowServiceImportWorkflowHandler.ServeHTTP(w, r)
-		case WorkflowServiceExportWorkflowProcedure:
-			workflowServiceExportWorkflowHandler.ServeHTTP(w, r)
-		case WorkflowServiceSetWorkflowVisibilityProcedure:
-			workflowServiceSetWorkflowVisibilityHandler.ServeHTTP(w, r)
-		case WorkflowServiceCopyWorkflowProcedure:
-			workflowServiceCopyWorkflowHandler.ServeHTTP(w, r)
-		case WorkflowServiceCreateWorkflowDraftProcedure:
-			workflowServiceCreateWorkflowDraftHandler.ServeHTTP(w, r)
-		case WorkflowServiceSetWorkflowStatusProcedure:
-			workflowServiceSetWorkflowStatusHandler.ServeHTTP(w, r)
-		case WorkflowServiceForkOrphanedWorkflowProcedure:
-			workflowServiceForkOrphanedWorkflowHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedWorkflowServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedWorkflowServiceHandler struct{}
 
-func (UnimplementedWorkflowServiceHandler) ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.ListWorkflows is not implemented"))
+func (UnimplementedWorkflowServiceHandler) ListWorkflows(context.Context, *v1.ListWorkflowsRequest) (*v1.ListWorkflowsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.ListWorkflows is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.SaveWorkflow is not implemented"))
+func (UnimplementedWorkflowServiceHandler) SaveWorkflow(context.Context, *v1.SaveWorkflowRequest) (*v1.SaveWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.SaveWorkflow is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.GetWorkflow is not implemented"))
+func (UnimplementedWorkflowServiceHandler) GetWorkflow(context.Context, *v1.GetWorkflowRequest) (*v1.GetWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.GetWorkflow is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) DeleteWorkflow(context.Context, *connect.Request[v1.DeleteWorkflowRequest]) (*connect.Response[v1.DeleteWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.DeleteWorkflow is not implemented"))
+func (UnimplementedWorkflowServiceHandler) DeleteWorkflow(context.Context, *v1.DeleteWorkflowRequest) (*v1.DeleteWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.DeleteWorkflow is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) ValidateWorkflow(context.Context, *connect.Request[v1.ValidateWorkflowRequest]) (*connect.Response[v1.ValidateWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.ValidateWorkflow is not implemented"))
+func (UnimplementedWorkflowServiceHandler) ValidateWorkflow(context.Context, *v1.ValidateWorkflowRequest) (*v1.ValidateWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.ValidateWorkflow is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) ImportWorkflow(context.Context, *connect.Request[v1.ImportWorkflowRequest]) (*connect.Response[v1.ImportWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.ImportWorkflow is not implemented"))
+func (UnimplementedWorkflowServiceHandler) ImportWorkflow(context.Context, *v1.ImportWorkflowRequest) (*v1.ImportWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.ImportWorkflow is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) ExportWorkflow(context.Context, *connect.Request[v1.ExportWorkflowRequest]) (*connect.Response[v1.ExportWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.ExportWorkflow is not implemented"))
+func (UnimplementedWorkflowServiceHandler) ExportWorkflow(context.Context, *v1.ExportWorkflowRequest) (*v1.ExportWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.ExportWorkflow is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) SetWorkflowVisibility(context.Context, *connect.Request[v1.SetWorkflowVisibilityRequest]) (*connect.Response[v1.SetWorkflowVisibilityResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.SetWorkflowVisibility is not implemented"))
+func (UnimplementedWorkflowServiceHandler) SetWorkflowVisibility(context.Context, *v1.SetWorkflowVisibilityRequest) (*v1.SetWorkflowVisibilityResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.SetWorkflowVisibility is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) CopyWorkflow(context.Context, *connect.Request[v1.CopyWorkflowRequest]) (*connect.Response[v1.CopyWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.CopyWorkflow is not implemented"))
+func (UnimplementedWorkflowServiceHandler) CopyWorkflow(context.Context, *v1.CopyWorkflowRequest) (*v1.CopyWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.CopyWorkflow is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) CreateWorkflowDraft(context.Context, *connect.Request[v1.CreateWorkflowDraftRequest]) (*connect.Response[v1.CreateWorkflowDraftResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.CreateWorkflowDraft is not implemented"))
+func (UnimplementedWorkflowServiceHandler) CreateWorkflowDraft(context.Context, *v1.CreateWorkflowDraftRequest) (*v1.CreateWorkflowDraftResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.CreateWorkflowDraft is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.SetWorkflowStatus is not implemented"))
+func (UnimplementedWorkflowServiceHandler) SetWorkflowStatus(context.Context, *v1.SetWorkflowStatusRequest) (*v1.SetWorkflowStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.SetWorkflowStatus is not implemented")
 }
 
-func (UnimplementedWorkflowServiceHandler) ForkOrphanedWorkflow(context.Context, *connect.Request[v1.ForkOrphanedWorkflowRequest]) (*connect.Response[v1.ForkOrphanedWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.ForkOrphanedWorkflow is not implemented"))
+func (UnimplementedWorkflowServiceHandler) ForkOrphanedWorkflow(context.Context, *v1.ForkOrphanedWorkflowRequest) (*v1.ForkOrphanedWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorkflowService.ForkOrphanedWorkflow is not implemented")
+}
+
+type workflowServiceClient struct {
+	client *connect.Client
+}
+
+func (c *workflowServiceClient) ListWorkflows(ctx context.Context, req *v1.ListWorkflowsRequest) (*v1.ListWorkflowsResponse, error) {
+	var res v1.ListWorkflowsResponse
+	if err := c.client.CallUnary(ctx, workflowServiceListWorkflowsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) SaveWorkflow(ctx context.Context, req *v1.SaveWorkflowRequest) (*v1.SaveWorkflowResponse, error) {
+	var res v1.SaveWorkflowResponse
+	if err := c.client.CallUnary(ctx, workflowServiceSaveWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) GetWorkflow(ctx context.Context, req *v1.GetWorkflowRequest) (*v1.GetWorkflowResponse, error) {
+	var res v1.GetWorkflowResponse
+	if err := c.client.CallUnary(ctx, workflowServiceGetWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) DeleteWorkflow(ctx context.Context, req *v1.DeleteWorkflowRequest) (*v1.DeleteWorkflowResponse, error) {
+	var res v1.DeleteWorkflowResponse
+	if err := c.client.CallUnary(ctx, workflowServiceDeleteWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) ValidateWorkflow(ctx context.Context, req *v1.ValidateWorkflowRequest) (*v1.ValidateWorkflowResponse, error) {
+	var res v1.ValidateWorkflowResponse
+	if err := c.client.CallUnary(ctx, workflowServiceValidateWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) ImportWorkflow(ctx context.Context, req *v1.ImportWorkflowRequest) (*v1.ImportWorkflowResponse, error) {
+	var res v1.ImportWorkflowResponse
+	if err := c.client.CallUnary(ctx, workflowServiceImportWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) ExportWorkflow(ctx context.Context, req *v1.ExportWorkflowRequest) (*v1.ExportWorkflowResponse, error) {
+	var res v1.ExportWorkflowResponse
+	if err := c.client.CallUnary(ctx, workflowServiceExportWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) SetWorkflowVisibility(ctx context.Context, req *v1.SetWorkflowVisibilityRequest) (*v1.SetWorkflowVisibilityResponse, error) {
+	var res v1.SetWorkflowVisibilityResponse
+	if err := c.client.CallUnary(ctx, workflowServiceSetWorkflowVisibilitySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) CopyWorkflow(ctx context.Context, req *v1.CopyWorkflowRequest) (*v1.CopyWorkflowResponse, error) {
+	var res v1.CopyWorkflowResponse
+	if err := c.client.CallUnary(ctx, workflowServiceCopyWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) CreateWorkflowDraft(ctx context.Context, req *v1.CreateWorkflowDraftRequest) (*v1.CreateWorkflowDraftResponse, error) {
+	var res v1.CreateWorkflowDraftResponse
+	if err := c.client.CallUnary(ctx, workflowServiceCreateWorkflowDraftSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) SetWorkflowStatus(ctx context.Context, req *v1.SetWorkflowStatusRequest) (*v1.SetWorkflowStatusResponse, error) {
+	var res v1.SetWorkflowStatusResponse
+	if err := c.client.CallUnary(ctx, workflowServiceSetWorkflowStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *workflowServiceClient) ForkOrphanedWorkflow(ctx context.Context, req *v1.ForkOrphanedWorkflowRequest) (*v1.ForkOrphanedWorkflowResponse, error) {
+	var res v1.ForkOrphanedWorkflowResponse
+	if err := c.client.CallUnary(ctx, workflowServiceForkOrphanedWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type workflowServiceHandler struct{ svc WorkflowServiceHandler }
+
+func (h workflowServiceHandler) listWorkflows(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListWorkflowsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListWorkflows(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) saveWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SaveWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SaveWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) getWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) deleteWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) validateWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ValidateWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ValidateWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) importWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ImportWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ImportWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) exportWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExportWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ExportWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) setWorkflowVisibility(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetWorkflowVisibilityRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetWorkflowVisibility(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) copyWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CopyWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CopyWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) createWorkflowDraft(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateWorkflowDraftRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateWorkflowDraft(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) setWorkflowStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetWorkflowStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetWorkflowStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h workflowServiceHandler) forkOrphanedWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ForkOrphanedWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ForkOrphanedWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

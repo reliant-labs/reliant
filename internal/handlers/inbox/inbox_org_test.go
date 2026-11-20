@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -74,10 +74,10 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 	}
 	itemIDs := func(ctx context.Context) []string {
 		t.Helper()
-		resp, err := newSvc().ListInbox(ctx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+		resp, err := newSvc().ListInbox(ctx, &reliantv1.ListInboxRequest{})
 		require.NoError(t, err)
 		var out []string
-		for _, it := range resp.Msg.Items {
+		for _, it := range resp.Items {
 			out = append(out, it.ItemId)
 		}
 		sort.Strings(out)
@@ -157,10 +157,10 @@ func TestListInbox_ScopedToTheNamedOrg(t *testing.T) {
 	ctx := authz.WithMembership(userCtx(), memberOf{"home": true, "acme": true})
 	itemIDs := func(orgID *string) []string {
 		t.Helper()
-		resp, err := newSvc().ListInbox(ctx, connect.NewRequest(&reliantv1.ListInboxRequest{OrgId: orgID}))
+		resp, err := newSvc().ListInbox(ctx, &reliantv1.ListInboxRequest{OrgId: orgID})
 		require.NoError(t, err)
 		out := []string{}
-		for _, it := range resp.Msg.Items {
+		for _, it := range resp.Items {
 			out = append(out, it.ItemId)
 		}
 		sort.Strings(out)
@@ -175,8 +175,8 @@ func TestListInbox_ScopedToTheNamedOrg(t *testing.T) {
 	require.Equal(t, sorted(approval("chat-home"), approval("chat-legacy"), "recovery:gone"), itemIDs(ptr.Of("home")),
 		"home, the default org, with the items of no org")
 
-	_, err := newSvc().ListInbox(ctx, connect.NewRequest(&reliantv1.ListInboxRequest{OrgId: ptr.Of("globex")}))
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "an org the caller is not in")
+	_, err := newSvc().ListInbox(ctx, &reliantv1.ListInboxRequest{OrgId: ptr.Of("globex")})
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "an org the caller is not in")
 }
 
 // An item is judged by its chat, else its automation, else its project,
@@ -279,9 +279,9 @@ func TestListInbox_BrokenDefinitionListsUnderItsProjectsOrg(t *testing.T) {
 	broken := func(orgID *string) int {
 		t.Helper()
 		f.inbox.storageCache.Delete(f.userID)
-		resp, err := f.inbox.ListInbox(ctx, connect.NewRequest(&reliantv1.ListInboxRequest{OrgId: orgID}))
+		resp, err := f.inbox.ListInbox(ctx, &reliantv1.ListInboxRequest{OrgId: orgID})
 		require.NoError(t, err)
-		return len(inboxByKind(resp.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN))
+		return len(inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN))
 	}
 	require.Equal(t, 1, broken(nil), "no org named")
 	require.Equal(t, 1, broken(ptr.Of("acme")), "its project's org")

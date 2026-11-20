@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
@@ -233,20 +232,20 @@ func projectToProto(p *db.Project) *reliantv1.Project {
 // ListProjects lists all projects for the current user
 func (s *Service) ListProjects(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListProjectsRequest],
-) (*connect.Response[reliantv1.ListProjectsResponse], error) {
+	req *reliantv1.ListProjectsRequest,
+) (*reliantv1.ListProjectsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	limit := int(req.Msg.Limit)
+	limit := int(req.Limit)
 	if limit <= 0 {
 		limit = 100
 	}
-	offset := int(req.Msg.Offset)
+	offset := int(req.Offset)
 	if offset < 0 {
 		offset = 0
 	}
 
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -270,35 +269,35 @@ func (s *Service) ListProjects(
 		protoProjects[i] = projectToProto(p)
 	}
 
-	return connect.NewResponse(&reliantv1.ListProjectsResponse{
+	return &reliantv1.ListProjectsResponse{
 		Projects: protoProjects,
 		Total:    int32(len(projects)),
-	}), nil
+	}, nil
 }
 
 // GetProject retrieves a project by ID
 func (s *Service) GetProject(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetProjectRequest],
-) (*connect.Response[reliantv1.GetProjectResponse], error) {
+	req *reliantv1.GetProjectRequest,
+) (*reliantv1.GetProjectResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		// A viewer of a shared project reads its card, in the viewer's shape
 		// (no path) and without the git check, which would reach the owner's
 		// machine.
 		viewing := authz.WithViewerReads(ctx)
-		if shared, getErr := s.deps.Repo.GetProject(viewing, req.Msg.ProjectId); getErr == nil {
+		if shared, getErr := s.deps.Repo.GetProject(viewing, req.ProjectId); getErr == nil {
 			// Not the owner here, so a readable answer is a viewer's: it is
 			// shaped for one whatever the decision says.
 			if _, denied := authz.ReadProjectAccess(viewing, userID, shared); denied == nil {
-				return connect.NewResponse(&reliantv1.GetProjectResponse{Project: projectproto.ForViewer(projectToProto(shared))}), nil
+				return &reliantv1.GetProjectResponse{Project: projectproto.ForViewer(projectToProto(shared))}, nil
 			}
 		}
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -337,9 +336,9 @@ func (s *Service) GetProject(
 		IsGitRepo: project.IsGitRepo,
 	})
 
-	return connect.NewResponse(&reliantv1.GetProjectResponse{
+	return &reliantv1.GetProjectResponse{
 		Project: projectToProto(project),
-	}), nil
+	}, nil
 }
 
 // checkGit asks target's machine whether its checkout is a git repository,
@@ -353,28 +352,28 @@ func (s *Service) checkGit(ctx context.Context, userID string, target projectche
 // UpdateProject updates a project
 func (s *Service) UpdateProject(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateProjectRequest],
-) (*connect.Response[reliantv1.UpdateProjectResponse], error) {
+	req *reliantv1.UpdateProjectRequest,
+) (*reliantv1.UpdateProjectResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Update fields
-	if req.Msg.Name != nil {
-		project.Name = *req.Msg.Name
+	if req.Name != nil {
+		project.Name = *req.Name
 	}
-	if req.Msg.Description != nil {
-		project.Description = req.Msg.Description
+	if req.Description != nil {
+		project.Description = req.Description
 	}
-	if req.Msg.DefaultBranch != nil {
-		project.DefaultBranch = req.Msg.DefaultBranch
+	if req.DefaultBranch != nil {
+		project.DefaultBranch = req.DefaultBranch
 	}
 
 	project.UpdatedAt = time.Now().UTC()
@@ -384,30 +383,30 @@ func (s *Service) UpdateProject(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update project"))
 	}
 
-	return connect.NewResponse(&reliantv1.UpdateProjectResponse{
+	return &reliantv1.UpdateProjectResponse{
 		Project: projectToProto(project),
-	}), nil
+	}, nil
 }
 
 // TouchProject updates the project's last_active timestamp
 func (s *Service) TouchProject(
 	ctx context.Context,
-	req *connect.Request[reliantv1.TouchProjectRequest],
-) (*connect.Response[reliantv1.TouchProjectResponse], error) {
+	req *reliantv1.TouchProjectRequest,
+) (*reliantv1.TouchProjectResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	if err := s.deps.Repo.TouchProject(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.deps.Repo.TouchProject(ctx, req.ProjectId, userID); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update project activity"))
 	}
 
 	if s.deps.Router != nil {
-		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 		if err != nil {
-			logging.WarnContext(ctx, "TouchProject: failed to load project for MCP warmup", "projectID", req.Msg.ProjectId, "error", err)
+			logging.WarnContext(ctx, "TouchProject: failed to load project for MCP warmup", "projectID", req.ProjectId, "error", err)
 		} else if project != nil {
 			// Warm up on the machine holding the checkout, at its path there.
 			// A project no machine holds has nothing to warm up.
@@ -433,24 +432,24 @@ func (s *Service) TouchProject(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.TouchProjectResponse{
+	return &reliantv1.TouchProjectResponse{
 		Success: true,
 		Message: "Project activity updated",
-	}), nil
+	}, nil
 }
 
 // GetProjectMetadata returns detailed project metadata
 func (s *Service) GetProjectMetadata(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetProjectMetadataRequest],
-) (*connect.Response[reliantv1.GetProjectMetadataResponse], error) {
+	req *reliantv1.GetProjectMetadataRequest,
+) (*reliantv1.GetProjectMetadataResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -471,35 +470,35 @@ func (s *Service) GetProjectMetadata(
 		resp.DefaultBranch = project.DefaultBranch
 	}
 
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // UpdateProjectMetadata updates project metadata
 func (s *Service) UpdateProjectMetadata(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateProjectMetadataRequest],
-) (*connect.Response[reliantv1.UpdateProjectMetadataResponse], error) {
+	req *reliantv1.UpdateProjectMetadataRequest,
+) (*reliantv1.UpdateProjectMetadataResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Update fields
-	if req.Msg.Description != nil {
-		project.Description = req.Msg.Description
+	if req.Description != nil {
+		project.Description = req.Description
 	}
 
 	if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update project"))
 	}
 
-	return connect.NewResponse(&reliantv1.UpdateProjectMetadataResponse{
+	return &reliantv1.UpdateProjectMetadataResponse{
 		Project: projectToProto(project),
-	}), nil
+	}, nil
 }

@@ -7,142 +7,139 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ToolCallServiceName is the fully-qualified name of the ToolCallService service.
 	ToolCallServiceName = "reliant.v1.ToolCallService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ToolCallServiceCancelToolCallProcedure is the fully-qualified name of the ToolCallService's
+	// ToolCallServiceCancelToolCallProcedure is the procedure name of the ToolCallService's
 	// CancelToolCall RPC.
 	ToolCallServiceCancelToolCallProcedure = "/reliant.v1.ToolCallService/CancelToolCall"
-	// ToolCallServiceConvertToBackgroundProcedure is the fully-qualified name of the ToolCallService's
+	// ToolCallServiceConvertToBackgroundProcedure is the procedure name of the ToolCallService's
 	// ConvertToBackground RPC.
 	ToolCallServiceConvertToBackgroundProcedure = "/reliant.v1.ToolCallService/ConvertToBackground"
+)
+
+var (
+	toolCallServiceCancelToolCallSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_tool_call_proto.Services().ByName("ToolCallService").Methods().ByName("CancelToolCall"),
+			Procedure:  ToolCallServiceCancelToolCallProcedure,
+		}
+	})
+	toolCallServiceConvertToBackgroundSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_tool_call_proto.Services().ByName("ToolCallService").Methods().ByName("ConvertToBackground"),
+			Procedure:  ToolCallServiceConvertToBackgroundProcedure,
+		}
+	})
 )
 
 // ToolCallServiceClient is a client for the reliant.v1.ToolCallService service.
 type ToolCallServiceClient interface {
 	// CancelToolCall cancels an executing tool call
 	// This sets the chat cancellation flag which propagates to the workflow
-	CancelToolCall(context.Context, *connect.Request[v1.CancelToolCallRequest]) (*connect.Response[v1.CancelToolCallResponse], error)
+	CancelToolCall(context.Context, *v1.CancelToolCallRequest) (*v1.CancelToolCallResponse, error)
 	// ConvertToBackground converts an executing tool call to a background process
 	// This allows the tool to continue running while the workflow can proceed
-	ConvertToBackground(context.Context, *connect.Request[v1.ConvertToBackgroundRequest]) (*connect.Response[v1.ConvertToBackgroundResponse], error)
+	ConvertToBackground(context.Context, *v1.ConvertToBackgroundRequest) (*v1.ConvertToBackgroundResponse, error)
 }
 
-// NewToolCallServiceClient constructs a client for the reliant.v1.ToolCallService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewToolCallServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ToolCallServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	toolCallServiceMethods := v1.File_reliant_v1_tool_call_proto.Services().ByName("ToolCallService").Methods()
-	return &toolCallServiceClient{
-		cancelToolCall: connect.NewClient[v1.CancelToolCallRequest, v1.CancelToolCallResponse](
-			httpClient,
-			baseURL+ToolCallServiceCancelToolCallProcedure,
-			connect.WithSchema(toolCallServiceMethods.ByName("CancelToolCall")),
-			connect.WithClientOptions(opts...),
-		),
-		convertToBackground: connect.NewClient[v1.ConvertToBackgroundRequest, v1.ConvertToBackgroundResponse](
-			httpClient,
-			baseURL+ToolCallServiceConvertToBackgroundProcedure,
-			connect.WithSchema(toolCallServiceMethods.ByName("ConvertToBackground")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// toolCallServiceClient implements ToolCallServiceClient.
-type toolCallServiceClient struct {
-	cancelToolCall      *connect.Client[v1.CancelToolCallRequest, v1.CancelToolCallResponse]
-	convertToBackground *connect.Client[v1.ConvertToBackgroundRequest, v1.ConvertToBackgroundResponse]
-}
-
-// CancelToolCall calls reliant.v1.ToolCallService.CancelToolCall.
-func (c *toolCallServiceClient) CancelToolCall(ctx context.Context, req *connect.Request[v1.CancelToolCallRequest]) (*connect.Response[v1.CancelToolCallResponse], error) {
-	return c.cancelToolCall.CallUnary(ctx, req)
-}
-
-// ConvertToBackground calls reliant.v1.ToolCallService.ConvertToBackground.
-func (c *toolCallServiceClient) ConvertToBackground(ctx context.Context, req *connect.Request[v1.ConvertToBackgroundRequest]) (*connect.Response[v1.ConvertToBackgroundResponse], error) {
-	return c.convertToBackground.CallUnary(ctx, req)
+// NewToolCallServiceClient constructs a client for the reliant.v1.ToolCallService service. Multiple
+// service clients may share a single connect.Client.
+func NewToolCallServiceClient(client *connect.Client) ToolCallServiceClient {
+	return &toolCallServiceClient{client: client}
 }
 
 // ToolCallServiceHandler is an implementation of the reliant.v1.ToolCallService service.
 type ToolCallServiceHandler interface {
 	// CancelToolCall cancels an executing tool call
 	// This sets the chat cancellation flag which propagates to the workflow
-	CancelToolCall(context.Context, *connect.Request[v1.CancelToolCallRequest]) (*connect.Response[v1.CancelToolCallResponse], error)
+	CancelToolCall(context.Context, *v1.CancelToolCallRequest) (*v1.CancelToolCallResponse, error)
 	// ConvertToBackground converts an executing tool call to a background process
 	// This allows the tool to continue running while the workflow can proceed
-	ConvertToBackground(context.Context, *connect.Request[v1.ConvertToBackgroundRequest]) (*connect.Response[v1.ConvertToBackgroundResponse], error)
+	ConvertToBackground(context.Context, *v1.ConvertToBackgroundRequest) (*v1.ConvertToBackgroundResponse, error)
 }
 
-// NewToolCallServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewToolCallServiceHandler(svc ToolCallServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	toolCallServiceMethods := v1.File_reliant_v1_tool_call_proto.Services().ByName("ToolCallService").Methods()
-	toolCallServiceCancelToolCallHandler := connect.NewUnaryHandler(
-		ToolCallServiceCancelToolCallProcedure,
-		svc.CancelToolCall,
-		connect.WithSchema(toolCallServiceMethods.ByName("CancelToolCall")),
-		connect.WithHandlerOptions(opts...),
+// RegisterToolCallServiceHandler registers svc as the reliant.v1.ToolCallService implementation on
+// server.
+func RegisterToolCallServiceHandler(server *connect.Server, svc ToolCallServiceHandler) {
+	adapter := toolCallServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: toolCallServiceCancelToolCallSpec(), Handler: adapter.cancelToolCall},
+		connect.Method{Spec: toolCallServiceConvertToBackgroundSpec(), Handler: adapter.convertToBackground},
 	)
-	toolCallServiceConvertToBackgroundHandler := connect.NewUnaryHandler(
-		ToolCallServiceConvertToBackgroundProcedure,
-		svc.ConvertToBackground,
-		connect.WithSchema(toolCallServiceMethods.ByName("ConvertToBackground")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.ToolCallService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ToolCallServiceCancelToolCallProcedure:
-			toolCallServiceCancelToolCallHandler.ServeHTTP(w, r)
-		case ToolCallServiceConvertToBackgroundProcedure:
-			toolCallServiceConvertToBackgroundHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedToolCallServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedToolCallServiceHandler struct{}
 
-func (UnimplementedToolCallServiceHandler) CancelToolCall(context.Context, *connect.Request[v1.CancelToolCallRequest]) (*connect.Response[v1.CancelToolCallResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolCallService.CancelToolCall is not implemented"))
+func (UnimplementedToolCallServiceHandler) CancelToolCall(context.Context, *v1.CancelToolCallRequest) (*v1.CancelToolCallResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ToolCallService.CancelToolCall is not implemented")
 }
 
-func (UnimplementedToolCallServiceHandler) ConvertToBackground(context.Context, *connect.Request[v1.ConvertToBackgroundRequest]) (*connect.Response[v1.ConvertToBackgroundResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolCallService.ConvertToBackground is not implemented"))
+func (UnimplementedToolCallServiceHandler) ConvertToBackground(context.Context, *v1.ConvertToBackgroundRequest) (*v1.ConvertToBackgroundResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ToolCallService.ConvertToBackground is not implemented")
+}
+
+type toolCallServiceClient struct {
+	client *connect.Client
+}
+
+func (c *toolCallServiceClient) CancelToolCall(ctx context.Context, req *v1.CancelToolCallRequest) (*v1.CancelToolCallResponse, error) {
+	var res v1.CancelToolCallResponse
+	if err := c.client.CallUnary(ctx, toolCallServiceCancelToolCallSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *toolCallServiceClient) ConvertToBackground(ctx context.Context, req *v1.ConvertToBackgroundRequest) (*v1.ConvertToBackgroundResponse, error) {
+	var res v1.ConvertToBackgroundResponse
+	if err := c.client.CallUnary(ctx, toolCallServiceConvertToBackgroundSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type toolCallServiceHandler struct{ svc ToolCallServiceHandler }
+
+func (h toolCallServiceHandler) cancelToolCall(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CancelToolCallRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelToolCall(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h toolCallServiceHandler) convertToBackground(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ConvertToBackgroundRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ConvertToBackground(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

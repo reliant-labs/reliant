@@ -11,13 +11,14 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
@@ -45,7 +46,7 @@ func refuseFromAgentShell(*cobra.Command, []string) error {
 // per project, so an ambiguous name is reported rather than guessed at.
 
 func newTriggerServiceClient(conn *connection) reliantv1connect.TriggerServiceClient {
-	return reliantv1connect.NewTriggerServiceClient(conn.httpClient(), conn.ServerURL)
+	return reliantv1connect.NewTriggerServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil))
 }
 
 // newTriggerCmd builds the `reliant trigger` command tree.
@@ -259,12 +260,12 @@ func newTriggerCreateCmd() *cobra.Command {
 				return err
 			}
 			resp, err := newTriggerServiceClient(conn).CreateTrigger(cmd.Context(),
-				connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: def}))
+				&reliantv1.CreateTriggerRequest{Trigger: def})
 			if err != nil {
 				return conn.annotate(fmt.Errorf("creating trigger: %w", err))
 			}
-			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
-			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
+			printTriggerDetail(cmd.OutOrStdout(), resp.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.GetFundingWarning())
 			return nil
 		},
 	}
@@ -326,12 +327,12 @@ your own accounts is done in the app.`,
 				return err
 			}
 			resp, err := client.UpdateTrigger(cmd.Context(),
-				connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: existing.GetId(), Trigger: def}))
+				&reliantv1.UpdateTriggerRequest{Id: existing.GetId(), Trigger: def})
 			if err != nil {
 				return conn.annotate(fmt.Errorf("updating trigger: %w", err))
 			}
-			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
-			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
+			printTriggerDetail(cmd.OutOrStdout(), resp.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.GetFundingWarning())
 			return nil
 		},
 	}
@@ -434,12 +435,12 @@ definition and firing history survive and re-enabling needs no re-derivation.`,
 				return conn.annotate(err)
 			}
 			resp, err := client.SetTriggerEnabled(cmd.Context(),
-				connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: trigger.GetId(), Enabled: enabled}))
+				&reliantv1.SetTriggerEnabledRequest{Id: trigger.GetId(), Enabled: enabled})
 			if err != nil {
 				return conn.annotate(fmt.Errorf("%s trigger: %w", verb, err))
 			}
-			printTriggerDetail(cmd.OutOrStdout(), resp.Msg.GetTrigger())
-			printFundingWarning(cmd.OutOrStdout(), resp.Msg.GetFundingWarning())
+			printTriggerDetail(cmd.OutOrStdout(), resp.GetTrigger())
+			printFundingWarning(cmd.OutOrStdout(), resp.GetFundingWarning())
 			return nil
 		},
 	}
@@ -471,7 +472,7 @@ it started are real and still exist.`,
 				return conn.annotate(err)
 			}
 			if _, err := client.DeleteTrigger(cmd.Context(),
-				connect.NewRequest(&reliantv1.DeleteTriggerRequest{Id: trigger.GetId()})); err != nil {
+				&reliantv1.DeleteTriggerRequest{Id: trigger.GetId()}); err != nil {
 				return conn.annotate(fmt.Errorf("deleting trigger: %w", err))
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Deleted trigger %q (%s)\n", trigger.GetName(), trigger.GetId())
@@ -668,20 +669,20 @@ func resolveTrigger(
 	client reliantv1connect.TriggerServiceClient,
 	idOrName string,
 ) (*reliantv1.Trigger, error) {
-	resp, err := client.GetTrigger(ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: idOrName}))
+	resp, err := client.GetTrigger(ctx, &reliantv1.GetTriggerRequest{Id: idOrName})
 	if err == nil {
-		return resp.Msg.GetTrigger(), nil
+		return resp.GetTrigger(), nil
 	}
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		return nil, fmt.Errorf("looking up trigger %q: %w", idOrName, err)
 	}
 
-	list, err := client.ListTriggers(ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	list, err := client.ListTriggers(ctx, &reliantv1.ListTriggersRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("looking up trigger %q by name: %w", idOrName, err)
 	}
 	var matches []*reliantv1.Trigger
-	for _, t := range list.Msg.GetTriggers() {
+	for _, t := range list.GetTriggers() {
 		if t.GetName() == idOrName {
 			matches = append(matches, t)
 		}
@@ -950,11 +951,11 @@ func lastEventSummary(ev *reliantv1.TriggerEvent) string {
 
 // triggerDaemonLister is the one daemon-registry call --daemon needs.
 type triggerDaemonLister interface {
-	ListDaemons(context.Context, *connect.Request[reliantv1.ListDaemonsRequest]) (*connect.Response[reliantv1.ListDaemonsResponse], error)
+	ListDaemons(context.Context, *reliantv1.ListDaemonsRequest) (*reliantv1.ListDaemonsResponse, error)
 }
 
 func newDaemonRegistryClient(conn *connection) reliantv1connect.DaemonRegistryServiceClient {
-	return reliantv1connect.NewDaemonRegistryServiceClient(conn.httpClient(), conn.ServerURL)
+	return reliantv1connect.NewDaemonRegistryServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil))
 }
 
 // resolveTriggerDaemon turns --daemon into a daemon id. An exact id wins;
@@ -962,11 +963,11 @@ func newDaemonRegistryClient(conn *connection) reliantv1connect.DaemonRegistrySe
 // hostname shared by several is reported with its candidates rather than
 // guessed at.
 func resolveTriggerDaemon(ctx context.Context, client triggerDaemonLister, idOrHostname string) (string, error) {
-	resp, err := client.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	resp, err := client.ListDaemons(ctx, &reliantv1.ListDaemonsRequest{})
 	if err != nil {
 		return "", fmt.Errorf("listing daemons to resolve --daemon %q: %w", idOrHostname, err)
 	}
-	daemons := resp.Msg.GetDaemons()
+	daemons := resp.GetDaemons()
 	for _, d := range daemons {
 		if d.GetDaemonId() == idOrHostname {
 			return d.GetDaemonId(), nil

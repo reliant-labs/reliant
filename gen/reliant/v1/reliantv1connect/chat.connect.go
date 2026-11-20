@@ -7,133 +7,385 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ChatServiceName is the fully-qualified name of the ChatService service.
 	ChatServiceName = "reliant.v1.ChatService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ChatServiceStartChatProcedure is the fully-qualified name of the ChatService's StartChat RPC.
+	// ChatServiceStartChatProcedure is the procedure name of the ChatService's StartChat RPC.
 	ChatServiceStartChatProcedure = "/reliant.v1.ChatService/StartChat"
-	// ChatServiceRunNowProcedure is the fully-qualified name of the ChatService's RunNow RPC.
+	// ChatServiceRunNowProcedure is the procedure name of the ChatService's RunNow RPC.
 	ChatServiceRunNowProcedure = "/reliant.v1.ChatService/RunNow"
-	// ChatServiceAdoptChatProcedure is the fully-qualified name of the ChatService's AdoptChat RPC.
+	// ChatServiceAdoptChatProcedure is the procedure name of the ChatService's AdoptChat RPC.
 	ChatServiceAdoptChatProcedure = "/reliant.v1.ChatService/AdoptChat"
-	// ChatServiceUnadoptChatProcedure is the fully-qualified name of the ChatService's UnadoptChat RPC.
+	// ChatServiceUnadoptChatProcedure is the procedure name of the ChatService's UnadoptChat RPC.
 	ChatServiceUnadoptChatProcedure = "/reliant.v1.ChatService/UnadoptChat"
-	// ChatServiceListChatsProcedure is the fully-qualified name of the ChatService's ListChats RPC.
+	// ChatServiceListChatsProcedure is the procedure name of the ChatService's ListChats RPC.
 	ChatServiceListChatsProcedure = "/reliant.v1.ChatService/ListChats"
-	// ChatServiceGetChatProcedure is the fully-qualified name of the ChatService's GetChat RPC.
+	// ChatServiceGetChatProcedure is the procedure name of the ChatService's GetChat RPC.
 	ChatServiceGetChatProcedure = "/reliant.v1.ChatService/GetChat"
-	// ChatServiceUpdateChatProcedure is the fully-qualified name of the ChatService's UpdateChat RPC.
+	// ChatServiceUpdateChatProcedure is the procedure name of the ChatService's UpdateChat RPC.
 	ChatServiceUpdateChatProcedure = "/reliant.v1.ChatService/UpdateChat"
-	// ChatServiceDeleteChatProcedure is the fully-qualified name of the ChatService's DeleteChat RPC.
+	// ChatServiceDeleteChatProcedure is the procedure name of the ChatService's DeleteChat RPC.
 	ChatServiceDeleteChatProcedure = "/reliant.v1.ChatService/DeleteChat"
-	// ChatServiceSearchChatsProcedure is the fully-qualified name of the ChatService's SearchChats RPC.
+	// ChatServiceSearchChatsProcedure is the procedure name of the ChatService's SearchChats RPC.
 	ChatServiceSearchChatsProcedure = "/reliant.v1.ChatService/SearchChats"
-	// ChatServiceListArchivedChatsProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceListArchivedChatsProcedure is the procedure name of the ChatService's
 	// ListArchivedChats RPC.
 	ChatServiceListArchivedChatsProcedure = "/reliant.v1.ChatService/ListArchivedChats"
-	// ChatServiceSendMessageProcedure is the fully-qualified name of the ChatService's SendMessage RPC.
+	// ChatServiceSendMessageProcedure is the procedure name of the ChatService's SendMessage RPC.
 	ChatServiceSendMessageProcedure = "/reliant.v1.ChatService/SendMessage"
-	// ChatServiceSendAgentMessageProcedure is the fully-qualified name of the ChatService's
-	// SendAgentMessage RPC.
+	// ChatServiceSendAgentMessageProcedure is the procedure name of the ChatService's SendAgentMessage
+	// RPC.
 	ChatServiceSendAgentMessageProcedure = "/reliant.v1.ChatService/SendAgentMessage"
-	// ChatServiceListQueuedAgentMessagesProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceListQueuedAgentMessagesProcedure is the procedure name of the ChatService's
 	// ListQueuedAgentMessages RPC.
 	ChatServiceListQueuedAgentMessagesProcedure = "/reliant.v1.ChatService/ListQueuedAgentMessages"
-	// ChatServiceCancelQueuedAgentMessageProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceCancelQueuedAgentMessageProcedure is the procedure name of the ChatService's
 	// CancelQueuedAgentMessage RPC.
 	ChatServiceCancelQueuedAgentMessageProcedure = "/reliant.v1.ChatService/CancelQueuedAgentMessage"
-	// ChatServiceInterruptThreadProcedure is the fully-qualified name of the ChatService's
-	// InterruptThread RPC.
+	// ChatServiceInterruptThreadProcedure is the procedure name of the ChatService's InterruptThread
+	// RPC.
 	ChatServiceInterruptThreadProcedure = "/reliant.v1.ChatService/InterruptThread"
-	// ChatServiceListMessagesProcedure is the fully-qualified name of the ChatService's ListMessages
-	// RPC.
+	// ChatServiceListMessagesProcedure is the procedure name of the ChatService's ListMessages RPC.
 	ChatServiceListMessagesProcedure = "/reliant.v1.ChatService/ListMessages"
-	// ChatServiceGetToolResultProcedure is the fully-qualified name of the ChatService's GetToolResult
-	// RPC.
+	// ChatServiceGetToolResultProcedure is the procedure name of the ChatService's GetToolResult RPC.
 	ChatServiceGetToolResultProcedure = "/reliant.v1.ChatService/GetToolResult"
-	// ChatServiceGetContentBlockBodiesProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceGetContentBlockBodiesProcedure is the procedure name of the ChatService's
 	// GetContentBlockBodies RPC.
 	ChatServiceGetContentBlockBodiesProcedure = "/reliant.v1.ChatService/GetContentBlockBodies"
-	// ChatServiceUpdateChatStateProcedure is the fully-qualified name of the ChatService's
-	// UpdateChatState RPC.
-	ChatServiceUpdateChatStateProcedure = "/reliant.v1.ChatService/UpdateChatState"
-	// ChatServiceTerminateChatProcedure is the fully-qualified name of the ChatService's TerminateChat
+	// ChatServiceUpdateChatStateProcedure is the procedure name of the ChatService's UpdateChatState
 	// RPC.
+	ChatServiceUpdateChatStateProcedure = "/reliant.v1.ChatService/UpdateChatState"
+	// ChatServiceTerminateChatProcedure is the procedure name of the ChatService's TerminateChat RPC.
 	ChatServiceTerminateChatProcedure = "/reliant.v1.ChatService/TerminateChat"
-	// ChatServicePauseChatProcedure is the fully-qualified name of the ChatService's PauseChat RPC.
+	// ChatServicePauseChatProcedure is the procedure name of the ChatService's PauseChat RPC.
 	ChatServicePauseChatProcedure = "/reliant.v1.ChatService/PauseChat"
-	// ChatServiceResumeChatProcedure is the fully-qualified name of the ChatService's ResumeChat RPC.
+	// ChatServiceResumeChatProcedure is the procedure name of the ChatService's ResumeChat RPC.
 	ChatServiceResumeChatProcedure = "/reliant.v1.ChatService/ResumeChat"
-	// ChatServiceRetryUsageLimitWaitProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceRetryUsageLimitWaitProcedure is the procedure name of the ChatService's
 	// RetryUsageLimitWait RPC.
 	ChatServiceRetryUsageLimitWaitProcedure = "/reliant.v1.ChatService/RetryUsageLimitWait"
-	// ChatServiceDismissChatProcedure is the fully-qualified name of the ChatService's DismissChat RPC.
+	// ChatServiceDismissChatProcedure is the procedure name of the ChatService's DismissChat RPC.
 	ChatServiceDismissChatProcedure = "/reliant.v1.ChatService/DismissChat"
-	// ChatServiceMarkUnreadChatProcedure is the fully-qualified name of the ChatService's
-	// MarkUnreadChat RPC.
+	// ChatServiceMarkUnreadChatProcedure is the procedure name of the ChatService's MarkUnreadChat RPC.
 	ChatServiceMarkUnreadChatProcedure = "/reliant.v1.ChatService/MarkUnreadChat"
-	// ChatServiceCompactChatProcedure is the fully-qualified name of the ChatService's CompactChat RPC.
+	// ChatServiceCompactChatProcedure is the procedure name of the ChatService's CompactChat RPC.
 	ChatServiceCompactChatProcedure = "/reliant.v1.ChatService/CompactChat"
-	// ChatServiceBranchChatProcedure is the fully-qualified name of the ChatService's BranchChat RPC.
+	// ChatServiceBranchChatProcedure is the procedure name of the ChatService's BranchChat RPC.
 	ChatServiceBranchChatProcedure = "/reliant.v1.ChatService/BranchChat"
-	// ChatServiceListBranchesProcedure is the fully-qualified name of the ChatService's ListBranches
-	// RPC.
+	// ChatServiceListBranchesProcedure is the procedure name of the ChatService's ListBranches RPC.
 	ChatServiceListBranchesProcedure = "/reliant.v1.ChatService/ListBranches"
-	// ChatServiceUpdateWorkflowParamsProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceUpdateWorkflowParamsProcedure is the procedure name of the ChatService's
 	// UpdateWorkflowParams RPC.
 	ChatServiceUpdateWorkflowParamsProcedure = "/reliant.v1.ChatService/UpdateWorkflowParams"
-	// ChatServiceUpdateChatProviderPolicyProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceUpdateChatProviderPolicyProcedure is the procedure name of the ChatService's
 	// UpdateChatProviderPolicy RPC.
 	ChatServiceUpdateChatProviderPolicyProcedure = "/reliant.v1.ChatService/UpdateChatProviderPolicy"
-	// ChatServiceGetChatUpdatesProcedure is the fully-qualified name of the ChatService's
-	// GetChatUpdates RPC.
+	// ChatServiceGetChatUpdatesProcedure is the procedure name of the ChatService's GetChatUpdates RPC.
 	ChatServiceGetChatUpdatesProcedure = "/reliant.v1.ChatService/GetChatUpdates"
-	// ChatServiceListChatPlansProcedure is the fully-qualified name of the ChatService's ListChatPlans
-	// RPC.
+	// ChatServiceListChatPlansProcedure is the procedure name of the ChatService's ListChatPlans RPC.
 	ChatServiceListChatPlansProcedure = "/reliant.v1.ChatService/ListChatPlans"
-	// ChatServiceGetWorkflowExecutionsProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceGetWorkflowExecutionsProcedure is the procedure name of the ChatService's
 	// GetWorkflowExecutions RPC.
 	ChatServiceGetWorkflowExecutionsProcedure = "/reliant.v1.ChatService/GetWorkflowExecutions"
-	// ChatServiceListStepExecutionsProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceListStepExecutionsProcedure is the procedure name of the ChatService's
 	// ListStepExecutions RPC.
 	ChatServiceListStepExecutionsProcedure = "/reliant.v1.ChatService/ListStepExecutions"
-	// ChatServiceGetWorkflowNodeExecutionsProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceGetWorkflowNodeExecutionsProcedure is the procedure name of the ChatService's
 	// GetWorkflowNodeExecutions RPC.
 	ChatServiceGetWorkflowNodeExecutionsProcedure = "/reliant.v1.ChatService/GetWorkflowNodeExecutions"
-	// ChatServiceGetThreadWorkflowInputsProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceGetThreadWorkflowInputsProcedure is the procedure name of the ChatService's
 	// GetThreadWorkflowInputs RPC.
 	ChatServiceGetThreadWorkflowInputsProcedure = "/reliant.v1.ChatService/GetThreadWorkflowInputs"
-	// ChatServiceSetChatDaemonProcedure is the fully-qualified name of the ChatService's SetChatDaemon
-	// RPC.
+	// ChatServiceSetChatDaemonProcedure is the procedure name of the ChatService's SetChatDaemon RPC.
 	ChatServiceSetChatDaemonProcedure = "/reliant.v1.ChatService/SetChatDaemon"
-	// ChatServiceMoveChatToProjectProcedure is the fully-qualified name of the ChatService's
+	// ChatServiceMoveChatToProjectProcedure is the procedure name of the ChatService's
 	// MoveChatToProject RPC.
 	ChatServiceMoveChatToProjectProcedure = "/reliant.v1.ChatService/MoveChatToProject"
+)
+
+var (
+	chatServiceStartChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("StartChat"),
+			Procedure:  ChatServiceStartChatProcedure,
+		}
+	})
+	chatServiceRunNowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("RunNow"),
+			Procedure:  ChatServiceRunNowProcedure,
+		}
+	})
+	chatServiceAdoptChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("AdoptChat"),
+			Procedure:  ChatServiceAdoptChatProcedure,
+		}
+	})
+	chatServiceUnadoptChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("UnadoptChat"),
+			Procedure:  ChatServiceUnadoptChatProcedure,
+		}
+	})
+	chatServiceListChatsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("ListChats"),
+			Procedure:  ChatServiceListChatsProcedure,
+		}
+	})
+	chatServiceGetChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("GetChat"),
+			Procedure:  ChatServiceGetChatProcedure,
+		}
+	})
+	chatServiceUpdateChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("UpdateChat"),
+			Procedure:  ChatServiceUpdateChatProcedure,
+		}
+	})
+	chatServiceDeleteChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("DeleteChat"),
+			Procedure:  ChatServiceDeleteChatProcedure,
+		}
+	})
+	chatServiceSearchChatsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("SearchChats"),
+			Procedure:  ChatServiceSearchChatsProcedure,
+		}
+	})
+	chatServiceListArchivedChatsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("ListArchivedChats"),
+			Procedure:  ChatServiceListArchivedChatsProcedure,
+		}
+	})
+	chatServiceSendMessageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("SendMessage"),
+			Procedure:  ChatServiceSendMessageProcedure,
+		}
+	})
+	chatServiceSendAgentMessageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("SendAgentMessage"),
+			Procedure:  ChatServiceSendAgentMessageProcedure,
+		}
+	})
+	chatServiceListQueuedAgentMessagesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("ListQueuedAgentMessages"),
+			Procedure:  ChatServiceListQueuedAgentMessagesProcedure,
+		}
+	})
+	chatServiceCancelQueuedAgentMessageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("CancelQueuedAgentMessage"),
+			Procedure:  ChatServiceCancelQueuedAgentMessageProcedure,
+		}
+	})
+	chatServiceInterruptThreadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("InterruptThread"),
+			Procedure:  ChatServiceInterruptThreadProcedure,
+		}
+	})
+	chatServiceListMessagesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("ListMessages"),
+			Procedure:  ChatServiceListMessagesProcedure,
+		}
+	})
+	chatServiceGetToolResultSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("GetToolResult"),
+			Procedure:  ChatServiceGetToolResultProcedure,
+		}
+	})
+	chatServiceGetContentBlockBodiesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("GetContentBlockBodies"),
+			Procedure:  ChatServiceGetContentBlockBodiesProcedure,
+		}
+	})
+	chatServiceUpdateChatStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("UpdateChatState"),
+			Procedure:  ChatServiceUpdateChatStateProcedure,
+		}
+	})
+	chatServiceTerminateChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("TerminateChat"),
+			Procedure:  ChatServiceTerminateChatProcedure,
+		}
+	})
+	chatServicePauseChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("PauseChat"),
+			Procedure:  ChatServicePauseChatProcedure,
+		}
+	})
+	chatServiceResumeChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("ResumeChat"),
+			Procedure:  ChatServiceResumeChatProcedure,
+		}
+	})
+	chatServiceRetryUsageLimitWaitSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("RetryUsageLimitWait"),
+			Procedure:  ChatServiceRetryUsageLimitWaitProcedure,
+		}
+	})
+	chatServiceDismissChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("DismissChat"),
+			Procedure:  ChatServiceDismissChatProcedure,
+		}
+	})
+	chatServiceMarkUnreadChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("MarkUnreadChat"),
+			Procedure:  ChatServiceMarkUnreadChatProcedure,
+		}
+	})
+	chatServiceCompactChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("CompactChat"),
+			Procedure:  ChatServiceCompactChatProcedure,
+		}
+	})
+	chatServiceBranchChatSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("BranchChat"),
+			Procedure:  ChatServiceBranchChatProcedure,
+		}
+	})
+	chatServiceListBranchesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("ListBranches"),
+			Procedure:  ChatServiceListBranchesProcedure,
+		}
+	})
+	chatServiceUpdateWorkflowParamsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("UpdateWorkflowParams"),
+			Procedure:  ChatServiceUpdateWorkflowParamsProcedure,
+		}
+	})
+	chatServiceUpdateChatProviderPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("UpdateChatProviderPolicy"),
+			Procedure:  ChatServiceUpdateChatProviderPolicyProcedure,
+		}
+	})
+	chatServiceGetChatUpdatesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("GetChatUpdates"),
+			Procedure:  ChatServiceGetChatUpdatesProcedure,
+		}
+	})
+	chatServiceListChatPlansSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("ListChatPlans"),
+			Procedure:  ChatServiceListChatPlansProcedure,
+		}
+	})
+	chatServiceGetWorkflowExecutionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("GetWorkflowExecutions"),
+			Procedure:  ChatServiceGetWorkflowExecutionsProcedure,
+		}
+	})
+	chatServiceListStepExecutionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("ListStepExecutions"),
+			Procedure:  ChatServiceListStepExecutionsProcedure,
+		}
+	})
+	chatServiceGetWorkflowNodeExecutionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("GetWorkflowNodeExecutions"),
+			Procedure:  ChatServiceGetWorkflowNodeExecutionsProcedure,
+		}
+	})
+	chatServiceGetThreadWorkflowInputsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("GetThreadWorkflowInputs"),
+			Procedure:  ChatServiceGetThreadWorkflowInputsProcedure,
+		}
+	})
+	chatServiceSetChatDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("SetChatDaemon"),
+			Procedure:  ChatServiceSetChatDaemonProcedure,
+		}
+	})
+	chatServiceMoveChatToProjectSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods().ByName("MoveChatToProject"),
+			Procedure:  ChatServiceMoveChatToProjectProcedure,
+		}
+	})
 )
 
 // ChatServiceClient is a client for the reliant.v1.ChatService service.
@@ -149,7 +401,7 @@ type ChatServiceClient interface {
 	// start records a trigger_events row whose dedupe key is the chat id, so
 	// "a chat starts exactly once" is a database invariant rather than client
 	// discipline. See research/TRIGGERS.md.
-	StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error)
+	StartChat(context.Context, *v1.StartChatRequest) (*v1.StartChatResponse, error)
 	// RunNow starts a workflow by hand, from its detail page's "Run now". It is
 	// StartChat's attended start with its own launch kind (manual.run), and it
 	// works for a workflow whose Chat trigger is off (automation_only): pressing
@@ -158,34 +410,34 @@ type ChatServiceClient interface {
 	// Owner-only by construction: the run is the caller's, resolved against the
 	// caller's workflows. It is not an agent tool, and manual.run is not a launch
 	// kind StartChat can be asked for.
-	RunNow(context.Context, *connect.Request[v1.RunNowRequest]) (*connect.Response[v1.RunNowResponse], error)
+	RunNow(context.Context, *v1.RunNowRequest) (*v1.RunNowResponse, error)
 	// AdoptChat takes a run (typically an automation's) into the caller's own
 	// chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
 	// root run started by SendMessage attended. Idempotent; owner-only.
-	AdoptChat(context.Context, *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error)
+	AdoptChat(context.Context, *v1.AdoptChatRequest) (*v1.AdoptChatResponse, error)
 	// UnadoptChat clears adopted_at. It is not archive: the run stays in Runs.
 	// Idempotent; owner-only.
-	UnadoptChat(context.Context, *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error)
+	UnadoptChat(context.Context, *v1.UnadoptChatRequest) (*v1.UnadoptChatResponse, error)
 	// ListChats lists all non-archived chats for a project
 	// forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
-	ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error)
+	ListChats(context.Context, *v1.ListChatsRequest) (*v1.ListChatsResponse, error)
 	// GetChat retrieves a specific chat by ID
 	// forge:custom — owner-checked, and reports the run's live Temporal state alongside the chat row
-	GetChat(context.Context, *connect.Request[v1.GetChatRequest]) (*connect.Response[v1.GetChatResponse], error)
+	GetChat(context.Context, *v1.GetChatRequest) (*v1.GetChatResponse, error)
 	// UpdateChat updates chat metadata (title, temperature, etc.)
 	// forge:custom — a partial update that resolves the worktree and emits title/config change events
-	UpdateChat(context.Context, *connect.Request[v1.UpdateChatRequest]) (*connect.Response[v1.UpdateChatResponse], error)
+	UpdateChat(context.Context, *v1.UpdateChatRequest) (*v1.UpdateChatResponse, error)
 	// DeleteChat permanently deletes an archived chat. A chat that is not
 	// archived is refused (FailedPrecondition): archive it with UpdateChatState
 	// first, so a delete can never silently be an archive, or the reverse.
 	// forge:custom — refuses a chat that is not archived, and cancels its run before deleting
-	DeleteChat(context.Context, *connect.Request[v1.DeleteChatRequest]) (*connect.Response[v1.DeleteChatResponse], error)
+	DeleteChat(context.Context, *v1.DeleteChatRequest) (*v1.DeleteChatResponse, error)
 	// SearchChats searches chats by title and message content
-	SearchChats(context.Context, *connect.Request[v1.SearchChatsRequest]) (*connect.Response[v1.SearchChatsResponse], error)
+	SearchChats(context.Context, *v1.SearchChatsRequest) (*v1.SearchChatsResponse, error)
 	// ListArchivedChats lists all archived chats with worktree info
-	ListArchivedChats(context.Context, *connect.Request[v1.ListArchivedChatsRequest]) (*connect.Response[v1.ListArchivedChatsResponse], error)
+	ListArchivedChats(context.Context, *v1.ListArchivedChatsRequest) (*v1.ListArchivedChatsResponse, error)
 	// SendMessage sends a user message to a chat and continues workflow
-	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
+	SendMessage(context.Context, *v1.SendMessageRequest) (*v1.SendMessageResponse, error)
 	// SendAgentMessage lets a human queue a message into a SPECIFIC running
 	// thread's mailbox (the agent_messages table) without pausing or otherwise
 	// touching the chat's workflow/pause state. This is the human-facing
@@ -194,18 +446,18 @@ type ChatServiceClient interface {
 	//
 	// The message is delivered at the target thread's next agent-loop step
 	// boundary, same as spawn_send. It is queued, not delivered synchronously.
-	SendAgentMessage(context.Context, *connect.Request[v1.SendAgentMessageRequest]) (*connect.Response[v1.SendAgentMessageResponse], error)
+	SendAgentMessage(context.Context, *v1.SendAgentMessageRequest) (*v1.SendAgentMessageResponse, error)
 	// ListQueuedAgentMessages returns the messages currently sitting in a
 	// thread's mailbox (agent_messages) with status = queued -- i.e. sent via
 	// SendAgentMessage or spawn_send but not yet drained into that thread's
 	// history. This is what lets a human see what they queued instead of it
 	// being invisible until the agent happens to drain it.
-	ListQueuedAgentMessages(context.Context, *connect.Request[v1.ListQueuedAgentMessagesRequest]) (*connect.Response[v1.ListQueuedAgentMessagesResponse], error)
+	ListQueuedAgentMessages(context.Context, *v1.ListQueuedAgentMessagesRequest) (*v1.ListQueuedAgentMessagesResponse, error)
 	// CancelQueuedAgentMessage revokes a single queued mailbox entry before
 	// the target agent drains it. This is a race against the agent's own loop
 	// boundary -- see CancelQueuedAgentMessageResponse for the honesty
 	// contract when the message was already delivered.
-	CancelQueuedAgentMessage(context.Context, *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error)
+	CancelQueuedAgentMessage(context.Context, *v1.CancelQueuedAgentMessageRequest) (*v1.CancelQueuedAgentMessageResponse, error)
 	// InterruptThread stops what a thread is doing right now so it reads its
 	// mailbox at once, instead of at the end of the work already in flight.
 	//
@@ -224,73 +476,73 @@ type ChatServiceClient interface {
 	// the delivery -- there is no row to update and no window to lose.
 	//
 	// Queue the message first (SendAgentMessage), then interrupt.
-	InterruptThread(context.Context, *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error)
+	InterruptThread(context.Context, *v1.InterruptThreadRequest) (*v1.InterruptThreadResponse, error)
 	// ListMessages lists messages for a chat with content blocks
 	// forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
-	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
+	ListMessages(context.Context, *v1.ListMessagesRequest) (*v1.ListMessagesResponse, error)
 	// GetToolResult returns one tool call's full result content. The transcript
 	// read paths send a truncated preview of a large result (ContentBlock.
 	// truncated); this is how the client gets the rest, on demand.
-	GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error)
+	GetToolResult(context.Context, *v1.GetToolResultRequest) (*v1.GetToolResultResponse, error)
 	// GetContentBlockBodies returns the bodies of content blocks that a
 	// transcript read sent elided (ContentBlock.body_elided), by block id. A
 	// block resolves when it belongs to chat_id, or to history a branch of it
 	// inherits (the same rule as GetToolResult). Any other id comes back in
 	// not_found, so the response never says whether an id exists elsewhere.
 	// forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
-	GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error)
+	GetContentBlockBodies(context.Context, *v1.GetContentBlockBodiesRequest) (*v1.GetContentBlockBodiesResponse, error)
 	// UpdateChatState changes chat state (idle/archived)
-	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
+	UpdateChatState(context.Context, *v1.UpdateChatStateRequest) (*v1.UpdateChatStateResponse, error)
 	// TerminateChat forcefully terminates the running workflow for a chat
-	TerminateChat(context.Context, *connect.Request[v1.TerminateChatRequest]) (*connect.Response[v1.TerminateChatResponse], error)
+	TerminateChat(context.Context, *v1.TerminateChatRequest) (*v1.TerminateChatResponse, error)
 	// PauseChat pauses the running workflow (keeps it resumable)
-	PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error)
+	PauseChat(context.Context, *v1.PauseChatRequest) (*v1.PauseChatResponse, error)
 	// ResumeChat resumes a paused or expired workflow
-	ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error)
+	ResumeChat(context.Context, *v1.ResumeChatRequest) (*v1.ResumeChatResponse, error)
 	// RetryUsageLimitWait wakes a run parked until a provider's usage limit
 	// resets ("Retry now"): it retries the step immediately instead of waiting
 	// for the reset. A run that is not waiting is left alone (woken = false).
-	RetryUsageLimitWait(context.Context, *connect.Request[v1.RetryUsageLimitWaitRequest]) (*connect.Response[v1.RetryUsageLimitWaitResponse], error)
+	RetryUsageLimitWait(context.Context, *v1.RetryUsageLimitWaitRequest) (*v1.RetryUsageLimitWaitResponse, error)
 	// DismissChat clears needs_attention state when user views a chat
-	DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error)
+	DismissChat(context.Context, *v1.DismissChatRequest) (*v1.DismissChatResponse, error)
 	// MarkUnreadChat marks a chat as needing attention (mark as unread)
-	MarkUnreadChat(context.Context, *connect.Request[v1.MarkUnreadChatRequest]) (*connect.Response[v1.MarkUnreadChatResponse], error)
+	MarkUnreadChat(context.Context, *v1.MarkUnreadChatRequest) (*v1.MarkUnreadChatResponse, error)
 	// CompactChat triggers manual context compaction for a chat
-	CompactChat(context.Context, *connect.Request[v1.CompactChatRequest]) (*connect.Response[v1.CompactChatResponse], error)
+	CompactChat(context.Context, *v1.CompactChatRequest) (*v1.CompactChatResponse, error)
 	// BranchChat creates a new chat branched from a specific message ordinal
-	BranchChat(context.Context, *connect.Request[v1.BranchChatRequest]) (*connect.Response[v1.BranchChatResponse], error)
+	BranchChat(context.Context, *v1.BranchChatRequest) (*v1.BranchChatResponse, error)
 	// ListBranches lists all chats branched from a parent chat
-	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
+	ListBranches(context.Context, *v1.ListBranchesRequest) (*v1.ListBranchesResponse, error)
 	// UpdateWorkflowParams updates workflow parameters for a running chat
 	// This signals the running workflow to update its inputs (e.g., mode, temperature)
-	UpdateWorkflowParams(context.Context, *connect.Request[v1.UpdateWorkflowParamsRequest]) (*connect.Response[v1.UpdateWorkflowParamsResponse], error)
+	UpdateWorkflowParams(context.Context, *v1.UpdateWorkflowParamsRequest) (*v1.UpdateWorkflowParamsResponse, error)
 	// UpdateChatProviderPolicy sets what the chat does when its provider is rate-limited.
-	UpdateChatProviderPolicy(context.Context, *connect.Request[v1.UpdateChatProviderPolicyRequest]) (*connect.Response[v1.UpdateChatProviderPolicyResponse], error)
+	UpdateChatProviderPolicy(context.Context, *v1.UpdateChatProviderPolicyRequest) (*v1.UpdateChatProviderPolicyResponse, error)
 	// GetChatUpdates fetches chat updates since a sequence number
-	GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error)
+	GetChatUpdates(context.Context, *v1.GetChatUpdatesRequest) (*v1.GetChatUpdatesResponse, error)
 	// ListChatPlans lists plans associated with a chat
-	ListChatPlans(context.Context, *connect.Request[v1.ListChatPlansRequest]) (*connect.Response[v1.ListChatPlansResponse], error)
+	ListChatPlans(context.Context, *v1.ListChatPlansRequest) (*v1.ListChatPlansResponse, error)
 	// GetWorkflowExecutions returns the workflow execution tree for a chat
-	GetWorkflowExecutions(context.Context, *connect.Request[v1.GetWorkflowExecutionsRequest]) (*connect.Response[v1.GetWorkflowExecutionsResponse], error)
+	GetWorkflowExecutions(context.Context, *v1.GetWorkflowExecutionsRequest) (*v1.GetWorkflowExecutionsResponse, error)
 	// ListStepExecutions returns the full record of a chat's steps — resolved
 	// inputs, output and error per attempt — optionally scoped to one node.
 	// What the builder's Run tab inspects a step from.
 	// forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
-	ListStepExecutions(context.Context, *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error)
+	ListStepExecutions(context.Context, *v1.ListStepExecutionsRequest) (*v1.ListStepExecutionsResponse, error)
 	// GetWorkflowNodeExecutions returns the newest node_execution update of each
 	// node of one of a chat's workflow runs: the node state a run-status view
 	// starts from, before it follows the chat stream's live node events. The
 	// chat snapshot does not carry node state.
-	GetWorkflowNodeExecutions(context.Context, *connect.Request[v1.GetWorkflowNodeExecutionsRequest]) (*connect.Response[v1.GetWorkflowNodeExecutionsResponse], error)
+	GetWorkflowNodeExecutions(context.Context, *v1.GetWorkflowNodeExecutionsRequest) (*v1.GetWorkflowNodeExecutionsResponse, error)
 	// GetThreadWorkflowInputs returns the workflow inputs for a specific thread
-	GetThreadWorkflowInputs(context.Context, *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error)
+	GetThreadWorkflowInputs(context.Context, *v1.GetThreadWorkflowInputsRequest) (*v1.GetThreadWorkflowInputsResponse, error)
 	// SetChatDaemon sets the active daemon for a chat session.
 	// The selected daemon is used as the default for tool execution in this chat.
 	// Set daemon_id to empty string to clear and revert to default resolution.
 	// Setting a daemon on a chat with no machine ("Connect a machine") clears
 	// no_machine in the same write; the next turn is offered the full tool set.
 	// The reverse never happens: clearing the daemon leaves no_machine false.
-	SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error)
+	SetChatDaemon(context.Context, *v1.SetChatDaemonRequest) (*v1.SetChatDaemonResponse, error)
 	// MoveChatToProject moves an idle chat to another of the caller's projects.
 	// The chat keeps its history; its next turn runs in the new project's main
 	// checkout, on a machine that has the project (daemon_id when given, else the
@@ -303,481 +555,13 @@ type ChatServiceClient interface {
 	// and for an archived chat. A chat in a branch workspace is refused unless
 	// leave_workspace is set: the workspace belongs to the old project and stays
 	// there. Moving a chat to the project it is already in returns it unchanged.
-	MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error)
+	MoveChatToProject(context.Context, *v1.MoveChatToProjectRequest) (*v1.MoveChatToProjectResponse, error)
 }
 
-// NewChatServiceClient constructs a client for the reliant.v1.ChatService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ChatServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	chatServiceMethods := v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods()
-	return &chatServiceClient{
-		startChat: connect.NewClient[v1.StartChatRequest, v1.StartChatResponse](
-			httpClient,
-			baseURL+ChatServiceStartChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("StartChat")),
-			connect.WithClientOptions(opts...),
-		),
-		runNow: connect.NewClient[v1.RunNowRequest, v1.RunNowResponse](
-			httpClient,
-			baseURL+ChatServiceRunNowProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("RunNow")),
-			connect.WithClientOptions(opts...),
-		),
-		adoptChat: connect.NewClient[v1.AdoptChatRequest, v1.AdoptChatResponse](
-			httpClient,
-			baseURL+ChatServiceAdoptChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("AdoptChat")),
-			connect.WithClientOptions(opts...),
-		),
-		unadoptChat: connect.NewClient[v1.UnadoptChatRequest, v1.UnadoptChatResponse](
-			httpClient,
-			baseURL+ChatServiceUnadoptChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("UnadoptChat")),
-			connect.WithClientOptions(opts...),
-		),
-		listChats: connect.NewClient[v1.ListChatsRequest, v1.ListChatsResponse](
-			httpClient,
-			baseURL+ChatServiceListChatsProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ListChats")),
-			connect.WithClientOptions(opts...),
-		),
-		getChat: connect.NewClient[v1.GetChatRequest, v1.GetChatResponse](
-			httpClient,
-			baseURL+ChatServiceGetChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("GetChat")),
-			connect.WithClientOptions(opts...),
-		),
-		updateChat: connect.NewClient[v1.UpdateChatRequest, v1.UpdateChatResponse](
-			httpClient,
-			baseURL+ChatServiceUpdateChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("UpdateChat")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteChat: connect.NewClient[v1.DeleteChatRequest, v1.DeleteChatResponse](
-			httpClient,
-			baseURL+ChatServiceDeleteChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("DeleteChat")),
-			connect.WithClientOptions(opts...),
-		),
-		searchChats: connect.NewClient[v1.SearchChatsRequest, v1.SearchChatsResponse](
-			httpClient,
-			baseURL+ChatServiceSearchChatsProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("SearchChats")),
-			connect.WithClientOptions(opts...),
-		),
-		listArchivedChats: connect.NewClient[v1.ListArchivedChatsRequest, v1.ListArchivedChatsResponse](
-			httpClient,
-			baseURL+ChatServiceListArchivedChatsProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ListArchivedChats")),
-			connect.WithClientOptions(opts...),
-		),
-		sendMessage: connect.NewClient[v1.SendMessageRequest, v1.SendMessageResponse](
-			httpClient,
-			baseURL+ChatServiceSendMessageProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("SendMessage")),
-			connect.WithClientOptions(opts...),
-		),
-		sendAgentMessage: connect.NewClient[v1.SendAgentMessageRequest, v1.SendAgentMessageResponse](
-			httpClient,
-			baseURL+ChatServiceSendAgentMessageProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("SendAgentMessage")),
-			connect.WithClientOptions(opts...),
-		),
-		listQueuedAgentMessages: connect.NewClient[v1.ListQueuedAgentMessagesRequest, v1.ListQueuedAgentMessagesResponse](
-			httpClient,
-			baseURL+ChatServiceListQueuedAgentMessagesProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ListQueuedAgentMessages")),
-			connect.WithClientOptions(opts...),
-		),
-		cancelQueuedAgentMessage: connect.NewClient[v1.CancelQueuedAgentMessageRequest, v1.CancelQueuedAgentMessageResponse](
-			httpClient,
-			baseURL+ChatServiceCancelQueuedAgentMessageProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("CancelQueuedAgentMessage")),
-			connect.WithClientOptions(opts...),
-		),
-		interruptThread: connect.NewClient[v1.InterruptThreadRequest, v1.InterruptThreadResponse](
-			httpClient,
-			baseURL+ChatServiceInterruptThreadProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("InterruptThread")),
-			connect.WithClientOptions(opts...),
-		),
-		listMessages: connect.NewClient[v1.ListMessagesRequest, v1.ListMessagesResponse](
-			httpClient,
-			baseURL+ChatServiceListMessagesProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ListMessages")),
-			connect.WithClientOptions(opts...),
-		),
-		getToolResult: connect.NewClient[v1.GetToolResultRequest, v1.GetToolResultResponse](
-			httpClient,
-			baseURL+ChatServiceGetToolResultProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
-			connect.WithClientOptions(opts...),
-		),
-		getContentBlockBodies: connect.NewClient[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse](
-			httpClient,
-			baseURL+ChatServiceGetContentBlockBodiesProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
-			connect.WithClientOptions(opts...),
-		),
-		updateChatState: connect.NewClient[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse](
-			httpClient,
-			baseURL+ChatServiceUpdateChatStateProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("UpdateChatState")),
-			connect.WithClientOptions(opts...),
-		),
-		terminateChat: connect.NewClient[v1.TerminateChatRequest, v1.TerminateChatResponse](
-			httpClient,
-			baseURL+ChatServiceTerminateChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("TerminateChat")),
-			connect.WithClientOptions(opts...),
-		),
-		pauseChat: connect.NewClient[v1.PauseChatRequest, v1.PauseChatResponse](
-			httpClient,
-			baseURL+ChatServicePauseChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("PauseChat")),
-			connect.WithClientOptions(opts...),
-		),
-		resumeChat: connect.NewClient[v1.ResumeChatRequest, v1.ResumeChatResponse](
-			httpClient,
-			baseURL+ChatServiceResumeChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ResumeChat")),
-			connect.WithClientOptions(opts...),
-		),
-		retryUsageLimitWait: connect.NewClient[v1.RetryUsageLimitWaitRequest, v1.RetryUsageLimitWaitResponse](
-			httpClient,
-			baseURL+ChatServiceRetryUsageLimitWaitProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("RetryUsageLimitWait")),
-			connect.WithClientOptions(opts...),
-		),
-		dismissChat: connect.NewClient[v1.DismissChatRequest, v1.DismissChatResponse](
-			httpClient,
-			baseURL+ChatServiceDismissChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("DismissChat")),
-			connect.WithClientOptions(opts...),
-		),
-		markUnreadChat: connect.NewClient[v1.MarkUnreadChatRequest, v1.MarkUnreadChatResponse](
-			httpClient,
-			baseURL+ChatServiceMarkUnreadChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("MarkUnreadChat")),
-			connect.WithClientOptions(opts...),
-		),
-		compactChat: connect.NewClient[v1.CompactChatRequest, v1.CompactChatResponse](
-			httpClient,
-			baseURL+ChatServiceCompactChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("CompactChat")),
-			connect.WithClientOptions(opts...),
-		),
-		branchChat: connect.NewClient[v1.BranchChatRequest, v1.BranchChatResponse](
-			httpClient,
-			baseURL+ChatServiceBranchChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("BranchChat")),
-			connect.WithClientOptions(opts...),
-		),
-		listBranches: connect.NewClient[v1.ListBranchesRequest, v1.ListBranchesResponse](
-			httpClient,
-			baseURL+ChatServiceListBranchesProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ListBranches")),
-			connect.WithClientOptions(opts...),
-		),
-		updateWorkflowParams: connect.NewClient[v1.UpdateWorkflowParamsRequest, v1.UpdateWorkflowParamsResponse](
-			httpClient,
-			baseURL+ChatServiceUpdateWorkflowParamsProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("UpdateWorkflowParams")),
-			connect.WithClientOptions(opts...),
-		),
-		updateChatProviderPolicy: connect.NewClient[v1.UpdateChatProviderPolicyRequest, v1.UpdateChatProviderPolicyResponse](
-			httpClient,
-			baseURL+ChatServiceUpdateChatProviderPolicyProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("UpdateChatProviderPolicy")),
-			connect.WithClientOptions(opts...),
-		),
-		getChatUpdates: connect.NewClient[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse](
-			httpClient,
-			baseURL+ChatServiceGetChatUpdatesProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("GetChatUpdates")),
-			connect.WithClientOptions(opts...),
-		),
-		listChatPlans: connect.NewClient[v1.ListChatPlansRequest, v1.ListChatPlansResponse](
-			httpClient,
-			baseURL+ChatServiceListChatPlansProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ListChatPlans")),
-			connect.WithClientOptions(opts...),
-		),
-		getWorkflowExecutions: connect.NewClient[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse](
-			httpClient,
-			baseURL+ChatServiceGetWorkflowExecutionsProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
-			connect.WithClientOptions(opts...),
-		),
-		listStepExecutions: connect.NewClient[v1.ListStepExecutionsRequest, v1.ListStepExecutionsResponse](
-			httpClient,
-			baseURL+ChatServiceListStepExecutionsProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ListStepExecutions")),
-			connect.WithClientOptions(opts...),
-		),
-		getWorkflowNodeExecutions: connect.NewClient[v1.GetWorkflowNodeExecutionsRequest, v1.GetWorkflowNodeExecutionsResponse](
-			httpClient,
-			baseURL+ChatServiceGetWorkflowNodeExecutionsProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("GetWorkflowNodeExecutions")),
-			connect.WithClientOptions(opts...),
-		),
-		getThreadWorkflowInputs: connect.NewClient[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse](
-			httpClient,
-			baseURL+ChatServiceGetThreadWorkflowInputsProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("GetThreadWorkflowInputs")),
-			connect.WithClientOptions(opts...),
-		),
-		setChatDaemon: connect.NewClient[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse](
-			httpClient,
-			baseURL+ChatServiceSetChatDaemonProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("SetChatDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		moveChatToProject: connect.NewClient[v1.MoveChatToProjectRequest, v1.MoveChatToProjectResponse](
-			httpClient,
-			baseURL+ChatServiceMoveChatToProjectProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("MoveChatToProject")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// chatServiceClient implements ChatServiceClient.
-type chatServiceClient struct {
-	startChat                 *connect.Client[v1.StartChatRequest, v1.StartChatResponse]
-	runNow                    *connect.Client[v1.RunNowRequest, v1.RunNowResponse]
-	adoptChat                 *connect.Client[v1.AdoptChatRequest, v1.AdoptChatResponse]
-	unadoptChat               *connect.Client[v1.UnadoptChatRequest, v1.UnadoptChatResponse]
-	listChats                 *connect.Client[v1.ListChatsRequest, v1.ListChatsResponse]
-	getChat                   *connect.Client[v1.GetChatRequest, v1.GetChatResponse]
-	updateChat                *connect.Client[v1.UpdateChatRequest, v1.UpdateChatResponse]
-	deleteChat                *connect.Client[v1.DeleteChatRequest, v1.DeleteChatResponse]
-	searchChats               *connect.Client[v1.SearchChatsRequest, v1.SearchChatsResponse]
-	listArchivedChats         *connect.Client[v1.ListArchivedChatsRequest, v1.ListArchivedChatsResponse]
-	sendMessage               *connect.Client[v1.SendMessageRequest, v1.SendMessageResponse]
-	sendAgentMessage          *connect.Client[v1.SendAgentMessageRequest, v1.SendAgentMessageResponse]
-	listQueuedAgentMessages   *connect.Client[v1.ListQueuedAgentMessagesRequest, v1.ListQueuedAgentMessagesResponse]
-	cancelQueuedAgentMessage  *connect.Client[v1.CancelQueuedAgentMessageRequest, v1.CancelQueuedAgentMessageResponse]
-	interruptThread           *connect.Client[v1.InterruptThreadRequest, v1.InterruptThreadResponse]
-	listMessages              *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
-	getToolResult             *connect.Client[v1.GetToolResultRequest, v1.GetToolResultResponse]
-	getContentBlockBodies     *connect.Client[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse]
-	updateChatState           *connect.Client[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse]
-	terminateChat             *connect.Client[v1.TerminateChatRequest, v1.TerminateChatResponse]
-	pauseChat                 *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
-	resumeChat                *connect.Client[v1.ResumeChatRequest, v1.ResumeChatResponse]
-	retryUsageLimitWait       *connect.Client[v1.RetryUsageLimitWaitRequest, v1.RetryUsageLimitWaitResponse]
-	dismissChat               *connect.Client[v1.DismissChatRequest, v1.DismissChatResponse]
-	markUnreadChat            *connect.Client[v1.MarkUnreadChatRequest, v1.MarkUnreadChatResponse]
-	compactChat               *connect.Client[v1.CompactChatRequest, v1.CompactChatResponse]
-	branchChat                *connect.Client[v1.BranchChatRequest, v1.BranchChatResponse]
-	listBranches              *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
-	updateWorkflowParams      *connect.Client[v1.UpdateWorkflowParamsRequest, v1.UpdateWorkflowParamsResponse]
-	updateChatProviderPolicy  *connect.Client[v1.UpdateChatProviderPolicyRequest, v1.UpdateChatProviderPolicyResponse]
-	getChatUpdates            *connect.Client[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse]
-	listChatPlans             *connect.Client[v1.ListChatPlansRequest, v1.ListChatPlansResponse]
-	getWorkflowExecutions     *connect.Client[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse]
-	listStepExecutions        *connect.Client[v1.ListStepExecutionsRequest, v1.ListStepExecutionsResponse]
-	getWorkflowNodeExecutions *connect.Client[v1.GetWorkflowNodeExecutionsRequest, v1.GetWorkflowNodeExecutionsResponse]
-	getThreadWorkflowInputs   *connect.Client[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse]
-	setChatDaemon             *connect.Client[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse]
-	moveChatToProject         *connect.Client[v1.MoveChatToProjectRequest, v1.MoveChatToProjectResponse]
-}
-
-// StartChat calls reliant.v1.ChatService.StartChat.
-func (c *chatServiceClient) StartChat(ctx context.Context, req *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error) {
-	return c.startChat.CallUnary(ctx, req)
-}
-
-// RunNow calls reliant.v1.ChatService.RunNow.
-func (c *chatServiceClient) RunNow(ctx context.Context, req *connect.Request[v1.RunNowRequest]) (*connect.Response[v1.RunNowResponse], error) {
-	return c.runNow.CallUnary(ctx, req)
-}
-
-// AdoptChat calls reliant.v1.ChatService.AdoptChat.
-func (c *chatServiceClient) AdoptChat(ctx context.Context, req *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error) {
-	return c.adoptChat.CallUnary(ctx, req)
-}
-
-// UnadoptChat calls reliant.v1.ChatService.UnadoptChat.
-func (c *chatServiceClient) UnadoptChat(ctx context.Context, req *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error) {
-	return c.unadoptChat.CallUnary(ctx, req)
-}
-
-// ListChats calls reliant.v1.ChatService.ListChats.
-func (c *chatServiceClient) ListChats(ctx context.Context, req *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error) {
-	return c.listChats.CallUnary(ctx, req)
-}
-
-// GetChat calls reliant.v1.ChatService.GetChat.
-func (c *chatServiceClient) GetChat(ctx context.Context, req *connect.Request[v1.GetChatRequest]) (*connect.Response[v1.GetChatResponse], error) {
-	return c.getChat.CallUnary(ctx, req)
-}
-
-// UpdateChat calls reliant.v1.ChatService.UpdateChat.
-func (c *chatServiceClient) UpdateChat(ctx context.Context, req *connect.Request[v1.UpdateChatRequest]) (*connect.Response[v1.UpdateChatResponse], error) {
-	return c.updateChat.CallUnary(ctx, req)
-}
-
-// DeleteChat calls reliant.v1.ChatService.DeleteChat.
-func (c *chatServiceClient) DeleteChat(ctx context.Context, req *connect.Request[v1.DeleteChatRequest]) (*connect.Response[v1.DeleteChatResponse], error) {
-	return c.deleteChat.CallUnary(ctx, req)
-}
-
-// SearchChats calls reliant.v1.ChatService.SearchChats.
-func (c *chatServiceClient) SearchChats(ctx context.Context, req *connect.Request[v1.SearchChatsRequest]) (*connect.Response[v1.SearchChatsResponse], error) {
-	return c.searchChats.CallUnary(ctx, req)
-}
-
-// ListArchivedChats calls reliant.v1.ChatService.ListArchivedChats.
-func (c *chatServiceClient) ListArchivedChats(ctx context.Context, req *connect.Request[v1.ListArchivedChatsRequest]) (*connect.Response[v1.ListArchivedChatsResponse], error) {
-	return c.listArchivedChats.CallUnary(ctx, req)
-}
-
-// SendMessage calls reliant.v1.ChatService.SendMessage.
-func (c *chatServiceClient) SendMessage(ctx context.Context, req *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {
-	return c.sendMessage.CallUnary(ctx, req)
-}
-
-// SendAgentMessage calls reliant.v1.ChatService.SendAgentMessage.
-func (c *chatServiceClient) SendAgentMessage(ctx context.Context, req *connect.Request[v1.SendAgentMessageRequest]) (*connect.Response[v1.SendAgentMessageResponse], error) {
-	return c.sendAgentMessage.CallUnary(ctx, req)
-}
-
-// ListQueuedAgentMessages calls reliant.v1.ChatService.ListQueuedAgentMessages.
-func (c *chatServiceClient) ListQueuedAgentMessages(ctx context.Context, req *connect.Request[v1.ListQueuedAgentMessagesRequest]) (*connect.Response[v1.ListQueuedAgentMessagesResponse], error) {
-	return c.listQueuedAgentMessages.CallUnary(ctx, req)
-}
-
-// CancelQueuedAgentMessage calls reliant.v1.ChatService.CancelQueuedAgentMessage.
-func (c *chatServiceClient) CancelQueuedAgentMessage(ctx context.Context, req *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error) {
-	return c.cancelQueuedAgentMessage.CallUnary(ctx, req)
-}
-
-// InterruptThread calls reliant.v1.ChatService.InterruptThread.
-func (c *chatServiceClient) InterruptThread(ctx context.Context, req *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error) {
-	return c.interruptThread.CallUnary(ctx, req)
-}
-
-// ListMessages calls reliant.v1.ChatService.ListMessages.
-func (c *chatServiceClient) ListMessages(ctx context.Context, req *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {
-	return c.listMessages.CallUnary(ctx, req)
-}
-
-// GetToolResult calls reliant.v1.ChatService.GetToolResult.
-func (c *chatServiceClient) GetToolResult(ctx context.Context, req *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error) {
-	return c.getToolResult.CallUnary(ctx, req)
-}
-
-// GetContentBlockBodies calls reliant.v1.ChatService.GetContentBlockBodies.
-func (c *chatServiceClient) GetContentBlockBodies(ctx context.Context, req *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error) {
-	return c.getContentBlockBodies.CallUnary(ctx, req)
-}
-
-// UpdateChatState calls reliant.v1.ChatService.UpdateChatState.
-func (c *chatServiceClient) UpdateChatState(ctx context.Context, req *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error) {
-	return c.updateChatState.CallUnary(ctx, req)
-}
-
-// TerminateChat calls reliant.v1.ChatService.TerminateChat.
-func (c *chatServiceClient) TerminateChat(ctx context.Context, req *connect.Request[v1.TerminateChatRequest]) (*connect.Response[v1.TerminateChatResponse], error) {
-	return c.terminateChat.CallUnary(ctx, req)
-}
-
-// PauseChat calls reliant.v1.ChatService.PauseChat.
-func (c *chatServiceClient) PauseChat(ctx context.Context, req *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error) {
-	return c.pauseChat.CallUnary(ctx, req)
-}
-
-// ResumeChat calls reliant.v1.ChatService.ResumeChat.
-func (c *chatServiceClient) ResumeChat(ctx context.Context, req *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error) {
-	return c.resumeChat.CallUnary(ctx, req)
-}
-
-// RetryUsageLimitWait calls reliant.v1.ChatService.RetryUsageLimitWait.
-func (c *chatServiceClient) RetryUsageLimitWait(ctx context.Context, req *connect.Request[v1.RetryUsageLimitWaitRequest]) (*connect.Response[v1.RetryUsageLimitWaitResponse], error) {
-	return c.retryUsageLimitWait.CallUnary(ctx, req)
-}
-
-// DismissChat calls reliant.v1.ChatService.DismissChat.
-func (c *chatServiceClient) DismissChat(ctx context.Context, req *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error) {
-	return c.dismissChat.CallUnary(ctx, req)
-}
-
-// MarkUnreadChat calls reliant.v1.ChatService.MarkUnreadChat.
-func (c *chatServiceClient) MarkUnreadChat(ctx context.Context, req *connect.Request[v1.MarkUnreadChatRequest]) (*connect.Response[v1.MarkUnreadChatResponse], error) {
-	return c.markUnreadChat.CallUnary(ctx, req)
-}
-
-// CompactChat calls reliant.v1.ChatService.CompactChat.
-func (c *chatServiceClient) CompactChat(ctx context.Context, req *connect.Request[v1.CompactChatRequest]) (*connect.Response[v1.CompactChatResponse], error) {
-	return c.compactChat.CallUnary(ctx, req)
-}
-
-// BranchChat calls reliant.v1.ChatService.BranchChat.
-func (c *chatServiceClient) BranchChat(ctx context.Context, req *connect.Request[v1.BranchChatRequest]) (*connect.Response[v1.BranchChatResponse], error) {
-	return c.branchChat.CallUnary(ctx, req)
-}
-
-// ListBranches calls reliant.v1.ChatService.ListBranches.
-func (c *chatServiceClient) ListBranches(ctx context.Context, req *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error) {
-	return c.listBranches.CallUnary(ctx, req)
-}
-
-// UpdateWorkflowParams calls reliant.v1.ChatService.UpdateWorkflowParams.
-func (c *chatServiceClient) UpdateWorkflowParams(ctx context.Context, req *connect.Request[v1.UpdateWorkflowParamsRequest]) (*connect.Response[v1.UpdateWorkflowParamsResponse], error) {
-	return c.updateWorkflowParams.CallUnary(ctx, req)
-}
-
-// UpdateChatProviderPolicy calls reliant.v1.ChatService.UpdateChatProviderPolicy.
-func (c *chatServiceClient) UpdateChatProviderPolicy(ctx context.Context, req *connect.Request[v1.UpdateChatProviderPolicyRequest]) (*connect.Response[v1.UpdateChatProviderPolicyResponse], error) {
-	return c.updateChatProviderPolicy.CallUnary(ctx, req)
-}
-
-// GetChatUpdates calls reliant.v1.ChatService.GetChatUpdates.
-func (c *chatServiceClient) GetChatUpdates(ctx context.Context, req *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error) {
-	return c.getChatUpdates.CallUnary(ctx, req)
-}
-
-// ListChatPlans calls reliant.v1.ChatService.ListChatPlans.
-func (c *chatServiceClient) ListChatPlans(ctx context.Context, req *connect.Request[v1.ListChatPlansRequest]) (*connect.Response[v1.ListChatPlansResponse], error) {
-	return c.listChatPlans.CallUnary(ctx, req)
-}
-
-// GetWorkflowExecutions calls reliant.v1.ChatService.GetWorkflowExecutions.
-func (c *chatServiceClient) GetWorkflowExecutions(ctx context.Context, req *connect.Request[v1.GetWorkflowExecutionsRequest]) (*connect.Response[v1.GetWorkflowExecutionsResponse], error) {
-	return c.getWorkflowExecutions.CallUnary(ctx, req)
-}
-
-// ListStepExecutions calls reliant.v1.ChatService.ListStepExecutions.
-func (c *chatServiceClient) ListStepExecutions(ctx context.Context, req *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error) {
-	return c.listStepExecutions.CallUnary(ctx, req)
-}
-
-// GetWorkflowNodeExecutions calls reliant.v1.ChatService.GetWorkflowNodeExecutions.
-func (c *chatServiceClient) GetWorkflowNodeExecutions(ctx context.Context, req *connect.Request[v1.GetWorkflowNodeExecutionsRequest]) (*connect.Response[v1.GetWorkflowNodeExecutionsResponse], error) {
-	return c.getWorkflowNodeExecutions.CallUnary(ctx, req)
-}
-
-// GetThreadWorkflowInputs calls reliant.v1.ChatService.GetThreadWorkflowInputs.
-func (c *chatServiceClient) GetThreadWorkflowInputs(ctx context.Context, req *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error) {
-	return c.getThreadWorkflowInputs.CallUnary(ctx, req)
-}
-
-// SetChatDaemon calls reliant.v1.ChatService.SetChatDaemon.
-func (c *chatServiceClient) SetChatDaemon(ctx context.Context, req *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error) {
-	return c.setChatDaemon.CallUnary(ctx, req)
-}
-
-// MoveChatToProject calls reliant.v1.ChatService.MoveChatToProject.
-func (c *chatServiceClient) MoveChatToProject(ctx context.Context, req *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error) {
-	return c.moveChatToProject.CallUnary(ctx, req)
+// NewChatServiceClient constructs a client for the reliant.v1.ChatService service. Multiple service
+// clients may share a single connect.Client.
+func NewChatServiceClient(client *connect.Client) ChatServiceClient {
+	return &chatServiceClient{client: client}
 }
 
 // ChatServiceHandler is an implementation of the reliant.v1.ChatService service.
@@ -793,7 +577,7 @@ type ChatServiceHandler interface {
 	// start records a trigger_events row whose dedupe key is the chat id, so
 	// "a chat starts exactly once" is a database invariant rather than client
 	// discipline. See research/TRIGGERS.md.
-	StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error)
+	StartChat(context.Context, *v1.StartChatRequest) (*v1.StartChatResponse, error)
 	// RunNow starts a workflow by hand, from its detail page's "Run now". It is
 	// StartChat's attended start with its own launch kind (manual.run), and it
 	// works for a workflow whose Chat trigger is off (automation_only): pressing
@@ -802,34 +586,34 @@ type ChatServiceHandler interface {
 	// Owner-only by construction: the run is the caller's, resolved against the
 	// caller's workflows. It is not an agent tool, and manual.run is not a launch
 	// kind StartChat can be asked for.
-	RunNow(context.Context, *connect.Request[v1.RunNowRequest]) (*connect.Response[v1.RunNowResponse], error)
+	RunNow(context.Context, *v1.RunNowRequest) (*v1.RunNowResponse, error)
 	// AdoptChat takes a run (typically an automation's) into the caller's own
 	// chats: sets adopted_at, which lists it in the sidebar, and makes the NEXT
 	// root run started by SendMessage attended. Idempotent; owner-only.
-	AdoptChat(context.Context, *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error)
+	AdoptChat(context.Context, *v1.AdoptChatRequest) (*v1.AdoptChatResponse, error)
 	// UnadoptChat clears adopted_at. It is not archive: the run stays in Runs.
 	// Idempotent; owner-only.
-	UnadoptChat(context.Context, *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error)
+	UnadoptChat(context.Context, *v1.UnadoptChatRequest) (*v1.UnadoptChatResponse, error)
 	// ListChats lists all non-archived chats for a project
 	// forge:custom — the caller's non-archived chats in one project, with the user update sequence the stream resumes from
-	ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error)
+	ListChats(context.Context, *v1.ListChatsRequest) (*v1.ListChatsResponse, error)
 	// GetChat retrieves a specific chat by ID
 	// forge:custom — owner-checked, and reports the run's live Temporal state alongside the chat row
-	GetChat(context.Context, *connect.Request[v1.GetChatRequest]) (*connect.Response[v1.GetChatResponse], error)
+	GetChat(context.Context, *v1.GetChatRequest) (*v1.GetChatResponse, error)
 	// UpdateChat updates chat metadata (title, temperature, etc.)
 	// forge:custom — a partial update that resolves the worktree and emits title/config change events
-	UpdateChat(context.Context, *connect.Request[v1.UpdateChatRequest]) (*connect.Response[v1.UpdateChatResponse], error)
+	UpdateChat(context.Context, *v1.UpdateChatRequest) (*v1.UpdateChatResponse, error)
 	// DeleteChat permanently deletes an archived chat. A chat that is not
 	// archived is refused (FailedPrecondition): archive it with UpdateChatState
 	// first, so a delete can never silently be an archive, or the reverse.
 	// forge:custom — refuses a chat that is not archived, and cancels its run before deleting
-	DeleteChat(context.Context, *connect.Request[v1.DeleteChatRequest]) (*connect.Response[v1.DeleteChatResponse], error)
+	DeleteChat(context.Context, *v1.DeleteChatRequest) (*v1.DeleteChatResponse, error)
 	// SearchChats searches chats by title and message content
-	SearchChats(context.Context, *connect.Request[v1.SearchChatsRequest]) (*connect.Response[v1.SearchChatsResponse], error)
+	SearchChats(context.Context, *v1.SearchChatsRequest) (*v1.SearchChatsResponse, error)
 	// ListArchivedChats lists all archived chats with worktree info
-	ListArchivedChats(context.Context, *connect.Request[v1.ListArchivedChatsRequest]) (*connect.Response[v1.ListArchivedChatsResponse], error)
+	ListArchivedChats(context.Context, *v1.ListArchivedChatsRequest) (*v1.ListArchivedChatsResponse, error)
 	// SendMessage sends a user message to a chat and continues workflow
-	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
+	SendMessage(context.Context, *v1.SendMessageRequest) (*v1.SendMessageResponse, error)
 	// SendAgentMessage lets a human queue a message into a SPECIFIC running
 	// thread's mailbox (the agent_messages table) without pausing or otherwise
 	// touching the chat's workflow/pause state. This is the human-facing
@@ -838,18 +622,18 @@ type ChatServiceHandler interface {
 	//
 	// The message is delivered at the target thread's next agent-loop step
 	// boundary, same as spawn_send. It is queued, not delivered synchronously.
-	SendAgentMessage(context.Context, *connect.Request[v1.SendAgentMessageRequest]) (*connect.Response[v1.SendAgentMessageResponse], error)
+	SendAgentMessage(context.Context, *v1.SendAgentMessageRequest) (*v1.SendAgentMessageResponse, error)
 	// ListQueuedAgentMessages returns the messages currently sitting in a
 	// thread's mailbox (agent_messages) with status = queued -- i.e. sent via
 	// SendAgentMessage or spawn_send but not yet drained into that thread's
 	// history. This is what lets a human see what they queued instead of it
 	// being invisible until the agent happens to drain it.
-	ListQueuedAgentMessages(context.Context, *connect.Request[v1.ListQueuedAgentMessagesRequest]) (*connect.Response[v1.ListQueuedAgentMessagesResponse], error)
+	ListQueuedAgentMessages(context.Context, *v1.ListQueuedAgentMessagesRequest) (*v1.ListQueuedAgentMessagesResponse, error)
 	// CancelQueuedAgentMessage revokes a single queued mailbox entry before
 	// the target agent drains it. This is a race against the agent's own loop
 	// boundary -- see CancelQueuedAgentMessageResponse for the honesty
 	// contract when the message was already delivered.
-	CancelQueuedAgentMessage(context.Context, *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error)
+	CancelQueuedAgentMessage(context.Context, *v1.CancelQueuedAgentMessageRequest) (*v1.CancelQueuedAgentMessageResponse, error)
 	// InterruptThread stops what a thread is doing right now so it reads its
 	// mailbox at once, instead of at the end of the work already in flight.
 	//
@@ -868,73 +652,73 @@ type ChatServiceHandler interface {
 	// the delivery -- there is no row to update and no window to lose.
 	//
 	// Queue the message first (SendAgentMessage), then interrupt.
-	InterruptThread(context.Context, *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error)
+	InterruptThread(context.Context, *v1.InterruptThreadRequest) (*v1.InterruptThreadResponse, error)
 	// ListMessages lists messages for a chat with content blocks
 	// forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
-	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
+	ListMessages(context.Context, *v1.ListMessagesRequest) (*v1.ListMessagesResponse, error)
 	// GetToolResult returns one tool call's full result content. The transcript
 	// read paths send a truncated preview of a large result (ContentBlock.
 	// truncated); this is how the client gets the rest, on demand.
-	GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error)
+	GetToolResult(context.Context, *v1.GetToolResultRequest) (*v1.GetToolResultResponse, error)
 	// GetContentBlockBodies returns the bodies of content blocks that a
 	// transcript read sent elided (ContentBlock.body_elided), by block id. A
 	// block resolves when it belongs to chat_id, or to history a branch of it
 	// inherits (the same rule as GetToolResult). Any other id comes back in
 	// not_found, so the response never says whether an id exists elsewhere.
 	// forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
-	GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error)
+	GetContentBlockBodies(context.Context, *v1.GetContentBlockBodiesRequest) (*v1.GetContentBlockBodiesResponse, error)
 	// UpdateChatState changes chat state (idle/archived)
-	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
+	UpdateChatState(context.Context, *v1.UpdateChatStateRequest) (*v1.UpdateChatStateResponse, error)
 	// TerminateChat forcefully terminates the running workflow for a chat
-	TerminateChat(context.Context, *connect.Request[v1.TerminateChatRequest]) (*connect.Response[v1.TerminateChatResponse], error)
+	TerminateChat(context.Context, *v1.TerminateChatRequest) (*v1.TerminateChatResponse, error)
 	// PauseChat pauses the running workflow (keeps it resumable)
-	PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error)
+	PauseChat(context.Context, *v1.PauseChatRequest) (*v1.PauseChatResponse, error)
 	// ResumeChat resumes a paused or expired workflow
-	ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error)
+	ResumeChat(context.Context, *v1.ResumeChatRequest) (*v1.ResumeChatResponse, error)
 	// RetryUsageLimitWait wakes a run parked until a provider's usage limit
 	// resets ("Retry now"): it retries the step immediately instead of waiting
 	// for the reset. A run that is not waiting is left alone (woken = false).
-	RetryUsageLimitWait(context.Context, *connect.Request[v1.RetryUsageLimitWaitRequest]) (*connect.Response[v1.RetryUsageLimitWaitResponse], error)
+	RetryUsageLimitWait(context.Context, *v1.RetryUsageLimitWaitRequest) (*v1.RetryUsageLimitWaitResponse, error)
 	// DismissChat clears needs_attention state when user views a chat
-	DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error)
+	DismissChat(context.Context, *v1.DismissChatRequest) (*v1.DismissChatResponse, error)
 	// MarkUnreadChat marks a chat as needing attention (mark as unread)
-	MarkUnreadChat(context.Context, *connect.Request[v1.MarkUnreadChatRequest]) (*connect.Response[v1.MarkUnreadChatResponse], error)
+	MarkUnreadChat(context.Context, *v1.MarkUnreadChatRequest) (*v1.MarkUnreadChatResponse, error)
 	// CompactChat triggers manual context compaction for a chat
-	CompactChat(context.Context, *connect.Request[v1.CompactChatRequest]) (*connect.Response[v1.CompactChatResponse], error)
+	CompactChat(context.Context, *v1.CompactChatRequest) (*v1.CompactChatResponse, error)
 	// BranchChat creates a new chat branched from a specific message ordinal
-	BranchChat(context.Context, *connect.Request[v1.BranchChatRequest]) (*connect.Response[v1.BranchChatResponse], error)
+	BranchChat(context.Context, *v1.BranchChatRequest) (*v1.BranchChatResponse, error)
 	// ListBranches lists all chats branched from a parent chat
-	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
+	ListBranches(context.Context, *v1.ListBranchesRequest) (*v1.ListBranchesResponse, error)
 	// UpdateWorkflowParams updates workflow parameters for a running chat
 	// This signals the running workflow to update its inputs (e.g., mode, temperature)
-	UpdateWorkflowParams(context.Context, *connect.Request[v1.UpdateWorkflowParamsRequest]) (*connect.Response[v1.UpdateWorkflowParamsResponse], error)
+	UpdateWorkflowParams(context.Context, *v1.UpdateWorkflowParamsRequest) (*v1.UpdateWorkflowParamsResponse, error)
 	// UpdateChatProviderPolicy sets what the chat does when its provider is rate-limited.
-	UpdateChatProviderPolicy(context.Context, *connect.Request[v1.UpdateChatProviderPolicyRequest]) (*connect.Response[v1.UpdateChatProviderPolicyResponse], error)
+	UpdateChatProviderPolicy(context.Context, *v1.UpdateChatProviderPolicyRequest) (*v1.UpdateChatProviderPolicyResponse, error)
 	// GetChatUpdates fetches chat updates since a sequence number
-	GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error)
+	GetChatUpdates(context.Context, *v1.GetChatUpdatesRequest) (*v1.GetChatUpdatesResponse, error)
 	// ListChatPlans lists plans associated with a chat
-	ListChatPlans(context.Context, *connect.Request[v1.ListChatPlansRequest]) (*connect.Response[v1.ListChatPlansResponse], error)
+	ListChatPlans(context.Context, *v1.ListChatPlansRequest) (*v1.ListChatPlansResponse, error)
 	// GetWorkflowExecutions returns the workflow execution tree for a chat
-	GetWorkflowExecutions(context.Context, *connect.Request[v1.GetWorkflowExecutionsRequest]) (*connect.Response[v1.GetWorkflowExecutionsResponse], error)
+	GetWorkflowExecutions(context.Context, *v1.GetWorkflowExecutionsRequest) (*v1.GetWorkflowExecutionsResponse, error)
 	// ListStepExecutions returns the full record of a chat's steps — resolved
 	// inputs, output and error per attempt — optionally scoped to one node.
 	// What the builder's Run tab inspects a step from.
 	// forge:custom — a chat's step records per attempt, scoped by node_path and bounded to the newest steps
-	ListStepExecutions(context.Context, *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error)
+	ListStepExecutions(context.Context, *v1.ListStepExecutionsRequest) (*v1.ListStepExecutionsResponse, error)
 	// GetWorkflowNodeExecutions returns the newest node_execution update of each
 	// node of one of a chat's workflow runs: the node state a run-status view
 	// starts from, before it follows the chat stream's live node events. The
 	// chat snapshot does not carry node state.
-	GetWorkflowNodeExecutions(context.Context, *connect.Request[v1.GetWorkflowNodeExecutionsRequest]) (*connect.Response[v1.GetWorkflowNodeExecutionsResponse], error)
+	GetWorkflowNodeExecutions(context.Context, *v1.GetWorkflowNodeExecutionsRequest) (*v1.GetWorkflowNodeExecutionsResponse, error)
 	// GetThreadWorkflowInputs returns the workflow inputs for a specific thread
-	GetThreadWorkflowInputs(context.Context, *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error)
+	GetThreadWorkflowInputs(context.Context, *v1.GetThreadWorkflowInputsRequest) (*v1.GetThreadWorkflowInputsResponse, error)
 	// SetChatDaemon sets the active daemon for a chat session.
 	// The selected daemon is used as the default for tool execution in this chat.
 	// Set daemon_id to empty string to clear and revert to default resolution.
 	// Setting a daemon on a chat with no machine ("Connect a machine") clears
 	// no_machine in the same write; the next turn is offered the full tool set.
 	// The reverse never happens: clearing the daemon leaves no_machine false.
-	SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error)
+	SetChatDaemon(context.Context, *v1.SetChatDaemonRequest) (*v1.SetChatDaemonResponse, error)
 	// MoveChatToProject moves an idle chat to another of the caller's projects.
 	// The chat keeps its history; its next turn runs in the new project's main
 	// checkout, on a machine that has the project (daemon_id when given, else the
@@ -947,479 +731,971 @@ type ChatServiceHandler interface {
 	// and for an archived chat. A chat in a branch workspace is refused unless
 	// leave_workspace is set: the workspace belongs to the old project and stays
 	// there. Moving a chat to the project it is already in returns it unchanged.
-	MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error)
+	MoveChatToProject(context.Context, *v1.MoveChatToProjectRequest) (*v1.MoveChatToProjectResponse, error)
 }
 
-// NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	chatServiceMethods := v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods()
-	chatServiceStartChatHandler := connect.NewUnaryHandler(
-		ChatServiceStartChatProcedure,
-		svc.StartChat,
-		connect.WithSchema(chatServiceMethods.ByName("StartChat")),
-		connect.WithHandlerOptions(opts...),
+// RegisterChatServiceHandler registers svc as the reliant.v1.ChatService implementation on server.
+func RegisterChatServiceHandler(server *connect.Server, svc ChatServiceHandler) {
+	adapter := chatServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: chatServiceStartChatSpec(), Handler: adapter.startChat},
+		connect.Method{Spec: chatServiceRunNowSpec(), Handler: adapter.runNow},
+		connect.Method{Spec: chatServiceAdoptChatSpec(), Handler: adapter.adoptChat},
+		connect.Method{Spec: chatServiceUnadoptChatSpec(), Handler: adapter.unadoptChat},
+		connect.Method{Spec: chatServiceListChatsSpec(), Handler: adapter.listChats},
+		connect.Method{Spec: chatServiceGetChatSpec(), Handler: adapter.getChat},
+		connect.Method{Spec: chatServiceUpdateChatSpec(), Handler: adapter.updateChat},
+		connect.Method{Spec: chatServiceDeleteChatSpec(), Handler: adapter.deleteChat},
+		connect.Method{Spec: chatServiceSearchChatsSpec(), Handler: adapter.searchChats},
+		connect.Method{Spec: chatServiceListArchivedChatsSpec(), Handler: adapter.listArchivedChats},
+		connect.Method{Spec: chatServiceSendMessageSpec(), Handler: adapter.sendMessage},
+		connect.Method{Spec: chatServiceSendAgentMessageSpec(), Handler: adapter.sendAgentMessage},
+		connect.Method{Spec: chatServiceListQueuedAgentMessagesSpec(), Handler: adapter.listQueuedAgentMessages},
+		connect.Method{Spec: chatServiceCancelQueuedAgentMessageSpec(), Handler: adapter.cancelQueuedAgentMessage},
+		connect.Method{Spec: chatServiceInterruptThreadSpec(), Handler: adapter.interruptThread},
+		connect.Method{Spec: chatServiceListMessagesSpec(), Handler: adapter.listMessages},
+		connect.Method{Spec: chatServiceGetToolResultSpec(), Handler: adapter.getToolResult},
+		connect.Method{Spec: chatServiceGetContentBlockBodiesSpec(), Handler: adapter.getContentBlockBodies},
+		connect.Method{Spec: chatServiceUpdateChatStateSpec(), Handler: adapter.updateChatState},
+		connect.Method{Spec: chatServiceTerminateChatSpec(), Handler: adapter.terminateChat},
+		connect.Method{Spec: chatServicePauseChatSpec(), Handler: adapter.pauseChat},
+		connect.Method{Spec: chatServiceResumeChatSpec(), Handler: adapter.resumeChat},
+		connect.Method{Spec: chatServiceRetryUsageLimitWaitSpec(), Handler: adapter.retryUsageLimitWait},
+		connect.Method{Spec: chatServiceDismissChatSpec(), Handler: adapter.dismissChat},
+		connect.Method{Spec: chatServiceMarkUnreadChatSpec(), Handler: adapter.markUnreadChat},
+		connect.Method{Spec: chatServiceCompactChatSpec(), Handler: adapter.compactChat},
+		connect.Method{Spec: chatServiceBranchChatSpec(), Handler: adapter.branchChat},
+		connect.Method{Spec: chatServiceListBranchesSpec(), Handler: adapter.listBranches},
+		connect.Method{Spec: chatServiceUpdateWorkflowParamsSpec(), Handler: adapter.updateWorkflowParams},
+		connect.Method{Spec: chatServiceUpdateChatProviderPolicySpec(), Handler: adapter.updateChatProviderPolicy},
+		connect.Method{Spec: chatServiceGetChatUpdatesSpec(), Handler: adapter.getChatUpdates},
+		connect.Method{Spec: chatServiceListChatPlansSpec(), Handler: adapter.listChatPlans},
+		connect.Method{Spec: chatServiceGetWorkflowExecutionsSpec(), Handler: adapter.getWorkflowExecutions},
+		connect.Method{Spec: chatServiceListStepExecutionsSpec(), Handler: adapter.listStepExecutions},
+		connect.Method{Spec: chatServiceGetWorkflowNodeExecutionsSpec(), Handler: adapter.getWorkflowNodeExecutions},
+		connect.Method{Spec: chatServiceGetThreadWorkflowInputsSpec(), Handler: adapter.getThreadWorkflowInputs},
+		connect.Method{Spec: chatServiceSetChatDaemonSpec(), Handler: adapter.setChatDaemon},
+		connect.Method{Spec: chatServiceMoveChatToProjectSpec(), Handler: adapter.moveChatToProject},
 	)
-	chatServiceRunNowHandler := connect.NewUnaryHandler(
-		ChatServiceRunNowProcedure,
-		svc.RunNow,
-		connect.WithSchema(chatServiceMethods.ByName("RunNow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceAdoptChatHandler := connect.NewUnaryHandler(
-		ChatServiceAdoptChatProcedure,
-		svc.AdoptChat,
-		connect.WithSchema(chatServiceMethods.ByName("AdoptChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceUnadoptChatHandler := connect.NewUnaryHandler(
-		ChatServiceUnadoptChatProcedure,
-		svc.UnadoptChat,
-		connect.WithSchema(chatServiceMethods.ByName("UnadoptChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceListChatsHandler := connect.NewUnaryHandler(
-		ChatServiceListChatsProcedure,
-		svc.ListChats,
-		connect.WithSchema(chatServiceMethods.ByName("ListChats")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceGetChatHandler := connect.NewUnaryHandler(
-		ChatServiceGetChatProcedure,
-		svc.GetChat,
-		connect.WithSchema(chatServiceMethods.ByName("GetChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceUpdateChatHandler := connect.NewUnaryHandler(
-		ChatServiceUpdateChatProcedure,
-		svc.UpdateChat,
-		connect.WithSchema(chatServiceMethods.ByName("UpdateChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceDeleteChatHandler := connect.NewUnaryHandler(
-		ChatServiceDeleteChatProcedure,
-		svc.DeleteChat,
-		connect.WithSchema(chatServiceMethods.ByName("DeleteChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceSearchChatsHandler := connect.NewUnaryHandler(
-		ChatServiceSearchChatsProcedure,
-		svc.SearchChats,
-		connect.WithSchema(chatServiceMethods.ByName("SearchChats")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceListArchivedChatsHandler := connect.NewUnaryHandler(
-		ChatServiceListArchivedChatsProcedure,
-		svc.ListArchivedChats,
-		connect.WithSchema(chatServiceMethods.ByName("ListArchivedChats")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceSendMessageHandler := connect.NewUnaryHandler(
-		ChatServiceSendMessageProcedure,
-		svc.SendMessage,
-		connect.WithSchema(chatServiceMethods.ByName("SendMessage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceSendAgentMessageHandler := connect.NewUnaryHandler(
-		ChatServiceSendAgentMessageProcedure,
-		svc.SendAgentMessage,
-		connect.WithSchema(chatServiceMethods.ByName("SendAgentMessage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceListQueuedAgentMessagesHandler := connect.NewUnaryHandler(
-		ChatServiceListQueuedAgentMessagesProcedure,
-		svc.ListQueuedAgentMessages,
-		connect.WithSchema(chatServiceMethods.ByName("ListQueuedAgentMessages")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceCancelQueuedAgentMessageHandler := connect.NewUnaryHandler(
-		ChatServiceCancelQueuedAgentMessageProcedure,
-		svc.CancelQueuedAgentMessage,
-		connect.WithSchema(chatServiceMethods.ByName("CancelQueuedAgentMessage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceInterruptThreadHandler := connect.NewUnaryHandler(
-		ChatServiceInterruptThreadProcedure,
-		svc.InterruptThread,
-		connect.WithSchema(chatServiceMethods.ByName("InterruptThread")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceListMessagesHandler := connect.NewUnaryHandler(
-		ChatServiceListMessagesProcedure,
-		svc.ListMessages,
-		connect.WithSchema(chatServiceMethods.ByName("ListMessages")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceGetToolResultHandler := connect.NewUnaryHandler(
-		ChatServiceGetToolResultProcedure,
-		svc.GetToolResult,
-		connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceGetContentBlockBodiesHandler := connect.NewUnaryHandler(
-		ChatServiceGetContentBlockBodiesProcedure,
-		svc.GetContentBlockBodies,
-		connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceUpdateChatStateHandler := connect.NewUnaryHandler(
-		ChatServiceUpdateChatStateProcedure,
-		svc.UpdateChatState,
-		connect.WithSchema(chatServiceMethods.ByName("UpdateChatState")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceTerminateChatHandler := connect.NewUnaryHandler(
-		ChatServiceTerminateChatProcedure,
-		svc.TerminateChat,
-		connect.WithSchema(chatServiceMethods.ByName("TerminateChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServicePauseChatHandler := connect.NewUnaryHandler(
-		ChatServicePauseChatProcedure,
-		svc.PauseChat,
-		connect.WithSchema(chatServiceMethods.ByName("PauseChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceResumeChatHandler := connect.NewUnaryHandler(
-		ChatServiceResumeChatProcedure,
-		svc.ResumeChat,
-		connect.WithSchema(chatServiceMethods.ByName("ResumeChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceRetryUsageLimitWaitHandler := connect.NewUnaryHandler(
-		ChatServiceRetryUsageLimitWaitProcedure,
-		svc.RetryUsageLimitWait,
-		connect.WithSchema(chatServiceMethods.ByName("RetryUsageLimitWait")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceDismissChatHandler := connect.NewUnaryHandler(
-		ChatServiceDismissChatProcedure,
-		svc.DismissChat,
-		connect.WithSchema(chatServiceMethods.ByName("DismissChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceMarkUnreadChatHandler := connect.NewUnaryHandler(
-		ChatServiceMarkUnreadChatProcedure,
-		svc.MarkUnreadChat,
-		connect.WithSchema(chatServiceMethods.ByName("MarkUnreadChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceCompactChatHandler := connect.NewUnaryHandler(
-		ChatServiceCompactChatProcedure,
-		svc.CompactChat,
-		connect.WithSchema(chatServiceMethods.ByName("CompactChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceBranchChatHandler := connect.NewUnaryHandler(
-		ChatServiceBranchChatProcedure,
-		svc.BranchChat,
-		connect.WithSchema(chatServiceMethods.ByName("BranchChat")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceListBranchesHandler := connect.NewUnaryHandler(
-		ChatServiceListBranchesProcedure,
-		svc.ListBranches,
-		connect.WithSchema(chatServiceMethods.ByName("ListBranches")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceUpdateWorkflowParamsHandler := connect.NewUnaryHandler(
-		ChatServiceUpdateWorkflowParamsProcedure,
-		svc.UpdateWorkflowParams,
-		connect.WithSchema(chatServiceMethods.ByName("UpdateWorkflowParams")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceUpdateChatProviderPolicyHandler := connect.NewUnaryHandler(
-		ChatServiceUpdateChatProviderPolicyProcedure,
-		svc.UpdateChatProviderPolicy,
-		connect.WithSchema(chatServiceMethods.ByName("UpdateChatProviderPolicy")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceGetChatUpdatesHandler := connect.NewUnaryHandler(
-		ChatServiceGetChatUpdatesProcedure,
-		svc.GetChatUpdates,
-		connect.WithSchema(chatServiceMethods.ByName("GetChatUpdates")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceListChatPlansHandler := connect.NewUnaryHandler(
-		ChatServiceListChatPlansProcedure,
-		svc.ListChatPlans,
-		connect.WithSchema(chatServiceMethods.ByName("ListChatPlans")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceGetWorkflowExecutionsHandler := connect.NewUnaryHandler(
-		ChatServiceGetWorkflowExecutionsProcedure,
-		svc.GetWorkflowExecutions,
-		connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceListStepExecutionsHandler := connect.NewUnaryHandler(
-		ChatServiceListStepExecutionsProcedure,
-		svc.ListStepExecutions,
-		connect.WithSchema(chatServiceMethods.ByName("ListStepExecutions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceGetWorkflowNodeExecutionsHandler := connect.NewUnaryHandler(
-		ChatServiceGetWorkflowNodeExecutionsProcedure,
-		svc.GetWorkflowNodeExecutions,
-		connect.WithSchema(chatServiceMethods.ByName("GetWorkflowNodeExecutions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceGetThreadWorkflowInputsHandler := connect.NewUnaryHandler(
-		ChatServiceGetThreadWorkflowInputsProcedure,
-		svc.GetThreadWorkflowInputs,
-		connect.WithSchema(chatServiceMethods.ByName("GetThreadWorkflowInputs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceSetChatDaemonHandler := connect.NewUnaryHandler(
-		ChatServiceSetChatDaemonProcedure,
-		svc.SetChatDaemon,
-		connect.WithSchema(chatServiceMethods.ByName("SetChatDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	chatServiceMoveChatToProjectHandler := connect.NewUnaryHandler(
-		ChatServiceMoveChatToProjectProcedure,
-		svc.MoveChatToProject,
-		connect.WithSchema(chatServiceMethods.ByName("MoveChatToProject")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ChatServiceStartChatProcedure:
-			chatServiceStartChatHandler.ServeHTTP(w, r)
-		case ChatServiceRunNowProcedure:
-			chatServiceRunNowHandler.ServeHTTP(w, r)
-		case ChatServiceAdoptChatProcedure:
-			chatServiceAdoptChatHandler.ServeHTTP(w, r)
-		case ChatServiceUnadoptChatProcedure:
-			chatServiceUnadoptChatHandler.ServeHTTP(w, r)
-		case ChatServiceListChatsProcedure:
-			chatServiceListChatsHandler.ServeHTTP(w, r)
-		case ChatServiceGetChatProcedure:
-			chatServiceGetChatHandler.ServeHTTP(w, r)
-		case ChatServiceUpdateChatProcedure:
-			chatServiceUpdateChatHandler.ServeHTTP(w, r)
-		case ChatServiceDeleteChatProcedure:
-			chatServiceDeleteChatHandler.ServeHTTP(w, r)
-		case ChatServiceSearchChatsProcedure:
-			chatServiceSearchChatsHandler.ServeHTTP(w, r)
-		case ChatServiceListArchivedChatsProcedure:
-			chatServiceListArchivedChatsHandler.ServeHTTP(w, r)
-		case ChatServiceSendMessageProcedure:
-			chatServiceSendMessageHandler.ServeHTTP(w, r)
-		case ChatServiceSendAgentMessageProcedure:
-			chatServiceSendAgentMessageHandler.ServeHTTP(w, r)
-		case ChatServiceListQueuedAgentMessagesProcedure:
-			chatServiceListQueuedAgentMessagesHandler.ServeHTTP(w, r)
-		case ChatServiceCancelQueuedAgentMessageProcedure:
-			chatServiceCancelQueuedAgentMessageHandler.ServeHTTP(w, r)
-		case ChatServiceInterruptThreadProcedure:
-			chatServiceInterruptThreadHandler.ServeHTTP(w, r)
-		case ChatServiceListMessagesProcedure:
-			chatServiceListMessagesHandler.ServeHTTP(w, r)
-		case ChatServiceGetToolResultProcedure:
-			chatServiceGetToolResultHandler.ServeHTTP(w, r)
-		case ChatServiceGetContentBlockBodiesProcedure:
-			chatServiceGetContentBlockBodiesHandler.ServeHTTP(w, r)
-		case ChatServiceUpdateChatStateProcedure:
-			chatServiceUpdateChatStateHandler.ServeHTTP(w, r)
-		case ChatServiceTerminateChatProcedure:
-			chatServiceTerminateChatHandler.ServeHTTP(w, r)
-		case ChatServicePauseChatProcedure:
-			chatServicePauseChatHandler.ServeHTTP(w, r)
-		case ChatServiceResumeChatProcedure:
-			chatServiceResumeChatHandler.ServeHTTP(w, r)
-		case ChatServiceRetryUsageLimitWaitProcedure:
-			chatServiceRetryUsageLimitWaitHandler.ServeHTTP(w, r)
-		case ChatServiceDismissChatProcedure:
-			chatServiceDismissChatHandler.ServeHTTP(w, r)
-		case ChatServiceMarkUnreadChatProcedure:
-			chatServiceMarkUnreadChatHandler.ServeHTTP(w, r)
-		case ChatServiceCompactChatProcedure:
-			chatServiceCompactChatHandler.ServeHTTP(w, r)
-		case ChatServiceBranchChatProcedure:
-			chatServiceBranchChatHandler.ServeHTTP(w, r)
-		case ChatServiceListBranchesProcedure:
-			chatServiceListBranchesHandler.ServeHTTP(w, r)
-		case ChatServiceUpdateWorkflowParamsProcedure:
-			chatServiceUpdateWorkflowParamsHandler.ServeHTTP(w, r)
-		case ChatServiceUpdateChatProviderPolicyProcedure:
-			chatServiceUpdateChatProviderPolicyHandler.ServeHTTP(w, r)
-		case ChatServiceGetChatUpdatesProcedure:
-			chatServiceGetChatUpdatesHandler.ServeHTTP(w, r)
-		case ChatServiceListChatPlansProcedure:
-			chatServiceListChatPlansHandler.ServeHTTP(w, r)
-		case ChatServiceGetWorkflowExecutionsProcedure:
-			chatServiceGetWorkflowExecutionsHandler.ServeHTTP(w, r)
-		case ChatServiceListStepExecutionsProcedure:
-			chatServiceListStepExecutionsHandler.ServeHTTP(w, r)
-		case ChatServiceGetWorkflowNodeExecutionsProcedure:
-			chatServiceGetWorkflowNodeExecutionsHandler.ServeHTTP(w, r)
-		case ChatServiceGetThreadWorkflowInputsProcedure:
-			chatServiceGetThreadWorkflowInputsHandler.ServeHTTP(w, r)
-		case ChatServiceSetChatDaemonProcedure:
-			chatServiceSetChatDaemonHandler.ServeHTTP(w, r)
-		case ChatServiceMoveChatToProjectProcedure:
-			chatServiceMoveChatToProjectHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedChatServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedChatServiceHandler struct{}
 
-func (UnimplementedChatServiceHandler) StartChat(context.Context, *connect.Request[v1.StartChatRequest]) (*connect.Response[v1.StartChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.StartChat is not implemented"))
+func (UnimplementedChatServiceHandler) StartChat(context.Context, *v1.StartChatRequest) (*v1.StartChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.StartChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) RunNow(context.Context, *connect.Request[v1.RunNowRequest]) (*connect.Response[v1.RunNowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.RunNow is not implemented"))
+func (UnimplementedChatServiceHandler) RunNow(context.Context, *v1.RunNowRequest) (*v1.RunNowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.RunNow is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) AdoptChat(context.Context, *connect.Request[v1.AdoptChatRequest]) (*connect.Response[v1.AdoptChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.AdoptChat is not implemented"))
+func (UnimplementedChatServiceHandler) AdoptChat(context.Context, *v1.AdoptChatRequest) (*v1.AdoptChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.AdoptChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) UnadoptChat(context.Context, *connect.Request[v1.UnadoptChatRequest]) (*connect.Response[v1.UnadoptChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UnadoptChat is not implemented"))
+func (UnimplementedChatServiceHandler) UnadoptChat(context.Context, *v1.UnadoptChatRequest) (*v1.UnadoptChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.UnadoptChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) ListChats(context.Context, *connect.Request[v1.ListChatsRequest]) (*connect.Response[v1.ListChatsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListChats is not implemented"))
+func (UnimplementedChatServiceHandler) ListChats(context.Context, *v1.ListChatsRequest) (*v1.ListChatsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.ListChats is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) GetChat(context.Context, *connect.Request[v1.GetChatRequest]) (*connect.Response[v1.GetChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetChat is not implemented"))
+func (UnimplementedChatServiceHandler) GetChat(context.Context, *v1.GetChatRequest) (*v1.GetChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.GetChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) UpdateChat(context.Context, *connect.Request[v1.UpdateChatRequest]) (*connect.Response[v1.UpdateChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UpdateChat is not implemented"))
+func (UnimplementedChatServiceHandler) UpdateChat(context.Context, *v1.UpdateChatRequest) (*v1.UpdateChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.UpdateChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) DeleteChat(context.Context, *connect.Request[v1.DeleteChatRequest]) (*connect.Response[v1.DeleteChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.DeleteChat is not implemented"))
+func (UnimplementedChatServiceHandler) DeleteChat(context.Context, *v1.DeleteChatRequest) (*v1.DeleteChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.DeleteChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) SearchChats(context.Context, *connect.Request[v1.SearchChatsRequest]) (*connect.Response[v1.SearchChatsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.SearchChats is not implemented"))
+func (UnimplementedChatServiceHandler) SearchChats(context.Context, *v1.SearchChatsRequest) (*v1.SearchChatsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.SearchChats is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) ListArchivedChats(context.Context, *connect.Request[v1.ListArchivedChatsRequest]) (*connect.Response[v1.ListArchivedChatsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListArchivedChats is not implemented"))
+func (UnimplementedChatServiceHandler) ListArchivedChats(context.Context, *v1.ListArchivedChatsRequest) (*v1.ListArchivedChatsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.ListArchivedChats is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.SendMessage is not implemented"))
+func (UnimplementedChatServiceHandler) SendMessage(context.Context, *v1.SendMessageRequest) (*v1.SendMessageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.SendMessage is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) SendAgentMessage(context.Context, *connect.Request[v1.SendAgentMessageRequest]) (*connect.Response[v1.SendAgentMessageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.SendAgentMessage is not implemented"))
+func (UnimplementedChatServiceHandler) SendAgentMessage(context.Context, *v1.SendAgentMessageRequest) (*v1.SendAgentMessageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.SendAgentMessage is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) ListQueuedAgentMessages(context.Context, *connect.Request[v1.ListQueuedAgentMessagesRequest]) (*connect.Response[v1.ListQueuedAgentMessagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListQueuedAgentMessages is not implemented"))
+func (UnimplementedChatServiceHandler) ListQueuedAgentMessages(context.Context, *v1.ListQueuedAgentMessagesRequest) (*v1.ListQueuedAgentMessagesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.ListQueuedAgentMessages is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) CancelQueuedAgentMessage(context.Context, *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.CancelQueuedAgentMessage is not implemented"))
+func (UnimplementedChatServiceHandler) CancelQueuedAgentMessage(context.Context, *v1.CancelQueuedAgentMessageRequest) (*v1.CancelQueuedAgentMessageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.CancelQueuedAgentMessage is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) InterruptThread(context.Context, *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.InterruptThread is not implemented"))
+func (UnimplementedChatServiceHandler) InterruptThread(context.Context, *v1.InterruptThreadRequest) (*v1.InterruptThreadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.InterruptThread is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListMessages is not implemented"))
+func (UnimplementedChatServiceHandler) ListMessages(context.Context, *v1.ListMessagesRequest) (*v1.ListMessagesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.ListMessages is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetToolResult is not implemented"))
+func (UnimplementedChatServiceHandler) GetToolResult(context.Context, *v1.GetToolResultRequest) (*v1.GetToolResultResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.GetToolResult is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetContentBlockBodies is not implemented"))
+func (UnimplementedChatServiceHandler) GetContentBlockBodies(context.Context, *v1.GetContentBlockBodiesRequest) (*v1.GetContentBlockBodiesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.GetContentBlockBodies is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UpdateChatState is not implemented"))
+func (UnimplementedChatServiceHandler) UpdateChatState(context.Context, *v1.UpdateChatStateRequest) (*v1.UpdateChatStateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.UpdateChatState is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) TerminateChat(context.Context, *connect.Request[v1.TerminateChatRequest]) (*connect.Response[v1.TerminateChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.TerminateChat is not implemented"))
+func (UnimplementedChatServiceHandler) TerminateChat(context.Context, *v1.TerminateChatRequest) (*v1.TerminateChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.TerminateChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.PauseChat is not implemented"))
+func (UnimplementedChatServiceHandler) PauseChat(context.Context, *v1.PauseChatRequest) (*v1.PauseChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.PauseChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ResumeChat is not implemented"))
+func (UnimplementedChatServiceHandler) ResumeChat(context.Context, *v1.ResumeChatRequest) (*v1.ResumeChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.ResumeChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) RetryUsageLimitWait(context.Context, *connect.Request[v1.RetryUsageLimitWaitRequest]) (*connect.Response[v1.RetryUsageLimitWaitResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.RetryUsageLimitWait is not implemented"))
+func (UnimplementedChatServiceHandler) RetryUsageLimitWait(context.Context, *v1.RetryUsageLimitWaitRequest) (*v1.RetryUsageLimitWaitResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.RetryUsageLimitWait is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.DismissChat is not implemented"))
+func (UnimplementedChatServiceHandler) DismissChat(context.Context, *v1.DismissChatRequest) (*v1.DismissChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.DismissChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) MarkUnreadChat(context.Context, *connect.Request[v1.MarkUnreadChatRequest]) (*connect.Response[v1.MarkUnreadChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.MarkUnreadChat is not implemented"))
+func (UnimplementedChatServiceHandler) MarkUnreadChat(context.Context, *v1.MarkUnreadChatRequest) (*v1.MarkUnreadChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.MarkUnreadChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) CompactChat(context.Context, *connect.Request[v1.CompactChatRequest]) (*connect.Response[v1.CompactChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.CompactChat is not implemented"))
+func (UnimplementedChatServiceHandler) CompactChat(context.Context, *v1.CompactChatRequest) (*v1.CompactChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.CompactChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) BranchChat(context.Context, *connect.Request[v1.BranchChatRequest]) (*connect.Response[v1.BranchChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.BranchChat is not implemented"))
+func (UnimplementedChatServiceHandler) BranchChat(context.Context, *v1.BranchChatRequest) (*v1.BranchChatResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.BranchChat is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListBranches is not implemented"))
+func (UnimplementedChatServiceHandler) ListBranches(context.Context, *v1.ListBranchesRequest) (*v1.ListBranchesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.ListBranches is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) UpdateWorkflowParams(context.Context, *connect.Request[v1.UpdateWorkflowParamsRequest]) (*connect.Response[v1.UpdateWorkflowParamsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UpdateWorkflowParams is not implemented"))
+func (UnimplementedChatServiceHandler) UpdateWorkflowParams(context.Context, *v1.UpdateWorkflowParamsRequest) (*v1.UpdateWorkflowParamsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.UpdateWorkflowParams is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) UpdateChatProviderPolicy(context.Context, *connect.Request[v1.UpdateChatProviderPolicyRequest]) (*connect.Response[v1.UpdateChatProviderPolicyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UpdateChatProviderPolicy is not implemented"))
+func (UnimplementedChatServiceHandler) UpdateChatProviderPolicy(context.Context, *v1.UpdateChatProviderPolicyRequest) (*v1.UpdateChatProviderPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.UpdateChatProviderPolicy is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetChatUpdates is not implemented"))
+func (UnimplementedChatServiceHandler) GetChatUpdates(context.Context, *v1.GetChatUpdatesRequest) (*v1.GetChatUpdatesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.GetChatUpdates is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) ListChatPlans(context.Context, *connect.Request[v1.ListChatPlansRequest]) (*connect.Response[v1.ListChatPlansResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListChatPlans is not implemented"))
+func (UnimplementedChatServiceHandler) ListChatPlans(context.Context, *v1.ListChatPlansRequest) (*v1.ListChatPlansResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.ListChatPlans is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) GetWorkflowExecutions(context.Context, *connect.Request[v1.GetWorkflowExecutionsRequest]) (*connect.Response[v1.GetWorkflowExecutionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetWorkflowExecutions is not implemented"))
+func (UnimplementedChatServiceHandler) GetWorkflowExecutions(context.Context, *v1.GetWorkflowExecutionsRequest) (*v1.GetWorkflowExecutionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.GetWorkflowExecutions is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) ListStepExecutions(context.Context, *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListStepExecutions is not implemented"))
+func (UnimplementedChatServiceHandler) ListStepExecutions(context.Context, *v1.ListStepExecutionsRequest) (*v1.ListStepExecutionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.ListStepExecutions is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) GetWorkflowNodeExecutions(context.Context, *connect.Request[v1.GetWorkflowNodeExecutionsRequest]) (*connect.Response[v1.GetWorkflowNodeExecutionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetWorkflowNodeExecutions is not implemented"))
+func (UnimplementedChatServiceHandler) GetWorkflowNodeExecutions(context.Context, *v1.GetWorkflowNodeExecutionsRequest) (*v1.GetWorkflowNodeExecutionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.GetWorkflowNodeExecutions is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) GetThreadWorkflowInputs(context.Context, *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetThreadWorkflowInputs is not implemented"))
+func (UnimplementedChatServiceHandler) GetThreadWorkflowInputs(context.Context, *v1.GetThreadWorkflowInputsRequest) (*v1.GetThreadWorkflowInputsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.GetThreadWorkflowInputs is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.SetChatDaemon is not implemented"))
+func (UnimplementedChatServiceHandler) SetChatDaemon(context.Context, *v1.SetChatDaemonRequest) (*v1.SetChatDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.SetChatDaemon is not implemented")
 }
 
-func (UnimplementedChatServiceHandler) MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.MoveChatToProject is not implemented"))
+func (UnimplementedChatServiceHandler) MoveChatToProject(context.Context, *v1.MoveChatToProjectRequest) (*v1.MoveChatToProjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ChatService.MoveChatToProject is not implemented")
+}
+
+type chatServiceClient struct {
+	client *connect.Client
+}
+
+func (c *chatServiceClient) StartChat(ctx context.Context, req *v1.StartChatRequest) (*v1.StartChatResponse, error) {
+	var res v1.StartChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceStartChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) RunNow(ctx context.Context, req *v1.RunNowRequest) (*v1.RunNowResponse, error) {
+	var res v1.RunNowResponse
+	if err := c.client.CallUnary(ctx, chatServiceRunNowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) AdoptChat(ctx context.Context, req *v1.AdoptChatRequest) (*v1.AdoptChatResponse, error) {
+	var res v1.AdoptChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceAdoptChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) UnadoptChat(ctx context.Context, req *v1.UnadoptChatRequest) (*v1.UnadoptChatResponse, error) {
+	var res v1.UnadoptChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceUnadoptChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) ListChats(ctx context.Context, req *v1.ListChatsRequest) (*v1.ListChatsResponse, error) {
+	var res v1.ListChatsResponse
+	if err := c.client.CallUnary(ctx, chatServiceListChatsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) GetChat(ctx context.Context, req *v1.GetChatRequest) (*v1.GetChatResponse, error) {
+	var res v1.GetChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceGetChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) UpdateChat(ctx context.Context, req *v1.UpdateChatRequest) (*v1.UpdateChatResponse, error) {
+	var res v1.UpdateChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceUpdateChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) DeleteChat(ctx context.Context, req *v1.DeleteChatRequest) (*v1.DeleteChatResponse, error) {
+	var res v1.DeleteChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceDeleteChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) SearchChats(ctx context.Context, req *v1.SearchChatsRequest) (*v1.SearchChatsResponse, error) {
+	var res v1.SearchChatsResponse
+	if err := c.client.CallUnary(ctx, chatServiceSearchChatsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) ListArchivedChats(ctx context.Context, req *v1.ListArchivedChatsRequest) (*v1.ListArchivedChatsResponse, error) {
+	var res v1.ListArchivedChatsResponse
+	if err := c.client.CallUnary(ctx, chatServiceListArchivedChatsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) SendMessage(ctx context.Context, req *v1.SendMessageRequest) (*v1.SendMessageResponse, error) {
+	var res v1.SendMessageResponse
+	if err := c.client.CallUnary(ctx, chatServiceSendMessageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) SendAgentMessage(ctx context.Context, req *v1.SendAgentMessageRequest) (*v1.SendAgentMessageResponse, error) {
+	var res v1.SendAgentMessageResponse
+	if err := c.client.CallUnary(ctx, chatServiceSendAgentMessageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) ListQueuedAgentMessages(ctx context.Context, req *v1.ListQueuedAgentMessagesRequest) (*v1.ListQueuedAgentMessagesResponse, error) {
+	var res v1.ListQueuedAgentMessagesResponse
+	if err := c.client.CallUnary(ctx, chatServiceListQueuedAgentMessagesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) CancelQueuedAgentMessage(ctx context.Context, req *v1.CancelQueuedAgentMessageRequest) (*v1.CancelQueuedAgentMessageResponse, error) {
+	var res v1.CancelQueuedAgentMessageResponse
+	if err := c.client.CallUnary(ctx, chatServiceCancelQueuedAgentMessageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) InterruptThread(ctx context.Context, req *v1.InterruptThreadRequest) (*v1.InterruptThreadResponse, error) {
+	var res v1.InterruptThreadResponse
+	if err := c.client.CallUnary(ctx, chatServiceInterruptThreadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) ListMessages(ctx context.Context, req *v1.ListMessagesRequest) (*v1.ListMessagesResponse, error) {
+	var res v1.ListMessagesResponse
+	if err := c.client.CallUnary(ctx, chatServiceListMessagesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) GetToolResult(ctx context.Context, req *v1.GetToolResultRequest) (*v1.GetToolResultResponse, error) {
+	var res v1.GetToolResultResponse
+	if err := c.client.CallUnary(ctx, chatServiceGetToolResultSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) GetContentBlockBodies(ctx context.Context, req *v1.GetContentBlockBodiesRequest) (*v1.GetContentBlockBodiesResponse, error) {
+	var res v1.GetContentBlockBodiesResponse
+	if err := c.client.CallUnary(ctx, chatServiceGetContentBlockBodiesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) UpdateChatState(ctx context.Context, req *v1.UpdateChatStateRequest) (*v1.UpdateChatStateResponse, error) {
+	var res v1.UpdateChatStateResponse
+	if err := c.client.CallUnary(ctx, chatServiceUpdateChatStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) TerminateChat(ctx context.Context, req *v1.TerminateChatRequest) (*v1.TerminateChatResponse, error) {
+	var res v1.TerminateChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceTerminateChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) PauseChat(ctx context.Context, req *v1.PauseChatRequest) (*v1.PauseChatResponse, error) {
+	var res v1.PauseChatResponse
+	if err := c.client.CallUnary(ctx, chatServicePauseChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) ResumeChat(ctx context.Context, req *v1.ResumeChatRequest) (*v1.ResumeChatResponse, error) {
+	var res v1.ResumeChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceResumeChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) RetryUsageLimitWait(ctx context.Context, req *v1.RetryUsageLimitWaitRequest) (*v1.RetryUsageLimitWaitResponse, error) {
+	var res v1.RetryUsageLimitWaitResponse
+	if err := c.client.CallUnary(ctx, chatServiceRetryUsageLimitWaitSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) DismissChat(ctx context.Context, req *v1.DismissChatRequest) (*v1.DismissChatResponse, error) {
+	var res v1.DismissChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceDismissChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) MarkUnreadChat(ctx context.Context, req *v1.MarkUnreadChatRequest) (*v1.MarkUnreadChatResponse, error) {
+	var res v1.MarkUnreadChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceMarkUnreadChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) CompactChat(ctx context.Context, req *v1.CompactChatRequest) (*v1.CompactChatResponse, error) {
+	var res v1.CompactChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceCompactChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) BranchChat(ctx context.Context, req *v1.BranchChatRequest) (*v1.BranchChatResponse, error) {
+	var res v1.BranchChatResponse
+	if err := c.client.CallUnary(ctx, chatServiceBranchChatSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) ListBranches(ctx context.Context, req *v1.ListBranchesRequest) (*v1.ListBranchesResponse, error) {
+	var res v1.ListBranchesResponse
+	if err := c.client.CallUnary(ctx, chatServiceListBranchesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) UpdateWorkflowParams(ctx context.Context, req *v1.UpdateWorkflowParamsRequest) (*v1.UpdateWorkflowParamsResponse, error) {
+	var res v1.UpdateWorkflowParamsResponse
+	if err := c.client.CallUnary(ctx, chatServiceUpdateWorkflowParamsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) UpdateChatProviderPolicy(ctx context.Context, req *v1.UpdateChatProviderPolicyRequest) (*v1.UpdateChatProviderPolicyResponse, error) {
+	var res v1.UpdateChatProviderPolicyResponse
+	if err := c.client.CallUnary(ctx, chatServiceUpdateChatProviderPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) GetChatUpdates(ctx context.Context, req *v1.GetChatUpdatesRequest) (*v1.GetChatUpdatesResponse, error) {
+	var res v1.GetChatUpdatesResponse
+	if err := c.client.CallUnary(ctx, chatServiceGetChatUpdatesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) ListChatPlans(ctx context.Context, req *v1.ListChatPlansRequest) (*v1.ListChatPlansResponse, error) {
+	var res v1.ListChatPlansResponse
+	if err := c.client.CallUnary(ctx, chatServiceListChatPlansSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) GetWorkflowExecutions(ctx context.Context, req *v1.GetWorkflowExecutionsRequest) (*v1.GetWorkflowExecutionsResponse, error) {
+	var res v1.GetWorkflowExecutionsResponse
+	if err := c.client.CallUnary(ctx, chatServiceGetWorkflowExecutionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) ListStepExecutions(ctx context.Context, req *v1.ListStepExecutionsRequest) (*v1.ListStepExecutionsResponse, error) {
+	var res v1.ListStepExecutionsResponse
+	if err := c.client.CallUnary(ctx, chatServiceListStepExecutionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) GetWorkflowNodeExecutions(ctx context.Context, req *v1.GetWorkflowNodeExecutionsRequest) (*v1.GetWorkflowNodeExecutionsResponse, error) {
+	var res v1.GetWorkflowNodeExecutionsResponse
+	if err := c.client.CallUnary(ctx, chatServiceGetWorkflowNodeExecutionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) GetThreadWorkflowInputs(ctx context.Context, req *v1.GetThreadWorkflowInputsRequest) (*v1.GetThreadWorkflowInputsResponse, error) {
+	var res v1.GetThreadWorkflowInputsResponse
+	if err := c.client.CallUnary(ctx, chatServiceGetThreadWorkflowInputsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) SetChatDaemon(ctx context.Context, req *v1.SetChatDaemonRequest) (*v1.SetChatDaemonResponse, error) {
+	var res v1.SetChatDaemonResponse
+	if err := c.client.CallUnary(ctx, chatServiceSetChatDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *chatServiceClient) MoveChatToProject(ctx context.Context, req *v1.MoveChatToProjectRequest) (*v1.MoveChatToProjectResponse, error) {
+	var res v1.MoveChatToProjectResponse
+	if err := c.client.CallUnary(ctx, chatServiceMoveChatToProjectSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type chatServiceHandler struct{ svc ChatServiceHandler }
+
+func (h chatServiceHandler) startChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) runNow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RunNowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RunNow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) adoptChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AdoptChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AdoptChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) unadoptChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UnadoptChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UnadoptChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) listChats(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListChatsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListChats(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) getChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) updateChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) deleteChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) searchChats(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SearchChatsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SearchChats(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) listArchivedChats(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListArchivedChatsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListArchivedChats(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) sendMessage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SendMessageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SendMessage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) sendAgentMessage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SendAgentMessageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SendAgentMessage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) listQueuedAgentMessages(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListQueuedAgentMessagesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListQueuedAgentMessages(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) cancelQueuedAgentMessage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CancelQueuedAgentMessageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelQueuedAgentMessage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) interruptThread(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InterruptThreadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InterruptThread(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) listMessages(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMessagesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMessages(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) getToolResult(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetToolResultRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetToolResult(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) getContentBlockBodies(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetContentBlockBodiesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetContentBlockBodies(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) updateChatState(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateChatStateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateChatState(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) terminateChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TerminateChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TerminateChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) pauseChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PauseChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PauseChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) resumeChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResumeChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResumeChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) retryUsageLimitWait(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RetryUsageLimitWaitRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RetryUsageLimitWait(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) dismissChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DismissChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DismissChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) markUnreadChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MarkUnreadChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MarkUnreadChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) compactChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompactChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompactChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) branchChat(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BranchChatRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BranchChat(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) listBranches(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBranchesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBranches(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) updateWorkflowParams(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateWorkflowParamsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateWorkflowParams(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) updateChatProviderPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateChatProviderPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateChatProviderPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) getChatUpdates(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetChatUpdatesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetChatUpdates(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) listChatPlans(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListChatPlansRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListChatPlans(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) getWorkflowExecutions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWorkflowExecutionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWorkflowExecutions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) listStepExecutions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListStepExecutionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListStepExecutions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) getWorkflowNodeExecutions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetWorkflowNodeExecutionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetWorkflowNodeExecutions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) getThreadWorkflowInputs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetThreadWorkflowInputsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetThreadWorkflowInputs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) setChatDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetChatDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetChatDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h chatServiceHandler) moveChatToProject(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MoveChatToProjectRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MoveChatToProject(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

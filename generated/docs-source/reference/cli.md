@@ -483,7 +483,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ui component search`](#reliant-forge-ui-component-search) | Search components by keyword |
 | [`reliant forge ui sourcemaps`](#reliant-forge-ui-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
 | [`reliant forge ui sourcemaps push`](#reliant-forge-ui-sourcemaps-push) | File the source maps of a built directory forge did not build |
-| [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity |
+| [`reliant forge version`](#reliant-forge-version) | Print the forge version and build identity (--pinned: the project's pinned forge) |
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
@@ -1320,7 +1320,7 @@ reliant forge
 | [`telemetry`](#reliant-forge-telemetry) | Show or change whether forge sends anonymous usage events |
 | [`tools`](#reliant-forge-tools) | Manage developer tooling forge depends on (proto plugins, linters, etc.) |
 | [`ui`](#reliant-forge-ui) | Frontend tooling: the component library and frontend source maps |
-| [`version`](#reliant-forge-version) | Print the forge version and build identity |
+| [`version`](#reliant-forge-version) | Print the forge version and build identity (--pinned: the project's pinned forge) |
 
 **Flags:**
 
@@ -10213,6 +10213,12 @@ change what clients read:
 
 Generated files, vendor/ and testdata/ are left alone, as is every
 connect.NewError in a test (a fixture). Re-running it changes nothing.
+
+connect-go v2 code (a file importing connectrpc.com/connect/v2) is not
+rewritten: v2's NewError takes a message string and its errors meet svcerr
+through a different interceptor, so v1's wire-identity proof does not carry
+over. Each such file is listed instead, and forge lint's
+forgeconv-handler-connect-error classifies its sites.
 --dry-run prints each rewrite as file:line: old → new, and the worklist; after a
 real run every file:line is the rewritten file's.
 
@@ -10726,6 +10732,9 @@ What it writes, in order:
   - deploy/: KCL config, observability dashboards and alert defaults, CI
     workflows, seed data
 then go mod tidy, goimports, and a validating go build of the whole tree.
+A failed build rolls back every file the run wrote; --keep-on-build-failure
+keeps them past a failed build or post generate hook, for a migration that
+ports hand-written code after generating.
 
 Hand-written code is never overwritten. Files that are yours from birth
 (handlers' rpc_<name>.go, internal/app/providers.go, compose.go) are written
@@ -10771,6 +10780,7 @@ Examples:
   forge generate --no-cache # Run every step even if nothing changed since the last verified run
   forge generate --explain  # Print per-file provenance log after generate
   forge generate --verbose  # Also print routine lines (skipped steps, pinned-tool resolution)
+  forge generate --keep-on-build-failure  # Mid-migration: keep the output although the project does not compile yet
 
 Additional maintainer/debug flags exist (pipeline narrowing, drift
 forensics, parallel-lane and migration escape hatches); run
@@ -10792,6 +10802,7 @@ reliant forge generate [flags]
 | `--force-cleanup` | `bool` | - | Also delete stale generated files that carry hand-edits. Generate always deletes the stale files nobody edited; without this flag it lists the edited ones and keeps them. |
 | `--heal` | `bool` | - | Overwrite on-disk content that matches a PRIOR forge render (an older vintage) with the current template. OFF by default: such content is byte-indistinguishable from a deliberate edit, so forge leaves it untouched and tells you how to proceed rather than silently reverting your work. Pass --heal to advance every such file to the current templates. |
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
+| `--keep-on-build-failure` | `bool` | - | Keep the generated files when the project does not compile yet, instead of rolling the tree back. For a migration whose hand-written code is ported after generating (connect-go v2, say): a failed compile check or post generate hook (forge.yaml generate.hooks) no longer rolls back, every step and hook still runs, each failure's output is printed, and the run exits non-zero and is not recorded as verified, so the next plain 'forge generate' checks the tree again. A failed input hook still rolls back: later steps project from its output. |
 | `--no-cache` | `bool` | - | Run every step even when nothing changed since a full run verified this tree (a no-op generate otherwise skips in about a second; see the 'Skipping' section above). FORGE_GENERATE_NO_CACHE=1 does the same. |
 | `--verbose`, `-v` | `bool` | - | Also print routine lines: one per gate-off skipped step ('⏩ skipped: <step name> (<reason>)') and which pinned build each codegen tool resolved to ('📌 <tool> resolved to <version>'). Default prints progress and what needs action only. |
 | `--watch`, `-w` | `bool` | - | Watch for changes and regenerate |
@@ -11602,6 +11613,12 @@ change what clients read:
 
 Generated files, vendor/ and testdata/ are left alone, as is every
 connect.NewError in a test (a fixture). Re-running it changes nothing.
+
+connect-go v2 code (a file importing connectrpc.com/connect/v2) is not
+rewritten: v2's NewError takes a message string and its errors meet svcerr
+through a different interceptor, so v1's wire-identity proof does not carry
+over. Each such file is listed instead, and forge lint's
+forgeconv-handler-connect-error classifies its sites.
 --dry-run prints each rewrite as file:line: old → new, and the worklist; after a
 real run every file:line is the rewritten file's.
 
@@ -12274,7 +12291,10 @@ tools 'forge lint' gates with: golangci-lint and buf.
 Each codegen tool is installed at the version this project's go.mod resolves
 for it (google.golang.org/protobuf, connectrpc.com/connect,
 golang.org/x/tools) — the version the committed generated code was produced
-with — falling back to @latest when go.mod does not contain the module.
+with — falling back to @latest when go.mod does not contain the module. A
+project whose go.mod directly requires connectrpc.com/connect/v2 gets the v2
+protoc-gen-connect-go (connectrpc.com/connect/v2/cmd/protoc-gen-connect-go),
+at the version go.mod resolves for connectrpc.com/connect/v2.
 --version overrides that for every codegen tool.
 
 The lint tools install at forge's pins ('forge tools pins'), never at
@@ -12987,12 +13007,14 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   changed_ops.service
   early_pass
   findings
+  findings.alert
   findings.code
   findings.commit
   findings.message
   findings.op
   findings.policy
   findings.pr
+  findings.pre_existing
   findings.ref
   findings.service
   findings.threshold
@@ -13002,6 +13024,7 @@ JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   issue_alerts
   new_issues
   not_evaluated
+  pre_existing_alerts
   query_mode
   reason
   reason_code
@@ -15321,10 +15344,19 @@ name (code_source "static").
 
   cli forge obs ops dev --sort p95 --top 5
   cli forge obs ops prod --kind component --sort errors --since 6h
+  cli forge obs ops prod --name billing.Charge --name todo.v1.TodoService/CreateTodo --since 7d
 
 Each kind's table is the busiest 200 ops; --sort re-ranks within them.
 
+--name asks for these ops only, by span name (repeatable or comma-separated,
+at most 200 names of at most 200 characters each). The query is narrowed to
+them, so it is cheap over any window. Every requested op is listed: one with
+no spans in the window and scope has "found": false and zero figures, which
+tells "no traffic" apart from "not asked". With --name, --top defaults to
+every requested op.
+
 JSON schema forge.obs.ops/v1. --fields takes dotted paths of:
+  names
   ops
   ops.calls
   ops.code_file_path
@@ -15333,6 +15365,7 @@ JSON schema forge.obs.ops/v1. --fields takes dotted paths of:
   ops.code_source
   ops.error_ratio
   ops.errors
+  ops.found
   ops.kind
   ops.name
   ops.p50_ms
@@ -15378,12 +15411,13 @@ reliant forge obs ops [env] [flags]
 | `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--kind` | `stringSlice` | `[]` | only these kinds, comma-separated: rpc, endpoint, component (default all) |
+| `--name` | `stringSlice` | `[]` | only these ops, by span name; repeatable or comma-separated (an op with no spans is listed with found false) |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--sort` | `string` | `calls` | calls | p95 | errors | rate |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
-| `--top` | `int` | `20` | most ops to return |
+| `--top` | `int` | `20` | most ops to return (with --name, default every requested op) |
 | `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
@@ -17609,6 +17643,17 @@ back on (orm has no key; --disable orm only leaves db/migrations out):
 Valid feature names: orm, codegen, migrations, ci, build, deploy,
 contracts, docs, frontend, observability, hot_reload.
 
+--connect picks the connect-go major a service project's Go code targets:
+v2 (connectrpc.com/connect/v2, the default) or v1 (connectrpc.com/connect,
+selectable until forge drops it).
+It decides what go.mod and gen/go.mod require, which protoc-gen-connect-go
+tools/tools.go pins, and the shape of every handler, mount and test forge
+writes. After this the project's go.mod IS the declaration: forge generate
+reads the major from it on every run (a direct require of
+connectrpc.com/connect/v2 is v2, anything else v1), so there is nothing to
+pass later and nothing in forge.yaml. With --in-place and no --connect, the
+existing go.mod's major is kept.
+
 --auth-mode picks the sign-in system of a service project with a frontend.
 native (the default) scaffolds today's: the users in deploy/kcl/identity.k,
 the dev identity provider and mail catcher, the sign-in pages and the route
@@ -17616,7 +17661,7 @@ guard. none scaffolds an app nobody signs in to: no identity, no dev IdP, a
 public frontend with no route guard and no sign-in pages, and a login broker
 that is never mounted. The API still authenticates, fail-closed: an rpc
 answers anonymous callers only when its proto declares
-`option (forge.v1.method) = { auth_required: false }`; every other rpc
+`option (forge.v1.method) = {auth_required: false}`; every other rpc
 answers 401, because nothing can issue the token it requires.
 
 Example:
@@ -17624,6 +17669,7 @@ Example:
   forge project new my-project --mod github.com/example/my-project --service gateway
   forge project new my-project --mod github.com/example/my-project --frontend web
   forge project new my-project --mod github.com/example/my-project --frontend web --auth-mode none
+  forge project new my-project --mod github.com/example/my-project --service orders --connect v1
   forge project new mycli      --mod github.com/example/mycli --kind cli
   forge project new mylib      --mod github.com/example/mylib --kind library
   forge project new landing    --kind site                          # new static site (Next.js export)
@@ -17673,6 +17719,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--binary` | `string` | `per-service` | Binary packaging: 'per-service' (default — canonical cmd/server.go cobra root, one Application per service) or 'shared' (one Go binary, cobra subcommand per service, KCL MultiServiceApplication for deploy) |
 | `--buf-plugins` | `string` | `local` | Default proto plugin source: 'local' (resolved from PATH; no BSR auth needed) or 'remote' (BSR-hosted, requires login under load) |
 | `--claimable` | `bool` | - | Scaffold prod for an ANONYMOUS deploy: forge env deploy prod --claimable then publishes with no account and prints a claim link. prod declares control_plane = forge.ControlPlane {claimable = True} and sizes its hosted services and jobs to the claimable plan (125m / 128 MiB, request and limit) instead of the billed shape band. A static site needs nothing extra |
+| `--connect` | `string` | - | connect-go major of a service project: v2 (default; connectrpc.com/connect/v2) or v1 (connectrpc.com/connect). Chooses what go.mod requires; from then on forge generate reads the major from go.mod (a direct require of connectrpc.com/connect/v2 is v2). With --in-place and no --connect, the existing go.mod's major is kept |
 | `--disable` | `stringSlice` | `[]` | Features to leave out of the scaffold (comma-separated): orm, codegen, migrations, ci, build, deploy, contracts, frontend, observability, hot_reload. Each is pinned off in forge.yaml's features: block (orm, which has no key, only steers this scaffold). |
 | `--dry-run` | `bool` | - | With --kind app: print what was detected and every file it would write, and write nothing |
 | `--force` | `bool` | - | With --in-place: scaffold over an existing forge.yaml, and REPLACE every pre-existing file the scaffold writes (README.md, go.mod, Taskfile.yml, …) with forge's version. Without it, existing files are kept and listed. .gitignore is always merged, never replaced |
@@ -20999,7 +21046,10 @@ tools 'forge lint' gates with: golangci-lint and buf.
 Each codegen tool is installed at the version this project's go.mod resolves
 for it (google.golang.org/protobuf, connectrpc.com/connect,
 golang.org/x/tools) — the version the committed generated code was produced
-with — falling back to @latest when go.mod does not contain the module.
+with — falling back to @latest when go.mod does not contain the module. A
+project whose go.mod directly requires connectrpc.com/connect/v2 gets the v2
+protoc-gen-connect-go (connectrpc.com/connect/v2/cmd/protoc-gen-connect-go),
+at the version go.mod resolves for connectrpc.com/connect/v2.
 --version overrides that for every codegen tool.
 
 The lint tools install at forge's pins ('forge tools pins'), never at
@@ -21266,11 +21316,33 @@ reliant forge ui sourcemaps push <dist> [flags]
 
 ### reliant forge version
 
-Print the forge version and build identity
+Print the forge version and build identity (--pinned: the project's pinned forge)
+
+Print this forge's version and build identity.
+
+--pinned prints the forge the project pins instead — the project found from
+the working directory or -C — fetching or building it the way a command
+handed to it would, but printing it instead of running it:
+
+  path     the executable (this forge's own when it already is the pin)
+  version  the version it reports
+  source   self | tools (the project's .tools/bin/forge) | cache | built
+
+--json prints it as one forge.version.pinned/v1 document, whose "command"
+is the exec-ready prefix ([path], or [path, "forge"] for an embedded forge).
+It fails when there is no project, no forge_version, or the pinned forge
+cannot be had.
 
 ```
-reliant forge version
+reliant forge version [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | With --pinned: print one forge.version.pinned/v1 document |
+| `--pinned` | `bool` | - | Print the forge the project pins (path, version, source), fetching or building it |
 
 ---
 

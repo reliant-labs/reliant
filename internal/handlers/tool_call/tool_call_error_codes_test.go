@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -42,13 +42,13 @@ func TestToolCallRPCs_RepositoryFailureCodes(t *testing.T) {
 		t.Run("CancelToolCall: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			svc := tool_call.NewTestToolCall(t, tool_call.WithToolCallDeps(tool_call.Deps{Repo: repo()}))
-			_, err := svc.CancelToolCall(tool_call.AuthedContext(t), connect.NewRequest(&pb.CancelToolCallRequest{ToolCallId: "call-1"}))
+			_, err := svc.CancelToolCall(tool_call.AuthedContext(t), &pb.CancelToolCallRequest{ToolCallId: "call-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("ConvertToBackground: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			svc := tool_call.NewTestToolCall(t, tool_call.WithToolCallDeps(tool_call.Deps{Repo: repo()}))
-			_, err := svc.ConvertToBackground(tool_call.AuthedContext(t), connect.NewRequest(&pb.ConvertToBackgroundRequest{ToolCallId: "call-1"}))
+			_, err := svc.ConvertToBackground(tool_call.AuthedContext(t), &pb.ConvertToBackgroundRequest{ToolCallId: "call-1"})
 			requireClientReads(t, err, tc.want)
 		})
 	}
@@ -79,9 +79,9 @@ func TestConvertToBackground_DaemonFailureCodes(t *testing.T) {
 				Repo:   ownedToolCallRepo(),
 				Router: &toolexectest.Recorder{BackgroundErr: tc.err},
 			}))
-			_, err := svc.ConvertToBackground(tool_call.AuthedContext(t), connect.NewRequest(&pb.ConvertToBackgroundRequest{ToolCallId: "call-1"}))
+			_, err := svc.ConvertToBackground(tool_call.AuthedContext(t), &pb.ConvertToBackgroundRequest{ToolCallId: "call-1"})
 			requireClientReads(t, err, tc.want)
-			msg := svcerr.ToConnect(err).Message()
+			msg := svcerr.ToConnectV2(err).Message()
 			require.True(t, strings.Contains(msg, tc.contains), "message %q lacks %q", msg, tc.contains)
 		})
 	}
@@ -109,6 +109,6 @@ func ownedToolCallRepo() *tool_call.MockRepository {
 func requireClientReads(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
-	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+	require.Equal(t, want, svcerr.CodeV2(err), "err = %v", err)
+	require.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 }

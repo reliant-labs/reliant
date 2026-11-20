@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -30,17 +30,17 @@ const machineNameRule = "a machine name is 1-63 lowercase letters, digits or hyp
 // workspace or anything named after them.
 func (s *Service) RenameMachine(
 	ctx context.Context,
-	req *connect.Request[pb.RenameMachineRequest],
-) (*connect.Response[pb.RenameMachineResponse], error) {
+	req *pb.RenameMachineRequest,
+) (*pb.RenameMachineResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
-	daemonID := req.Msg.GetDaemonId()
+	daemonID := req.GetDaemonId()
 	if daemonID == "" {
 		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
-	name := strings.TrimSpace(req.Msg.GetName())
+	name := strings.TrimSpace(req.GetName())
 	if !machineName.MatchString(name) {
 		return nil, svcerr.InvalidArgument(machineNameRule)
 	}
@@ -52,7 +52,7 @@ func (s *Service) RenameMachine(
 		return nil, svcerr.NotFound("machine")
 	}
 	if d.Name == name {
-		return connect.NewResponse(&pb.RenameMachineResponse{Daemon: daemonToProto(d, nil)}), nil
+		return &pb.RenameMachineResponse{Daemon: daemonToProto(d, nil)}, nil
 	}
 	jwt, ok := auth.GetUserJWT(userID)
 	if !ok || strings.TrimSpace(jwt) == "" {
@@ -77,7 +77,7 @@ func (s *Service) RenameMachine(
 			"error", err, "userID", userID, "daemonID", daemonID)
 	}
 	d.Name = name
-	return connect.NewResponse(&pb.RenameMachineResponse{Daemon: daemonToProto(d, nil)}), nil
+	return &pb.RenameMachineResponse{Daemon: daemonToProto(d, nil)}, nil
 }
 
 // controlPlaneRefusal carries a control-plane refusal to the caller in its

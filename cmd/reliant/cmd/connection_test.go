@@ -11,7 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -357,11 +361,11 @@ type fakeProjectService struct {
 	sawBearer string
 }
 
-func (f *fakeProjectService) ListProjects(_ context.Context, req *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error) {
-	f.sawBearer = req.Header().Get("Authorization")
-	return connect.NewResponse(&reliantv1.ListProjectsResponse{
+func (f *fakeProjectService) ListProjects(ctx context.Context, req *reliantv1.ListProjectsRequest) (*reliantv1.ListProjectsResponse, error) {
+	f.sawBearer = serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")
+	return &reliantv1.ListProjectsResponse{
 		Projects: []*reliantv1.Project{{Id: "p-1", Name: "demo", Path: "/work/demo"}},
-	}), nil
+	}, nil
 }
 
 // TestProjectListUsesTheServersLogin: `project list --server X` reaches X with
@@ -369,7 +373,9 @@ func (f *fakeProjectService) ListProjects(_ context.Context, req *connect.Reques
 func TestProjectListUsesTheServersLogin(t *testing.T) {
 	fake := &fakeProjectService{}
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewProjectServiceHandler(fake))
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterProjectServiceHandler(server, fake)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 

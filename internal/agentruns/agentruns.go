@@ -22,10 +22,11 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -44,10 +45,10 @@ type Launcher interface {
 // handlers authorize the caller from the request context — so each call below
 // runs as the run's owner, never as whoever happens to be on the worker.
 type RunAPI interface {
-	PauseRun(context.Context, *connect.Request[reliantv1.PauseRunRequest]) (*connect.Response[reliantv1.PauseRunResponse], error)
-	ResumeRun(context.Context, *connect.Request[reliantv1.ResumeRunRequest]) (*connect.Response[reliantv1.ResumeRunResponse], error)
-	CancelRun(context.Context, *connect.Request[reliantv1.CancelRunRequest]) (*connect.Response[reliantv1.CancelRunResponse], error)
-	SignalRun(context.Context, *connect.Request[reliantv1.SignalRunRequest]) (*connect.Response[reliantv1.SignalRunResponse], error)
+	PauseRun(context.Context, *reliantv1.PauseRunRequest) (*reliantv1.PauseRunResponse, error)
+	ResumeRun(context.Context, *reliantv1.ResumeRunRequest) (*reliantv1.ResumeRunResponse, error)
+	CancelRun(context.Context, *reliantv1.CancelRunRequest) (*reliantv1.CancelRunResponse, error)
+	SignalRun(context.Context, *reliantv1.SignalRunRequest) (*reliantv1.SignalRunResponse, error)
 }
 
 // Runs implements tools.RunStarter, tools.RunLifecycle and tools.RunMessenger.
@@ -143,7 +144,7 @@ func (r *Runs) PauseRun(ctx context.Context, userID, chatID string) error {
 	if r.api == nil {
 		return errors.New("no run service is configured")
 	}
-	_, err := r.api.PauseRun(asOwner(ctx, userID), connect.NewRequest(&reliantv1.PauseRunRequest{RunId: chatID}))
+	_, err := r.api.PauseRun(asOwner(ctx, userID), &reliantv1.PauseRunRequest{RunId: chatID})
 	return err
 }
 
@@ -152,11 +153,11 @@ func (r *Runs) ResumeRun(ctx context.Context, userID, chatID string) (tools.RunR
 	if r.api == nil {
 		return tools.RunResumeResult{}, errors.New("no run service is configured")
 	}
-	resp, err := r.api.ResumeRun(asOwner(ctx, userID), connect.NewRequest(&reliantv1.ResumeRunRequest{RunId: chatID}))
+	resp, err := r.api.ResumeRun(asOwner(ctx, userID), &reliantv1.ResumeRunRequest{RunId: chatID})
 	if err != nil {
 		return tools.RunResumeResult{}, err
 	}
-	return tools.RunResumeResult{Resumed: resp.Msg.Success, Detail: resp.Msg.Message}, nil
+	return tools.RunResumeResult{Resumed: resp.Success, Detail: resp.Message}, nil
 }
 
 // CancelRun hard-stops the run.
@@ -164,7 +165,7 @@ func (r *Runs) CancelRun(ctx context.Context, userID, chatID string) error {
 	if r.api == nil {
 		return errors.New("no run service is configured")
 	}
-	_, err := r.api.CancelRun(asOwner(ctx, userID), connect.NewRequest(&reliantv1.CancelRunRequest{RunId: chatID}))
+	_, err := r.api.CancelRun(asOwner(ctx, userID), &reliantv1.CancelRunRequest{RunId: chatID})
 	return err
 }
 
@@ -187,25 +188,46 @@ func (r *Runs) DeliverToRun(ctx context.Context, userID, chatID, thread, message
 		Kind:     core.AgentMessageKindRunMessage,
 		Subject:  from.Subject,
 	})
-	resp, err := r.api.SignalRun(ctx, connect.NewRequest(&reliantv1.SignalRunRequest{
+	resp, info, err := signalRun(ctx, r.api, &reliantv1.SignalRunRequest{
 		RunId:  chatID,
 		Thread: thread,
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
 			Content: message,
 		}},
-	}))
+	})
 	if err != nil {
 		return tools.RunDelivery{}, err
 	}
-	delivery := tools.RunDelivery{Delivered: resp.Msg.Delivered}
-	if !resp.Msg.Delivered {
-		delivery.NotDeliveredReason = resp.Header().Get(errreason.NotDeliveredHeader)
+	delivery := tools.RunDelivery{Delivered: resp.Delivered}
+	if !resp.Delivered {
+		delivery.NotDeliveredReason = info.ResponseHeader().Get(errreason.NotDeliveredHeader)
 	}
-	if len(resp.Msg.MessageIds) > 0 {
-		delivery.MessageID = resp.Msg.MessageIds[0]
+	if len(resp.MessageIds) > 0 {
+		delivery.MessageID = resp.MessageIds[0]
 	}
 	return delivery, nil
+}
+
+// signalRun calls api's SignalRun as a server call of its own, in process.
+// The handler answers "why nothing was delivered" in a response header
+// (errreason.NotDeliveredHeader); in connect-go v2 a handler writes response
+// headers to its call's CallInfo, which a bare method call does not have, so
+// the call runs through connect.Server.Call with one this caller then reads.
+func signalRun(ctx context.Context, api RunAPI, req *reliantv1.SignalRunRequest) (*reliantv1.SignalRunResponse, *connect.CallInfo, error) {
+	spec := connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: reliantv1connect.RunServiceSignalRunProcedure}
+	info := &connect.CallInfo{Spec: spec}
+	var resp *reliantv1.SignalRunResponse
+	server := connect.NewServer()
+	server.Register(connect.Method{Spec: spec, Handler: func(ctx context.Context, _ connect.Spec, _ connect.ServerStream) error {
+		var err error
+		resp, err = api.SignalRun(ctx, req)
+		return err
+	}})
+	if err := server.Call(ctx, spec.Procedure, info, nil); err != nil {
+		return nil, info, err
+	}
+	return resp, info, nil
 }
 
 // toParams converts a tool call's JSON inputs to the launcher's param values.

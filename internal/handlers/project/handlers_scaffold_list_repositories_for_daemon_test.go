@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -28,19 +28,19 @@ func TestListRepositoriesForDaemon_Generated(t *testing.T) {
 	}
 	svc := newService(t, store, nil)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListRepositoriesForDaemonRequest, pb.ListRepositoriesForDaemonResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListRepositoriesForDaemonRequest, pb.ListRepositoriesForDaemonResponse]{
 		{
 			Name:    "daemon_id is required",
-			Req:     connect.NewRequest(&pb.ListRepositoriesForDaemonRequest{}),
+			Req:     &pb.ListRepositoriesForDaemonRequest{},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "the caller's clones are joined with their project",
-			Req:  connect.NewRequest(&pb.ListRepositoriesForDaemonRequest{DaemonId: "d-1"}),
+			Req:  &pb.ListRepositoriesForDaemonRequest{DaemonId: "d-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListRepositoriesForDaemonResponse]) {
-				got := resp.Msg.GetRepositories()
+			Check: func(t *testing.T, resp *pb.ListRepositoriesForDaemonResponse) {
+				got := resp.GetRepositories()
 				if len(got) != 1 {
 					t.Fatalf("repositories = %v, want only p-1", got)
 				}

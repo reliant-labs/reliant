@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,14 +84,14 @@ func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID,
 		Name:      "with-env",
 		Branch:    "with-env",
 		CopyFiles: []string{".env", "reliant/.env", "reliant/web/node_modules/"},
-	}))
+	})
 	require.NoError(t, err)
-	settled := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	settled := awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -118,11 +118,11 @@ func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "")
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID, Name: "plain", Branch: "plain",
-	}))
+	})
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -143,11 +143,11 @@ func TestCreateWorktreeRejectsInvalidCopyPath(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	for _, bad := range []string{"../outside", "/etc/passwd", " "} {
-		_, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+		_, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 			ProjectId: projectID, Name: "bad", Branch: "bad", CopyFiles: []string{bad},
-		}))
+		})
 		require.Error(t, err, "copy path %q", bad)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "copy path %q", bad)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "copy path %q", bad)
 	}
 
 	router.mu.Lock()

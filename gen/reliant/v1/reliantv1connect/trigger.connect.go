@@ -7,116 +7,222 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// TriggerServiceName is the fully-qualified name of the TriggerService service.
 	TriggerServiceName = "reliant.v1.TriggerService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// TriggerServiceCreateTriggerProcedure is the fully-qualified name of the TriggerService's
-	// CreateTrigger RPC.
-	TriggerServiceCreateTriggerProcedure = "/reliant.v1.TriggerService/CreateTrigger"
-	// TriggerServiceGetTriggerProcedure is the fully-qualified name of the TriggerService's GetTrigger
+	// TriggerServiceCreateTriggerProcedure is the procedure name of the TriggerService's CreateTrigger
 	// RPC.
+	TriggerServiceCreateTriggerProcedure = "/reliant.v1.TriggerService/CreateTrigger"
+	// TriggerServiceGetTriggerProcedure is the procedure name of the TriggerService's GetTrigger RPC.
 	TriggerServiceGetTriggerProcedure = "/reliant.v1.TriggerService/GetTrigger"
-	// TriggerServiceListTriggersProcedure is the fully-qualified name of the TriggerService's
-	// ListTriggers RPC.
+	// TriggerServiceListTriggersProcedure is the procedure name of the TriggerService's ListTriggers
+	// RPC.
 	TriggerServiceListTriggersProcedure = "/reliant.v1.TriggerService/ListTriggers"
-	// TriggerServiceUpdateTriggerProcedure is the fully-qualified name of the TriggerService's
-	// UpdateTrigger RPC.
+	// TriggerServiceUpdateTriggerProcedure is the procedure name of the TriggerService's UpdateTrigger
+	// RPC.
 	TriggerServiceUpdateTriggerProcedure = "/reliant.v1.TriggerService/UpdateTrigger"
-	// TriggerServiceDeleteTriggerProcedure is the fully-qualified name of the TriggerService's
-	// DeleteTrigger RPC.
+	// TriggerServiceDeleteTriggerProcedure is the procedure name of the TriggerService's DeleteTrigger
+	// RPC.
 	TriggerServiceDeleteTriggerProcedure = "/reliant.v1.TriggerService/DeleteTrigger"
-	// TriggerServiceSetTriggerEnabledProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceSetTriggerEnabledProcedure is the procedure name of the TriggerService's
 	// SetTriggerEnabled RPC.
 	TriggerServiceSetTriggerEnabledProcedure = "/reliant.v1.TriggerService/SetTriggerEnabled"
-	// TriggerServiceFireTriggerProcedure is the fully-qualified name of the TriggerService's
-	// FireTrigger RPC.
+	// TriggerServiceFireTriggerProcedure is the procedure name of the TriggerService's FireTrigger RPC.
 	TriggerServiceFireTriggerProcedure = "/reliant.v1.TriggerService/FireTrigger"
-	// TriggerServiceListTriggerEventsProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceListTriggerEventsProcedure is the procedure name of the TriggerService's
 	// ListTriggerEvents RPC.
 	TriggerServiceListTriggerEventsProcedure = "/reliant.v1.TriggerService/ListTriggerEvents"
-	// TriggerServiceGetLaunchEventProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceGetLaunchEventProcedure is the procedure name of the TriggerService's
 	// GetLaunchEvent RPC.
 	TriggerServiceGetLaunchEventProcedure = "/reliant.v1.TriggerService/GetLaunchEvent"
-	// TriggerServiceRotateWebhookTokenProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceRotateWebhookTokenProcedure is the procedure name of the TriggerService's
 	// RotateWebhookToken RPC.
 	TriggerServiceRotateWebhookTokenProcedure = "/reliant.v1.TriggerService/RotateWebhookToken"
-	// TriggerServiceEnableWorkflowProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceEnableWorkflowProcedure is the procedure name of the TriggerService's
 	// EnableWorkflow RPC.
 	TriggerServiceEnableWorkflowProcedure = "/reliant.v1.TriggerService/EnableWorkflow"
-	// TriggerServiceDisableWorkflowProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceDisableWorkflowProcedure is the procedure name of the TriggerService's
 	// DisableWorkflow RPC.
 	TriggerServiceDisableWorkflowProcedure = "/reliant.v1.TriggerService/DisableWorkflow"
-	// TriggerServiceResolveTriggerSendersProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceResolveTriggerSendersProcedure is the procedure name of the TriggerService's
 	// ResolveTriggerSenders RPC.
 	TriggerServiceResolveTriggerSendersProcedure = "/reliant.v1.TriggerService/ResolveTriggerSenders"
-	// TriggerServiceListReplayEventsProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceListReplayEventsProcedure is the procedure name of the TriggerService's
 	// ListReplayEvents RPC.
 	TriggerServiceListReplayEventsProcedure = "/reliant.v1.TriggerService/ListReplayEvents"
-	// TriggerServicePreviewReplayProcedure is the fully-qualified name of the TriggerService's
-	// PreviewReplay RPC.
+	// TriggerServicePreviewReplayProcedure is the procedure name of the TriggerService's PreviewReplay
+	// RPC.
 	TriggerServicePreviewReplayProcedure = "/reliant.v1.TriggerService/PreviewReplay"
-	// TriggerServiceDraftAutomationProcedure is the fully-qualified name of the TriggerService's
+	// TriggerServiceDraftAutomationProcedure is the procedure name of the TriggerService's
 	// DraftAutomation RPC.
 	TriggerServiceDraftAutomationProcedure = "/reliant.v1.TriggerService/DraftAutomation"
+)
+
+var (
+	triggerServiceCreateTriggerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("CreateTrigger"),
+			Procedure:  TriggerServiceCreateTriggerProcedure,
+		}
+	})
+	triggerServiceGetTriggerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("GetTrigger"),
+			Procedure:  TriggerServiceGetTriggerProcedure,
+		}
+	})
+	triggerServiceListTriggersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("ListTriggers"),
+			Procedure:  TriggerServiceListTriggersProcedure,
+		}
+	})
+	triggerServiceUpdateTriggerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("UpdateTrigger"),
+			Procedure:  TriggerServiceUpdateTriggerProcedure,
+		}
+	})
+	triggerServiceDeleteTriggerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("DeleteTrigger"),
+			Procedure:  TriggerServiceDeleteTriggerProcedure,
+		}
+	})
+	triggerServiceSetTriggerEnabledSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("SetTriggerEnabled"),
+			Procedure:  TriggerServiceSetTriggerEnabledProcedure,
+		}
+	})
+	triggerServiceFireTriggerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("FireTrigger"),
+			Procedure:  TriggerServiceFireTriggerProcedure,
+		}
+	})
+	triggerServiceListTriggerEventsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("ListTriggerEvents"),
+			Procedure:  TriggerServiceListTriggerEventsProcedure,
+		}
+	})
+	triggerServiceGetLaunchEventSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("GetLaunchEvent"),
+			Procedure:  TriggerServiceGetLaunchEventProcedure,
+		}
+	})
+	triggerServiceRotateWebhookTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("RotateWebhookToken"),
+			Procedure:  TriggerServiceRotateWebhookTokenProcedure,
+		}
+	})
+	triggerServiceEnableWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("EnableWorkflow"),
+			Procedure:  TriggerServiceEnableWorkflowProcedure,
+		}
+	})
+	triggerServiceDisableWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("DisableWorkflow"),
+			Procedure:  TriggerServiceDisableWorkflowProcedure,
+		}
+	})
+	triggerServiceResolveTriggerSendersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("ResolveTriggerSenders"),
+			Procedure:        TriggerServiceResolveTriggerSendersProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	triggerServiceListReplayEventsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("ListReplayEvents"),
+			Procedure:  TriggerServiceListReplayEventsProcedure,
+		}
+	})
+	triggerServicePreviewReplaySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("PreviewReplay"),
+			Procedure:        TriggerServicePreviewReplayProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	triggerServiceDraftAutomationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods().ByName("DraftAutomation"),
+			Procedure:  TriggerServiceDraftAutomationProcedure,
+		}
+	})
 )
 
 // TriggerServiceClient is a client for the reliant.v1.TriggerService service.
 type TriggerServiceClient interface {
 	// CreateTrigger stores a new trigger and converges its schedule.
 	// forge:custom — validates the definition against its source and workflow, then converges its schedule
-	CreateTrigger(context.Context, *connect.Request[v1.CreateTriggerRequest]) (*connect.Response[v1.CreateTriggerResponse], error)
+	CreateTrigger(context.Context, *v1.CreateTriggerRequest) (*v1.CreateTriggerResponse, error)
 	// GetTrigger returns one trigger, including its read-only next fire time
 	// and most recent firing.
 	// forge:custom — owner-scoped, rendered with its next fire time and most recent firing
-	GetTrigger(context.Context, *connect.Request[v1.GetTriggerRequest]) (*connect.Response[v1.GetTriggerResponse], error)
+	GetTrigger(context.Context, *v1.GetTriggerRequest) (*v1.GetTriggerResponse, error)
 	// ListTriggers returns the caller's triggers, optionally narrowed to one
 	// project.
 	// forge:custom — the caller's triggers, rendered with their schedules and recent firings
-	ListTriggers(context.Context, *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error)
+	ListTriggers(context.Context, *v1.ListTriggersRequest) (*v1.ListTriggersResponse, error)
 	// UpdateTrigger replaces a trigger's definition and reconverges its
 	// schedule. The owner and kind are not updatable.
 	// forge:custom — replaces an owned trigger's definition and reconverges its schedule
-	UpdateTrigger(context.Context, *connect.Request[v1.UpdateTriggerRequest]) (*connect.Response[v1.UpdateTriggerResponse], error)
+	UpdateTrigger(context.Context, *v1.UpdateTriggerRequest) (*v1.UpdateTriggerResponse, error)
 	// DeleteTrigger removes a trigger and its schedule. Its firing history
 	// survives, with trigger_id cleared — the runs it started still exist.
 	// forge:custom — also removes the schedule and releases the trigger's automation credential
-	DeleteTrigger(context.Context, *connect.Request[v1.DeleteTriggerRequest]) (*connect.Response[v1.DeleteTriggerResponse], error)
+	DeleteTrigger(context.Context, *v1.DeleteTriggerRequest) (*v1.DeleteTriggerResponse, error)
 	// SetTriggerEnabled pauses or resumes a trigger. Disabling pauses the
 	// schedule rather than deleting it, so re-enabling needs no re-derivation.
-	SetTriggerEnabled(context.Context, *connect.Request[v1.SetTriggerEnabledRequest]) (*connect.Response[v1.SetTriggerEnabledResponse], error)
+	SetTriggerEnabled(context.Context, *v1.SetTriggerEnabledRequest) (*v1.SetTriggerEnabledResponse, error)
 	// FireTrigger runs a trigger now, out of band with its schedule. A manual
 	// fire skips the enabled and overlap checks: the human asking for it has
 	// already made that decision.
-	FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error)
+	FireTrigger(context.Context, *v1.FireTriggerRequest) (*v1.FireTriggerResponse, error)
 	// ListTriggerEvents returns a trigger's firings, newest first, paged by a
 	// keyset cursor. Each launched firing carries the state of the run it started.
 	// forge:custom — pages one owned trigger's firings by a keyset cursor, with each run's state
-	ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error)
+	ListTriggerEvents(context.Context, *v1.ListTriggerEventsRequest) (*v1.ListTriggerEventsResponse, error)
 	// GetLaunchEvent returns the event that launched a chat: its kind, the
 	// scheduled slot and manual flag for a schedule, the parent chat for an
 	// agent start, and the start (workflow, presets, params) for all of them.
@@ -124,10 +230,10 @@ type TriggerServiceClient interface {
 	//
 	// A separate RPC rather than a Chat field because trigger.proto imports
 	// chat.proto, so Chat cannot reference TriggerEvent without a cycle.
-	GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error)
+	GetLaunchEvent(context.Context, *v1.GetLaunchEventRequest) (*v1.GetLaunchEventResponse, error)
 	// RotateWebhookToken replaces a webhook trigger's token. The old token
 	// stops working immediately; the new one is returned once and never again.
-	RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error)
+	RotateWebhookToken(context.Context, *v1.RotateWebhookTokenRequest) (*v1.RotateWebhookTokenResponse, error)
 	// EnableWorkflow turns on every trigger a workflow declares, as one act:
 	// the user's choice of project, machine and connected accounts, applied to
 	// all of them. It is the one way a workflow's triggers start running; no
@@ -146,11 +252,11 @@ type TriggerServiceClient interface {
 	// activation's name, an unnamed connection and an unspecified acting
 	// identity are kept from what it had. A failed write puts every changed
 	// activation back as it was.
-	EnableWorkflow(context.Context, *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error)
+	EnableWorkflow(context.Context, *v1.EnableWorkflowRequest) (*v1.EnableWorkflowResponse, error)
 	// DisableWorkflow pauses every activation of a workflow. Unlike enabling it
 	// is not all-or-nothing: a pause that fails must not stop the others from
 	// pausing, so it reports each failure and pauses the rest.
-	DisableWorkflow(context.Context, *connect.Request[v1.DisableWorkflowRequest]) (*connect.Response[v1.DisableWorkflowResponse], error)
+	DisableWorkflow(context.Context, *v1.DisableWorkflowRequest) (*v1.DisableWorkflowResponse, error)
 	// ResolveTriggerSenders looks people up for a trigger's "Only from": a
 	// handle (a GitHub login) to the id trigger.sender.id carries, and an id
 	// back to the person's current name. It asks the provider with the
@@ -159,11 +265,11 @@ type TriggerServiceClient interface {
 	//
 	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
 	// verb, so without it forge generates a mutation hook for it.
-	ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error)
+	ResolveTriggerSenders(context.Context, *v1.ResolveTriggerSendersRequest) (*v1.ResolveTriggerSendersResponse, error)
 	// ListReplayEvents lists the recent events the caller's activations of a
 	// workflow's declared triggers received, newest first, so one can be run
 	// again with ChatService.RunNow.
-	ListReplayEvents(context.Context, *connect.Request[v1.ListReplayEventsRequest]) (*connect.Response[v1.ListReplayEventsResponse], error)
+	ListReplayEvents(context.Context, *v1.ListReplayEventsRequest) (*v1.ListReplayEventsResponse, error)
 	// PreviewReplay maps a past event through a declared trigger's inputs and
 	// prompt, as a fire of that event would. Only the mapping applies: the
 	// trigger's filter and origin_filter are not evaluated, because the person
@@ -176,7 +282,7 @@ type TriggerServiceClient interface {
 	//
 	// It only reads (nothing is fired or recorded), and says so with
 	// NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
-	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
+	PreviewReplay(context.Context, *v1.PreviewReplayRequest) (*v1.PreviewReplayResponse, error)
 	// DraftAutomation turns a person's description ("every weekday at 9,
 	// summarise yesterday's failed CI runs") into a proposed automation for
 	// them to review in the automation dialog. It stores nothing and creates
@@ -184,253 +290,47 @@ type TriggerServiceClient interface {
 	// draft is written by the caller's own fast model, with the draft_automation
 	// tool's schema as the structured output, and normalized by the same code
 	// that tool runs.
-	DraftAutomation(context.Context, *connect.Request[v1.DraftAutomationRequest]) (*connect.Response[v1.DraftAutomationResponse], error)
+	DraftAutomation(context.Context, *v1.DraftAutomationRequest) (*v1.DraftAutomationResponse, error)
 }
 
-// NewTriggerServiceClient constructs a client for the reliant.v1.TriggerService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) TriggerServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	triggerServiceMethods := v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods()
-	return &triggerServiceClient{
-		createTrigger: connect.NewClient[v1.CreateTriggerRequest, v1.CreateTriggerResponse](
-			httpClient,
-			baseURL+TriggerServiceCreateTriggerProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("CreateTrigger")),
-			connect.WithClientOptions(opts...),
-		),
-		getTrigger: connect.NewClient[v1.GetTriggerRequest, v1.GetTriggerResponse](
-			httpClient,
-			baseURL+TriggerServiceGetTriggerProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("GetTrigger")),
-			connect.WithClientOptions(opts...),
-		),
-		listTriggers: connect.NewClient[v1.ListTriggersRequest, v1.ListTriggersResponse](
-			httpClient,
-			baseURL+TriggerServiceListTriggersProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("ListTriggers")),
-			connect.WithClientOptions(opts...),
-		),
-		updateTrigger: connect.NewClient[v1.UpdateTriggerRequest, v1.UpdateTriggerResponse](
-			httpClient,
-			baseURL+TriggerServiceUpdateTriggerProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("UpdateTrigger")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteTrigger: connect.NewClient[v1.DeleteTriggerRequest, v1.DeleteTriggerResponse](
-			httpClient,
-			baseURL+TriggerServiceDeleteTriggerProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("DeleteTrigger")),
-			connect.WithClientOptions(opts...),
-		),
-		setTriggerEnabled: connect.NewClient[v1.SetTriggerEnabledRequest, v1.SetTriggerEnabledResponse](
-			httpClient,
-			baseURL+TriggerServiceSetTriggerEnabledProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("SetTriggerEnabled")),
-			connect.WithClientOptions(opts...),
-		),
-		fireTrigger: connect.NewClient[v1.FireTriggerRequest, v1.FireTriggerResponse](
-			httpClient,
-			baseURL+TriggerServiceFireTriggerProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("FireTrigger")),
-			connect.WithClientOptions(opts...),
-		),
-		listTriggerEvents: connect.NewClient[v1.ListTriggerEventsRequest, v1.ListTriggerEventsResponse](
-			httpClient,
-			baseURL+TriggerServiceListTriggerEventsProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("ListTriggerEvents")),
-			connect.WithClientOptions(opts...),
-		),
-		getLaunchEvent: connect.NewClient[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse](
-			httpClient,
-			baseURL+TriggerServiceGetLaunchEventProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateWebhookToken: connect.NewClient[v1.RotateWebhookTokenRequest, v1.RotateWebhookTokenResponse](
-			httpClient,
-			baseURL+TriggerServiceRotateWebhookTokenProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("RotateWebhookToken")),
-			connect.WithClientOptions(opts...),
-		),
-		enableWorkflow: connect.NewClient[v1.EnableWorkflowRequest, v1.EnableWorkflowResponse](
-			httpClient,
-			baseURL+TriggerServiceEnableWorkflowProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("EnableWorkflow")),
-			connect.WithClientOptions(opts...),
-		),
-		disableWorkflow: connect.NewClient[v1.DisableWorkflowRequest, v1.DisableWorkflowResponse](
-			httpClient,
-			baseURL+TriggerServiceDisableWorkflowProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("DisableWorkflow")),
-			connect.WithClientOptions(opts...),
-		),
-		resolveTriggerSenders: connect.NewClient[v1.ResolveTriggerSendersRequest, v1.ResolveTriggerSendersResponse](
-			httpClient,
-			baseURL+TriggerServiceResolveTriggerSendersProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("ResolveTriggerSenders")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		listReplayEvents: connect.NewClient[v1.ListReplayEventsRequest, v1.ListReplayEventsResponse](
-			httpClient,
-			baseURL+TriggerServiceListReplayEventsProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("ListReplayEvents")),
-			connect.WithClientOptions(opts...),
-		),
-		previewReplay: connect.NewClient[v1.PreviewReplayRequest, v1.PreviewReplayResponse](
-			httpClient,
-			baseURL+TriggerServicePreviewReplayProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("PreviewReplay")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		draftAutomation: connect.NewClient[v1.DraftAutomationRequest, v1.DraftAutomationResponse](
-			httpClient,
-			baseURL+TriggerServiceDraftAutomationProcedure,
-			connect.WithSchema(triggerServiceMethods.ByName("DraftAutomation")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// triggerServiceClient implements TriggerServiceClient.
-type triggerServiceClient struct {
-	createTrigger         *connect.Client[v1.CreateTriggerRequest, v1.CreateTriggerResponse]
-	getTrigger            *connect.Client[v1.GetTriggerRequest, v1.GetTriggerResponse]
-	listTriggers          *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
-	updateTrigger         *connect.Client[v1.UpdateTriggerRequest, v1.UpdateTriggerResponse]
-	deleteTrigger         *connect.Client[v1.DeleteTriggerRequest, v1.DeleteTriggerResponse]
-	setTriggerEnabled     *connect.Client[v1.SetTriggerEnabledRequest, v1.SetTriggerEnabledResponse]
-	fireTrigger           *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
-	listTriggerEvents     *connect.Client[v1.ListTriggerEventsRequest, v1.ListTriggerEventsResponse]
-	getLaunchEvent        *connect.Client[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse]
-	rotateWebhookToken    *connect.Client[v1.RotateWebhookTokenRequest, v1.RotateWebhookTokenResponse]
-	enableWorkflow        *connect.Client[v1.EnableWorkflowRequest, v1.EnableWorkflowResponse]
-	disableWorkflow       *connect.Client[v1.DisableWorkflowRequest, v1.DisableWorkflowResponse]
-	resolveTriggerSenders *connect.Client[v1.ResolveTriggerSendersRequest, v1.ResolveTriggerSendersResponse]
-	listReplayEvents      *connect.Client[v1.ListReplayEventsRequest, v1.ListReplayEventsResponse]
-	previewReplay         *connect.Client[v1.PreviewReplayRequest, v1.PreviewReplayResponse]
-	draftAutomation       *connect.Client[v1.DraftAutomationRequest, v1.DraftAutomationResponse]
-}
-
-// CreateTrigger calls reliant.v1.TriggerService.CreateTrigger.
-func (c *triggerServiceClient) CreateTrigger(ctx context.Context, req *connect.Request[v1.CreateTriggerRequest]) (*connect.Response[v1.CreateTriggerResponse], error) {
-	return c.createTrigger.CallUnary(ctx, req)
-}
-
-// GetTrigger calls reliant.v1.TriggerService.GetTrigger.
-func (c *triggerServiceClient) GetTrigger(ctx context.Context, req *connect.Request[v1.GetTriggerRequest]) (*connect.Response[v1.GetTriggerResponse], error) {
-	return c.getTrigger.CallUnary(ctx, req)
-}
-
-// ListTriggers calls reliant.v1.TriggerService.ListTriggers.
-func (c *triggerServiceClient) ListTriggers(ctx context.Context, req *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error) {
-	return c.listTriggers.CallUnary(ctx, req)
-}
-
-// UpdateTrigger calls reliant.v1.TriggerService.UpdateTrigger.
-func (c *triggerServiceClient) UpdateTrigger(ctx context.Context, req *connect.Request[v1.UpdateTriggerRequest]) (*connect.Response[v1.UpdateTriggerResponse], error) {
-	return c.updateTrigger.CallUnary(ctx, req)
-}
-
-// DeleteTrigger calls reliant.v1.TriggerService.DeleteTrigger.
-func (c *triggerServiceClient) DeleteTrigger(ctx context.Context, req *connect.Request[v1.DeleteTriggerRequest]) (*connect.Response[v1.DeleteTriggerResponse], error) {
-	return c.deleteTrigger.CallUnary(ctx, req)
-}
-
-// SetTriggerEnabled calls reliant.v1.TriggerService.SetTriggerEnabled.
-func (c *triggerServiceClient) SetTriggerEnabled(ctx context.Context, req *connect.Request[v1.SetTriggerEnabledRequest]) (*connect.Response[v1.SetTriggerEnabledResponse], error) {
-	return c.setTriggerEnabled.CallUnary(ctx, req)
-}
-
-// FireTrigger calls reliant.v1.TriggerService.FireTrigger.
-func (c *triggerServiceClient) FireTrigger(ctx context.Context, req *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error) {
-	return c.fireTrigger.CallUnary(ctx, req)
-}
-
-// ListTriggerEvents calls reliant.v1.TriggerService.ListTriggerEvents.
-func (c *triggerServiceClient) ListTriggerEvents(ctx context.Context, req *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error) {
-	return c.listTriggerEvents.CallUnary(ctx, req)
-}
-
-// GetLaunchEvent calls reliant.v1.TriggerService.GetLaunchEvent.
-func (c *triggerServiceClient) GetLaunchEvent(ctx context.Context, req *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error) {
-	return c.getLaunchEvent.CallUnary(ctx, req)
-}
-
-// RotateWebhookToken calls reliant.v1.TriggerService.RotateWebhookToken.
-func (c *triggerServiceClient) RotateWebhookToken(ctx context.Context, req *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error) {
-	return c.rotateWebhookToken.CallUnary(ctx, req)
-}
-
-// EnableWorkflow calls reliant.v1.TriggerService.EnableWorkflow.
-func (c *triggerServiceClient) EnableWorkflow(ctx context.Context, req *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error) {
-	return c.enableWorkflow.CallUnary(ctx, req)
-}
-
-// DisableWorkflow calls reliant.v1.TriggerService.DisableWorkflow.
-func (c *triggerServiceClient) DisableWorkflow(ctx context.Context, req *connect.Request[v1.DisableWorkflowRequest]) (*connect.Response[v1.DisableWorkflowResponse], error) {
-	return c.disableWorkflow.CallUnary(ctx, req)
-}
-
-// ResolveTriggerSenders calls reliant.v1.TriggerService.ResolveTriggerSenders.
-func (c *triggerServiceClient) ResolveTriggerSenders(ctx context.Context, req *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error) {
-	return c.resolveTriggerSenders.CallUnary(ctx, req)
-}
-
-// ListReplayEvents calls reliant.v1.TriggerService.ListReplayEvents.
-func (c *triggerServiceClient) ListReplayEvents(ctx context.Context, req *connect.Request[v1.ListReplayEventsRequest]) (*connect.Response[v1.ListReplayEventsResponse], error) {
-	return c.listReplayEvents.CallUnary(ctx, req)
-}
-
-// PreviewReplay calls reliant.v1.TriggerService.PreviewReplay.
-func (c *triggerServiceClient) PreviewReplay(ctx context.Context, req *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error) {
-	return c.previewReplay.CallUnary(ctx, req)
-}
-
-// DraftAutomation calls reliant.v1.TriggerService.DraftAutomation.
-func (c *triggerServiceClient) DraftAutomation(ctx context.Context, req *connect.Request[v1.DraftAutomationRequest]) (*connect.Response[v1.DraftAutomationResponse], error) {
-	return c.draftAutomation.CallUnary(ctx, req)
+// NewTriggerServiceClient constructs a client for the reliant.v1.TriggerService service. Multiple
+// service clients may share a single connect.Client.
+func NewTriggerServiceClient(client *connect.Client) TriggerServiceClient {
+	return &triggerServiceClient{client: client}
 }
 
 // TriggerServiceHandler is an implementation of the reliant.v1.TriggerService service.
 type TriggerServiceHandler interface {
 	// CreateTrigger stores a new trigger and converges its schedule.
 	// forge:custom — validates the definition against its source and workflow, then converges its schedule
-	CreateTrigger(context.Context, *connect.Request[v1.CreateTriggerRequest]) (*connect.Response[v1.CreateTriggerResponse], error)
+	CreateTrigger(context.Context, *v1.CreateTriggerRequest) (*v1.CreateTriggerResponse, error)
 	// GetTrigger returns one trigger, including its read-only next fire time
 	// and most recent firing.
 	// forge:custom — owner-scoped, rendered with its next fire time and most recent firing
-	GetTrigger(context.Context, *connect.Request[v1.GetTriggerRequest]) (*connect.Response[v1.GetTriggerResponse], error)
+	GetTrigger(context.Context, *v1.GetTriggerRequest) (*v1.GetTriggerResponse, error)
 	// ListTriggers returns the caller's triggers, optionally narrowed to one
 	// project.
 	// forge:custom — the caller's triggers, rendered with their schedules and recent firings
-	ListTriggers(context.Context, *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error)
+	ListTriggers(context.Context, *v1.ListTriggersRequest) (*v1.ListTriggersResponse, error)
 	// UpdateTrigger replaces a trigger's definition and reconverges its
 	// schedule. The owner and kind are not updatable.
 	// forge:custom — replaces an owned trigger's definition and reconverges its schedule
-	UpdateTrigger(context.Context, *connect.Request[v1.UpdateTriggerRequest]) (*connect.Response[v1.UpdateTriggerResponse], error)
+	UpdateTrigger(context.Context, *v1.UpdateTriggerRequest) (*v1.UpdateTriggerResponse, error)
 	// DeleteTrigger removes a trigger and its schedule. Its firing history
 	// survives, with trigger_id cleared — the runs it started still exist.
 	// forge:custom — also removes the schedule and releases the trigger's automation credential
-	DeleteTrigger(context.Context, *connect.Request[v1.DeleteTriggerRequest]) (*connect.Response[v1.DeleteTriggerResponse], error)
+	DeleteTrigger(context.Context, *v1.DeleteTriggerRequest) (*v1.DeleteTriggerResponse, error)
 	// SetTriggerEnabled pauses or resumes a trigger. Disabling pauses the
 	// schedule rather than deleting it, so re-enabling needs no re-derivation.
-	SetTriggerEnabled(context.Context, *connect.Request[v1.SetTriggerEnabledRequest]) (*connect.Response[v1.SetTriggerEnabledResponse], error)
+	SetTriggerEnabled(context.Context, *v1.SetTriggerEnabledRequest) (*v1.SetTriggerEnabledResponse, error)
 	// FireTrigger runs a trigger now, out of band with its schedule. A manual
 	// fire skips the enabled and overlap checks: the human asking for it has
 	// already made that decision.
-	FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error)
+	FireTrigger(context.Context, *v1.FireTriggerRequest) (*v1.FireTriggerResponse, error)
 	// ListTriggerEvents returns a trigger's firings, newest first, paged by a
 	// keyset cursor. Each launched firing carries the state of the run it started.
 	// forge:custom — pages one owned trigger's firings by a keyset cursor, with each run's state
-	ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error)
+	ListTriggerEvents(context.Context, *v1.ListTriggerEventsRequest) (*v1.ListTriggerEventsResponse, error)
 	// GetLaunchEvent returns the event that launched a chat: its kind, the
 	// scheduled slot and manual flag for a schedule, the parent chat for an
 	// agent start, and the start (workflow, presets, params) for all of them.
@@ -438,10 +338,10 @@ type TriggerServiceHandler interface {
 	//
 	// A separate RPC rather than a Chat field because trigger.proto imports
 	// chat.proto, so Chat cannot reference TriggerEvent without a cycle.
-	GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error)
+	GetLaunchEvent(context.Context, *v1.GetLaunchEventRequest) (*v1.GetLaunchEventResponse, error)
 	// RotateWebhookToken replaces a webhook trigger's token. The old token
 	// stops working immediately; the new one is returned once and never again.
-	RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error)
+	RotateWebhookToken(context.Context, *v1.RotateWebhookTokenRequest) (*v1.RotateWebhookTokenResponse, error)
 	// EnableWorkflow turns on every trigger a workflow declares, as one act:
 	// the user's choice of project, machine and connected accounts, applied to
 	// all of them. It is the one way a workflow's triggers start running; no
@@ -460,11 +360,11 @@ type TriggerServiceHandler interface {
 	// activation's name, an unnamed connection and an unspecified acting
 	// identity are kept from what it had. A failed write puts every changed
 	// activation back as it was.
-	EnableWorkflow(context.Context, *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error)
+	EnableWorkflow(context.Context, *v1.EnableWorkflowRequest) (*v1.EnableWorkflowResponse, error)
 	// DisableWorkflow pauses every activation of a workflow. Unlike enabling it
 	// is not all-or-nothing: a pause that fails must not stop the others from
 	// pausing, so it reports each failure and pauses the rest.
-	DisableWorkflow(context.Context, *connect.Request[v1.DisableWorkflowRequest]) (*connect.Response[v1.DisableWorkflowResponse], error)
+	DisableWorkflow(context.Context, *v1.DisableWorkflowRequest) (*v1.DisableWorkflowResponse, error)
 	// ResolveTriggerSenders looks people up for a trigger's "Only from": a
 	// handle (a GitHub login) to the id trigger.sender.id carries, and an id
 	// back to the person's current name. It asks the provider with the
@@ -473,11 +373,11 @@ type TriggerServiceHandler interface {
 	//
 	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
 	// verb, so without it forge generates a mutation hook for it.
-	ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error)
+	ResolveTriggerSenders(context.Context, *v1.ResolveTriggerSendersRequest) (*v1.ResolveTriggerSendersResponse, error)
 	// ListReplayEvents lists the recent events the caller's activations of a
 	// workflow's declared triggers received, newest first, so one can be run
 	// again with ChatService.RunNow.
-	ListReplayEvents(context.Context, *connect.Request[v1.ListReplayEventsRequest]) (*connect.Response[v1.ListReplayEventsResponse], error)
+	ListReplayEvents(context.Context, *v1.ListReplayEventsRequest) (*v1.ListReplayEventsResponse, error)
 	// PreviewReplay maps a past event through a declared trigger's inputs and
 	// prompt, as a fire of that event would. Only the mapping applies: the
 	// trigger's filter and origin_filter are not evaluated, because the person
@@ -490,7 +390,7 @@ type TriggerServiceHandler interface {
 	//
 	// It only reads (nothing is fired or recorded), and says so with
 	// NO_SIDE_EFFECTS, for the same reason as ResolveTriggerSenders.
-	PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error)
+	PreviewReplay(context.Context, *v1.PreviewReplayRequest) (*v1.PreviewReplayResponse, error)
 	// DraftAutomation turns a person's description ("every weekday at 9,
 	// summarise yesterday's failed CI runs") into a proposed automation for
 	// them to review in the automation dialog. It stores nothing and creates
@@ -498,217 +398,422 @@ type TriggerServiceHandler interface {
 	// draft is written by the caller's own fast model, with the draft_automation
 	// tool's schema as the structured output, and normalized by the same code
 	// that tool runs.
-	DraftAutomation(context.Context, *connect.Request[v1.DraftAutomationRequest]) (*connect.Response[v1.DraftAutomationResponse], error)
+	DraftAutomation(context.Context, *v1.DraftAutomationRequest) (*v1.DraftAutomationResponse, error)
 }
 
-// NewTriggerServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	triggerServiceMethods := v1.File_reliant_v1_trigger_proto.Services().ByName("TriggerService").Methods()
-	triggerServiceCreateTriggerHandler := connect.NewUnaryHandler(
-		TriggerServiceCreateTriggerProcedure,
-		svc.CreateTrigger,
-		connect.WithSchema(triggerServiceMethods.ByName("CreateTrigger")),
-		connect.WithHandlerOptions(opts...),
+// RegisterTriggerServiceHandler registers svc as the reliant.v1.TriggerService implementation on
+// server.
+func RegisterTriggerServiceHandler(server *connect.Server, svc TriggerServiceHandler) {
+	adapter := triggerServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: triggerServiceCreateTriggerSpec(), Handler: adapter.createTrigger},
+		connect.Method{Spec: triggerServiceGetTriggerSpec(), Handler: adapter.getTrigger},
+		connect.Method{Spec: triggerServiceListTriggersSpec(), Handler: adapter.listTriggers},
+		connect.Method{Spec: triggerServiceUpdateTriggerSpec(), Handler: adapter.updateTrigger},
+		connect.Method{Spec: triggerServiceDeleteTriggerSpec(), Handler: adapter.deleteTrigger},
+		connect.Method{Spec: triggerServiceSetTriggerEnabledSpec(), Handler: adapter.setTriggerEnabled},
+		connect.Method{Spec: triggerServiceFireTriggerSpec(), Handler: adapter.fireTrigger},
+		connect.Method{Spec: triggerServiceListTriggerEventsSpec(), Handler: adapter.listTriggerEvents},
+		connect.Method{Spec: triggerServiceGetLaunchEventSpec(), Handler: adapter.getLaunchEvent},
+		connect.Method{Spec: triggerServiceRotateWebhookTokenSpec(), Handler: adapter.rotateWebhookToken},
+		connect.Method{Spec: triggerServiceEnableWorkflowSpec(), Handler: adapter.enableWorkflow},
+		connect.Method{Spec: triggerServiceDisableWorkflowSpec(), Handler: adapter.disableWorkflow},
+		connect.Method{Spec: triggerServiceResolveTriggerSendersSpec(), Handler: adapter.resolveTriggerSenders},
+		connect.Method{Spec: triggerServiceListReplayEventsSpec(), Handler: adapter.listReplayEvents},
+		connect.Method{Spec: triggerServicePreviewReplaySpec(), Handler: adapter.previewReplay},
+		connect.Method{Spec: triggerServiceDraftAutomationSpec(), Handler: adapter.draftAutomation},
 	)
-	triggerServiceGetTriggerHandler := connect.NewUnaryHandler(
-		TriggerServiceGetTriggerProcedure,
-		svc.GetTrigger,
-		connect.WithSchema(triggerServiceMethods.ByName("GetTrigger")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceListTriggersHandler := connect.NewUnaryHandler(
-		TriggerServiceListTriggersProcedure,
-		svc.ListTriggers,
-		connect.WithSchema(triggerServiceMethods.ByName("ListTriggers")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceUpdateTriggerHandler := connect.NewUnaryHandler(
-		TriggerServiceUpdateTriggerProcedure,
-		svc.UpdateTrigger,
-		connect.WithSchema(triggerServiceMethods.ByName("UpdateTrigger")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceDeleteTriggerHandler := connect.NewUnaryHandler(
-		TriggerServiceDeleteTriggerProcedure,
-		svc.DeleteTrigger,
-		connect.WithSchema(triggerServiceMethods.ByName("DeleteTrigger")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceSetTriggerEnabledHandler := connect.NewUnaryHandler(
-		TriggerServiceSetTriggerEnabledProcedure,
-		svc.SetTriggerEnabled,
-		connect.WithSchema(triggerServiceMethods.ByName("SetTriggerEnabled")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceFireTriggerHandler := connect.NewUnaryHandler(
-		TriggerServiceFireTriggerProcedure,
-		svc.FireTrigger,
-		connect.WithSchema(triggerServiceMethods.ByName("FireTrigger")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceListTriggerEventsHandler := connect.NewUnaryHandler(
-		TriggerServiceListTriggerEventsProcedure,
-		svc.ListTriggerEvents,
-		connect.WithSchema(triggerServiceMethods.ByName("ListTriggerEvents")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceGetLaunchEventHandler := connect.NewUnaryHandler(
-		TriggerServiceGetLaunchEventProcedure,
-		svc.GetLaunchEvent,
-		connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceRotateWebhookTokenHandler := connect.NewUnaryHandler(
-		TriggerServiceRotateWebhookTokenProcedure,
-		svc.RotateWebhookToken,
-		connect.WithSchema(triggerServiceMethods.ByName("RotateWebhookToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceEnableWorkflowHandler := connect.NewUnaryHandler(
-		TriggerServiceEnableWorkflowProcedure,
-		svc.EnableWorkflow,
-		connect.WithSchema(triggerServiceMethods.ByName("EnableWorkflow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceDisableWorkflowHandler := connect.NewUnaryHandler(
-		TriggerServiceDisableWorkflowProcedure,
-		svc.DisableWorkflow,
-		connect.WithSchema(triggerServiceMethods.ByName("DisableWorkflow")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceResolveTriggerSendersHandler := connect.NewUnaryHandler(
-		TriggerServiceResolveTriggerSendersProcedure,
-		svc.ResolveTriggerSenders,
-		connect.WithSchema(triggerServiceMethods.ByName("ResolveTriggerSenders")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceListReplayEventsHandler := connect.NewUnaryHandler(
-		TriggerServiceListReplayEventsProcedure,
-		svc.ListReplayEvents,
-		connect.WithSchema(triggerServiceMethods.ByName("ListReplayEvents")),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServicePreviewReplayHandler := connect.NewUnaryHandler(
-		TriggerServicePreviewReplayProcedure,
-		svc.PreviewReplay,
-		connect.WithSchema(triggerServiceMethods.ByName("PreviewReplay")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	triggerServiceDraftAutomationHandler := connect.NewUnaryHandler(
-		TriggerServiceDraftAutomationProcedure,
-		svc.DraftAutomation,
-		connect.WithSchema(triggerServiceMethods.ByName("DraftAutomation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.TriggerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case TriggerServiceCreateTriggerProcedure:
-			triggerServiceCreateTriggerHandler.ServeHTTP(w, r)
-		case TriggerServiceGetTriggerProcedure:
-			triggerServiceGetTriggerHandler.ServeHTTP(w, r)
-		case TriggerServiceListTriggersProcedure:
-			triggerServiceListTriggersHandler.ServeHTTP(w, r)
-		case TriggerServiceUpdateTriggerProcedure:
-			triggerServiceUpdateTriggerHandler.ServeHTTP(w, r)
-		case TriggerServiceDeleteTriggerProcedure:
-			triggerServiceDeleteTriggerHandler.ServeHTTP(w, r)
-		case TriggerServiceSetTriggerEnabledProcedure:
-			triggerServiceSetTriggerEnabledHandler.ServeHTTP(w, r)
-		case TriggerServiceFireTriggerProcedure:
-			triggerServiceFireTriggerHandler.ServeHTTP(w, r)
-		case TriggerServiceListTriggerEventsProcedure:
-			triggerServiceListTriggerEventsHandler.ServeHTTP(w, r)
-		case TriggerServiceGetLaunchEventProcedure:
-			triggerServiceGetLaunchEventHandler.ServeHTTP(w, r)
-		case TriggerServiceRotateWebhookTokenProcedure:
-			triggerServiceRotateWebhookTokenHandler.ServeHTTP(w, r)
-		case TriggerServiceEnableWorkflowProcedure:
-			triggerServiceEnableWorkflowHandler.ServeHTTP(w, r)
-		case TriggerServiceDisableWorkflowProcedure:
-			triggerServiceDisableWorkflowHandler.ServeHTTP(w, r)
-		case TriggerServiceResolveTriggerSendersProcedure:
-			triggerServiceResolveTriggerSendersHandler.ServeHTTP(w, r)
-		case TriggerServiceListReplayEventsProcedure:
-			triggerServiceListReplayEventsHandler.ServeHTTP(w, r)
-		case TriggerServicePreviewReplayProcedure:
-			triggerServicePreviewReplayHandler.ServeHTTP(w, r)
-		case TriggerServiceDraftAutomationProcedure:
-			triggerServiceDraftAutomationHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedTriggerServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedTriggerServiceHandler struct{}
 
-func (UnimplementedTriggerServiceHandler) CreateTrigger(context.Context, *connect.Request[v1.CreateTriggerRequest]) (*connect.Response[v1.CreateTriggerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.CreateTrigger is not implemented"))
+func (UnimplementedTriggerServiceHandler) CreateTrigger(context.Context, *v1.CreateTriggerRequest) (*v1.CreateTriggerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.CreateTrigger is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) GetTrigger(context.Context, *connect.Request[v1.GetTriggerRequest]) (*connect.Response[v1.GetTriggerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.GetTrigger is not implemented"))
+func (UnimplementedTriggerServiceHandler) GetTrigger(context.Context, *v1.GetTriggerRequest) (*v1.GetTriggerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.GetTrigger is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) ListTriggers(context.Context, *connect.Request[v1.ListTriggersRequest]) (*connect.Response[v1.ListTriggersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.ListTriggers is not implemented"))
+func (UnimplementedTriggerServiceHandler) ListTriggers(context.Context, *v1.ListTriggersRequest) (*v1.ListTriggersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.ListTriggers is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) UpdateTrigger(context.Context, *connect.Request[v1.UpdateTriggerRequest]) (*connect.Response[v1.UpdateTriggerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.UpdateTrigger is not implemented"))
+func (UnimplementedTriggerServiceHandler) UpdateTrigger(context.Context, *v1.UpdateTriggerRequest) (*v1.UpdateTriggerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.UpdateTrigger is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) DeleteTrigger(context.Context, *connect.Request[v1.DeleteTriggerRequest]) (*connect.Response[v1.DeleteTriggerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.DeleteTrigger is not implemented"))
+func (UnimplementedTriggerServiceHandler) DeleteTrigger(context.Context, *v1.DeleteTriggerRequest) (*v1.DeleteTriggerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.DeleteTrigger is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) SetTriggerEnabled(context.Context, *connect.Request[v1.SetTriggerEnabledRequest]) (*connect.Response[v1.SetTriggerEnabledResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.SetTriggerEnabled is not implemented"))
+func (UnimplementedTriggerServiceHandler) SetTriggerEnabled(context.Context, *v1.SetTriggerEnabledRequest) (*v1.SetTriggerEnabledResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.SetTriggerEnabled is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.FireTrigger is not implemented"))
+func (UnimplementedTriggerServiceHandler) FireTrigger(context.Context, *v1.FireTriggerRequest) (*v1.FireTriggerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.FireTrigger is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) ListTriggerEvents(context.Context, *connect.Request[v1.ListTriggerEventsRequest]) (*connect.Response[v1.ListTriggerEventsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.ListTriggerEvents is not implemented"))
+func (UnimplementedTriggerServiceHandler) ListTriggerEvents(context.Context, *v1.ListTriggerEventsRequest) (*v1.ListTriggerEventsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.ListTriggerEvents is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) GetLaunchEvent(context.Context, *connect.Request[v1.GetLaunchEventRequest]) (*connect.Response[v1.GetLaunchEventResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.GetLaunchEvent is not implemented"))
+func (UnimplementedTriggerServiceHandler) GetLaunchEvent(context.Context, *v1.GetLaunchEventRequest) (*v1.GetLaunchEventResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.GetLaunchEvent is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) RotateWebhookToken(context.Context, *connect.Request[v1.RotateWebhookTokenRequest]) (*connect.Response[v1.RotateWebhookTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.RotateWebhookToken is not implemented"))
+func (UnimplementedTriggerServiceHandler) RotateWebhookToken(context.Context, *v1.RotateWebhookTokenRequest) (*v1.RotateWebhookTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.RotateWebhookToken is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) EnableWorkflow(context.Context, *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.EnableWorkflow is not implemented"))
+func (UnimplementedTriggerServiceHandler) EnableWorkflow(context.Context, *v1.EnableWorkflowRequest) (*v1.EnableWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.EnableWorkflow is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) DisableWorkflow(context.Context, *connect.Request[v1.DisableWorkflowRequest]) (*connect.Response[v1.DisableWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.DisableWorkflow is not implemented"))
+func (UnimplementedTriggerServiceHandler) DisableWorkflow(context.Context, *v1.DisableWorkflowRequest) (*v1.DisableWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.DisableWorkflow is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) ResolveTriggerSenders(context.Context, *connect.Request[v1.ResolveTriggerSendersRequest]) (*connect.Response[v1.ResolveTriggerSendersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.ResolveTriggerSenders is not implemented"))
+func (UnimplementedTriggerServiceHandler) ResolveTriggerSenders(context.Context, *v1.ResolveTriggerSendersRequest) (*v1.ResolveTriggerSendersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.ResolveTriggerSenders is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) ListReplayEvents(context.Context, *connect.Request[v1.ListReplayEventsRequest]) (*connect.Response[v1.ListReplayEventsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.ListReplayEvents is not implemented"))
+func (UnimplementedTriggerServiceHandler) ListReplayEvents(context.Context, *v1.ListReplayEventsRequest) (*v1.ListReplayEventsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.ListReplayEvents is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) PreviewReplay(context.Context, *connect.Request[v1.PreviewReplayRequest]) (*connect.Response[v1.PreviewReplayResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.PreviewReplay is not implemented"))
+func (UnimplementedTriggerServiceHandler) PreviewReplay(context.Context, *v1.PreviewReplayRequest) (*v1.PreviewReplayResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.PreviewReplay is not implemented")
 }
 
-func (UnimplementedTriggerServiceHandler) DraftAutomation(context.Context, *connect.Request[v1.DraftAutomationRequest]) (*connect.Response[v1.DraftAutomationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TriggerService.DraftAutomation is not implemented"))
+func (UnimplementedTriggerServiceHandler) DraftAutomation(context.Context, *v1.DraftAutomationRequest) (*v1.DraftAutomationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.TriggerService.DraftAutomation is not implemented")
+}
+
+type triggerServiceClient struct {
+	client *connect.Client
+}
+
+func (c *triggerServiceClient) CreateTrigger(ctx context.Context, req *v1.CreateTriggerRequest) (*v1.CreateTriggerResponse, error) {
+	var res v1.CreateTriggerResponse
+	if err := c.client.CallUnary(ctx, triggerServiceCreateTriggerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) GetTrigger(ctx context.Context, req *v1.GetTriggerRequest) (*v1.GetTriggerResponse, error) {
+	var res v1.GetTriggerResponse
+	if err := c.client.CallUnary(ctx, triggerServiceGetTriggerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) ListTriggers(ctx context.Context, req *v1.ListTriggersRequest) (*v1.ListTriggersResponse, error) {
+	var res v1.ListTriggersResponse
+	if err := c.client.CallUnary(ctx, triggerServiceListTriggersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) UpdateTrigger(ctx context.Context, req *v1.UpdateTriggerRequest) (*v1.UpdateTriggerResponse, error) {
+	var res v1.UpdateTriggerResponse
+	if err := c.client.CallUnary(ctx, triggerServiceUpdateTriggerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) DeleteTrigger(ctx context.Context, req *v1.DeleteTriggerRequest) (*v1.DeleteTriggerResponse, error) {
+	var res v1.DeleteTriggerResponse
+	if err := c.client.CallUnary(ctx, triggerServiceDeleteTriggerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) SetTriggerEnabled(ctx context.Context, req *v1.SetTriggerEnabledRequest) (*v1.SetTriggerEnabledResponse, error) {
+	var res v1.SetTriggerEnabledResponse
+	if err := c.client.CallUnary(ctx, triggerServiceSetTriggerEnabledSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) FireTrigger(ctx context.Context, req *v1.FireTriggerRequest) (*v1.FireTriggerResponse, error) {
+	var res v1.FireTriggerResponse
+	if err := c.client.CallUnary(ctx, triggerServiceFireTriggerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) ListTriggerEvents(ctx context.Context, req *v1.ListTriggerEventsRequest) (*v1.ListTriggerEventsResponse, error) {
+	var res v1.ListTriggerEventsResponse
+	if err := c.client.CallUnary(ctx, triggerServiceListTriggerEventsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) GetLaunchEvent(ctx context.Context, req *v1.GetLaunchEventRequest) (*v1.GetLaunchEventResponse, error) {
+	var res v1.GetLaunchEventResponse
+	if err := c.client.CallUnary(ctx, triggerServiceGetLaunchEventSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) RotateWebhookToken(ctx context.Context, req *v1.RotateWebhookTokenRequest) (*v1.RotateWebhookTokenResponse, error) {
+	var res v1.RotateWebhookTokenResponse
+	if err := c.client.CallUnary(ctx, triggerServiceRotateWebhookTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) EnableWorkflow(ctx context.Context, req *v1.EnableWorkflowRequest) (*v1.EnableWorkflowResponse, error) {
+	var res v1.EnableWorkflowResponse
+	if err := c.client.CallUnary(ctx, triggerServiceEnableWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) DisableWorkflow(ctx context.Context, req *v1.DisableWorkflowRequest) (*v1.DisableWorkflowResponse, error) {
+	var res v1.DisableWorkflowResponse
+	if err := c.client.CallUnary(ctx, triggerServiceDisableWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) ResolveTriggerSenders(ctx context.Context, req *v1.ResolveTriggerSendersRequest) (*v1.ResolveTriggerSendersResponse, error) {
+	var res v1.ResolveTriggerSendersResponse
+	if err := c.client.CallUnary(ctx, triggerServiceResolveTriggerSendersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) ListReplayEvents(ctx context.Context, req *v1.ListReplayEventsRequest) (*v1.ListReplayEventsResponse, error) {
+	var res v1.ListReplayEventsResponse
+	if err := c.client.CallUnary(ctx, triggerServiceListReplayEventsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) PreviewReplay(ctx context.Context, req *v1.PreviewReplayRequest) (*v1.PreviewReplayResponse, error) {
+	var res v1.PreviewReplayResponse
+	if err := c.client.CallUnary(ctx, triggerServicePreviewReplaySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *triggerServiceClient) DraftAutomation(ctx context.Context, req *v1.DraftAutomationRequest) (*v1.DraftAutomationResponse, error) {
+	var res v1.DraftAutomationResponse
+	if err := c.client.CallUnary(ctx, triggerServiceDraftAutomationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type triggerServiceHandler struct{ svc TriggerServiceHandler }
+
+func (h triggerServiceHandler) createTrigger(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateTriggerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateTrigger(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) getTrigger(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetTriggerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTrigger(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) listTriggers(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTriggersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTriggers(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) updateTrigger(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateTriggerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateTrigger(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) deleteTrigger(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteTriggerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteTrigger(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) setTriggerEnabled(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetTriggerEnabledRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetTriggerEnabled(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) fireTrigger(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.FireTriggerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.FireTrigger(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) listTriggerEvents(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTriggerEventsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTriggerEvents(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) getLaunchEvent(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetLaunchEventRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetLaunchEvent(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) rotateWebhookToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RotateWebhookTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RotateWebhookToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) enableWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.EnableWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.EnableWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) disableWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisableWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisableWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) resolveTriggerSenders(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveTriggerSendersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolveTriggerSenders(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) listReplayEvents(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListReplayEventsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListReplayEvents(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) previewReplay(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PreviewReplayRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PreviewReplay(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h triggerServiceHandler) draftAutomation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DraftAutomationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DraftAutomation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

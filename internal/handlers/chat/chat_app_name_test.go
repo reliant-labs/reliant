@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -43,29 +43,29 @@ func TestStartChat_AppName(t *testing.T) {
 	t.Parallel()
 	f := newBuilderTestFixture(t)
 	f.saveDraft(t, "test-user", "ask-app", db.WorkflowDraftStatusComplete)
-	start := func(app *string) (*connect.Response[reliantv1.StartChatResponse], error) {
-		return f.service.StartChat(f.ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+	start := func(app *string) (*reliantv1.StartChatResponse, error) {
+		return f.service.StartChat(f.ctx, &reliantv1.StartChatRequest{
 			ProjectId: f.projectID,
 			Workflow:  "ask-app",
 			AppName:   app,
 			Messages:  []*reliantv1.InputMessage{{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "why is checkout slow?"}},
-		}))
+		})
 	}
 
 	resp, err := start(ptr.Of("storefront"))
 	require.NoError(t, err)
-	assert.Equal(t, "storefront", resp.Msg.GetChat().GetAppName(), "the response carries the tag")
-	listed, err := f.service.ListChats(f.ctx, connect.NewRequest(&reliantv1.ListChatsRequest{AppName: ptr.Of("storefront")}))
+	assert.Equal(t, "storefront", resp.GetChat().GetAppName(), "the response carries the tag")
+	listed, err := f.service.ListChats(f.ctx, &reliantv1.ListChatsRequest{AppName: ptr.Of("storefront")})
 	require.NoError(t, err)
-	require.Len(t, listed.Msg.GetChats(), 1, "the app's chat list holds it")
-	assert.Equal(t, resp.Msg.GetChat().GetId(), listed.Msg.GetChats()[0].GetId())
-	assert.Equal(t, "storefront", listed.Msg.GetChats()[0].GetAppName(), "a read carries the stored tag")
+	require.Len(t, listed.GetChats(), 1, "the app's chat list holds it")
+	assert.Equal(t, resp.GetChat().GetId(), listed.GetChats()[0].GetId())
+	assert.Equal(t, "storefront", listed.GetChats()[0].GetAppName(), "a read carries the stored tag")
 
 	for name, app := range map[string]*string{"unset": nil, "empty": ptr.Of("")} {
 		resp, err := start(app)
 		require.NoError(t, err, name)
-		assert.Nil(t, resp.Msg.GetChat().AppName, "%s: a chat about no app is untagged", name)
-		stored, err := f.repo.GetChat(f.ctx, resp.Msg.GetChat().GetId())
+		assert.Nil(t, resp.GetChat().AppName, "%s: a chat about no app is untagged", name)
+		stored, err := f.repo.GetChat(f.ctx, resp.GetChat().GetId())
 		require.NoError(t, err)
 		assert.Nil(t, stored.AppName, name)
 	}
@@ -75,7 +75,7 @@ func TestStartChat_AppName(t *testing.T) {
 	for _, bad := range []string{"9lives", "my app", "a/b", strings.Repeat("a", 129)} {
 		_, err := start(ptr.Of(bad))
 		require.Error(t, err, bad)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "%q: %v", bad, err)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "%q: %v", bad, err)
 	}
 	after, err := f.repo.ListChats(f.ctx, db.ChatFilters{UserID: "test-user", Limit: 100})
 	require.NoError(t, err)
@@ -119,10 +119,10 @@ func TestListChats_AppNameFilter(t *testing.T) {
 
 	list := func(ctx context.Context, org, app *string) []string {
 		t.Helper()
-		resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{OrgId: org, AppName: app}))
+		resp, err := service.ListChats(ctx, &reliantv1.ListChatsRequest{OrgId: org, AppName: app})
 		require.NoError(t, err)
 		var out []string
-		for _, c := range resp.Msg.Chats {
+		for _, c := range resp.Chats {
 			if strings.HasSuffix(c.GetId(), suffix) {
 				out = append(out, c.GetId())
 				if app != nil && *app != "" {
@@ -161,10 +161,10 @@ func TestBranchChat_KeepsTheAppName(t *testing.T) {
 	require.NoError(t, err)
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{ChatId: sourceChatID, MessageId: messageID}))
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{ChatId: sourceChatID, MessageId: messageID})
 	require.NoError(t, err)
-	assert.Equal(t, "storefront", resp.Msg.GetChat().GetAppName())
-	branch, err := repo.GetChat(ctx, resp.Msg.GetChat().GetId())
+	assert.Equal(t, "storefront", resp.GetChat().GetAppName())
+	branch, err := repo.GetChat(ctx, resp.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, branch.AppName)
 	assert.Equal(t, "storefront", *branch.AppName)
@@ -181,10 +181,10 @@ func TestGetChat_ViewerReadsTheAppName(t *testing.T) {
 	require.NoError(t, err)
 	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
 
-	resp, err := svc.GetChat(f.Viewer, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.ChatID}))
+	resp, err := svc.GetChat(f.Viewer, &reliantv1.GetChatRequest{ChatId: f.ChatID})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetChat().GetViewerAccess())
-	assert.Equal(t, "storefront", resp.Msg.GetChat().GetAppName())
+	assert.True(t, resp.GetChat().GetViewerAccess())
+	assert.Equal(t, "storefront", resp.GetChat().GetAppName())
 }
 
 // The column's CHECK holds forge's shape for ASCII and admits what the

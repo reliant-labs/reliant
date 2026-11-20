@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,13 +27,13 @@ func TestInterruptThread_TranslatesServiceResult(t *testing.T) {
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	svc := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
 
-	resp, err := svc.InterruptThread(ctx, connect.NewRequest(&reliantv1.InterruptThreadRequest{
+	resp, err := svc.InterruptThread(ctx, &reliantv1.InterruptThreadRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.rootThreadID,
-	}))
+	})
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), resp.Msg.CancelledToolCalls)
-	assert.Empty(t, resp.Msg.UndeliverableToolCalls)
+	assert.Equal(t, int32(0), resp.CancelledToolCalls)
+	assert.Empty(t, resp.UndeliverableToolCalls)
 }
 
 // Every way threads.InterruptThread fails reaches the client with the code its
@@ -49,12 +49,12 @@ func TestInterruptThread_ErrorCodes(t *testing.T) {
 	interrupt := func(t *testing.T, threadsSvc *threads.Service, chatID, threadID string) *connect.Error {
 		t.Helper()
 		svc := &Service{deps: Deps{Repo: repo}, threads: threadsSvc}
-		_, err := svc.InterruptThread(ctx, connect.NewRequest(&reliantv1.InterruptThreadRequest{
+		_, err := svc.InterruptThread(ctx, &reliantv1.InterruptThreadRequest{
 			ChatId:   chatID,
 			ThreadId: threadID,
-		}))
+		})
 		require.Error(t, err)
-		return svcerr.ToConnect(err)
+		return svcerr.ToConnectV2(err)
 	}
 
 	t.Run("a missing thread id is InvalidArgument", func(t *testing.T) {

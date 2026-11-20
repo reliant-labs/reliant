@@ -4,7 +4,7 @@ package grpc
 import (
 	"context"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -21,10 +21,10 @@ const forgeAPIDisabledReason = errreason.ForgeAPIDisabled
 // ForgeAPIDisabled is ForgeService's mount option when the operator turned
 // the forge API off (ApiServerConfig.disable_forge_api,
 // RELIANT_DISABLE_FORGE_API): forgeAPIDisabled innermost in its chain — a
-// mount's own handler options run inside the listener's — so every rpc
+// mount's own interceptors run inside the listener's — so every rpc
 // answers FailedPrecondition, after auth, before the handler runs.
 func ForgeAPIDisabled() mountkit.Option {
-	return mountkit.WithHandlerOptions(connect.WithInterceptors(forgeAPIDisabled{}))
+	return mountkit.WithInterceptorsV2(forgeAPIDisabled{}.intercept)
 }
 
 // forgeAPIDisabled answers every ForgeService rpc with FailedPrecondition: the
@@ -38,25 +38,15 @@ func ForgeAPIDisabled() mountkit.Option {
 type forgeAPIDisabled struct{}
 
 func (forgeAPIDisabled) refusal() error {
-	return svcerr.ToConnect(svcerr.WithReason(
+	return svcerr.ToConnectV2(svcerr.WithReason(
 		svcerr.FailedPrecondition("the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)"),
 		forgeAPIDisabledReason))
 }
 
-func (d forgeAPIDisabled) WrapUnary(connect.UnaryFunc) connect.UnaryFunc {
-	return func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-		return nil, d.refusal()
-	}
-}
-
-// WrapStreamingClient is the identity: this interceptor only ever wraps
-// handlers.
-func (forgeAPIDisabled) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (d forgeAPIDisabled) WrapStreamingHandler(connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(context.Context, connect.StreamingHandlerConn) error {
+// intercept answers every call, unary or streaming, with the refusal; the
+// listener's svcerr layer, outside it, delivers the refusal's reason.
+func (d forgeAPIDisabled) intercept(connect.ServerFunc) connect.ServerFunc {
+	return func(context.Context, connect.Spec, connect.ServerStream) error {
 		return d.refusal()
 	}
 }

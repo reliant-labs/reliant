@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -61,13 +60,13 @@ func generateSlug(name string) string {
 // SaveWorkflow creates or updates a workflow in the database
 func (s *Service) SaveWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SaveWorkflowRequest],
-) (*connect.Response[reliantv1.SaveWorkflowResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.SaveWorkflowRequest,
+) (*reliantv1.SaveWorkflowResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	protoWf := req.Msg.Workflow
+	protoWf := req.Workflow
 	if protoWf == nil {
 		return nil, svcerr.InvalidArgument("workflow is required")
 	}
@@ -85,7 +84,7 @@ func (s *Service) SaveWorkflow(
 	// Get user ID from auth context
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
@@ -95,9 +94,9 @@ func (s *Service) SaveWorkflow(
 	var isUpdate bool
 	var isRename bool // true if updating by ID and slug is changing
 
-	if req.Msg.DraftId != nil && *req.Msg.DraftId != "" {
+	if req.DraftId != nil && *req.DraftId != "" {
 		// Look up by draft ID first - this allows renames to work correctly
-		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, *req.Msg.DraftId)
+		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, *req.DraftId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow draft by ID"))
 		}
@@ -154,7 +153,7 @@ func (s *Service) SaveWorkflow(
 		}
 
 		// Check against project workflows - project not found is ok, just skip check
-		projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.deps.Repo, ctx, req.Msg.ProjectId, slug)
+		projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.deps.Repo, ctx, req.ProjectId, slug)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load project workflow"))
 		}
@@ -187,9 +186,9 @@ func (s *Service) SaveWorkflow(
 	check := s.validateWorkflowDefinition(ctx, userID, definitionYAML)
 	isValid := check.valid()
 	validationErrors := check.protoErrors(true)
-	rejected := func(message string) *connect.Response[reliantv1.SaveWorkflowResponse] {
+	rejected := func(message string) *reliantv1.SaveWorkflowResponse {
 		activity.Skip(ctx) // nothing was stored: no "save" event
-		return connect.NewResponse(&reliantv1.SaveWorkflowResponse{
+		return &reliantv1.SaveWorkflowResponse{
 			Success:          false,
 			Message:          message,
 			Workflow:         protoWf,
@@ -197,7 +196,7 @@ func (s *Service) SaveWorkflow(
 			ValidationErrors: validationErrors,
 			Slug:             slug,
 			YamlDefinition:   string(definitionYAML),
-		})
+		}
 	}
 	if check.parseErr != nil {
 		// Nothing structural to store, even as a draft.
@@ -205,11 +204,11 @@ func (s *Service) SaveWorkflow(
 	}
 
 	// Handle project file write-back if source_path is provided
-	if sourcePath := req.Msg.GetSourcePath(); sourcePath != "" {
+	if sourcePath := req.GetSourcePath(); sourcePath != "" {
 		if !isValid {
 			return rejected("Workflow not saved: project workflows run straight from the file, so they must pass validation — " + check.summary()), nil
 		}
-		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+		project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 		}
@@ -261,7 +260,7 @@ func (s *Service) SaveWorkflow(
 
 		message := "Workflow saved to project file successfully"
 
-		return connect.NewResponse(&reliantv1.SaveWorkflowResponse{
+		return &reliantv1.SaveWorkflowResponse{
 			Success:          true,
 			Message:          message,
 			Workflow:         protoWf,
@@ -269,23 +268,23 @@ func (s *Service) SaveWorkflow(
 			ValidationErrors: validationErrors,
 			Slug:             slug,
 			YamlDefinition:   string(definitionYAML),
-		}), nil
+		}, nil
 	}
 
 	// Use existing user workflow check result from earlier
 	existing := existingUserWorkflow
 
-	status := resolveDraftStatus(req.Msg.GetStatus(), existing)
+	status := resolveDraftStatus(req.GetStatus(), existing)
 	if status == db.WorkflowDraftStatusComplete && !isValid {
 		return rejected(completeRejectedMessage(check)), nil
 	}
 
 	// OCC: Check for conflicts if expected_version is provided
-	if existing != nil && req.Msg.ExpectedVersion != nil {
-		if existing.Version != *req.Msg.ExpectedVersion {
+	if existing != nil && req.ExpectedVersion != nil {
+		if existing.Version != *req.ExpectedVersion {
 			return nil, svcerr.WithReason(svcerr.Aborted(fmt.Sprintf(
 				"workflow was modified since you last loaded it (expected version: %d, current version: %d) - please reload and retry",
-				*req.Msg.ExpectedVersion,
+				*req.ExpectedVersion,
 				existing.Version,
 			)), errreason.StaleRevision)
 		}
@@ -301,7 +300,7 @@ func (s *Service) SaveWorkflow(
 	} else {
 		draftID = uuid.New().String()
 		var err error
-		if orgID, err = s.actingOrg(ctx, userID, req.Msg.GetOrgId()); err != nil {
+		if orgID, err = s.actingOrg(ctx, userID, req.GetOrgId()); err != nil {
 			return nil, err
 		}
 	}
@@ -378,7 +377,7 @@ func (s *Service) SaveWorkflow(
 		YamlDefinition:   string(definitionYAML),
 		Status:           draftStatusToProto(saved.Status),
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // GetWorkflow returns a specific workflow by name/slug or draft ID
@@ -387,12 +386,12 @@ func (s *Service) SaveWorkflow(
 // the caller's own workflows, then the project's.
 func (s *Service) GetWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetWorkflowRequest],
-) (*connect.Response[reliantv1.GetWorkflowResponse], error) {
+	req *reliantv1.GetWorkflowRequest,
+) (*reliantv1.GetWorkflowResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Draft ID lookup takes priority
-	if draftID := req.Msg.GetDraftId(); draftID != "" {
+	if draftID := req.GetDraftId(); draftID != "" {
 		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, draftID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load draft"))
@@ -409,7 +408,7 @@ func (s *Service) GetWorkflow(
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse workflow"))
 		}
 
-		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
+		return &reliantv1.GetWorkflowResponse{
 			Workflow:         protoWf,
 			Source:           "user",
 			DraftId:          &draft.ID,
@@ -417,10 +416,10 @@ func (s *Service) GetWorkflow(
 			YamlDefinition:   draft.Definition,
 			Status:           draftStatusToProto(draft.Status),
 			ValidationErrors: s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition)).protoErrors(true),
-		}), nil
+		}, nil
 	}
 
-	workflowName := req.Msg.Name
+	workflowName := req.Name
 	if workflowName == "" {
 		return nil, svcerr.InvalidArgument("workflow name or draft_id is required")
 	}
@@ -437,12 +436,12 @@ func (s *Service) GetWorkflow(
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse builtin workflow"))
 		}
-		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
+		return &reliantv1.GetWorkflowResponse{
 			Workflow:       protoWf,
 			Source:         "builtin",
 			YamlDefinition: string(data),
 			Status:         reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
-		}), nil
+		}, nil
 	}
 
 	// A ref ("project://deploy") or a bare name: the slug it addresses.
@@ -450,21 +449,21 @@ func (s *Service) GetWorkflow(
 
 	// Decide user-vs-project with the rule a run resolves by (workflowsource):
 	// the caller's own workflow shadows the project's of the same name.
-	if req.Msg.ProjectId != "" {
-		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if req.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 			return nil, err
 		}
 	}
 	resolved, resolveErr := workflowsource.Resolve(ctx, s.deps.Repo, workflowsource.Options{
-		UserID: userID, ProjectID: req.Msg.ProjectId,
+		UserID: userID, ProjectID: req.ProjectId,
 	}, workflowName)
 	if resolveErr == nil && resolved.Source == workflowref.SourceProject {
-		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
+		return &reliantv1.GetWorkflowResponse{
 			Workflow:       resolved.Workflow,
 			Source:         "project",
 			YamlDefinition: string(resolved.YAML),
 			Status:         reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
-		}), nil
+		}, nil
 	}
 
 	// Otherwise the answer is the user's own workflow, whatever its state: a
@@ -494,17 +493,17 @@ func (s *Service) GetWorkflow(
 		// This allows the frontend to show an error state while still allowing
 		// the user to view/clear the corrupted workflow or use the chat to fix it
 		parseErr := err.Error()
-		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
+		return &reliantv1.GetWorkflowResponse{
 			Source:        "user",
 			DraftId:       &draft.ID,
 			Version:       draft.Version,
 			ParseError:    &parseErr,
 			RawDefinition: &draft.Definition,
 			Status:        draftStatusToProto(draft.Status),
-		}), nil
+		}, nil
 	}
 
-	return connect.NewResponse(&reliantv1.GetWorkflowResponse{
+	return &reliantv1.GetWorkflowResponse{
 		Workflow:         protoWf,
 		Source:           "user",
 		DraftId:          &draft.ID,
@@ -512,19 +511,19 @@ func (s *Service) GetWorkflow(
 		YamlDefinition:   draft.Definition,
 		Status:           draftStatusToProto(draft.Status),
 		ValidationErrors: s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition)).protoErrors(true),
-	}), nil
+	}, nil
 }
 
 // DeleteWorkflow deletes a workflow from the database
 func (s *Service) DeleteWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteWorkflowRequest],
-) (*connect.Response[reliantv1.DeleteWorkflowResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.DeleteWorkflowRequest,
+) (*reliantv1.DeleteWorkflowResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("workflow name is required")
 	}
@@ -571,11 +570,11 @@ func (s *Service) DeleteWorkflow(
 	if len(removed) > 0 {
 		message = fmt.Sprintf("Workflow deleted successfully, along with %d automation%s that ran it", len(removed), plural(len(removed)))
 	}
-	return connect.NewResponse(&reliantv1.DeleteWorkflowResponse{
+	return &reliantv1.DeleteWorkflowResponse{
 		Success: true,
 		Message: message,
 		Slug:    slug,
-	}), nil
+	}, nil
 }
 
 func plural(n int) string {

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -55,9 +55,9 @@ func (e *triggerTestEnv) enableRequest(mutate func(*reliantv1.EnableWorkflowRequ
 
 func (e *triggerTestEnv) enable(t *testing.T, req *reliantv1.EnableWorkflowRequest) *reliantv1.EnableWorkflowResponse {
 	t.Helper()
-	resp, err := e.svc.EnableWorkflow(e.ctx, connect.NewRequest(req))
+	resp, err := e.svc.EnableWorkflow(e.ctx, req)
 	require.NoError(t, err)
-	return resp.Msg
+	return resp
 }
 
 func outcomes(resp *reliantv1.EnableWorkflowResponse) map[string]reliantv1.WorkflowTriggerOutcome {
@@ -193,7 +193,7 @@ nodes:
     args: {title: ok}
 `)
 	require.True(t, env.enable(t, env.enableRequest(nil)).Enabled)
-	_, err := env.svc.DisableWorkflow(env.ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	_, err := env.svc.DisableWorkflow(env.ctx, &reliantv1.DisableWorkflowRequest{Workflow: "triage"})
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(env.ctx)
@@ -211,10 +211,10 @@ nodes:
 	}
 	env.backend.mu.Unlock()
 
-	resp, err := env.svc.EnableWorkflow(ctx, connect.NewRequest(env.enableRequest(nil)))
+	resp, err := env.svc.EnableWorkflow(ctx, env.enableRequest(nil))
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Enabled)
-	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, outcomes(resp.Msg)["nightly"])
+	assert.False(t, resp.Enabled)
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, outcomes(resp)["nightly"])
 	stored := env.storedTriggers(t)
 	require.Len(t, stored, 1)
 	assert.False(t, stored[0].Enabled, "a failed resume is switched back off, even after the request's deadline")
@@ -276,11 +276,11 @@ func TestEnableWorkflowResumesAPausedActivationAndKeepsItsSettings(t *testing.T)
 		assert.Empty(t, r.Activation.GetMessage(), "%s keeps its declaration's prompt", r.Trigger)
 	}
 
-	disabled, err := env.svc.DisableWorkflow(env.ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	disabled, err := env.svc.DisableWorkflow(env.ctx, &reliantv1.DisableWorkflowRequest{Workflow: "triage"})
 	require.NoError(t, err)
-	require.Len(t, disabled.Msg.Paused, 3)
-	assert.Empty(t, disabled.Msg.Failed)
-	for _, p := range disabled.Msg.Paused {
+	require.Len(t, disabled.Paused, 3)
+	assert.Empty(t, disabled.Failed)
+	for _, p := range disabled.Paused {
 		assert.False(t, p.GetEnabled())
 	}
 
@@ -360,7 +360,7 @@ func TestEnableWorkflowResumesAPausedAutomationWithNewSettings(t *testing.T) {
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
 	connect1 := func(r *reliantv1.EnableWorkflowRequest) { r.ConnectionIds = map[string]string{"test": conn.ID} }
 	require.True(t, env.enable(t, env.enableRequest(connect1)).Enabled)
-	_, err := env.svc.DisableWorkflow(env.ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	_, err := env.svc.DisableWorkflow(env.ctx, &reliantv1.DisableWorkflowRequest{Workflow: "triage"})
 	require.NoError(t, err)
 
 	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
@@ -557,11 +557,11 @@ func TestEnableWorkflowOverridesOneTrigger(t *testing.T) {
 	assert.Equal(t, "digest", by["nightly"].GetName())
 	assert.Equal(t, "Custom prompt", by["nightly"].GetMessage())
 
-	_, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+	_, err := env.svc.EnableWorkflow(env.ctx, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
 		r.Overrides = []*reliantv1.WorkflowTriggerOverride{{Trigger: "nope"}}
-	})))
+	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // Naming triggers narrows the enable to them: an already-activated one is
@@ -604,47 +604,47 @@ func TestEnableWorkflowNamedTriggersUpdatesInPlaceAndLeavesTheRest(t *testing.T)
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED, got["nightly"].Outcome)
 	assert.Len(t, env.storedTriggers(t), 2, "no duplicate row; hook is still not activated")
 
-	_, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+	_, err := env.svc.EnableWorkflow(env.ctx, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
 		r.Triggers = []string{"nope"}
-	})))
+	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an undeclared name refuses, it does not enable nothing")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "an undeclared name refuses, it does not enable nothing")
 
-	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+	_, err = env.svc.EnableWorkflow(env.ctx, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
 		r.Triggers = []string{"nightly"}
 		r.Overrides = []*reliantv1.WorkflowTriggerOverride{{Trigger: "hook"}}
-	})))
+	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an override for a trigger the request does not enable is refused")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "an override for a trigger the request does not enable is refused")
 
 	// A connection for an integration no enabled trigger listens through is
 	// a typo to refuse, not a key to ignore (the trigger would listen through
 	// the default connection instead), and nothing is written.
-	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+	_, err = env.svc.EnableWorkflow(env.ctx, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
 		r.Triggers = []string{"new-issue"}
 		r.ConnectionIds = map[string]string{"tset": conn.ID}
-	})))
+	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an unmatched connection key is refused")
-	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "an unmatched connection key is refused")
+	_, err = env.svc.EnableWorkflow(env.ctx, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
 		r.Triggers = []string{"nightly"}
 		r.ConnectionIds = map[string]string{"test": conn.ID}
-	})))
+	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a connection for a trigger the request does not enable is refused")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "a connection for a trigger the request does not enable is refused")
 	assert.Len(t, env.storedTriggers(t), 2)
 
 	// A second trigger of an existing name is the caller's conflict, not an
 	// internal error.
-	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+	_, err = env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 		Name:      got["nightly"].Activation.GetName(),
 		ProjectId: env.projectID,
 		DaemonId:  env.daemonID,
 		Workflow:  "triage",
 		Source:    &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "nightly"},
-	}}))
+	}})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err))
 	assert.Len(t, env.storedTriggers(t), 2)
 }
 
@@ -659,17 +659,17 @@ func TestEnableWorkflowRefusals(t *testing.T) {
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "plain", "name: plain\nentry: [a]\nnodes:\n  - id: a\n    type: approval\n    args: {title: ok}\n")
 
-	_, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "plain" })))
+	_, err := env.svc.EnableWorkflow(env.ctx, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "plain" }))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a workflow with no triggers has nothing to enable")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "a workflow with no triggers has nothing to enable")
 
-	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "missing" })))
+	_, err = env.svc.EnableWorkflow(env.ctx, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "missing" }))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
-	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.ProjectId = "" })))
+	_, err = env.svc.EnableWorkflow(env.ctx, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.ProjectId = "" }))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // A machine the project cannot run on refuses the lot, like any activation.
@@ -693,9 +693,9 @@ func TestDisableWorkflowPausesOnlyThatWorkflowsActivations(t *testing.T) {
 	require.True(t, env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.ConnectionIds = map[string]string{"test": conn.ID} })).Enabled)
 	unrelated := env.create(t, env.definition(nil)) // an ad hoc schedule on another workflow
 
-	resp, err := env.svc.DisableWorkflow(env.ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	resp, err := env.svc.DisableWorkflow(env.ctx, &reliantv1.DisableWorkflowRequest{Workflow: "triage"})
 	require.NoError(t, err)
-	assert.Len(t, resp.Msg.Paused, 3)
+	assert.Len(t, resp.Paused, 3)
 
 	after, err := env.repo.GetTrigger(context.Background(), unrelated.GetId())
 	require.NoError(t, err)
@@ -715,17 +715,17 @@ func TestDisableWorkflowReportsAFailureAndPausesTheRest(t *testing.T) {
 	// a webhook has nothing to converge.
 	env.backend.syncErr = errors.New("temporal is down")
 
-	resp, err := env.svc.DisableWorkflow(env.ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	resp, err := env.svc.DisableWorkflow(env.ctx, &reliantv1.DisableWorkflowRequest{Workflow: "triage"})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Failed, 2)
-	for _, f := range resp.Msg.Failed {
+	require.Len(t, resp.Failed, 2)
+	for _, f := range resp.Failed {
 		// The schedule backend's own text is server-side: the person reads
 		// what failed, and the log reads why.
 		assert.Equal(t, "the schedule backend is unavailable", f.Message)
 		assert.NotEmpty(t, f.TriggerId)
 	}
-	require.Len(t, resp.Msg.Paused, 1, "the webhook pauses though the others could not")
-	assert.Equal(t, "hook", resp.Msg.Paused[0].GetWorkflowTrigger())
+	require.Len(t, resp.Paused, 1, "the webhook pauses though the others could not")
+	assert.Equal(t, "hook", resp.Paused[0].GetWorkflowTrigger())
 }
 
 // One user cannot enable, resume or pause another's activations.
@@ -739,9 +739,9 @@ func TestWorkflowEnableAndDisableAreScopedToTheCaller(t *testing.T) {
 	require.True(t, env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.ConnectionIds = map[string]string{"test": conn.ID} })).Enabled)
 
 	stranger := withUser(env.ctx, "someone-else")
-	resp, err := env.svc.DisableWorkflow(stranger, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	resp, err := env.svc.DisableWorkflow(stranger, &reliantv1.DisableWorkflowRequest{Workflow: "triage"})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.Paused)
+	assert.Empty(t, resp.Paused)
 	for _, tr := range env.storedTriggers(t) {
 		assert.True(t, tr.Enabled)
 	}

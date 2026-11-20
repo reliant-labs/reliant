@@ -5,69 +5,143 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/identity/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// IdentityServiceName is the fully-qualified name of the IdentityService service.
 	IdentityServiceName = "controlplane.v1.IdentityService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// IdentityServiceGetIdentityStatusProcedure is the fully-qualified name of the IdentityService's
+	// IdentityServiceGetIdentityStatusProcedure is the procedure name of the IdentityService's
 	// GetIdentityStatus RPC.
 	IdentityServiceGetIdentityStatusProcedure = "/controlplane.v1.IdentityService/GetIdentityStatus"
-	// IdentityServiceListUsersProcedure is the fully-qualified name of the IdentityService's ListUsers
-	// RPC.
+	// IdentityServiceListUsersProcedure is the procedure name of the IdentityService's ListUsers RPC.
 	IdentityServiceListUsersProcedure = "/controlplane.v1.IdentityService/ListUsers"
-	// IdentityServiceGetUserProcedure is the fully-qualified name of the IdentityService's GetUser RPC.
+	// IdentityServiceGetUserProcedure is the procedure name of the IdentityService's GetUser RPC.
 	IdentityServiceGetUserProcedure = "/controlplane.v1.IdentityService/GetUser"
-	// IdentityServiceInviteUserProcedure is the fully-qualified name of the IdentityService's
-	// InviteUser RPC.
+	// IdentityServiceInviteUserProcedure is the procedure name of the IdentityService's InviteUser RPC.
 	IdentityServiceInviteUserProcedure = "/controlplane.v1.IdentityService/InviteUser"
-	// IdentityServiceSetUserRolesProcedure is the fully-qualified name of the IdentityService's
-	// SetUserRoles RPC.
+	// IdentityServiceSetUserRolesProcedure is the procedure name of the IdentityService's SetUserRoles
+	// RPC.
 	IdentityServiceSetUserRolesProcedure = "/controlplane.v1.IdentityService/SetUserRoles"
-	// IdentityServiceSendPasswordResetProcedure is the fully-qualified name of the IdentityService's
+	// IdentityServiceSendPasswordResetProcedure is the procedure name of the IdentityService's
 	// SendPasswordReset RPC.
 	IdentityServiceSendPasswordResetProcedure = "/controlplane.v1.IdentityService/SendPasswordReset"
-	// IdentityServiceLockUserProcedure is the fully-qualified name of the IdentityService's LockUser
-	// RPC.
+	// IdentityServiceLockUserProcedure is the procedure name of the IdentityService's LockUser RPC.
 	IdentityServiceLockUserProcedure = "/controlplane.v1.IdentityService/LockUser"
-	// IdentityServiceUnlockUserProcedure is the fully-qualified name of the IdentityService's
-	// UnlockUser RPC.
+	// IdentityServiceUnlockUserProcedure is the procedure name of the IdentityService's UnlockUser RPC.
 	IdentityServiceUnlockUserProcedure = "/controlplane.v1.IdentityService/UnlockUser"
-	// IdentityServiceDeleteUserProcedure is the fully-qualified name of the IdentityService's
-	// DeleteUser RPC.
+	// IdentityServiceDeleteUserProcedure is the procedure name of the IdentityService's DeleteUser RPC.
 	IdentityServiceDeleteUserProcedure = "/controlplane.v1.IdentityService/DeleteUser"
-	// IdentityServiceRevokeSessionsProcedure is the fully-qualified name of the IdentityService's
+	// IdentityServiceRevokeSessionsProcedure is the procedure name of the IdentityService's
 	// RevokeSessions RPC.
 	IdentityServiceRevokeSessionsProcedure = "/controlplane.v1.IdentityService/RevokeSessions"
-	// IdentityServiceRequestExportProcedure is the fully-qualified name of the IdentityService's
+	// IdentityServiceRequestExportProcedure is the procedure name of the IdentityService's
 	// RequestExport RPC.
 	IdentityServiceRequestExportProcedure = "/controlplane.v1.IdentityService/RequestExport"
-	// IdentityServiceGetExportURLProcedure is the fully-qualified name of the IdentityService's
-	// GetExportURL RPC.
+	// IdentityServiceGetExportURLProcedure is the procedure name of the IdentityService's GetExportURL
+	// RPC.
 	IdentityServiceGetExportURLProcedure = "/controlplane.v1.IdentityService/GetExportURL"
+)
+
+var (
+	identityServiceGetIdentityStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("GetIdentityStatus"),
+			Procedure:  IdentityServiceGetIdentityStatusProcedure,
+		}
+	})
+	identityServiceListUsersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("ListUsers"),
+			Procedure:  IdentityServiceListUsersProcedure,
+		}
+	})
+	identityServiceGetUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("GetUser"),
+			Procedure:        IdentityServiceGetUserProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	identityServiceInviteUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("InviteUser"),
+			Procedure:  IdentityServiceInviteUserProcedure,
+		}
+	})
+	identityServiceSetUserRolesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("SetUserRoles"),
+			Procedure:  IdentityServiceSetUserRolesProcedure,
+		}
+	})
+	identityServiceSendPasswordResetSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("SendPasswordReset"),
+			Procedure:  IdentityServiceSendPasswordResetProcedure,
+		}
+	})
+	identityServiceLockUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("LockUser"),
+			Procedure:  IdentityServiceLockUserProcedure,
+		}
+	})
+	identityServiceUnlockUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("UnlockUser"),
+			Procedure:  IdentityServiceUnlockUserProcedure,
+		}
+	})
+	identityServiceDeleteUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("DeleteUser"),
+			Procedure:  IdentityServiceDeleteUserProcedure,
+		}
+	})
+	identityServiceRevokeSessionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("RevokeSessions"),
+			Procedure:  IdentityServiceRevokeSessionsProcedure,
+		}
+	})
+	identityServiceRequestExportSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("RequestExport"),
+			Procedure:  IdentityServiceRequestExportProcedure,
+		}
+	})
+	identityServiceGetExportURLSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods().ByName("GetExportURL"),
+			Procedure:  IdentityServiceGetExportURLProcedure,
+		}
+	})
 )
 
 // IdentityServiceClient is a client for the controlplane.v1.IdentityService service.
@@ -75,9 +149,9 @@ type IdentityServiceClient interface {
 	// GetIdentityStatus reports the environment's identity instance: state, issuer,
 	// apps, deliveries and sharers. Read from the reconciler's rows; it dials no
 	// Zitadel and returns no secret.
-	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
+	GetIdentityStatus(context.Context, *v1.GetIdentityStatusRequest) (*v1.GetIdentityStatusResponse, error)
 	// ListUsers lists the instance's human users with their state and roles.
-	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
+	ListUsers(context.Context, *v1.ListIdentityUsersRequest) (*v1.ListIdentityUsersResponse, error)
 	// GetUser reads one human user of the instance by its identity-provider
 	// subject id (IdentityUser.user_id, the token's sub), with the same state,
 	// roles and sign-in fields ListUsers returns: what a console deep-links to.
@@ -85,27 +159,27 @@ type IdentityServiceClient interface {
 	// identity:read. NotFound for an id the environment's instance does not
 	// hold, a service account, or a deleted user; an id from another org's
 	// instance is simply not in this one.
-	GetUser(context.Context, *connect.Request[v1.GetIdentityUserRequest]) (*connect.Response[v1.GetIdentityUserResponse], error)
+	GetUser(context.Context, *v1.GetIdentityUserRequest) (*v1.GetIdentityUserResponse, error)
 	// InviteUser creates the account if needed and grants the console-managed
 	// roles. An account with no credential yet (a new one, or one never set up)
 	// gets a password-set code: emailed as a link when the environment has mail
 	// delivery, or handed back with return_code.
-	InviteUser(context.Context, *connect.Request[v1.InviteIdentityUserRequest]) (*connect.Response[v1.InviteIdentityUserResponse], error)
+	InviteUser(context.Context, *v1.InviteIdentityUserRequest) (*v1.InviteIdentityUserResponse, error)
 	// SetUserRoles replaces the user's console-managed roles. Declared roles are
 	// left as they are.
-	SetUserRoles(context.Context, *connect.Request[v1.SetIdentityUserRolesRequest]) (*connect.Response[v1.SetIdentityUserRolesResponse], error)
+	SetUserRoles(context.Context, *v1.SetIdentityUserRolesRequest) (*v1.SetIdentityUserRolesResponse, error)
 	// SendPasswordReset issues the user a password-set code: emailed as a link
 	// when the environment has mail delivery, or handed back with return_code.
-	SendPasswordReset(context.Context, *connect.Request[v1.SendIdentityPasswordResetRequest]) (*connect.Response[v1.SendIdentityPasswordResetResponse], error)
+	SendPasswordReset(context.Context, *v1.SendIdentityPasswordResetRequest) (*v1.SendIdentityPasswordResetResponse, error)
 	// LockUser blocks sign-in for the user. Reversible with UnlockUser.
-	LockUser(context.Context, *connect.Request[v1.LockIdentityUserRequest]) (*connect.Response[v1.LockIdentityUserResponse], error)
-	UnlockUser(context.Context, *connect.Request[v1.UnlockIdentityUserRequest]) (*connect.Response[v1.UnlockIdentityUserResponse], error)
+	LockUser(context.Context, *v1.LockIdentityUserRequest) (*v1.LockIdentityUserResponse, error)
+	UnlockUser(context.Context, *v1.UnlockIdentityUserRequest) (*v1.UnlockIdentityUserResponse, error)
 	// DeleteUser removes the account. A user who holds a declared role is
 	// refused: the next reconcile would recreate them.
-	DeleteUser(context.Context, *connect.Request[v1.DeleteIdentityUserRequest]) (*connect.Response[v1.DeleteIdentityUserResponse], error)
+	DeleteUser(context.Context, *v1.DeleteIdentityUserRequest) (*v1.DeleteIdentityUserResponse, error)
 	// RevokeSessions ends the user's sign-in sessions. Access tokens already
 	// issued stay valid until they expire.
-	RevokeSessions(context.Context, *connect.Request[v1.RevokeIdentitySessionsRequest]) (*connect.Response[v1.RevokeIdentitySessionsResponse], error)
+	RevokeSessions(context.Context, *v1.RevokeIdentitySessionsRequest) (*v1.RevokeIdentitySessionsResponse, error)
 	// RequestExport exports the environment's identity instance now (every
 	// user, password hashes included) and returns a signed, short-lived
 	// download URL for it. Requests within the same 15 minutes share one
@@ -114,175 +188,18 @@ type IdentityServiceClient interface {
 	// AND the identity:manage grant), because the export is a credential.
 	// FailedPrecondition where export is not enabled for this deployment, or
 	// the instance is not ready.
-	RequestExport(context.Context, *connect.Request[v1.RequestIdentityExportRequest]) (*connect.Response[v1.RequestIdentityExportResponse], error)
+	RequestExport(context.Context, *v1.RequestIdentityExportRequest) (*v1.RequestIdentityExportResponse, error)
 	// GetExportURL returns a fresh signed URL for the export that already exists
 	// (the one written when the identity was withdrawn). NotFound when there is
 	// none; FailedPrecondition where export is not enabled. Needs
 	// identity:manage, as RequestExport does.
-	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
+	GetExportURL(context.Context, *v1.GetIdentityExportURLRequest) (*v1.GetIdentityExportURLResponse, error)
 }
 
-// NewIdentityServiceClient constructs a client for the controlplane.v1.IdentityService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) IdentityServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	identityServiceMethods := v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods()
-	return &identityServiceClient{
-		getIdentityStatus: connect.NewClient[v1.GetIdentityStatusRequest, v1.GetIdentityStatusResponse](
-			httpClient,
-			baseURL+IdentityServiceGetIdentityStatusProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("GetIdentityStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		listUsers: connect.NewClient[v1.ListIdentityUsersRequest, v1.ListIdentityUsersResponse](
-			httpClient,
-			baseURL+IdentityServiceListUsersProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
-			connect.WithClientOptions(opts...),
-		),
-		getUser: connect.NewClient[v1.GetIdentityUserRequest, v1.GetIdentityUserResponse](
-			httpClient,
-			baseURL+IdentityServiceGetUserProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("GetUser")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		inviteUser: connect.NewClient[v1.InviteIdentityUserRequest, v1.InviteIdentityUserResponse](
-			httpClient,
-			baseURL+IdentityServiceInviteUserProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("InviteUser")),
-			connect.WithClientOptions(opts...),
-		),
-		setUserRoles: connect.NewClient[v1.SetIdentityUserRolesRequest, v1.SetIdentityUserRolesResponse](
-			httpClient,
-			baseURL+IdentityServiceSetUserRolesProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("SetUserRoles")),
-			connect.WithClientOptions(opts...),
-		),
-		sendPasswordReset: connect.NewClient[v1.SendIdentityPasswordResetRequest, v1.SendIdentityPasswordResetResponse](
-			httpClient,
-			baseURL+IdentityServiceSendPasswordResetProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("SendPasswordReset")),
-			connect.WithClientOptions(opts...),
-		),
-		lockUser: connect.NewClient[v1.LockIdentityUserRequest, v1.LockIdentityUserResponse](
-			httpClient,
-			baseURL+IdentityServiceLockUserProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("LockUser")),
-			connect.WithClientOptions(opts...),
-		),
-		unlockUser: connect.NewClient[v1.UnlockIdentityUserRequest, v1.UnlockIdentityUserResponse](
-			httpClient,
-			baseURL+IdentityServiceUnlockUserProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("UnlockUser")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteUser: connect.NewClient[v1.DeleteIdentityUserRequest, v1.DeleteIdentityUserResponse](
-			httpClient,
-			baseURL+IdentityServiceDeleteUserProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("DeleteUser")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeSessions: connect.NewClient[v1.RevokeIdentitySessionsRequest, v1.RevokeIdentitySessionsResponse](
-			httpClient,
-			baseURL+IdentityServiceRevokeSessionsProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("RevokeSessions")),
-			connect.WithClientOptions(opts...),
-		),
-		requestExport: connect.NewClient[v1.RequestIdentityExportRequest, v1.RequestIdentityExportResponse](
-			httpClient,
-			baseURL+IdentityServiceRequestExportProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("RequestExport")),
-			connect.WithClientOptions(opts...),
-		),
-		getExportURL: connect.NewClient[v1.GetIdentityExportURLRequest, v1.GetIdentityExportURLResponse](
-			httpClient,
-			baseURL+IdentityServiceGetExportURLProcedure,
-			connect.WithSchema(identityServiceMethods.ByName("GetExportURL")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// identityServiceClient implements IdentityServiceClient.
-type identityServiceClient struct {
-	getIdentityStatus *connect.Client[v1.GetIdentityStatusRequest, v1.GetIdentityStatusResponse]
-	listUsers         *connect.Client[v1.ListIdentityUsersRequest, v1.ListIdentityUsersResponse]
-	getUser           *connect.Client[v1.GetIdentityUserRequest, v1.GetIdentityUserResponse]
-	inviteUser        *connect.Client[v1.InviteIdentityUserRequest, v1.InviteIdentityUserResponse]
-	setUserRoles      *connect.Client[v1.SetIdentityUserRolesRequest, v1.SetIdentityUserRolesResponse]
-	sendPasswordReset *connect.Client[v1.SendIdentityPasswordResetRequest, v1.SendIdentityPasswordResetResponse]
-	lockUser          *connect.Client[v1.LockIdentityUserRequest, v1.LockIdentityUserResponse]
-	unlockUser        *connect.Client[v1.UnlockIdentityUserRequest, v1.UnlockIdentityUserResponse]
-	deleteUser        *connect.Client[v1.DeleteIdentityUserRequest, v1.DeleteIdentityUserResponse]
-	revokeSessions    *connect.Client[v1.RevokeIdentitySessionsRequest, v1.RevokeIdentitySessionsResponse]
-	requestExport     *connect.Client[v1.RequestIdentityExportRequest, v1.RequestIdentityExportResponse]
-	getExportURL      *connect.Client[v1.GetIdentityExportURLRequest, v1.GetIdentityExportURLResponse]
-}
-
-// GetIdentityStatus calls controlplane.v1.IdentityService.GetIdentityStatus.
-func (c *identityServiceClient) GetIdentityStatus(ctx context.Context, req *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error) {
-	return c.getIdentityStatus.CallUnary(ctx, req)
-}
-
-// ListUsers calls controlplane.v1.IdentityService.ListUsers.
-func (c *identityServiceClient) ListUsers(ctx context.Context, req *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error) {
-	return c.listUsers.CallUnary(ctx, req)
-}
-
-// GetUser calls controlplane.v1.IdentityService.GetUser.
-func (c *identityServiceClient) GetUser(ctx context.Context, req *connect.Request[v1.GetIdentityUserRequest]) (*connect.Response[v1.GetIdentityUserResponse], error) {
-	return c.getUser.CallUnary(ctx, req)
-}
-
-// InviteUser calls controlplane.v1.IdentityService.InviteUser.
-func (c *identityServiceClient) InviteUser(ctx context.Context, req *connect.Request[v1.InviteIdentityUserRequest]) (*connect.Response[v1.InviteIdentityUserResponse], error) {
-	return c.inviteUser.CallUnary(ctx, req)
-}
-
-// SetUserRoles calls controlplane.v1.IdentityService.SetUserRoles.
-func (c *identityServiceClient) SetUserRoles(ctx context.Context, req *connect.Request[v1.SetIdentityUserRolesRequest]) (*connect.Response[v1.SetIdentityUserRolesResponse], error) {
-	return c.setUserRoles.CallUnary(ctx, req)
-}
-
-// SendPasswordReset calls controlplane.v1.IdentityService.SendPasswordReset.
-func (c *identityServiceClient) SendPasswordReset(ctx context.Context, req *connect.Request[v1.SendIdentityPasswordResetRequest]) (*connect.Response[v1.SendIdentityPasswordResetResponse], error) {
-	return c.sendPasswordReset.CallUnary(ctx, req)
-}
-
-// LockUser calls controlplane.v1.IdentityService.LockUser.
-func (c *identityServiceClient) LockUser(ctx context.Context, req *connect.Request[v1.LockIdentityUserRequest]) (*connect.Response[v1.LockIdentityUserResponse], error) {
-	return c.lockUser.CallUnary(ctx, req)
-}
-
-// UnlockUser calls controlplane.v1.IdentityService.UnlockUser.
-func (c *identityServiceClient) UnlockUser(ctx context.Context, req *connect.Request[v1.UnlockIdentityUserRequest]) (*connect.Response[v1.UnlockIdentityUserResponse], error) {
-	return c.unlockUser.CallUnary(ctx, req)
-}
-
-// DeleteUser calls controlplane.v1.IdentityService.DeleteUser.
-func (c *identityServiceClient) DeleteUser(ctx context.Context, req *connect.Request[v1.DeleteIdentityUserRequest]) (*connect.Response[v1.DeleteIdentityUserResponse], error) {
-	return c.deleteUser.CallUnary(ctx, req)
-}
-
-// RevokeSessions calls controlplane.v1.IdentityService.RevokeSessions.
-func (c *identityServiceClient) RevokeSessions(ctx context.Context, req *connect.Request[v1.RevokeIdentitySessionsRequest]) (*connect.Response[v1.RevokeIdentitySessionsResponse], error) {
-	return c.revokeSessions.CallUnary(ctx, req)
-}
-
-// RequestExport calls controlplane.v1.IdentityService.RequestExport.
-func (c *identityServiceClient) RequestExport(ctx context.Context, req *connect.Request[v1.RequestIdentityExportRequest]) (*connect.Response[v1.RequestIdentityExportResponse], error) {
-	return c.requestExport.CallUnary(ctx, req)
-}
-
-// GetExportURL calls controlplane.v1.IdentityService.GetExportURL.
-func (c *identityServiceClient) GetExportURL(ctx context.Context, req *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error) {
-	return c.getExportURL.CallUnary(ctx, req)
+// NewIdentityServiceClient constructs a client for the controlplane.v1.IdentityService service.
+// Multiple service clients may share a single connect.Client.
+func NewIdentityServiceClient(client *connect.Client) IdentityServiceClient {
+	return &identityServiceClient{client: client}
 }
 
 // IdentityServiceHandler is an implementation of the controlplane.v1.IdentityService service.
@@ -290,9 +207,9 @@ type IdentityServiceHandler interface {
 	// GetIdentityStatus reports the environment's identity instance: state, issuer,
 	// apps, deliveries and sharers. Read from the reconciler's rows; it dials no
 	// Zitadel and returns no secret.
-	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
+	GetIdentityStatus(context.Context, *v1.GetIdentityStatusRequest) (*v1.GetIdentityStatusResponse, error)
 	// ListUsers lists the instance's human users with their state and roles.
-	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
+	ListUsers(context.Context, *v1.ListIdentityUsersRequest) (*v1.ListIdentityUsersResponse, error)
 	// GetUser reads one human user of the instance by its identity-provider
 	// subject id (IdentityUser.user_id, the token's sub), with the same state,
 	// roles and sign-in fields ListUsers returns: what a console deep-links to.
@@ -300,27 +217,27 @@ type IdentityServiceHandler interface {
 	// identity:read. NotFound for an id the environment's instance does not
 	// hold, a service account, or a deleted user; an id from another org's
 	// instance is simply not in this one.
-	GetUser(context.Context, *connect.Request[v1.GetIdentityUserRequest]) (*connect.Response[v1.GetIdentityUserResponse], error)
+	GetUser(context.Context, *v1.GetIdentityUserRequest) (*v1.GetIdentityUserResponse, error)
 	// InviteUser creates the account if needed and grants the console-managed
 	// roles. An account with no credential yet (a new one, or one never set up)
 	// gets a password-set code: emailed as a link when the environment has mail
 	// delivery, or handed back with return_code.
-	InviteUser(context.Context, *connect.Request[v1.InviteIdentityUserRequest]) (*connect.Response[v1.InviteIdentityUserResponse], error)
+	InviteUser(context.Context, *v1.InviteIdentityUserRequest) (*v1.InviteIdentityUserResponse, error)
 	// SetUserRoles replaces the user's console-managed roles. Declared roles are
 	// left as they are.
-	SetUserRoles(context.Context, *connect.Request[v1.SetIdentityUserRolesRequest]) (*connect.Response[v1.SetIdentityUserRolesResponse], error)
+	SetUserRoles(context.Context, *v1.SetIdentityUserRolesRequest) (*v1.SetIdentityUserRolesResponse, error)
 	// SendPasswordReset issues the user a password-set code: emailed as a link
 	// when the environment has mail delivery, or handed back with return_code.
-	SendPasswordReset(context.Context, *connect.Request[v1.SendIdentityPasswordResetRequest]) (*connect.Response[v1.SendIdentityPasswordResetResponse], error)
+	SendPasswordReset(context.Context, *v1.SendIdentityPasswordResetRequest) (*v1.SendIdentityPasswordResetResponse, error)
 	// LockUser blocks sign-in for the user. Reversible with UnlockUser.
-	LockUser(context.Context, *connect.Request[v1.LockIdentityUserRequest]) (*connect.Response[v1.LockIdentityUserResponse], error)
-	UnlockUser(context.Context, *connect.Request[v1.UnlockIdentityUserRequest]) (*connect.Response[v1.UnlockIdentityUserResponse], error)
+	LockUser(context.Context, *v1.LockIdentityUserRequest) (*v1.LockIdentityUserResponse, error)
+	UnlockUser(context.Context, *v1.UnlockIdentityUserRequest) (*v1.UnlockIdentityUserResponse, error)
 	// DeleteUser removes the account. A user who holds a declared role is
 	// refused: the next reconcile would recreate them.
-	DeleteUser(context.Context, *connect.Request[v1.DeleteIdentityUserRequest]) (*connect.Response[v1.DeleteIdentityUserResponse], error)
+	DeleteUser(context.Context, *v1.DeleteIdentityUserRequest) (*v1.DeleteIdentityUserResponse, error)
 	// RevokeSessions ends the user's sign-in sessions. Access tokens already
 	// issued stay valid until they expire.
-	RevokeSessions(context.Context, *connect.Request[v1.RevokeIdentitySessionsRequest]) (*connect.Response[v1.RevokeIdentitySessionsResponse], error)
+	RevokeSessions(context.Context, *v1.RevokeIdentitySessionsRequest) (*v1.RevokeIdentitySessionsResponse, error)
 	// RequestExport exports the environment's identity instance now (every
 	// user, password hashes included) and returns a signed, short-lived
 	// download URL for it. Requests within the same 15 minutes share one
@@ -329,173 +246,327 @@ type IdentityServiceHandler interface {
 	// AND the identity:manage grant), because the export is a credential.
 	// FailedPrecondition where export is not enabled for this deployment, or
 	// the instance is not ready.
-	RequestExport(context.Context, *connect.Request[v1.RequestIdentityExportRequest]) (*connect.Response[v1.RequestIdentityExportResponse], error)
+	RequestExport(context.Context, *v1.RequestIdentityExportRequest) (*v1.RequestIdentityExportResponse, error)
 	// GetExportURL returns a fresh signed URL for the export that already exists
 	// (the one written when the identity was withdrawn). NotFound when there is
 	// none; FailedPrecondition where export is not enabled. Needs
 	// identity:manage, as RequestExport does.
-	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
+	GetExportURL(context.Context, *v1.GetIdentityExportURLRequest) (*v1.GetIdentityExportURLResponse, error)
 }
 
-// NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	identityServiceMethods := v1.File_services_identity_v1_identity_proto.Services().ByName("IdentityService").Methods()
-	identityServiceGetIdentityStatusHandler := connect.NewUnaryHandler(
-		IdentityServiceGetIdentityStatusProcedure,
-		svc.GetIdentityStatus,
-		connect.WithSchema(identityServiceMethods.ByName("GetIdentityStatus")),
-		connect.WithHandlerOptions(opts...),
+// RegisterIdentityServiceHandler registers svc as the controlplane.v1.IdentityService
+// implementation on server.
+func RegisterIdentityServiceHandler(server *connect.Server, svc IdentityServiceHandler) {
+	adapter := identityServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: identityServiceGetIdentityStatusSpec(), Handler: adapter.getIdentityStatus},
+		connect.Method{Spec: identityServiceListUsersSpec(), Handler: adapter.listUsers},
+		connect.Method{Spec: identityServiceGetUserSpec(), Handler: adapter.getUser},
+		connect.Method{Spec: identityServiceInviteUserSpec(), Handler: adapter.inviteUser},
+		connect.Method{Spec: identityServiceSetUserRolesSpec(), Handler: adapter.setUserRoles},
+		connect.Method{Spec: identityServiceSendPasswordResetSpec(), Handler: adapter.sendPasswordReset},
+		connect.Method{Spec: identityServiceLockUserSpec(), Handler: adapter.lockUser},
+		connect.Method{Spec: identityServiceUnlockUserSpec(), Handler: adapter.unlockUser},
+		connect.Method{Spec: identityServiceDeleteUserSpec(), Handler: adapter.deleteUser},
+		connect.Method{Spec: identityServiceRevokeSessionsSpec(), Handler: adapter.revokeSessions},
+		connect.Method{Spec: identityServiceRequestExportSpec(), Handler: adapter.requestExport},
+		connect.Method{Spec: identityServiceGetExportURLSpec(), Handler: adapter.getExportURL},
 	)
-	identityServiceListUsersHandler := connect.NewUnaryHandler(
-		IdentityServiceListUsersProcedure,
-		svc.ListUsers,
-		connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceGetUserHandler := connect.NewUnaryHandler(
-		IdentityServiceGetUserProcedure,
-		svc.GetUser,
-		connect.WithSchema(identityServiceMethods.ByName("GetUser")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceInviteUserHandler := connect.NewUnaryHandler(
-		IdentityServiceInviteUserProcedure,
-		svc.InviteUser,
-		connect.WithSchema(identityServiceMethods.ByName("InviteUser")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceSetUserRolesHandler := connect.NewUnaryHandler(
-		IdentityServiceSetUserRolesProcedure,
-		svc.SetUserRoles,
-		connect.WithSchema(identityServiceMethods.ByName("SetUserRoles")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceSendPasswordResetHandler := connect.NewUnaryHandler(
-		IdentityServiceSendPasswordResetProcedure,
-		svc.SendPasswordReset,
-		connect.WithSchema(identityServiceMethods.ByName("SendPasswordReset")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceLockUserHandler := connect.NewUnaryHandler(
-		IdentityServiceLockUserProcedure,
-		svc.LockUser,
-		connect.WithSchema(identityServiceMethods.ByName("LockUser")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceUnlockUserHandler := connect.NewUnaryHandler(
-		IdentityServiceUnlockUserProcedure,
-		svc.UnlockUser,
-		connect.WithSchema(identityServiceMethods.ByName("UnlockUser")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceDeleteUserHandler := connect.NewUnaryHandler(
-		IdentityServiceDeleteUserProcedure,
-		svc.DeleteUser,
-		connect.WithSchema(identityServiceMethods.ByName("DeleteUser")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceRevokeSessionsHandler := connect.NewUnaryHandler(
-		IdentityServiceRevokeSessionsProcedure,
-		svc.RevokeSessions,
-		connect.WithSchema(identityServiceMethods.ByName("RevokeSessions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceRequestExportHandler := connect.NewUnaryHandler(
-		IdentityServiceRequestExportProcedure,
-		svc.RequestExport,
-		connect.WithSchema(identityServiceMethods.ByName("RequestExport")),
-		connect.WithHandlerOptions(opts...),
-	)
-	identityServiceGetExportURLHandler := connect.NewUnaryHandler(
-		IdentityServiceGetExportURLProcedure,
-		svc.GetExportURL,
-		connect.WithSchema(identityServiceMethods.ByName("GetExportURL")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case IdentityServiceGetIdentityStatusProcedure:
-			identityServiceGetIdentityStatusHandler.ServeHTTP(w, r)
-		case IdentityServiceListUsersProcedure:
-			identityServiceListUsersHandler.ServeHTTP(w, r)
-		case IdentityServiceGetUserProcedure:
-			identityServiceGetUserHandler.ServeHTTP(w, r)
-		case IdentityServiceInviteUserProcedure:
-			identityServiceInviteUserHandler.ServeHTTP(w, r)
-		case IdentityServiceSetUserRolesProcedure:
-			identityServiceSetUserRolesHandler.ServeHTTP(w, r)
-		case IdentityServiceSendPasswordResetProcedure:
-			identityServiceSendPasswordResetHandler.ServeHTTP(w, r)
-		case IdentityServiceLockUserProcedure:
-			identityServiceLockUserHandler.ServeHTTP(w, r)
-		case IdentityServiceUnlockUserProcedure:
-			identityServiceUnlockUserHandler.ServeHTTP(w, r)
-		case IdentityServiceDeleteUserProcedure:
-			identityServiceDeleteUserHandler.ServeHTTP(w, r)
-		case IdentityServiceRevokeSessionsProcedure:
-			identityServiceRevokeSessionsHandler.ServeHTTP(w, r)
-		case IdentityServiceRequestExportProcedure:
-			identityServiceRequestExportHandler.ServeHTTP(w, r)
-		case IdentityServiceGetExportURLProcedure:
-			identityServiceGetExportURLHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedIdentityServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedIdentityServiceHandler struct{}
 
-func (UnimplementedIdentityServiceHandler) GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetIdentityStatus is not implemented"))
+func (UnimplementedIdentityServiceHandler) GetIdentityStatus(context.Context, *v1.GetIdentityStatusRequest) (*v1.GetIdentityStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.GetIdentityStatus is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.ListUsers is not implemented"))
+func (UnimplementedIdentityServiceHandler) ListUsers(context.Context, *v1.ListIdentityUsersRequest) (*v1.ListIdentityUsersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.ListUsers is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) GetUser(context.Context, *connect.Request[v1.GetIdentityUserRequest]) (*connect.Response[v1.GetIdentityUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetUser is not implemented"))
+func (UnimplementedIdentityServiceHandler) GetUser(context.Context, *v1.GetIdentityUserRequest) (*v1.GetIdentityUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.GetUser is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) InviteUser(context.Context, *connect.Request[v1.InviteIdentityUserRequest]) (*connect.Response[v1.InviteIdentityUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.InviteUser is not implemented"))
+func (UnimplementedIdentityServiceHandler) InviteUser(context.Context, *v1.InviteIdentityUserRequest) (*v1.InviteIdentityUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.InviteUser is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) SetUserRoles(context.Context, *connect.Request[v1.SetIdentityUserRolesRequest]) (*connect.Response[v1.SetIdentityUserRolesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.SetUserRoles is not implemented"))
+func (UnimplementedIdentityServiceHandler) SetUserRoles(context.Context, *v1.SetIdentityUserRolesRequest) (*v1.SetIdentityUserRolesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.SetUserRoles is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) SendPasswordReset(context.Context, *connect.Request[v1.SendIdentityPasswordResetRequest]) (*connect.Response[v1.SendIdentityPasswordResetResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.SendPasswordReset is not implemented"))
+func (UnimplementedIdentityServiceHandler) SendPasswordReset(context.Context, *v1.SendIdentityPasswordResetRequest) (*v1.SendIdentityPasswordResetResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.SendPasswordReset is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) LockUser(context.Context, *connect.Request[v1.LockIdentityUserRequest]) (*connect.Response[v1.LockIdentityUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.LockUser is not implemented"))
+func (UnimplementedIdentityServiceHandler) LockUser(context.Context, *v1.LockIdentityUserRequest) (*v1.LockIdentityUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.LockUser is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) UnlockUser(context.Context, *connect.Request[v1.UnlockIdentityUserRequest]) (*connect.Response[v1.UnlockIdentityUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.UnlockUser is not implemented"))
+func (UnimplementedIdentityServiceHandler) UnlockUser(context.Context, *v1.UnlockIdentityUserRequest) (*v1.UnlockIdentityUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.UnlockUser is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) DeleteUser(context.Context, *connect.Request[v1.DeleteIdentityUserRequest]) (*connect.Response[v1.DeleteIdentityUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.DeleteUser is not implemented"))
+func (UnimplementedIdentityServiceHandler) DeleteUser(context.Context, *v1.DeleteIdentityUserRequest) (*v1.DeleteIdentityUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.DeleteUser is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) RevokeSessions(context.Context, *connect.Request[v1.RevokeIdentitySessionsRequest]) (*connect.Response[v1.RevokeIdentitySessionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.RevokeSessions is not implemented"))
+func (UnimplementedIdentityServiceHandler) RevokeSessions(context.Context, *v1.RevokeIdentitySessionsRequest) (*v1.RevokeIdentitySessionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.RevokeSessions is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) RequestExport(context.Context, *connect.Request[v1.RequestIdentityExportRequest]) (*connect.Response[v1.RequestIdentityExportResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.RequestExport is not implemented"))
+func (UnimplementedIdentityServiceHandler) RequestExport(context.Context, *v1.RequestIdentityExportRequest) (*v1.RequestIdentityExportResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.RequestExport is not implemented")
 }
 
-func (UnimplementedIdentityServiceHandler) GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetExportURL is not implemented"))
+func (UnimplementedIdentityServiceHandler) GetExportURL(context.Context, *v1.GetIdentityExportURLRequest) (*v1.GetIdentityExportURLResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.IdentityService.GetExportURL is not implemented")
+}
+
+type identityServiceClient struct {
+	client *connect.Client
+}
+
+func (c *identityServiceClient) GetIdentityStatus(ctx context.Context, req *v1.GetIdentityStatusRequest) (*v1.GetIdentityStatusResponse, error) {
+	var res v1.GetIdentityStatusResponse
+	if err := c.client.CallUnary(ctx, identityServiceGetIdentityStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) ListUsers(ctx context.Context, req *v1.ListIdentityUsersRequest) (*v1.ListIdentityUsersResponse, error) {
+	var res v1.ListIdentityUsersResponse
+	if err := c.client.CallUnary(ctx, identityServiceListUsersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) GetUser(ctx context.Context, req *v1.GetIdentityUserRequest) (*v1.GetIdentityUserResponse, error) {
+	var res v1.GetIdentityUserResponse
+	if err := c.client.CallUnary(ctx, identityServiceGetUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) InviteUser(ctx context.Context, req *v1.InviteIdentityUserRequest) (*v1.InviteIdentityUserResponse, error) {
+	var res v1.InviteIdentityUserResponse
+	if err := c.client.CallUnary(ctx, identityServiceInviteUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) SetUserRoles(ctx context.Context, req *v1.SetIdentityUserRolesRequest) (*v1.SetIdentityUserRolesResponse, error) {
+	var res v1.SetIdentityUserRolesResponse
+	if err := c.client.CallUnary(ctx, identityServiceSetUserRolesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) SendPasswordReset(ctx context.Context, req *v1.SendIdentityPasswordResetRequest) (*v1.SendIdentityPasswordResetResponse, error) {
+	var res v1.SendIdentityPasswordResetResponse
+	if err := c.client.CallUnary(ctx, identityServiceSendPasswordResetSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) LockUser(ctx context.Context, req *v1.LockIdentityUserRequest) (*v1.LockIdentityUserResponse, error) {
+	var res v1.LockIdentityUserResponse
+	if err := c.client.CallUnary(ctx, identityServiceLockUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) UnlockUser(ctx context.Context, req *v1.UnlockIdentityUserRequest) (*v1.UnlockIdentityUserResponse, error) {
+	var res v1.UnlockIdentityUserResponse
+	if err := c.client.CallUnary(ctx, identityServiceUnlockUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) DeleteUser(ctx context.Context, req *v1.DeleteIdentityUserRequest) (*v1.DeleteIdentityUserResponse, error) {
+	var res v1.DeleteIdentityUserResponse
+	if err := c.client.CallUnary(ctx, identityServiceDeleteUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) RevokeSessions(ctx context.Context, req *v1.RevokeIdentitySessionsRequest) (*v1.RevokeIdentitySessionsResponse, error) {
+	var res v1.RevokeIdentitySessionsResponse
+	if err := c.client.CallUnary(ctx, identityServiceRevokeSessionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) RequestExport(ctx context.Context, req *v1.RequestIdentityExportRequest) (*v1.RequestIdentityExportResponse, error) {
+	var res v1.RequestIdentityExportResponse
+	if err := c.client.CallUnary(ctx, identityServiceRequestExportSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *identityServiceClient) GetExportURL(ctx context.Context, req *v1.GetIdentityExportURLRequest) (*v1.GetIdentityExportURLResponse, error) {
+	var res v1.GetIdentityExportURLResponse
+	if err := c.client.CallUnary(ctx, identityServiceGetExportURLSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type identityServiceHandler struct{ svc IdentityServiceHandler }
+
+func (h identityServiceHandler) getIdentityStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetIdentityStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetIdentityStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) listUsers(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListIdentityUsersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListUsers(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) getUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetIdentityUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) inviteUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InviteIdentityUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InviteUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) setUserRoles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetIdentityUserRolesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetUserRoles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) sendPasswordReset(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SendIdentityPasswordResetRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SendPasswordReset(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) lockUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.LockIdentityUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.LockUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) unlockUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UnlockIdentityUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UnlockUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) deleteUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteIdentityUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) revokeSessions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeIdentitySessionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeSessions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) requestExport(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RequestIdentityExportRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RequestExport(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h identityServiceHandler) getExportURL(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetIdentityExportURLRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetExportURL(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

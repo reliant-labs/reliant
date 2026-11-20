@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -47,10 +47,10 @@ func TestConnectionErrorCodes(t *testing.T) {
 				GetFunc: func(context.Context, string, string) (*core.Connection, error) { return nil, tc.err },
 			}
 			svc := connection.NewTestConnection(t, connection.WithConnectionDeps(connection.Deps{Connections: conns}), connection.WithPlaceholderDeps())
-			_, err := svc.GetConnection(connection.AuthedContext(t), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: "conn-1"}))
+			_, err := svc.GetConnection(connection.AuthedContext(t), &reliantv1.GetConnectionRequest{Id: "conn-1"})
 			require.Error(t, err)
-			assert.Equal(t, tc.wantCode, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.wantCode, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.NotContains(t, msg, "secret")
 			if tc.wantMsg != "" {
 				assert.Equal(t, tc.wantMsg, msg)
@@ -73,8 +73,8 @@ func TestConnectionErrorsOnTheWire(t *testing.T) {
 		},
 	}
 	_, client := connection.NewTestConnectionServer(t, connection.WithConnectionDeps(connection.Deps{Connections: conns}), connection.WithPlaceholderDeps())
-	_, err := client.GetConnection(context.Background(), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: "conn-1"}))
+	_, err := client.GetConnection(context.Background(), &reliantv1.GetConnectionRequest{Id: "conn-1"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Equal(t, "reconnect GitHub", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Equal(t, "reconnect GitHub", svcerr.ToConnectV2(err).Message())
 }

@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -51,9 +52,9 @@ func TestGetContentBlockBodies(t *testing.T) {
 
 	get := func(t *testing.T, ctx context.Context, req *reliantv1.GetContentBlockBodiesRequest) *reliantv1.GetContentBlockBodiesResponse {
 		t.Helper()
-		resp, err := svc.GetContentBlockBodies(ctx, connect.NewRequest(req))
+		resp, err := svc.GetContentBlockBodies(ctx, req)
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 
 	t.Run("the chat's own blocks: inputs whole, results at the display preview, thinking whole", func(t *testing.T) {
@@ -98,11 +99,11 @@ func TestGetContentBlockBodies(t *testing.T) {
 	})
 
 	t.Run("another user's chat is NOT_FOUND", func(t *testing.T) {
-		_, err := svc.GetContentBlockBodies(ctx, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+		_, err := svc.GetContentBlockBodies(ctx, &reliantv1.GetContentBlockBodiesRequest{
 			ChatId: theirs.ChatID, BlockIds: []string{theirs.DoneCallBlockID},
-		}))
+		})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("a block of another of the caller's chats, not inherited, is not found", func(t *testing.T) {
@@ -154,9 +155,9 @@ func TestGetContentBlockBodies(t *testing.T) {
 		for i := range ids {
 			ids[i] = uuid.New().String()
 		}
-		_, err := svc.GetContentBlockBodies(ctx, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{ChatId: mine.ChatID, BlockIds: ids}))
+		_, err := svc.GetContentBlockBodies(ctx, &reliantv1.GetContentBlockBodiesRequest{ChatId: mine.ChatID, BlockIds: ids})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 
 		resp := get(t, ctx, &reliantv1.GetContentBlockBodiesRequest{ChatId: mine.ChatID, BlockIds: ids[:maxContentBlockBodyIDs]})
 		assert.Len(t, resp.NotFound, maxContentBlockBodyIDs, "100 is allowed")
@@ -199,12 +200,12 @@ func TestGetToolResultAndBodiesAgreeOnBranches(t *testing.T) {
 	mine := dbtest.SeedTranscriptBodies(t, ctx, repo, "test-user")
 	branch := seedToolResult(t, repo, "test-user", "", "", ptr.Of(mine.ContextWindowID))
 
-	full, err := svc.GetToolResult(ctx, connect.NewRequest(&reliantv1.GetToolResultRequest{ChatId: branch.chatID, ToolCallId: mine.DoneCallID}))
+	full, err := svc.GetToolResult(ctx, &reliantv1.GetToolResultRequest{ChatId: branch.chatID, ToolCallId: mine.DoneCallID})
 	require.NoError(t, err)
-	bodies, err := svc.GetContentBlockBodies(ctx, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+	bodies, err := svc.GetContentBlockBodies(ctx, &reliantv1.GetContentBlockBodiesRequest{
 		ChatId: branch.chatID, BlockIds: []string{mine.ResultBlockID}, Full: ptr.Of(true),
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, bodies.Msg.Bodies, 1)
-	assert.Equal(t, full.Msg.Content, bodies.Msg.Bodies[0].GetContent())
+	require.Len(t, bodies.Bodies, 1)
+	assert.Equal(t, full.Content, bodies.Bodies[0].GetContent())
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -50,7 +50,7 @@ func TestSentinelsAreClassifiedWithUnchangedIdentityAndText(t *testing.T) {
 			if !errors.Is(err, tc.err) {
 				t.Fatalf("errors.Is lost the sentinel through wrapping")
 			}
-			wire := svcerr.ToConnect(err)
+			wire := svcerr.ToConnectV2(err)
 			if wire.Code() != tc.code {
 				t.Errorf("wire code = %v, want %v", wire.Code(), tc.code)
 			}

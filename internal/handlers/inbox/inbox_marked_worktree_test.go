@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -116,24 +116,24 @@ func TestListInbox_MarkedWorktreeIsAnItem(t *testing.T) {
 
 	// Another user never sees it.
 	other, _, _ := f.otherUser(t)
-	resp, err := f.inbox.ListInbox(other, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	resp, err := f.inbox.ListInbox(other, &reliantv1.ListInboxRequest{})
 	require.NoError(t, err)
-	assert.Empty(t, inboxByKind(resp.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED))
+	assert.Empty(t, inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED))
 }
 
 func TestKeepMarkedWorktree(t *testing.T) {
 	f, sender, id := markedFixture(t)
 
-	_, err := f.inbox.KeepMarkedWorktree(f.ctx, connect.NewRequest(&reliantv1.KeepMarkedWorktreeRequest{WorktreeId: id, MarkId: "m-old"}))
-	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a mark other than the one shown")
+	_, err := f.inbox.KeepMarkedWorktree(f.ctx, &reliantv1.KeepMarkedWorktreeRequest{WorktreeId: id, MarkId: "m-old"})
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "a mark other than the one shown")
 	other, _, _ := f.otherUser(t)
-	_, err = f.inbox.KeepMarkedWorktree(other, connect.NewRequest(&reliantv1.KeepMarkedWorktreeRequest{WorktreeId: id, MarkId: "m-1"}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's worktree")
-	_, err = f.inbox.KeepMarkedWorktree(f.ctx, connect.NewRequest(&reliantv1.KeepMarkedWorktreeRequest{WorktreeId: id}))
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = f.inbox.KeepMarkedWorktree(other, &reliantv1.KeepMarkedWorktreeRequest{WorktreeId: id, MarkId: "m-1"})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "another user's worktree")
+	_, err = f.inbox.KeepMarkedWorktree(f.ctx, &reliantv1.KeepMarkedWorktreeRequest{WorktreeId: id})
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	require.Len(t, f.markedItems(t), 1, "none of those changed it")
 
-	_, err = f.inbox.KeepMarkedWorktree(f.ctx, connect.NewRequest(&reliantv1.KeepMarkedWorktreeRequest{WorktreeId: id, MarkId: "m-1"}))
+	_, err = f.inbox.KeepMarkedWorktree(f.ctx, &reliantv1.KeepMarkedWorktreeRequest{WorktreeId: id, MarkId: "m-1"})
 	require.NoError(t, err)
 	assert.Empty(t, f.markedItems(t), "kept: no longer marked")
 	assert.Contains(t, sender.cmds, worktreereclaim.UnmarkCommand, "its tombstone removed")
@@ -144,13 +144,13 @@ func TestKeepMarkedWorktree(t *testing.T) {
 
 func TestReclaimMarkedWorktreeNow(t *testing.T) {
 	f, _, id, sweeper := markedFixtureSweeper(t)
-	_, err := f.inbox.ReclaimMarkedWorktreeNow(f.ctx, connect.NewRequest(&reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-old"}))
-	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	_, err := f.inbox.ReclaimMarkedWorktreeNow(f.ctx, &reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-old"})
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	other, _, _ := f.otherUser(t)
-	_, err = f.inbox.ReclaimMarkedWorktreeNow(other, connect.NewRequest(&reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	_, err = f.inbox.ReclaimMarkedWorktreeNow(other, &reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
-	_, err = f.inbox.ReclaimMarkedWorktreeNow(f.ctx, connect.NewRequest(&reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"}))
+	_, err = f.inbox.ReclaimMarkedWorktreeNow(f.ctx, &reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"})
 	require.NoError(t, err)
 	sweeper.WaitCleanups()
 	// Marked a moment ago, its tombstone standing and its work landed: the
@@ -167,7 +167,7 @@ func TestReclaimMarkedWorktreeNow_StillKeepsAWorktreeWhoseTombstoneIsGone(t *tes
 	sender.mu.Lock()
 	sender.mark = "" // someone deleted the tombstone
 	sender.mu.Unlock()
-	_, err := f.inbox.ReclaimMarkedWorktreeNow(f.ctx, connect.NewRequest(&reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"}))
+	_, err := f.inbox.ReclaimMarkedWorktreeNow(f.ctx, &reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"})
 	require.NoError(t, err)
 	sweeper.WaitCleanups()
 	wt, err := f.repo.GetWorktree(f.ctx, id)
@@ -189,9 +189,9 @@ func TestListInbox_MarkedWorktreeFollowsItsProjectsScope(t *testing.T) {
 	marked := func(req *reliantv1.ListInboxRequest) (int, int32) {
 		t.Helper()
 		f.inbox.storageCache.Delete(f.userID)
-		resp, err := f.inbox.ListInbox(ctx, connect.NewRequest(req))
+		resp, err := f.inbox.ListInbox(ctx, req)
 		require.NoError(t, err)
-		return len(inboxByKind(resp.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED)), resp.Msg.OtherProjectsCount
+		return len(inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_MARKED)), resp.OtherProjectsCount
 	}
 	n, _ := marked(&reliantv1.ListInboxRequest{})
 	require.Equal(t, 1, n, "no scope")

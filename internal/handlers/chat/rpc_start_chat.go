@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -26,15 +25,15 @@ import (
 // the connect codes this RPC has always returned.
 func (s *Service) StartChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StartChatRequest],
-) (*connect.Response[reliantv1.StartChatResponse], error) {
+	req *reliantv1.StartChatRequest,
+) (*reliantv1.StartChatResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// The launch kind is the server's decision. A client can ask for exactly
 	// two non-default kinds, builder.test through builder_test and cli.run
 	// through cli_run; schedule, agent.start_run and manual.run have no way in
 	// through this RPC.
 	eventKind := core.TriggerEventKindChatStart
-	msg := req.Msg
+	msg := req
 	switch {
 	case msg.GetBuilderTest() && msg.GetCliRun():
 		return nil, svcerr.InvalidArgument("builder_test and cli_run are different launch kinds; set at most one")

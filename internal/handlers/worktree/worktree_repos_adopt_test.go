@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -139,8 +139,8 @@ func TestListProjectReposStillFailsWhenNothingOnDisk(t *testing.T) {
 
 	_, err := s.listProjectRepos(ctx, project.UserID, project, placeOn("test-daemon-id"))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "no git repository found in /home/workspace/projects/adopt-test")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "no git repository found in /home/workspace/projects/adopt-test")
 	assert.Equal(t, 1, router.discoverCalls)
 }
 
@@ -233,8 +233,8 @@ func TestListProjectReposNeverBlamesTheProjectForAnUnreachableMachine(t *testing
 
 			_, err := s.listProjectRepos(context.Background(), project.UserID, project, placeOn("m"))
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.code, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.Contains(t, msg, tc.contains)
 			assert.NotContains(t, msg, "no git repo")
 		})

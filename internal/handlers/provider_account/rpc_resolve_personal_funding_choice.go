@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -24,8 +23,8 @@ import (
 // The chat's blocked threads are woken so they act on the answer at once.
 func (s *Service) ResolvePersonalFundingChoice(
 	ctx context.Context,
-	req *connect.Request[pb.ResolvePersonalFundingChoiceRequest],
-) (*connect.Response[pb.ResolvePersonalFundingChoiceResponse], error) {
+	req *pb.ResolvePersonalFundingChoiceRequest,
+) (*pb.ResolvePersonalFundingChoiceResponse, error) {
 	if err := orgs.RequirePerson(ctx, "decide whether a chat may use your own AI account"); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -33,13 +32,13 @@ func (s *Service) ResolvePersonalFundingChoice(
 	if err != nil {
 		return nil, err
 	}
-	chatID := req.Msg.GetChatId()
+	chatID := req.GetChatId()
 	if chatID == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("chat_id is required"))
 	}
 	var state string
 	var onLimit orgfunding.OnOrgLimit
-	switch req.Msg.GetChoice() {
+	switch req.GetChoice() {
 	case pb.ResolvePersonalFundingChoiceRequest_CHOICE_USE_PERSONAL:
 		state, onLimit = core.PersonalFundingUsePersonal, orgfunding.OnOrgLimitUsePersonal
 	case pb.ResolvePersonalFundingChoiceRequest_CHOICE_KEEP_WAITING:
@@ -54,7 +53,7 @@ func (s *Service) ResolvePersonalFundingChoice(
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	if req.Msg.GetRemember() {
+	if req.GetRemember() {
 		current, _ := s.deps.Store.GetSettingValue(ctx, userID, orgfunding.SettingKey)
 		next := orgfunding.Parse(current).With(q.OrgID, orgfunding.Preference{OnOrgLimit: onLimit}, nil)
 		if err := s.deps.Store.SetString(ctx, userID, nil, orgfunding.SettingKey, next.Value()); err != nil {
@@ -63,5 +62,5 @@ func (s *Service) ResolvePersonalFundingChoice(
 		}
 	}
 	s.wakeChats(ctx, userID, "personal funding answered")
-	return connect.NewResponse(&pb.ResolvePersonalFundingChoiceResponse{Question: personalFundingProto(q)}), nil
+	return &pb.ResolvePersonalFundingChoiceResponse{Question: personalFundingProto(q)}, nil
 }

@@ -12,11 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 type fakeRegistrationStream struct {
@@ -33,7 +35,7 @@ func (f *fakeRegistrationStream) Receive() (*reliantv1.ServerMessage, error) {
 // keeps the real cause on Receive. The registration error must carry it.
 func TestSendRegistrationSurfacesReceiveError(t *testing.T) {
 	sendErr := fmt.Errorf("write envelope: %w", io.EOF)
-	realCause := connect.NewError(connect.CodeUnavailable, errors.New("dial tcp: lookup gateway.example.com: no such host"))
+	realCause := connect.NewError(connect.CodeUnavailable, "dial tcp: lookup gateway.example.com: no such host")
 
 	err := sendRegistration(&fakeRegistrationStream{sendErr: sendErr, recvErr: realCause}, &reliantv1.DaemonMessage{})
 
@@ -44,7 +46,7 @@ func TestSendRegistrationSurfacesReceiveError(t *testing.T) {
 }
 
 func TestSendRegistrationKeepsPermissionDeniedFatal(t *testing.T) {
-	denied := connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
+	denied := connect.NewError(connect.CodePermissionDenied, "daemon id is owned by another user")
 	err := sendRegistration(&fakeRegistrationStream{sendErr: io.EOF, recvErr: denied}, &reliantv1.DaemonMessage{})
 	require.Error(t, err)
 	require.True(t, isFatalError(err), "a permission_denied found via Receive must still stop the daemon")
@@ -71,7 +73,7 @@ func TestRunSessionNamesTLSFailureInsteadOfEOF(t *testing.T) {
 
 	d := &daemonClient{
 		gatewayURL:    srv.URL,
-		gatewayClient: reliantv1connect.NewToolsDaemonServiceClient(&http.Client{Timeout: 10 * time.Second}, srv.URL, connect.WithGRPC()),
+		gatewayClient: reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(&http.Client{Timeout: 10 * time.Second}, srv.URL, []connecthttp.Option{connecthttp.WithGRPC()})),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

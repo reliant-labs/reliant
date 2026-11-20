@@ -7,37 +7,38 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// OrgUsageServiceName is the fully-qualified name of the OrgUsageService service.
 	OrgUsageServiceName = "reliant.v1.OrgUsageService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// OrgUsageServiceGetOrgLLMUsageProcedure is the fully-qualified name of the OrgUsageService's
+	// OrgUsageServiceGetOrgLLMUsageProcedure is the procedure name of the OrgUsageService's
 	// GetOrgLLMUsage RPC.
 	OrgUsageServiceGetOrgLLMUsageProcedure = "/reliant.v1.OrgUsageService/GetOrgLLMUsage"
+)
+
+var (
+	orgUsageServiceGetOrgLLMUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_org_usage_proto.Services().ByName("OrgUsageService").Methods().ByName("GetOrgLLMUsage"),
+			Procedure:  OrgUsageServiceGetOrgLLMUsageProcedure,
+		}
+	})
 )
 
 // OrgUsageServiceClient is a client for the reliant.v1.OrgUsageService service.
@@ -49,37 +50,13 @@ type OrgUsageServiceClient interface {
 	// Its completeness is never COMPLETE: it is not the whole of the LLM use in
 	// the org's chats (members' own accounts are left out by design), and its
 	// costs are list-price estimates, not what the org was billed.
-	GetOrgLLMUsage(context.Context, *connect.Request[v1.GetOrgLLMUsageRequest]) (*connect.Response[v1.GetOrgLLMUsageResponse], error)
+	GetOrgLLMUsage(context.Context, *v1.GetOrgLLMUsageRequest) (*v1.GetOrgLLMUsageResponse, error)
 }
 
-// NewOrgUsageServiceClient constructs a client for the reliant.v1.OrgUsageService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewOrgUsageServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrgUsageServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	orgUsageServiceMethods := v1.File_reliant_v1_org_usage_proto.Services().ByName("OrgUsageService").Methods()
-	return &orgUsageServiceClient{
-		getOrgLLMUsage: connect.NewClient[v1.GetOrgLLMUsageRequest, v1.GetOrgLLMUsageResponse](
-			httpClient,
-			baseURL+OrgUsageServiceGetOrgLLMUsageProcedure,
-			connect.WithSchema(orgUsageServiceMethods.ByName("GetOrgLLMUsage")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// orgUsageServiceClient implements OrgUsageServiceClient.
-type orgUsageServiceClient struct {
-	getOrgLLMUsage *connect.Client[v1.GetOrgLLMUsageRequest, v1.GetOrgLLMUsageResponse]
-}
-
-// GetOrgLLMUsage calls reliant.v1.OrgUsageService.GetOrgLLMUsage.
-func (c *orgUsageServiceClient) GetOrgLLMUsage(ctx context.Context, req *connect.Request[v1.GetOrgLLMUsageRequest]) (*connect.Response[v1.GetOrgLLMUsageResponse], error) {
-	return c.getOrgLLMUsage.CallUnary(ctx, req)
+// NewOrgUsageServiceClient constructs a client for the reliant.v1.OrgUsageService service. Multiple
+// service clients may share a single connect.Client.
+func NewOrgUsageServiceClient(client *connect.Client) OrgUsageServiceClient {
+	return &orgUsageServiceClient{client: client}
 }
 
 // OrgUsageServiceHandler is an implementation of the reliant.v1.OrgUsageService service.
@@ -91,35 +68,47 @@ type OrgUsageServiceHandler interface {
 	// Its completeness is never COMPLETE: it is not the whole of the LLM use in
 	// the org's chats (members' own accounts are left out by design), and its
 	// costs are list-price estimates, not what the org was billed.
-	GetOrgLLMUsage(context.Context, *connect.Request[v1.GetOrgLLMUsageRequest]) (*connect.Response[v1.GetOrgLLMUsageResponse], error)
+	GetOrgLLMUsage(context.Context, *v1.GetOrgLLMUsageRequest) (*v1.GetOrgLLMUsageResponse, error)
 }
 
-// NewOrgUsageServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewOrgUsageServiceHandler(svc OrgUsageServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	orgUsageServiceMethods := v1.File_reliant_v1_org_usage_proto.Services().ByName("OrgUsageService").Methods()
-	orgUsageServiceGetOrgLLMUsageHandler := connect.NewUnaryHandler(
-		OrgUsageServiceGetOrgLLMUsageProcedure,
-		svc.GetOrgLLMUsage,
-		connect.WithSchema(orgUsageServiceMethods.ByName("GetOrgLLMUsage")),
-		connect.WithHandlerOptions(opts...),
+// RegisterOrgUsageServiceHandler registers svc as the reliant.v1.OrgUsageService implementation on
+// server.
+func RegisterOrgUsageServiceHandler(server *connect.Server, svc OrgUsageServiceHandler) {
+	adapter := orgUsageServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: orgUsageServiceGetOrgLLMUsageSpec(), Handler: adapter.getOrgLLMUsage},
 	)
-	return "/reliant.v1.OrgUsageService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case OrgUsageServiceGetOrgLLMUsageProcedure:
-			orgUsageServiceGetOrgLLMUsageHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedOrgUsageServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedOrgUsageServiceHandler struct{}
 
-func (UnimplementedOrgUsageServiceHandler) GetOrgLLMUsage(context.Context, *connect.Request[v1.GetOrgLLMUsageRequest]) (*connect.Response[v1.GetOrgLLMUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.OrgUsageService.GetOrgLLMUsage is not implemented"))
+func (UnimplementedOrgUsageServiceHandler) GetOrgLLMUsage(context.Context, *v1.GetOrgLLMUsageRequest) (*v1.GetOrgLLMUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.OrgUsageService.GetOrgLLMUsage is not implemented")
+}
+
+type orgUsageServiceClient struct {
+	client *connect.Client
+}
+
+func (c *orgUsageServiceClient) GetOrgLLMUsage(ctx context.Context, req *v1.GetOrgLLMUsageRequest) (*v1.GetOrgLLMUsageResponse, error) {
+	var res v1.GetOrgLLMUsageResponse
+	if err := c.client.CallUnary(ctx, orgUsageServiceGetOrgLLMUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type orgUsageServiceHandler struct{ svc OrgUsageServiceHandler }
+
+func (h orgUsageServiceHandler) getOrgLLMUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetOrgLLMUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetOrgLLMUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

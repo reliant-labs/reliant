@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -27,15 +25,15 @@ func errNoRouter() error {
 // callback server and opens the browser.
 func (s *Service) StartOAuthFlow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StartOAuthFlowRequest],
-) (*connect.Response[reliantv1.StartOAuthFlowResponse], error) {
+	req *reliantv1.StartOAuthFlowRequest,
+) (*reliantv1.StartOAuthFlowResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 
 	payload, err := json.Marshal(map[string]any{
-		"authorize_url_template": req.Msg.AuthorizeUrlTemplate,
+		"authorize_url_template": req.AuthorizeUrlTemplate,
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
@@ -61,11 +59,11 @@ func (s *Service) StartOAuthFlow(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 
-	return connect.NewResponse(&reliantv1.StartOAuthFlowResponse{
+	return &reliantv1.StartOAuthFlowResponse{
 		Code:        resp.Code,
 		State:       resp.State,
 		RedirectUri: resp.RedirectURI,
-	}), nil
+	}, nil
 }
 
 // oauthDaemonError maps a failed OAuth daemon command onto the svcerr kind
@@ -106,15 +104,15 @@ const openHelperTimeoutMs = 10_000
 // port for one linking session.
 func (s *Service) OpenOAuthHelper(
 	ctx context.Context,
-	req *connect.Request[reliantv1.OpenOAuthHelperRequest],
-) (*connect.Response[reliantv1.OpenOAuthHelperResponse], error) {
+	req *reliantv1.OpenOAuthHelperRequest,
+) (*reliantv1.OpenOAuthHelperResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 
 	payload, err := json.Marshal(map[string]any{
-		"web_origin": req.Msg.WebOrigin,
+		"web_origin": req.WebOrigin,
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
@@ -137,18 +135,18 @@ func (s *Service) OpenOAuthHelper(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 
-	return connect.NewResponse(&reliantv1.OpenOAuthHelperResponse{
+	return &reliantv1.OpenOAuthHelperResponse{
 		Port:           resp.Port,
 		Addr:           resp.Addr,
 		AlreadyRunning: resp.AlreadyRunning,
-	}), nil
+	}, nil
 }
 
 // CloseOAuthHelper closes the helper port when the linking session ends.
 func (s *Service) CloseOAuthHelper(
 	ctx context.Context,
-	_ *connect.Request[reliantv1.CloseOAuthHelperRequest],
-) (*connect.Response[reliantv1.CloseOAuthHelperResponse], error) {
+	_ *reliantv1.CloseOAuthHelperRequest,
+) (*reliantv1.CloseOAuthHelperResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
@@ -169,5 +167,5 @@ func (s *Service) CloseOAuthHelper(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 
-	return connect.NewResponse(&reliantv1.CloseOAuthHelperResponse{Closed: resp.Closed}), nil
+	return &reliantv1.CloseOAuthHelperResponse{Closed: resp.Closed}, nil
 }

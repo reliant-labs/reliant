@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -94,9 +93,9 @@ func TestGetChat_NeedsRecovery(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := &Service{deps: Deps{Repo: repo}, runs: runs.NewService(repo, tc.temporal, nil)}
-			resp, err := svc.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: chatID}))
+			resp, err := svc.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: chatID})
 			require.NoError(t, err)
-			assert.Equal(t, tc.want, resp.Msg.Chat.NeedsRecovery)
+			assert.Equal(t, tc.want, resp.Chat.NeedsRecovery)
 		})
 	}
 }
@@ -116,10 +115,10 @@ func TestGetChat_SlowTemporalIsBounded(t *testing.T) {
 
 	svc := &Service{deps: Deps{Repo: repo}, runs: runs.NewService(repo, &describeFake{block: true}, nil)}
 	start := time.Now()
-	resp, err := svc.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: chatID}))
+	resp, err := svc.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: chatID})
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Chat.NeedsRecovery, "an unanswered query is unknown, not a ghost")
+	assert.False(t, resp.Chat.NeedsRecovery, "an unanswered query is unknown, not a ghost")
 	assert.Less(t, elapsed, 5*time.Second, "GetChat waited on a Temporal that never answers")
 }

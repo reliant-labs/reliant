@@ -20,92 +20,177 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AccessTokenServiceName is the fully-qualified name of the AccessTokenService service.
 	AccessTokenServiceName = "controlplane.v1.AccessTokenService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AccessTokenServiceCreateTokenProcedure is the fully-qualified name of the AccessTokenService's
+	// AccessTokenServiceCreateTokenProcedure is the procedure name of the AccessTokenService's
 	// CreateToken RPC.
 	AccessTokenServiceCreateTokenProcedure = "/controlplane.v1.AccessTokenService/CreateToken"
-	// AccessTokenServiceListTokensProcedure is the fully-qualified name of the AccessTokenService's
+	// AccessTokenServiceListTokensProcedure is the procedure name of the AccessTokenService's
 	// ListTokens RPC.
 	AccessTokenServiceListTokensProcedure = "/controlplane.v1.AccessTokenService/ListTokens"
-	// AccessTokenServiceRevokeTokenProcedure is the fully-qualified name of the AccessTokenService's
+	// AccessTokenServiceRevokeTokenProcedure is the procedure name of the AccessTokenService's
 	// RevokeToken RPC.
 	AccessTokenServiceRevokeTokenProcedure = "/controlplane.v1.AccessTokenService/RevokeToken"
-	// AccessTokenServiceCreateMyTokenProcedure is the fully-qualified name of the AccessTokenService's
+	// AccessTokenServiceCreateMyTokenProcedure is the procedure name of the AccessTokenService's
 	// CreateMyToken RPC.
 	AccessTokenServiceCreateMyTokenProcedure = "/controlplane.v1.AccessTokenService/CreateMyToken"
-	// AccessTokenServiceListMyTokensProcedure is the fully-qualified name of the AccessTokenService's
+	// AccessTokenServiceListMyTokensProcedure is the procedure name of the AccessTokenService's
 	// ListMyTokens RPC.
 	AccessTokenServiceListMyTokensProcedure = "/controlplane.v1.AccessTokenService/ListMyTokens"
-	// AccessTokenServiceRevokeMyTokenProcedure is the fully-qualified name of the AccessTokenService's
+	// AccessTokenServiceRevokeMyTokenProcedure is the procedure name of the AccessTokenService's
 	// RevokeMyToken RPC.
 	AccessTokenServiceRevokeMyTokenProcedure = "/controlplane.v1.AccessTokenService/RevokeMyToken"
-	// AccessTokenServiceUpdateMyTokenProcedure is the fully-qualified name of the AccessTokenService's
+	// AccessTokenServiceUpdateMyTokenProcedure is the procedure name of the AccessTokenService's
 	// UpdateMyToken RPC.
 	AccessTokenServiceUpdateMyTokenProcedure = "/controlplane.v1.AccessTokenService/UpdateMyToken"
-	// AccessTokenServiceResetDaemonScopePolicyProcedure is the fully-qualified name of the
+	// AccessTokenServiceResetDaemonScopePolicyProcedure is the procedure name of the
 	// AccessTokenService's ResetDaemonScopePolicy RPC.
 	AccessTokenServiceResetDaemonScopePolicyProcedure = "/controlplane.v1.AccessTokenService/ResetDaemonScopePolicy"
-	// AccessTokenServiceListMyCLILoginsProcedure is the fully-qualified name of the
-	// AccessTokenService's ListMyCLILogins RPC.
+	// AccessTokenServiceListMyCLILoginsProcedure is the procedure name of the AccessTokenService's
+	// ListMyCLILogins RPC.
 	AccessTokenServiceListMyCLILoginsProcedure = "/controlplane.v1.AccessTokenService/ListMyCLILogins"
-	// AccessTokenServiceRevokeMyCLILoginProcedure is the fully-qualified name of the
-	// AccessTokenService's RevokeMyCLILogin RPC.
+	// AccessTokenServiceRevokeMyCLILoginProcedure is the procedure name of the AccessTokenService's
+	// RevokeMyCLILogin RPC.
 	AccessTokenServiceRevokeMyCLILoginProcedure = "/controlplane.v1.AccessTokenService/RevokeMyCLILogin"
-	// AccessTokenServiceExchangeTokenProcedure is the fully-qualified name of the AccessTokenService's
+	// AccessTokenServiceExchangeTokenProcedure is the procedure name of the AccessTokenService's
 	// ExchangeToken RPC.
 	AccessTokenServiceExchangeTokenProcedure = "/controlplane.v1.AccessTokenService/ExchangeToken"
-	// AccessTokenServiceListOrgMemberGrantsProcedure is the fully-qualified name of the
-	// AccessTokenService's ListOrgMemberGrants RPC.
+	// AccessTokenServiceListOrgMemberGrantsProcedure is the procedure name of the AccessTokenService's
+	// ListOrgMemberGrants RPC.
 	AccessTokenServiceListOrgMemberGrantsProcedure = "/controlplane.v1.AccessTokenService/ListOrgMemberGrants"
-	// AccessTokenServiceUpdateOrgMemberGrantsProcedure is the fully-qualified name of the
+	// AccessTokenServiceUpdateOrgMemberGrantsProcedure is the procedure name of the
 	// AccessTokenService's UpdateOrgMemberGrants RPC.
 	AccessTokenServiceUpdateOrgMemberGrantsProcedure = "/controlplane.v1.AccessTokenService/UpdateOrgMemberGrants"
+)
+
+var (
+	accessTokenServiceCreateTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("CreateToken"),
+			Procedure:  AccessTokenServiceCreateTokenProcedure,
+		}
+	})
+	accessTokenServiceListTokensSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("ListTokens"),
+			Procedure:  AccessTokenServiceListTokensProcedure,
+		}
+	})
+	accessTokenServiceRevokeTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("RevokeToken"),
+			Procedure:  AccessTokenServiceRevokeTokenProcedure,
+		}
+	})
+	accessTokenServiceCreateMyTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("CreateMyToken"),
+			Procedure:  AccessTokenServiceCreateMyTokenProcedure,
+		}
+	})
+	accessTokenServiceListMyTokensSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("ListMyTokens"),
+			Procedure:  AccessTokenServiceListMyTokensProcedure,
+		}
+	})
+	accessTokenServiceRevokeMyTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("RevokeMyToken"),
+			Procedure:  AccessTokenServiceRevokeMyTokenProcedure,
+		}
+	})
+	accessTokenServiceUpdateMyTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("UpdateMyToken"),
+			Procedure:  AccessTokenServiceUpdateMyTokenProcedure,
+		}
+	})
+	accessTokenServiceResetDaemonScopePolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("ResetDaemonScopePolicy"),
+			Procedure:  AccessTokenServiceResetDaemonScopePolicyProcedure,
+		}
+	})
+	accessTokenServiceListMyCLILoginsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("ListMyCLILogins"),
+			Procedure:  AccessTokenServiceListMyCLILoginsProcedure,
+		}
+	})
+	accessTokenServiceRevokeMyCLILoginSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("RevokeMyCLILogin"),
+			Procedure:  AccessTokenServiceRevokeMyCLILoginProcedure,
+		}
+	})
+	accessTokenServiceExchangeTokenSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("ExchangeToken"),
+			Procedure:  AccessTokenServiceExchangeTokenProcedure,
+		}
+	})
+	accessTokenServiceListOrgMemberGrantsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("ListOrgMemberGrants"),
+			Procedure:  AccessTokenServiceListOrgMemberGrantsProcedure,
+		}
+	})
+	accessTokenServiceUpdateOrgMemberGrantsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods().ByName("UpdateOrgMemberGrants"),
+			Procedure:  AccessTokenServiceUpdateOrgMemberGrantsProcedure,
+		}
+	})
 )
 
 // AccessTokenServiceClient is a client for the controlplane.v1.AccessTokenService service.
 type AccessTokenServiceClient interface {
 	// CreateToken mints an ORG automation token (no acting user) — CI deploy,
 	// secret management. Caller: an org admin's human session.
-	CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error)
+	CreateToken(context.Context, *v1.CreateTokenRequest) (*v1.CreateTokenResponse, error)
 	// ListTokens lists the caller org's tokens. Never a plaintext.
-	ListTokens(context.Context, *connect.Request[v1.ListTokensRequest]) (*connect.Response[v1.ListTokensResponse], error)
+	ListTokens(context.Context, *v1.ListTokensRequest) (*v1.ListTokensResponse, error)
 	// RevokeToken revokes one of the caller org's tokens, immediately.
-	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
+	RevokeToken(context.Context, *v1.RevokeTokenRequest) (*v1.RevokeTokenResponse, error)
 	// CreateMyToken mints a token that ACTS AS THE CALLER — a CLI token
 	// (reliant:api), a daemon credential (daemon:connect), an LLM key
 	// (llm:invoke). Caller: a human session. The org is the caller's primary org.
-	CreateMyToken(context.Context, *connect.Request[v1.CreateMyTokenRequest]) (*connect.Response[v1.CreateMyTokenResponse], error)
+	CreateMyToken(context.Context, *v1.CreateMyTokenRequest) (*v1.CreateMyTokenResponse, error)
 	// ListMyTokens lists tokens acting as the caller.
-	ListMyTokens(context.Context, *connect.Request[v1.ListMyTokensRequest]) (*connect.Response[v1.ListMyTokensResponse], error)
+	ListMyTokens(context.Context, *v1.ListMyTokensRequest) (*v1.ListMyTokensResponse, error)
 	// RevokeMyToken revokes one of the caller's own tokens.
-	RevokeMyToken(context.Context, *connect.Request[v1.RevokeMyTokenRequest]) (*connect.Response[v1.RevokeMyTokenResponse], error)
+	RevokeMyToken(context.Context, *v1.RevokeMyTokenRequest) (*v1.RevokeMyTokenResponse, error)
 	// UpdateMyToken changes one of the caller's own tokens' name and scopes.
 	//
 	// The SECRET IS NEVER REISSUED: editing a live daemon's permissions must
@@ -117,20 +202,20 @@ type AccessTokenServiceClient interface {
 	// a per-daemon ceiling that also clips existing helpers and future renewals.
 	// Label-only edits and revocation leave that ceiling alone. To restore full
 	// authority explicitly ResetDaemonScopePolicy, then reissue via user login.
-	UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error)
+	UpdateMyToken(context.Context, *v1.UpdateMyTokenRequest) (*v1.UpdateMyTokenResponse, error)
 	// ResetDaemonScopePolicy explicitly restores full user-granted defaults for
 	// FUTURE credentials of one owned daemon. User session only. Existing token
 	// scope sets are never widened: reissue through authenticated login afterwards.
 	// Renewal, label edits and token revocation never reset this durable policy.
-	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
+	ResetDaemonScopePolicy(context.Context, *v1.ResetDaemonScopePolicyRequest) (*v1.ResetDaemonScopePolicyResponse, error)
 	// ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
 	// device, when each was issued and last used, and when it ends. Browser
 	// session only: a CLI login is refused, like every rpc of this service.
-	ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error)
+	ListMyCLILogins(context.Context, *v1.ListMyCLILoginsRequest) (*v1.ListMyCLILoginsResponse, error)
 	// RevokeMyCLILogin ends one of the caller's own CLI logins at once: its
 	// next request is refused. Idempotent: revoking a revoked login succeeds.
 	// Another person's login, or none, is NotFound. Browser session only.
-	RevokeMyCLILogin(context.Context, *connect.Request[v1.RevokeMyCLILoginRequest]) (*connect.Response[v1.RevokeMyCLILoginResponse], error)
+	RevokeMyCLILogin(context.Context, *v1.RevokeMyCLILoginRequest) (*v1.RevokeMyCLILoginResponse, error)
 	// ExchangeToken attenuates a machine credential acting as a person to a
 	// short-lived helper. It NEVER widens: requested scopes must be explicitly
 	// held by the caller (not merely implied by write), exchangeable, and still
@@ -139,209 +224,41 @@ type AccessTokenServiceClient interface {
 	// Caller must hold deploy:write. The result lives at most an hour, never
 	// outlives the caller, and inherits its user, org and resource binding.
 	// All org capabilities may ride a daemon binding, including cluster:manage.
-	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
+	ExchangeToken(context.Context, *v1.ExchangeTokenRequest) (*v1.ExchangeTokenResponse, error)
 	// ListOrgMemberGrants lists every member of the caller's org with the
 	// permissions they hold. Caller: a human session holding token:read.
-	ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error)
+	ListOrgMemberGrants(context.Context, *v1.ListOrgMemberGrantsRequest) (*v1.ListOrgMemberGrantsResponse, error)
 	// UpdateOrgMemberGrants replaces one member's permission set.
 	//
 	// CLIPPED TO THE CALLER: you cannot grant a permission you do not hold
 	// yourself, which is what stops permission administration from being a
 	// path to every other permission.
-	UpdateOrgMemberGrants(context.Context, *connect.Request[v1.UpdateOrgMemberGrantsRequest]) (*connect.Response[v1.UpdateOrgMemberGrantsResponse], error)
+	UpdateOrgMemberGrants(context.Context, *v1.UpdateOrgMemberGrantsRequest) (*v1.UpdateOrgMemberGrantsResponse, error)
 }
 
 // NewAccessTokenServiceClient constructs a client for the controlplane.v1.AccessTokenService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AccessTokenServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	accessTokenServiceMethods := v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods()
-	return &accessTokenServiceClient{
-		createToken: connect.NewClient[v1.CreateTokenRequest, v1.CreateTokenResponse](
-			httpClient,
-			baseURL+AccessTokenServiceCreateTokenProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("CreateToken")),
-			connect.WithClientOptions(opts...),
-		),
-		listTokens: connect.NewClient[v1.ListTokensRequest, v1.ListTokensResponse](
-			httpClient,
-			baseURL+AccessTokenServiceListTokensProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("ListTokens")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeToken: connect.NewClient[v1.RevokeTokenRequest, v1.RevokeTokenResponse](
-			httpClient,
-			baseURL+AccessTokenServiceRevokeTokenProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("RevokeToken")),
-			connect.WithClientOptions(opts...),
-		),
-		createMyToken: connect.NewClient[v1.CreateMyTokenRequest, v1.CreateMyTokenResponse](
-			httpClient,
-			baseURL+AccessTokenServiceCreateMyTokenProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("CreateMyToken")),
-			connect.WithClientOptions(opts...),
-		),
-		listMyTokens: connect.NewClient[v1.ListMyTokensRequest, v1.ListMyTokensResponse](
-			httpClient,
-			baseURL+AccessTokenServiceListMyTokensProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("ListMyTokens")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeMyToken: connect.NewClient[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse](
-			httpClient,
-			baseURL+AccessTokenServiceRevokeMyTokenProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("RevokeMyToken")),
-			connect.WithClientOptions(opts...),
-		),
-		updateMyToken: connect.NewClient[v1.UpdateMyTokenRequest, v1.UpdateMyTokenResponse](
-			httpClient,
-			baseURL+AccessTokenServiceUpdateMyTokenProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("UpdateMyToken")),
-			connect.WithClientOptions(opts...),
-		),
-		resetDaemonScopePolicy: connect.NewClient[v1.ResetDaemonScopePolicyRequest, v1.ResetDaemonScopePolicyResponse](
-			httpClient,
-			baseURL+AccessTokenServiceResetDaemonScopePolicyProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("ResetDaemonScopePolicy")),
-			connect.WithClientOptions(opts...),
-		),
-		listMyCLILogins: connect.NewClient[v1.ListMyCLILoginsRequest, v1.ListMyCLILoginsResponse](
-			httpClient,
-			baseURL+AccessTokenServiceListMyCLILoginsProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("ListMyCLILogins")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeMyCLILogin: connect.NewClient[v1.RevokeMyCLILoginRequest, v1.RevokeMyCLILoginResponse](
-			httpClient,
-			baseURL+AccessTokenServiceRevokeMyCLILoginProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("RevokeMyCLILogin")),
-			connect.WithClientOptions(opts...),
-		),
-		exchangeToken: connect.NewClient[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse](
-			httpClient,
-			baseURL+AccessTokenServiceExchangeTokenProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("ExchangeToken")),
-			connect.WithClientOptions(opts...),
-		),
-		listOrgMemberGrants: connect.NewClient[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse](
-			httpClient,
-			baseURL+AccessTokenServiceListOrgMemberGrantsProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("ListOrgMemberGrants")),
-			connect.WithClientOptions(opts...),
-		),
-		updateOrgMemberGrants: connect.NewClient[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse](
-			httpClient,
-			baseURL+AccessTokenServiceUpdateOrgMemberGrantsProcedure,
-			connect.WithSchema(accessTokenServiceMethods.ByName("UpdateOrgMemberGrants")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// accessTokenServiceClient implements AccessTokenServiceClient.
-type accessTokenServiceClient struct {
-	createToken            *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
-	listTokens             *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
-	revokeToken            *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	createMyToken          *connect.Client[v1.CreateMyTokenRequest, v1.CreateMyTokenResponse]
-	listMyTokens           *connect.Client[v1.ListMyTokensRequest, v1.ListMyTokensResponse]
-	revokeMyToken          *connect.Client[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse]
-	updateMyToken          *connect.Client[v1.UpdateMyTokenRequest, v1.UpdateMyTokenResponse]
-	resetDaemonScopePolicy *connect.Client[v1.ResetDaemonScopePolicyRequest, v1.ResetDaemonScopePolicyResponse]
-	listMyCLILogins        *connect.Client[v1.ListMyCLILoginsRequest, v1.ListMyCLILoginsResponse]
-	revokeMyCLILogin       *connect.Client[v1.RevokeMyCLILoginRequest, v1.RevokeMyCLILoginResponse]
-	exchangeToken          *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
-	listOrgMemberGrants    *connect.Client[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse]
-	updateOrgMemberGrants  *connect.Client[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse]
-}
-
-// CreateToken calls controlplane.v1.AccessTokenService.CreateToken.
-func (c *accessTokenServiceClient) CreateToken(ctx context.Context, req *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error) {
-	return c.createToken.CallUnary(ctx, req)
-}
-
-// ListTokens calls controlplane.v1.AccessTokenService.ListTokens.
-func (c *accessTokenServiceClient) ListTokens(ctx context.Context, req *connect.Request[v1.ListTokensRequest]) (*connect.Response[v1.ListTokensResponse], error) {
-	return c.listTokens.CallUnary(ctx, req)
-}
-
-// RevokeToken calls controlplane.v1.AccessTokenService.RevokeToken.
-func (c *accessTokenServiceClient) RevokeToken(ctx context.Context, req *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error) {
-	return c.revokeToken.CallUnary(ctx, req)
-}
-
-// CreateMyToken calls controlplane.v1.AccessTokenService.CreateMyToken.
-func (c *accessTokenServiceClient) CreateMyToken(ctx context.Context, req *connect.Request[v1.CreateMyTokenRequest]) (*connect.Response[v1.CreateMyTokenResponse], error) {
-	return c.createMyToken.CallUnary(ctx, req)
-}
-
-// ListMyTokens calls controlplane.v1.AccessTokenService.ListMyTokens.
-func (c *accessTokenServiceClient) ListMyTokens(ctx context.Context, req *connect.Request[v1.ListMyTokensRequest]) (*connect.Response[v1.ListMyTokensResponse], error) {
-	return c.listMyTokens.CallUnary(ctx, req)
-}
-
-// RevokeMyToken calls controlplane.v1.AccessTokenService.RevokeMyToken.
-func (c *accessTokenServiceClient) RevokeMyToken(ctx context.Context, req *connect.Request[v1.RevokeMyTokenRequest]) (*connect.Response[v1.RevokeMyTokenResponse], error) {
-	return c.revokeMyToken.CallUnary(ctx, req)
-}
-
-// UpdateMyToken calls controlplane.v1.AccessTokenService.UpdateMyToken.
-func (c *accessTokenServiceClient) UpdateMyToken(ctx context.Context, req *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error) {
-	return c.updateMyToken.CallUnary(ctx, req)
-}
-
-// ResetDaemonScopePolicy calls controlplane.v1.AccessTokenService.ResetDaemonScopePolicy.
-func (c *accessTokenServiceClient) ResetDaemonScopePolicy(ctx context.Context, req *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error) {
-	return c.resetDaemonScopePolicy.CallUnary(ctx, req)
-}
-
-// ListMyCLILogins calls controlplane.v1.AccessTokenService.ListMyCLILogins.
-func (c *accessTokenServiceClient) ListMyCLILogins(ctx context.Context, req *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error) {
-	return c.listMyCLILogins.CallUnary(ctx, req)
-}
-
-// RevokeMyCLILogin calls controlplane.v1.AccessTokenService.RevokeMyCLILogin.
-func (c *accessTokenServiceClient) RevokeMyCLILogin(ctx context.Context, req *connect.Request[v1.RevokeMyCLILoginRequest]) (*connect.Response[v1.RevokeMyCLILoginResponse], error) {
-	return c.revokeMyCLILogin.CallUnary(ctx, req)
-}
-
-// ExchangeToken calls controlplane.v1.AccessTokenService.ExchangeToken.
-func (c *accessTokenServiceClient) ExchangeToken(ctx context.Context, req *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
-	return c.exchangeToken.CallUnary(ctx, req)
-}
-
-// ListOrgMemberGrants calls controlplane.v1.AccessTokenService.ListOrgMemberGrants.
-func (c *accessTokenServiceClient) ListOrgMemberGrants(ctx context.Context, req *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error) {
-	return c.listOrgMemberGrants.CallUnary(ctx, req)
-}
-
-// UpdateOrgMemberGrants calls controlplane.v1.AccessTokenService.UpdateOrgMemberGrants.
-func (c *accessTokenServiceClient) UpdateOrgMemberGrants(ctx context.Context, req *connect.Request[v1.UpdateOrgMemberGrantsRequest]) (*connect.Response[v1.UpdateOrgMemberGrantsResponse], error) {
-	return c.updateOrgMemberGrants.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewAccessTokenServiceClient(client *connect.Client) AccessTokenServiceClient {
+	return &accessTokenServiceClient{client: client}
 }
 
 // AccessTokenServiceHandler is an implementation of the controlplane.v1.AccessTokenService service.
 type AccessTokenServiceHandler interface {
 	// CreateToken mints an ORG automation token (no acting user) — CI deploy,
 	// secret management. Caller: an org admin's human session.
-	CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error)
+	CreateToken(context.Context, *v1.CreateTokenRequest) (*v1.CreateTokenResponse, error)
 	// ListTokens lists the caller org's tokens. Never a plaintext.
-	ListTokens(context.Context, *connect.Request[v1.ListTokensRequest]) (*connect.Response[v1.ListTokensResponse], error)
+	ListTokens(context.Context, *v1.ListTokensRequest) (*v1.ListTokensResponse, error)
 	// RevokeToken revokes one of the caller org's tokens, immediately.
-	RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error)
+	RevokeToken(context.Context, *v1.RevokeTokenRequest) (*v1.RevokeTokenResponse, error)
 	// CreateMyToken mints a token that ACTS AS THE CALLER — a CLI token
 	// (reliant:api), a daemon credential (daemon:connect), an LLM key
 	// (llm:invoke). Caller: a human session. The org is the caller's primary org.
-	CreateMyToken(context.Context, *connect.Request[v1.CreateMyTokenRequest]) (*connect.Response[v1.CreateMyTokenResponse], error)
+	CreateMyToken(context.Context, *v1.CreateMyTokenRequest) (*v1.CreateMyTokenResponse, error)
 	// ListMyTokens lists tokens acting as the caller.
-	ListMyTokens(context.Context, *connect.Request[v1.ListMyTokensRequest]) (*connect.Response[v1.ListMyTokensResponse], error)
+	ListMyTokens(context.Context, *v1.ListMyTokensRequest) (*v1.ListMyTokensResponse, error)
 	// RevokeMyToken revokes one of the caller's own tokens.
-	RevokeMyToken(context.Context, *connect.Request[v1.RevokeMyTokenRequest]) (*connect.Response[v1.RevokeMyTokenResponse], error)
+	RevokeMyToken(context.Context, *v1.RevokeMyTokenRequest) (*v1.RevokeMyTokenResponse, error)
 	// UpdateMyToken changes one of the caller's own tokens' name and scopes.
 	//
 	// The SECRET IS NEVER REISSUED: editing a live daemon's permissions must
@@ -353,20 +270,20 @@ type AccessTokenServiceHandler interface {
 	// a per-daemon ceiling that also clips existing helpers and future renewals.
 	// Label-only edits and revocation leave that ceiling alone. To restore full
 	// authority explicitly ResetDaemonScopePolicy, then reissue via user login.
-	UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error)
+	UpdateMyToken(context.Context, *v1.UpdateMyTokenRequest) (*v1.UpdateMyTokenResponse, error)
 	// ResetDaemonScopePolicy explicitly restores full user-granted defaults for
 	// FUTURE credentials of one owned daemon. User session only. Existing token
 	// scope sets are never widened: reissue through authenticated login afterwards.
 	// Renewal, label edits and token revocation never reset this durable policy.
-	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
+	ResetDaemonScopePolicy(context.Context, *v1.ResetDaemonScopePolicyRequest) (*v1.ResetDaemonScopePolicyResponse, error)
 	// ListMyCLILogins lists the caller's human CLI logins (`forge login`): the
 	// device, when each was issued and last used, and when it ends. Browser
 	// session only: a CLI login is refused, like every rpc of this service.
-	ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error)
+	ListMyCLILogins(context.Context, *v1.ListMyCLILoginsRequest) (*v1.ListMyCLILoginsResponse, error)
 	// RevokeMyCLILogin ends one of the caller's own CLI logins at once: its
 	// next request is refused. Idempotent: revoking a revoked login succeeds.
 	// Another person's login, or none, is NotFound. Browser session only.
-	RevokeMyCLILogin(context.Context, *connect.Request[v1.RevokeMyCLILoginRequest]) (*connect.Response[v1.RevokeMyCLILoginResponse], error)
+	RevokeMyCLILogin(context.Context, *v1.RevokeMyCLILoginRequest) (*v1.RevokeMyCLILoginResponse, error)
 	// ExchangeToken attenuates a machine credential acting as a person to a
 	// short-lived helper. It NEVER widens: requested scopes must be explicitly
 	// held by the caller (not merely implied by write), exchangeable, and still
@@ -375,188 +292,356 @@ type AccessTokenServiceHandler interface {
 	// Caller must hold deploy:write. The result lives at most an hour, never
 	// outlives the caller, and inherits its user, org and resource binding.
 	// All org capabilities may ride a daemon binding, including cluster:manage.
-	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
+	ExchangeToken(context.Context, *v1.ExchangeTokenRequest) (*v1.ExchangeTokenResponse, error)
 	// ListOrgMemberGrants lists every member of the caller's org with the
 	// permissions they hold. Caller: a human session holding token:read.
-	ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error)
+	ListOrgMemberGrants(context.Context, *v1.ListOrgMemberGrantsRequest) (*v1.ListOrgMemberGrantsResponse, error)
 	// UpdateOrgMemberGrants replaces one member's permission set.
 	//
 	// CLIPPED TO THE CALLER: you cannot grant a permission you do not hold
 	// yourself, which is what stops permission administration from being a
 	// path to every other permission.
-	UpdateOrgMemberGrants(context.Context, *connect.Request[v1.UpdateOrgMemberGrantsRequest]) (*connect.Response[v1.UpdateOrgMemberGrantsResponse], error)
+	UpdateOrgMemberGrants(context.Context, *v1.UpdateOrgMemberGrantsRequest) (*v1.UpdateOrgMemberGrantsResponse, error)
 }
 
-// NewAccessTokenServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	accessTokenServiceMethods := v1.File_services_access_token_v1_access_token_proto.Services().ByName("AccessTokenService").Methods()
-	accessTokenServiceCreateTokenHandler := connect.NewUnaryHandler(
-		AccessTokenServiceCreateTokenProcedure,
-		svc.CreateToken,
-		connect.WithSchema(accessTokenServiceMethods.ByName("CreateToken")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAccessTokenServiceHandler registers svc as the controlplane.v1.AccessTokenService
+// implementation on server.
+func RegisterAccessTokenServiceHandler(server *connect.Server, svc AccessTokenServiceHandler) {
+	adapter := accessTokenServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: accessTokenServiceCreateTokenSpec(), Handler: adapter.createToken},
+		connect.Method{Spec: accessTokenServiceListTokensSpec(), Handler: adapter.listTokens},
+		connect.Method{Spec: accessTokenServiceRevokeTokenSpec(), Handler: adapter.revokeToken},
+		connect.Method{Spec: accessTokenServiceCreateMyTokenSpec(), Handler: adapter.createMyToken},
+		connect.Method{Spec: accessTokenServiceListMyTokensSpec(), Handler: adapter.listMyTokens},
+		connect.Method{Spec: accessTokenServiceRevokeMyTokenSpec(), Handler: adapter.revokeMyToken},
+		connect.Method{Spec: accessTokenServiceUpdateMyTokenSpec(), Handler: adapter.updateMyToken},
+		connect.Method{Spec: accessTokenServiceResetDaemonScopePolicySpec(), Handler: adapter.resetDaemonScopePolicy},
+		connect.Method{Spec: accessTokenServiceListMyCLILoginsSpec(), Handler: adapter.listMyCLILogins},
+		connect.Method{Spec: accessTokenServiceRevokeMyCLILoginSpec(), Handler: adapter.revokeMyCLILogin},
+		connect.Method{Spec: accessTokenServiceExchangeTokenSpec(), Handler: adapter.exchangeToken},
+		connect.Method{Spec: accessTokenServiceListOrgMemberGrantsSpec(), Handler: adapter.listOrgMemberGrants},
+		connect.Method{Spec: accessTokenServiceUpdateOrgMemberGrantsSpec(), Handler: adapter.updateOrgMemberGrants},
 	)
-	accessTokenServiceListTokensHandler := connect.NewUnaryHandler(
-		AccessTokenServiceListTokensProcedure,
-		svc.ListTokens,
-		connect.WithSchema(accessTokenServiceMethods.ByName("ListTokens")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceRevokeTokenHandler := connect.NewUnaryHandler(
-		AccessTokenServiceRevokeTokenProcedure,
-		svc.RevokeToken,
-		connect.WithSchema(accessTokenServiceMethods.ByName("RevokeToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceCreateMyTokenHandler := connect.NewUnaryHandler(
-		AccessTokenServiceCreateMyTokenProcedure,
-		svc.CreateMyToken,
-		connect.WithSchema(accessTokenServiceMethods.ByName("CreateMyToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceListMyTokensHandler := connect.NewUnaryHandler(
-		AccessTokenServiceListMyTokensProcedure,
-		svc.ListMyTokens,
-		connect.WithSchema(accessTokenServiceMethods.ByName("ListMyTokens")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceRevokeMyTokenHandler := connect.NewUnaryHandler(
-		AccessTokenServiceRevokeMyTokenProcedure,
-		svc.RevokeMyToken,
-		connect.WithSchema(accessTokenServiceMethods.ByName("RevokeMyToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceUpdateMyTokenHandler := connect.NewUnaryHandler(
-		AccessTokenServiceUpdateMyTokenProcedure,
-		svc.UpdateMyToken,
-		connect.WithSchema(accessTokenServiceMethods.ByName("UpdateMyToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceResetDaemonScopePolicyHandler := connect.NewUnaryHandler(
-		AccessTokenServiceResetDaemonScopePolicyProcedure,
-		svc.ResetDaemonScopePolicy,
-		connect.WithSchema(accessTokenServiceMethods.ByName("ResetDaemonScopePolicy")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceListMyCLILoginsHandler := connect.NewUnaryHandler(
-		AccessTokenServiceListMyCLILoginsProcedure,
-		svc.ListMyCLILogins,
-		connect.WithSchema(accessTokenServiceMethods.ByName("ListMyCLILogins")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceRevokeMyCLILoginHandler := connect.NewUnaryHandler(
-		AccessTokenServiceRevokeMyCLILoginProcedure,
-		svc.RevokeMyCLILogin,
-		connect.WithSchema(accessTokenServiceMethods.ByName("RevokeMyCLILogin")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceExchangeTokenHandler := connect.NewUnaryHandler(
-		AccessTokenServiceExchangeTokenProcedure,
-		svc.ExchangeToken,
-		connect.WithSchema(accessTokenServiceMethods.ByName("ExchangeToken")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceListOrgMemberGrantsHandler := connect.NewUnaryHandler(
-		AccessTokenServiceListOrgMemberGrantsProcedure,
-		svc.ListOrgMemberGrants,
-		connect.WithSchema(accessTokenServiceMethods.ByName("ListOrgMemberGrants")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessTokenServiceUpdateOrgMemberGrantsHandler := connect.NewUnaryHandler(
-		AccessTokenServiceUpdateOrgMemberGrantsProcedure,
-		svc.UpdateOrgMemberGrants,
-		connect.WithSchema(accessTokenServiceMethods.ByName("UpdateOrgMemberGrants")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.AccessTokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AccessTokenServiceCreateTokenProcedure:
-			accessTokenServiceCreateTokenHandler.ServeHTTP(w, r)
-		case AccessTokenServiceListTokensProcedure:
-			accessTokenServiceListTokensHandler.ServeHTTP(w, r)
-		case AccessTokenServiceRevokeTokenProcedure:
-			accessTokenServiceRevokeTokenHandler.ServeHTTP(w, r)
-		case AccessTokenServiceCreateMyTokenProcedure:
-			accessTokenServiceCreateMyTokenHandler.ServeHTTP(w, r)
-		case AccessTokenServiceListMyTokensProcedure:
-			accessTokenServiceListMyTokensHandler.ServeHTTP(w, r)
-		case AccessTokenServiceRevokeMyTokenProcedure:
-			accessTokenServiceRevokeMyTokenHandler.ServeHTTP(w, r)
-		case AccessTokenServiceUpdateMyTokenProcedure:
-			accessTokenServiceUpdateMyTokenHandler.ServeHTTP(w, r)
-		case AccessTokenServiceResetDaemonScopePolicyProcedure:
-			accessTokenServiceResetDaemonScopePolicyHandler.ServeHTTP(w, r)
-		case AccessTokenServiceListMyCLILoginsProcedure:
-			accessTokenServiceListMyCLILoginsHandler.ServeHTTP(w, r)
-		case AccessTokenServiceRevokeMyCLILoginProcedure:
-			accessTokenServiceRevokeMyCLILoginHandler.ServeHTTP(w, r)
-		case AccessTokenServiceExchangeTokenProcedure:
-			accessTokenServiceExchangeTokenHandler.ServeHTTP(w, r)
-		case AccessTokenServiceListOrgMemberGrantsProcedure:
-			accessTokenServiceListOrgMemberGrantsHandler.ServeHTTP(w, r)
-		case AccessTokenServiceUpdateOrgMemberGrantsProcedure:
-			accessTokenServiceUpdateOrgMemberGrantsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAccessTokenServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAccessTokenServiceHandler struct{}
 
-func (UnimplementedAccessTokenServiceHandler) CreateToken(context.Context, *connect.Request[v1.CreateTokenRequest]) (*connect.Response[v1.CreateTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.CreateToken is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) CreateToken(context.Context, *v1.CreateTokenRequest) (*v1.CreateTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.CreateToken is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) ListTokens(context.Context, *connect.Request[v1.ListTokensRequest]) (*connect.Response[v1.ListTokensResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ListTokens is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) ListTokens(context.Context, *v1.ListTokensRequest) (*v1.ListTokensResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.ListTokens is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) RevokeToken(context.Context, *connect.Request[v1.RevokeTokenRequest]) (*connect.Response[v1.RevokeTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.RevokeToken is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) RevokeToken(context.Context, *v1.RevokeTokenRequest) (*v1.RevokeTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.RevokeToken is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) CreateMyToken(context.Context, *connect.Request[v1.CreateMyTokenRequest]) (*connect.Response[v1.CreateMyTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.CreateMyToken is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) CreateMyToken(context.Context, *v1.CreateMyTokenRequest) (*v1.CreateMyTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.CreateMyToken is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) ListMyTokens(context.Context, *connect.Request[v1.ListMyTokensRequest]) (*connect.Response[v1.ListMyTokensResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ListMyTokens is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) ListMyTokens(context.Context, *v1.ListMyTokensRequest) (*v1.ListMyTokensResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.ListMyTokens is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) RevokeMyToken(context.Context, *connect.Request[v1.RevokeMyTokenRequest]) (*connect.Response[v1.RevokeMyTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.RevokeMyToken is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) RevokeMyToken(context.Context, *v1.RevokeMyTokenRequest) (*v1.RevokeMyTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.RevokeMyToken is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.UpdateMyToken is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) UpdateMyToken(context.Context, *v1.UpdateMyTokenRequest) (*v1.UpdateMyTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.UpdateMyToken is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ResetDaemonScopePolicy is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) ResetDaemonScopePolicy(context.Context, *v1.ResetDaemonScopePolicyRequest) (*v1.ResetDaemonScopePolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.ResetDaemonScopePolicy is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) ListMyCLILogins(context.Context, *connect.Request[v1.ListMyCLILoginsRequest]) (*connect.Response[v1.ListMyCLILoginsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ListMyCLILogins is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) ListMyCLILogins(context.Context, *v1.ListMyCLILoginsRequest) (*v1.ListMyCLILoginsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.ListMyCLILogins is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) RevokeMyCLILogin(context.Context, *connect.Request[v1.RevokeMyCLILoginRequest]) (*connect.Response[v1.RevokeMyCLILoginResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.RevokeMyCLILogin is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) RevokeMyCLILogin(context.Context, *v1.RevokeMyCLILoginRequest) (*v1.RevokeMyCLILoginResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.RevokeMyCLILogin is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ExchangeToken is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) ExchangeToken(context.Context, *v1.ExchangeTokenRequest) (*v1.ExchangeTokenResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.ExchangeToken is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) ListOrgMemberGrants(context.Context, *connect.Request[v1.ListOrgMemberGrantsRequest]) (*connect.Response[v1.ListOrgMemberGrantsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ListOrgMemberGrants is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) ListOrgMemberGrants(context.Context, *v1.ListOrgMemberGrantsRequest) (*v1.ListOrgMemberGrantsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.ListOrgMemberGrants is not implemented")
 }
 
-func (UnimplementedAccessTokenServiceHandler) UpdateOrgMemberGrants(context.Context, *connect.Request[v1.UpdateOrgMemberGrantsRequest]) (*connect.Response[v1.UpdateOrgMemberGrantsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.UpdateOrgMemberGrants is not implemented"))
+func (UnimplementedAccessTokenServiceHandler) UpdateOrgMemberGrants(context.Context, *v1.UpdateOrgMemberGrantsRequest) (*v1.UpdateOrgMemberGrantsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AccessTokenService.UpdateOrgMemberGrants is not implemented")
+}
+
+type accessTokenServiceClient struct {
+	client *connect.Client
+}
+
+func (c *accessTokenServiceClient) CreateToken(ctx context.Context, req *v1.CreateTokenRequest) (*v1.CreateTokenResponse, error) {
+	var res v1.CreateTokenResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceCreateTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) ListTokens(ctx context.Context, req *v1.ListTokensRequest) (*v1.ListTokensResponse, error) {
+	var res v1.ListTokensResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceListTokensSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) RevokeToken(ctx context.Context, req *v1.RevokeTokenRequest) (*v1.RevokeTokenResponse, error) {
+	var res v1.RevokeTokenResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceRevokeTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) CreateMyToken(ctx context.Context, req *v1.CreateMyTokenRequest) (*v1.CreateMyTokenResponse, error) {
+	var res v1.CreateMyTokenResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceCreateMyTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) ListMyTokens(ctx context.Context, req *v1.ListMyTokensRequest) (*v1.ListMyTokensResponse, error) {
+	var res v1.ListMyTokensResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceListMyTokensSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) RevokeMyToken(ctx context.Context, req *v1.RevokeMyTokenRequest) (*v1.RevokeMyTokenResponse, error) {
+	var res v1.RevokeMyTokenResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceRevokeMyTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) UpdateMyToken(ctx context.Context, req *v1.UpdateMyTokenRequest) (*v1.UpdateMyTokenResponse, error) {
+	var res v1.UpdateMyTokenResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceUpdateMyTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) ResetDaemonScopePolicy(ctx context.Context, req *v1.ResetDaemonScopePolicyRequest) (*v1.ResetDaemonScopePolicyResponse, error) {
+	var res v1.ResetDaemonScopePolicyResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceResetDaemonScopePolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) ListMyCLILogins(ctx context.Context, req *v1.ListMyCLILoginsRequest) (*v1.ListMyCLILoginsResponse, error) {
+	var res v1.ListMyCLILoginsResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceListMyCLILoginsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) RevokeMyCLILogin(ctx context.Context, req *v1.RevokeMyCLILoginRequest) (*v1.RevokeMyCLILoginResponse, error) {
+	var res v1.RevokeMyCLILoginResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceRevokeMyCLILoginSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) ExchangeToken(ctx context.Context, req *v1.ExchangeTokenRequest) (*v1.ExchangeTokenResponse, error) {
+	var res v1.ExchangeTokenResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceExchangeTokenSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) ListOrgMemberGrants(ctx context.Context, req *v1.ListOrgMemberGrantsRequest) (*v1.ListOrgMemberGrantsResponse, error) {
+	var res v1.ListOrgMemberGrantsResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceListOrgMemberGrantsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accessTokenServiceClient) UpdateOrgMemberGrants(ctx context.Context, req *v1.UpdateOrgMemberGrantsRequest) (*v1.UpdateOrgMemberGrantsResponse, error) {
+	var res v1.UpdateOrgMemberGrantsResponse
+	if err := c.client.CallUnary(ctx, accessTokenServiceUpdateOrgMemberGrantsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type accessTokenServiceHandler struct{ svc AccessTokenServiceHandler }
+
+func (h accessTokenServiceHandler) createToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) listTokens(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTokensRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTokens(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) revokeToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) createMyToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateMyTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateMyToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) listMyTokens(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMyTokensRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMyTokens(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) revokeMyToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeMyTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeMyToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) updateMyToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateMyTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateMyToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) resetDaemonScopePolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResetDaemonScopePolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResetDaemonScopePolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) listMyCLILogins(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMyCLILoginsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMyCLILogins(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) revokeMyCLILogin(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeMyCLILoginRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeMyCLILogin(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) exchangeToken(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExchangeTokenRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ExchangeToken(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) listOrgMemberGrants(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOrgMemberGrantsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOrgMemberGrants(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accessTokenServiceHandler) updateOrgMemberGrants(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateOrgMemberGrantsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateOrgMemberGrants(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

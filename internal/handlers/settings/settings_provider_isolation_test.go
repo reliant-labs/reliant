@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -105,26 +104,26 @@ func TestSettingsService_CompleteClaudeOAuth_LeavesCodexConnected(t *testing.T) 
 			seedProviders(t, ctx, repo, userID, seeded...)
 			before := providerCredentials(t, ctx, repo, userID)
 
-			resp, err := svc.CompleteClaudeOAuth(ctx, connect.NewRequest(&reliantv1.CompleteClaudeOAuthRequest{
+			resp, err := svc.CompleteClaudeOAuth(ctx, &reliantv1.CompleteClaudeOAuthRequest{
 				Code:         "auth-code",
 				CodeVerifier: "verifier",
 				RedirectUri:  "http://localhost:54545/callback",
 				State:        "reliant:oauth:claude:state",
-			}))
+			})
 			require.NoError(t, err)
-			require.True(t, resp.Msg.Success)
-			require.NotNil(t, resp.Msg.Account)
-			assert.Equal(t, "user@example.com", resp.Msg.Account.Label, "the account is labelled by its detected email")
+			require.True(t, resp.Success)
+			require.NotNil(t, resp.Account)
+			assert.Equal(t, "user@example.com", resp.Account.Label, "the account is labelled by its detected email")
 
 			after := providerCredentials(t, ctx, repo, userID)
 			assert.Equal(t, withoutProvider(before, "claude"), withoutProvider(after, "claude"),
 				"connecting Claude must not change any other provider's credentials")
 
 			// And the user sees both connected, which is what Settings renders.
-			statuses, err := svc.GetProviderStatuses(ctx, connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
+			statuses, err := svc.GetProviderStatuses(ctx, &reliantv1.GetProviderStatusesRequest{})
 			require.NoError(t, err)
-			assert.True(t, findProviderStatus(t, statuses.Msg.Providers, "claude").Configured)
-			assert.True(t, findProviderStatus(t, statuses.Msg.Providers, "codex").Configured,
+			assert.True(t, findProviderStatus(t, statuses.Providers, "claude").Configured)
+			assert.True(t, findProviderStatus(t, statuses.Providers, "codex").Configured,
 				"Codex must still be connected after a Claude sign-in")
 		})
 	}

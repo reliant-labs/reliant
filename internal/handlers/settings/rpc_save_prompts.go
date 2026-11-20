@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -17,12 +15,12 @@ import (
 )
 
 // SavePrompts saves global user prompts
-func (s *Service) SavePrompts(ctx context.Context, req *connect.Request[reliantv1.SavePromptsRequest]) (*connect.Response[reliantv1.SavePromptsResponse], error) {
+func (s *Service) SavePrompts(ctx context.Context, req *reliantv1.SavePromptsRequest) (*reliantv1.SavePromptsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Convert proto prompts to JSON-serializable struct
-	prompts := make([]map[string]interface{}, len(req.Msg.Prompts))
-	for i, p := range req.Msg.Prompts {
+	prompts := make([]map[string]interface{}, len(req.Prompts))
+	for i, p := range req.Prompts {
 		prompt := map[string]interface{}{
 			"id":      p.Id,
 			"title":   p.Title,
@@ -53,9 +51,9 @@ func (s *Service) SavePrompts(ctx context.Context, req *connect.Request[reliantv
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after SavePrompts", "error", err)
 	}
 
-	return connect.NewResponse(&reliantv1.SavePromptsResponse{
+	return &reliantv1.SavePromptsResponse{
 		Success: true,
 		Message: "Prompts saved successfully",
-		Prompts: req.Msg.Prompts,
-	}), nil
+		Prompts: req.Prompts,
+	}, nil
 }

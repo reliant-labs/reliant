@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -33,11 +33,11 @@ func TestListConnections_SynthesizesTheOrgsGitHubAppInstallations(t *testing.T) 
 	as := func(user string) context.Context { return authz.WithMembership(asConnUser(user), members) }
 	org := "org-1"
 	list := func(ctx context.Context, req *reliantv1.ListConnectionsRequest) ([]*reliantv1.Connection, error) {
-		resp, err := svc.ListConnections(ctx, connect.NewRequest(req))
+		resp, err := svc.ListConnections(ctx, req)
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg.Connections, nil
+		return resp.Connections, nil
 	}
 
 	own, err := list(as("dana"), &reliantv1.ListConnectionsRequest{})

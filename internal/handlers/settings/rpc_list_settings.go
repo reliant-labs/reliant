@@ -3,8 +3,6 @@ package settings
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -12,12 +10,12 @@ import (
 )
 
 // ListSettings lists all settings for the current user
-func (s *Service) ListSettings(ctx context.Context, req *connect.Request[reliantv1.ListSettingsRequest]) (*connect.Response[reliantv1.ListSettingsResponse], error) {
+func (s *Service) ListSettings(ctx context.Context, req *reliantv1.ListSettingsRequest) (*reliantv1.ListSettingsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	var projectID *string
-	if req.Msg.ProjectId != nil {
-		projectID = req.Msg.ProjectId
+	if req.ProjectId != nil {
+		projectID = req.ProjectId
 	}
 
 	settings, err := s.deps.Repo.ListSettings(ctx, userID, projectID)
@@ -30,8 +28,8 @@ func (s *Service) ListSettings(ctx context.Context, req *connect.Request[reliant
 		protoSettings[i] = settingToProto(setting)
 	}
 
-	return connect.NewResponse(&reliantv1.ListSettingsResponse{
+	return &reliantv1.ListSettingsResponse{
 		Settings: protoSettings,
 		Total:    int32(len(protoSettings)),
-	}), nil
+	}, nil
 }

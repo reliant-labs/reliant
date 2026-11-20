@@ -6,7 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -161,28 +162,33 @@ func (e *wakingError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 // the machine so the client can say which one is waking. It is still a user
 // error; the class is carried onto the fresh error, which drops the chain.
 func (e *wakingError) connectError() *connect.Error {
-	cerr := svcerr.ToConnect(svcerr.WithReason(
+	cerr := svcerr.ToConnectV2(svcerr.WithReason(
 		svcerr.WithClass(svcerr.Unavailable(e.Error()), svcerr.ClassUser), errreason.DaemonWaking))
-	if detail, err := connect.NewErrorDetail(&reliantv1.DaemonWaking{DaemonId: e.daemonID}); err == nil {
-		cerr.AddDetail(detail)
+	if detail, err := connectproto.NewErrorDetail(&reliantv1.DaemonWaking{DaemonId: e.daemonID}); err == nil {
+		cerr = cerr.WithDetail(detail)
 	}
 	return cerr
 }
 
 // NewInterceptor turns a handler error that woke a machine into
 // Unavailable with a DaemonWaking detail, whatever code and message the handler
-// wrapped it in. Mounted on the services that take the wake step.
-func NewInterceptor() connect.Interceptor {
-	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			resp, err := next(ctx, req)
+// wrapped it in. Mounted on the services that take the wake step
+// (mountkit.WithInterceptorsV2). Like the unary interceptor it was under
+// connect v1, it leaves streaming calls alone.
+func NewInterceptor() connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			err := next(ctx, spec, stream)
+			if spec.StreamType != connect.StreamTypeUnary {
+				return err
+			}
 			var waking *wakingError
 			if err != nil && errors.As(err, &waking) {
-				return nil, waking.connectError()
+				return waking.connectError()
 			}
-			return resp, err
+			return err
 		}
-	})
+	}
 }
 
 // IsWaking reports whether err is, or wraps, a request that woke its

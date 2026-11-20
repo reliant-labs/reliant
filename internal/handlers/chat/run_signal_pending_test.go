@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -63,12 +62,12 @@ func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	resp, err := runs.SignalRun(ctx, connect.NewRequest(&reliantv1.SignalRunRequest{
+	resp, err := runs.SignalRun(ctx, &reliantv1.SignalRunRequest{
 		RunId: chatID,
 		Messages: []*reliantv1.InputMessage{
 			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "hello?"},
 		},
-	}))
+	})
 	require.NoError(t, err, "a pending run reports delivered=false, never an error")
-	require.False(t, resp.Msg.Delivered)
+	require.False(t, resp.Delivered)
 }

@@ -6,14 +6,16 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/errreason"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -52,17 +54,19 @@ func TestExchangeToken_RefusalsOnTheWire(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			authority := tokenauthority.NewMemory()
-			_, client := NewTestTokenServer(t, WithTokenDeps(Deps{Authority: authority, ControlPlane: tc.cp}))
+			srv, _ := NewTestTokenServer(t, WithTokenDeps(Deps{Authority: authority, ControlPlane: tc.cp}))
+			// A client as reliant builds them (rpcclient): svcerr.MetaOf reads the metadata.
+			client := reliantv1connect.NewTokenServiceClient(rpcclient.New(srv.Client(), srv.URL, nil))
 			bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
 
-			_, err := client.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+			_, err := client.ExchangeToken(clientBearer(context.Background(), bearer), &reliantv1.ExchangeTokenRequest{
 				Audience: testControlPlane, Scopes: tc.scopes,
-			}))
+			})
 			var cerr *connect.Error
 			require.True(t, errors.As(err, &cerr), "want a Connect error, got %v", err)
 			assert.Equal(t, tc.wantCode, cerr.Code())
-			assert.Equal(t, tc.wantReason, cerr.Meta().Get(svcerr.ReasonHeader))
-			assert.Equal(t, tc.wantScopes, cerr.Meta().Get(fat.ScopesHeader))
+			assert.Equal(t, tc.wantReason, svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
+			assert.Equal(t, tc.wantScopes, svcerr.MetaOf(err).Get(fat.ScopesHeader))
 			assert.Equal(t, tc.wantMessage, cerr.Message())
 		})
 	}

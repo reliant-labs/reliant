@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/proto"
@@ -23,10 +22,10 @@ import (
 // D12).
 func (s *Service) AdoptTrigger(
 	ctx context.Context,
-	req *connect.Request[pb.AdoptTriggerRequest],
-) (*connect.Response[pb.AdoptTriggerResponse], error) {
+	req *pb.AdoptTriggerRequest,
+) (*pb.AdoptTriggerResponse, error) {
 	callerID := auth.MustGetUserID(ctx)
-	t, err := s.adminTrigger(ctx, callerID, req.Msg.GetTriggerId())
+	t, err := s.adminTrigger(ctx, callerID, req.GetTriggerId())
 	if err != nil {
 		return nil, err
 	}
@@ -34,25 +33,25 @@ func (s *Service) AdoptTrigger(
 		return nil, err
 	}
 
-	newOwner := strings.TrimSpace(req.Msg.GetNewOwnerUserId())
+	newOwner := strings.TrimSpace(req.GetNewOwnerUserId())
 	if newOwner == "" || newOwner == callerID {
-		if req.Msg.Rebinding == nil {
+		if req.Rebinding == nil {
 			return nil, svcerr.InvalidArgument("rebinding is required: adopting an automation means choosing your own project, machine and connections for it")
 		}
-		adopted, err := s.deps.Triggers.AdoptAs(ctx, t, callerID, req.Msg.Rebinding, "")
+		adopted, err := s.deps.Triggers.AdoptAs(ctx, t, callerID, req.Rebinding, "")
 		if err != nil {
 			return nil, err
 		}
-		return connect.NewResponse(&pb.AdoptTriggerResponse{
+		return &pb.AdoptTriggerResponse{
 			Trigger: adopted.Trigger,
 			Webhook: adopted.Webhook,
 			Notices: adopted.Notices,
-		}), nil
+		}, nil
 	}
 
 	// An offer: the offeree chooses their own project, machine and
 	// connections when they accept, so the admin may not choose them.
-	if rb := req.Msg.Rebinding; rb != nil && !proto.Equal(rb, &pb.TriggerRebinding{}) {
+	if rb := req.Rebinding; rb != nil && !proto.Equal(rb, &pb.TriggerRebinding{}) {
 		return nil, svcerr.InvalidArgument("rebinding must be unset when offering an automation to someone else: they choose their own project, machine and connections when they accept")
 	}
 	member, err := orgtakeover.LiveMember(ctx, newOwner, *t.OrgID)
@@ -80,5 +79,5 @@ func (s *Service) AdoptTrigger(
 	}
 	logging.InfoContext(ctx, "[takeover] offered an automation whose creator left its organization",
 		"trigger_id", t.ID, "offer_id", offer.ID, "offered_by", callerID, "offeree", newOwner, "org_id", offer.OrgID)
-	return connect.NewResponse(&pb.AdoptTriggerResponse{Offer: offerToProto(offer)}), nil
+	return &pb.AdoptTriggerResponse{Offer: offerToProto(offer)}, nil
 }

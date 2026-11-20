@@ -3,8 +3,6 @@ package catalog_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/tdd"
 	"github.com/reliant-labs/forge/pkg/testkit"
 
@@ -18,13 +16,13 @@ func TestListAvailableModels_Generated(t *testing.T) {
 
 	svc := catalog.NewTestCatalog(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListAvailableModelsRequest, pb.ListAvailableModelsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListAvailableModelsRequest, pb.ListAvailableModelsResponse]{
 		{
 			Name: "a caller with no provider credentials has no models",
-			Req:  connect.NewRequest(&pb.ListAvailableModelsRequest{}),
+			Req:  &pb.ListAvailableModelsRequest{},
 			Ctx:  catalog.AuthedContext(t, testkit.WithUserID(noProvidersUser)),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListAvailableModelsResponse]) {
-				if got := resp.Msg.GetModels(); len(got) != 0 {
+			Check: func(t *testing.T, resp *pb.ListAvailableModelsResponse) {
+				if got := resp.GetModels(); len(got) != 0 {
 					t.Fatalf("models = %v, want none", got)
 				}
 			},

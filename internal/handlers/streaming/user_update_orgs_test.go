@@ -4,20 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -122,22 +117,18 @@ func credentialUserStream(t *testing.T, repo Repository, hub streaming.UpdateHub
 	for _, f := range tune {
 		f(svc)
 	}
-	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
 	// A request through a listener carries the membership authz decides with.
-	mux.Handle(path, authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler.ServeHTTP(w, r.WithContext(authz.WithCredentialOrg(authz.WithMembership(r.Context(), m), bound)))
-	})))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.Start()
-	t.Cleanup(srv.Close)
+	client := serveStreaming(t, svc, func(next http.Handler) http.Handler {
+		return authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(authz.WithCredentialOrg(authz.WithMembership(r.Context(), m), bound)))
+		}))
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-		StreamUserUpdates(ctx, connect.NewRequest(&reliantv1.StreamUserUpdatesRequest{}))
+	stream, err := client.StreamUserUpdates(ctx, &reliantv1.StreamUserUpdatesRequest{})
 	require.NoError(t, err)
-	return receiveAll(t, stream)
+	events, _ := receiveAll(t, stream)
+	return events
 }
 
 func nextBatch(t *testing.T, events <-chan *reliantv1.UserStreamEvent) (ids []string, latest int64) {

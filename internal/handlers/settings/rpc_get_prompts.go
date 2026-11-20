@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -17,15 +15,15 @@ import (
 // ============================================================================
 
 // GetPrompts retrieves global user prompts
-func (s *Service) GetPrompts(ctx context.Context, req *connect.Request[reliantv1.GetPromptsRequest]) (*connect.Response[reliantv1.GetPromptsResponse], error) {
+func (s *Service) GetPrompts(ctx context.Context, req *reliantv1.GetPromptsRequest) (*reliantv1.GetPromptsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	setting, err := s.deps.Repo.GetSetting(ctx, userID, nil, "global.prompts")
 	if err != nil {
 		// Return empty prompts if not found
-		return connect.NewResponse(&reliantv1.GetPromptsResponse{
+		return &reliantv1.GetPromptsResponse{
 			Prompts: []*reliantv1.UserPrompt{},
-		}), nil
+		}, nil
 	}
 
 	var prompts []struct {
@@ -55,7 +53,7 @@ func (s *Service) GetPrompts(ctx context.Context, req *connect.Request[reliantv1
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetPromptsResponse{
+	return &reliantv1.GetPromptsResponse{
 		Prompts: protoPrompts,
-	}), nil
+	}, nil
 }

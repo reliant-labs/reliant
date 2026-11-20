@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -109,9 +109,9 @@ func (f *discoverFixture) addRow(t *testing.T, path string, archived bool) {
 
 func (f *discoverFixture) discover(t *testing.T) *reliantv1.DiscoverWorktreesResponse {
 	t.Helper()
-	resp, err := f.svc.DiscoverWorktrees(f.ctx, connect.NewRequest(&reliantv1.DiscoverWorktreesRequest{ProjectId: f.projectID}))
+	resp, err := f.svc.DiscoverWorktrees(f.ctx, &reliantv1.DiscoverWorktreesRequest{ProjectId: f.projectID})
 	require.NoError(t, err)
-	return resp.Msg
+	return resp
 }
 
 func TestDiscoverWorktrees_SendsRepoPathsAndExcludesTrackedRows(t *testing.T) {
@@ -209,7 +209,7 @@ func TestDiscoverWorktrees_RejectsAnotherUsersProject(t *testing.T) {
 
 	f := newDiscoverTestFixture(t, "")
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
-	_, err := f.svc.DiscoverWorktrees(ctx, connect.NewRequest(&reliantv1.DiscoverWorktreesRequest{ProjectId: f.projectID}))
+	_, err := f.svc.DiscoverWorktrees(ctx, &reliantv1.DiscoverWorktreesRequest{ProjectId: f.projectID})
 	require.Error(t, err)
 	assert.Nil(t, f.router.payloads)
 }
@@ -222,12 +222,12 @@ func TestPruneWorktrees_SendsReposAndReturnsPruned(t *testing.T) {
 	f.router.pruned = []map[string]any{
 		{"repo_id": f.repoIDs[1], "path": "/gone", "prunable": true, "prunable_reason": "missing"},
 	}
-	resp, err := f.svc.PruneWorktrees(f.ctx, connect.NewRequest(&reliantv1.PruneWorktreesRequest{ProjectId: f.projectID}))
+	resp, err := f.svc.PruneWorktrees(f.ctx, &reliantv1.PruneWorktreesRequest{ProjectId: f.projectID})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Pruned, 1)
-	assert.Equal(t, "/gone", resp.Msg.Pruned[0].Path)
-	assert.Equal(t, "repob", resp.Msg.Pruned[0].RepoName)
-	assert.Equal(t, "missing", resp.Msg.Pruned[0].Reason)
+	require.Len(t, resp.Pruned, 1)
+	assert.Equal(t, "/gone", resp.Pruned[0].Path)
+	assert.Equal(t, "repob", resp.Pruned[0].RepoName)
+	assert.Equal(t, "missing", resp.Pruned[0].Reason)
 
 	var sent struct {
 		Repos []struct {
@@ -239,8 +239,8 @@ func TestPruneWorktrees_SendsReposAndReturnsPruned(t *testing.T) {
 	require.Len(t, sent.Repos, 2)
 	assert.Equal(t, filepath.Join("/proj", "b"), sent.Repos[1].Path)
 
-	_, err = f.svc.PruneWorktrees(f.ctx, connect.NewRequest(&reliantv1.PruneWorktreesRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = f.svc.PruneWorktrees(f.ctx, &reliantv1.PruneWorktreesRequest{})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 func TestDiscoverWorktrees_BackgroundNeverWakesAnAsleepMachine(t *testing.T) {
@@ -251,11 +251,11 @@ func TestDiscoverWorktrees_BackgroundNeverWakesAnAsleepMachine(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			f := newAsleepFixture(t, placementDefaultDaemon)
-			_, err := f.wt.DiscoverWorktrees(f.ctx, connect.NewRequest(&reliantv1.DiscoverWorktreesRequest{
+			_, err := f.wt.DiscoverWorktrees(f.ctx, &reliantv1.DiscoverWorktreesRequest{
 				ProjectId: f.projectID, Background: background,
-			}))
+			})
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+			assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 			if background {
 				assert.Empty(t, f.router.wakeCalls(), "a background poll must not start the machine")
 				assert.False(t, machinewake.IsWaking(err))
@@ -273,11 +273,11 @@ func TestImportWorktree_MultiRepoNeedsConfirmMove(t *testing.T) {
 	t.Parallel()
 
 	f := newDiscoverTestFixture(t, "a", "b")
-	_, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
+	_, err := f.svc.ImportWorktree(f.ctx, &reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, RepoId: f.repoIDs[0], Path: "/x/wt",
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "moves")
 	assert.Nil(t, f.router.payloads, "nothing reaches the daemon before the user confirms")
 }
@@ -288,11 +288,11 @@ func TestImportWorktree_RefusesPathsTheDaemonDoesNotReport(t *testing.T) {
 
 	f := newDiscoverTestFixture(t, "")
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/real", "branch": "b"}}
-	_, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
+	_, err := f.svc.ImportWorktree(f.ctx, &reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, Path: "/etc",
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	rows, _ := f.repo.ListWorktrees(context.Background(), db.WorktreeFilters{ProjectID: &f.projectID, IncludeArchived: true})
 	assert.Empty(t, rows)
 }
@@ -303,11 +303,11 @@ func TestImportWorktree_DetachedHeadIsRefused(t *testing.T) {
 
 	f := newDiscoverTestFixture(t, "")
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/det", "head": "abc", "detached": true}}
-	_, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
+	_, err := f.svc.ImportWorktree(f.ctx, &reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, Path: "/x/det",
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "detached")
 }
 
@@ -317,11 +317,11 @@ func TestImportWorktree_SingleRepoRegistersInPlace(t *testing.T) {
 
 	f := newDiscoverTestFixture(t, "")
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/wt", "name": "wt", "branch": "feat/y"}}
-	resp, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
+	resp, err := f.svc.ImportWorktree(f.ctx, &reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, Path: "/x/wt",
-	}))
+	})
 	require.NoError(t, err)
-	got, err := f.repo.GetWorktree(context.Background(), resp.Msg.Worktree.Id)
+	got, err := f.repo.GetWorktree(context.Background(), resp.Worktree.Id)
 	require.NoError(t, err)
 	assert.Equal(t, "/x/wt", got.Path)
 	assert.Equal(t, "feat/y", got.Branch)
@@ -331,17 +331,17 @@ func TestImportWorktree_SingleRepoRegistersInPlace(t *testing.T) {
 
 	// Same name again: AlreadyExists, not Internal.
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/other", "name": "wt", "branch": "feat/z"}}
-	_, err = f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
+	_, err = f.svc.ImportWorktree(f.ctx, &reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, Path: "/x/other",
-	}))
-	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
+	})
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err))
 
 	// A branch held by another row: FailedPrecondition.
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/third", "name": "third", "branch": "feat/y"}}
-	_, err = f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
+	_, err = f.svc.ImportWorktree(f.ctx, &reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, Path: "/x/third",
-	}))
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	})
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 }
 
 // A path is one machine's. A workspace B imported at /ws/same says nothing
@@ -377,6 +377,6 @@ func TestDiscoverWorktrees_ExcludesOnlyThisMachinesRows(t *testing.T) {
 	assert.ElementsMatch(t, []string{"/ws/mine", "/ws/legacy"}, sentRoots(), "another machine's row does not hide this machine's checkout")
 
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/ws/same", "branch": "feat"}}
-	_, _ = f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: f.projectID, Path: "/ws/same"}))
+	_, _ = f.svc.ImportWorktree(f.ctx, &reliantv1.ImportWorktreeRequest{ProjectId: f.projectID, Path: "/ws/same"})
 	assert.ElementsMatch(t, []string{"/ws/mine", "/ws/legacy"}, sentRoots(), "import validates against the same machine's rows")
 }

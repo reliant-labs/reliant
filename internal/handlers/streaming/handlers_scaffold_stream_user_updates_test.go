@@ -2,10 +2,12 @@ package streaming_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
@@ -28,25 +30,43 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		stream, err := client.StreamUserUpdates(ctx, connect.NewRequest(req))
+		stream, err := client.StreamUserUpdates(ctx, req)
 		require.NoError(t, err)
 		defer func() { _ = stream.Close() }()
-		for stream.Receive() {
+		var streamErr error
+		for {
+			_, err := stream.Receive()
+			if err != nil {
+				streamErr = err
+				break
+			}
 			// The first frame is the user catch-up; a refused stream sends none.
 		}
-		return stream.Err()
+		if errors.Is(streamErr, io.EOF) {
+			streamErr = nil
+		}
+		return streamErr
 	}
 	openChat := func(t *testing.T, client reliantv1connect.StreamingServiceClient, req *pb.StreamChatUpdatesRequest) error {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		stream, err := client.StreamChatUpdates(ctx, connect.NewRequest(req))
+		stream, err := client.StreamChatUpdates(ctx, req)
 		require.NoError(t, err)
 		defer func() { _ = stream.Close() }()
-		for stream.Receive() {
+		var streamErr error
+		for {
+			_, err := stream.Receive()
+			if err != nil {
+				streamErr = err
+				break
+			}
 			// A refused stream sends no frame.
 		}
-		return stream.Err()
+		if errors.Is(streamErr, io.EOF) {
+			streamErr = nil
+		}
+		return streamErr
 	}
 
 	t.Run("anonymous caller is unauthenticated", func(t *testing.T) {
@@ -55,7 +75,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
 			streaming.WithoutPrincipal())
 		err := open(t, client, &pb.StreamUserUpdatesRequest{})
-		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 	})
 
 	t.Run("anonymous caller cannot open a chat stream", func(t *testing.T) {
@@ -64,7 +84,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
 			streaming.WithoutPrincipal())
 		err := openChat(t, client, &pb.StreamChatUpdatesRequest{ChatId: "chat-1"})
-		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 	})
 
 	t.Run("another user's chat is not found", func(t *testing.T) {
@@ -73,7 +93,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
 			streaming.WithPrincipal(testkit.WithUserID("test-user")))
 		err := openChat(t, client, &pb.StreamChatUpdatesRequest{ChatId: "chat-of-someone-else"})
-		require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+		require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("a chat stream names its chat", func(t *testing.T) {
@@ -82,7 +102,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
 			streaming.WithPrincipal(testkit.WithUserID("test-user")))
 		err := openChat(t, client, &pb.StreamChatUpdatesRequest{})
-		require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	})
 }
 

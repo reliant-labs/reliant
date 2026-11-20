@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -126,9 +126,9 @@ func entryRefs(entries []*reliantv1.CatalogEntrySummary) []string {
 
 func TestSearchCatalog_ReturnsRankedLightweightEntries(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
-	resp, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{Query: "contact"}))
+	resp, err := svc.SearchCatalog(asUser("bob"), &reliantv1.SearchCatalogRequest{Query: "contact"})
 	require.NoError(t, err)
-	got := resp.Msg
+	got := resp
 	// Both acme contact actions reach the prefix tier; web/fetch only mentions
 	// "contact" in its summary, so it ranks last even though bob can use it
 	// and cannot use acme.
@@ -159,47 +159,47 @@ func TestSearchCatalog_ConnectedIsTheCallers(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
 	req := &reliantv1.SearchCatalogRequest{ConnectedOnly: true}
 
-	alice, err := svc.SearchCatalog(asUser("alice"), connect.NewRequest(req))
+	alice, err := svc.SearchCatalog(asUser("alice"), req)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"acme/contact.create@1", "acme/contact.get@1", "acme/deal.list@1", "web/fetch@1"},
-		entryRefs(alice.Msg.GetEntries()))
-	for _, e := range alice.Msg.GetEntries() {
+		entryRefs(alice.GetEntries()))
+	for _, e := range alice.GetEntries() {
 		assert.True(t, e.GetConnected(), e.GetRef())
 	}
 
-	bob, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(req))
+	bob, err := svc.SearchCatalog(asUser("bob"), req)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"web/fetch@1"}, entryRefs(bob.Msg.GetEntries()))
+	assert.Equal(t, []string{"web/fetch@1"}, entryRefs(bob.GetEntries()))
 }
 
 func TestSearchCatalog_Pages(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
 	req := &reliantv1.SearchCatalogRequest{PageSize: 3}
-	p1, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(req))
+	p1, err := svc.SearchCatalog(asUser("bob"), req)
 	require.NoError(t, err)
-	require.Len(t, p1.Msg.GetEntries(), 3)
-	require.NotEmpty(t, p1.Msg.GetNextPageToken())
-	assert.EqualValues(t, 4, p1.Msg.GetTotalSize())
+	require.Len(t, p1.GetEntries(), 3)
+	require.NotEmpty(t, p1.GetNextPageToken())
+	assert.EqualValues(t, 4, p1.GetTotalSize())
 
-	req.PageToken = p1.Msg.GetNextPageToken()
-	p2, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(req))
+	req.PageToken = p1.GetNextPageToken()
+	p2, err := svc.SearchCatalog(asUser("bob"), req)
 	require.NoError(t, err)
-	assert.Len(t, p2.Msg.GetEntries(), 1)
-	assert.Empty(t, p2.Msg.GetNextPageToken())
-	assert.NotContains(t, entryRefs(p1.Msg.GetEntries()), p2.Msg.GetEntries()[0].GetRef())
+	assert.Len(t, p2.GetEntries(), 1)
+	assert.Empty(t, p2.GetNextPageToken())
+	assert.NotContains(t, entryRefs(p1.GetEntries()), p2.GetEntries()[0].GetRef())
 }
 
 func TestSearchCatalog_FiltersByKindAndCategory(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
-	resp, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{
+	resp, err := svc.SearchCatalog(asUser("bob"), &reliantv1.SearchCatalogRequest{
 		Kinds: []reliantv1.CatalogEntryKind{reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER},
-	}))
+	})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.GetEntries(), "no trigger types exist yet")
+	assert.Empty(t, resp.GetEntries(), "no trigger types exist yet")
 
-	resp, err = svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{Category: "core"}))
+	resp, err = svc.SearchCatalog(asUser("bob"), &reliantv1.SearchCatalogRequest{Category: "core"})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"web/fetch@1"}, entryRefs(resp.Msg.GetEntries()))
+	assert.Equal(t, []string{"web/fetch@1"}, entryRefs(resp.GetEntries()))
 }
 
 func TestSearchCatalog_RejectsBadRequests(t *testing.T) {
@@ -212,9 +212,9 @@ func TestSearchCatalog_RejectsBadRequests(t *testing.T) {
 	}
 	for name, req := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(req))
+			_, err := svc.SearchCatalog(asUser("bob"), req)
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 		})
 	}
 }
@@ -226,9 +226,9 @@ func TestListCatalogIntegrations_ListsIntegrationsConnectedFirst(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
 	listing := func(user string, req *reliantv1.ListCatalogIntegrationsRequest) *reliantv1.ListCatalogIntegrationsResponse {
 		t.Helper()
-		resp, err := svc.ListCatalogIntegrations(asUser(user), connect.NewRequest(req))
+		resp, err := svc.ListCatalogIntegrations(asUser(user), req)
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 	ids := func(msg *reliantv1.ListCatalogIntegrationsResponse) []string {
 		out := []string{}
@@ -285,36 +285,36 @@ func TestListCatalogIntegrations_RejectsBadRequests(t *testing.T) {
 	}
 	for name, req := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, err := svc.ListCatalogIntegrations(asUser("bob"), connect.NewRequest(req))
+			_, err := svc.ListCatalogIntegrations(asUser("bob"), req)
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 		})
 	}
-	_, err := svc.ListCatalogIntegrations(context.Background(), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
-	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
-	_, err = NewTestCatalog(t).ListCatalogIntegrations(asUser("bob"), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
-	assert.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
+	_, err := svc.ListCatalogIntegrations(context.Background(), &reliantv1.ListCatalogIntegrationsRequest{})
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
+	_, err = NewTestCatalog(t).ListCatalogIntegrations(asUser("bob"), &reliantv1.ListCatalogIntegrationsRequest{})
+	assert.Equal(t, connect.CodeUnimplemented, svcerr.CodeV2(err))
 }
 
 func TestSearchCatalog_RequiresAUser(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
-	_, err := svc.SearchCatalog(context.Background(), connect.NewRequest(&reliantv1.SearchCatalogRequest{}))
-	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
-	_, err = svc.GetCatalogEntry(context.Background(), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "web/fetch@1"}))
-	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+	_, err := svc.SearchCatalog(context.Background(), &reliantv1.SearchCatalogRequest{})
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
+	_, err = svc.GetCatalogEntry(context.Background(), &reliantv1.GetCatalogEntryRequest{Ref: "web/fetch@1"})
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 }
 
 func TestSearchCatalog_UnconfiguredIsUnimplemented(t *testing.T) {
 	svc := NewTestCatalog(t)
-	_, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{}))
-	assert.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
+	_, err := svc.SearchCatalog(asUser("bob"), &reliantv1.SearchCatalogRequest{})
+	assert.Equal(t, connect.CodeUnimplemented, svcerr.CodeV2(err))
 }
 
 func TestGetCatalogEntry_ReturnsSchemasAndConnectionRequirement(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
-	resp, err := svc.GetCatalogEntry(asUser("alice"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "acme/contact.create@1"}))
+	resp, err := svc.GetCatalogEntry(asUser("alice"), &reliantv1.GetCatalogEntryRequest{Ref: "acme/contact.create@1"})
 	require.NoError(t, err)
-	e := resp.Msg.GetEntry()
+	e := resp.GetEntry()
 
 	assert.Equal(t, "acme/contact.create@1", e.GetSummary().GetRef())
 	assert.True(t, e.GetSummary().GetConnected(), "alice has an active acme connection")
@@ -339,42 +339,42 @@ func TestGetCatalogEntry_ReturnsSchemasAndConnectionRequirement(t *testing.T) {
 	assert.Equal(t, "region", conn.GetConnectionParams()[0].GetName())
 	assert.False(t, conn.GetConnectionParams()[0].GetRequired(), "it has a default")
 
-	bob, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "acme/contact.create@1"}))
+	bob, err := svc.GetCatalogEntry(asUser("bob"), &reliantv1.GetCatalogEntryRequest{Ref: "acme/contact.create@1"})
 	require.NoError(t, err)
-	assert.False(t, bob.Msg.GetEntry().GetSummary().GetConnected())
+	assert.False(t, bob.GetEntry().GetSummary().GetConnected())
 }
 
 func TestGetCatalogEntry_ActionWithoutSchemasGetsEmptyObjects(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
-	resp, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "acme/deal.list@1"}))
+	resp, err := svc.GetCatalogEntry(asUser("bob"), &reliantv1.GetCatalogEntryRequest{Ref: "acme/deal.list@1"})
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"type": "object"}, resp.Msg.GetEntry().GetParamsSchema().AsMap())
-	assert.Equal(t, map[string]any{"type": "object"}, resp.Msg.GetEntry().GetOutputSchema().AsMap())
-	assert.Empty(t, resp.Msg.GetEntry().GetToolName())
+	assert.Equal(t, map[string]any{"type": "object"}, resp.GetEntry().GetParamsSchema().AsMap())
+	assert.Equal(t, map[string]any{"type": "object"}, resp.GetEntry().GetOutputSchema().AsMap())
+	assert.Empty(t, resp.GetEntry().GetToolName())
 }
 
 func TestGetCatalogEntry_UnknownRefIsNotFound(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
 	for _, ref := range []string{"acme/contact.create@2", "acme/nope@1", "nope/fetch@1", "garbage"} {
-		_, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: ref}))
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), ref)
+		_, err := svc.GetCatalogEntry(asUser("bob"), &reliantv1.GetCatalogEntryRequest{Ref: ref})
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), ref)
 	}
-	_, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err := svc.GetCatalogEntry(asUser("bob"), &reliantv1.GetCatalogEntryRequest{})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // The embedded catalog is what production serves; its entries must convert.
 func TestGetCatalogEntry_EveryEmbeddedEntryConverts(t *testing.T) {
 	idx := catalogindex.MustBuiltin()
 	svc := NewTestCatalog(t, WithCatalogDeps(Deps{Search: catalogindex.NewService(idx, nil, nil)}))
-	all, err := svc.SearchCatalog(asUser("u"), connect.NewRequest(&reliantv1.SearchCatalogRequest{PageSize: catalogindex.MaxPageSize}))
+	all, err := svc.SearchCatalog(asUser("u"), &reliantv1.SearchCatalogRequest{PageSize: catalogindex.MaxPageSize})
 	require.NoError(t, err)
-	require.NotEmpty(t, all.Msg.GetEntries())
+	require.NotEmpty(t, all.GetEntries())
 	kinds := map[reliantv1.CatalogEntryKind]int{}
-	for _, s := range all.Msg.GetEntries() {
-		resp, err := svc.GetCatalogEntry(asUser("u"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: s.GetRef()}))
+	for _, s := range all.GetEntries() {
+		resp, err := svc.GetCatalogEntry(asUser("u"), &reliantv1.GetCatalogEntryRequest{Ref: s.GetRef()})
 		require.NoError(t, err, s.GetRef())
-		e := resp.Msg.GetEntry()
+		e := resp.GetEntry()
 		kinds[s.GetKind()]++
 		// An action converts with its params schema, a trigger with its
 		// payload schema; each carries only its own.
@@ -428,19 +428,19 @@ func TestGetCatalogEntry_TriggerCarriesItsPayloadSchema(t *testing.T) {
 	require.NoError(t, err)
 	svc := NewTestCatalog(t, WithCatalogDeps(Deps{Search: catalogindex.NewService(idx, fakeCatalogConnections{}, nil)}))
 
-	list, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{
+	list, err := svc.SearchCatalog(asUser("bob"), &reliantv1.SearchCatalogRequest{
 		Kinds: []reliantv1.CatalogEntryKind{reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER},
-	}))
+	})
 	require.NoError(t, err)
-	require.Equal(t, []string{"pager/alert.fired@1"}, entryRefs(list.Msg.GetEntries()))
-	assert.Equal(t, "Alert fired", list.Msg.GetEntries()[0].GetDisplayName())
+	require.Equal(t, []string{"pager/alert.fired@1"}, entryRefs(list.GetEntries()))
+	assert.Equal(t, "Alert fired", list.GetEntries()[0].GetDisplayName())
 	// The summary names the provider events it fires on, so a client can
 	// name a run's event ("alert.fired" → "Alert fired") from the search alone.
-	assert.Equal(t, []string{"alert.fired"}, list.Msg.GetEntries()[0].GetEvents())
+	assert.Equal(t, []string{"alert.fired"}, list.GetEntries()[0].GetEvents())
 
-	resp, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "pager/alert.fired@1"}))
+	resp, err := svc.GetCatalogEntry(asUser("bob"), &reliantv1.GetCatalogEntryRequest{Ref: "pager/alert.fired@1"})
 	require.NoError(t, err)
-	e := resp.Msg.GetEntry()
+	e := resp.GetEntry()
 	assert.Equal(t, reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER, e.GetSummary().GetKind())
 	assert.Nil(t, e.GetParamsSchema())
 	assert.Nil(t, e.GetOutputSchema())
@@ -456,18 +456,18 @@ func TestCatalogServesValueTypes(t *testing.T) {
 	idx := catalogindex.MustBuiltin()
 	svc := NewTestCatalog(t, WithCatalogDeps(Deps{Search: catalogindex.NewService(idx, fakeCatalogConnections{}, nil)}))
 
-	list, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{
+	list, err := svc.SearchCatalog(asUser("bob"), &reliantv1.SearchCatalogRequest{
 		Kinds: []reliantv1.CatalogEntryKind{reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE}, PageSize: 100,
-	}))
+	})
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"github.repository", "github.label", "github.user", "github.installation"}, entryRefs(list.Msg.GetEntries()))
-	for _, e := range list.Msg.GetEntries() {
+	assert.ElementsMatch(t, []string{"github.repository", "github.label", "github.user", "github.installation"}, entryRefs(list.GetEntries()))
+	for _, e := range list.GetEntries() {
 		assert.Equal(t, reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE, e.GetKind())
 	}
 
-	got, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "github.repository"}))
+	got, err := svc.GetCatalogEntry(asUser("bob"), &reliantv1.GetCatalogEntryRequest{Ref: "github.repository"})
 	require.NoError(t, err)
-	e := got.Msg.GetEntry()
+	e := got.GetEntry()
 	assert.Equal(t, reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE, e.GetSummary().GetKind())
 	assert.Equal(t, "github", e.GetSummary().GetIntegration().GetId())
 	require.NotNil(t, e.GetValueSchema())
@@ -477,7 +477,7 @@ func TestCatalogServesValueTypes(t *testing.T) {
 	assert.Nil(t, e.GetPayloadSchema())
 
 	// An action entry carries no value schema.
-	action, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "github/user.get@1"}))
+	action, err := svc.GetCatalogEntry(asUser("bob"), &reliantv1.GetCatalogEntryRequest{Ref: "github/user.get@1"})
 	require.NoError(t, err)
-	assert.Nil(t, action.Msg.GetEntry().GetValueSchema())
+	assert.Nil(t, action.GetEntry().GetValueSchema())
 }

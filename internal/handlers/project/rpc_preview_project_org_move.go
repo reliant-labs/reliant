@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -48,10 +47,10 @@ const (
 // preview shows them as unknown rather than failing.
 func (s *Service) PreviewProjectOrgMove(
 	ctx context.Context,
-	req *connect.Request[pb.PreviewProjectOrgMoveRequest],
-) (*connect.Response[pb.PreviewProjectOrgMoveResponse], error) {
+	req *pb.PreviewProjectOrgMoveRequest,
+) (*pb.PreviewProjectOrgMoveResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	projectID, to := req.Msg.GetProjectId(), req.Msg.GetToOrgId()
+	projectID, to := req.GetProjectId(), req.GetToOrgId()
 	project, err := s.deps.Repo.GetProject(ctx, projectID)
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
@@ -72,12 +71,12 @@ func (s *Service) PreviewProjectOrgMove(
 	if err := s.addControlPlaneEffects(ctx, userID, projectID, from, to, effects, out); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.PreviewProjectOrgMoveResponse{
+	return &pb.PreviewProjectOrgMoveResponse{
 		FromOrgId: from,
 		ToOrgId:   to,
 		Blockers:  projectMoveBlockersProto(blockers),
 		Effects:   out,
-	}), nil
+	}, nil
 }
 
 // moveFactsTimeout bounds control-plane's preview read: past it the preview

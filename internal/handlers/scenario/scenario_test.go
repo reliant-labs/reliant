@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -101,7 +100,7 @@ edges: []
 	}))
 
 	outputJSON := `{"response_text":"child done"}`
-	resp, err := service.RunScenario(ctx, connect.NewRequest(&reliantv1.RunScenarioRequest{
+	resp, err := service.RunScenario(ctx, &reliantv1.RunScenarioRequest{
 		ProjectId:    projectID,
 		WorkflowSlug: "parent-flow",
 		Scenario: &reliantv1.ScenarioDefinition{
@@ -115,10 +114,10 @@ edges: []
 				Reached: []string{"child", "child.draft", "done"},
 			},
 		},
-	}))
+	})
 	require.NoError(t, err)
-	require.Equal(t, "passed", resp.Msg.Result.Status, "mismatches: %v", resp.Msg.Result.Mismatches)
-	require.Contains(t, resp.Msg.Result.Execution.NodesReached, "child.draft")
+	require.Equal(t, "passed", resp.Result.Status, "mismatches: %v", resp.Result.Mismatches)
+	require.Contains(t, resp.Result.Execution.NodesReached, "child.draft")
 }
 
 // runtimeOnlyWorkflow / runtimeOnlyScenario are a shape the retired graph
@@ -172,7 +171,7 @@ func TestScenarioService_RunScenario_ExecutesOnTheRuntime(t *testing.T) {
 		CreatedAt: now, UpdatedAt: now,
 	}))
 
-	resp, err := service.RunScenario(ctx, connect.NewRequest(&reliantv1.RunScenarioRequest{
+	resp, err := service.RunScenario(ctx, &reliantv1.RunScenarioRequest{
 		WorkflowSlug: "denied-loop",
 		Scenario: &reliantv1.ScenarioDefinition{
 			Name: "denied_once",
@@ -182,10 +181,10 @@ func TestScenarioService_RunScenario_ExecutesOnTheRuntime(t *testing.T) {
 			},
 			Expect: &reliantv1.ScenarioExpectation{Outcome: "completed"},
 		},
-	}))
+	})
 	require.NoError(t, err)
-	require.Equal(t, "failed", resp.Msg.Result.Status)
-	require.Contains(t, strings.Join(resp.Msg.Result.Mismatches, "\n"),
+	require.Equal(t, "failed", resp.Result.Status)
+	require.Contains(t, strings.Join(resp.Result.Mismatches, "\n"),
 		`scenario exhausted its mocks for node "agent_loop.call_llm"`,
 		"the runtime re-enters the loop after a denial; the retired simulator did not")
 }

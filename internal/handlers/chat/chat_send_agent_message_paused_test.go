@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -98,11 +97,11 @@ func setupPausedAgentMessageFixture(t *testing.T) pausedAgentMessageFixture {
 
 func (fx pausedAgentMessageFixture) send(t *testing.T, threadID, body string) *reliantv1.SendAgentMessageResponse {
 	t.Helper()
-	resp, err := fx.service.SendAgentMessage(fx.ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := fx.service.SendAgentMessage(fx.ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: threadID, Message: body,
-	}))
+	})
 	require.NoError(t, err)
-	return resp.Msg
+	return resp
 }
 
 func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) {
@@ -201,11 +200,11 @@ func TestSendAgentMessage_AsyncAnswerDoorbellDoesNotYieldQuestions(t *testing.T)
 	require.NoError(t, fx.repo.UpdateWorkflowStatus(fx.ctx, fx.rootThreadID, db.Active()))
 	require.NoError(t, fx.repo.UpdateWorkflowStatus(fx.ctx, fx.childThreadID, db.Active()))
 
-	resp, err := fx.service.SendAgentMessage(threadwake.WithoutQuestionYield(fx.ctx), connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := fx.service.SendAgentMessage(threadwake.WithoutQuestionYield(fx.ctx), &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "Answer to the question you asked without waiting",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success, "got: %s", resp.Msg.Message)
+	require.True(t, resp.Success, "got: %s", resp.Message)
 
 	wakes := threadWakeSignals(fx.temporal.signals)
 	require.Len(t, wakes, 1, "the thread is still woken, like any mail")

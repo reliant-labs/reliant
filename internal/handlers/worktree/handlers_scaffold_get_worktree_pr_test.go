@@ -3,7 +3,7 @@ package worktree_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -16,16 +16,16 @@ func TestGetWorktreePR_Generated(t *testing.T) {
 
 	svc := newOwnedWorktreeService(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetWorktreePRRequest, pb.GetWorktreePRResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetWorktreePRRequest, pb.GetWorktreePRResponse]{
 		{
 			Name:    "a missing worktree_id is invalid",
-			Req:     connect.NewRequest(&pb.GetWorktreePRRequest{}),
+			Req:     &pb.GetWorktreePRRequest{},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "another user's worktree is not found",
-			Req:     connect.NewRequest(&pb.GetWorktreePRRequest{WorktreeId: otherWorktreeID}),
+			Req:     &pb.GetWorktreePRRequest{WorktreeId: otherWorktreeID},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

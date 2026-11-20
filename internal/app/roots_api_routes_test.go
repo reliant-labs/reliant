@@ -13,12 +13,14 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -66,6 +68,7 @@ import (
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 const routesTestAPIKey = "api-routes-test-key"
@@ -126,7 +129,7 @@ func serveUserRoutes(t *testing.T, routes *UserRoutes) string {
 	t.Helper()
 	authn, err := grpcserver.NewUserAuth(auth.Settings{Mode: auth.ModeAPIKey, APIKey: routesTestAPIKey}, nobodysTokens{})
 	require.NoError(t, err)
-	chain, err := grpcserver.NewUserChain(grpcserver.UserChainDeps{Auth: authn})
+	chain, err := grpcserver.NewUserChain(grpcserver.UserChainDeps{Auth: authn.Intercept})
 	require.NoError(t, err)
 	listener, err := grpcserver.NewAPIListener(grpcserver.APIListenerDeps{BindAddress: "127.0.0.1", Chain: chain, Routes: routes})
 	require.NoError(t, err)
@@ -156,7 +159,7 @@ func h2c() *http.Client {
 // check one service's audience and serve another's.
 func TestAPIMountsEveryUserService(t *testing.T) {
 	mux := http.NewServeMux()
-	names := testUserRoutes(t, apiMountOptions(false)).Register(mux)
+	names := testUserRoutes(t, apiMountOptions(false)).RegisterV2(mountkit.NewMuxV2(mux, nil))
 
 	want := append([]string(nil), userServices...)
 	sort.Strings(want)
@@ -186,9 +189,9 @@ func TestAPIServicesAnswerBehindAuth(t *testing.T) {
 		reliantv1connect.ForgeServiceGetTopologyProcedure,
 	} {
 		t.Run(strings.TrimPrefix(procedure, "/reliant.v1."), func(t *testing.T) {
-			call := connect.NewClient[emptypb.Empty, emptypb.Empty](h2c(), baseURL+procedure)
-			_, err := call.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{}))
-			require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "got %v", err)
+			err := rpcclient.New(h2c(), baseURL, nil).CallUnary(context.Background(),
+				connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: procedure}, &emptypb.Empty{}, &emptypb.Empty{})
+			require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err), "got %v", err)
 		})
 	}
 }
@@ -205,16 +208,16 @@ func TestAPIMountOptions(t *testing.T) {
 	off := apiMountOptions(true)
 	require.Len(t, off.Forge, 1)
 	baseURL := serveUserRoutes(t, testUserRoutes(t, off))
-	client := reliantv1connect.NewForgeServiceClient(h2c(), baseURL)
+	client := reliantv1connect.NewForgeServiceClient(rpcclient.New(h2c(), baseURL, nil))
 
-	req := connect.NewRequest(&reliantv1.GetForgeTopologyRequest{})
-	req.Header().Set("Authorization", "Bearer "+routesTestAPIKey)
-	_, err := client.GetTopology(context.Background(), req)
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set("Authorization", "Bearer "+routesTestAPIKey)
+	_, err := client.GetTopology(ctx, &reliantv1.GetForgeTopologyRequest{})
 	var connectErr *connect.Error
 	require.True(t, errors.As(err, &connectErr), "want a Connect error, got %v", err)
 	require.Equal(t, connect.CodeFailedPrecondition, connectErr.Code(), "got %v", err)
-	require.Equal(t, "forge_api_disabled", connectErr.Meta().Get(svcerr.ReasonHeader))
+	require.Equal(t, "forge_api_disabled", svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 
-	_, err = client.GetTopology(context.Background(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{}))
-	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "an anonymous caller is refused for its credential first")
+	_, err = client.GetTopology(context.Background(), &reliantv1.GetForgeTopologyRequest{})
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err), "an anonymous caller is refused for its credential first")
 }

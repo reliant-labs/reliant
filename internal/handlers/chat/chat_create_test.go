@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -67,18 +67,18 @@ nodes:
 
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+	_, err := service.StartChat(ctx, &reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "invalid-spawn-tree",
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
 			Content: "hello",
 		}},
-	}))
+	})
 	require.Error(t, err)
 
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	require.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	require.Contains(t, connectErr.Message(), "workflow tree validation failed")
 	require.Contains(t, connectErr.Message(), "invalid-spawn-tree")

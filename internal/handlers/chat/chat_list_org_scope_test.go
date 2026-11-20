@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -57,10 +57,10 @@ func TestArchivedAndSearch_ScopedToTheNamedOrg(t *testing.T) {
 	sorted := func(s ...string) []string { sort.Strings(s); return s }
 	archived := func(orgID *string) []string {
 		t.Helper()
-		resp, err := service.ListArchivedChats(ctx, connect.NewRequest(&reliantv1.ListArchivedChatsRequest{OrgId: orgID}))
+		resp, err := service.ListArchivedChats(ctx, &reliantv1.ListArchivedChatsRequest{OrgId: orgID})
 		require.NoError(t, err)
 		var out []string
-		for _, ac := range resp.Msg.Chats {
+		for _, ac := range resp.Chats {
 			if ac.Chat.ProjectId == projectID {
 				out = append(out, ac.Chat.Id)
 			}
@@ -69,10 +69,10 @@ func TestArchivedAndSearch_ScopedToTheNamedOrg(t *testing.T) {
 	}
 	searched := func(orgID *string) []string {
 		t.Helper()
-		resp, err := service.SearchChats(ctx, connect.NewRequest(&reliantv1.SearchChatsRequest{Query: "needle", ProjectId: projectID, OrgId: orgID}))
+		resp, err := service.SearchChats(ctx, &reliantv1.SearchChatsRequest{Query: "needle", ProjectId: projectID, OrgId: orgID})
 		require.NoError(t, err)
 		var out []string
-		for _, c := range resp.Msg.Chats {
+		for _, c := range resp.Chats {
 			out = append(out, c.Id)
 		}
 		return sorted(out...)
@@ -88,8 +88,8 @@ func TestArchivedAndSearch_ScopedToTheNamedOrg(t *testing.T) {
 	require.Equal(t, sorted(home, home+"-archived", legacy, legacy+"-archived"), searched(ptr.Of("home")), "search, the default org with the chats of no org")
 
 	// An org the caller is not in is refused, not listed empty.
-	_, err := service.ListArchivedChats(ctx, connect.NewRequest(&reliantv1.ListArchivedChatsRequest{OrgId: ptr.Of("globex")}))
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
-	_, err = service.SearchChats(ctx, connect.NewRequest(&reliantv1.SearchChatsRequest{Query: "needle", OrgId: ptr.Of("globex")}))
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+	_, err := service.ListArchivedChats(ctx, &reliantv1.ListArchivedChatsRequest{OrgId: ptr.Of("globex")})
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
+	_, err = service.SearchChats(ctx, &reliantv1.SearchChatsRequest{Query: "needle", OrgId: ptr.Of("globex")})
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 }

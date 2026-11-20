@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -24,9 +24,9 @@ func TestRecreateWorktree_RepairsAnActiveWorktreeWhoseDirectoryVanished(t *testi
 	wt, path := e.worktree(t, "vanished")
 	require.NoError(t, os.RemoveAll(path))
 
-	resp, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	resp, err := e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
-	assert.Contains(t, resp.Msg.Message, "recreated from branch feat/vanished")
+	assert.Contains(t, resp.Message, "recreated from branch feat/vanished")
 	assert.Equal(t, "feat/vanished", gitIn(t, path, "rev-parse", "--abbrev-ref", "HEAD"))
 	assert.Contains(t, e.router.calls, toolexec.WorkspaceEnsureCommand)
 
@@ -43,9 +43,9 @@ func TestRecreateWorktree_ActiveWorktreeThatIsPresentIsANoOp(t *testing.T) {
 	wt, path := e.worktree(t, "healthy")
 	require.NoError(t, os.WriteFile(filepath.Join(path, "dirty.txt"), []byte("keep"), 0o644))
 
-	resp, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	resp, err := e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.NoError(t, err)
-	assert.Contains(t, resp.Msg.Message, "nothing needed recreating")
+	assert.Contains(t, resp.Message, "nothing needed recreating")
 	b, err := os.ReadFile(filepath.Join(path, "dirty.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "keep", string(b))
@@ -59,8 +59,8 @@ func TestRecreateWorktree_ReportsWhyAnActiveWorktreeCannotBeRebuilt(t *testing.T
 	gitIn(t, e.project.Path, "worktree", "remove", "--force", "--force", path)
 	gitIn(t, e.project.Path, "branch", "-D", "feat/unrecoverable")
 
-	_, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
+	_, err := e.svc.RecreateWorktree(e.ctx, &reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "no longer exists")
 }

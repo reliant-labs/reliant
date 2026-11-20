@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"connectrpc.com/otelconnect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/observe"
@@ -50,16 +50,16 @@ func NewUserAuth(settings auth.Settings, tokens accesstokenclient.Introspector) 
 func (a *UserAuth) Settings() auth.Settings { return a.settings }
 
 // UserChain is the interceptor chain of the API listener: forge's chain
-// (serverkit.NewChain) with reliant's user credential as its authenticator.
+// (serverkit.NewChainV2) with reliant's user credential as its authenticator.
 // Its audience is serverkit.AudienceUser, which every service the API mounts
 // declares by declaring none.
-type UserChain struct{ *serverkit.Chain }
+type UserChain struct{ *serverkit.ChainV2 }
 
 // UserChainDeps configures a UserChain.
 type UserChainDeps struct {
 	// Auth authenticates users: a JWT or the API key, and `rlat_` access
-	// tokens through its introspector (UserAuth). Required.
-	Auth connect.Interceptor
+	// tokens through its introspector (UserAuth's Intercept). Required.
+	Auth connect.ServerInterceptor
 	// AllowedEmailDomains, when non-empty, admits only users whose email is
 	// in one of these domains.
 	AllowedEmailDomains []string
@@ -110,8 +110,8 @@ type UserChainDeps struct {
 // as Benign is not logged at ERROR, and a drained stream is an expected
 // outcome) and the stream drain are the chain's defaults — the trace span now
 // opens outermost, ahead of recovery and logging, as forge places it, so
-// every log line of a request carries its trace id. svcerr.Interceptor is not
-// a slot: NewChain always installs it innermost, so a handler's svcerr error
+// every log line of a request carries its trace id. svcerr.InterceptorV2 is
+// not a slot: NewChainV2 always installs it innermost, so a handler's svcerr error
 // reaches the client with its code, and an error nothing recognises reaches
 // it as internal with svcerr.InternalMessage (the original stays on the
 // "rpc failed" record's cause).
@@ -119,22 +119,22 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 	if deps.Auth == nil {
 		return nil, errors.New("user chain: UserChainDeps.Auth is required")
 	}
-	activityIC, err := activity.Interceptor(activity.Deps{Principal: Principal{}, Logger: deps.Logger})
+	activityIC, err := activity.InterceptorV2(activity.Deps{Principal: Principal{}, Logger: deps.Logger})
 	if err != nil {
 		return nil, fmt.Errorf("user chain: %w", err)
 	}
-	trace, err := otelconnect.NewInterceptor(otelconnect.WithTrustRemote())
+	trace, err := otelconnect.NewServerInterceptor(otelconnect.WithTrustRemote())
 	if err != nil {
 		return nil, fmt.Errorf("user chain: trace interceptor: %w", err)
 	}
-	chain, err := serverkit.NewChain(serverkit.ChainDeps{
-		Auth:   serverkit.AuthFor(serverkit.AudienceUser, deps.Auth),
+	chain, err := serverkit.NewChainV2(serverkit.ChainDepsV2{
+		Auth:   serverkit.AuthForV2(serverkit.AudienceUser, deps.Auth),
 		Logger: deps.Logger,
 		// forge's default trace interceptor, inside a request scope so the
 		// authenticator can attribute the request's logs and spans to its
 		// user (interceptors.RequestScope).
 		Trace:    interceptors.RequestScope(trace),
-		Audit:    serverkit.NoAudit,
+		NoAudit:  true,
 		Activity: activityIC,
 		// A failed RPC is one issue event, forge's "rpc failed" ERROR line,
 		// grouped per procedure (sfp1). The process handler trusts a record
@@ -143,15 +143,11 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 		// failure Temporal carries as Benign — nobody has to act — logged at
 		// ERROR, error_class=server, and counted as a dead-end error.
 		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
-		Deadline: serverkit.Deadline{
-			Unary:      interceptors.UnaryTimeout,
-			Procedures: interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines()),
-			OnSlow:     interceptors.ReportSlowRPC,
+		Deadline:   userChainDeadline(),
+		Extras: []connect.ServerInterceptor{
+			interceptors.NewDomainWhitelistInterceptor(deps.AllowedEmailDomains).Intercept,
 		},
-		Extras: []connect.Interceptor{
-			interceptors.NewDomainWhitelistInterceptor(deps.AllowedEmailDomains),
-		},
-		Validate:     serverkit.NoValidate,
+		NoValidate:   true,
 		ReadMaxBytes: -1,
 		SendMaxBytes: -1,
 	})
@@ -159,4 +155,14 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 		return nil, fmt.Errorf("user chain: %w", err)
 	}
 	return &UserChain{chain}, nil
+}
+
+// userChainDeadline is the user chain's Deadline slot: reliant's budgets
+// (NewUserChain says why).
+func userChainDeadline() serverkit.Deadline {
+	return serverkit.Deadline{
+		Unary:      interceptors.UnaryTimeout,
+		Procedures: interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines()),
+		OnSlow:     interceptors.ReportSlowRPC,
+	}
 }

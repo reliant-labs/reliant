@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -38,7 +38,7 @@ func TestRefusalWire(t *testing.T) {
 // panic value never reaches the client.
 func TestPanicWire(t *testing.T) {
 	g := New(Deps{Limits: Limits{PerUser: 1}}).(*guard)
-	_, err := g.do(context.Background(), "user", "key", Read[pb.ListChatsResponse]("list"), func(context.Context) (connect.AnyResponse, error) {
+	_, err := g.do(context.Background(), "user", "key", Read[pb.ListChatsResponse]("list"), func(context.Context) (*answer, error) {
 		panic("secret handler detail")
 	})
 	require.Error(t, err)

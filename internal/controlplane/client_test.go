@@ -2,12 +2,15 @@ package controlplane
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
 	accesstokenv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1/controlplanev1connect"
 )
@@ -17,15 +20,17 @@ func TestClient_MintLLMKey_RequestsAPerDeviceRotatingLLMToken(t *testing.T) {
 		gotAuth string
 		gotReq  *accesstokenv1.CreateMyTokenRequest
 	)
-	handler := connect.NewUnaryHandler(
-		accesstokenv1connect.AccessTokenServiceCreateMyTokenProcedure,
-		func(_ context.Context, req *connect.Request[accesstokenv1.CreateMyTokenRequest]) (*connect.Response[accesstokenv1.CreateMyTokenResponse], error) {
-			gotAuth = req.Header().Get("Authorization")
-			gotReq = req.Msg
-			return connect.NewResponse(&accesstokenv1.CreateMyTokenResponse{Secret: "rlat_minted", Rotated: true}), nil
-		},
-	)
-	server := httptest.NewServer(handler)
+	srv := connect.NewServer(svcerr.InterceptorV2())
+	accesstokenv1connect.RegisterAccessTokenServiceHandler(srv, accessTokens{create: func(ctx context.Context, req *accesstokenv1.CreateMyTokenRequest) (*accesstokenv1.CreateMyTokenResponse, error) {
+		if info, ok := connect.CallInfoForServerContext(ctx); ok {
+			gotAuth = info.RequestHeader().Get("Authorization")
+		}
+		gotReq = req
+		return &accesstokenv1.CreateMyTokenResponse{Secret: "rlat_minted", Rotated: true}, nil
+	}})
+	mux := http.NewServeMux()
+	mountkit.MountV2(mux, srv)
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	key, err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: server.URL}}).MintLLMKey(context.Background(), " jwt-token ", "laptop")
@@ -44,10 +49,25 @@ func TestClient_MintLLMKey_RequestsAPerDeviceRotatingLLMToken(t *testing.T) {
 	}
 }
 
-func TestAttachAuthorization_LeavesHeaderUnsetWhenBlank(t *testing.T) {
-	req := connect.NewRequest(&accesstokenv1.CreateMyTokenRequest{})
-	attachAuthorization(req, "  ")
-	if got := req.Header().Get("Authorization"); got != "" {
+// createMyToken is an AccessTokenService that answers CreateMyToken with fn.
+type createMyToken func(context.Context, *accesstokenv1.CreateMyTokenRequest) (*accesstokenv1.CreateMyTokenResponse, error)
+
+type accessTokens struct {
+	accesstokenv1connect.UnimplementedAccessTokenServiceHandler
+	create createMyToken
+}
+
+func (a accessTokens) CreateMyToken(ctx context.Context, req *accesstokenv1.CreateMyTokenRequest) (*accesstokenv1.CreateMyTokenResponse, error) {
+	return a.create(ctx, req)
+}
+
+func TestWithAuthorization_LeavesHeaderUnsetWhenBlank(t *testing.T) {
+	ctx := withAuthorization(context.Background(), "  ")
+	info, ok := connect.CallInfoForClientContext(ctx)
+	if !ok {
+		t.Fatal("withAuthorization attached no call info")
+	}
+	if got := info.RequestHeader().Get("Authorization"); got != "" {
 		t.Fatalf("authorization header = %q, want empty", got)
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
@@ -16,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -34,8 +34,8 @@ import (
 // user stream, its replay, or the user-level events it would have stalled.
 func (s *Service) StreamChatUpdates(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StreamChatUpdatesRequest],
-	stream *connect.ServerStream[reliantv1.ChatStreamEvent],
+	req *reliantv1.StreamChatUpdatesRequest,
+	stream reliantv1connect.StreamingServiceStreamChatUpdatesServerStream,
 ) error {
 	// Note: Authentication is handled by the WrapStreamingHandler interceptor
 	userID, ok := auth.GetUserIDFromContext(ctx)
@@ -43,11 +43,11 @@ func (s *Service) StreamChatUpdates(
 		return svcerr.ErrUnauthenticated
 	}
 
-	chatID := req.Msg.GetChatId()
+	chatID := req.GetChatId()
 	if chatID == "" {
 		return svcerr.InvalidArgument("chat_id is required")
 	}
-	sinceSeq := req.Msg.GetSinceSeq()
+	sinceSeq := req.GetSinceSeq()
 
 	// The RPC span lasts as long as the chat stays open; the moment the
 	// client had its initial sync is the chat_stream.caught_up event on it.
@@ -122,7 +122,7 @@ func (s *Service) StreamChatUpdates(
 	// The user-level updates about this chat that the client's
 	// project-scoped user stream drops (see chatFocusFilter). Only a
 	// project-scoped client has any.
-	focus := newChatFocusFilter(s.deps.Repo, req.Msg.GetProjectId(), chatID)
+	focus := newChatFocusFilter(s.deps.Repo, req.GetProjectId(), chatID)
 	if viewer {
 		focus = nil // the owner's user-level updates are theirs
 	}
@@ -137,8 +137,8 @@ func (s *Service) StreamChatUpdates(
 	}
 
 	opts := chatSyncOptions{
-		toolBodies: messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs()),
-		skipTotal:  req.Msg.GetSkipTotal(),
+		toolBodies: messageproto.ResolveToolBodyMode(req.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs()),
+		skipTotal:  req.GetSkipTotal(),
 	}
 	lastChatSeq, err := s.sendInitialChatSync(ctx, chat, sinceSeq, opts, out)
 	if err != nil {

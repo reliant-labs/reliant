@@ -56,9 +56,12 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/go-cmp/cmp"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -69,6 +72,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -86,58 +90,66 @@ const (
 // ---- server side: the test service (the only connect-major-specific part) ----
 
 type (
-	goldenUnaryFn  func(ctx context.Context, req *connect.Request[wrapperspb.StringValue]) (*connect.Response[wrapperspb.StringValue], error)
-	goldenStreamFn func(ctx context.Context, req *connect.Request[wrapperspb.StringValue], stream *connect.ServerStream[wrapperspb.StringValue]) error
+	goldenUnaryFn  func(ctx context.Context, req *wrapperspb.StringValue) (*wrapperspb.StringValue, error)
+	goldenStreamFn func(ctx context.Context, req *wrapperspb.StringValue, stream connect.ServerStream) error
 )
 
-// goldenHandlers builds the service's handler set, each registered the way
-// generated code registers a method: NewUnaryHandler / NewServerStreamHandler
-// with the chain's handler options.
-func goldenHandlers(upstreamURL string, opts []connect.HandlerOption) http.Handler {
-	upstream := connect.NewClient[wrapperspb.StringValue, wrapperspb.StringValue](http.DefaultClient, upstreamURL+"/upstream.v1.Upstream/Fail")
+// goldenRegister builds the service's registration, each method registered
+// the way generated code registers one: a connect.Method whose handler
+// receives the request, calls the implementation and sends its answer.
+func goldenRegister(upstreamURL string) func(*connect.Server) {
+	upstream := rpcclient.New(http.DefaultClient, upstreamURL, nil)
 	callUpstream := func(ctx context.Context) error {
-		_, err := upstream.CallUnary(ctx, connect.NewRequest(wrapperspb.String("ping")))
-		return err
+		return upstream.CallUnary(ctx, connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: "/upstream.v1.Upstream/Fail"},
+			wrapperspb.String("ping"), &wrapperspb.StringValue{})
 	}
-	reply := func(msg string) *connect.Response[wrapperspb.StringValue] {
-		return connect.NewResponse(wrapperspb.String(msg))
+	reply := func(msg string) *wrapperspb.StringValue {
+		return wrapperspb.String(msg)
 	}
 	fail := func(err error) goldenUnaryFn {
-		return func(context.Context, *connect.Request[wrapperspb.StringValue]) (*connect.Response[wrapperspb.StringValue], error) {
+		return func(context.Context, *wrapperspb.StringValue) (*wrapperspb.StringValue, error) {
 			return nil, err
 		}
 	}
 
-	unary := map[string]goldenUnaryFn{}
+	var methods []connect.Method
 	for _, c := range goldenCases() {
-		if c.unary != nil {
-			unary[c.name] = c.unary(callUpstream, reply, fail)
+		if c.unary == nil {
+			continue
 		}
+		fn := c.unary(callUpstream, reply, fail)
+		methods = append(methods, connect.Method{
+			Spec: connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: goldenService + c.name},
+			Handler: func(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+				var req wrapperspb.StringValue
+				if err := stream.Receive(&req); err != nil {
+					return err
+				}
+				res, err := fn(ctx, &req)
+				if err != nil {
+					return err
+				}
+				return stream.Send(res)
+			},
+		})
 	}
-	stream := map[string]goldenStreamFn{}
 	for _, c := range goldenCases() {
-		if c.stream != nil {
-			stream[c.name] = c.stream(callUpstream)
+		if c.stream == nil {
+			continue
 		}
+		fn := c.stream(callUpstream)
+		methods = append(methods, connect.Method{
+			Spec: connect.Spec{StreamType: connect.StreamTypeServer, Procedure: goldenService + c.name},
+			Handler: func(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+				var req wrapperspb.StringValue
+				if err := stream.Receive(&req); err != nil {
+					return err
+				}
+				return fn(ctx, &req, stream)
+			},
+		})
 	}
-
-	handlers := map[string]http.Handler{}
-	for name, fn := range unary {
-		proc := goldenService + name
-		handlers[proc] = connect.NewUnaryHandler(proc, fn, opts...)
-	}
-	for name, fn := range stream {
-		proc := goldenService + name
-		handlers[proc] = connect.NewServerStreamHandler(proc, fn, opts...)
-	}
-	// Like generated code: a switch on the path, http.NotFound for anything else.
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h, ok := handlers[r.URL.Path]; ok {
-			h.ServeHTTP(w, r)
-			return
-		}
-		http.NotFound(w, r)
-	})
+	return func(server *connect.Server) { server.Register(methods...) }
 }
 
 // startGoldenUpstream serves a Connect server whose one rpc fails with a
@@ -145,18 +157,19 @@ func goldenHandlers(upstreamURL string, opts []connect.HandlerOption) http.Handl
 // the shape of an error one reliant service gets back from another.
 func startGoldenUpstream(t *testing.T) string {
 	t.Helper()
-	mux := http.NewServeMux()
-	const proc = "/upstream.v1.Upstream/Fail"
-	mux.Handle(proc, connect.NewUnaryHandler(proc,
-		func(context.Context, *connect.Request[wrapperspb.StringValue]) (*connect.Response[wrapperspb.StringValue], error) {
-			ce := connect.NewError(connect.CodeFailedPrecondition, errors.New(goldenUpstreamMsg))
-			if d, err := connect.NewErrorDetail(wrapperspb.String("upstream-detail")); err == nil {
-				ce.AddDetail(d)
+	server := connect.NewServer(svcerr.InterceptorV2())
+	server.Register(connect.Method{
+		Spec: connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: "/upstream.v1.Upstream/Fail"},
+		Handler: func(context.Context, connect.Spec, connect.ServerStream) error {
+			ce := connect.NewError(connect.CodeFailedPrecondition, goldenUpstreamMsg)
+			if d, err := connectproto.NewErrorDetail(wrapperspb.String("upstream-detail")); err == nil {
+				ce = ce.WithDetail(d)
 			}
-			ce.Meta().Set(svcerr.ReasonHeader, "upstream_reason")
-			ce.Meta().Set("X-Upstream-Meta", "from-upstream")
-			return nil, ce
-		}))
+			return svcerr.WithMetadata(svcerr.WithReason(ce, "upstream_reason"), "X-Upstream-Meta", "from-upstream")
+		},
+	})
+	mux := http.NewServeMux()
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
@@ -189,7 +202,7 @@ type goldenCase struct {
 	// timeout is the client deadline the request carries (zero: none).
 	timeout time.Duration
 	// unary / stream build the handler registered under the case's name.
-	unary  func(callUpstream func(context.Context) error, reply func(string) *connect.Response[wrapperspb.StringValue], fail func(error) goldenUnaryFn) goldenUnaryFn
+	unary  func(callUpstream func(context.Context) error, reply func(string) *wrapperspb.StringValue, fail func(error) goldenUnaryFn) goldenUnaryFn
 	stream func(callUpstream func(context.Context) error) goldenStreamFn
 	// raw requests, for the cases that are not one rpc in each protocol.
 	raw func() []reqSpec
@@ -197,7 +210,7 @@ type goldenCase struct {
 
 // failWith is a unary case whose handler returns err.
 func failWith(name string, err error) goldenCase {
-	return goldenCase{name: name, kind: kindUnary, unary: func(_ func(context.Context) error, _ func(string) *connect.Response[wrapperspb.StringValue], fail func(error) goldenUnaryFn) goldenUnaryFn {
+	return goldenCase{name: name, kind: kindUnary, unary: func(_ func(context.Context) error, _ func(string) *wrapperspb.StringValue, fail func(error) goldenUnaryFn) goldenUnaryFn {
 		return fail(err)
 	}}
 }
@@ -206,9 +219,10 @@ func failWith(name string, err error) goldenCase {
 // returns err (nil ends the stream OK).
 func streamTwoThen(name string, send int, err func() error) goldenCase {
 	return goldenCase{name: name, kind: kindStream, stream: func(func(context.Context) error) goldenStreamFn {
-		return func(_ context.Context, _ *connect.Request[wrapperspb.StringValue], s *connect.ServerStream[wrapperspb.StringValue]) error {
-			s.ResponseHeader().Set("X-Golden-Header", "header-value")
-			s.ResponseTrailer().Set("X-Golden-Trailer", "trailer-value")
+		return func(ctx context.Context, _ *wrapperspb.StringValue, s connect.ServerStream) error {
+			info := serverkit.CallInfoV2(ctx)
+			info.ResponseHeader().Set("X-Golden-Header", "header-value")
+			info.ResponseTrailer().Set("X-Golden-Trailer", "trailer-value")
 			for _, m := range []string{"one", "two"}[:send] {
 				if e := s.Send(wrapperspb.String(m)); e != nil {
 					return e
@@ -228,9 +242,9 @@ func svcerrReasonMeta() error {
 }
 
 func connectErrorWithDetail() error {
-	ce := connect.NewError(connect.CodeAborted, errors.New("raw connect error with a detail"))
-	if d, err := connect.NewErrorDetail(wrapperspb.String("conn-detail")); err == nil {
-		ce.AddDetail(d)
+	ce := connect.NewError(connect.CodeAborted, "raw connect error with a detail")
+	if d, err := connectproto.NewErrorDetail(wrapperspb.String("conn-detail")); err == nil {
+		ce = ce.WithDetail(d)
 	}
 	return ce
 }
@@ -238,16 +252,16 @@ func connectErrorWithDetail() error {
 func goldenCases() []goldenCase {
 	structDetail, _ := structpb.NewStruct(map[string]any{"field": "value"})
 	cases := []goldenCase{
-		{name: "Success", kind: kindUnary, unary: func(_ func(context.Context) error, reply func(string) *connect.Response[wrapperspb.StringValue], _ func(error) goldenUnaryFn) goldenUnaryFn {
-			return func(_ context.Context, req *connect.Request[wrapperspb.StringValue]) (*connect.Response[wrapperspb.StringValue], error) {
-				resp := reply("pong: " + req.Msg.GetValue())
-				resp.Header().Set("X-Golden-Header", "header-value")
-				resp.Trailer().Set("X-Golden-Trailer", "trailer-value")
-				return resp, nil
+		{name: "Success", kind: kindUnary, unary: func(_ func(context.Context) error, reply func(string) *wrapperspb.StringValue, _ func(error) goldenUnaryFn) goldenUnaryFn {
+			return func(ctx context.Context, req *wrapperspb.StringValue) (*wrapperspb.StringValue, error) {
+				info := serverkit.CallInfoV2(ctx)
+				info.ResponseHeader().Set("X-Golden-Header", "header-value")
+				info.ResponseTrailer().Set("X-Golden-Trailer", "trailer-value")
+				return reply("pong: " + req.GetValue()), nil
 			}
 		}},
-		{name: "LargeSuccess", kind: kindUnary, unary: func(_ func(context.Context) error, reply func(string) *connect.Response[wrapperspb.StringValue], _ func(error) goldenUnaryFn) goldenUnaryFn {
-			return func(context.Context, *connect.Request[wrapperspb.StringValue]) (*connect.Response[wrapperspb.StringValue], error) {
+		{name: "LargeSuccess", kind: kindUnary, unary: func(_ func(context.Context) error, reply func(string) *wrapperspb.StringValue, _ func(error) goldenUnaryFn) goldenUnaryFn {
+			return func(context.Context, *wrapperspb.StringValue) (*wrapperspb.StringValue, error) {
 				return reply(strings.Repeat("large payload ", 300)), nil
 			}
 		}},
@@ -261,28 +275,28 @@ func goldenCases() []goldenCase {
 		failWith("PlainError", errors.New("secret internals: db password=hunter2")),
 		failWith("ConnectErrorDetail", connectErrorWithDetail()),
 		failWith("ConnectErrorMeta", func() error {
-			ce := connect.NewError(connect.CodeResourceExhausted, errors.New("slow down"))
-			ce.Meta().Set("Retry-After", "7")
-			ce.Meta().Set("X-Golden-Meta", "meta-value")
-			return ce
+			// A v2 *connect.Error carries no metadata of its own: svcerr
+			// carries it, and svcerr.InterceptorV2 sends it where v1 sent Meta.
+			ce := connect.NewError(connect.CodeResourceExhausted, "slow down")
+			return svcerr.WithMetadata(svcerr.WithMetadata(ce, "Retry-After", "7"), "X-Golden-Meta", "meta-value")
 		}()),
 		failWith("Canceled", context.Canceled),
 		failWith("WrappedCanceled", fmt.Errorf("op: %w", context.Canceled)),
 		failWith("DeadlineExceeded", context.DeadlineExceeded),
-		{name: "ClientDeadline", kind: kindUnary, timeout: 30 * time.Millisecond, unary: func(func(context.Context) error, func(string) *connect.Response[wrapperspb.StringValue], func(error) goldenUnaryFn) goldenUnaryFn {
-			return func(ctx context.Context, _ *connect.Request[wrapperspb.StringValue]) (*connect.Response[wrapperspb.StringValue], error) {
+		{name: "ClientDeadline", kind: kindUnary, timeout: 30 * time.Millisecond, unary: func(func(context.Context) error, func(string) *wrapperspb.StringValue, func(error) goldenUnaryFn) goldenUnaryFn {
+			return func(ctx context.Context, _ *wrapperspb.StringValue) (*wrapperspb.StringValue, error) {
 				<-ctx.Done()
 				return nil, ctx.Err()
 			}
 		}},
-		{name: "RemoteUnary", kind: kindUnary, unary: func(call func(context.Context) error, _ func(string) *connect.Response[wrapperspb.StringValue], _ func(error) goldenUnaryFn) goldenUnaryFn {
-			return func(ctx context.Context, _ *connect.Request[wrapperspb.StringValue]) (*connect.Response[wrapperspb.StringValue], error) {
+		{name: "RemoteUnary", kind: kindUnary, unary: func(call func(context.Context) error, _ func(string) *wrapperspb.StringValue, _ func(error) goldenUnaryFn) goldenUnaryFn {
+			return func(ctx context.Context, _ *wrapperspb.StringValue) (*wrapperspb.StringValue, error) {
 				return nil, call(ctx)
 			}
 		}},
 
 		{name: "StreamLarge", kind: kindStream, stream: func(func(context.Context) error) goldenStreamFn {
-			return func(_ context.Context, _ *connect.Request[wrapperspb.StringValue], s *connect.ServerStream[wrapperspb.StringValue]) error {
+			return func(_ context.Context, _ *wrapperspb.StringValue, s connect.ServerStream) error {
 				return s.Send(wrapperspb.String(strings.Repeat("large payload ", 300)))
 			}
 		}},
@@ -293,7 +307,7 @@ func goldenCases() []goldenCase {
 		streamTwoThen("StreamConnectErrorDetail", 1, connectErrorWithDetail),
 		streamTwoThen("StreamCanceled", 1, func() error { return context.Canceled }),
 		{name: "StreamRemote", kind: kindStream, stream: func(call func(context.Context) error) goldenStreamFn {
-			return func(ctx context.Context, _ *connect.Request[wrapperspb.StringValue], s *connect.ServerStream[wrapperspb.StringValue]) error {
+			return func(ctx context.Context, _ *wrapperspb.StringValue, s connect.ServerStream) error {
 				if err := s.Send(wrapperspb.String("one")); err != nil {
 					return err
 				}
@@ -761,9 +775,9 @@ func serveGolden(t *testing.T, l goldenListener) string {
 	return "http://" + l.Addr().String()
 }
 
-func wireGoldenRoutes(upstreamURL string) serverkit.Routes {
-	return serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
-		mux.Handle(goldenService, goldenHandlers(upstreamURL, opts))
+func wireGoldenRoutes(upstreamURL string) serverkit.RoutesV2 {
+	return serverkit.RoutesFuncV2(func(mux *mountkit.MuxV2) []string {
+		mux.Register(goldenRegister(upstreamURL))
 		// No service name is returned: the test service is not in the proto
 		// registry, so the listener has no audience to check it against.
 		return nil
@@ -781,7 +795,7 @@ func startUserGolden(t *testing.T, upstreamURL string) goldenChain {
 	userAuth, err := NewUserAuth(auth.Settings{Mode: auth.ModeAPIKey, APIKey: goldenAPIKey}, tokenauthority.NewMemory())
 	require.NoError(t, err)
 	quiet := slog.New(slog.DiscardHandler)
-	chain, err := NewUserChain(UserChainDeps{Auth: userAuth, Logger: quiet})
+	chain, err := NewUserChain(UserChainDeps{Auth: userAuth.Intercept, Logger: quiet})
 	require.NoError(t, err)
 	l, err := NewAPIListener(APIListenerDeps{BindAddress: "127.0.0.1", Chain: chain, Routes: wireGoldenRoutes(upstreamURL), Logger: quiet})
 	require.NoError(t, err)

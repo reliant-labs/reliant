@@ -11,167 +11,448 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/billing/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BillingServiceName is the fully-qualified name of the BillingService service.
 	BillingServiceName = "controlplane.v1.BillingService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BillingServiceGetOrganizationCostSummaryProcedure is the fully-qualified name of the
-	// BillingService's GetOrganizationCostSummary RPC.
+	// BillingServiceGetOrganizationCostSummaryProcedure is the procedure name of the BillingService's
+	// GetOrganizationCostSummary RPC.
 	BillingServiceGetOrganizationCostSummaryProcedure = "/controlplane.v1.BillingService/GetOrganizationCostSummary"
-	// BillingServiceListOrganizationUsageProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceListOrganizationUsageProcedure is the procedure name of the BillingService's
 	// ListOrganizationUsage RPC.
 	BillingServiceListOrganizationUsageProcedure = "/controlplane.v1.BillingService/ListOrganizationUsage"
-	// BillingServiceGetProjectCostProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceGetProjectCostProcedure is the procedure name of the BillingService's
 	// GetProjectCost RPC.
 	BillingServiceGetProjectCostProcedure = "/controlplane.v1.BillingService/GetProjectCost"
-	// BillingServiceListPlansProcedure is the fully-qualified name of the BillingService's ListPlans
-	// RPC.
+	// BillingServiceListPlansProcedure is the procedure name of the BillingService's ListPlans RPC.
 	BillingServiceListPlansProcedure = "/controlplane.v1.BillingService/ListPlans"
-	// BillingServiceGetPlanProcedure is the fully-qualified name of the BillingService's GetPlan RPC.
+	// BillingServiceGetPlanProcedure is the procedure name of the BillingService's GetPlan RPC.
 	BillingServiceGetPlanProcedure = "/controlplane.v1.BillingService/GetPlan"
-	// BillingServiceGetCurrentUserSubscriptionProcedure is the fully-qualified name of the
-	// BillingService's GetCurrentUserSubscription RPC.
+	// BillingServiceGetCurrentUserSubscriptionProcedure is the procedure name of the BillingService's
+	// GetCurrentUserSubscription RPC.
 	BillingServiceGetCurrentUserSubscriptionProcedure = "/controlplane.v1.BillingService/GetCurrentUserSubscription"
-	// BillingServiceCreateCurrentUserCheckoutSessionProcedure is the fully-qualified name of the
+	// BillingServiceCreateCurrentUserCheckoutSessionProcedure is the procedure name of the
 	// BillingService's CreateCurrentUserCheckoutSession RPC.
 	BillingServiceCreateCurrentUserCheckoutSessionProcedure = "/controlplane.v1.BillingService/CreateCurrentUserCheckoutSession"
-	// BillingServiceCreateCurrentUserBillingPortalSessionProcedure is the fully-qualified name of the
+	// BillingServiceCreateCurrentUserBillingPortalSessionProcedure is the procedure name of the
 	// BillingService's CreateCurrentUserBillingPortalSession RPC.
 	BillingServiceCreateCurrentUserBillingPortalSessionProcedure = "/controlplane.v1.BillingService/CreateCurrentUserBillingPortalSession"
-	// BillingServiceListCurrentUserInvoicesProcedure is the fully-qualified name of the
-	// BillingService's ListCurrentUserInvoices RPC.
+	// BillingServiceListCurrentUserInvoicesProcedure is the procedure name of the BillingService's
+	// ListCurrentUserInvoices RPC.
 	BillingServiceListCurrentUserInvoicesProcedure = "/controlplane.v1.BillingService/ListCurrentUserInvoices"
-	// BillingServiceListOrgLimitChangesProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceListOrgLimitChangesProcedure is the procedure name of the BillingService's
 	// ListOrgLimitChanges RPC.
 	BillingServiceListOrgLimitChangesProcedure = "/controlplane.v1.BillingService/ListOrgLimitChanges"
-	// BillingServiceGetCurrentUserWalletOverviewProcedure is the fully-qualified name of the
-	// BillingService's GetCurrentUserWalletOverview RPC.
+	// BillingServiceGetCurrentUserWalletOverviewProcedure is the procedure name of the BillingService's
+	// GetCurrentUserWalletOverview RPC.
 	BillingServiceGetCurrentUserWalletOverviewProcedure = "/controlplane.v1.BillingService/GetCurrentUserWalletOverview"
-	// BillingServiceCreateCurrentUserWalletTopupSessionProcedure is the fully-qualified name of the
+	// BillingServiceCreateCurrentUserWalletTopupSessionProcedure is the procedure name of the
 	// BillingService's CreateCurrentUserWalletTopupSession RPC.
 	BillingServiceCreateCurrentUserWalletTopupSessionProcedure = "/controlplane.v1.BillingService/CreateCurrentUserWalletTopupSession"
-	// BillingServiceCreateCurrentUserWalletTopupPaymentIntentProcedure is the fully-qualified name of
-	// the BillingService's CreateCurrentUserWalletTopupPaymentIntent RPC.
+	// BillingServiceCreateCurrentUserWalletTopupPaymentIntentProcedure is the procedure name of the
+	// BillingService's CreateCurrentUserWalletTopupPaymentIntent RPC.
 	BillingServiceCreateCurrentUserWalletTopupPaymentIntentProcedure = "/controlplane.v1.BillingService/CreateCurrentUserWalletTopupPaymentIntent"
-	// BillingServiceGetCurrentUserWalletTopupQuoteProcedure is the fully-qualified name of the
+	// BillingServiceGetCurrentUserWalletTopupQuoteProcedure is the procedure name of the
 	// BillingService's GetCurrentUserWalletTopupQuote RPC.
 	BillingServiceGetCurrentUserWalletTopupQuoteProcedure = "/controlplane.v1.BillingService/GetCurrentUserWalletTopupQuote"
-	// BillingServiceRedeemCouponProcedure is the fully-qualified name of the BillingService's
-	// RedeemCoupon RPC.
+	// BillingServiceRedeemCouponProcedure is the procedure name of the BillingService's RedeemCoupon
+	// RPC.
 	BillingServiceRedeemCouponProcedure = "/controlplane.v1.BillingService/RedeemCoupon"
-	// BillingServiceGetCurrentUserReliantStateProcedure is the fully-qualified name of the
-	// BillingService's GetCurrentUserReliantState RPC.
+	// BillingServiceGetCurrentUserReliantStateProcedure is the procedure name of the BillingService's
+	// GetCurrentUserReliantState RPC.
 	BillingServiceGetCurrentUserReliantStateProcedure = "/controlplane.v1.BillingService/GetCurrentUserReliantState"
-	// BillingServiceRepairCurrentUserReliantAccessProcedure is the fully-qualified name of the
+	// BillingServiceRepairCurrentUserReliantAccessProcedure is the procedure name of the
 	// BillingService's RepairCurrentUserReliantAccess RPC.
 	BillingServiceRepairCurrentUserReliantAccessProcedure = "/controlplane.v1.BillingService/RepairCurrentUserReliantAccess"
-	// BillingServiceRotateCurrentUserReliantAccessProcedure is the fully-qualified name of the
+	// BillingServiceRotateCurrentUserReliantAccessProcedure is the procedure name of the
 	// BillingService's RotateCurrentUserReliantAccess RPC.
 	BillingServiceRotateCurrentUserReliantAccessProcedure = "/controlplane.v1.BillingService/RotateCurrentUserReliantAccess"
-	// BillingServiceGetCurrentUserReliantOverviewProcedure is the fully-qualified name of the
+	// BillingServiceGetCurrentUserReliantOverviewProcedure is the procedure name of the
 	// BillingService's GetCurrentUserReliantOverview RPC.
 	BillingServiceGetCurrentUserReliantOverviewProcedure = "/controlplane.v1.BillingService/GetCurrentUserReliantOverview"
-	// BillingServiceSetCurrentUserReliantEnabledProcedure is the fully-qualified name of the
-	// BillingService's SetCurrentUserReliantEnabled RPC.
+	// BillingServiceSetCurrentUserReliantEnabledProcedure is the procedure name of the BillingService's
+	// SetCurrentUserReliantEnabled RPC.
 	BillingServiceSetCurrentUserReliantEnabledProcedure = "/controlplane.v1.BillingService/SetCurrentUserReliantEnabled"
-	// BillingServiceGetCurrentUserComputeSubscriptionProcedure is the fully-qualified name of the
+	// BillingServiceGetCurrentUserComputeSubscriptionProcedure is the procedure name of the
 	// BillingService's GetCurrentUserComputeSubscription RPC.
 	BillingServiceGetCurrentUserComputeSubscriptionProcedure = "/controlplane.v1.BillingService/GetCurrentUserComputeSubscription"
-	// BillingServiceSetCurrentUserComputeOverageProcedure is the fully-qualified name of the
-	// BillingService's SetCurrentUserComputeOverage RPC.
+	// BillingServiceSetCurrentUserComputeOverageProcedure is the procedure name of the BillingService's
+	// SetCurrentUserComputeOverage RPC.
 	BillingServiceSetCurrentUserComputeOverageProcedure = "/controlplane.v1.BillingService/SetCurrentUserComputeOverage"
-	// BillingServiceSetCurrentUserInfraOverageProcedure is the fully-qualified name of the
-	// BillingService's SetCurrentUserInfraOverage RPC.
+	// BillingServiceSetCurrentUserInfraOverageProcedure is the procedure name of the BillingService's
+	// SetCurrentUserInfraOverage RPC.
 	BillingServiceSetCurrentUserInfraOverageProcedure = "/controlplane.v1.BillingService/SetCurrentUserInfraOverage"
-	// BillingServiceGetCurrentUserInfraOverageProcedure is the fully-qualified name of the
-	// BillingService's GetCurrentUserInfraOverage RPC.
+	// BillingServiceGetCurrentUserInfraOverageProcedure is the procedure name of the BillingService's
+	// GetCurrentUserInfraOverage RPC.
 	BillingServiceGetCurrentUserInfraOverageProcedure = "/controlplane.v1.BillingService/GetCurrentUserInfraOverage"
-	// BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure is the fully-qualified name of
-	// the BillingService's CreateCurrentUserComputeSubscriptionIntent RPC.
+	// BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure is the procedure name of the
+	// BillingService's CreateCurrentUserComputeSubscriptionIntent RPC.
 	BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure = "/controlplane.v1.BillingService/CreateCurrentUserComputeSubscriptionIntent"
-	// BillingServiceGetMachinePricingReadinessProcedure is the fully-qualified name of the
-	// BillingService's GetMachinePricingReadiness RPC.
+	// BillingServiceGetMachinePricingReadinessProcedure is the procedure name of the BillingService's
+	// GetMachinePricingReadiness RPC.
 	BillingServiceGetMachinePricingReadinessProcedure = "/controlplane.v1.BillingService/GetMachinePricingReadiness"
-	// BillingServiceAcceptNextMachinePricingProcedure is the fully-qualified name of the
-	// BillingService's AcceptNextMachinePricing RPC.
+	// BillingServiceAcceptNextMachinePricingProcedure is the procedure name of the BillingService's
+	// AcceptNextMachinePricing RPC.
 	BillingServiceAcceptNextMachinePricingProcedure = "/controlplane.v1.BillingService/AcceptNextMachinePricing"
-	// BillingServicePreviewMachinePlanChangeProcedure is the fully-qualified name of the
-	// BillingService's PreviewMachinePlanChange RPC.
+	// BillingServicePreviewMachinePlanChangeProcedure is the procedure name of the BillingService's
+	// PreviewMachinePlanChange RPC.
 	BillingServicePreviewMachinePlanChangeProcedure = "/controlplane.v1.BillingService/PreviewMachinePlanChange"
-	// BillingServiceChangeMachinePlanProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceChangeMachinePlanProcedure is the procedure name of the BillingService's
 	// ChangeMachinePlan RPC.
 	BillingServiceChangeMachinePlanProcedure = "/controlplane.v1.BillingService/ChangeMachinePlan"
-	// BillingServiceGetCurrentUserUsageBillingProcedure is the fully-qualified name of the
-	// BillingService's GetCurrentUserUsageBilling RPC.
+	// BillingServiceGetCurrentUserUsageBillingProcedure is the procedure name of the BillingService's
+	// GetCurrentUserUsageBilling RPC.
 	BillingServiceGetCurrentUserUsageBillingProcedure = "/controlplane.v1.BillingService/GetCurrentUserUsageBilling"
-	// BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure is the fully-qualified name of the
+	// BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure is the procedure name of the
 	// BillingService's CreateCurrentUserUsageBillingCheckout RPC.
 	BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure = "/controlplane.v1.BillingService/CreateCurrentUserUsageBillingCheckout"
-	// BillingServiceGetCurrentUserWalletAutoRechargeProcedure is the fully-qualified name of the
+	// BillingServiceGetCurrentUserWalletAutoRechargeProcedure is the procedure name of the
 	// BillingService's GetCurrentUserWalletAutoRecharge RPC.
 	BillingServiceGetCurrentUserWalletAutoRechargeProcedure = "/controlplane.v1.BillingService/GetCurrentUserWalletAutoRecharge"
-	// BillingServiceSetCurrentUserWalletAutoRechargeProcedure is the fully-qualified name of the
+	// BillingServiceSetCurrentUserWalletAutoRechargeProcedure is the procedure name of the
 	// BillingService's SetCurrentUserWalletAutoRecharge RPC.
 	BillingServiceSetCurrentUserWalletAutoRechargeProcedure = "/controlplane.v1.BillingService/SetCurrentUserWalletAutoRecharge"
-	// BillingServiceCreateCurrentUserWalletPaymentMethodSetupProcedure is the fully-qualified name of
-	// the BillingService's CreateCurrentUserWalletPaymentMethodSetup RPC.
+	// BillingServiceCreateCurrentUserWalletPaymentMethodSetupProcedure is the procedure name of the
+	// BillingService's CreateCurrentUserWalletPaymentMethodSetup RPC.
 	BillingServiceCreateCurrentUserWalletPaymentMethodSetupProcedure = "/controlplane.v1.BillingService/CreateCurrentUserWalletPaymentMethodSetup"
-	// BillingServiceConfirmCurrentUserWalletPaymentMethodProcedure is the fully-qualified name of the
+	// BillingServiceConfirmCurrentUserWalletPaymentMethodProcedure is the procedure name of the
 	// BillingService's ConfirmCurrentUserWalletPaymentMethod RPC.
 	BillingServiceConfirmCurrentUserWalletPaymentMethodProcedure = "/controlplane.v1.BillingService/ConfirmCurrentUserWalletPaymentMethod"
-	// BillingServiceGetCurrentUserComputeUsageProcedure is the fully-qualified name of the
-	// BillingService's GetCurrentUserComputeUsage RPC.
+	// BillingServiceGetCurrentUserComputeUsageProcedure is the procedure name of the BillingService's
+	// GetCurrentUserComputeUsage RPC.
 	BillingServiceGetCurrentUserComputeUsageProcedure = "/controlplane.v1.BillingService/GetCurrentUserComputeUsage"
-	// BillingServiceGetCurrentUserComputeEligibilityProcedure is the fully-qualified name of the
+	// BillingServiceGetCurrentUserComputeEligibilityProcedure is the procedure name of the
 	// BillingService's GetCurrentUserComputeEligibility RPC.
 	BillingServiceGetCurrentUserComputeEligibilityProcedure = "/controlplane.v1.BillingService/GetCurrentUserComputeEligibility"
-	// BillingServiceGetUsageSummaryProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceGetUsageSummaryProcedure is the procedure name of the BillingService's
 	// GetUsageSummary RPC.
 	BillingServiceGetUsageSummaryProcedure = "/controlplane.v1.BillingService/GetUsageSummary"
-	// BillingServiceGetInvoicePreviewProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceGetInvoicePreviewProcedure is the procedure name of the BillingService's
 	// GetInvoicePreview RPC.
 	BillingServiceGetInvoicePreviewProcedure = "/controlplane.v1.BillingService/GetInvoicePreview"
-	// BillingServiceGetCurrentUserBillingEmailProcedure is the fully-qualified name of the
-	// BillingService's GetCurrentUserBillingEmail RPC.
+	// BillingServiceGetCurrentUserBillingEmailProcedure is the procedure name of the BillingService's
+	// GetCurrentUserBillingEmail RPC.
 	BillingServiceGetCurrentUserBillingEmailProcedure = "/controlplane.v1.BillingService/GetCurrentUserBillingEmail"
-	// BillingServiceUpdateBillingEmailProcedure is the fully-qualified name of the BillingService's
+	// BillingServiceUpdateBillingEmailProcedure is the procedure name of the BillingService's
 	// UpdateBillingEmail RPC.
 	BillingServiceUpdateBillingEmailProcedure = "/controlplane.v1.BillingService/UpdateBillingEmail"
+)
+
+var (
+	billingServiceGetOrganizationCostSummarySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetOrganizationCostSummary"),
+			Procedure:  BillingServiceGetOrganizationCostSummaryProcedure,
+		}
+	})
+	billingServiceListOrganizationUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("ListOrganizationUsage"),
+			Procedure:  BillingServiceListOrganizationUsageProcedure,
+		}
+	})
+	billingServiceGetProjectCostSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetProjectCost"),
+			Procedure:  BillingServiceGetProjectCostProcedure,
+		}
+	})
+	billingServiceListPlansSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("ListPlans"),
+			Procedure:  BillingServiceListPlansProcedure,
+		}
+	})
+	billingServiceGetPlanSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetPlan"),
+			Procedure:  BillingServiceGetPlanProcedure,
+		}
+	})
+	billingServiceGetCurrentUserSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserSubscription"),
+			Procedure:  BillingServiceGetCurrentUserSubscriptionProcedure,
+		}
+	})
+	billingServiceCreateCurrentUserCheckoutSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("CreateCurrentUserCheckoutSession"),
+			Procedure:  BillingServiceCreateCurrentUserCheckoutSessionProcedure,
+		}
+	})
+	billingServiceCreateCurrentUserBillingPortalSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("CreateCurrentUserBillingPortalSession"),
+			Procedure:  BillingServiceCreateCurrentUserBillingPortalSessionProcedure,
+		}
+	})
+	billingServiceListCurrentUserInvoicesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("ListCurrentUserInvoices"),
+			Procedure:  BillingServiceListCurrentUserInvoicesProcedure,
+		}
+	})
+	billingServiceListOrgLimitChangesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("ListOrgLimitChanges"),
+			Procedure:  BillingServiceListOrgLimitChangesProcedure,
+		}
+	})
+	billingServiceGetCurrentUserWalletOverviewSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserWalletOverview"),
+			Procedure:  BillingServiceGetCurrentUserWalletOverviewProcedure,
+		}
+	})
+	billingServiceCreateCurrentUserWalletTopupSessionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("CreateCurrentUserWalletTopupSession"),
+			Procedure:  BillingServiceCreateCurrentUserWalletTopupSessionProcedure,
+		}
+	})
+	billingServiceCreateCurrentUserWalletTopupPaymentIntentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("CreateCurrentUserWalletTopupPaymentIntent"),
+			Procedure:  BillingServiceCreateCurrentUserWalletTopupPaymentIntentProcedure,
+		}
+	})
+	billingServiceGetCurrentUserWalletTopupQuoteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserWalletTopupQuote"),
+			Procedure:  BillingServiceGetCurrentUserWalletTopupQuoteProcedure,
+		}
+	})
+	billingServiceRedeemCouponSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("RedeemCoupon"),
+			Procedure:  BillingServiceRedeemCouponProcedure,
+		}
+	})
+	billingServiceGetCurrentUserReliantStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserReliantState"),
+			Procedure:  BillingServiceGetCurrentUserReliantStateProcedure,
+		}
+	})
+	billingServiceRepairCurrentUserReliantAccessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("RepairCurrentUserReliantAccess"),
+			Procedure:  BillingServiceRepairCurrentUserReliantAccessProcedure,
+		}
+	})
+	billingServiceRotateCurrentUserReliantAccessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("RotateCurrentUserReliantAccess"),
+			Procedure:  BillingServiceRotateCurrentUserReliantAccessProcedure,
+		}
+	})
+	billingServiceGetCurrentUserReliantOverviewSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserReliantOverview"),
+			Procedure:  BillingServiceGetCurrentUserReliantOverviewProcedure,
+		}
+	})
+	billingServiceSetCurrentUserReliantEnabledSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("SetCurrentUserReliantEnabled"),
+			Procedure:  BillingServiceSetCurrentUserReliantEnabledProcedure,
+		}
+	})
+	billingServiceGetCurrentUserComputeSubscriptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserComputeSubscription"),
+			Procedure:  BillingServiceGetCurrentUserComputeSubscriptionProcedure,
+		}
+	})
+	billingServiceSetCurrentUserComputeOverageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("SetCurrentUserComputeOverage"),
+			Procedure:  BillingServiceSetCurrentUserComputeOverageProcedure,
+		}
+	})
+	billingServiceSetCurrentUserInfraOverageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("SetCurrentUserInfraOverage"),
+			Procedure:  BillingServiceSetCurrentUserInfraOverageProcedure,
+		}
+	})
+	billingServiceGetCurrentUserInfraOverageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserInfraOverage"),
+			Procedure:  BillingServiceGetCurrentUserInfraOverageProcedure,
+		}
+	})
+	billingServiceCreateCurrentUserComputeSubscriptionIntentSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("CreateCurrentUserComputeSubscriptionIntent"),
+			Procedure:  BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure,
+		}
+	})
+	billingServiceGetMachinePricingReadinessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetMachinePricingReadiness"),
+			Procedure:  BillingServiceGetMachinePricingReadinessProcedure,
+		}
+	})
+	billingServiceAcceptNextMachinePricingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("AcceptNextMachinePricing"),
+			Procedure:  BillingServiceAcceptNextMachinePricingProcedure,
+		}
+	})
+	billingServicePreviewMachinePlanChangeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("PreviewMachinePlanChange"),
+			Procedure:        BillingServicePreviewMachinePlanChangeProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	billingServiceChangeMachinePlanSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("ChangeMachinePlan"),
+			Procedure:  BillingServiceChangeMachinePlanProcedure,
+		}
+	})
+	billingServiceGetCurrentUserUsageBillingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserUsageBilling"),
+			Procedure:  BillingServiceGetCurrentUserUsageBillingProcedure,
+		}
+	})
+	billingServiceCreateCurrentUserUsageBillingCheckoutSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("CreateCurrentUserUsageBillingCheckout"),
+			Procedure:  BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure,
+		}
+	})
+	billingServiceGetCurrentUserWalletAutoRechargeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserWalletAutoRecharge"),
+			Procedure:  BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
+		}
+	})
+	billingServiceSetCurrentUserWalletAutoRechargeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("SetCurrentUserWalletAutoRecharge"),
+			Procedure:  BillingServiceSetCurrentUserWalletAutoRechargeProcedure,
+		}
+	})
+	billingServiceCreateCurrentUserWalletPaymentMethodSetupSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("CreateCurrentUserWalletPaymentMethodSetup"),
+			Procedure:  BillingServiceCreateCurrentUserWalletPaymentMethodSetupProcedure,
+		}
+	})
+	billingServiceConfirmCurrentUserWalletPaymentMethodSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("ConfirmCurrentUserWalletPaymentMethod"),
+			Procedure:  BillingServiceConfirmCurrentUserWalletPaymentMethodProcedure,
+		}
+	})
+	billingServiceGetCurrentUserComputeUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserComputeUsage"),
+			Procedure:  BillingServiceGetCurrentUserComputeUsageProcedure,
+		}
+	})
+	billingServiceGetCurrentUserComputeEligibilitySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserComputeEligibility"),
+			Procedure:  BillingServiceGetCurrentUserComputeEligibilityProcedure,
+		}
+	})
+	billingServiceGetUsageSummarySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetUsageSummary"),
+			Procedure:  BillingServiceGetUsageSummaryProcedure,
+		}
+	})
+	billingServiceGetInvoicePreviewSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetInvoicePreview"),
+			Procedure:  BillingServiceGetInvoicePreviewProcedure,
+		}
+	})
+	billingServiceGetCurrentUserBillingEmailSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("GetCurrentUserBillingEmail"),
+			Procedure:  BillingServiceGetCurrentUserBillingEmailProcedure,
+		}
+	})
+	billingServiceUpdateBillingEmailSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods().ByName("UpdateBillingEmail"),
+			Procedure:  BillingServiceUpdateBillingEmailProcedure,
+		}
+	})
 )
 
 // BillingServiceClient is a client for the controlplane.v1.BillingService service.
 type BillingServiceClient interface {
 	// Canonical current-period organization accounting. Requires billing:read,
 	// not billing management. Unknown amounts stay absent; no historical range.
-	GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error)
+	GetOrganizationCostSummary(context.Context, *v1.GetOrganizationCostSummaryRequest) (*v1.GetOrganizationCostSummaryResponse, error)
 	// History of the organization's usage and spend, built from durable
 	// ledgers (never live telemetry). Requires billing:read, re-checked at use,
 	// and is scoped to the caller's organization. Range is at most 400 days.
-	ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error)
+	ListOrganizationUsage(context.Context, *v1.ListOrganizationUsageRequest) (*v1.ListOrganizationUsageResponse, error)
 	// One project's cost for one UTC calendar month, dashboard-shaped: the
 	// estimated bill to date, the forecast, last month, daily list price,
 	// drivers per workload, allowances and caps. The server owns every figure's
@@ -179,15 +460,15 @@ type BillingServiceClient interface {
 	// environment-bound credentials are refused. The project must belong to
 	// org_id (NOT_FOUND otherwise), and environment_ids must be its
 	// environments.
-	GetProjectCost(context.Context, *connect.Request[v1.GetProjectCostRequest]) (*connect.Response[v1.GetProjectCostResponse], error)
+	GetProjectCost(context.Context, *v1.GetProjectCostRequest) (*v1.GetProjectCostResponse, error)
 	// Read-only catalog.
-	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
-	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
+	ListPlans(context.Context, *v1.ListPlansRequest) (*v1.ListPlansResponse, error)
+	GetPlan(context.Context, *v1.GetPlanRequest) (*v1.GetPlanResponse, error)
 	// Current user subscription / billing portal / invoices.
-	GetCurrentUserSubscription(context.Context, *connect.Request[v1.GetCurrentUserSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserSubscriptionResponse], error)
-	CreateCurrentUserCheckoutSession(context.Context, *connect.Request[v1.CreateCurrentUserCheckoutSessionRequest]) (*connect.Response[v1.CreateCurrentUserCheckoutSessionResponse], error)
-	CreateCurrentUserBillingPortalSession(context.Context, *connect.Request[v1.CreateCurrentUserBillingPortalSessionRequest]) (*connect.Response[v1.CreateCurrentUserBillingPortalSessionResponse], error)
-	ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error)
+	GetCurrentUserSubscription(context.Context, *v1.GetCurrentUserSubscriptionRequest) (*v1.GetCurrentUserSubscriptionResponse, error)
+	CreateCurrentUserCheckoutSession(context.Context, *v1.CreateCurrentUserCheckoutSessionRequest) (*v1.CreateCurrentUserCheckoutSessionResponse, error)
+	CreateCurrentUserBillingPortalSession(context.Context, *v1.CreateCurrentUserBillingPortalSessionRequest) (*v1.CreateCurrentUserBillingPortalSessionResponse, error)
+	ListCurrentUserInvoices(context.Context, *v1.ListCurrentUserInvoicesRequest) (*v1.ListCurrentUserInvoicesResponse, error)
 	// ListOrgLimitChanges is the org's limit-change history, newest first: who
 	// changed which limit, from what, to what, and when. One list across every
 	// org limit (observability spend cap today; LLM cap, infra overage and wallet
@@ -195,12 +476,12 @@ type BillingServiceClient interface {
 	//
 	// forge:custom — hand-written over the shared org_limit_changes table; it is
 	// not an entity list, so it gets no CRUD wiring or admin page.
-	ListOrgLimitChanges(context.Context, *connect.Request[v1.ListOrgLimitChangesRequest]) (*connect.Response[v1.ListOrgLimitChangesResponse], error)
+	ListOrgLimitChanges(context.Context, *v1.ListOrgLimitChangesRequest) (*v1.ListOrgLimitChangesResponse, error)
 	// Wallet (per-user).
-	GetCurrentUserWalletOverview(context.Context, *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error)
+	GetCurrentUserWalletOverview(context.Context, *v1.GetCurrentUserWalletOverviewRequest) (*v1.GetCurrentUserWalletOverviewResponse, error)
 	// (GrantCurrentUserWelcomeCredit removed. There is no signup wallet credit:
 	// LLM credit is redeemed from a coupon, RedeemCoupon.)
-	CreateCurrentUserWalletTopupSession(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupSessionRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupSessionResponse], error)
+	CreateCurrentUserWalletTopupSession(context.Context, *v1.CreateCurrentUserWalletTopupSessionRequest) (*v1.CreateCurrentUserWalletTopupSessionResponse, error)
 	// CreateCurrentUserWalletTopupPaymentIntent mints a PaymentIntent for a
 	// top-up the user confirms in OUR page with Stripe Elements, rather than in
 	// Stripe's hosted or embedded Checkout.
@@ -211,7 +492,7 @@ type BillingServiceClient interface {
 	//
 	// Confirmation is the browser's, entitlement is still the webhook's. A
 	// succeeded confirmation reported by the client grants nothing on its own.
-	CreateCurrentUserWalletTopupPaymentIntent(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupPaymentIntentRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupPaymentIntentResponse], error)
+	CreateCurrentUserWalletTopupPaymentIntent(context.Context, *v1.CreateCurrentUserWalletTopupPaymentIntentRequest) (*v1.CreateCurrentUserWalletTopupPaymentIntentResponse, error)
 	// GetCurrentUserWalletTopupQuote prices a top-up WITHOUT minting anything at
 	// Stripe, so the checkout page can disclose the top-up service fee, and the
 	// total it makes, before asking for a card.
@@ -225,7 +506,7 @@ type BillingServiceClient interface {
 	//
 	// Creates no Stripe object and no database row: the picker can call it on
 	// every amount the user clicks.
-	GetCurrentUserWalletTopupQuote(context.Context, *connect.Request[v1.GetCurrentUserWalletTopupQuoteRequest]) (*connect.Response[v1.GetCurrentUserWalletTopupQuoteResponse], error)
+	GetCurrentUserWalletTopupQuote(context.Context, *v1.GetCurrentUserWalletTopupQuoteRequest) (*v1.GetCurrentUserWalletTopupQuoteResponse, error)
 	// RedeemCoupon credits the caller's org wallet from a coupon code.
 	//
 	// END-USER facing (any authenticated caller), unlike the coupon MANAGEMENT
@@ -235,28 +516,28 @@ type BillingServiceClient interface {
 	//
 	// Idempotent per (coupon, org): a second redemption of the same code by the
 	// same org is refused rather than credited twice.
-	RedeemCoupon(context.Context, *connect.Request[v1.RedeemCouponRequest]) (*connect.Response[v1.RedeemCouponResponse], error)
+	RedeemCoupon(context.Context, *v1.RedeemCouponRequest) (*v1.RedeemCouponResponse, error)
 	// Reliant managed-LLM access (per-user).
-	GetCurrentUserReliantState(context.Context, *connect.Request[v1.GetCurrentUserReliantStateRequest]) (*connect.Response[v1.GetCurrentUserReliantStateResponse], error)
-	RepairCurrentUserReliantAccess(context.Context, *connect.Request[v1.RepairCurrentUserReliantAccessRequest]) (*connect.Response[v1.RepairCurrentUserReliantAccessResponse], error)
-	RotateCurrentUserReliantAccess(context.Context, *connect.Request[v1.RotateCurrentUserReliantAccessRequest]) (*connect.Response[v1.RotateCurrentUserReliantAccessResponse], error)
-	GetCurrentUserReliantOverview(context.Context, *connect.Request[v1.GetCurrentUserReliantOverviewRequest]) (*connect.Response[v1.GetCurrentUserReliantOverviewResponse], error)
+	GetCurrentUserReliantState(context.Context, *v1.GetCurrentUserReliantStateRequest) (*v1.GetCurrentUserReliantStateResponse, error)
+	RepairCurrentUserReliantAccess(context.Context, *v1.RepairCurrentUserReliantAccessRequest) (*v1.RepairCurrentUserReliantAccessResponse, error)
+	RotateCurrentUserReliantAccess(context.Context, *v1.RotateCurrentUserReliantAccessRequest) (*v1.RotateCurrentUserReliantAccessResponse, error)
+	GetCurrentUserReliantOverview(context.Context, *v1.GetCurrentUserReliantOverviewRequest) (*v1.GetCurrentUserReliantOverviewResponse, error)
 	// SetCurrentUserReliantEnabled turns managed Reliant LLM access on or off
 	// for the caller. This is the ONLY writer of reliant_enabled: the flag is a
 	// user preference, never inferred from wallet balance, org membership, or
 	// provisioning state. A funded user may still prefer their own API key.
-	SetCurrentUserReliantEnabled(context.Context, *connect.Request[v1.SetCurrentUserReliantEnabledRequest]) (*connect.Response[v1.SetCurrentUserReliantEnabledResponse], error)
+	SetCurrentUserReliantEnabled(context.Context, *v1.SetCurrentUserReliantEnabledRequest) (*v1.SetCurrentUserReliantEnabledResponse, error)
 	// Workspace compute plan (per-user).
-	GetCurrentUserComputeSubscription(context.Context, *connect.Request[v1.GetCurrentUserComputeSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserComputeSubscriptionResponse], error)
-	SetCurrentUserComputeOverage(context.Context, *connect.Request[v1.SetCurrentUserComputeOverageRequest]) (*connect.Response[v1.SetCurrentUserComputeOverageResponse], error)
+	GetCurrentUserComputeSubscription(context.Context, *v1.GetCurrentUserComputeSubscriptionRequest) (*v1.GetCurrentUserComputeSubscriptionResponse, error)
+	SetCurrentUserComputeOverage(context.Context, *v1.SetCurrentUserComputeOverageRequest) (*v1.SetCurrentUserComputeOverageResponse, error)
 	// Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
 	// the compute pair above. Separate from it because the two cap different
 	// products through different gates; see SetCurrentUserInfraOverageRequest.
-	SetCurrentUserInfraOverage(context.Context, *connect.Request[v1.SetCurrentUserInfraOverageRequest]) (*connect.Response[v1.SetCurrentUserInfraOverageResponse], error)
+	SetCurrentUserInfraOverage(context.Context, *v1.SetCurrentUserInfraOverageRequest) (*v1.SetCurrentUserInfraOverageResponse, error)
 	// Everything the deploy overage surface renders from, in one call:
 	// consumption, allowance, the customer's cap, and the current ladder rung
 	// per dimension.
-	GetCurrentUserInfraOverage(context.Context, *connect.Request[v1.GetCurrentUserInfraOverageRequest]) (*connect.Response[v1.GetCurrentUserInfraOverageResponse], error)
+	GetCurrentUserInfraOverage(context.Context, *v1.GetCurrentUserInfraOverageRequest) (*v1.GetCurrentUserInfraOverageResponse, error)
 	// CreateCurrentUserComputeSubscriptionIntent starts a compute subscription
 	// the user pays for in OUR page with Stripe Elements, rather than in
 	// Stripe's hosted Checkout page inside an iframe.
@@ -272,10 +553,10 @@ type BillingServiceClient interface {
 	// expires the unpaid subscription on its own. Entitlement — and cancelling
 	// the plan this one supersedes — remains the webhook's, on the signal that
 	// confirms the money actually moved.
-	CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error)
+	CreateCurrentUserComputeSubscriptionIntent(context.Context, *v1.CreateCurrentUserComputeSubscriptionIntentRequest) (*v1.CreateCurrentUserComputeSubscriptionIntentResponse, error)
 	// Machine pricing is accepted explicitly for the next billing period only.
-	GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error)
-	AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error)
+	GetMachinePricingReadiness(context.Context, *v1.GetMachinePricingReadinessRequest) (*v1.GetMachinePricingReadinessResponse, error)
+	AcceptNextMachinePricing(context.Context, *v1.AcceptNextMachinePricingRequest) (*v1.AcceptNextMachinePricingResponse, error)
 	// Quotes a change of the org's machine plan: an upgrade applies now and is
 	// charged the prorated difference today; a downgrade applies at the next
 	// billing period and charges or credits nothing; choosing the current plan
@@ -283,34 +564,34 @@ type BillingServiceClient interface {
 	// binding for ten minutes through terms_sha256. A pure read: it reads the
 	// subscription, period, snapshot and pending/scheduled changes, and prices
 	// an upgrade with Stripe's invoice preview, which persists nothing.
-	PreviewMachinePlanChange(context.Context, *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error)
+	PreviewMachinePlanChange(context.Context, *v1.PreviewMachinePlanChangeRequest) (*v1.PreviewMachinePlanChangeResponse, error)
 	// Makes the change the caller confirmed, at exactly its quote: an upgrade
 	// is paid before it applies (a declined payment changes nothing), a
 	// downgrade is scheduled for the next period. Retrying the same confirmed
 	// quote never charges twice.
-	ChangeMachinePlan(context.Context, *connect.Request[v1.ChangeMachinePlanRequest]) (*connect.Response[v1.ChangeMachinePlanResponse], error)
+	ChangeMachinePlan(context.Context, *v1.ChangeMachinePlanRequest) (*v1.ChangeMachinePlanResponse, error)
 	// Independent organization-wide hosted usage funding; never requires a machine plan.
-	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
+	GetCurrentUserUsageBilling(context.Context, *v1.GetCurrentUserUsageBillingRequest) (*v1.GetCurrentUserUsageBillingResponse, error)
 	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
-	CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error)
+	CreateCurrentUserUsageBillingCheckout(context.Context, *v1.CreateCurrentUserUsageBillingCheckoutRequest) (*v1.CreateCurrentUserUsageBillingCheckoutResponse, error)
 	// AI credit auto-recharge: refill the wallet from a saved card when the
 	// balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
 	//
 	// Three RPCs, because saving a card and arming the rule are separate
 	// decisions: a user may save a card and never arm auto-recharge, and a
 	// compute subscriber already HAS a saved card and only needs the rule.
-	GetCurrentUserWalletAutoRecharge(context.Context, *connect.Request[v1.GetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.GetCurrentUserWalletAutoRechargeResponse], error)
-	SetCurrentUserWalletAutoRecharge(context.Context, *connect.Request[v1.SetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.SetCurrentUserWalletAutoRechargeResponse], error)
+	GetCurrentUserWalletAutoRecharge(context.Context, *v1.GetCurrentUserWalletAutoRechargeRequest) (*v1.GetCurrentUserWalletAutoRechargeResponse, error)
+	SetCurrentUserWalletAutoRecharge(context.Context, *v1.SetCurrentUserWalletAutoRechargeRequest) (*v1.SetCurrentUserWalletAutoRechargeResponse, error)
 	// Begins saving a card for off-session use. Moves no money.
 	//
 	// Returns EITHER an already-saved payment method (the compute-subscriber
 	// path, where this is a read rather than a collection) OR a SetupIntent
 	// client secret to mount with Stripe.js — never both.
-	CreateCurrentUserWalletPaymentMethodSetup(context.Context, *connect.Request[v1.CreateCurrentUserWalletPaymentMethodSetupRequest]) (*connect.Response[v1.CreateCurrentUserWalletPaymentMethodSetupResponse], error)
+	CreateCurrentUserWalletPaymentMethodSetup(context.Context, *v1.CreateCurrentUserWalletPaymentMethodSetupRequest) (*v1.CreateCurrentUserWalletPaymentMethodSetupResponse, error)
 	// Records a card the user just saved. The server reads the card's details
 	// back from Stripe; the client sends only the payment method ID.
-	ConfirmCurrentUserWalletPaymentMethod(context.Context, *connect.Request[v1.ConfirmCurrentUserWalletPaymentMethodRequest]) (*connect.Response[v1.ConfirmCurrentUserWalletPaymentMethodResponse], error)
-	GetCurrentUserComputeUsage(context.Context, *connect.Request[v1.GetCurrentUserComputeUsageRequest]) (*connect.Response[v1.GetCurrentUserComputeUsageResponse], error)
+	ConfirmCurrentUserWalletPaymentMethod(context.Context, *v1.ConfirmCurrentUserWalletPaymentMethodRequest) (*v1.ConfirmCurrentUserWalletPaymentMethodResponse, error)
+	GetCurrentUserComputeUsage(context.Context, *v1.GetCurrentUserComputeUsageRequest) (*v1.GetCurrentUserComputeUsageResponse, error)
 	// GetCurrentUserComputeEligibility answers "can this caller start a managed
 	// daemon right now, and if not, why".
 	//
@@ -321,10 +602,10 @@ type BillingServiceClient interface {
 	// anything to do with whether a machine may run. The authoritative gate is
 	// internal/svcdaemon.checkDaemonSizeAllowed; this RPC reports the same
 	// funding facts so the UI can predict it instead of guessing.
-	GetCurrentUserComputeEligibility(context.Context, *connect.Request[v1.GetCurrentUserComputeEligibilityRequest]) (*connect.Response[v1.GetCurrentUserComputeEligibilityResponse], error)
+	GetCurrentUserComputeEligibility(context.Context, *v1.GetCurrentUserComputeEligibilityRequest) (*v1.GetCurrentUserComputeEligibilityResponse, error)
 	// Misc per-org reads that callers expect on the public surface.
-	GetUsageSummary(context.Context, *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error)
-	GetInvoicePreview(context.Context, *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error)
+	GetUsageSummary(context.Context, *v1.GetUsageSummaryRequest) (*v1.GetUsageSummaryResponse, error)
+	GetInvoicePreview(context.Context, *v1.GetInvoicePreviewRequest) (*v1.GetInvoicePreviewResponse, error)
 	// Per-user billing email. UpdateBillingEmail persists a CONFIRMED billing
 	// address (empty clears it) and, until an emailed confirmation exists,
 	// accepts only the caller's own verified account email — any other address
@@ -332,545 +613,25 @@ type BillingServiceClient interface {
 	// returns the confirmed value plus the fallback (users.email / JWT) the
 	// billing flows use when there is none. Backs reliant/web's
 	// BillingEmailRequiredModal.
-	GetCurrentUserBillingEmail(context.Context, *connect.Request[v1.GetCurrentUserBillingEmailRequest]) (*connect.Response[v1.GetCurrentUserBillingEmailResponse], error)
-	UpdateBillingEmail(context.Context, *connect.Request[v1.UpdateBillingEmailRequest]) (*connect.Response[v1.UpdateBillingEmailResponse], error)
+	GetCurrentUserBillingEmail(context.Context, *v1.GetCurrentUserBillingEmailRequest) (*v1.GetCurrentUserBillingEmailResponse, error)
+	UpdateBillingEmail(context.Context, *v1.UpdateBillingEmailRequest) (*v1.UpdateBillingEmailResponse, error)
 }
 
-// NewBillingServiceClient constructs a client for the controlplane.v1.BillingService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BillingServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	billingServiceMethods := v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods()
-	return &billingServiceClient{
-		getOrganizationCostSummary: connect.NewClient[v1.GetOrganizationCostSummaryRequest, v1.GetOrganizationCostSummaryResponse](
-			httpClient,
-			baseURL+BillingServiceGetOrganizationCostSummaryProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
-			connect.WithClientOptions(opts...),
-		),
-		listOrganizationUsage: connect.NewClient[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse](
-			httpClient,
-			baseURL+BillingServiceListOrganizationUsageProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("ListOrganizationUsage")),
-			connect.WithClientOptions(opts...),
-		),
-		getProjectCost: connect.NewClient[v1.GetProjectCostRequest, v1.GetProjectCostResponse](
-			httpClient,
-			baseURL+BillingServiceGetProjectCostProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetProjectCost")),
-			connect.WithClientOptions(opts...),
-		),
-		listPlans: connect.NewClient[v1.ListPlansRequest, v1.ListPlansResponse](
-			httpClient,
-			baseURL+BillingServiceListPlansProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("ListPlans")),
-			connect.WithClientOptions(opts...),
-		),
-		getPlan: connect.NewClient[v1.GetPlanRequest, v1.GetPlanResponse](
-			httpClient,
-			baseURL+BillingServiceGetPlanProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetPlan")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserSubscription: connect.NewClient[v1.GetCurrentUserSubscriptionRequest, v1.GetCurrentUserSubscriptionResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserSubscriptionProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserSubscription")),
-			connect.WithClientOptions(opts...),
-		),
-		createCurrentUserCheckoutSession: connect.NewClient[v1.CreateCurrentUserCheckoutSessionRequest, v1.CreateCurrentUserCheckoutSessionResponse](
-			httpClient,
-			baseURL+BillingServiceCreateCurrentUserCheckoutSessionProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserCheckoutSession")),
-			connect.WithClientOptions(opts...),
-		),
-		createCurrentUserBillingPortalSession: connect.NewClient[v1.CreateCurrentUserBillingPortalSessionRequest, v1.CreateCurrentUserBillingPortalSessionResponse](
-			httpClient,
-			baseURL+BillingServiceCreateCurrentUserBillingPortalSessionProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserBillingPortalSession")),
-			connect.WithClientOptions(opts...),
-		),
-		listCurrentUserInvoices: connect.NewClient[v1.ListCurrentUserInvoicesRequest, v1.ListCurrentUserInvoicesResponse](
-			httpClient,
-			baseURL+BillingServiceListCurrentUserInvoicesProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("ListCurrentUserInvoices")),
-			connect.WithClientOptions(opts...),
-		),
-		listOrgLimitChanges: connect.NewClient[v1.ListOrgLimitChangesRequest, v1.ListOrgLimitChangesResponse](
-			httpClient,
-			baseURL+BillingServiceListOrgLimitChangesProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("ListOrgLimitChanges")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserWalletOverview: connect.NewClient[v1.GetCurrentUserWalletOverviewRequest, v1.GetCurrentUserWalletOverviewResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserWalletOverviewProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletOverview")),
-			connect.WithClientOptions(opts...),
-		),
-		createCurrentUserWalletTopupSession: connect.NewClient[v1.CreateCurrentUserWalletTopupSessionRequest, v1.CreateCurrentUserWalletTopupSessionResponse](
-			httpClient,
-			baseURL+BillingServiceCreateCurrentUserWalletTopupSessionProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserWalletTopupSession")),
-			connect.WithClientOptions(opts...),
-		),
-		createCurrentUserWalletTopupPaymentIntent: connect.NewClient[v1.CreateCurrentUserWalletTopupPaymentIntentRequest, v1.CreateCurrentUserWalletTopupPaymentIntentResponse](
-			httpClient,
-			baseURL+BillingServiceCreateCurrentUserWalletTopupPaymentIntentProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserWalletTopupPaymentIntent")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserWalletTopupQuote: connect.NewClient[v1.GetCurrentUserWalletTopupQuoteRequest, v1.GetCurrentUserWalletTopupQuoteResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserWalletTopupQuoteProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletTopupQuote")),
-			connect.WithClientOptions(opts...),
-		),
-		redeemCoupon: connect.NewClient[v1.RedeemCouponRequest, v1.RedeemCouponResponse](
-			httpClient,
-			baseURL+BillingServiceRedeemCouponProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("RedeemCoupon")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserReliantState: connect.NewClient[v1.GetCurrentUserReliantStateRequest, v1.GetCurrentUserReliantStateResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserReliantStateProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserReliantState")),
-			connect.WithClientOptions(opts...),
-		),
-		repairCurrentUserReliantAccess: connect.NewClient[v1.RepairCurrentUserReliantAccessRequest, v1.RepairCurrentUserReliantAccessResponse](
-			httpClient,
-			baseURL+BillingServiceRepairCurrentUserReliantAccessProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("RepairCurrentUserReliantAccess")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateCurrentUserReliantAccess: connect.NewClient[v1.RotateCurrentUserReliantAccessRequest, v1.RotateCurrentUserReliantAccessResponse](
-			httpClient,
-			baseURL+BillingServiceRotateCurrentUserReliantAccessProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("RotateCurrentUserReliantAccess")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserReliantOverview: connect.NewClient[v1.GetCurrentUserReliantOverviewRequest, v1.GetCurrentUserReliantOverviewResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserReliantOverviewProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserReliantOverview")),
-			connect.WithClientOptions(opts...),
-		),
-		setCurrentUserReliantEnabled: connect.NewClient[v1.SetCurrentUserReliantEnabledRequest, v1.SetCurrentUserReliantEnabledResponse](
-			httpClient,
-			baseURL+BillingServiceSetCurrentUserReliantEnabledProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("SetCurrentUserReliantEnabled")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserComputeSubscription: connect.NewClient[v1.GetCurrentUserComputeSubscriptionRequest, v1.GetCurrentUserComputeSubscriptionResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserComputeSubscriptionProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeSubscription")),
-			connect.WithClientOptions(opts...),
-		),
-		setCurrentUserComputeOverage: connect.NewClient[v1.SetCurrentUserComputeOverageRequest, v1.SetCurrentUserComputeOverageResponse](
-			httpClient,
-			baseURL+BillingServiceSetCurrentUserComputeOverageProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("SetCurrentUserComputeOverage")),
-			connect.WithClientOptions(opts...),
-		),
-		setCurrentUserInfraOverage: connect.NewClient[v1.SetCurrentUserInfraOverageRequest, v1.SetCurrentUserInfraOverageResponse](
-			httpClient,
-			baseURL+BillingServiceSetCurrentUserInfraOverageProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("SetCurrentUserInfraOverage")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserInfraOverage: connect.NewClient[v1.GetCurrentUserInfraOverageRequest, v1.GetCurrentUserInfraOverageResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserInfraOverageProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserInfraOverage")),
-			connect.WithClientOptions(opts...),
-		),
-		createCurrentUserComputeSubscriptionIntent: connect.NewClient[v1.CreateCurrentUserComputeSubscriptionIntentRequest, v1.CreateCurrentUserComputeSubscriptionIntentResponse](
-			httpClient,
-			baseURL+BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserComputeSubscriptionIntent")),
-			connect.WithClientOptions(opts...),
-		),
-		getMachinePricingReadiness: connect.NewClient[v1.GetMachinePricingReadinessRequest, v1.GetMachinePricingReadinessResponse](
-			httpClient,
-			baseURL+BillingServiceGetMachinePricingReadinessProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetMachinePricingReadiness")),
-			connect.WithClientOptions(opts...),
-		),
-		acceptNextMachinePricing: connect.NewClient[v1.AcceptNextMachinePricingRequest, v1.AcceptNextMachinePricingResponse](
-			httpClient,
-			baseURL+BillingServiceAcceptNextMachinePricingProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("AcceptNextMachinePricing")),
-			connect.WithClientOptions(opts...),
-		),
-		previewMachinePlanChange: connect.NewClient[v1.PreviewMachinePlanChangeRequest, v1.PreviewMachinePlanChangeResponse](
-			httpClient,
-			baseURL+BillingServicePreviewMachinePlanChangeProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("PreviewMachinePlanChange")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		changeMachinePlan: connect.NewClient[v1.ChangeMachinePlanRequest, v1.ChangeMachinePlanResponse](
-			httpClient,
-			baseURL+BillingServiceChangeMachinePlanProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("ChangeMachinePlan")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserUsageBilling: connect.NewClient[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserUsageBillingProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserUsageBilling")),
-			connect.WithClientOptions(opts...),
-		),
-		createCurrentUserUsageBillingCheckout: connect.NewClient[v1.CreateCurrentUserUsageBillingCheckoutRequest, v1.CreateCurrentUserUsageBillingCheckoutResponse](
-			httpClient,
-			baseURL+BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserUsageBillingCheckout")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserWalletAutoRecharge: connect.NewClient[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletAutoRecharge")),
-			connect.WithClientOptions(opts...),
-		),
-		setCurrentUserWalletAutoRecharge: connect.NewClient[v1.SetCurrentUserWalletAutoRechargeRequest, v1.SetCurrentUserWalletAutoRechargeResponse](
-			httpClient,
-			baseURL+BillingServiceSetCurrentUserWalletAutoRechargeProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("SetCurrentUserWalletAutoRecharge")),
-			connect.WithClientOptions(opts...),
-		),
-		createCurrentUserWalletPaymentMethodSetup: connect.NewClient[v1.CreateCurrentUserWalletPaymentMethodSetupRequest, v1.CreateCurrentUserWalletPaymentMethodSetupResponse](
-			httpClient,
-			baseURL+BillingServiceCreateCurrentUserWalletPaymentMethodSetupProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserWalletPaymentMethodSetup")),
-			connect.WithClientOptions(opts...),
-		),
-		confirmCurrentUserWalletPaymentMethod: connect.NewClient[v1.ConfirmCurrentUserWalletPaymentMethodRequest, v1.ConfirmCurrentUserWalletPaymentMethodResponse](
-			httpClient,
-			baseURL+BillingServiceConfirmCurrentUserWalletPaymentMethodProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("ConfirmCurrentUserWalletPaymentMethod")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserComputeUsage: connect.NewClient[v1.GetCurrentUserComputeUsageRequest, v1.GetCurrentUserComputeUsageResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserComputeUsageProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeUsage")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserComputeEligibility: connect.NewClient[v1.GetCurrentUserComputeEligibilityRequest, v1.GetCurrentUserComputeEligibilityResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserComputeEligibilityProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeEligibility")),
-			connect.WithClientOptions(opts...),
-		),
-		getUsageSummary: connect.NewClient[v1.GetUsageSummaryRequest, v1.GetUsageSummaryResponse](
-			httpClient,
-			baseURL+BillingServiceGetUsageSummaryProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetUsageSummary")),
-			connect.WithClientOptions(opts...),
-		),
-		getInvoicePreview: connect.NewClient[v1.GetInvoicePreviewRequest, v1.GetInvoicePreviewResponse](
-			httpClient,
-			baseURL+BillingServiceGetInvoicePreviewProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetInvoicePreview")),
-			connect.WithClientOptions(opts...),
-		),
-		getCurrentUserBillingEmail: connect.NewClient[v1.GetCurrentUserBillingEmailRequest, v1.GetCurrentUserBillingEmailResponse](
-			httpClient,
-			baseURL+BillingServiceGetCurrentUserBillingEmailProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserBillingEmail")),
-			connect.WithClientOptions(opts...),
-		),
-		updateBillingEmail: connect.NewClient[v1.UpdateBillingEmailRequest, v1.UpdateBillingEmailResponse](
-			httpClient,
-			baseURL+BillingServiceUpdateBillingEmailProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("UpdateBillingEmail")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// billingServiceClient implements BillingServiceClient.
-type billingServiceClient struct {
-	getOrganizationCostSummary                 *connect.Client[v1.GetOrganizationCostSummaryRequest, v1.GetOrganizationCostSummaryResponse]
-	listOrganizationUsage                      *connect.Client[v1.ListOrganizationUsageRequest, v1.ListOrganizationUsageResponse]
-	getProjectCost                             *connect.Client[v1.GetProjectCostRequest, v1.GetProjectCostResponse]
-	listPlans                                  *connect.Client[v1.ListPlansRequest, v1.ListPlansResponse]
-	getPlan                                    *connect.Client[v1.GetPlanRequest, v1.GetPlanResponse]
-	getCurrentUserSubscription                 *connect.Client[v1.GetCurrentUserSubscriptionRequest, v1.GetCurrentUserSubscriptionResponse]
-	createCurrentUserCheckoutSession           *connect.Client[v1.CreateCurrentUserCheckoutSessionRequest, v1.CreateCurrentUserCheckoutSessionResponse]
-	createCurrentUserBillingPortalSession      *connect.Client[v1.CreateCurrentUserBillingPortalSessionRequest, v1.CreateCurrentUserBillingPortalSessionResponse]
-	listCurrentUserInvoices                    *connect.Client[v1.ListCurrentUserInvoicesRequest, v1.ListCurrentUserInvoicesResponse]
-	listOrgLimitChanges                        *connect.Client[v1.ListOrgLimitChangesRequest, v1.ListOrgLimitChangesResponse]
-	getCurrentUserWalletOverview               *connect.Client[v1.GetCurrentUserWalletOverviewRequest, v1.GetCurrentUserWalletOverviewResponse]
-	createCurrentUserWalletTopupSession        *connect.Client[v1.CreateCurrentUserWalletTopupSessionRequest, v1.CreateCurrentUserWalletTopupSessionResponse]
-	createCurrentUserWalletTopupPaymentIntent  *connect.Client[v1.CreateCurrentUserWalletTopupPaymentIntentRequest, v1.CreateCurrentUserWalletTopupPaymentIntentResponse]
-	getCurrentUserWalletTopupQuote             *connect.Client[v1.GetCurrentUserWalletTopupQuoteRequest, v1.GetCurrentUserWalletTopupQuoteResponse]
-	redeemCoupon                               *connect.Client[v1.RedeemCouponRequest, v1.RedeemCouponResponse]
-	getCurrentUserReliantState                 *connect.Client[v1.GetCurrentUserReliantStateRequest, v1.GetCurrentUserReliantStateResponse]
-	repairCurrentUserReliantAccess             *connect.Client[v1.RepairCurrentUserReliantAccessRequest, v1.RepairCurrentUserReliantAccessResponse]
-	rotateCurrentUserReliantAccess             *connect.Client[v1.RotateCurrentUserReliantAccessRequest, v1.RotateCurrentUserReliantAccessResponse]
-	getCurrentUserReliantOverview              *connect.Client[v1.GetCurrentUserReliantOverviewRequest, v1.GetCurrentUserReliantOverviewResponse]
-	setCurrentUserReliantEnabled               *connect.Client[v1.SetCurrentUserReliantEnabledRequest, v1.SetCurrentUserReliantEnabledResponse]
-	getCurrentUserComputeSubscription          *connect.Client[v1.GetCurrentUserComputeSubscriptionRequest, v1.GetCurrentUserComputeSubscriptionResponse]
-	setCurrentUserComputeOverage               *connect.Client[v1.SetCurrentUserComputeOverageRequest, v1.SetCurrentUserComputeOverageResponse]
-	setCurrentUserInfraOverage                 *connect.Client[v1.SetCurrentUserInfraOverageRequest, v1.SetCurrentUserInfraOverageResponse]
-	getCurrentUserInfraOverage                 *connect.Client[v1.GetCurrentUserInfraOverageRequest, v1.GetCurrentUserInfraOverageResponse]
-	createCurrentUserComputeSubscriptionIntent *connect.Client[v1.CreateCurrentUserComputeSubscriptionIntentRequest, v1.CreateCurrentUserComputeSubscriptionIntentResponse]
-	getMachinePricingReadiness                 *connect.Client[v1.GetMachinePricingReadinessRequest, v1.GetMachinePricingReadinessResponse]
-	acceptNextMachinePricing                   *connect.Client[v1.AcceptNextMachinePricingRequest, v1.AcceptNextMachinePricingResponse]
-	previewMachinePlanChange                   *connect.Client[v1.PreviewMachinePlanChangeRequest, v1.PreviewMachinePlanChangeResponse]
-	changeMachinePlan                          *connect.Client[v1.ChangeMachinePlanRequest, v1.ChangeMachinePlanResponse]
-	getCurrentUserUsageBilling                 *connect.Client[v1.GetCurrentUserUsageBillingRequest, v1.GetCurrentUserUsageBillingResponse]
-	createCurrentUserUsageBillingCheckout      *connect.Client[v1.CreateCurrentUserUsageBillingCheckoutRequest, v1.CreateCurrentUserUsageBillingCheckoutResponse]
-	getCurrentUserWalletAutoRecharge           *connect.Client[v1.GetCurrentUserWalletAutoRechargeRequest, v1.GetCurrentUserWalletAutoRechargeResponse]
-	setCurrentUserWalletAutoRecharge           *connect.Client[v1.SetCurrentUserWalletAutoRechargeRequest, v1.SetCurrentUserWalletAutoRechargeResponse]
-	createCurrentUserWalletPaymentMethodSetup  *connect.Client[v1.CreateCurrentUserWalletPaymentMethodSetupRequest, v1.CreateCurrentUserWalletPaymentMethodSetupResponse]
-	confirmCurrentUserWalletPaymentMethod      *connect.Client[v1.ConfirmCurrentUserWalletPaymentMethodRequest, v1.ConfirmCurrentUserWalletPaymentMethodResponse]
-	getCurrentUserComputeUsage                 *connect.Client[v1.GetCurrentUserComputeUsageRequest, v1.GetCurrentUserComputeUsageResponse]
-	getCurrentUserComputeEligibility           *connect.Client[v1.GetCurrentUserComputeEligibilityRequest, v1.GetCurrentUserComputeEligibilityResponse]
-	getUsageSummary                            *connect.Client[v1.GetUsageSummaryRequest, v1.GetUsageSummaryResponse]
-	getInvoicePreview                          *connect.Client[v1.GetInvoicePreviewRequest, v1.GetInvoicePreviewResponse]
-	getCurrentUserBillingEmail                 *connect.Client[v1.GetCurrentUserBillingEmailRequest, v1.GetCurrentUserBillingEmailResponse]
-	updateBillingEmail                         *connect.Client[v1.UpdateBillingEmailRequest, v1.UpdateBillingEmailResponse]
-}
-
-// GetOrganizationCostSummary calls controlplane.v1.BillingService.GetOrganizationCostSummary.
-func (c *billingServiceClient) GetOrganizationCostSummary(ctx context.Context, req *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error) {
-	return c.getOrganizationCostSummary.CallUnary(ctx, req)
-}
-
-// ListOrganizationUsage calls controlplane.v1.BillingService.ListOrganizationUsage.
-func (c *billingServiceClient) ListOrganizationUsage(ctx context.Context, req *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error) {
-	return c.listOrganizationUsage.CallUnary(ctx, req)
-}
-
-// GetProjectCost calls controlplane.v1.BillingService.GetProjectCost.
-func (c *billingServiceClient) GetProjectCost(ctx context.Context, req *connect.Request[v1.GetProjectCostRequest]) (*connect.Response[v1.GetProjectCostResponse], error) {
-	return c.getProjectCost.CallUnary(ctx, req)
-}
-
-// ListPlans calls controlplane.v1.BillingService.ListPlans.
-func (c *billingServiceClient) ListPlans(ctx context.Context, req *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error) {
-	return c.listPlans.CallUnary(ctx, req)
-}
-
-// GetPlan calls controlplane.v1.BillingService.GetPlan.
-func (c *billingServiceClient) GetPlan(ctx context.Context, req *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error) {
-	return c.getPlan.CallUnary(ctx, req)
-}
-
-// GetCurrentUserSubscription calls controlplane.v1.BillingService.GetCurrentUserSubscription.
-func (c *billingServiceClient) GetCurrentUserSubscription(ctx context.Context, req *connect.Request[v1.GetCurrentUserSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserSubscriptionResponse], error) {
-	return c.getCurrentUserSubscription.CallUnary(ctx, req)
-}
-
-// CreateCurrentUserCheckoutSession calls
-// controlplane.v1.BillingService.CreateCurrentUserCheckoutSession.
-func (c *billingServiceClient) CreateCurrentUserCheckoutSession(ctx context.Context, req *connect.Request[v1.CreateCurrentUserCheckoutSessionRequest]) (*connect.Response[v1.CreateCurrentUserCheckoutSessionResponse], error) {
-	return c.createCurrentUserCheckoutSession.CallUnary(ctx, req)
-}
-
-// CreateCurrentUserBillingPortalSession calls
-// controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession.
-func (c *billingServiceClient) CreateCurrentUserBillingPortalSession(ctx context.Context, req *connect.Request[v1.CreateCurrentUserBillingPortalSessionRequest]) (*connect.Response[v1.CreateCurrentUserBillingPortalSessionResponse], error) {
-	return c.createCurrentUserBillingPortalSession.CallUnary(ctx, req)
-}
-
-// ListCurrentUserInvoices calls controlplane.v1.BillingService.ListCurrentUserInvoices.
-func (c *billingServiceClient) ListCurrentUserInvoices(ctx context.Context, req *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error) {
-	return c.listCurrentUserInvoices.CallUnary(ctx, req)
-}
-
-// ListOrgLimitChanges calls controlplane.v1.BillingService.ListOrgLimitChanges.
-func (c *billingServiceClient) ListOrgLimitChanges(ctx context.Context, req *connect.Request[v1.ListOrgLimitChangesRequest]) (*connect.Response[v1.ListOrgLimitChangesResponse], error) {
-	return c.listOrgLimitChanges.CallUnary(ctx, req)
-}
-
-// GetCurrentUserWalletOverview calls controlplane.v1.BillingService.GetCurrentUserWalletOverview.
-func (c *billingServiceClient) GetCurrentUserWalletOverview(ctx context.Context, req *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error) {
-	return c.getCurrentUserWalletOverview.CallUnary(ctx, req)
-}
-
-// CreateCurrentUserWalletTopupSession calls
-// controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession.
-func (c *billingServiceClient) CreateCurrentUserWalletTopupSession(ctx context.Context, req *connect.Request[v1.CreateCurrentUserWalletTopupSessionRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupSessionResponse], error) {
-	return c.createCurrentUserWalletTopupSession.CallUnary(ctx, req)
-}
-
-// CreateCurrentUserWalletTopupPaymentIntent calls
-// controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent.
-func (c *billingServiceClient) CreateCurrentUserWalletTopupPaymentIntent(ctx context.Context, req *connect.Request[v1.CreateCurrentUserWalletTopupPaymentIntentRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupPaymentIntentResponse], error) {
-	return c.createCurrentUserWalletTopupPaymentIntent.CallUnary(ctx, req)
-}
-
-// GetCurrentUserWalletTopupQuote calls
-// controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote.
-func (c *billingServiceClient) GetCurrentUserWalletTopupQuote(ctx context.Context, req *connect.Request[v1.GetCurrentUserWalletTopupQuoteRequest]) (*connect.Response[v1.GetCurrentUserWalletTopupQuoteResponse], error) {
-	return c.getCurrentUserWalletTopupQuote.CallUnary(ctx, req)
-}
-
-// RedeemCoupon calls controlplane.v1.BillingService.RedeemCoupon.
-func (c *billingServiceClient) RedeemCoupon(ctx context.Context, req *connect.Request[v1.RedeemCouponRequest]) (*connect.Response[v1.RedeemCouponResponse], error) {
-	return c.redeemCoupon.CallUnary(ctx, req)
-}
-
-// GetCurrentUserReliantState calls controlplane.v1.BillingService.GetCurrentUserReliantState.
-func (c *billingServiceClient) GetCurrentUserReliantState(ctx context.Context, req *connect.Request[v1.GetCurrentUserReliantStateRequest]) (*connect.Response[v1.GetCurrentUserReliantStateResponse], error) {
-	return c.getCurrentUserReliantState.CallUnary(ctx, req)
-}
-
-// RepairCurrentUserReliantAccess calls
-// controlplane.v1.BillingService.RepairCurrentUserReliantAccess.
-func (c *billingServiceClient) RepairCurrentUserReliantAccess(ctx context.Context, req *connect.Request[v1.RepairCurrentUserReliantAccessRequest]) (*connect.Response[v1.RepairCurrentUserReliantAccessResponse], error) {
-	return c.repairCurrentUserReliantAccess.CallUnary(ctx, req)
-}
-
-// RotateCurrentUserReliantAccess calls
-// controlplane.v1.BillingService.RotateCurrentUserReliantAccess.
-func (c *billingServiceClient) RotateCurrentUserReliantAccess(ctx context.Context, req *connect.Request[v1.RotateCurrentUserReliantAccessRequest]) (*connect.Response[v1.RotateCurrentUserReliantAccessResponse], error) {
-	return c.rotateCurrentUserReliantAccess.CallUnary(ctx, req)
-}
-
-// GetCurrentUserReliantOverview calls controlplane.v1.BillingService.GetCurrentUserReliantOverview.
-func (c *billingServiceClient) GetCurrentUserReliantOverview(ctx context.Context, req *connect.Request[v1.GetCurrentUserReliantOverviewRequest]) (*connect.Response[v1.GetCurrentUserReliantOverviewResponse], error) {
-	return c.getCurrentUserReliantOverview.CallUnary(ctx, req)
-}
-
-// SetCurrentUserReliantEnabled calls controlplane.v1.BillingService.SetCurrentUserReliantEnabled.
-func (c *billingServiceClient) SetCurrentUserReliantEnabled(ctx context.Context, req *connect.Request[v1.SetCurrentUserReliantEnabledRequest]) (*connect.Response[v1.SetCurrentUserReliantEnabledResponse], error) {
-	return c.setCurrentUserReliantEnabled.CallUnary(ctx, req)
-}
-
-// GetCurrentUserComputeSubscription calls
-// controlplane.v1.BillingService.GetCurrentUserComputeSubscription.
-func (c *billingServiceClient) GetCurrentUserComputeSubscription(ctx context.Context, req *connect.Request[v1.GetCurrentUserComputeSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserComputeSubscriptionResponse], error) {
-	return c.getCurrentUserComputeSubscription.CallUnary(ctx, req)
-}
-
-// SetCurrentUserComputeOverage calls controlplane.v1.BillingService.SetCurrentUserComputeOverage.
-func (c *billingServiceClient) SetCurrentUserComputeOverage(ctx context.Context, req *connect.Request[v1.SetCurrentUserComputeOverageRequest]) (*connect.Response[v1.SetCurrentUserComputeOverageResponse], error) {
-	return c.setCurrentUserComputeOverage.CallUnary(ctx, req)
-}
-
-// SetCurrentUserInfraOverage calls controlplane.v1.BillingService.SetCurrentUserInfraOverage.
-func (c *billingServiceClient) SetCurrentUserInfraOverage(ctx context.Context, req *connect.Request[v1.SetCurrentUserInfraOverageRequest]) (*connect.Response[v1.SetCurrentUserInfraOverageResponse], error) {
-	return c.setCurrentUserInfraOverage.CallUnary(ctx, req)
-}
-
-// GetCurrentUserInfraOverage calls controlplane.v1.BillingService.GetCurrentUserInfraOverage.
-func (c *billingServiceClient) GetCurrentUserInfraOverage(ctx context.Context, req *connect.Request[v1.GetCurrentUserInfraOverageRequest]) (*connect.Response[v1.GetCurrentUserInfraOverageResponse], error) {
-	return c.getCurrentUserInfraOverage.CallUnary(ctx, req)
-}
-
-// CreateCurrentUserComputeSubscriptionIntent calls
-// controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent.
-func (c *billingServiceClient) CreateCurrentUserComputeSubscriptionIntent(ctx context.Context, req *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error) {
-	return c.createCurrentUserComputeSubscriptionIntent.CallUnary(ctx, req)
-}
-
-// GetMachinePricingReadiness calls controlplane.v1.BillingService.GetMachinePricingReadiness.
-func (c *billingServiceClient) GetMachinePricingReadiness(ctx context.Context, req *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error) {
-	return c.getMachinePricingReadiness.CallUnary(ctx, req)
-}
-
-// AcceptNextMachinePricing calls controlplane.v1.BillingService.AcceptNextMachinePricing.
-func (c *billingServiceClient) AcceptNextMachinePricing(ctx context.Context, req *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error) {
-	return c.acceptNextMachinePricing.CallUnary(ctx, req)
-}
-
-// PreviewMachinePlanChange calls controlplane.v1.BillingService.PreviewMachinePlanChange.
-func (c *billingServiceClient) PreviewMachinePlanChange(ctx context.Context, req *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error) {
-	return c.previewMachinePlanChange.CallUnary(ctx, req)
-}
-
-// ChangeMachinePlan calls controlplane.v1.BillingService.ChangeMachinePlan.
-func (c *billingServiceClient) ChangeMachinePlan(ctx context.Context, req *connect.Request[v1.ChangeMachinePlanRequest]) (*connect.Response[v1.ChangeMachinePlanResponse], error) {
-	return c.changeMachinePlan.CallUnary(ctx, req)
-}
-
-// GetCurrentUserUsageBilling calls controlplane.v1.BillingService.GetCurrentUserUsageBilling.
-func (c *billingServiceClient) GetCurrentUserUsageBilling(ctx context.Context, req *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error) {
-	return c.getCurrentUserUsageBilling.CallUnary(ctx, req)
-}
-
-// CreateCurrentUserUsageBillingCheckout calls
-// controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout.
-func (c *billingServiceClient) CreateCurrentUserUsageBillingCheckout(ctx context.Context, req *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error) {
-	return c.createCurrentUserUsageBillingCheckout.CallUnary(ctx, req)
-}
-
-// GetCurrentUserWalletAutoRecharge calls
-// controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge.
-func (c *billingServiceClient) GetCurrentUserWalletAutoRecharge(ctx context.Context, req *connect.Request[v1.GetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.GetCurrentUserWalletAutoRechargeResponse], error) {
-	return c.getCurrentUserWalletAutoRecharge.CallUnary(ctx, req)
-}
-
-// SetCurrentUserWalletAutoRecharge calls
-// controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge.
-func (c *billingServiceClient) SetCurrentUserWalletAutoRecharge(ctx context.Context, req *connect.Request[v1.SetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.SetCurrentUserWalletAutoRechargeResponse], error) {
-	return c.setCurrentUserWalletAutoRecharge.CallUnary(ctx, req)
-}
-
-// CreateCurrentUserWalletPaymentMethodSetup calls
-// controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup.
-func (c *billingServiceClient) CreateCurrentUserWalletPaymentMethodSetup(ctx context.Context, req *connect.Request[v1.CreateCurrentUserWalletPaymentMethodSetupRequest]) (*connect.Response[v1.CreateCurrentUserWalletPaymentMethodSetupResponse], error) {
-	return c.createCurrentUserWalletPaymentMethodSetup.CallUnary(ctx, req)
-}
-
-// ConfirmCurrentUserWalletPaymentMethod calls
-// controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod.
-func (c *billingServiceClient) ConfirmCurrentUserWalletPaymentMethod(ctx context.Context, req *connect.Request[v1.ConfirmCurrentUserWalletPaymentMethodRequest]) (*connect.Response[v1.ConfirmCurrentUserWalletPaymentMethodResponse], error) {
-	return c.confirmCurrentUserWalletPaymentMethod.CallUnary(ctx, req)
-}
-
-// GetCurrentUserComputeUsage calls controlplane.v1.BillingService.GetCurrentUserComputeUsage.
-func (c *billingServiceClient) GetCurrentUserComputeUsage(ctx context.Context, req *connect.Request[v1.GetCurrentUserComputeUsageRequest]) (*connect.Response[v1.GetCurrentUserComputeUsageResponse], error) {
-	return c.getCurrentUserComputeUsage.CallUnary(ctx, req)
-}
-
-// GetCurrentUserComputeEligibility calls
-// controlplane.v1.BillingService.GetCurrentUserComputeEligibility.
-func (c *billingServiceClient) GetCurrentUserComputeEligibility(ctx context.Context, req *connect.Request[v1.GetCurrentUserComputeEligibilityRequest]) (*connect.Response[v1.GetCurrentUserComputeEligibilityResponse], error) {
-	return c.getCurrentUserComputeEligibility.CallUnary(ctx, req)
-}
-
-// GetUsageSummary calls controlplane.v1.BillingService.GetUsageSummary.
-func (c *billingServiceClient) GetUsageSummary(ctx context.Context, req *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error) {
-	return c.getUsageSummary.CallUnary(ctx, req)
-}
-
-// GetInvoicePreview calls controlplane.v1.BillingService.GetInvoicePreview.
-func (c *billingServiceClient) GetInvoicePreview(ctx context.Context, req *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error) {
-	return c.getInvoicePreview.CallUnary(ctx, req)
-}
-
-// GetCurrentUserBillingEmail calls controlplane.v1.BillingService.GetCurrentUserBillingEmail.
-func (c *billingServiceClient) GetCurrentUserBillingEmail(ctx context.Context, req *connect.Request[v1.GetCurrentUserBillingEmailRequest]) (*connect.Response[v1.GetCurrentUserBillingEmailResponse], error) {
-	return c.getCurrentUserBillingEmail.CallUnary(ctx, req)
-}
-
-// UpdateBillingEmail calls controlplane.v1.BillingService.UpdateBillingEmail.
-func (c *billingServiceClient) UpdateBillingEmail(ctx context.Context, req *connect.Request[v1.UpdateBillingEmailRequest]) (*connect.Response[v1.UpdateBillingEmailResponse], error) {
-	return c.updateBillingEmail.CallUnary(ctx, req)
+// NewBillingServiceClient constructs a client for the controlplane.v1.BillingService service.
+// Multiple service clients may share a single connect.Client.
+func NewBillingServiceClient(client *connect.Client) BillingServiceClient {
+	return &billingServiceClient{client: client}
 }
 
 // BillingServiceHandler is an implementation of the controlplane.v1.BillingService service.
 type BillingServiceHandler interface {
 	// Canonical current-period organization accounting. Requires billing:read,
 	// not billing management. Unknown amounts stay absent; no historical range.
-	GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error)
+	GetOrganizationCostSummary(context.Context, *v1.GetOrganizationCostSummaryRequest) (*v1.GetOrganizationCostSummaryResponse, error)
 	// History of the organization's usage and spend, built from durable
 	// ledgers (never live telemetry). Requires billing:read, re-checked at use,
 	// and is scoped to the caller's organization. Range is at most 400 days.
-	ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error)
+	ListOrganizationUsage(context.Context, *v1.ListOrganizationUsageRequest) (*v1.ListOrganizationUsageResponse, error)
 	// One project's cost for one UTC calendar month, dashboard-shaped: the
 	// estimated bill to date, the forecast, last month, daily list price,
 	// drivers per workload, allowances and caps. The server owns every figure's
@@ -878,15 +639,15 @@ type BillingServiceHandler interface {
 	// environment-bound credentials are refused. The project must belong to
 	// org_id (NOT_FOUND otherwise), and environment_ids must be its
 	// environments.
-	GetProjectCost(context.Context, *connect.Request[v1.GetProjectCostRequest]) (*connect.Response[v1.GetProjectCostResponse], error)
+	GetProjectCost(context.Context, *v1.GetProjectCostRequest) (*v1.GetProjectCostResponse, error)
 	// Read-only catalog.
-	ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error)
-	GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error)
+	ListPlans(context.Context, *v1.ListPlansRequest) (*v1.ListPlansResponse, error)
+	GetPlan(context.Context, *v1.GetPlanRequest) (*v1.GetPlanResponse, error)
 	// Current user subscription / billing portal / invoices.
-	GetCurrentUserSubscription(context.Context, *connect.Request[v1.GetCurrentUserSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserSubscriptionResponse], error)
-	CreateCurrentUserCheckoutSession(context.Context, *connect.Request[v1.CreateCurrentUserCheckoutSessionRequest]) (*connect.Response[v1.CreateCurrentUserCheckoutSessionResponse], error)
-	CreateCurrentUserBillingPortalSession(context.Context, *connect.Request[v1.CreateCurrentUserBillingPortalSessionRequest]) (*connect.Response[v1.CreateCurrentUserBillingPortalSessionResponse], error)
-	ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error)
+	GetCurrentUserSubscription(context.Context, *v1.GetCurrentUserSubscriptionRequest) (*v1.GetCurrentUserSubscriptionResponse, error)
+	CreateCurrentUserCheckoutSession(context.Context, *v1.CreateCurrentUserCheckoutSessionRequest) (*v1.CreateCurrentUserCheckoutSessionResponse, error)
+	CreateCurrentUserBillingPortalSession(context.Context, *v1.CreateCurrentUserBillingPortalSessionRequest) (*v1.CreateCurrentUserBillingPortalSessionResponse, error)
+	ListCurrentUserInvoices(context.Context, *v1.ListCurrentUserInvoicesRequest) (*v1.ListCurrentUserInvoicesResponse, error)
 	// ListOrgLimitChanges is the org's limit-change history, newest first: who
 	// changed which limit, from what, to what, and when. One list across every
 	// org limit (observability spend cap today; LLM cap, infra overage and wallet
@@ -894,12 +655,12 @@ type BillingServiceHandler interface {
 	//
 	// forge:custom — hand-written over the shared org_limit_changes table; it is
 	// not an entity list, so it gets no CRUD wiring or admin page.
-	ListOrgLimitChanges(context.Context, *connect.Request[v1.ListOrgLimitChangesRequest]) (*connect.Response[v1.ListOrgLimitChangesResponse], error)
+	ListOrgLimitChanges(context.Context, *v1.ListOrgLimitChangesRequest) (*v1.ListOrgLimitChangesResponse, error)
 	// Wallet (per-user).
-	GetCurrentUserWalletOverview(context.Context, *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error)
+	GetCurrentUserWalletOverview(context.Context, *v1.GetCurrentUserWalletOverviewRequest) (*v1.GetCurrentUserWalletOverviewResponse, error)
 	// (GrantCurrentUserWelcomeCredit removed. There is no signup wallet credit:
 	// LLM credit is redeemed from a coupon, RedeemCoupon.)
-	CreateCurrentUserWalletTopupSession(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupSessionRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupSessionResponse], error)
+	CreateCurrentUserWalletTopupSession(context.Context, *v1.CreateCurrentUserWalletTopupSessionRequest) (*v1.CreateCurrentUserWalletTopupSessionResponse, error)
 	// CreateCurrentUserWalletTopupPaymentIntent mints a PaymentIntent for a
 	// top-up the user confirms in OUR page with Stripe Elements, rather than in
 	// Stripe's hosted or embedded Checkout.
@@ -910,7 +671,7 @@ type BillingServiceHandler interface {
 	//
 	// Confirmation is the browser's, entitlement is still the webhook's. A
 	// succeeded confirmation reported by the client grants nothing on its own.
-	CreateCurrentUserWalletTopupPaymentIntent(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupPaymentIntentRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupPaymentIntentResponse], error)
+	CreateCurrentUserWalletTopupPaymentIntent(context.Context, *v1.CreateCurrentUserWalletTopupPaymentIntentRequest) (*v1.CreateCurrentUserWalletTopupPaymentIntentResponse, error)
 	// GetCurrentUserWalletTopupQuote prices a top-up WITHOUT minting anything at
 	// Stripe, so the checkout page can disclose the top-up service fee, and the
 	// total it makes, before asking for a card.
@@ -924,7 +685,7 @@ type BillingServiceHandler interface {
 	//
 	// Creates no Stripe object and no database row: the picker can call it on
 	// every amount the user clicks.
-	GetCurrentUserWalletTopupQuote(context.Context, *connect.Request[v1.GetCurrentUserWalletTopupQuoteRequest]) (*connect.Response[v1.GetCurrentUserWalletTopupQuoteResponse], error)
+	GetCurrentUserWalletTopupQuote(context.Context, *v1.GetCurrentUserWalletTopupQuoteRequest) (*v1.GetCurrentUserWalletTopupQuoteResponse, error)
 	// RedeemCoupon credits the caller's org wallet from a coupon code.
 	//
 	// END-USER facing (any authenticated caller), unlike the coupon MANAGEMENT
@@ -934,28 +695,28 @@ type BillingServiceHandler interface {
 	//
 	// Idempotent per (coupon, org): a second redemption of the same code by the
 	// same org is refused rather than credited twice.
-	RedeemCoupon(context.Context, *connect.Request[v1.RedeemCouponRequest]) (*connect.Response[v1.RedeemCouponResponse], error)
+	RedeemCoupon(context.Context, *v1.RedeemCouponRequest) (*v1.RedeemCouponResponse, error)
 	// Reliant managed-LLM access (per-user).
-	GetCurrentUserReliantState(context.Context, *connect.Request[v1.GetCurrentUserReliantStateRequest]) (*connect.Response[v1.GetCurrentUserReliantStateResponse], error)
-	RepairCurrentUserReliantAccess(context.Context, *connect.Request[v1.RepairCurrentUserReliantAccessRequest]) (*connect.Response[v1.RepairCurrentUserReliantAccessResponse], error)
-	RotateCurrentUserReliantAccess(context.Context, *connect.Request[v1.RotateCurrentUserReliantAccessRequest]) (*connect.Response[v1.RotateCurrentUserReliantAccessResponse], error)
-	GetCurrentUserReliantOverview(context.Context, *connect.Request[v1.GetCurrentUserReliantOverviewRequest]) (*connect.Response[v1.GetCurrentUserReliantOverviewResponse], error)
+	GetCurrentUserReliantState(context.Context, *v1.GetCurrentUserReliantStateRequest) (*v1.GetCurrentUserReliantStateResponse, error)
+	RepairCurrentUserReliantAccess(context.Context, *v1.RepairCurrentUserReliantAccessRequest) (*v1.RepairCurrentUserReliantAccessResponse, error)
+	RotateCurrentUserReliantAccess(context.Context, *v1.RotateCurrentUserReliantAccessRequest) (*v1.RotateCurrentUserReliantAccessResponse, error)
+	GetCurrentUserReliantOverview(context.Context, *v1.GetCurrentUserReliantOverviewRequest) (*v1.GetCurrentUserReliantOverviewResponse, error)
 	// SetCurrentUserReliantEnabled turns managed Reliant LLM access on or off
 	// for the caller. This is the ONLY writer of reliant_enabled: the flag is a
 	// user preference, never inferred from wallet balance, org membership, or
 	// provisioning state. A funded user may still prefer their own API key.
-	SetCurrentUserReliantEnabled(context.Context, *connect.Request[v1.SetCurrentUserReliantEnabledRequest]) (*connect.Response[v1.SetCurrentUserReliantEnabledResponse], error)
+	SetCurrentUserReliantEnabled(context.Context, *v1.SetCurrentUserReliantEnabledRequest) (*v1.SetCurrentUserReliantEnabledResponse, error)
 	// Workspace compute plan (per-user).
-	GetCurrentUserComputeSubscription(context.Context, *connect.Request[v1.GetCurrentUserComputeSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserComputeSubscriptionResponse], error)
-	SetCurrentUserComputeOverage(context.Context, *connect.Request[v1.SetCurrentUserComputeOverageRequest]) (*connect.Response[v1.SetCurrentUserComputeOverageResponse], error)
+	GetCurrentUserComputeSubscription(context.Context, *v1.GetCurrentUserComputeSubscriptionRequest) (*v1.GetCurrentUserComputeSubscriptionResponse, error)
+	SetCurrentUserComputeOverage(context.Context, *v1.SetCurrentUserComputeOverageRequest) (*v1.SetCurrentUserComputeOverageResponse, error)
 	// Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
 	// the compute pair above. Separate from it because the two cap different
 	// products through different gates; see SetCurrentUserInfraOverageRequest.
-	SetCurrentUserInfraOverage(context.Context, *connect.Request[v1.SetCurrentUserInfraOverageRequest]) (*connect.Response[v1.SetCurrentUserInfraOverageResponse], error)
+	SetCurrentUserInfraOverage(context.Context, *v1.SetCurrentUserInfraOverageRequest) (*v1.SetCurrentUserInfraOverageResponse, error)
 	// Everything the deploy overage surface renders from, in one call:
 	// consumption, allowance, the customer's cap, and the current ladder rung
 	// per dimension.
-	GetCurrentUserInfraOverage(context.Context, *connect.Request[v1.GetCurrentUserInfraOverageRequest]) (*connect.Response[v1.GetCurrentUserInfraOverageResponse], error)
+	GetCurrentUserInfraOverage(context.Context, *v1.GetCurrentUserInfraOverageRequest) (*v1.GetCurrentUserInfraOverageResponse, error)
 	// CreateCurrentUserComputeSubscriptionIntent starts a compute subscription
 	// the user pays for in OUR page with Stripe Elements, rather than in
 	// Stripe's hosted Checkout page inside an iframe.
@@ -971,10 +732,10 @@ type BillingServiceHandler interface {
 	// expires the unpaid subscription on its own. Entitlement — and cancelling
 	// the plan this one supersedes — remains the webhook's, on the signal that
 	// confirms the money actually moved.
-	CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error)
+	CreateCurrentUserComputeSubscriptionIntent(context.Context, *v1.CreateCurrentUserComputeSubscriptionIntentRequest) (*v1.CreateCurrentUserComputeSubscriptionIntentResponse, error)
 	// Machine pricing is accepted explicitly for the next billing period only.
-	GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error)
-	AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error)
+	GetMachinePricingReadiness(context.Context, *v1.GetMachinePricingReadinessRequest) (*v1.GetMachinePricingReadinessResponse, error)
+	AcceptNextMachinePricing(context.Context, *v1.AcceptNextMachinePricingRequest) (*v1.AcceptNextMachinePricingResponse, error)
 	// Quotes a change of the org's machine plan: an upgrade applies now and is
 	// charged the prorated difference today; a downgrade applies at the next
 	// billing period and charges or credits nothing; choosing the current plan
@@ -982,34 +743,34 @@ type BillingServiceHandler interface {
 	// binding for ten minutes through terms_sha256. A pure read: it reads the
 	// subscription, period, snapshot and pending/scheduled changes, and prices
 	// an upgrade with Stripe's invoice preview, which persists nothing.
-	PreviewMachinePlanChange(context.Context, *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error)
+	PreviewMachinePlanChange(context.Context, *v1.PreviewMachinePlanChangeRequest) (*v1.PreviewMachinePlanChangeResponse, error)
 	// Makes the change the caller confirmed, at exactly its quote: an upgrade
 	// is paid before it applies (a declined payment changes nothing), a
 	// downgrade is scheduled for the next period. Retrying the same confirmed
 	// quote never charges twice.
-	ChangeMachinePlan(context.Context, *connect.Request[v1.ChangeMachinePlanRequest]) (*connect.Response[v1.ChangeMachinePlanResponse], error)
+	ChangeMachinePlan(context.Context, *v1.ChangeMachinePlanRequest) (*v1.ChangeMachinePlanResponse, error)
 	// Independent organization-wide hosted usage funding; never requires a machine plan.
-	GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error)
+	GetCurrentUserUsageBilling(context.Context, *v1.GetCurrentUserUsageBillingRequest) (*v1.GetCurrentUserUsageBillingResponse, error)
 	// Explicit PAYG consent. Does not grant funding until verified Stripe reconciliation.
-	CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error)
+	CreateCurrentUserUsageBillingCheckout(context.Context, *v1.CreateCurrentUserUsageBillingCheckoutRequest) (*v1.CreateCurrentUserUsageBillingCheckoutResponse, error)
 	// AI credit auto-recharge: refill the wallet from a saved card when the
 	// balance falls below a threshold, bounded by a MANDATORY monthly ceiling.
 	//
 	// Three RPCs, because saving a card and arming the rule are separate
 	// decisions: a user may save a card and never arm auto-recharge, and a
 	// compute subscriber already HAS a saved card and only needs the rule.
-	GetCurrentUserWalletAutoRecharge(context.Context, *connect.Request[v1.GetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.GetCurrentUserWalletAutoRechargeResponse], error)
-	SetCurrentUserWalletAutoRecharge(context.Context, *connect.Request[v1.SetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.SetCurrentUserWalletAutoRechargeResponse], error)
+	GetCurrentUserWalletAutoRecharge(context.Context, *v1.GetCurrentUserWalletAutoRechargeRequest) (*v1.GetCurrentUserWalletAutoRechargeResponse, error)
+	SetCurrentUserWalletAutoRecharge(context.Context, *v1.SetCurrentUserWalletAutoRechargeRequest) (*v1.SetCurrentUserWalletAutoRechargeResponse, error)
 	// Begins saving a card for off-session use. Moves no money.
 	//
 	// Returns EITHER an already-saved payment method (the compute-subscriber
 	// path, where this is a read rather than a collection) OR a SetupIntent
 	// client secret to mount with Stripe.js — never both.
-	CreateCurrentUserWalletPaymentMethodSetup(context.Context, *connect.Request[v1.CreateCurrentUserWalletPaymentMethodSetupRequest]) (*connect.Response[v1.CreateCurrentUserWalletPaymentMethodSetupResponse], error)
+	CreateCurrentUserWalletPaymentMethodSetup(context.Context, *v1.CreateCurrentUserWalletPaymentMethodSetupRequest) (*v1.CreateCurrentUserWalletPaymentMethodSetupResponse, error)
 	// Records a card the user just saved. The server reads the card's details
 	// back from Stripe; the client sends only the payment method ID.
-	ConfirmCurrentUserWalletPaymentMethod(context.Context, *connect.Request[v1.ConfirmCurrentUserWalletPaymentMethodRequest]) (*connect.Response[v1.ConfirmCurrentUserWalletPaymentMethodResponse], error)
-	GetCurrentUserComputeUsage(context.Context, *connect.Request[v1.GetCurrentUserComputeUsageRequest]) (*connect.Response[v1.GetCurrentUserComputeUsageResponse], error)
+	ConfirmCurrentUserWalletPaymentMethod(context.Context, *v1.ConfirmCurrentUserWalletPaymentMethodRequest) (*v1.ConfirmCurrentUserWalletPaymentMethodResponse, error)
+	GetCurrentUserComputeUsage(context.Context, *v1.GetCurrentUserComputeUsageRequest) (*v1.GetCurrentUserComputeUsageResponse, error)
 	// GetCurrentUserComputeEligibility answers "can this caller start a managed
 	// daemon right now, and if not, why".
 	//
@@ -1020,10 +781,10 @@ type BillingServiceHandler interface {
 	// anything to do with whether a machine may run. The authoritative gate is
 	// internal/svcdaemon.checkDaemonSizeAllowed; this RPC reports the same
 	// funding facts so the UI can predict it instead of guessing.
-	GetCurrentUserComputeEligibility(context.Context, *connect.Request[v1.GetCurrentUserComputeEligibilityRequest]) (*connect.Response[v1.GetCurrentUserComputeEligibilityResponse], error)
+	GetCurrentUserComputeEligibility(context.Context, *v1.GetCurrentUserComputeEligibilityRequest) (*v1.GetCurrentUserComputeEligibilityResponse, error)
 	// Misc per-org reads that callers expect on the public surface.
-	GetUsageSummary(context.Context, *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error)
-	GetInvoicePreview(context.Context, *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error)
+	GetUsageSummary(context.Context, *v1.GetUsageSummaryRequest) (*v1.GetUsageSummaryResponse, error)
+	GetInvoicePreview(context.Context, *v1.GetInvoicePreviewRequest) (*v1.GetInvoicePreviewResponse, error)
 	// Per-user billing email. UpdateBillingEmail persists a CONFIRMED billing
 	// address (empty clears it) and, until an emailed confirmation exists,
 	// accepts only the caller's own verified account email — any other address
@@ -1031,517 +792,1048 @@ type BillingServiceHandler interface {
 	// returns the confirmed value plus the fallback (users.email / JWT) the
 	// billing flows use when there is none. Backs reliant/web's
 	// BillingEmailRequiredModal.
-	GetCurrentUserBillingEmail(context.Context, *connect.Request[v1.GetCurrentUserBillingEmailRequest]) (*connect.Response[v1.GetCurrentUserBillingEmailResponse], error)
-	UpdateBillingEmail(context.Context, *connect.Request[v1.UpdateBillingEmailRequest]) (*connect.Response[v1.UpdateBillingEmailResponse], error)
+	GetCurrentUserBillingEmail(context.Context, *v1.GetCurrentUserBillingEmailRequest) (*v1.GetCurrentUserBillingEmailResponse, error)
+	UpdateBillingEmail(context.Context, *v1.UpdateBillingEmailRequest) (*v1.UpdateBillingEmailResponse, error)
 }
 
-// NewBillingServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	billingServiceMethods := v1.File_services_billing_v1_billing_proto.Services().ByName("BillingService").Methods()
-	billingServiceGetOrganizationCostSummaryHandler := connect.NewUnaryHandler(
-		BillingServiceGetOrganizationCostSummaryProcedure,
-		svc.GetOrganizationCostSummary,
-		connect.WithSchema(billingServiceMethods.ByName("GetOrganizationCostSummary")),
-		connect.WithHandlerOptions(opts...),
+// RegisterBillingServiceHandler registers svc as the controlplane.v1.BillingService implementation
+// on server.
+func RegisterBillingServiceHandler(server *connect.Server, svc BillingServiceHandler) {
+	adapter := billingServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: billingServiceGetOrganizationCostSummarySpec(), Handler: adapter.getOrganizationCostSummary},
+		connect.Method{Spec: billingServiceListOrganizationUsageSpec(), Handler: adapter.listOrganizationUsage},
+		connect.Method{Spec: billingServiceGetProjectCostSpec(), Handler: adapter.getProjectCost},
+		connect.Method{Spec: billingServiceListPlansSpec(), Handler: adapter.listPlans},
+		connect.Method{Spec: billingServiceGetPlanSpec(), Handler: adapter.getPlan},
+		connect.Method{Spec: billingServiceGetCurrentUserSubscriptionSpec(), Handler: adapter.getCurrentUserSubscription},
+		connect.Method{Spec: billingServiceCreateCurrentUserCheckoutSessionSpec(), Handler: adapter.createCurrentUserCheckoutSession},
+		connect.Method{Spec: billingServiceCreateCurrentUserBillingPortalSessionSpec(), Handler: adapter.createCurrentUserBillingPortalSession},
+		connect.Method{Spec: billingServiceListCurrentUserInvoicesSpec(), Handler: adapter.listCurrentUserInvoices},
+		connect.Method{Spec: billingServiceListOrgLimitChangesSpec(), Handler: adapter.listOrgLimitChanges},
+		connect.Method{Spec: billingServiceGetCurrentUserWalletOverviewSpec(), Handler: adapter.getCurrentUserWalletOverview},
+		connect.Method{Spec: billingServiceCreateCurrentUserWalletTopupSessionSpec(), Handler: adapter.createCurrentUserWalletTopupSession},
+		connect.Method{Spec: billingServiceCreateCurrentUserWalletTopupPaymentIntentSpec(), Handler: adapter.createCurrentUserWalletTopupPaymentIntent},
+		connect.Method{Spec: billingServiceGetCurrentUserWalletTopupQuoteSpec(), Handler: adapter.getCurrentUserWalletTopupQuote},
+		connect.Method{Spec: billingServiceRedeemCouponSpec(), Handler: adapter.redeemCoupon},
+		connect.Method{Spec: billingServiceGetCurrentUserReliantStateSpec(), Handler: adapter.getCurrentUserReliantState},
+		connect.Method{Spec: billingServiceRepairCurrentUserReliantAccessSpec(), Handler: adapter.repairCurrentUserReliantAccess},
+		connect.Method{Spec: billingServiceRotateCurrentUserReliantAccessSpec(), Handler: adapter.rotateCurrentUserReliantAccess},
+		connect.Method{Spec: billingServiceGetCurrentUserReliantOverviewSpec(), Handler: adapter.getCurrentUserReliantOverview},
+		connect.Method{Spec: billingServiceSetCurrentUserReliantEnabledSpec(), Handler: adapter.setCurrentUserReliantEnabled},
+		connect.Method{Spec: billingServiceGetCurrentUserComputeSubscriptionSpec(), Handler: adapter.getCurrentUserComputeSubscription},
+		connect.Method{Spec: billingServiceSetCurrentUserComputeOverageSpec(), Handler: adapter.setCurrentUserComputeOverage},
+		connect.Method{Spec: billingServiceSetCurrentUserInfraOverageSpec(), Handler: adapter.setCurrentUserInfraOverage},
+		connect.Method{Spec: billingServiceGetCurrentUserInfraOverageSpec(), Handler: adapter.getCurrentUserInfraOverage},
+		connect.Method{Spec: billingServiceCreateCurrentUserComputeSubscriptionIntentSpec(), Handler: adapter.createCurrentUserComputeSubscriptionIntent},
+		connect.Method{Spec: billingServiceGetMachinePricingReadinessSpec(), Handler: adapter.getMachinePricingReadiness},
+		connect.Method{Spec: billingServiceAcceptNextMachinePricingSpec(), Handler: adapter.acceptNextMachinePricing},
+		connect.Method{Spec: billingServicePreviewMachinePlanChangeSpec(), Handler: adapter.previewMachinePlanChange},
+		connect.Method{Spec: billingServiceChangeMachinePlanSpec(), Handler: adapter.changeMachinePlan},
+		connect.Method{Spec: billingServiceGetCurrentUserUsageBillingSpec(), Handler: adapter.getCurrentUserUsageBilling},
+		connect.Method{Spec: billingServiceCreateCurrentUserUsageBillingCheckoutSpec(), Handler: adapter.createCurrentUserUsageBillingCheckout},
+		connect.Method{Spec: billingServiceGetCurrentUserWalletAutoRechargeSpec(), Handler: adapter.getCurrentUserWalletAutoRecharge},
+		connect.Method{Spec: billingServiceSetCurrentUserWalletAutoRechargeSpec(), Handler: adapter.setCurrentUserWalletAutoRecharge},
+		connect.Method{Spec: billingServiceCreateCurrentUserWalletPaymentMethodSetupSpec(), Handler: adapter.createCurrentUserWalletPaymentMethodSetup},
+		connect.Method{Spec: billingServiceConfirmCurrentUserWalletPaymentMethodSpec(), Handler: adapter.confirmCurrentUserWalletPaymentMethod},
+		connect.Method{Spec: billingServiceGetCurrentUserComputeUsageSpec(), Handler: adapter.getCurrentUserComputeUsage},
+		connect.Method{Spec: billingServiceGetCurrentUserComputeEligibilitySpec(), Handler: adapter.getCurrentUserComputeEligibility},
+		connect.Method{Spec: billingServiceGetUsageSummarySpec(), Handler: adapter.getUsageSummary},
+		connect.Method{Spec: billingServiceGetInvoicePreviewSpec(), Handler: adapter.getInvoicePreview},
+		connect.Method{Spec: billingServiceGetCurrentUserBillingEmailSpec(), Handler: adapter.getCurrentUserBillingEmail},
+		connect.Method{Spec: billingServiceUpdateBillingEmailSpec(), Handler: adapter.updateBillingEmail},
 	)
-	billingServiceListOrganizationUsageHandler := connect.NewUnaryHandler(
-		BillingServiceListOrganizationUsageProcedure,
-		svc.ListOrganizationUsage,
-		connect.WithSchema(billingServiceMethods.ByName("ListOrganizationUsage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetProjectCostHandler := connect.NewUnaryHandler(
-		BillingServiceGetProjectCostProcedure,
-		svc.GetProjectCost,
-		connect.WithSchema(billingServiceMethods.ByName("GetProjectCost")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceListPlansHandler := connect.NewUnaryHandler(
-		BillingServiceListPlansProcedure,
-		svc.ListPlans,
-		connect.WithSchema(billingServiceMethods.ByName("ListPlans")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetPlanHandler := connect.NewUnaryHandler(
-		BillingServiceGetPlanProcedure,
-		svc.GetPlan,
-		connect.WithSchema(billingServiceMethods.ByName("GetPlan")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserSubscriptionHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserSubscriptionProcedure,
-		svc.GetCurrentUserSubscription,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserSubscription")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceCreateCurrentUserCheckoutSessionHandler := connect.NewUnaryHandler(
-		BillingServiceCreateCurrentUserCheckoutSessionProcedure,
-		svc.CreateCurrentUserCheckoutSession,
-		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserCheckoutSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceCreateCurrentUserBillingPortalSessionHandler := connect.NewUnaryHandler(
-		BillingServiceCreateCurrentUserBillingPortalSessionProcedure,
-		svc.CreateCurrentUserBillingPortalSession,
-		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserBillingPortalSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceListCurrentUserInvoicesHandler := connect.NewUnaryHandler(
-		BillingServiceListCurrentUserInvoicesProcedure,
-		svc.ListCurrentUserInvoices,
-		connect.WithSchema(billingServiceMethods.ByName("ListCurrentUserInvoices")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceListOrgLimitChangesHandler := connect.NewUnaryHandler(
-		BillingServiceListOrgLimitChangesProcedure,
-		svc.ListOrgLimitChanges,
-		connect.WithSchema(billingServiceMethods.ByName("ListOrgLimitChanges")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserWalletOverviewHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserWalletOverviewProcedure,
-		svc.GetCurrentUserWalletOverview,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletOverview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceCreateCurrentUserWalletTopupSessionHandler := connect.NewUnaryHandler(
-		BillingServiceCreateCurrentUserWalletTopupSessionProcedure,
-		svc.CreateCurrentUserWalletTopupSession,
-		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserWalletTopupSession")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceCreateCurrentUserWalletTopupPaymentIntentHandler := connect.NewUnaryHandler(
-		BillingServiceCreateCurrentUserWalletTopupPaymentIntentProcedure,
-		svc.CreateCurrentUserWalletTopupPaymentIntent,
-		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserWalletTopupPaymentIntent")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserWalletTopupQuoteHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserWalletTopupQuoteProcedure,
-		svc.GetCurrentUserWalletTopupQuote,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletTopupQuote")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceRedeemCouponHandler := connect.NewUnaryHandler(
-		BillingServiceRedeemCouponProcedure,
-		svc.RedeemCoupon,
-		connect.WithSchema(billingServiceMethods.ByName("RedeemCoupon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserReliantStateHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserReliantStateProcedure,
-		svc.GetCurrentUserReliantState,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserReliantState")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceRepairCurrentUserReliantAccessHandler := connect.NewUnaryHandler(
-		BillingServiceRepairCurrentUserReliantAccessProcedure,
-		svc.RepairCurrentUserReliantAccess,
-		connect.WithSchema(billingServiceMethods.ByName("RepairCurrentUserReliantAccess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceRotateCurrentUserReliantAccessHandler := connect.NewUnaryHandler(
-		BillingServiceRotateCurrentUserReliantAccessProcedure,
-		svc.RotateCurrentUserReliantAccess,
-		connect.WithSchema(billingServiceMethods.ByName("RotateCurrentUserReliantAccess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserReliantOverviewHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserReliantOverviewProcedure,
-		svc.GetCurrentUserReliantOverview,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserReliantOverview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceSetCurrentUserReliantEnabledHandler := connect.NewUnaryHandler(
-		BillingServiceSetCurrentUserReliantEnabledProcedure,
-		svc.SetCurrentUserReliantEnabled,
-		connect.WithSchema(billingServiceMethods.ByName("SetCurrentUserReliantEnabled")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserComputeSubscriptionHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserComputeSubscriptionProcedure,
-		svc.GetCurrentUserComputeSubscription,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeSubscription")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceSetCurrentUserComputeOverageHandler := connect.NewUnaryHandler(
-		BillingServiceSetCurrentUserComputeOverageProcedure,
-		svc.SetCurrentUserComputeOverage,
-		connect.WithSchema(billingServiceMethods.ByName("SetCurrentUserComputeOverage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceSetCurrentUserInfraOverageHandler := connect.NewUnaryHandler(
-		BillingServiceSetCurrentUserInfraOverageProcedure,
-		svc.SetCurrentUserInfraOverage,
-		connect.WithSchema(billingServiceMethods.ByName("SetCurrentUserInfraOverage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserInfraOverageHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserInfraOverageProcedure,
-		svc.GetCurrentUserInfraOverage,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserInfraOverage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceCreateCurrentUserComputeSubscriptionIntentHandler := connect.NewUnaryHandler(
-		BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure,
-		svc.CreateCurrentUserComputeSubscriptionIntent,
-		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserComputeSubscriptionIntent")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetMachinePricingReadinessHandler := connect.NewUnaryHandler(
-		BillingServiceGetMachinePricingReadinessProcedure,
-		svc.GetMachinePricingReadiness,
-		connect.WithSchema(billingServiceMethods.ByName("GetMachinePricingReadiness")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceAcceptNextMachinePricingHandler := connect.NewUnaryHandler(
-		BillingServiceAcceptNextMachinePricingProcedure,
-		svc.AcceptNextMachinePricing,
-		connect.WithSchema(billingServiceMethods.ByName("AcceptNextMachinePricing")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServicePreviewMachinePlanChangeHandler := connect.NewUnaryHandler(
-		BillingServicePreviewMachinePlanChangeProcedure,
-		svc.PreviewMachinePlanChange,
-		connect.WithSchema(billingServiceMethods.ByName("PreviewMachinePlanChange")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceChangeMachinePlanHandler := connect.NewUnaryHandler(
-		BillingServiceChangeMachinePlanProcedure,
-		svc.ChangeMachinePlan,
-		connect.WithSchema(billingServiceMethods.ByName("ChangeMachinePlan")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserUsageBillingHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserUsageBillingProcedure,
-		svc.GetCurrentUserUsageBilling,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserUsageBilling")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceCreateCurrentUserUsageBillingCheckoutHandler := connect.NewUnaryHandler(
-		BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure,
-		svc.CreateCurrentUserUsageBillingCheckout,
-		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserUsageBillingCheckout")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserWalletAutoRechargeHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserWalletAutoRechargeProcedure,
-		svc.GetCurrentUserWalletAutoRecharge,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserWalletAutoRecharge")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceSetCurrentUserWalletAutoRechargeHandler := connect.NewUnaryHandler(
-		BillingServiceSetCurrentUserWalletAutoRechargeProcedure,
-		svc.SetCurrentUserWalletAutoRecharge,
-		connect.WithSchema(billingServiceMethods.ByName("SetCurrentUserWalletAutoRecharge")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceCreateCurrentUserWalletPaymentMethodSetupHandler := connect.NewUnaryHandler(
-		BillingServiceCreateCurrentUserWalletPaymentMethodSetupProcedure,
-		svc.CreateCurrentUserWalletPaymentMethodSetup,
-		connect.WithSchema(billingServiceMethods.ByName("CreateCurrentUserWalletPaymentMethodSetup")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceConfirmCurrentUserWalletPaymentMethodHandler := connect.NewUnaryHandler(
-		BillingServiceConfirmCurrentUserWalletPaymentMethodProcedure,
-		svc.ConfirmCurrentUserWalletPaymentMethod,
-		connect.WithSchema(billingServiceMethods.ByName("ConfirmCurrentUserWalletPaymentMethod")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserComputeUsageHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserComputeUsageProcedure,
-		svc.GetCurrentUserComputeUsage,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeUsage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserComputeEligibilityHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserComputeEligibilityProcedure,
-		svc.GetCurrentUserComputeEligibility,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserComputeEligibility")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetUsageSummaryHandler := connect.NewUnaryHandler(
-		BillingServiceGetUsageSummaryProcedure,
-		svc.GetUsageSummary,
-		connect.WithSchema(billingServiceMethods.ByName("GetUsageSummary")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetInvoicePreviewHandler := connect.NewUnaryHandler(
-		BillingServiceGetInvoicePreviewProcedure,
-		svc.GetInvoicePreview,
-		connect.WithSchema(billingServiceMethods.ByName("GetInvoicePreview")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceGetCurrentUserBillingEmailHandler := connect.NewUnaryHandler(
-		BillingServiceGetCurrentUserBillingEmailProcedure,
-		svc.GetCurrentUserBillingEmail,
-		connect.WithSchema(billingServiceMethods.ByName("GetCurrentUserBillingEmail")),
-		connect.WithHandlerOptions(opts...),
-	)
-	billingServiceUpdateBillingEmailHandler := connect.NewUnaryHandler(
-		BillingServiceUpdateBillingEmailProcedure,
-		svc.UpdateBillingEmail,
-		connect.WithSchema(billingServiceMethods.ByName("UpdateBillingEmail")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.BillingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BillingServiceGetOrganizationCostSummaryProcedure:
-			billingServiceGetOrganizationCostSummaryHandler.ServeHTTP(w, r)
-		case BillingServiceListOrganizationUsageProcedure:
-			billingServiceListOrganizationUsageHandler.ServeHTTP(w, r)
-		case BillingServiceGetProjectCostProcedure:
-			billingServiceGetProjectCostHandler.ServeHTTP(w, r)
-		case BillingServiceListPlansProcedure:
-			billingServiceListPlansHandler.ServeHTTP(w, r)
-		case BillingServiceGetPlanProcedure:
-			billingServiceGetPlanHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserSubscriptionProcedure:
-			billingServiceGetCurrentUserSubscriptionHandler.ServeHTTP(w, r)
-		case BillingServiceCreateCurrentUserCheckoutSessionProcedure:
-			billingServiceCreateCurrentUserCheckoutSessionHandler.ServeHTTP(w, r)
-		case BillingServiceCreateCurrentUserBillingPortalSessionProcedure:
-			billingServiceCreateCurrentUserBillingPortalSessionHandler.ServeHTTP(w, r)
-		case BillingServiceListCurrentUserInvoicesProcedure:
-			billingServiceListCurrentUserInvoicesHandler.ServeHTTP(w, r)
-		case BillingServiceListOrgLimitChangesProcedure:
-			billingServiceListOrgLimitChangesHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserWalletOverviewProcedure:
-			billingServiceGetCurrentUserWalletOverviewHandler.ServeHTTP(w, r)
-		case BillingServiceCreateCurrentUserWalletTopupSessionProcedure:
-			billingServiceCreateCurrentUserWalletTopupSessionHandler.ServeHTTP(w, r)
-		case BillingServiceCreateCurrentUserWalletTopupPaymentIntentProcedure:
-			billingServiceCreateCurrentUserWalletTopupPaymentIntentHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserWalletTopupQuoteProcedure:
-			billingServiceGetCurrentUserWalletTopupQuoteHandler.ServeHTTP(w, r)
-		case BillingServiceRedeemCouponProcedure:
-			billingServiceRedeemCouponHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserReliantStateProcedure:
-			billingServiceGetCurrentUserReliantStateHandler.ServeHTTP(w, r)
-		case BillingServiceRepairCurrentUserReliantAccessProcedure:
-			billingServiceRepairCurrentUserReliantAccessHandler.ServeHTTP(w, r)
-		case BillingServiceRotateCurrentUserReliantAccessProcedure:
-			billingServiceRotateCurrentUserReliantAccessHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserReliantOverviewProcedure:
-			billingServiceGetCurrentUserReliantOverviewHandler.ServeHTTP(w, r)
-		case BillingServiceSetCurrentUserReliantEnabledProcedure:
-			billingServiceSetCurrentUserReliantEnabledHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserComputeSubscriptionProcedure:
-			billingServiceGetCurrentUserComputeSubscriptionHandler.ServeHTTP(w, r)
-		case BillingServiceSetCurrentUserComputeOverageProcedure:
-			billingServiceSetCurrentUserComputeOverageHandler.ServeHTTP(w, r)
-		case BillingServiceSetCurrentUserInfraOverageProcedure:
-			billingServiceSetCurrentUserInfraOverageHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserInfraOverageProcedure:
-			billingServiceGetCurrentUserInfraOverageHandler.ServeHTTP(w, r)
-		case BillingServiceCreateCurrentUserComputeSubscriptionIntentProcedure:
-			billingServiceCreateCurrentUserComputeSubscriptionIntentHandler.ServeHTTP(w, r)
-		case BillingServiceGetMachinePricingReadinessProcedure:
-			billingServiceGetMachinePricingReadinessHandler.ServeHTTP(w, r)
-		case BillingServiceAcceptNextMachinePricingProcedure:
-			billingServiceAcceptNextMachinePricingHandler.ServeHTTP(w, r)
-		case BillingServicePreviewMachinePlanChangeProcedure:
-			billingServicePreviewMachinePlanChangeHandler.ServeHTTP(w, r)
-		case BillingServiceChangeMachinePlanProcedure:
-			billingServiceChangeMachinePlanHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserUsageBillingProcedure:
-			billingServiceGetCurrentUserUsageBillingHandler.ServeHTTP(w, r)
-		case BillingServiceCreateCurrentUserUsageBillingCheckoutProcedure:
-			billingServiceCreateCurrentUserUsageBillingCheckoutHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserWalletAutoRechargeProcedure:
-			billingServiceGetCurrentUserWalletAutoRechargeHandler.ServeHTTP(w, r)
-		case BillingServiceSetCurrentUserWalletAutoRechargeProcedure:
-			billingServiceSetCurrentUserWalletAutoRechargeHandler.ServeHTTP(w, r)
-		case BillingServiceCreateCurrentUserWalletPaymentMethodSetupProcedure:
-			billingServiceCreateCurrentUserWalletPaymentMethodSetupHandler.ServeHTTP(w, r)
-		case BillingServiceConfirmCurrentUserWalletPaymentMethodProcedure:
-			billingServiceConfirmCurrentUserWalletPaymentMethodHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserComputeUsageProcedure:
-			billingServiceGetCurrentUserComputeUsageHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserComputeEligibilityProcedure:
-			billingServiceGetCurrentUserComputeEligibilityHandler.ServeHTTP(w, r)
-		case BillingServiceGetUsageSummaryProcedure:
-			billingServiceGetUsageSummaryHandler.ServeHTTP(w, r)
-		case BillingServiceGetInvoicePreviewProcedure:
-			billingServiceGetInvoicePreviewHandler.ServeHTTP(w, r)
-		case BillingServiceGetCurrentUserBillingEmailProcedure:
-			billingServiceGetCurrentUserBillingEmailHandler.ServeHTTP(w, r)
-		case BillingServiceUpdateBillingEmailProcedure:
-			billingServiceUpdateBillingEmailHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedBillingServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBillingServiceHandler struct{}
 
-func (UnimplementedBillingServiceHandler) GetOrganizationCostSummary(context.Context, *connect.Request[v1.GetOrganizationCostSummaryRequest]) (*connect.Response[v1.GetOrganizationCostSummaryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetOrganizationCostSummary is not implemented"))
+func (UnimplementedBillingServiceHandler) GetOrganizationCostSummary(context.Context, *v1.GetOrganizationCostSummaryRequest) (*v1.GetOrganizationCostSummaryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetOrganizationCostSummary is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) ListOrganizationUsage(context.Context, *connect.Request[v1.ListOrganizationUsageRequest]) (*connect.Response[v1.ListOrganizationUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListOrganizationUsage is not implemented"))
+func (UnimplementedBillingServiceHandler) ListOrganizationUsage(context.Context, *v1.ListOrganizationUsageRequest) (*v1.ListOrganizationUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.ListOrganizationUsage is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetProjectCost(context.Context, *connect.Request[v1.GetProjectCostRequest]) (*connect.Response[v1.GetProjectCostResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetProjectCost is not implemented"))
+func (UnimplementedBillingServiceHandler) GetProjectCost(context.Context, *v1.GetProjectCostRequest) (*v1.GetProjectCostResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetProjectCost is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) ListPlans(context.Context, *connect.Request[v1.ListPlansRequest]) (*connect.Response[v1.ListPlansResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListPlans is not implemented"))
+func (UnimplementedBillingServiceHandler) ListPlans(context.Context, *v1.ListPlansRequest) (*v1.ListPlansResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.ListPlans is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetPlan(context.Context, *connect.Request[v1.GetPlanRequest]) (*connect.Response[v1.GetPlanResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetPlan is not implemented"))
+func (UnimplementedBillingServiceHandler) GetPlan(context.Context, *v1.GetPlanRequest) (*v1.GetPlanResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetPlan is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserSubscription(context.Context, *connect.Request[v1.GetCurrentUserSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserSubscriptionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserSubscription is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserSubscription(context.Context, *v1.GetCurrentUserSubscriptionRequest) (*v1.GetCurrentUserSubscriptionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserSubscription is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) CreateCurrentUserCheckoutSession(context.Context, *connect.Request[v1.CreateCurrentUserCheckoutSessionRequest]) (*connect.Response[v1.CreateCurrentUserCheckoutSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserCheckoutSession is not implemented"))
+func (UnimplementedBillingServiceHandler) CreateCurrentUserCheckoutSession(context.Context, *v1.CreateCurrentUserCheckoutSessionRequest) (*v1.CreateCurrentUserCheckoutSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.CreateCurrentUserCheckoutSession is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) CreateCurrentUserBillingPortalSession(context.Context, *connect.Request[v1.CreateCurrentUserBillingPortalSessionRequest]) (*connect.Response[v1.CreateCurrentUserBillingPortalSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession is not implemented"))
+func (UnimplementedBillingServiceHandler) CreateCurrentUserBillingPortalSession(context.Context, *v1.CreateCurrentUserBillingPortalSessionRequest) (*v1.CreateCurrentUserBillingPortalSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListCurrentUserInvoices is not implemented"))
+func (UnimplementedBillingServiceHandler) ListCurrentUserInvoices(context.Context, *v1.ListCurrentUserInvoicesRequest) (*v1.ListCurrentUserInvoicesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.ListCurrentUserInvoices is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) ListOrgLimitChanges(context.Context, *connect.Request[v1.ListOrgLimitChangesRequest]) (*connect.Response[v1.ListOrgLimitChangesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListOrgLimitChanges is not implemented"))
+func (UnimplementedBillingServiceHandler) ListOrgLimitChanges(context.Context, *v1.ListOrgLimitChangesRequest) (*v1.ListOrgLimitChangesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.ListOrgLimitChanges is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserWalletOverview(context.Context, *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserWalletOverview is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserWalletOverview(context.Context, *v1.GetCurrentUserWalletOverviewRequest) (*v1.GetCurrentUserWalletOverviewResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserWalletOverview is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) CreateCurrentUserWalletTopupSession(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupSessionRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupSessionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession is not implemented"))
+func (UnimplementedBillingServiceHandler) CreateCurrentUserWalletTopupSession(context.Context, *v1.CreateCurrentUserWalletTopupSessionRequest) (*v1.CreateCurrentUserWalletTopupSessionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) CreateCurrentUserWalletTopupPaymentIntent(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupPaymentIntentRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupPaymentIntentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent is not implemented"))
+func (UnimplementedBillingServiceHandler) CreateCurrentUserWalletTopupPaymentIntent(context.Context, *v1.CreateCurrentUserWalletTopupPaymentIntentRequest) (*v1.CreateCurrentUserWalletTopupPaymentIntentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserWalletTopupQuote(context.Context, *connect.Request[v1.GetCurrentUserWalletTopupQuoteRequest]) (*connect.Response[v1.GetCurrentUserWalletTopupQuoteResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserWalletTopupQuote(context.Context, *v1.GetCurrentUserWalletTopupQuoteRequest) (*v1.GetCurrentUserWalletTopupQuoteResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) RedeemCoupon(context.Context, *connect.Request[v1.RedeemCouponRequest]) (*connect.Response[v1.RedeemCouponResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.RedeemCoupon is not implemented"))
+func (UnimplementedBillingServiceHandler) RedeemCoupon(context.Context, *v1.RedeemCouponRequest) (*v1.RedeemCouponResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.RedeemCoupon is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserReliantState(context.Context, *connect.Request[v1.GetCurrentUserReliantStateRequest]) (*connect.Response[v1.GetCurrentUserReliantStateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserReliantState is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserReliantState(context.Context, *v1.GetCurrentUserReliantStateRequest) (*v1.GetCurrentUserReliantStateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserReliantState is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) RepairCurrentUserReliantAccess(context.Context, *connect.Request[v1.RepairCurrentUserReliantAccessRequest]) (*connect.Response[v1.RepairCurrentUserReliantAccessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.RepairCurrentUserReliantAccess is not implemented"))
+func (UnimplementedBillingServiceHandler) RepairCurrentUserReliantAccess(context.Context, *v1.RepairCurrentUserReliantAccessRequest) (*v1.RepairCurrentUserReliantAccessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.RepairCurrentUserReliantAccess is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) RotateCurrentUserReliantAccess(context.Context, *connect.Request[v1.RotateCurrentUserReliantAccessRequest]) (*connect.Response[v1.RotateCurrentUserReliantAccessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.RotateCurrentUserReliantAccess is not implemented"))
+func (UnimplementedBillingServiceHandler) RotateCurrentUserReliantAccess(context.Context, *v1.RotateCurrentUserReliantAccessRequest) (*v1.RotateCurrentUserReliantAccessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.RotateCurrentUserReliantAccess is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserReliantOverview(context.Context, *connect.Request[v1.GetCurrentUserReliantOverviewRequest]) (*connect.Response[v1.GetCurrentUserReliantOverviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserReliantOverview is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserReliantOverview(context.Context, *v1.GetCurrentUserReliantOverviewRequest) (*v1.GetCurrentUserReliantOverviewResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserReliantOverview is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) SetCurrentUserReliantEnabled(context.Context, *connect.Request[v1.SetCurrentUserReliantEnabledRequest]) (*connect.Response[v1.SetCurrentUserReliantEnabledResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.SetCurrentUserReliantEnabled is not implemented"))
+func (UnimplementedBillingServiceHandler) SetCurrentUserReliantEnabled(context.Context, *v1.SetCurrentUserReliantEnabledRequest) (*v1.SetCurrentUserReliantEnabledResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.SetCurrentUserReliantEnabled is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserComputeSubscription(context.Context, *connect.Request[v1.GetCurrentUserComputeSubscriptionRequest]) (*connect.Response[v1.GetCurrentUserComputeSubscriptionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserComputeSubscription is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserComputeSubscription(context.Context, *v1.GetCurrentUserComputeSubscriptionRequest) (*v1.GetCurrentUserComputeSubscriptionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserComputeSubscription is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) SetCurrentUserComputeOverage(context.Context, *connect.Request[v1.SetCurrentUserComputeOverageRequest]) (*connect.Response[v1.SetCurrentUserComputeOverageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.SetCurrentUserComputeOverage is not implemented"))
+func (UnimplementedBillingServiceHandler) SetCurrentUserComputeOverage(context.Context, *v1.SetCurrentUserComputeOverageRequest) (*v1.SetCurrentUserComputeOverageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.SetCurrentUserComputeOverage is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) SetCurrentUserInfraOverage(context.Context, *connect.Request[v1.SetCurrentUserInfraOverageRequest]) (*connect.Response[v1.SetCurrentUserInfraOverageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.SetCurrentUserInfraOverage is not implemented"))
+func (UnimplementedBillingServiceHandler) SetCurrentUserInfraOverage(context.Context, *v1.SetCurrentUserInfraOverageRequest) (*v1.SetCurrentUserInfraOverageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.SetCurrentUserInfraOverage is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserInfraOverage(context.Context, *connect.Request[v1.GetCurrentUserInfraOverageRequest]) (*connect.Response[v1.GetCurrentUserInfraOverageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserInfraOverage is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserInfraOverage(context.Context, *v1.GetCurrentUserInfraOverageRequest) (*v1.GetCurrentUserInfraOverageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserInfraOverage is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) CreateCurrentUserComputeSubscriptionIntent(context.Context, *connect.Request[v1.CreateCurrentUserComputeSubscriptionIntentRequest]) (*connect.Response[v1.CreateCurrentUserComputeSubscriptionIntentResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent is not implemented"))
+func (UnimplementedBillingServiceHandler) CreateCurrentUserComputeSubscriptionIntent(context.Context, *v1.CreateCurrentUserComputeSubscriptionIntentRequest) (*v1.CreateCurrentUserComputeSubscriptionIntentResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetMachinePricingReadiness(context.Context, *connect.Request[v1.GetMachinePricingReadinessRequest]) (*connect.Response[v1.GetMachinePricingReadinessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetMachinePricingReadiness is not implemented"))
+func (UnimplementedBillingServiceHandler) GetMachinePricingReadiness(context.Context, *v1.GetMachinePricingReadinessRequest) (*v1.GetMachinePricingReadinessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetMachinePricingReadiness is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) AcceptNextMachinePricing(context.Context, *connect.Request[v1.AcceptNextMachinePricingRequest]) (*connect.Response[v1.AcceptNextMachinePricingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.AcceptNextMachinePricing is not implemented"))
+func (UnimplementedBillingServiceHandler) AcceptNextMachinePricing(context.Context, *v1.AcceptNextMachinePricingRequest) (*v1.AcceptNextMachinePricingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.AcceptNextMachinePricing is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) PreviewMachinePlanChange(context.Context, *connect.Request[v1.PreviewMachinePlanChangeRequest]) (*connect.Response[v1.PreviewMachinePlanChangeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.PreviewMachinePlanChange is not implemented"))
+func (UnimplementedBillingServiceHandler) PreviewMachinePlanChange(context.Context, *v1.PreviewMachinePlanChangeRequest) (*v1.PreviewMachinePlanChangeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.PreviewMachinePlanChange is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) ChangeMachinePlan(context.Context, *connect.Request[v1.ChangeMachinePlanRequest]) (*connect.Response[v1.ChangeMachinePlanResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ChangeMachinePlan is not implemented"))
+func (UnimplementedBillingServiceHandler) ChangeMachinePlan(context.Context, *v1.ChangeMachinePlanRequest) (*v1.ChangeMachinePlanResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.ChangeMachinePlan is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserUsageBilling(context.Context, *connect.Request[v1.GetCurrentUserUsageBillingRequest]) (*connect.Response[v1.GetCurrentUserUsageBillingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserUsageBilling is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserUsageBilling(context.Context, *v1.GetCurrentUserUsageBillingRequest) (*v1.GetCurrentUserUsageBillingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserUsageBilling is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) CreateCurrentUserUsageBillingCheckout(context.Context, *connect.Request[v1.CreateCurrentUserUsageBillingCheckoutRequest]) (*connect.Response[v1.CreateCurrentUserUsageBillingCheckoutResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout is not implemented"))
+func (UnimplementedBillingServiceHandler) CreateCurrentUserUsageBillingCheckout(context.Context, *v1.CreateCurrentUserUsageBillingCheckoutRequest) (*v1.CreateCurrentUserUsageBillingCheckoutResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserWalletAutoRecharge(context.Context, *connect.Request[v1.GetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.GetCurrentUserWalletAutoRechargeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserWalletAutoRecharge(context.Context, *v1.GetCurrentUserWalletAutoRechargeRequest) (*v1.GetCurrentUserWalletAutoRechargeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) SetCurrentUserWalletAutoRecharge(context.Context, *connect.Request[v1.SetCurrentUserWalletAutoRechargeRequest]) (*connect.Response[v1.SetCurrentUserWalletAutoRechargeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge is not implemented"))
+func (UnimplementedBillingServiceHandler) SetCurrentUserWalletAutoRecharge(context.Context, *v1.SetCurrentUserWalletAutoRechargeRequest) (*v1.SetCurrentUserWalletAutoRechargeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) CreateCurrentUserWalletPaymentMethodSetup(context.Context, *connect.Request[v1.CreateCurrentUserWalletPaymentMethodSetupRequest]) (*connect.Response[v1.CreateCurrentUserWalletPaymentMethodSetupResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup is not implemented"))
+func (UnimplementedBillingServiceHandler) CreateCurrentUserWalletPaymentMethodSetup(context.Context, *v1.CreateCurrentUserWalletPaymentMethodSetupRequest) (*v1.CreateCurrentUserWalletPaymentMethodSetupResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) ConfirmCurrentUserWalletPaymentMethod(context.Context, *connect.Request[v1.ConfirmCurrentUserWalletPaymentMethodRequest]) (*connect.Response[v1.ConfirmCurrentUserWalletPaymentMethodResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod is not implemented"))
+func (UnimplementedBillingServiceHandler) ConfirmCurrentUserWalletPaymentMethod(context.Context, *v1.ConfirmCurrentUserWalletPaymentMethodRequest) (*v1.ConfirmCurrentUserWalletPaymentMethodResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserComputeUsage(context.Context, *connect.Request[v1.GetCurrentUserComputeUsageRequest]) (*connect.Response[v1.GetCurrentUserComputeUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserComputeUsage is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserComputeUsage(context.Context, *v1.GetCurrentUserComputeUsageRequest) (*v1.GetCurrentUserComputeUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserComputeUsage is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserComputeEligibility(context.Context, *connect.Request[v1.GetCurrentUserComputeEligibilityRequest]) (*connect.Response[v1.GetCurrentUserComputeEligibilityResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserComputeEligibility is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserComputeEligibility(context.Context, *v1.GetCurrentUserComputeEligibilityRequest) (*v1.GetCurrentUserComputeEligibilityResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserComputeEligibility is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetUsageSummary(context.Context, *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetUsageSummary is not implemented"))
+func (UnimplementedBillingServiceHandler) GetUsageSummary(context.Context, *v1.GetUsageSummaryRequest) (*v1.GetUsageSummaryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetUsageSummary is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetInvoicePreview(context.Context, *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetInvoicePreview is not implemented"))
+func (UnimplementedBillingServiceHandler) GetInvoicePreview(context.Context, *v1.GetInvoicePreviewRequest) (*v1.GetInvoicePreviewResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetInvoicePreview is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) GetCurrentUserBillingEmail(context.Context, *connect.Request[v1.GetCurrentUserBillingEmailRequest]) (*connect.Response[v1.GetCurrentUserBillingEmailResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetCurrentUserBillingEmail is not implemented"))
+func (UnimplementedBillingServiceHandler) GetCurrentUserBillingEmail(context.Context, *v1.GetCurrentUserBillingEmailRequest) (*v1.GetCurrentUserBillingEmailResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.GetCurrentUserBillingEmail is not implemented")
 }
 
-func (UnimplementedBillingServiceHandler) UpdateBillingEmail(context.Context, *connect.Request[v1.UpdateBillingEmailRequest]) (*connect.Response[v1.UpdateBillingEmailResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.UpdateBillingEmail is not implemented"))
+func (UnimplementedBillingServiceHandler) UpdateBillingEmail(context.Context, *v1.UpdateBillingEmailRequest) (*v1.UpdateBillingEmailResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BillingService.UpdateBillingEmail is not implemented")
+}
+
+type billingServiceClient struct {
+	client *connect.Client
+}
+
+func (c *billingServiceClient) GetOrganizationCostSummary(ctx context.Context, req *v1.GetOrganizationCostSummaryRequest) (*v1.GetOrganizationCostSummaryResponse, error) {
+	var res v1.GetOrganizationCostSummaryResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetOrganizationCostSummarySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) ListOrganizationUsage(ctx context.Context, req *v1.ListOrganizationUsageRequest) (*v1.ListOrganizationUsageResponse, error) {
+	var res v1.ListOrganizationUsageResponse
+	if err := c.client.CallUnary(ctx, billingServiceListOrganizationUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetProjectCost(ctx context.Context, req *v1.GetProjectCostRequest) (*v1.GetProjectCostResponse, error) {
+	var res v1.GetProjectCostResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetProjectCostSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) ListPlans(ctx context.Context, req *v1.ListPlansRequest) (*v1.ListPlansResponse, error) {
+	var res v1.ListPlansResponse
+	if err := c.client.CallUnary(ctx, billingServiceListPlansSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetPlan(ctx context.Context, req *v1.GetPlanRequest) (*v1.GetPlanResponse, error) {
+	var res v1.GetPlanResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetPlanSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserSubscription(ctx context.Context, req *v1.GetCurrentUserSubscriptionRequest) (*v1.GetCurrentUserSubscriptionResponse, error) {
+	var res v1.GetCurrentUserSubscriptionResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) CreateCurrentUserCheckoutSession(ctx context.Context, req *v1.CreateCurrentUserCheckoutSessionRequest) (*v1.CreateCurrentUserCheckoutSessionResponse, error) {
+	var res v1.CreateCurrentUserCheckoutSessionResponse
+	if err := c.client.CallUnary(ctx, billingServiceCreateCurrentUserCheckoutSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) CreateCurrentUserBillingPortalSession(ctx context.Context, req *v1.CreateCurrentUserBillingPortalSessionRequest) (*v1.CreateCurrentUserBillingPortalSessionResponse, error) {
+	var res v1.CreateCurrentUserBillingPortalSessionResponse
+	if err := c.client.CallUnary(ctx, billingServiceCreateCurrentUserBillingPortalSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) ListCurrentUserInvoices(ctx context.Context, req *v1.ListCurrentUserInvoicesRequest) (*v1.ListCurrentUserInvoicesResponse, error) {
+	var res v1.ListCurrentUserInvoicesResponse
+	if err := c.client.CallUnary(ctx, billingServiceListCurrentUserInvoicesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) ListOrgLimitChanges(ctx context.Context, req *v1.ListOrgLimitChangesRequest) (*v1.ListOrgLimitChangesResponse, error) {
+	var res v1.ListOrgLimitChangesResponse
+	if err := c.client.CallUnary(ctx, billingServiceListOrgLimitChangesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserWalletOverview(ctx context.Context, req *v1.GetCurrentUserWalletOverviewRequest) (*v1.GetCurrentUserWalletOverviewResponse, error) {
+	var res v1.GetCurrentUserWalletOverviewResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserWalletOverviewSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) CreateCurrentUserWalletTopupSession(ctx context.Context, req *v1.CreateCurrentUserWalletTopupSessionRequest) (*v1.CreateCurrentUserWalletTopupSessionResponse, error) {
+	var res v1.CreateCurrentUserWalletTopupSessionResponse
+	if err := c.client.CallUnary(ctx, billingServiceCreateCurrentUserWalletTopupSessionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) CreateCurrentUserWalletTopupPaymentIntent(ctx context.Context, req *v1.CreateCurrentUserWalletTopupPaymentIntentRequest) (*v1.CreateCurrentUserWalletTopupPaymentIntentResponse, error) {
+	var res v1.CreateCurrentUserWalletTopupPaymentIntentResponse
+	if err := c.client.CallUnary(ctx, billingServiceCreateCurrentUserWalletTopupPaymentIntentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserWalletTopupQuote(ctx context.Context, req *v1.GetCurrentUserWalletTopupQuoteRequest) (*v1.GetCurrentUserWalletTopupQuoteResponse, error) {
+	var res v1.GetCurrentUserWalletTopupQuoteResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserWalletTopupQuoteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) RedeemCoupon(ctx context.Context, req *v1.RedeemCouponRequest) (*v1.RedeemCouponResponse, error) {
+	var res v1.RedeemCouponResponse
+	if err := c.client.CallUnary(ctx, billingServiceRedeemCouponSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserReliantState(ctx context.Context, req *v1.GetCurrentUserReliantStateRequest) (*v1.GetCurrentUserReliantStateResponse, error) {
+	var res v1.GetCurrentUserReliantStateResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserReliantStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) RepairCurrentUserReliantAccess(ctx context.Context, req *v1.RepairCurrentUserReliantAccessRequest) (*v1.RepairCurrentUserReliantAccessResponse, error) {
+	var res v1.RepairCurrentUserReliantAccessResponse
+	if err := c.client.CallUnary(ctx, billingServiceRepairCurrentUserReliantAccessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) RotateCurrentUserReliantAccess(ctx context.Context, req *v1.RotateCurrentUserReliantAccessRequest) (*v1.RotateCurrentUserReliantAccessResponse, error) {
+	var res v1.RotateCurrentUserReliantAccessResponse
+	if err := c.client.CallUnary(ctx, billingServiceRotateCurrentUserReliantAccessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserReliantOverview(ctx context.Context, req *v1.GetCurrentUserReliantOverviewRequest) (*v1.GetCurrentUserReliantOverviewResponse, error) {
+	var res v1.GetCurrentUserReliantOverviewResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserReliantOverviewSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) SetCurrentUserReliantEnabled(ctx context.Context, req *v1.SetCurrentUserReliantEnabledRequest) (*v1.SetCurrentUserReliantEnabledResponse, error) {
+	var res v1.SetCurrentUserReliantEnabledResponse
+	if err := c.client.CallUnary(ctx, billingServiceSetCurrentUserReliantEnabledSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserComputeSubscription(ctx context.Context, req *v1.GetCurrentUserComputeSubscriptionRequest) (*v1.GetCurrentUserComputeSubscriptionResponse, error) {
+	var res v1.GetCurrentUserComputeSubscriptionResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserComputeSubscriptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) SetCurrentUserComputeOverage(ctx context.Context, req *v1.SetCurrentUserComputeOverageRequest) (*v1.SetCurrentUserComputeOverageResponse, error) {
+	var res v1.SetCurrentUserComputeOverageResponse
+	if err := c.client.CallUnary(ctx, billingServiceSetCurrentUserComputeOverageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) SetCurrentUserInfraOverage(ctx context.Context, req *v1.SetCurrentUserInfraOverageRequest) (*v1.SetCurrentUserInfraOverageResponse, error) {
+	var res v1.SetCurrentUserInfraOverageResponse
+	if err := c.client.CallUnary(ctx, billingServiceSetCurrentUserInfraOverageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserInfraOverage(ctx context.Context, req *v1.GetCurrentUserInfraOverageRequest) (*v1.GetCurrentUserInfraOverageResponse, error) {
+	var res v1.GetCurrentUserInfraOverageResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserInfraOverageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) CreateCurrentUserComputeSubscriptionIntent(ctx context.Context, req *v1.CreateCurrentUserComputeSubscriptionIntentRequest) (*v1.CreateCurrentUserComputeSubscriptionIntentResponse, error) {
+	var res v1.CreateCurrentUserComputeSubscriptionIntentResponse
+	if err := c.client.CallUnary(ctx, billingServiceCreateCurrentUserComputeSubscriptionIntentSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetMachinePricingReadiness(ctx context.Context, req *v1.GetMachinePricingReadinessRequest) (*v1.GetMachinePricingReadinessResponse, error) {
+	var res v1.GetMachinePricingReadinessResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetMachinePricingReadinessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) AcceptNextMachinePricing(ctx context.Context, req *v1.AcceptNextMachinePricingRequest) (*v1.AcceptNextMachinePricingResponse, error) {
+	var res v1.AcceptNextMachinePricingResponse
+	if err := c.client.CallUnary(ctx, billingServiceAcceptNextMachinePricingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) PreviewMachinePlanChange(ctx context.Context, req *v1.PreviewMachinePlanChangeRequest) (*v1.PreviewMachinePlanChangeResponse, error) {
+	var res v1.PreviewMachinePlanChangeResponse
+	if err := c.client.CallUnary(ctx, billingServicePreviewMachinePlanChangeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) ChangeMachinePlan(ctx context.Context, req *v1.ChangeMachinePlanRequest) (*v1.ChangeMachinePlanResponse, error) {
+	var res v1.ChangeMachinePlanResponse
+	if err := c.client.CallUnary(ctx, billingServiceChangeMachinePlanSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserUsageBilling(ctx context.Context, req *v1.GetCurrentUserUsageBillingRequest) (*v1.GetCurrentUserUsageBillingResponse, error) {
+	var res v1.GetCurrentUserUsageBillingResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserUsageBillingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) CreateCurrentUserUsageBillingCheckout(ctx context.Context, req *v1.CreateCurrentUserUsageBillingCheckoutRequest) (*v1.CreateCurrentUserUsageBillingCheckoutResponse, error) {
+	var res v1.CreateCurrentUserUsageBillingCheckoutResponse
+	if err := c.client.CallUnary(ctx, billingServiceCreateCurrentUserUsageBillingCheckoutSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserWalletAutoRecharge(ctx context.Context, req *v1.GetCurrentUserWalletAutoRechargeRequest) (*v1.GetCurrentUserWalletAutoRechargeResponse, error) {
+	var res v1.GetCurrentUserWalletAutoRechargeResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserWalletAutoRechargeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) SetCurrentUserWalletAutoRecharge(ctx context.Context, req *v1.SetCurrentUserWalletAutoRechargeRequest) (*v1.SetCurrentUserWalletAutoRechargeResponse, error) {
+	var res v1.SetCurrentUserWalletAutoRechargeResponse
+	if err := c.client.CallUnary(ctx, billingServiceSetCurrentUserWalletAutoRechargeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) CreateCurrentUserWalletPaymentMethodSetup(ctx context.Context, req *v1.CreateCurrentUserWalletPaymentMethodSetupRequest) (*v1.CreateCurrentUserWalletPaymentMethodSetupResponse, error) {
+	var res v1.CreateCurrentUserWalletPaymentMethodSetupResponse
+	if err := c.client.CallUnary(ctx, billingServiceCreateCurrentUserWalletPaymentMethodSetupSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) ConfirmCurrentUserWalletPaymentMethod(ctx context.Context, req *v1.ConfirmCurrentUserWalletPaymentMethodRequest) (*v1.ConfirmCurrentUserWalletPaymentMethodResponse, error) {
+	var res v1.ConfirmCurrentUserWalletPaymentMethodResponse
+	if err := c.client.CallUnary(ctx, billingServiceConfirmCurrentUserWalletPaymentMethodSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserComputeUsage(ctx context.Context, req *v1.GetCurrentUserComputeUsageRequest) (*v1.GetCurrentUserComputeUsageResponse, error) {
+	var res v1.GetCurrentUserComputeUsageResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserComputeUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserComputeEligibility(ctx context.Context, req *v1.GetCurrentUserComputeEligibilityRequest) (*v1.GetCurrentUserComputeEligibilityResponse, error) {
+	var res v1.GetCurrentUserComputeEligibilityResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserComputeEligibilitySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetUsageSummary(ctx context.Context, req *v1.GetUsageSummaryRequest) (*v1.GetUsageSummaryResponse, error) {
+	var res v1.GetUsageSummaryResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetUsageSummarySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetInvoicePreview(ctx context.Context, req *v1.GetInvoicePreviewRequest) (*v1.GetInvoicePreviewResponse, error) {
+	var res v1.GetInvoicePreviewResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetInvoicePreviewSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) GetCurrentUserBillingEmail(ctx context.Context, req *v1.GetCurrentUserBillingEmailRequest) (*v1.GetCurrentUserBillingEmailResponse, error) {
+	var res v1.GetCurrentUserBillingEmailResponse
+	if err := c.client.CallUnary(ctx, billingServiceGetCurrentUserBillingEmailSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *billingServiceClient) UpdateBillingEmail(ctx context.Context, req *v1.UpdateBillingEmailRequest) (*v1.UpdateBillingEmailResponse, error) {
+	var res v1.UpdateBillingEmailResponse
+	if err := c.client.CallUnary(ctx, billingServiceUpdateBillingEmailSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type billingServiceHandler struct{ svc BillingServiceHandler }
+
+func (h billingServiceHandler) getOrganizationCostSummary(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetOrganizationCostSummaryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetOrganizationCostSummary(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) listOrganizationUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOrganizationUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOrganizationUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getProjectCost(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetProjectCostRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetProjectCost(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) listPlans(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPlansRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPlans(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getPlan(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPlanRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPlan(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) createCurrentUserCheckoutSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCurrentUserCheckoutSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCurrentUserCheckoutSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) createCurrentUserBillingPortalSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCurrentUserBillingPortalSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCurrentUserBillingPortalSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) listCurrentUserInvoices(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListCurrentUserInvoicesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListCurrentUserInvoices(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) listOrgLimitChanges(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOrgLimitChangesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOrgLimitChanges(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserWalletOverview(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserWalletOverviewRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserWalletOverview(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) createCurrentUserWalletTopupSession(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCurrentUserWalletTopupSessionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCurrentUserWalletTopupSession(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) createCurrentUserWalletTopupPaymentIntent(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCurrentUserWalletTopupPaymentIntentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCurrentUserWalletTopupPaymentIntent(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserWalletTopupQuote(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserWalletTopupQuoteRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserWalletTopupQuote(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) redeemCoupon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RedeemCouponRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RedeemCoupon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserReliantState(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserReliantStateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserReliantState(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) repairCurrentUserReliantAccess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RepairCurrentUserReliantAccessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RepairCurrentUserReliantAccess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) rotateCurrentUserReliantAccess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RotateCurrentUserReliantAccessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RotateCurrentUserReliantAccess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserReliantOverview(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserReliantOverviewRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserReliantOverview(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) setCurrentUserReliantEnabled(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetCurrentUserReliantEnabledRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetCurrentUserReliantEnabled(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserComputeSubscription(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserComputeSubscriptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserComputeSubscription(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) setCurrentUserComputeOverage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetCurrentUserComputeOverageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetCurrentUserComputeOverage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) setCurrentUserInfraOverage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetCurrentUserInfraOverageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetCurrentUserInfraOverage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserInfraOverage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserInfraOverageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserInfraOverage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) createCurrentUserComputeSubscriptionIntent(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCurrentUserComputeSubscriptionIntentRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCurrentUserComputeSubscriptionIntent(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getMachinePricingReadiness(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetMachinePricingReadinessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetMachinePricingReadiness(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) acceptNextMachinePricing(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AcceptNextMachinePricingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AcceptNextMachinePricing(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) previewMachinePlanChange(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PreviewMachinePlanChangeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PreviewMachinePlanChange(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) changeMachinePlan(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ChangeMachinePlanRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ChangeMachinePlan(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserUsageBilling(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserUsageBillingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserUsageBilling(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) createCurrentUserUsageBillingCheckout(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCurrentUserUsageBillingCheckoutRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCurrentUserUsageBillingCheckout(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserWalletAutoRecharge(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserWalletAutoRechargeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserWalletAutoRecharge(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) setCurrentUserWalletAutoRecharge(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetCurrentUserWalletAutoRechargeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetCurrentUserWalletAutoRecharge(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) createCurrentUserWalletPaymentMethodSetup(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCurrentUserWalletPaymentMethodSetupRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCurrentUserWalletPaymentMethodSetup(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) confirmCurrentUserWalletPaymentMethod(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ConfirmCurrentUserWalletPaymentMethodRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ConfirmCurrentUserWalletPaymentMethod(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserComputeUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserComputeUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserComputeUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserComputeEligibility(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserComputeEligibilityRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserComputeEligibility(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getUsageSummary(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetUsageSummaryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetUsageSummary(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getInvoicePreview(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetInvoicePreviewRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetInvoicePreview(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) getCurrentUserBillingEmail(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserBillingEmailRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUserBillingEmail(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h billingServiceHandler) updateBillingEmail(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateBillingEmailRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateBillingEmail(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

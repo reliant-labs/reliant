@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,10 +15,10 @@ import (
 func getCELCompletions(t *testing.T) *reliantv1.GetCELCompletionsResponse {
 	t.Helper()
 	svc := NewTestCatalog(t) // GetCELCompletions uses no external deps
-	resp, err := svc.GetCELCompletions(context.Background(), connect.NewRequest(&reliantv1.GetCELCompletionsRequest{}))
+	resp, err := svc.GetCELCompletions(context.Background(), &reliantv1.GetCELCompletionsRequest{})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	return resp.Msg
+	return resp
 }
 
 func TestGetCELCompletions_ReturnsNonEmptyData(t *testing.T) {
@@ -132,16 +131,16 @@ func TestGetCELCompletions_NodeOutputSchemas(t *testing.T) {
 func TestGetCELCompletions_Idempotent(t *testing.T) {
 	svc := NewTestCatalog(t)
 	ctx := context.Background()
-	req := connect.NewRequest(&reliantv1.GetCELCompletionsRequest{})
+	req := &reliantv1.GetCELCompletionsRequest{}
 
 	resp1, err := svc.GetCELCompletions(ctx, req)
 	require.NoError(t, err)
 
-	resp2, err := svc.GetCELCompletions(ctx, connect.NewRequest(&reliantv1.GetCELCompletionsRequest{}))
+	resp2, err := svc.GetCELCompletions(ctx, &reliantv1.GetCELCompletionsRequest{})
 	require.NoError(t, err)
 
 	// Same pointer — sync.Once caching guarantees identical object.
-	assert.Same(t, resp1.Msg, resp2.Msg, "cached response should return the same pointer")
+	assert.Same(t, resp1, resp2, "cached response should return the same pointer")
 }
 
 // fieldNamesFromCELFields extracts field names from a slice of CELFieldInfo.

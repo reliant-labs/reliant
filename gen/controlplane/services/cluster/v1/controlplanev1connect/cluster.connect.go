@@ -11,58 +11,79 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/cluster/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ClusterServiceName is the fully-qualified name of the ClusterService service.
 	ClusterServiceName = "controlplane.v1.ClusterService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ClusterServiceListClustersProcedure is the fully-qualified name of the ClusterService's
-	// ListClusters RPC.
-	ClusterServiceListClustersProcedure = "/controlplane.v1.ClusterService/ListClusters"
-	// ClusterServiceGetClusterProcedure is the fully-qualified name of the ClusterService's GetCluster
+	// ClusterServiceListClustersProcedure is the procedure name of the ClusterService's ListClusters
 	// RPC.
+	ClusterServiceListClustersProcedure = "/controlplane.v1.ClusterService/ListClusters"
+	// ClusterServiceGetClusterProcedure is the procedure name of the ClusterService's GetCluster RPC.
 	ClusterServiceGetClusterProcedure = "/controlplane.v1.ClusterService/GetCluster"
-	// ClusterServiceRemoveClusterProcedure is the fully-qualified name of the ClusterService's
-	// RemoveCluster RPC.
+	// ClusterServiceRemoveClusterProcedure is the procedure name of the ClusterService's RemoveCluster
+	// RPC.
 	ClusterServiceRemoveClusterProcedure = "/controlplane.v1.ClusterService/RemoveCluster"
-	// ClusterServiceConnectClusterProcedure is the fully-qualified name of the ClusterService's
+	// ClusterServiceConnectClusterProcedure is the procedure name of the ClusterService's
 	// ConnectCluster RPC.
 	ClusterServiceConnectClusterProcedure = "/controlplane.v1.ClusterService/ConnectCluster"
+)
+
+var (
+	clusterServiceListClustersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_cluster_v1_cluster_proto.Services().ByName("ClusterService").Methods().ByName("ListClusters"),
+			Procedure:  ClusterServiceListClustersProcedure,
+		}
+	})
+	clusterServiceGetClusterSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_cluster_v1_cluster_proto.Services().ByName("ClusterService").Methods().ByName("GetCluster"),
+			Procedure:  ClusterServiceGetClusterProcedure,
+		}
+	})
+	clusterServiceRemoveClusterSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_cluster_v1_cluster_proto.Services().ByName("ClusterService").Methods().ByName("RemoveCluster"),
+			Procedure:  ClusterServiceRemoveClusterProcedure,
+		}
+	})
+	clusterServiceConnectClusterSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_cluster_v1_cluster_proto.Services().ByName("ClusterService").Methods().ByName("ConnectCluster"),
+			Procedure:  ClusterServiceConnectClusterProcedure,
+		}
+	})
 )
 
 // ClusterServiceClient is a client for the controlplane.v1.ClusterService service.
 type ClusterServiceClient interface {
 	// ListClusters returns every live cluster of the caller's org, by name.
-	ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error)
+	ListClusters(context.Context, *v1.ListClustersRequest) (*v1.ListClustersResponse, error)
 	// GetCluster returns one cluster of the caller's org.
-	GetCluster(context.Context, *connect.Request[v1.GetClusterRequest]) (*connect.Response[v1.GetClusterResponse], error)
+	GetCluster(context.Context, *v1.GetClusterRequest) (*v1.GetClusterResponse, error)
 	// RemoveCluster disconnects a BYO cluster, dropping its stored connection
 	// material, and frees its name. REFUSED (FailedPrecondition)
 	// while any live environment references the cluster.
-	RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error)
+	RemoveCluster(context.Context, *v1.RemoveClusterRequest) (*v1.RemoveClusterResponse, error)
 	// ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
 	//
 	// The platform is told the address, the CA and the scoped ServiceAccount
@@ -77,85 +98,25 @@ type ClusterServiceClient interface {
 	// connect command safe to put in a script, and it is why there is no
 	// separate UpdateCluster: a second spelling of the same write could
 	// disagree with this one about what a partial request means.
-	ConnectCluster(context.Context, *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error)
+	ConnectCluster(context.Context, *v1.ConnectClusterRequest) (*v1.ConnectClusterResponse, error)
 }
 
-// NewClusterServiceClient constructs a client for the controlplane.v1.ClusterService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewClusterServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ClusterServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	clusterServiceMethods := v1.File_services_cluster_v1_cluster_proto.Services().ByName("ClusterService").Methods()
-	return &clusterServiceClient{
-		listClusters: connect.NewClient[v1.ListClustersRequest, v1.ListClustersResponse](
-			httpClient,
-			baseURL+ClusterServiceListClustersProcedure,
-			connect.WithSchema(clusterServiceMethods.ByName("ListClusters")),
-			connect.WithClientOptions(opts...),
-		),
-		getCluster: connect.NewClient[v1.GetClusterRequest, v1.GetClusterResponse](
-			httpClient,
-			baseURL+ClusterServiceGetClusterProcedure,
-			connect.WithSchema(clusterServiceMethods.ByName("GetCluster")),
-			connect.WithClientOptions(opts...),
-		),
-		removeCluster: connect.NewClient[v1.RemoveClusterRequest, v1.RemoveClusterResponse](
-			httpClient,
-			baseURL+ClusterServiceRemoveClusterProcedure,
-			connect.WithSchema(clusterServiceMethods.ByName("RemoveCluster")),
-			connect.WithClientOptions(opts...),
-		),
-		connectCluster: connect.NewClient[v1.ConnectClusterRequest, v1.ConnectClusterResponse](
-			httpClient,
-			baseURL+ClusterServiceConnectClusterProcedure,
-			connect.WithSchema(clusterServiceMethods.ByName("ConnectCluster")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// clusterServiceClient implements ClusterServiceClient.
-type clusterServiceClient struct {
-	listClusters   *connect.Client[v1.ListClustersRequest, v1.ListClustersResponse]
-	getCluster     *connect.Client[v1.GetClusterRequest, v1.GetClusterResponse]
-	removeCluster  *connect.Client[v1.RemoveClusterRequest, v1.RemoveClusterResponse]
-	connectCluster *connect.Client[v1.ConnectClusterRequest, v1.ConnectClusterResponse]
-}
-
-// ListClusters calls controlplane.v1.ClusterService.ListClusters.
-func (c *clusterServiceClient) ListClusters(ctx context.Context, req *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error) {
-	return c.listClusters.CallUnary(ctx, req)
-}
-
-// GetCluster calls controlplane.v1.ClusterService.GetCluster.
-func (c *clusterServiceClient) GetCluster(ctx context.Context, req *connect.Request[v1.GetClusterRequest]) (*connect.Response[v1.GetClusterResponse], error) {
-	return c.getCluster.CallUnary(ctx, req)
-}
-
-// RemoveCluster calls controlplane.v1.ClusterService.RemoveCluster.
-func (c *clusterServiceClient) RemoveCluster(ctx context.Context, req *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error) {
-	return c.removeCluster.CallUnary(ctx, req)
-}
-
-// ConnectCluster calls controlplane.v1.ClusterService.ConnectCluster.
-func (c *clusterServiceClient) ConnectCluster(ctx context.Context, req *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error) {
-	return c.connectCluster.CallUnary(ctx, req)
+// NewClusterServiceClient constructs a client for the controlplane.v1.ClusterService service.
+// Multiple service clients may share a single connect.Client.
+func NewClusterServiceClient(client *connect.Client) ClusterServiceClient {
+	return &clusterServiceClient{client: client}
 }
 
 // ClusterServiceHandler is an implementation of the controlplane.v1.ClusterService service.
 type ClusterServiceHandler interface {
 	// ListClusters returns every live cluster of the caller's org, by name.
-	ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error)
+	ListClusters(context.Context, *v1.ListClustersRequest) (*v1.ListClustersResponse, error)
 	// GetCluster returns one cluster of the caller's org.
-	GetCluster(context.Context, *connect.Request[v1.GetClusterRequest]) (*connect.Response[v1.GetClusterResponse], error)
+	GetCluster(context.Context, *v1.GetClusterRequest) (*v1.GetClusterResponse, error)
 	// RemoveCluster disconnects a BYO cluster, dropping its stored connection
 	// material, and frees its name. REFUSED (FailedPrecondition)
 	// while any live environment references the cluster.
-	RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error)
+	RemoveCluster(context.Context, *v1.RemoveClusterRequest) (*v1.RemoveClusterResponse, error)
 	// ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
 	//
 	// The platform is told the address, the CA and the scoped ServiceAccount
@@ -170,71 +131,122 @@ type ClusterServiceHandler interface {
 	// connect command safe to put in a script, and it is why there is no
 	// separate UpdateCluster: a second spelling of the same write could
 	// disagree with this one about what a partial request means.
-	ConnectCluster(context.Context, *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error)
+	ConnectCluster(context.Context, *v1.ConnectClusterRequest) (*v1.ConnectClusterResponse, error)
 }
 
-// NewClusterServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewClusterServiceHandler(svc ClusterServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	clusterServiceMethods := v1.File_services_cluster_v1_cluster_proto.Services().ByName("ClusterService").Methods()
-	clusterServiceListClustersHandler := connect.NewUnaryHandler(
-		ClusterServiceListClustersProcedure,
-		svc.ListClusters,
-		connect.WithSchema(clusterServiceMethods.ByName("ListClusters")),
-		connect.WithHandlerOptions(opts...),
+// RegisterClusterServiceHandler registers svc as the controlplane.v1.ClusterService implementation
+// on server.
+func RegisterClusterServiceHandler(server *connect.Server, svc ClusterServiceHandler) {
+	adapter := clusterServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: clusterServiceListClustersSpec(), Handler: adapter.listClusters},
+		connect.Method{Spec: clusterServiceGetClusterSpec(), Handler: adapter.getCluster},
+		connect.Method{Spec: clusterServiceRemoveClusterSpec(), Handler: adapter.removeCluster},
+		connect.Method{Spec: clusterServiceConnectClusterSpec(), Handler: adapter.connectCluster},
 	)
-	clusterServiceGetClusterHandler := connect.NewUnaryHandler(
-		ClusterServiceGetClusterProcedure,
-		svc.GetCluster,
-		connect.WithSchema(clusterServiceMethods.ByName("GetCluster")),
-		connect.WithHandlerOptions(opts...),
-	)
-	clusterServiceRemoveClusterHandler := connect.NewUnaryHandler(
-		ClusterServiceRemoveClusterProcedure,
-		svc.RemoveCluster,
-		connect.WithSchema(clusterServiceMethods.ByName("RemoveCluster")),
-		connect.WithHandlerOptions(opts...),
-	)
-	clusterServiceConnectClusterHandler := connect.NewUnaryHandler(
-		ClusterServiceConnectClusterProcedure,
-		svc.ConnectCluster,
-		connect.WithSchema(clusterServiceMethods.ByName("ConnectCluster")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.ClusterService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ClusterServiceListClustersProcedure:
-			clusterServiceListClustersHandler.ServeHTTP(w, r)
-		case ClusterServiceGetClusterProcedure:
-			clusterServiceGetClusterHandler.ServeHTTP(w, r)
-		case ClusterServiceRemoveClusterProcedure:
-			clusterServiceRemoveClusterHandler.ServeHTTP(w, r)
-		case ClusterServiceConnectClusterProcedure:
-			clusterServiceConnectClusterHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedClusterServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedClusterServiceHandler struct{}
 
-func (UnimplementedClusterServiceHandler) ListClusters(context.Context, *connect.Request[v1.ListClustersRequest]) (*connect.Response[v1.ListClustersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.ListClusters is not implemented"))
+func (UnimplementedClusterServiceHandler) ListClusters(context.Context, *v1.ListClustersRequest) (*v1.ListClustersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClusterService.ListClusters is not implemented")
 }
 
-func (UnimplementedClusterServiceHandler) GetCluster(context.Context, *connect.Request[v1.GetClusterRequest]) (*connect.Response[v1.GetClusterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.GetCluster is not implemented"))
+func (UnimplementedClusterServiceHandler) GetCluster(context.Context, *v1.GetClusterRequest) (*v1.GetClusterResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClusterService.GetCluster is not implemented")
 }
 
-func (UnimplementedClusterServiceHandler) RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.RemoveCluster is not implemented"))
+func (UnimplementedClusterServiceHandler) RemoveCluster(context.Context, *v1.RemoveClusterRequest) (*v1.RemoveClusterResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClusterService.RemoveCluster is not implemented")
 }
 
-func (UnimplementedClusterServiceHandler) ConnectCluster(context.Context, *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ClusterService.ConnectCluster is not implemented"))
+func (UnimplementedClusterServiceHandler) ConnectCluster(context.Context, *v1.ConnectClusterRequest) (*v1.ConnectClusterResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.ClusterService.ConnectCluster is not implemented")
+}
+
+type clusterServiceClient struct {
+	client *connect.Client
+}
+
+func (c *clusterServiceClient) ListClusters(ctx context.Context, req *v1.ListClustersRequest) (*v1.ListClustersResponse, error) {
+	var res v1.ListClustersResponse
+	if err := c.client.CallUnary(ctx, clusterServiceListClustersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *clusterServiceClient) GetCluster(ctx context.Context, req *v1.GetClusterRequest) (*v1.GetClusterResponse, error) {
+	var res v1.GetClusterResponse
+	if err := c.client.CallUnary(ctx, clusterServiceGetClusterSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *clusterServiceClient) RemoveCluster(ctx context.Context, req *v1.RemoveClusterRequest) (*v1.RemoveClusterResponse, error) {
+	var res v1.RemoveClusterResponse
+	if err := c.client.CallUnary(ctx, clusterServiceRemoveClusterSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *clusterServiceClient) ConnectCluster(ctx context.Context, req *v1.ConnectClusterRequest) (*v1.ConnectClusterResponse, error) {
+	var res v1.ConnectClusterResponse
+	if err := c.client.CallUnary(ctx, clusterServiceConnectClusterSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type clusterServiceHandler struct{ svc ClusterServiceHandler }
+
+func (h clusterServiceHandler) listClusters(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListClustersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListClusters(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h clusterServiceHandler) getCluster(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetClusterRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCluster(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h clusterServiceHandler) removeCluster(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RemoveClusterRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RemoveCluster(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h clusterServiceHandler) connectCluster(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ConnectClusterRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ConnectCluster(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

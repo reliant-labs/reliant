@@ -3,27 +3,25 @@ package connection
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 )
 
-func (s *Service) ListConnections(ctx context.Context, req *connect.Request[reliantv1.ListConnectionsRequest]) (*connect.Response[reliantv1.ListConnectionsResponse], error) {
+func (s *Service) ListConnections(ctx context.Context, req *reliantv1.ListConnectionsRequest) (*reliantv1.ListConnectionsResponse, error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	cs, err := s.deps.Connections.List(ctx, userID, req.Msg.GetIntegrationId())
+	cs, err := s.deps.Connections.List(ctx, userID, req.GetIntegrationId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	// The org's own connections only when the request names the org: an old
 	// client, which never does, sees exactly its own, as before.
-	org := req.Msg.GetOrgId()
+	org := req.GetOrgId()
 	if org != "" {
-		orgs, err := s.deps.Connections.ListOrg(ctx, userID, org, req.Msg.GetIntegrationId())
+		orgs, err := s.deps.Connections.ListOrg(ctx, userID, org, req.GetIntegrationId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 		}
@@ -35,7 +33,7 @@ func (s *Service) ListConnections(ctx context.Context, req *connect.Request[reli
 	}
 	// ListOrg has established the caller is a live member of org.
 	if org != "" {
-		out = append(out, s.orgGitHubApps(ctx, org, req.Msg.GetIntegrationId())...)
+		out = append(out, s.orgGitHubApps(ctx, org, req.GetIntegrationId())...)
 	}
-	return connect.NewResponse(&reliantv1.ListConnectionsResponse{Connections: out}), nil
+	return &reliantv1.ListConnectionsResponse{Connections: out}, nil
 }

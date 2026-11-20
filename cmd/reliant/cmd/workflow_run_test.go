@@ -9,7 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,11 +25,11 @@ type fakeRunChatService struct {
 	got *reliantv1.StartChatRequest
 }
 
-func (f *fakeRunChatService) StartChat(_ context.Context, r *connect.Request[reliantv1.StartChatRequest]) (*connect.Response[reliantv1.StartChatResponse], error) {
-	f.got = r.Msg
-	return connect.NewResponse(&reliantv1.StartChatResponse{
-		Chat: &reliantv1.Chat{Id: "chat-1", Title: r.Msg.GetTitle()},
-	}), nil
+func (f *fakeRunChatService) StartChat(_ context.Context, r *reliantv1.StartChatRequest) (*reliantv1.StartChatResponse, error) {
+	f.got = r
+	return &reliantv1.StartChatResponse{
+		Chat: &reliantv1.Chat{Id: "chat-1", Title: r.GetTitle()},
+	}, nil
 }
 
 // runWorkflowRunCmd runs `reliant workflow run` against a fake ChatService and
@@ -47,7 +50,9 @@ func execWorkflowRunCmd(t *testing.T, register func(*http.ServeMux), args ...str
 	isolateForgeCredHome(t)
 	fake := &fakeRunChatService{}
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewChatServiceHandler(fake))
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterChatServiceHandler(server, fake)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	if register != nil {
 		register(mux)
 	}
@@ -69,11 +74,11 @@ type fakeRunDaemons struct {
 	reliantv1connect.UnimplementedDaemonRegistryServiceHandler
 }
 
-func (fakeRunDaemons) ListDaemons(context.Context, *connect.Request[reliantv1.ListDaemonsRequest]) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
-	return connect.NewResponse(&reliantv1.ListDaemonsResponse{Daemons: []*reliantv1.DaemonInfo{
+func (fakeRunDaemons) ListDaemons(context.Context, *reliantv1.ListDaemonsRequest) (*reliantv1.ListDaemonsResponse, error) {
+	return &reliantv1.ListDaemonsResponse{Daemons: []*reliantv1.DaemonInfo{
 		{DaemonId: "d-laptop", Hostname: "laptop"},
 		{DaemonId: "d-cloud", Hostname: "cloud"},
-	}}), nil
+	}}, nil
 }
 
 type fakeRunProjects struct {
@@ -81,8 +86,8 @@ type fakeRunProjects struct {
 	rows []*reliantv1.ProjectDaemon
 }
 
-func (f fakeRunProjects) ListProjectDaemons(context.Context, *connect.Request[reliantv1.ListProjectDaemonsRequest]) (*connect.Response[reliantv1.ListProjectDaemonsResponse], error) {
-	return connect.NewResponse(&reliantv1.ListProjectDaemonsResponse{ProjectDaemons: f.rows}), nil
+func (f fakeRunProjects) ListProjectDaemons(context.Context, *reliantv1.ListProjectDaemonsRequest) (*reliantv1.ListProjectDaemonsResponse, error) {
+	return &reliantv1.ListProjectDaemonsResponse{ProjectDaemons: f.rows}, nil
 }
 
 // --project-id wins over --project-path, so nothing looks the project up on
@@ -93,8 +98,11 @@ func TestWorkflowRun_ProjectIDWithDaemonNeedsTheProjectOnThatMachine(t *testing.
 	installing := reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLING
 	mounts := func(rows ...*reliantv1.ProjectDaemon) func(*http.ServeMux) {
 		return func(mux *http.ServeMux) {
-			mux.Handle(reliantv1connect.NewDaemonRegistryServiceHandler(fakeRunDaemons{}))
-			mux.Handle(reliantv1connect.NewProjectServiceHandler(fakeRunProjects{rows: rows}))
+			server := connect.NewServer(svcerr.InterceptorV2())
+			reliantv1connect.RegisterDaemonRegistryServiceHandler(server, fakeRunDaemons{})
+			reliantv1connect.RegisterProjectServiceHandler(server, fakeRunProjects{rows: rows})
+			mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
+
 		}
 	}
 

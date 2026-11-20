@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -203,17 +203,17 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 	}))
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID,
 		Name:      "slow-worktree",
 		Branch:    "slow-worktree",
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Worktree)
+	require.NotNil(t, resp.Worktree)
 
 	// The daemon command runs on the detached goroutine, so wait for creation
 	// to settle before reading what timeout it used.
-	awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	assert.Equal(t, worktreeDaemonCommandTimeoutMs, router.timeoutFor("worktree.create"))
 	assert.Greater(t, router.timeoutFor("worktree.create"), int32(30_000))
@@ -255,17 +255,17 @@ func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
 	}))
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID,
 		Name:      "owned-worktree",
 		Branch:    "owned-worktree",
-	}))
+	})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Worktree)
+	require.NotNil(t, resp.Worktree)
 
 	// Assert against the settled row rather than the CREATING one: the owning
 	// daemon must survive the async completion, not just the initial insert.
-	stored := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	stored := awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	// The mock router's ResolveDaemonID returns "test-daemon-id".
 	require.NotNil(t, stored.DaemonID, "worktree must record its owning daemon")
 	assert.Equal(t, "test-daemon-id", *stored.DaemonID)
@@ -331,13 +331,13 @@ func TestRevertFiles_DeletesNestedUntrackedFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(nestedAbsPath, []byte("temp\n"), 0644))
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := svc.RevertFiles(ctx, connect.NewRequest(&reliantv1.RevertFilesRequest{
+	resp, err := svc.RevertFiles(ctx, &reliantv1.RevertFilesRequest{
 		WorktreeId: worktreeID,
 		Files:      []string{nestedRelPath},
-	}))
+	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	assert.Contains(t, resp.Msg.Files, nestedRelPath)
+	assert.Contains(t, resp.Files, nestedRelPath)
 
 	_, statErr := os.Stat(nestedAbsPath)
 	assert.True(t, os.IsNotExist(statErr), "expected nested untracked file to be deleted")
@@ -350,12 +350,12 @@ func TestRevertFiles_ReturnsFailedPreconditionWhenAllRequestedFilesFail(t *testi
 	svc, userID, worktreeID := setupTestWorktreeServiceForRevert(t)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	_, err := svc.RevertFiles(ctx, connect.NewRequest(&reliantv1.RevertFilesRequest{
+	_, err := svc.RevertFiles(ctx, &reliantv1.RevertFilesRequest{
 		WorktreeId: worktreeID,
 		Files:      []string{"does-not-exist.txt"},
-	}))
+	})
 	require.Error(t, err)
 
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "file not in changed state")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "file not in changed state")
 }

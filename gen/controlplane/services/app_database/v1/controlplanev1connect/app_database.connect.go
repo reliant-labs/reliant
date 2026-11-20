@@ -5,59 +5,98 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/app_database/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AppDatabaseServiceName is the fully-qualified name of the AppDatabaseService service.
 	AppDatabaseServiceName = "controlplane.v1.AppDatabaseService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AppDatabaseServiceQueryDatabaseProcedure is the fully-qualified name of the AppDatabaseService's
+	// AppDatabaseServiceQueryDatabaseProcedure is the procedure name of the AppDatabaseService's
 	// QueryDatabase RPC.
 	AppDatabaseServiceQueryDatabaseProcedure = "/controlplane.v1.AppDatabaseService/QueryDatabase"
-	// AppDatabaseServiceQueryDatabasePanelProcedure is the fully-qualified name of the
-	// AppDatabaseService's QueryDatabasePanel RPC.
+	// AppDatabaseServiceQueryDatabasePanelProcedure is the procedure name of the AppDatabaseService's
+	// QueryDatabasePanel RPC.
 	AppDatabaseServiceQueryDatabasePanelProcedure = "/controlplane.v1.AppDatabaseService/QueryDatabasePanel"
-	// AppDatabaseServiceListDashboardDatabasesProcedure is the fully-qualified name of the
+	// AppDatabaseServiceListDashboardDatabasesProcedure is the procedure name of the
 	// AppDatabaseService's ListDashboardDatabases RPC.
 	AppDatabaseServiceListDashboardDatabasesProcedure = "/controlplane.v1.AppDatabaseService/ListDashboardDatabases"
-	// AppDatabaseServiceListBrowsableDatabasesProcedure is the fully-qualified name of the
+	// AppDatabaseServiceListBrowsableDatabasesProcedure is the procedure name of the
 	// AppDatabaseService's ListBrowsableDatabases RPC.
 	AppDatabaseServiceListBrowsableDatabasesProcedure = "/controlplane.v1.AppDatabaseService/ListBrowsableDatabases"
-	// AppDatabaseServiceDescribeDatabaseProcedure is the fully-qualified name of the
-	// AppDatabaseService's DescribeDatabase RPC.
+	// AppDatabaseServiceDescribeDatabaseProcedure is the procedure name of the AppDatabaseService's
+	// DescribeDatabase RPC.
 	AppDatabaseServiceDescribeDatabaseProcedure = "/controlplane.v1.AppDatabaseService/DescribeDatabase"
-	// AppDatabaseServiceBrowseTableProcedure is the fully-qualified name of the AppDatabaseService's
+	// AppDatabaseServiceBrowseTableProcedure is the procedure name of the AppDatabaseService's
 	// BrowseTable RPC.
 	AppDatabaseServiceBrowseTableProcedure = "/controlplane.v1.AppDatabaseService/BrowseTable"
+)
+
+var (
+	appDatabaseServiceQueryDatabaseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_app_database_v1_app_database_proto.Services().ByName("AppDatabaseService").Methods().ByName("QueryDatabase"),
+			Procedure:  AppDatabaseServiceQueryDatabaseProcedure,
+		}
+	})
+	appDatabaseServiceQueryDatabasePanelSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_app_database_v1_app_database_proto.Services().ByName("AppDatabaseService").Methods().ByName("QueryDatabasePanel"),
+			Procedure:  AppDatabaseServiceQueryDatabasePanelProcedure,
+		}
+	})
+	appDatabaseServiceListDashboardDatabasesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_app_database_v1_app_database_proto.Services().ByName("AppDatabaseService").Methods().ByName("ListDashboardDatabases"),
+			Procedure:  AppDatabaseServiceListDashboardDatabasesProcedure,
+		}
+	})
+	appDatabaseServiceListBrowsableDatabasesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_app_database_v1_app_database_proto.Services().ByName("AppDatabaseService").Methods().ByName("ListBrowsableDatabases"),
+			Procedure:        AppDatabaseServiceListBrowsableDatabasesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	appDatabaseServiceDescribeDatabaseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_app_database_v1_app_database_proto.Services().ByName("AppDatabaseService").Methods().ByName("DescribeDatabase"),
+			Procedure:        AppDatabaseServiceDescribeDatabaseProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	appDatabaseServiceBrowseTableSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_services_app_database_v1_app_database_proto.Services().ByName("AppDatabaseService").Methods().ByName("BrowseTable"),
+			Procedure:        AppDatabaseServiceBrowseTableProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // AppDatabaseServiceClient is a client for the controlplane.v1.AppDatabaseService service.
 type AppDatabaseServiceClient interface {
 	// QueryDatabase runs one read-only statement and returns its rows, bounded by
 	// max_rows and timeout_ms.
-	QueryDatabase(context.Context, *connect.Request[v1.QueryDatabaseRequest]) (*connect.Response[v1.QueryDatabaseResponse], error)
+	QueryDatabase(context.Context, *v1.QueryDatabaseRequest) (*v1.QueryDatabaseResponse, error)
 	// QueryDatabasePanel runs one dashboard panel's read-only statement as the
 	// database's dashboard role and returns it folded for drawing: a time series
 	// when draw is "line" (or "auto" and the first column is a time), otherwise
@@ -66,13 +105,13 @@ type AppDatabaseServiceClient interface {
 	// Not declared as an activity: a panel refreshes every minute, so the handler
 	// records one dashboard_db_access event per person, dashboard, environment
 	// and day instead. The audit_log row is written for every request.
-	QueryDatabasePanel(context.Context, *connect.Request[v1.QueryDatabasePanelRequest]) (*connect.Response[v1.QueryDatabasePanelResponse], error)
+	QueryDatabasePanel(context.Context, *v1.QueryDatabasePanelRequest) (*v1.QueryDatabasePanelResponse, error)
 	// ListDashboardDatabases returns the environment's databases that have
 	// dashboards enabled, their limits, and the tables and columns the dashboard
 	// role may SELECT (the editor's schema browser). Same admission as
 	// QueryDatabasePanel, without the database/placement steps for databases that
 	// are not enabled: those are simply absent.
-	ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error)
+	ListDashboardDatabases(context.Context, *v1.ListDashboardDatabasesRequest) (*v1.ListDashboardDatabasesResponse, error)
 	// ListBrowsableDatabases returns every database of the environment the data
 	// browser can offer: each managed and each external database, the policy a
 	// read of it runs under, and whether the control plane can reach it. Reads
@@ -86,7 +125,7 @@ type AppDatabaseServiceClient interface {
 	// FailedPrecondition reason "shape_unknown" (the environment has not
 	// recorded what it deploys yet, so its databases are not known),
 	// Unavailable (browsing is not configured on this server).
-	ListBrowsableDatabases(context.Context, *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error)
+	ListBrowsableDatabases(context.Context, *v1.ListBrowsableDatabasesRequest) (*v1.ListBrowsableDatabasesResponse, error)
 	// DescribeDatabase returns the tables and views forge_ro may SELECT in one
 	// database, each with the columns it may read, its primary key, its foreign
 	// keys and the foreign keys of readable tables that point at it (what the
@@ -95,7 +134,7 @@ type AppDatabaseServiceClient interface {
 	//
 	// ERRORS: every step of the data browser's admission except step 9.
 	// InvalidArgument when a bound is out of range.
-	DescribeDatabase(context.Context, *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error)
+	DescribeDatabase(context.Context, *v1.DescribeDatabaseRequest) (*v1.DescribeDatabaseResponse, error)
 	// BrowseTable returns one page of one table or view: the chosen columns,
 	// filtered, sorted and paged, compiled into one parameterised SELECT. It also
 	// serves the row page (a primary-key eq filter, limit 1) and the Related
@@ -110,107 +149,20 @@ type AppDatabaseServiceClient interface {
 	// bound is out of range; a column (in columns, filters or sort) forge_ro
 	// cannot read in the table; a filter whose values do not fit its op; or a
 	// value Postgres cannot convert to the column's type.
-	BrowseTable(context.Context, *connect.Request[v1.BrowseTableRequest]) (*connect.Response[v1.BrowseTableResponse], error)
+	BrowseTable(context.Context, *v1.BrowseTableRequest) (*v1.BrowseTableResponse, error)
 }
 
 // NewAppDatabaseServiceClient constructs a client for the controlplane.v1.AppDatabaseService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAppDatabaseServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AppDatabaseServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	appDatabaseServiceMethods := v1.File_services_app_database_v1_app_database_proto.Services().ByName("AppDatabaseService").Methods()
-	return &appDatabaseServiceClient{
-		queryDatabase: connect.NewClient[v1.QueryDatabaseRequest, v1.QueryDatabaseResponse](
-			httpClient,
-			baseURL+AppDatabaseServiceQueryDatabaseProcedure,
-			connect.WithSchema(appDatabaseServiceMethods.ByName("QueryDatabase")),
-			connect.WithClientOptions(opts...),
-		),
-		queryDatabasePanel: connect.NewClient[v1.QueryDatabasePanelRequest, v1.QueryDatabasePanelResponse](
-			httpClient,
-			baseURL+AppDatabaseServiceQueryDatabasePanelProcedure,
-			connect.WithSchema(appDatabaseServiceMethods.ByName("QueryDatabasePanel")),
-			connect.WithClientOptions(opts...),
-		),
-		listDashboardDatabases: connect.NewClient[v1.ListDashboardDatabasesRequest, v1.ListDashboardDatabasesResponse](
-			httpClient,
-			baseURL+AppDatabaseServiceListDashboardDatabasesProcedure,
-			connect.WithSchema(appDatabaseServiceMethods.ByName("ListDashboardDatabases")),
-			connect.WithClientOptions(opts...),
-		),
-		listBrowsableDatabases: connect.NewClient[v1.ListBrowsableDatabasesRequest, v1.ListBrowsableDatabasesResponse](
-			httpClient,
-			baseURL+AppDatabaseServiceListBrowsableDatabasesProcedure,
-			connect.WithSchema(appDatabaseServiceMethods.ByName("ListBrowsableDatabases")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		describeDatabase: connect.NewClient[v1.DescribeDatabaseRequest, v1.DescribeDatabaseResponse](
-			httpClient,
-			baseURL+AppDatabaseServiceDescribeDatabaseProcedure,
-			connect.WithSchema(appDatabaseServiceMethods.ByName("DescribeDatabase")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		browseTable: connect.NewClient[v1.BrowseTableRequest, v1.BrowseTableResponse](
-			httpClient,
-			baseURL+AppDatabaseServiceBrowseTableProcedure,
-			connect.WithSchema(appDatabaseServiceMethods.ByName("BrowseTable")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// appDatabaseServiceClient implements AppDatabaseServiceClient.
-type appDatabaseServiceClient struct {
-	queryDatabase          *connect.Client[v1.QueryDatabaseRequest, v1.QueryDatabaseResponse]
-	queryDatabasePanel     *connect.Client[v1.QueryDatabasePanelRequest, v1.QueryDatabasePanelResponse]
-	listDashboardDatabases *connect.Client[v1.ListDashboardDatabasesRequest, v1.ListDashboardDatabasesResponse]
-	listBrowsableDatabases *connect.Client[v1.ListBrowsableDatabasesRequest, v1.ListBrowsableDatabasesResponse]
-	describeDatabase       *connect.Client[v1.DescribeDatabaseRequest, v1.DescribeDatabaseResponse]
-	browseTable            *connect.Client[v1.BrowseTableRequest, v1.BrowseTableResponse]
-}
-
-// QueryDatabase calls controlplane.v1.AppDatabaseService.QueryDatabase.
-func (c *appDatabaseServiceClient) QueryDatabase(ctx context.Context, req *connect.Request[v1.QueryDatabaseRequest]) (*connect.Response[v1.QueryDatabaseResponse], error) {
-	return c.queryDatabase.CallUnary(ctx, req)
-}
-
-// QueryDatabasePanel calls controlplane.v1.AppDatabaseService.QueryDatabasePanel.
-func (c *appDatabaseServiceClient) QueryDatabasePanel(ctx context.Context, req *connect.Request[v1.QueryDatabasePanelRequest]) (*connect.Response[v1.QueryDatabasePanelResponse], error) {
-	return c.queryDatabasePanel.CallUnary(ctx, req)
-}
-
-// ListDashboardDatabases calls controlplane.v1.AppDatabaseService.ListDashboardDatabases.
-func (c *appDatabaseServiceClient) ListDashboardDatabases(ctx context.Context, req *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error) {
-	return c.listDashboardDatabases.CallUnary(ctx, req)
-}
-
-// ListBrowsableDatabases calls controlplane.v1.AppDatabaseService.ListBrowsableDatabases.
-func (c *appDatabaseServiceClient) ListBrowsableDatabases(ctx context.Context, req *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error) {
-	return c.listBrowsableDatabases.CallUnary(ctx, req)
-}
-
-// DescribeDatabase calls controlplane.v1.AppDatabaseService.DescribeDatabase.
-func (c *appDatabaseServiceClient) DescribeDatabase(ctx context.Context, req *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error) {
-	return c.describeDatabase.CallUnary(ctx, req)
-}
-
-// BrowseTable calls controlplane.v1.AppDatabaseService.BrowseTable.
-func (c *appDatabaseServiceClient) BrowseTable(ctx context.Context, req *connect.Request[v1.BrowseTableRequest]) (*connect.Response[v1.BrowseTableResponse], error) {
-	return c.browseTable.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewAppDatabaseServiceClient(client *connect.Client) AppDatabaseServiceClient {
+	return &appDatabaseServiceClient{client: client}
 }
 
 // AppDatabaseServiceHandler is an implementation of the controlplane.v1.AppDatabaseService service.
 type AppDatabaseServiceHandler interface {
 	// QueryDatabase runs one read-only statement and returns its rows, bounded by
 	// max_rows and timeout_ms.
-	QueryDatabase(context.Context, *connect.Request[v1.QueryDatabaseRequest]) (*connect.Response[v1.QueryDatabaseResponse], error)
+	QueryDatabase(context.Context, *v1.QueryDatabaseRequest) (*v1.QueryDatabaseResponse, error)
 	// QueryDatabasePanel runs one dashboard panel's read-only statement as the
 	// database's dashboard role and returns it folded for drawing: a time series
 	// when draw is "line" (or "auto" and the first column is a time), otherwise
@@ -219,13 +171,13 @@ type AppDatabaseServiceHandler interface {
 	// Not declared as an activity: a panel refreshes every minute, so the handler
 	// records one dashboard_db_access event per person, dashboard, environment
 	// and day instead. The audit_log row is written for every request.
-	QueryDatabasePanel(context.Context, *connect.Request[v1.QueryDatabasePanelRequest]) (*connect.Response[v1.QueryDatabasePanelResponse], error)
+	QueryDatabasePanel(context.Context, *v1.QueryDatabasePanelRequest) (*v1.QueryDatabasePanelResponse, error)
 	// ListDashboardDatabases returns the environment's databases that have
 	// dashboards enabled, their limits, and the tables and columns the dashboard
 	// role may SELECT (the editor's schema browser). Same admission as
 	// QueryDatabasePanel, without the database/placement steps for databases that
 	// are not enabled: those are simply absent.
-	ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error)
+	ListDashboardDatabases(context.Context, *v1.ListDashboardDatabasesRequest) (*v1.ListDashboardDatabasesResponse, error)
 	// ListBrowsableDatabases returns every database of the environment the data
 	// browser can offer: each managed and each external database, the policy a
 	// read of it runs under, and whether the control plane can reach it. Reads
@@ -239,7 +191,7 @@ type AppDatabaseServiceHandler interface {
 	// FailedPrecondition reason "shape_unknown" (the environment has not
 	// recorded what it deploys yet, so its databases are not known),
 	// Unavailable (browsing is not configured on this server).
-	ListBrowsableDatabases(context.Context, *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error)
+	ListBrowsableDatabases(context.Context, *v1.ListBrowsableDatabasesRequest) (*v1.ListBrowsableDatabasesResponse, error)
 	// DescribeDatabase returns the tables and views forge_ro may SELECT in one
 	// database, each with the columns it may read, its primary key, its foreign
 	// keys and the foreign keys of readable tables that point at it (what the
@@ -248,7 +200,7 @@ type AppDatabaseServiceHandler interface {
 	//
 	// ERRORS: every step of the data browser's admission except step 9.
 	// InvalidArgument when a bound is out of range.
-	DescribeDatabase(context.Context, *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error)
+	DescribeDatabase(context.Context, *v1.DescribeDatabaseRequest) (*v1.DescribeDatabaseResponse, error)
 	// BrowseTable returns one page of one table or view: the chosen columns,
 	// filtered, sorted and paged, compiled into one parameterised SELECT. It also
 	// serves the row page (a primary-key eq filter, limit 1) and the Related
@@ -263,98 +215,172 @@ type AppDatabaseServiceHandler interface {
 	// bound is out of range; a column (in columns, filters or sort) forge_ro
 	// cannot read in the table; a filter whose values do not fit its op; or a
 	// value Postgres cannot convert to the column's type.
-	BrowseTable(context.Context, *connect.Request[v1.BrowseTableRequest]) (*connect.Response[v1.BrowseTableResponse], error)
+	BrowseTable(context.Context, *v1.BrowseTableRequest) (*v1.BrowseTableResponse, error)
 }
 
-// NewAppDatabaseServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAppDatabaseServiceHandler(svc AppDatabaseServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	appDatabaseServiceMethods := v1.File_services_app_database_v1_app_database_proto.Services().ByName("AppDatabaseService").Methods()
-	appDatabaseServiceQueryDatabaseHandler := connect.NewUnaryHandler(
-		AppDatabaseServiceQueryDatabaseProcedure,
-		svc.QueryDatabase,
-		connect.WithSchema(appDatabaseServiceMethods.ByName("QueryDatabase")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAppDatabaseServiceHandler registers svc as the controlplane.v1.AppDatabaseService
+// implementation on server.
+func RegisterAppDatabaseServiceHandler(server *connect.Server, svc AppDatabaseServiceHandler) {
+	adapter := appDatabaseServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: appDatabaseServiceQueryDatabaseSpec(), Handler: adapter.queryDatabase},
+		connect.Method{Spec: appDatabaseServiceQueryDatabasePanelSpec(), Handler: adapter.queryDatabasePanel},
+		connect.Method{Spec: appDatabaseServiceListDashboardDatabasesSpec(), Handler: adapter.listDashboardDatabases},
+		connect.Method{Spec: appDatabaseServiceListBrowsableDatabasesSpec(), Handler: adapter.listBrowsableDatabases},
+		connect.Method{Spec: appDatabaseServiceDescribeDatabaseSpec(), Handler: adapter.describeDatabase},
+		connect.Method{Spec: appDatabaseServiceBrowseTableSpec(), Handler: adapter.browseTable},
 	)
-	appDatabaseServiceQueryDatabasePanelHandler := connect.NewUnaryHandler(
-		AppDatabaseServiceQueryDatabasePanelProcedure,
-		svc.QueryDatabasePanel,
-		connect.WithSchema(appDatabaseServiceMethods.ByName("QueryDatabasePanel")),
-		connect.WithHandlerOptions(opts...),
-	)
-	appDatabaseServiceListDashboardDatabasesHandler := connect.NewUnaryHandler(
-		AppDatabaseServiceListDashboardDatabasesProcedure,
-		svc.ListDashboardDatabases,
-		connect.WithSchema(appDatabaseServiceMethods.ByName("ListDashboardDatabases")),
-		connect.WithHandlerOptions(opts...),
-	)
-	appDatabaseServiceListBrowsableDatabasesHandler := connect.NewUnaryHandler(
-		AppDatabaseServiceListBrowsableDatabasesProcedure,
-		svc.ListBrowsableDatabases,
-		connect.WithSchema(appDatabaseServiceMethods.ByName("ListBrowsableDatabases")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	appDatabaseServiceDescribeDatabaseHandler := connect.NewUnaryHandler(
-		AppDatabaseServiceDescribeDatabaseProcedure,
-		svc.DescribeDatabase,
-		connect.WithSchema(appDatabaseServiceMethods.ByName("DescribeDatabase")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	appDatabaseServiceBrowseTableHandler := connect.NewUnaryHandler(
-		AppDatabaseServiceBrowseTableProcedure,
-		svc.BrowseTable,
-		connect.WithSchema(appDatabaseServiceMethods.ByName("BrowseTable")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.AppDatabaseService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AppDatabaseServiceQueryDatabaseProcedure:
-			appDatabaseServiceQueryDatabaseHandler.ServeHTTP(w, r)
-		case AppDatabaseServiceQueryDatabasePanelProcedure:
-			appDatabaseServiceQueryDatabasePanelHandler.ServeHTTP(w, r)
-		case AppDatabaseServiceListDashboardDatabasesProcedure:
-			appDatabaseServiceListDashboardDatabasesHandler.ServeHTTP(w, r)
-		case AppDatabaseServiceListBrowsableDatabasesProcedure:
-			appDatabaseServiceListBrowsableDatabasesHandler.ServeHTTP(w, r)
-		case AppDatabaseServiceDescribeDatabaseProcedure:
-			appDatabaseServiceDescribeDatabaseHandler.ServeHTTP(w, r)
-		case AppDatabaseServiceBrowseTableProcedure:
-			appDatabaseServiceBrowseTableHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAppDatabaseServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAppDatabaseServiceHandler struct{}
 
-func (UnimplementedAppDatabaseServiceHandler) QueryDatabase(context.Context, *connect.Request[v1.QueryDatabaseRequest]) (*connect.Response[v1.QueryDatabaseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.QueryDatabase is not implemented"))
+func (UnimplementedAppDatabaseServiceHandler) QueryDatabase(context.Context, *v1.QueryDatabaseRequest) (*v1.QueryDatabaseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AppDatabaseService.QueryDatabase is not implemented")
 }
 
-func (UnimplementedAppDatabaseServiceHandler) QueryDatabasePanel(context.Context, *connect.Request[v1.QueryDatabasePanelRequest]) (*connect.Response[v1.QueryDatabasePanelResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.QueryDatabasePanel is not implemented"))
+func (UnimplementedAppDatabaseServiceHandler) QueryDatabasePanel(context.Context, *v1.QueryDatabasePanelRequest) (*v1.QueryDatabasePanelResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AppDatabaseService.QueryDatabasePanel is not implemented")
 }
 
-func (UnimplementedAppDatabaseServiceHandler) ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.ListDashboardDatabases is not implemented"))
+func (UnimplementedAppDatabaseServiceHandler) ListDashboardDatabases(context.Context, *v1.ListDashboardDatabasesRequest) (*v1.ListDashboardDatabasesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AppDatabaseService.ListDashboardDatabases is not implemented")
 }
 
-func (UnimplementedAppDatabaseServiceHandler) ListBrowsableDatabases(context.Context, *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.ListBrowsableDatabases is not implemented"))
+func (UnimplementedAppDatabaseServiceHandler) ListBrowsableDatabases(context.Context, *v1.ListBrowsableDatabasesRequest) (*v1.ListBrowsableDatabasesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AppDatabaseService.ListBrowsableDatabases is not implemented")
 }
 
-func (UnimplementedAppDatabaseServiceHandler) DescribeDatabase(context.Context, *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.DescribeDatabase is not implemented"))
+func (UnimplementedAppDatabaseServiceHandler) DescribeDatabase(context.Context, *v1.DescribeDatabaseRequest) (*v1.DescribeDatabaseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AppDatabaseService.DescribeDatabase is not implemented")
 }
 
-func (UnimplementedAppDatabaseServiceHandler) BrowseTable(context.Context, *connect.Request[v1.BrowseTableRequest]) (*connect.Response[v1.BrowseTableResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.BrowseTable is not implemented"))
+func (UnimplementedAppDatabaseServiceHandler) BrowseTable(context.Context, *v1.BrowseTableRequest) (*v1.BrowseTableResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AppDatabaseService.BrowseTable is not implemented")
+}
+
+type appDatabaseServiceClient struct {
+	client *connect.Client
+}
+
+func (c *appDatabaseServiceClient) QueryDatabase(ctx context.Context, req *v1.QueryDatabaseRequest) (*v1.QueryDatabaseResponse, error) {
+	var res v1.QueryDatabaseResponse
+	if err := c.client.CallUnary(ctx, appDatabaseServiceQueryDatabaseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *appDatabaseServiceClient) QueryDatabasePanel(ctx context.Context, req *v1.QueryDatabasePanelRequest) (*v1.QueryDatabasePanelResponse, error) {
+	var res v1.QueryDatabasePanelResponse
+	if err := c.client.CallUnary(ctx, appDatabaseServiceQueryDatabasePanelSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *appDatabaseServiceClient) ListDashboardDatabases(ctx context.Context, req *v1.ListDashboardDatabasesRequest) (*v1.ListDashboardDatabasesResponse, error) {
+	var res v1.ListDashboardDatabasesResponse
+	if err := c.client.CallUnary(ctx, appDatabaseServiceListDashboardDatabasesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *appDatabaseServiceClient) ListBrowsableDatabases(ctx context.Context, req *v1.ListBrowsableDatabasesRequest) (*v1.ListBrowsableDatabasesResponse, error) {
+	var res v1.ListBrowsableDatabasesResponse
+	if err := c.client.CallUnary(ctx, appDatabaseServiceListBrowsableDatabasesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *appDatabaseServiceClient) DescribeDatabase(ctx context.Context, req *v1.DescribeDatabaseRequest) (*v1.DescribeDatabaseResponse, error) {
+	var res v1.DescribeDatabaseResponse
+	if err := c.client.CallUnary(ctx, appDatabaseServiceDescribeDatabaseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *appDatabaseServiceClient) BrowseTable(ctx context.Context, req *v1.BrowseTableRequest) (*v1.BrowseTableResponse, error) {
+	var res v1.BrowseTableResponse
+	if err := c.client.CallUnary(ctx, appDatabaseServiceBrowseTableSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type appDatabaseServiceHandler struct{ svc AppDatabaseServiceHandler }
+
+func (h appDatabaseServiceHandler) queryDatabase(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.QueryDatabaseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.QueryDatabase(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h appDatabaseServiceHandler) queryDatabasePanel(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.QueryDatabasePanelRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.QueryDatabasePanel(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h appDatabaseServiceHandler) listDashboardDatabases(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDashboardDatabasesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDashboardDatabases(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h appDatabaseServiceHandler) listBrowsableDatabases(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListBrowsableDatabasesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListBrowsableDatabases(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h appDatabaseServiceHandler) describeDatabase(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DescribeDatabaseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DescribeDatabase(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h appDatabaseServiceHandler) browseTable(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BrowseTableRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BrowseTable(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

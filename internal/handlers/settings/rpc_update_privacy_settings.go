@@ -3,8 +3,6 @@ package settings
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -14,7 +12,7 @@ import (
 )
 
 // UpdatePrivacySettings updates user privacy settings
-func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Request[reliantv1.UpdatePrivacySettingsRequest]) (*connect.Response[reliantv1.UpdatePrivacySettingsResponse], error) {
+func (s *Service) UpdatePrivacySettings(ctx context.Context, req *reliantv1.UpdatePrivacySettingsRequest) (*reliantv1.UpdatePrivacySettingsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Get current settings
@@ -24,11 +22,11 @@ func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Reques
 	}
 
 	// Update only the fields that were provided
-	if req.Msg.AnalyticsEnabled != nil {
-		analyticsEnabled = *req.Msg.AnalyticsEnabled
+	if req.AnalyticsEnabled != nil {
+		analyticsEnabled = *req.AnalyticsEnabled
 	}
-	if req.Msg.CrashReportingEnabled != nil {
-		crashReportingEnabled = *req.Msg.CrashReportingEnabled
+	if req.CrashReportingEnabled != nil {
+		crashReportingEnabled = *req.CrashReportingEnabled
 	}
 
 	// Save the updated settings
@@ -38,11 +36,11 @@ func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Reques
 
 	logging.InfoContext(ctx, "Privacy settings updated", "userID", userID, "analyticsEnabled", analyticsEnabled, "crashReportingEnabled", crashReportingEnabled)
 
-	return connect.NewResponse(&reliantv1.UpdatePrivacySettingsResponse{
+	return &reliantv1.UpdatePrivacySettingsResponse{
 		Success:               true,
 		Message:               "Privacy settings updated successfully",
 		AnalyticsEnabled:      analyticsEnabled,
 		CrashReportingEnabled: crashReportingEnabled,
 		RequiresRestart:       false,
-	}), nil
+	}, nil
 }

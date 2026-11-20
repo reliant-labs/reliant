@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -45,10 +45,10 @@ func TestDiskReport_HeartbeatToRegistryAndKeptWhileOffline(t *testing.T) {
 	}})
 
 	reg := newDaemonRegistry(t, repo, nil)
-	list, err := reg.ListDaemons(userCtx("user-1"), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	list, err := reg.ListDaemons(userCtx("user-1"), &reliantv1.ListDaemonsRequest{})
 	require.NoError(t, err)
-	require.Len(t, list.Msg.Daemons, 1)
-	disk := list.Msg.Daemons[0].GetDisk()
+	require.Len(t, list.Daemons, 1)
+	disk := list.Daemons[0].GetDisk()
 	require.NotNil(t, disk, "ListDaemons carries the disk report")
 	require.Len(t, disk.Volumes, 2)
 	assert.True(t, disk.Volumes[0].Pressure)
@@ -58,10 +58,10 @@ func TestDiskReport_HeartbeatToRegistryAndKeptWhileOffline(t *testing.T) {
 	// The session ends: release every attachment row up to now (#722 made a
 	// release take the session's attached_at, so it cannot drop a newer one).
 	require.NoError(t, repo.ReleaseDaemonAttachment(context.Background(), "daemon-1", time.Now()))
-	got, err := reg.GetDaemon(userCtx("user-1"), connect.NewRequest(&reliantv1.GetDaemonRequest{DaemonId: "daemon-1"}))
+	got, err := reg.GetDaemon(userCtx("user-1"), &reliantv1.GetDaemonRequest{DaemonId: "daemon-1"})
 	require.NoError(t, err)
-	require.NotNil(t, got.Msg.Daemon.GetDisk(), "the report outlives the connection")
-	assert.True(t, got.Msg.Daemon.GetDisk().Volumes[0].Pressure)
+	require.NotNil(t, got.Daemon.GetDisk(), "the report outlives the connection")
+	assert.True(t, got.Daemon.GetDisk().Volumes[0].Pressure)
 }
 
 // ClearMachineCaches relays the user's confirmed kinds to the machine and
@@ -77,21 +77,21 @@ func TestClearMachineCaches_RelaysToTheMachine(t *testing.T) {
 	}}
 	reg := newDaemonRegistry(t, repo, router)
 
-	resp, err := reg.ClearMachineCaches(userCtx("user-1"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{
+	resp, err := reg.ClearMachineCaches(userCtx("user-1"), &reliantv1.ClearMachineCachesRequest{
 		DaemonId: "daemon-1", Kinds: []string{diskwatch.KindGoBuildCache, diskwatch.KindDockerVolumes},
-	}))
+	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{diskwatch.KindGoBuildCache}, resp.Msg.Started)
-	require.Len(t, resp.Msg.Skipped, 1)
-	assert.Equal(t, "not clearable", resp.Msg.Skipped[0].Reason)
+	assert.Equal(t, []string{diskwatch.KindGoBuildCache}, resp.Started)
+	require.Len(t, resp.Skipped, 1)
+	assert.Equal(t, "not clearable", resp.Skipped[0].Reason)
 	require.Len(t, router.commands, 1)
 	assert.Equal(t, diskwatch.ClearCachesCommand, router.commands[0].commandType)
 	assert.JSONEq(t, `{"kinds":["go_build_cache","docker_volumes"]}`, string(router.commands[0].payload))
 
-	_, err = reg.ClearMachineCaches(userCtx("user-2"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-1", Kinds: []string{"go_build_cache"}}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's machine")
-	_, err = reg.ClearMachineCaches(userCtx("user-1"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-off", Kinds: []string{"go_build_cache"}}))
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "an offline machine")
-	_, err = reg.ClearMachineCaches(userCtx("user-1"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-1"}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = reg.ClearMachineCaches(userCtx("user-2"), &reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-1", Kinds: []string{"go_build_cache"}})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "another user's machine")
+	_, err = reg.ClearMachineCaches(userCtx("user-1"), &reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-off", Kinds: []string{"go_build_cache"}})
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "an offline machine")
+	_, err = reg.ClearMachineCaches(userCtx("user-1"), &reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-1"})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -56,11 +55,11 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 	db.SeedProviderAccount(t, repo, "test-user", "reliant", "rlat_abcdef0123456789abcdef0123456789")
 
 	svc := NewTestCatalog(t)
-	resp, err := svc.ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))
+	resp, err := svc.ListModels(ctx, &reliantv1.ListModelsRequest{})
 	require.NoError(t, err)
 
 	reliantIDs := make([]string, 0)
-	for _, model := range resp.Msg.Models {
+	for _, model := range resp.Models {
 		if model.DriverId != "reliant" {
 			continue
 		}
@@ -75,11 +74,11 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 
 func TestCatalogService_ListModelsByProvider_ReliantOnlyExposesCuratedAllowlist(t *testing.T) {
 	svc := NewTestCatalog(t)
-	resp, err := svc.ListModelsByProvider(context.Background(), connect.NewRequest(&reliantv1.ListModelsByProviderRequest{Provider: "reliant"}))
+	resp, err := svc.ListModelsByProvider(context.Background(), &reliantv1.ListModelsByProviderRequest{Provider: "reliant"})
 	require.NoError(t, err)
 
-	ids := make([]string, 0, len(resp.Msg.Models))
-	for _, model := range resp.Msg.Models {
+	ids := make([]string, 0, len(resp.Models))
+	for _, model := range resp.Models {
 		ids = append(ids, model.Id)
 		assert.Equal(t, "reliant", model.DriverId)
 	}
@@ -111,11 +110,11 @@ func TestCatalogService_ListModels_HidesUnregisteredDriversAndReportsTemperature
 	db.SeedProviderAccount(t, repo, "test-user", "xai", "xai-test-key")
 	db.SeedProviderAccount(t, repo, "test-user", "openrouter", "sk-or-test")
 
-	resp, err := NewTestCatalog(t).ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))
+	resp, err := NewTestCatalog(t).ListModels(ctx, &reliantv1.ListModelsRequest{})
 	require.NoError(t, err)
 
 	sawOpenRouter := false
-	for _, m := range resp.Msg.Models {
+	for _, m := range resp.Models {
 		assert.NotEqual(t, "xai", m.DriverId, "xai has no registered driver; %s must not be listed", m.Id)
 		assert.NotEqual(t, "grok-4", extractBaseModelID(m.Id))
 		if m.DriverId == "openrouter" {

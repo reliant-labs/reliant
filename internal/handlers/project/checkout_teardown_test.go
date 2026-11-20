@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -62,14 +62,14 @@ var outdated = svcerr.FailedPrecondition(`this machine is running an older versi
 func remove(t *testing.T, svc *project.Service) error {
 	t.Helper()
 	_, err := svc.RemoveProjectFromDaemon(project.AuthedContext(t),
-		connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+		&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 	return err
 }
 
 func reclone(t *testing.T, svc *project.Service) error {
 	t.Helper()
 	_, err := svc.RecloneProjectOnDaemon(project.AuthedContext(t),
-		connect.NewRequest(&pb.RecloneProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+		&pb.RecloneProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 	return err
 }
 
@@ -94,12 +94,12 @@ func TestTeardown_AnotherUsersProjectIsNeverTornDown(t *testing.T) {
 	stranger := project.AuthedContext(t, testkit.WithUserID("someone-else"))
 
 	_, err := svc.RemoveProjectFromDaemon(stranger,
-		connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+		&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 	require.NoError(t, err, "a project the caller cannot see is already gone, as far as they can tell")
 	_, err = svc.RecloneProjectOnDaemon(stranger,
-		connect.NewRequest(&pb.RecloneProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
+		&pb.RecloneProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
 	assert.Empty(t, d.sent, "nothing reaches the owner's machine")
 	assert.Empty(t, book, "no teardown is recorded, so the owner's workspace creation is not held")
@@ -137,8 +137,8 @@ func TestRemove_ALostAckIsRetriedWithTheSameOp(t *testing.T) {
 
 	err := remove(t, svc)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "still running")
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "still running")
 	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "creation stays held while the outcome is unknown")
 	assert.Zero(t, *deleted)
 
@@ -183,9 +183,9 @@ func TestRemove_ATransportFailureIsNoOutcome(t *testing.T) {
 
 	err := remove(t, svc)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "answer was lost")
-	assert.NotContains(t, svcerr.ToConnect(err).Message(), "nats", "the transport's words stay off the wire")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "answer was lost")
+	assert.NotContains(t, svcerr.ToConnectV2(err).Message(), "nats", "the transport's words stay off the wire")
 	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "a lost answer releases nothing")
 
 	err = remove(t, svc)
@@ -213,7 +213,7 @@ func TestRemove_AnOlderDaemonsReportedFailureIsItsOutcome(t *testing.T) {
 	}}
 	err := remove(t, newService(t, store, fakeDaemon(d.answer)))
 	require.Error(t, err)
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "refusing to remove non-clone path")
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "refusing to remove non-clone path")
 	assert.Equal(t, db.CheckoutTeardownFailed, book["op-1"].State)
 	assert.Equal(t, []string{"git.remove", "git.teardown_status"}, d.sent)
 	assert.Zero(t, *deleted)
@@ -232,8 +232,8 @@ func TestRemove_AGuardRefusalWhileTheTeardownRunsKeepsItPending(t *testing.T) {
 	}}
 	err := remove(t, newService(t, store, fakeDaemon(d.answer)))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "has not said how the operation itself ended")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "has not said how the operation itself ended")
 	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "creation stays held while the teardown may be deleting")
 	assert.Equal(t, []string{"op-1", "op-1"}, d.opIDs, "the status asked is the op's own")
 	assert.Zero(t, *deleted)
@@ -251,7 +251,7 @@ func TestRemove_ARefusalBeforeTheJournalSettlesNotRunViaTheFence(t *testing.T) {
 	}}
 	err := remove(t, newService(t, store, fakeDaemon(d.answer)))
 	require.Error(t, err)
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "did not run")
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "did not run")
 	assert.Equal(t, db.CheckoutTeardownNotRun, book["op-1"].State)
 	assert.Zero(t, *deleted)
 }
@@ -302,8 +302,8 @@ func TestRemove_AnOlderDaemonsSameKindRetrySendsOneDeleteAtATime(t *testing.T) {
 
 	err := remove(t, svc)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "too old to confirm")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "too old to confirm")
 	assert.Equal(t, []string{"git.remove", "git.teardown_status"}, d.sent, "one destructive command inside the grace")
 	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State)
 
@@ -324,7 +324,7 @@ func TestReclone_StillRunningStaysPending(t *testing.T) {
 		reply(`{"success":false,"op_id":"%s","op_state":"running"}`),
 	}}
 	err := reclone(t, newService(t, store, fakeDaemon(d.answer)))
-	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err))
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(err))
 	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State)
 }
 
@@ -349,7 +349,7 @@ func TestRemove_AnOlderDaemonsReplyIsItsOutcome(t *testing.T) {
 			assert.Equal(t, tc.wantErr, err != nil, "err = %v", err)
 			assert.Equal(t, tc.wantState, book["op-1"].State)
 			if tc.wantErr {
-				assert.Contains(t, svcerr.ToConnect(err).Message(), "permission denied")
+				assert.Contains(t, svcerr.ToConnectV2(err).Message(), "permission denied")
 				assert.Zero(t, *deleted)
 			} else {
 				assert.Equal(t, 1, *deleted)
@@ -375,7 +375,7 @@ func TestReclone_AnOlderDaemonsLostReplyFallsBackToTheGrace(t *testing.T) {
 
 	err := remove(t, svc)
 	require.Error(t, err)
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "too old to confirm")
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "too old to confirm")
 	assert.Equal(t, db.CheckoutTeardownPending, book["op-1"].State, "inside the grace an old machine's op still holds")
 
 	// Past the grace the op expires, and the remove goes ahead.
@@ -398,8 +398,8 @@ func TestRemove_RefusedWhileWorkspacesLiveThere(t *testing.T) {
 	}
 	d := &scriptedDaemon{}
 	err := remove(t, newService(t, store, fakeDaemon(d.answer)))
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "archive them")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "archive them")
 	assert.Empty(t, book)
 	assert.Empty(t, d.sent)
 }

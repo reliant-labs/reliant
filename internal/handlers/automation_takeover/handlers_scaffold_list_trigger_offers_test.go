@@ -41,8 +41,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -66,13 +64,13 @@ func TestListTriggerOffers_Generated(t *testing.T) {
 		},
 	}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListTriggerOffersRequest, pb.ListTriggerOffersResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListTriggerOffersRequest, pb.ListTriggerOffersResponse]{
 		{
 			Name: "no offers lists none",
-			Req:  connect.NewRequest(&pb.ListTriggerOffersRequest{}),
+			Req:  &pb.ListTriggerOffersRequest{},
 			Ctx:  automation_takeover.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListTriggerOffersResponse]) {
-				if n := len(resp.Msg.GetOffers()); n != 0 {
+			Check: func(t *testing.T, resp *pb.ListTriggerOffersResponse) {
+				if n := len(resp.GetOffers()); n != 0 {
 					t.Fatalf("listed %d offers, want none", n)
 				}
 			},

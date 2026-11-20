@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"go.opentelemetry.io/otel"
@@ -36,7 +39,9 @@ func TestDefaultClientTracesEachCallOnce(t *testing.T) {
 
 	var traceparents []string
 	mux := http.NewServeMux()
-	mux.Handle(daemonv1connect.NewDaemonServiceHandler(&resumeRecorder{}))
+	server := connect.NewServer()
+	daemonv1connect.RegisterDaemonServiceHandler(server, &resumeRecorder{})
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	mux.HandleFunc(runResumePath, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"resumed":true}`))
 	})

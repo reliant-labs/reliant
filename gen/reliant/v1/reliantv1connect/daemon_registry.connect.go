@@ -7,98 +7,185 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// DaemonRegistryServiceName is the fully-qualified name of the DaemonRegistryService service.
 	DaemonRegistryServiceName = "reliant.v1.DaemonRegistryService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DaemonRegistryServiceListDaemonsProcedure is the fully-qualified name of the
-	// DaemonRegistryService's ListDaemons RPC.
+	// DaemonRegistryServiceListDaemonsProcedure is the procedure name of the DaemonRegistryService's
+	// ListDaemons RPC.
 	DaemonRegistryServiceListDaemonsProcedure = "/reliant.v1.DaemonRegistryService/ListDaemons"
-	// DaemonRegistryServiceGetDaemonProcedure is the fully-qualified name of the
-	// DaemonRegistryService's GetDaemon RPC.
+	// DaemonRegistryServiceGetDaemonProcedure is the procedure name of the DaemonRegistryService's
+	// GetDaemon RPC.
 	DaemonRegistryServiceGetDaemonProcedure = "/reliant.v1.DaemonRegistryService/GetDaemon"
-	// DaemonRegistryServiceResolveDaemonProcedure is the fully-qualified name of the
-	// DaemonRegistryService's ResolveDaemon RPC.
+	// DaemonRegistryServiceResolveDaemonProcedure is the procedure name of the DaemonRegistryService's
+	// ResolveDaemon RPC.
 	DaemonRegistryServiceResolveDaemonProcedure = "/reliant.v1.DaemonRegistryService/ResolveDaemon"
-	// DaemonRegistryServiceResumeDaemonProcedure is the fully-qualified name of the
-	// DaemonRegistryService's ResumeDaemon RPC.
+	// DaemonRegistryServiceResumeDaemonProcedure is the procedure name of the DaemonRegistryService's
+	// ResumeDaemon RPC.
 	DaemonRegistryServiceResumeDaemonProcedure = "/reliant.v1.DaemonRegistryService/ResumeDaemon"
-	// DaemonRegistryServiceRefreshLocalModelsProcedure is the fully-qualified name of the
+	// DaemonRegistryServiceRefreshLocalModelsProcedure is the procedure name of the
 	// DaemonRegistryService's RefreshLocalModels RPC.
 	DaemonRegistryServiceRefreshLocalModelsProcedure = "/reliant.v1.DaemonRegistryService/RefreshLocalModels"
-	// DaemonRegistryServiceSetLocalModelEndpointsProcedure is the fully-qualified name of the
+	// DaemonRegistryServiceSetLocalModelEndpointsProcedure is the procedure name of the
 	// DaemonRegistryService's SetLocalModelEndpoints RPC.
 	DaemonRegistryServiceSetLocalModelEndpointsProcedure = "/reliant.v1.DaemonRegistryService/SetLocalModelEndpoints"
-	// DaemonRegistryServiceClearMachineCachesProcedure is the fully-qualified name of the
+	// DaemonRegistryServiceClearMachineCachesProcedure is the procedure name of the
 	// DaemonRegistryService's ClearMachineCaches RPC.
 	DaemonRegistryServiceClearMachineCachesProcedure = "/reliant.v1.DaemonRegistryService/ClearMachineCaches"
-	// DaemonRegistryServiceSetDefaultDaemonProcedure is the fully-qualified name of the
+	// DaemonRegistryServiceSetDefaultDaemonProcedure is the procedure name of the
 	// DaemonRegistryService's SetDefaultDaemon RPC.
 	DaemonRegistryServiceSetDefaultDaemonProcedure = "/reliant.v1.DaemonRegistryService/SetDefaultDaemon"
-	// DaemonRegistryServiceSetMachineLabelsProcedure is the fully-qualified name of the
+	// DaemonRegistryServiceSetMachineLabelsProcedure is the procedure name of the
 	// DaemonRegistryService's SetMachineLabels RPC.
 	DaemonRegistryServiceSetMachineLabelsProcedure = "/reliant.v1.DaemonRegistryService/SetMachineLabels"
-	// DaemonRegistryServiceRenameMachineProcedure is the fully-qualified name of the
-	// DaemonRegistryService's RenameMachine RPC.
+	// DaemonRegistryServiceRenameMachineProcedure is the procedure name of the DaemonRegistryService's
+	// RenameMachine RPC.
 	DaemonRegistryServiceRenameMachineProcedure = "/reliant.v1.DaemonRegistryService/RenameMachine"
-	// DaemonRegistryServiceListMachinePoolsProcedure is the fully-qualified name of the
+	// DaemonRegistryServiceListMachinePoolsProcedure is the procedure name of the
 	// DaemonRegistryService's ListMachinePools RPC.
 	DaemonRegistryServiceListMachinePoolsProcedure = "/reliant.v1.DaemonRegistryService/ListMachinePools"
-	// DaemonRegistryServicePutMachinePoolProcedure is the fully-qualified name of the
-	// DaemonRegistryService's PutMachinePool RPC.
+	// DaemonRegistryServicePutMachinePoolProcedure is the procedure name of the DaemonRegistryService's
+	// PutMachinePool RPC.
 	DaemonRegistryServicePutMachinePoolProcedure = "/reliant.v1.DaemonRegistryService/PutMachinePool"
-	// DaemonRegistryServiceDeleteMachinePoolProcedure is the fully-qualified name of the
+	// DaemonRegistryServiceDeleteMachinePoolProcedure is the procedure name of the
 	// DaemonRegistryService's DeleteMachinePool RPC.
 	DaemonRegistryServiceDeleteMachinePoolProcedure = "/reliant.v1.DaemonRegistryService/DeleteMachinePool"
+)
+
+var (
+	daemonRegistryServiceListDaemonsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("ListDaemons"),
+			Procedure:  DaemonRegistryServiceListDaemonsProcedure,
+		}
+	})
+	daemonRegistryServiceGetDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("GetDaemon"),
+			Procedure:  DaemonRegistryServiceGetDaemonProcedure,
+		}
+	})
+	daemonRegistryServiceResolveDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("ResolveDaemon"),
+			Procedure:        DaemonRegistryServiceResolveDaemonProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	daemonRegistryServiceResumeDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("ResumeDaemon"),
+			Procedure:  DaemonRegistryServiceResumeDaemonProcedure,
+		}
+	})
+	daemonRegistryServiceRefreshLocalModelsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("RefreshLocalModels"),
+			Procedure:  DaemonRegistryServiceRefreshLocalModelsProcedure,
+		}
+	})
+	daemonRegistryServiceSetLocalModelEndpointsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("SetLocalModelEndpoints"),
+			Procedure:  DaemonRegistryServiceSetLocalModelEndpointsProcedure,
+		}
+	})
+	daemonRegistryServiceClearMachineCachesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("ClearMachineCaches"),
+			Procedure:  DaemonRegistryServiceClearMachineCachesProcedure,
+		}
+	})
+	daemonRegistryServiceSetDefaultDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("SetDefaultDaemon"),
+			Procedure:  DaemonRegistryServiceSetDefaultDaemonProcedure,
+		}
+	})
+	daemonRegistryServiceSetMachineLabelsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("SetMachineLabels"),
+			Procedure:  DaemonRegistryServiceSetMachineLabelsProcedure,
+		}
+	})
+	daemonRegistryServiceRenameMachineSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("RenameMachine"),
+			Procedure:  DaemonRegistryServiceRenameMachineProcedure,
+		}
+	})
+	daemonRegistryServiceListMachinePoolsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("ListMachinePools"),
+			Procedure:        DaemonRegistryServiceListMachinePoolsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	daemonRegistryServicePutMachinePoolSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("PutMachinePool"),
+			Procedure:  DaemonRegistryServicePutMachinePoolProcedure,
+		}
+	})
+	daemonRegistryServiceDeleteMachinePoolSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods().ByName("DeleteMachinePool"),
+			Procedure:  DaemonRegistryServiceDeleteMachinePoolProcedure,
+		}
+	})
 )
 
 // DaemonRegistryServiceClient is a client for the reliant.v1.DaemonRegistryService service.
 type DaemonRegistryServiceClient interface {
 	// ListDaemons returns the authenticated user's registered daemons.
-	ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error)
+	ListDaemons(context.Context, *v1.ListDaemonsRequest) (*v1.ListDaemonsResponse, error)
 	// GetDaemon fetches a specific daemon by ID.
-	GetDaemon(context.Context, *connect.Request[v1.GetDaemonRequest]) (*connect.Response[v1.GetDaemonResponse], error)
+	GetDaemon(context.Context, *v1.GetDaemonRequest) (*v1.GetDaemonResponse, error)
 	// ResolveDaemon picks the right daemon for routing given optional selectors.
 	// Used by distributed OSS routers.
-	ResolveDaemon(context.Context, *connect.Request[v1.ResolveDaemonRequest]) (*connect.Response[v1.ResolveDaemonResponse], error)
+	ResolveDaemon(context.Context, *v1.ResolveDaemonRequest) (*v1.ResolveDaemonResponse, error)
 	// ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
 	// the resolved daemon is not currently active.
-	ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error)
+	ResumeDaemon(context.Context, *v1.ResumeDaemonRequest) (*v1.ResumeDaemonResponse, error)
 	// RefreshLocalModels asks an online daemon to re-probe its local model
 	// servers and waits (bounded) for the new inventory. Backs the UI's
 	// "Test connection" / "Refresh". Fails with Unavailable when the daemon is
 	// offline.
-	RefreshLocalModels(context.Context, *connect.Request[v1.RefreshLocalModelsRequest]) (*connect.Response[v1.RefreshLocalModelsResponse], error)
+	RefreshLocalModels(context.Context, *v1.RefreshLocalModelsRequest) (*v1.RefreshLocalModelsResponse, error)
 	// SetLocalModelEndpoints replaces the user-configured local model
 	// endpoints on an online daemon (persisted in that machine's
 	// ~/.reliant/config.yaml, models.providers.local) and returns the
 	// re-probed inventory. Auto-detected well-known ports need no
 	// configuration and are not listed here.
-	SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error)
+	SetLocalModelEndpoints(context.Context, *v1.SetLocalModelEndpointsRequest) (*v1.SetLocalModelEndpointsResponse, error)
 	// ClearMachineCaches frees space on an online machine by clearing the
 	// rebuildable caches the user confirmed — only kinds the daemon reports as
 	// clearable (DiskConsumer.clearable): a Go-format cache trim of entries
@@ -107,18 +194,18 @@ type DaemonRegistryServiceClient interface {
 	// could hold data. The clean-up runs in the background on the machine;
 	// progress shows as DiskConsumer.clearing and then as freed space in the
 	// next disk report. Fails with Unavailable when the machine is offline.
-	ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error)
+	ClearMachineCaches(context.Context, *v1.ClearMachineCachesRequest) (*v1.ClearMachineCachesResponse, error)
 	// SetDefaultDaemon makes one of the caller's machines their default
 	// (DaemonInfo.is_default), replacing any previous one; an empty daemon_id
 	// clears it. Work that names a machine — a pinned chat, an automation's
 	// chosen machine — is unaffected. NotFound for a machine the caller does
 	// not own.
-	SetDefaultDaemon(context.Context, *connect.Request[v1.SetDefaultDaemonRequest]) (*connect.Response[v1.SetDefaultDaemonResponse], error)
+	SetDefaultDaemon(context.Context, *v1.SetDefaultDaemonRequest) (*v1.SetDefaultDaemonResponse, error)
 	// SetMachineLabels replaces one of the caller's machines' durable labels.
 	// Labels decide machine-pool membership (a pool selects the owner's machines
 	// whose labels contain its selector), so this is how a machine joins or
 	// leaves a pool. Keys and values are short slugs.
-	SetMachineLabels(context.Context, *connect.Request[v1.SetMachineLabelsRequest]) (*connect.Response[v1.SetMachineLabelsResponse], error)
+	SetMachineLabels(context.Context, *v1.SetMachineLabelsRequest) (*v1.SetMachineLabelsResponse, error)
 	// RenameMachine renames one of the caller's machines. The control plane
 	// owns the name, so it is written there first (UpdateDaemon new_name, which
 	// validates it and keeps it unique among the owner's live machines) and
@@ -129,227 +216,57 @@ type DaemonRegistryServiceClient interface {
 	// with a letter or digit. AlreadyExists when another of the caller's
 	// machines has it; NotFound for a machine the caller does not own;
 	// Unimplemented without a control plane.
-	RenameMachine(context.Context, *connect.Request[v1.RenameMachineRequest]) (*connect.Response[v1.RenameMachineResponse], error)
+	RenameMachine(context.Context, *v1.RenameMachineRequest) (*v1.RenameMachineResponse, error)
 	// forge:custom — the caller's pools joined with their members' live state,
 	// not a page of rows.
 	//
 	// ListMachinePools returns the caller's machine pools, each with its
 	// members as they are now: state, live runs placed by the pool, and why a
 	// member would be passed over (dev-docs/design/machine-pools.md).
-	ListMachinePools(context.Context, *connect.Request[v1.ListMachinePoolsRequest]) (*connect.Response[v1.ListMachinePoolsResponse], error)
+	ListMachinePools(context.Context, *v1.ListMachinePoolsRequest) (*v1.ListMachinePoolsResponse, error)
 	// PutMachinePool creates the caller's pool of that name, or replaces its
 	// definition. Members are not listed: they are the caller's machines whose
 	// labels match the selector.
-	PutMachinePool(context.Context, *connect.Request[v1.PutMachinePoolRequest]) (*connect.Response[v1.PutMachinePoolResponse], error)
+	PutMachinePool(context.Context, *v1.PutMachinePoolRequest) (*v1.PutMachinePoolResponse, error)
 	// forge:custom — by the caller's pool name, refused while a trigger runs
 	// on the pool.
 	//
 	// DeleteMachinePool deletes one of the caller's pools. Refused with
 	// FailedPrecondition while a trigger still runs on it. Its machines and
 	// their labels are untouched.
-	DeleteMachinePool(context.Context, *connect.Request[v1.DeleteMachinePoolRequest]) (*connect.Response[v1.DeleteMachinePoolResponse], error)
+	DeleteMachinePool(context.Context, *v1.DeleteMachinePoolRequest) (*v1.DeleteMachinePoolResponse, error)
 }
 
 // NewDaemonRegistryServiceClient constructs a client for the reliant.v1.DaemonRegistryService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DaemonRegistryServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	daemonRegistryServiceMethods := v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods()
-	return &daemonRegistryServiceClient{
-		listDaemons: connect.NewClient[v1.ListDaemonsRequest, v1.ListDaemonsResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceListDaemonsProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("ListDaemons")),
-			connect.WithClientOptions(opts...),
-		),
-		getDaemon: connect.NewClient[v1.GetDaemonRequest, v1.GetDaemonResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceGetDaemonProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("GetDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		resolveDaemon: connect.NewClient[v1.ResolveDaemonRequest, v1.ResolveDaemonResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceResolveDaemonProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("ResolveDaemon")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		resumeDaemon: connect.NewClient[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceResumeDaemonProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("ResumeDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		refreshLocalModels: connect.NewClient[v1.RefreshLocalModelsRequest, v1.RefreshLocalModelsResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceRefreshLocalModelsProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("RefreshLocalModels")),
-			connect.WithClientOptions(opts...),
-		),
-		setLocalModelEndpoints: connect.NewClient[v1.SetLocalModelEndpointsRequest, v1.SetLocalModelEndpointsResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceSetLocalModelEndpointsProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("SetLocalModelEndpoints")),
-			connect.WithClientOptions(opts...),
-		),
-		clearMachineCaches: connect.NewClient[v1.ClearMachineCachesRequest, v1.ClearMachineCachesResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceClearMachineCachesProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("ClearMachineCaches")),
-			connect.WithClientOptions(opts...),
-		),
-		setDefaultDaemon: connect.NewClient[v1.SetDefaultDaemonRequest, v1.SetDefaultDaemonResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceSetDefaultDaemonProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("SetDefaultDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		setMachineLabels: connect.NewClient[v1.SetMachineLabelsRequest, v1.SetMachineLabelsResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceSetMachineLabelsProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("SetMachineLabels")),
-			connect.WithClientOptions(opts...),
-		),
-		renameMachine: connect.NewClient[v1.RenameMachineRequest, v1.RenameMachineResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceRenameMachineProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("RenameMachine")),
-			connect.WithClientOptions(opts...),
-		),
-		listMachinePools: connect.NewClient[v1.ListMachinePoolsRequest, v1.ListMachinePoolsResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceListMachinePoolsProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("ListMachinePools")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		putMachinePool: connect.NewClient[v1.PutMachinePoolRequest, v1.PutMachinePoolResponse](
-			httpClient,
-			baseURL+DaemonRegistryServicePutMachinePoolProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("PutMachinePool")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteMachinePool: connect.NewClient[v1.DeleteMachinePoolRequest, v1.DeleteMachinePoolResponse](
-			httpClient,
-			baseURL+DaemonRegistryServiceDeleteMachinePoolProcedure,
-			connect.WithSchema(daemonRegistryServiceMethods.ByName("DeleteMachinePool")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// daemonRegistryServiceClient implements DaemonRegistryServiceClient.
-type daemonRegistryServiceClient struct {
-	listDaemons            *connect.Client[v1.ListDaemonsRequest, v1.ListDaemonsResponse]
-	getDaemon              *connect.Client[v1.GetDaemonRequest, v1.GetDaemonResponse]
-	resolveDaemon          *connect.Client[v1.ResolveDaemonRequest, v1.ResolveDaemonResponse]
-	resumeDaemon           *connect.Client[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse]
-	refreshLocalModels     *connect.Client[v1.RefreshLocalModelsRequest, v1.RefreshLocalModelsResponse]
-	setLocalModelEndpoints *connect.Client[v1.SetLocalModelEndpointsRequest, v1.SetLocalModelEndpointsResponse]
-	clearMachineCaches     *connect.Client[v1.ClearMachineCachesRequest, v1.ClearMachineCachesResponse]
-	setDefaultDaemon       *connect.Client[v1.SetDefaultDaemonRequest, v1.SetDefaultDaemonResponse]
-	setMachineLabels       *connect.Client[v1.SetMachineLabelsRequest, v1.SetMachineLabelsResponse]
-	renameMachine          *connect.Client[v1.RenameMachineRequest, v1.RenameMachineResponse]
-	listMachinePools       *connect.Client[v1.ListMachinePoolsRequest, v1.ListMachinePoolsResponse]
-	putMachinePool         *connect.Client[v1.PutMachinePoolRequest, v1.PutMachinePoolResponse]
-	deleteMachinePool      *connect.Client[v1.DeleteMachinePoolRequest, v1.DeleteMachinePoolResponse]
-}
-
-// ListDaemons calls reliant.v1.DaemonRegistryService.ListDaemons.
-func (c *daemonRegistryServiceClient) ListDaemons(ctx context.Context, req *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error) {
-	return c.listDaemons.CallUnary(ctx, req)
-}
-
-// GetDaemon calls reliant.v1.DaemonRegistryService.GetDaemon.
-func (c *daemonRegistryServiceClient) GetDaemon(ctx context.Context, req *connect.Request[v1.GetDaemonRequest]) (*connect.Response[v1.GetDaemonResponse], error) {
-	return c.getDaemon.CallUnary(ctx, req)
-}
-
-// ResolveDaemon calls reliant.v1.DaemonRegistryService.ResolveDaemon.
-func (c *daemonRegistryServiceClient) ResolveDaemon(ctx context.Context, req *connect.Request[v1.ResolveDaemonRequest]) (*connect.Response[v1.ResolveDaemonResponse], error) {
-	return c.resolveDaemon.CallUnary(ctx, req)
-}
-
-// ResumeDaemon calls reliant.v1.DaemonRegistryService.ResumeDaemon.
-func (c *daemonRegistryServiceClient) ResumeDaemon(ctx context.Context, req *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error) {
-	return c.resumeDaemon.CallUnary(ctx, req)
-}
-
-// RefreshLocalModels calls reliant.v1.DaemonRegistryService.RefreshLocalModels.
-func (c *daemonRegistryServiceClient) RefreshLocalModels(ctx context.Context, req *connect.Request[v1.RefreshLocalModelsRequest]) (*connect.Response[v1.RefreshLocalModelsResponse], error) {
-	return c.refreshLocalModels.CallUnary(ctx, req)
-}
-
-// SetLocalModelEndpoints calls reliant.v1.DaemonRegistryService.SetLocalModelEndpoints.
-func (c *daemonRegistryServiceClient) SetLocalModelEndpoints(ctx context.Context, req *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error) {
-	return c.setLocalModelEndpoints.CallUnary(ctx, req)
-}
-
-// ClearMachineCaches calls reliant.v1.DaemonRegistryService.ClearMachineCaches.
-func (c *daemonRegistryServiceClient) ClearMachineCaches(ctx context.Context, req *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error) {
-	return c.clearMachineCaches.CallUnary(ctx, req)
-}
-
-// SetDefaultDaemon calls reliant.v1.DaemonRegistryService.SetDefaultDaemon.
-func (c *daemonRegistryServiceClient) SetDefaultDaemon(ctx context.Context, req *connect.Request[v1.SetDefaultDaemonRequest]) (*connect.Response[v1.SetDefaultDaemonResponse], error) {
-	return c.setDefaultDaemon.CallUnary(ctx, req)
-}
-
-// SetMachineLabels calls reliant.v1.DaemonRegistryService.SetMachineLabels.
-func (c *daemonRegistryServiceClient) SetMachineLabels(ctx context.Context, req *connect.Request[v1.SetMachineLabelsRequest]) (*connect.Response[v1.SetMachineLabelsResponse], error) {
-	return c.setMachineLabels.CallUnary(ctx, req)
-}
-
-// RenameMachine calls reliant.v1.DaemonRegistryService.RenameMachine.
-func (c *daemonRegistryServiceClient) RenameMachine(ctx context.Context, req *connect.Request[v1.RenameMachineRequest]) (*connect.Response[v1.RenameMachineResponse], error) {
-	return c.renameMachine.CallUnary(ctx, req)
-}
-
-// ListMachinePools calls reliant.v1.DaemonRegistryService.ListMachinePools.
-func (c *daemonRegistryServiceClient) ListMachinePools(ctx context.Context, req *connect.Request[v1.ListMachinePoolsRequest]) (*connect.Response[v1.ListMachinePoolsResponse], error) {
-	return c.listMachinePools.CallUnary(ctx, req)
-}
-
-// PutMachinePool calls reliant.v1.DaemonRegistryService.PutMachinePool.
-func (c *daemonRegistryServiceClient) PutMachinePool(ctx context.Context, req *connect.Request[v1.PutMachinePoolRequest]) (*connect.Response[v1.PutMachinePoolResponse], error) {
-	return c.putMachinePool.CallUnary(ctx, req)
-}
-
-// DeleteMachinePool calls reliant.v1.DaemonRegistryService.DeleteMachinePool.
-func (c *daemonRegistryServiceClient) DeleteMachinePool(ctx context.Context, req *connect.Request[v1.DeleteMachinePoolRequest]) (*connect.Response[v1.DeleteMachinePoolResponse], error) {
-	return c.deleteMachinePool.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewDaemonRegistryServiceClient(client *connect.Client) DaemonRegistryServiceClient {
+	return &daemonRegistryServiceClient{client: client}
 }
 
 // DaemonRegistryServiceHandler is an implementation of the reliant.v1.DaemonRegistryService
 // service.
 type DaemonRegistryServiceHandler interface {
 	// ListDaemons returns the authenticated user's registered daemons.
-	ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error)
+	ListDaemons(context.Context, *v1.ListDaemonsRequest) (*v1.ListDaemonsResponse, error)
 	// GetDaemon fetches a specific daemon by ID.
-	GetDaemon(context.Context, *connect.Request[v1.GetDaemonRequest]) (*connect.Response[v1.GetDaemonResponse], error)
+	GetDaemon(context.Context, *v1.GetDaemonRequest) (*v1.GetDaemonResponse, error)
 	// ResolveDaemon picks the right daemon for routing given optional selectors.
 	// Used by distributed OSS routers.
-	ResolveDaemon(context.Context, *connect.Request[v1.ResolveDaemonRequest]) (*connect.Response[v1.ResolveDaemonResponse], error)
+	ResolveDaemon(context.Context, *v1.ResolveDaemonRequest) (*v1.ResolveDaemonResponse, error)
 	// ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
 	// the resolved daemon is not currently active.
-	ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error)
+	ResumeDaemon(context.Context, *v1.ResumeDaemonRequest) (*v1.ResumeDaemonResponse, error)
 	// RefreshLocalModels asks an online daemon to re-probe its local model
 	// servers and waits (bounded) for the new inventory. Backs the UI's
 	// "Test connection" / "Refresh". Fails with Unavailable when the daemon is
 	// offline.
-	RefreshLocalModels(context.Context, *connect.Request[v1.RefreshLocalModelsRequest]) (*connect.Response[v1.RefreshLocalModelsResponse], error)
+	RefreshLocalModels(context.Context, *v1.RefreshLocalModelsRequest) (*v1.RefreshLocalModelsResponse, error)
 	// SetLocalModelEndpoints replaces the user-configured local model
 	// endpoints on an online daemon (persisted in that machine's
 	// ~/.reliant/config.yaml, models.providers.local) and returns the
 	// re-probed inventory. Auto-detected well-known ports need no
 	// configuration and are not listed here.
-	SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error)
+	SetLocalModelEndpoints(context.Context, *v1.SetLocalModelEndpointsRequest) (*v1.SetLocalModelEndpointsResponse, error)
 	// ClearMachineCaches frees space on an online machine by clearing the
 	// rebuildable caches the user confirmed — only kinds the daemon reports as
 	// clearable (DiskConsumer.clearable): a Go-format cache trim of entries
@@ -358,18 +275,18 @@ type DaemonRegistryServiceHandler interface {
 	// could hold data. The clean-up runs in the background on the machine;
 	// progress shows as DiskConsumer.clearing and then as freed space in the
 	// next disk report. Fails with Unavailable when the machine is offline.
-	ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error)
+	ClearMachineCaches(context.Context, *v1.ClearMachineCachesRequest) (*v1.ClearMachineCachesResponse, error)
 	// SetDefaultDaemon makes one of the caller's machines their default
 	// (DaemonInfo.is_default), replacing any previous one; an empty daemon_id
 	// clears it. Work that names a machine — a pinned chat, an automation's
 	// chosen machine — is unaffected. NotFound for a machine the caller does
 	// not own.
-	SetDefaultDaemon(context.Context, *connect.Request[v1.SetDefaultDaemonRequest]) (*connect.Response[v1.SetDefaultDaemonResponse], error)
+	SetDefaultDaemon(context.Context, *v1.SetDefaultDaemonRequest) (*v1.SetDefaultDaemonResponse, error)
 	// SetMachineLabels replaces one of the caller's machines' durable labels.
 	// Labels decide machine-pool membership (a pool selects the owner's machines
 	// whose labels contain its selector), so this is how a machine joins or
 	// leaves a pool. Keys and values are short slugs.
-	SetMachineLabels(context.Context, *connect.Request[v1.SetMachineLabelsRequest]) (*connect.Response[v1.SetMachineLabelsResponse], error)
+	SetMachineLabels(context.Context, *v1.SetMachineLabelsRequest) (*v1.SetMachineLabelsResponse, error)
 	// RenameMachine renames one of the caller's machines. The control plane
 	// owns the name, so it is written there first (UpdateDaemon new_name, which
 	// validates it and keeps it unique among the owner's live machines) and
@@ -380,199 +297,365 @@ type DaemonRegistryServiceHandler interface {
 	// with a letter or digit. AlreadyExists when another of the caller's
 	// machines has it; NotFound for a machine the caller does not own;
 	// Unimplemented without a control plane.
-	RenameMachine(context.Context, *connect.Request[v1.RenameMachineRequest]) (*connect.Response[v1.RenameMachineResponse], error)
+	RenameMachine(context.Context, *v1.RenameMachineRequest) (*v1.RenameMachineResponse, error)
 	// forge:custom — the caller's pools joined with their members' live state,
 	// not a page of rows.
 	//
 	// ListMachinePools returns the caller's machine pools, each with its
 	// members as they are now: state, live runs placed by the pool, and why a
 	// member would be passed over (dev-docs/design/machine-pools.md).
-	ListMachinePools(context.Context, *connect.Request[v1.ListMachinePoolsRequest]) (*connect.Response[v1.ListMachinePoolsResponse], error)
+	ListMachinePools(context.Context, *v1.ListMachinePoolsRequest) (*v1.ListMachinePoolsResponse, error)
 	// PutMachinePool creates the caller's pool of that name, or replaces its
 	// definition. Members are not listed: they are the caller's machines whose
 	// labels match the selector.
-	PutMachinePool(context.Context, *connect.Request[v1.PutMachinePoolRequest]) (*connect.Response[v1.PutMachinePoolResponse], error)
+	PutMachinePool(context.Context, *v1.PutMachinePoolRequest) (*v1.PutMachinePoolResponse, error)
 	// forge:custom — by the caller's pool name, refused while a trigger runs
 	// on the pool.
 	//
 	// DeleteMachinePool deletes one of the caller's pools. Refused with
 	// FailedPrecondition while a trigger still runs on it. Its machines and
 	// their labels are untouched.
-	DeleteMachinePool(context.Context, *connect.Request[v1.DeleteMachinePoolRequest]) (*connect.Response[v1.DeleteMachinePoolResponse], error)
+	DeleteMachinePool(context.Context, *v1.DeleteMachinePoolRequest) (*v1.DeleteMachinePoolResponse, error)
 }
 
-// NewDaemonRegistryServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	daemonRegistryServiceMethods := v1.File_reliant_v1_daemon_registry_proto.Services().ByName("DaemonRegistryService").Methods()
-	daemonRegistryServiceListDaemonsHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceListDaemonsProcedure,
-		svc.ListDaemons,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("ListDaemons")),
-		connect.WithHandlerOptions(opts...),
+// RegisterDaemonRegistryServiceHandler registers svc as the reliant.v1.DaemonRegistryService
+// implementation on server.
+func RegisterDaemonRegistryServiceHandler(server *connect.Server, svc DaemonRegistryServiceHandler) {
+	adapter := daemonRegistryServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: daemonRegistryServiceListDaemonsSpec(), Handler: adapter.listDaemons},
+		connect.Method{Spec: daemonRegistryServiceGetDaemonSpec(), Handler: adapter.getDaemon},
+		connect.Method{Spec: daemonRegistryServiceResolveDaemonSpec(), Handler: adapter.resolveDaemon},
+		connect.Method{Spec: daemonRegistryServiceResumeDaemonSpec(), Handler: adapter.resumeDaemon},
+		connect.Method{Spec: daemonRegistryServiceRefreshLocalModelsSpec(), Handler: adapter.refreshLocalModels},
+		connect.Method{Spec: daemonRegistryServiceSetLocalModelEndpointsSpec(), Handler: adapter.setLocalModelEndpoints},
+		connect.Method{Spec: daemonRegistryServiceClearMachineCachesSpec(), Handler: adapter.clearMachineCaches},
+		connect.Method{Spec: daemonRegistryServiceSetDefaultDaemonSpec(), Handler: adapter.setDefaultDaemon},
+		connect.Method{Spec: daemonRegistryServiceSetMachineLabelsSpec(), Handler: adapter.setMachineLabels},
+		connect.Method{Spec: daemonRegistryServiceRenameMachineSpec(), Handler: adapter.renameMachine},
+		connect.Method{Spec: daemonRegistryServiceListMachinePoolsSpec(), Handler: adapter.listMachinePools},
+		connect.Method{Spec: daemonRegistryServicePutMachinePoolSpec(), Handler: adapter.putMachinePool},
+		connect.Method{Spec: daemonRegistryServiceDeleteMachinePoolSpec(), Handler: adapter.deleteMachinePool},
 	)
-	daemonRegistryServiceGetDaemonHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceGetDaemonProcedure,
-		svc.GetDaemon,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("GetDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceResolveDaemonHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceResolveDaemonProcedure,
-		svc.ResolveDaemon,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("ResolveDaemon")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceResumeDaemonHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceResumeDaemonProcedure,
-		svc.ResumeDaemon,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("ResumeDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceRefreshLocalModelsHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceRefreshLocalModelsProcedure,
-		svc.RefreshLocalModels,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("RefreshLocalModels")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceSetLocalModelEndpointsHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceSetLocalModelEndpointsProcedure,
-		svc.SetLocalModelEndpoints,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("SetLocalModelEndpoints")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceClearMachineCachesHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceClearMachineCachesProcedure,
-		svc.ClearMachineCaches,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("ClearMachineCaches")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceSetDefaultDaemonHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceSetDefaultDaemonProcedure,
-		svc.SetDefaultDaemon,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("SetDefaultDaemon")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceSetMachineLabelsHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceSetMachineLabelsProcedure,
-		svc.SetMachineLabels,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("SetMachineLabels")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceRenameMachineHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceRenameMachineProcedure,
-		svc.RenameMachine,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("RenameMachine")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceListMachinePoolsHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceListMachinePoolsProcedure,
-		svc.ListMachinePools,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("ListMachinePools")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServicePutMachinePoolHandler := connect.NewUnaryHandler(
-		DaemonRegistryServicePutMachinePoolProcedure,
-		svc.PutMachinePool,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("PutMachinePool")),
-		connect.WithHandlerOptions(opts...),
-	)
-	daemonRegistryServiceDeleteMachinePoolHandler := connect.NewUnaryHandler(
-		DaemonRegistryServiceDeleteMachinePoolProcedure,
-		svc.DeleteMachinePool,
-		connect.WithSchema(daemonRegistryServiceMethods.ByName("DeleteMachinePool")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.DaemonRegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case DaemonRegistryServiceListDaemonsProcedure:
-			daemonRegistryServiceListDaemonsHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceGetDaemonProcedure:
-			daemonRegistryServiceGetDaemonHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceResolveDaemonProcedure:
-			daemonRegistryServiceResolveDaemonHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceResumeDaemonProcedure:
-			daemonRegistryServiceResumeDaemonHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceRefreshLocalModelsProcedure:
-			daemonRegistryServiceRefreshLocalModelsHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceSetLocalModelEndpointsProcedure:
-			daemonRegistryServiceSetLocalModelEndpointsHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceClearMachineCachesProcedure:
-			daemonRegistryServiceClearMachineCachesHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceSetDefaultDaemonProcedure:
-			daemonRegistryServiceSetDefaultDaemonHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceSetMachineLabelsProcedure:
-			daemonRegistryServiceSetMachineLabelsHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceRenameMachineProcedure:
-			daemonRegistryServiceRenameMachineHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceListMachinePoolsProcedure:
-			daemonRegistryServiceListMachinePoolsHandler.ServeHTTP(w, r)
-		case DaemonRegistryServicePutMachinePoolProcedure:
-			daemonRegistryServicePutMachinePoolHandler.ServeHTTP(w, r)
-		case DaemonRegistryServiceDeleteMachinePoolProcedure:
-			daemonRegistryServiceDeleteMachinePoolHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedDaemonRegistryServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDaemonRegistryServiceHandler struct{}
 
-func (UnimplementedDaemonRegistryServiceHandler) ListDaemons(context.Context, *connect.Request[v1.ListDaemonsRequest]) (*connect.Response[v1.ListDaemonsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ListDaemons is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) ListDaemons(context.Context, *v1.ListDaemonsRequest) (*v1.ListDaemonsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.ListDaemons is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) GetDaemon(context.Context, *connect.Request[v1.GetDaemonRequest]) (*connect.Response[v1.GetDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.GetDaemon is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) GetDaemon(context.Context, *v1.GetDaemonRequest) (*v1.GetDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.GetDaemon is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) ResolveDaemon(context.Context, *connect.Request[v1.ResolveDaemonRequest]) (*connect.Response[v1.ResolveDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ResolveDaemon is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) ResolveDaemon(context.Context, *v1.ResolveDaemonRequest) (*v1.ResolveDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.ResolveDaemon is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ResumeDaemon is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) ResumeDaemon(context.Context, *v1.ResumeDaemonRequest) (*v1.ResumeDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.ResumeDaemon is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) RefreshLocalModels(context.Context, *connect.Request[v1.RefreshLocalModelsRequest]) (*connect.Response[v1.RefreshLocalModelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.RefreshLocalModels is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) RefreshLocalModels(context.Context, *v1.RefreshLocalModelsRequest) (*v1.RefreshLocalModelsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.RefreshLocalModels is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.SetLocalModelEndpoints is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) SetLocalModelEndpoints(context.Context, *v1.SetLocalModelEndpointsRequest) (*v1.SetLocalModelEndpointsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.SetLocalModelEndpoints is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ClearMachineCaches is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) ClearMachineCaches(context.Context, *v1.ClearMachineCachesRequest) (*v1.ClearMachineCachesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.ClearMachineCaches is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) SetDefaultDaemon(context.Context, *connect.Request[v1.SetDefaultDaemonRequest]) (*connect.Response[v1.SetDefaultDaemonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.SetDefaultDaemon is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) SetDefaultDaemon(context.Context, *v1.SetDefaultDaemonRequest) (*v1.SetDefaultDaemonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.SetDefaultDaemon is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) SetMachineLabels(context.Context, *connect.Request[v1.SetMachineLabelsRequest]) (*connect.Response[v1.SetMachineLabelsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.SetMachineLabels is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) SetMachineLabels(context.Context, *v1.SetMachineLabelsRequest) (*v1.SetMachineLabelsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.SetMachineLabels is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) RenameMachine(context.Context, *connect.Request[v1.RenameMachineRequest]) (*connect.Response[v1.RenameMachineResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.RenameMachine is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) RenameMachine(context.Context, *v1.RenameMachineRequest) (*v1.RenameMachineResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.RenameMachine is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) ListMachinePools(context.Context, *connect.Request[v1.ListMachinePoolsRequest]) (*connect.Response[v1.ListMachinePoolsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ListMachinePools is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) ListMachinePools(context.Context, *v1.ListMachinePoolsRequest) (*v1.ListMachinePoolsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.ListMachinePools is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) PutMachinePool(context.Context, *connect.Request[v1.PutMachinePoolRequest]) (*connect.Response[v1.PutMachinePoolResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.PutMachinePool is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) PutMachinePool(context.Context, *v1.PutMachinePoolRequest) (*v1.PutMachinePoolResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.PutMachinePool is not implemented")
 }
 
-func (UnimplementedDaemonRegistryServiceHandler) DeleteMachinePool(context.Context, *connect.Request[v1.DeleteMachinePoolRequest]) (*connect.Response[v1.DeleteMachinePoolResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.DeleteMachinePool is not implemented"))
+func (UnimplementedDaemonRegistryServiceHandler) DeleteMachinePool(context.Context, *v1.DeleteMachinePoolRequest) (*v1.DeleteMachinePoolResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.DaemonRegistryService.DeleteMachinePool is not implemented")
+}
+
+type daemonRegistryServiceClient struct {
+	client *connect.Client
+}
+
+func (c *daemonRegistryServiceClient) ListDaemons(ctx context.Context, req *v1.ListDaemonsRequest) (*v1.ListDaemonsResponse, error) {
+	var res v1.ListDaemonsResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceListDaemonsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) GetDaemon(ctx context.Context, req *v1.GetDaemonRequest) (*v1.GetDaemonResponse, error) {
+	var res v1.GetDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceGetDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) ResolveDaemon(ctx context.Context, req *v1.ResolveDaemonRequest) (*v1.ResolveDaemonResponse, error) {
+	var res v1.ResolveDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceResolveDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) ResumeDaemon(ctx context.Context, req *v1.ResumeDaemonRequest) (*v1.ResumeDaemonResponse, error) {
+	var res v1.ResumeDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceResumeDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) RefreshLocalModels(ctx context.Context, req *v1.RefreshLocalModelsRequest) (*v1.RefreshLocalModelsResponse, error) {
+	var res v1.RefreshLocalModelsResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceRefreshLocalModelsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) SetLocalModelEndpoints(ctx context.Context, req *v1.SetLocalModelEndpointsRequest) (*v1.SetLocalModelEndpointsResponse, error) {
+	var res v1.SetLocalModelEndpointsResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceSetLocalModelEndpointsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) ClearMachineCaches(ctx context.Context, req *v1.ClearMachineCachesRequest) (*v1.ClearMachineCachesResponse, error) {
+	var res v1.ClearMachineCachesResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceClearMachineCachesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) SetDefaultDaemon(ctx context.Context, req *v1.SetDefaultDaemonRequest) (*v1.SetDefaultDaemonResponse, error) {
+	var res v1.SetDefaultDaemonResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceSetDefaultDaemonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) SetMachineLabels(ctx context.Context, req *v1.SetMachineLabelsRequest) (*v1.SetMachineLabelsResponse, error) {
+	var res v1.SetMachineLabelsResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceSetMachineLabelsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) RenameMachine(ctx context.Context, req *v1.RenameMachineRequest) (*v1.RenameMachineResponse, error) {
+	var res v1.RenameMachineResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceRenameMachineSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) ListMachinePools(ctx context.Context, req *v1.ListMachinePoolsRequest) (*v1.ListMachinePoolsResponse, error) {
+	var res v1.ListMachinePoolsResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceListMachinePoolsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) PutMachinePool(ctx context.Context, req *v1.PutMachinePoolRequest) (*v1.PutMachinePoolResponse, error) {
+	var res v1.PutMachinePoolResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServicePutMachinePoolSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *daemonRegistryServiceClient) DeleteMachinePool(ctx context.Context, req *v1.DeleteMachinePoolRequest) (*v1.DeleteMachinePoolResponse, error) {
+	var res v1.DeleteMachinePoolResponse
+	if err := c.client.CallUnary(ctx, daemonRegistryServiceDeleteMachinePoolSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type daemonRegistryServiceHandler struct{ svc DaemonRegistryServiceHandler }
+
+func (h daemonRegistryServiceHandler) listDaemons(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListDaemonsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListDaemons(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) getDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) resolveDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolveDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) resumeDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResumeDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResumeDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) refreshLocalModels(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RefreshLocalModelsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RefreshLocalModels(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) setLocalModelEndpoints(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetLocalModelEndpointsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetLocalModelEndpoints(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) clearMachineCaches(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ClearMachineCachesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ClearMachineCaches(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) setDefaultDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetDefaultDaemonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetDefaultDaemon(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) setMachineLabels(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetMachineLabelsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetMachineLabels(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) renameMachine(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RenameMachineRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RenameMachine(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) listMachinePools(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMachinePoolsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMachinePools(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) putMachinePool(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PutMachinePoolRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PutMachinePool(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h daemonRegistryServiceHandler) deleteMachinePool(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteMachinePoolRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteMachinePool(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

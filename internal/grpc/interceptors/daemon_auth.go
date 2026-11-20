@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -46,36 +46,36 @@ func NewDaemonAuthInterceptor(tokens auth.AccessTokenAccountIntrospector) (*Daem
 func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(string) string) (context.Context, error) {
 	authHeader := strings.TrimSpace(header("Authorization"))
 	if authHeader == "" {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("missing authorization token"))
+		return nil, svcerr.ToConnectV2(svcerr.Unauthenticated("missing authorization token"))
 	}
 	rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 	if rawToken == authHeader {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid authorization header format"))
+		return nil, svcerr.ToConnectV2(svcerr.Unauthenticated("invalid authorization header format"))
 	}
 	rawToken = strings.TrimSpace(rawToken)
 	if !auth.IsAccessTokenFormat(rawToken) {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("daemon credential must be an rlat_ access token; re-register the daemon"))
+		return nil, svcerr.ToConnectV2(svcerr.Unauthenticated("daemon credential must be an rlat_ access token; re-register the daemon"))
 	}
 
 	account, err := i.tokens.IntrospectAccount(ctx, rawToken)
 	p := account.Principal
 	if err != nil {
 		if errors.Is(err, auth.ErrAccessTokenInactive) {
-			return nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid daemon auth token"))
+			return nil, svcerr.ToConnectV2(svcerr.Unauthenticated("invalid daemon auth token"))
 		}
 		// The authority is unreachable: our outage, not the daemon's bad
 		// credential. Unavailable makes the daemon retry instead of
 		// discarding a good token. The daemon reads only the fixed text;
 		// the authority's own error stays server-side as the cause, which
 		// the "rpc failed" record logs.
-		return nil, svcerr.ToConnect(svcerr.WithCause(
+		return nil, svcerr.ToConnectV2(svcerr.WithCause(
 			svcerr.Unavailable("daemon credential verification unavailable"), err))
 	}
 	if !p.Scopes.Permits(fat.ScopeDaemonConnect) || p.ActingUserID == "" {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("token does not grant daemon:connect"))
+		return nil, svcerr.ToConnectV2(svcerr.Unauthenticated("token does not grant daemon:connect"))
 	}
 	if p.Resource != nil && p.Resource.Kind != fat.ResourceDaemon {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("token is bound to a non-daemon resource"))
+		return nil, svcerr.ToConnectV2(svcerr.Unauthenticated("token is bound to a non-daemon resource"))
 	}
 
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, p.ActingUserID)
@@ -97,26 +97,15 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 	return ctx, nil
 }
 
-func (i *DaemonAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		authenticatedCtx, err := i.authenticate(ctx, req.Header().Get)
+// Intercept is the daemon authentication interceptor (a
+// connect.ServerInterceptor), for unary and streaming RPCs alike. A refusal
+// goes out through svcerr.RejectV2, which delivers its metadata.
+func (i *DaemonAuthInterceptor) Intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		authenticatedCtx, err := i.authenticate(ctx, requestHeader(ctx))
 		if err != nil {
-			return nil, err
+			return svcerr.RejectV2(ctx, err)
 		}
-		return next(authenticatedCtx, req)
-	}
-}
-
-func (i *DaemonAuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (i *DaemonAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		authenticatedCtx, err := i.authenticate(ctx, conn.RequestHeader().Get)
-		if err != nil {
-			return err
-		}
-		return next(authenticatedCtx, conn)
+		return next(authenticatedCtx, spec, stream)
 	}
 }

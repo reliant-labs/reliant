@@ -58,7 +58,7 @@ func TestUnpinnedChatStaysOnTheMachineThatHasTheProjectWhenALaptopConnects(t *te
 	// First run: StartChat with the default machine picker value.
 	resp, err := e.start(t, nil)
 	require.NoError(t, err)
-	chatID := resp.Msg.GetChat().GetId()
+	chatID := resp.GetChat().GetId()
 
 	chat, err := e.repo.GetChat(e.ctx, chatID)
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestStartChatWithNoInstallsPinsTheRoutersDefault(t *testing.T) {
 	resp, err := e.start(t, nil)
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := e.repo.GetChat(e.ctx, resp.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, only, *chat.ActiveDaemonID)
@@ -151,7 +151,7 @@ func TestStartChatNoMachineIsNeverPinned(t *testing.T) {
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.NoMachine = ptr.Of(true) })
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := e.repo.GetChat(e.ctx, resp.GetChat().GetId())
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 	assert.True(t, chat.NoMachine)

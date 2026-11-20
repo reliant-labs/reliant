@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -21,8 +21,8 @@ import (
 // projectRestoreClient is the slice of the ProjectService client the command
 // needs; reliantv1connect.ProjectServiceClient satisfies it.
 type projectRestoreClient interface {
-	ListDeletedProjects(context.Context, *connect.Request[reliantv1.ListDeletedProjectsRequest]) (*connect.Response[reliantv1.ListDeletedProjectsResponse], error)
-	RestoreProject(context.Context, *connect.Request[reliantv1.RestoreProjectRequest]) (*connect.Response[reliantv1.RestoreProjectResponse], error)
+	ListDeletedProjects(context.Context, *reliantv1.ListDeletedProjectsRequest) (*reliantv1.ListDeletedProjectsResponse, error)
+	RestoreProject(context.Context, *reliantv1.RestoreProjectRequest) (*reliantv1.RestoreProjectResponse, error)
 }
 
 func newProjectRestoreCmd() *cobra.Command {
@@ -71,14 +71,14 @@ type projectRestore struct {
 }
 
 func (r projectRestore) run(ctx context.Context, ref string) error {
-	resp, err := r.client.ListDeletedProjects(ctx, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{}))
+	resp, err := r.client.ListDeletedProjects(ctx, &reliantv1.ListDeletedProjectsRequest{})
 	if err != nil {
 		if connect.CodeOf(err) == connect.CodeUnimplemented {
 			return fmt.Errorf("this server deletes projects at once, so there is nothing to restore: %w", err)
 		}
 		return fmt.Errorf("listing deleted projects: %w", err)
 	}
-	deleted := resp.Msg.GetProjects()
+	deleted := resp.GetProjects()
 	if ref == "" {
 		return r.list(deleted)
 	}
@@ -86,11 +86,11 @@ func (r projectRestore) run(ctx context.Context, ref string) error {
 	if err != nil {
 		return err
 	}
-	restored, err := r.client.RestoreProject(ctx, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: project.GetId()}))
+	restored, err := r.client.RestoreProject(ctx, &reliantv1.RestoreProjectRequest{ProjectId: project.GetId()})
 	if err != nil {
 		return fmt.Errorf("restoring project %s: %w", project.GetId(), err)
 	}
-	resumed := restored.Msg.GetTriggersResumed()
+	resumed := restored.GetTriggersResumed()
 	if r.json {
 		return json.NewEncoder(r.out).Encode(map[string]any{
 			"id": project.GetId(), "name": project.GetName(), "restored": true, "automations_resumed": resumed,

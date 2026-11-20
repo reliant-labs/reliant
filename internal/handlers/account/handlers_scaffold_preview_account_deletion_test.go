@@ -3,9 +3,10 @@ package account_test
 import (
 	"context"
 	"database/sql"
+	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -28,19 +29,19 @@ func TestPreviewAccountDeletion_Generated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	withAccessToken := connect.NewRequest(&pb.PreviewAccountDeletionRequest{})
-	withAccessToken.Header().Set("Authorization", "Bearer "+minted.Plaintext)
+	withAccessToken := http.Header{"Authorization": {"Bearer " + minted.Plaintext}}
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.PreviewAccountDeletionRequest, pb.PreviewAccountDeletionResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.PreviewAccountDeletionRequest, pb.PreviewAccountDeletionResponse]{
 		{
 			Name:    "no caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.PreviewAccountDeletionRequest{}),
+			Req:     &pb.PreviewAccountDeletionRequest{},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "an access token is not an interactive session",
-			Req:     withAccessToken,
+			Req:     &pb.PreviewAccountDeletionRequest{},
+			Header:  withAccessToken,
 			Ctx:     account.AuthedContext(t),
 			WantErr: connect.CodeUnauthenticated,
 		},

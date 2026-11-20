@@ -3,8 +3,6 @@ package settings
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -13,7 +11,7 @@ import (
 
 // TrackOnboardingEvent was never implemented (a commented-out draft follows);
 // it answers exactly as before.
-func (s *Service) TrackOnboardingEvent(ctx context.Context, req *connect.Request[pb.TrackOnboardingEventRequest]) (*connect.Response[pb.TrackOnboardingEventResponse], error) {
+func (s *Service) TrackOnboardingEvent(ctx context.Context, req *pb.TrackOnboardingEventRequest) (*pb.TrackOnboardingEventResponse, error) {
 	return s.UnimplementedSettingsServiceHandler.TrackOnboardingEvent(ctx, req)
 }
 

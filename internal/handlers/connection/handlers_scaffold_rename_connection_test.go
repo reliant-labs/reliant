@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -27,16 +27,16 @@ func TestRenameConnection_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RenameConnectionRequest, pb.RenameConnectionResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.RenameConnectionRequest, pb.RenameConnectionResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.RenameConnectionRequest{Id: "c-1", Name: "work"}),
+			Req:     &pb.RenameConnectionRequest{Id: "c-1", Name: "work"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "a connection the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.RenameConnectionRequest{Id: "c-1", Name: "work"}),
+			Req:     &pb.RenameConnectionRequest{Id: "c-1", Name: "work"},
 			Ctx:     connection.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

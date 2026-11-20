@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -157,13 +157,12 @@ func (s *Service) Name() string {
 	return "tools_daemon"
 }
 
-// Register registers the service handlers with the HTTP mux. ConnectDaemon
+// RegisterV2 registers the service's handlers on server. ConnectDaemon
 // stops its stream's reader before it returns by aborting the request body
 // (serverkit.AbortReceive), which the serverkit listener the mux is served by
 // makes possible; it refuses a stream served any other way.
-func (s *Service) Register(mux *http.ServeMux, opts ...connect.HandlerOption) {
-	path, handler := reliantv1connect.NewToolsDaemonServiceHandler(s, opts...)
-	mux.Handle(path, handler)
+func (s *Service) RegisterV2(server *connect.Server) {
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, s)
 }
 
 // RegisterHTTP registers plain HTTP handlers (callbacks, REST endpoints)

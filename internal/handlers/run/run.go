@@ -12,8 +12,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -109,18 +109,18 @@ func runToProto(run *core.Workflow) *reliantv1.Run {
 // run with no messages at all, which StartChat and SendMessage both reject.
 func (s *Service) StartRun(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StartRunRequest],
-) (*connect.Response[reliantv1.StartRunResponse], error) {
+	req *reliantv1.StartRunRequest,
+) (*reliantv1.StartRunResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.Workflow == "" {
+	if req.Workflow == "" {
 		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 
-	if req.Msg.SessionId != "" {
-		return s.startInSession(ctx, userID, req.Msg)
+	if req.SessionId != "" {
+		return s.startInSession(ctx, userID, req)
 	}
-	return s.startWithNewSession(ctx, userID, req.Msg)
+	return s.startWithNewSession(ctx, userID, req)
 }
 
 // startInSession runs a workflow inside an existing session.
@@ -128,7 +128,7 @@ func (s *Service) startInSession(
 	ctx context.Context,
 	userID string,
 	msg *reliantv1.StartRunRequest,
-) (*connect.Response[reliantv1.StartRunResponse], error) {
+) (*reliantv1.StartRunResponse, error) {
 	chat, err := s.deps.Repo.GetChat(ctx, msg.SessionId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
@@ -150,7 +150,7 @@ func (s *Service) startInSession(
 		if msg.Mode != "" {
 			start.Mode = &msg.Mode
 		}
-		if _, err := s.deps.Chats.StartChat(ctx, connect.NewRequest(start)); err != nil {
+		if _, err := s.deps.Chats.StartChat(ctx, start); err != nil {
 			return nil, err
 		}
 		return s.respondWithSessionRun(ctx, msg.SessionId)
@@ -166,7 +166,7 @@ func (s *Service) startInSession(
 		send.Mode = &msg.Mode
 	}
 
-	if _, err := s.deps.Chats.SendMessage(ctx, connect.NewRequest(send)); err != nil {
+	if _, err := s.deps.Chats.SendMessage(ctx, send); err != nil {
 		return nil, err
 	}
 
@@ -186,7 +186,7 @@ func (s *Service) startWithNewSession(
 	ctx context.Context,
 	userID string,
 	msg *reliantv1.StartRunRequest,
-) (*connect.Response[reliantv1.StartRunResponse], error) {
+) (*reliantv1.StartRunResponse, error) {
 	projectID, err := s.defaultProjectID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -203,16 +203,16 @@ func (s *Service) startWithNewSession(
 		create.Mode = &msg.Mode
 	}
 
-	resp, err := s.deps.Chats.StartChat(ctx, connect.NewRequest(create))
+	resp, err := s.deps.Chats.StartChat(ctx, create)
 	if err != nil {
 		return nil, err
 	}
 
-	run, err := s.deps.Repo.GetWorkflow(ctx, resp.Msg.WorkflowId)
+	run, err := s.deps.Repo.GetWorkflow(ctx, resp.WorkflowId)
 	if err != nil || run == nil {
 		return nil, svcerr.WithCause(errRunNotReadBack, err)
 	}
-	return connect.NewResponse(&reliantv1.StartRunResponse{Run: runToProto(run)}), nil
+	return &reliantv1.StartRunResponse{Run: runToProto(run)}, nil
 }
 
 // defaultProjectID resolves the project a headless run is hosted in.
@@ -246,7 +246,7 @@ const defaultProjectScan = 200
 func (s *Service) respondWithSessionRun(
 	ctx context.Context,
 	sessionID string,
-) (*connect.Response[reliantv1.StartRunResponse], error) {
+) (*reliantv1.StartRunResponse, error) {
 	chat, err := s.deps.Repo.GetChat(ctx, sessionID)
 	if err != nil || chat == nil || chat.WorkflowID == nil || *chat.WorkflowID == "" {
 		return nil, svcerr.WithCause(errRunNotReadBack, err)
@@ -255,7 +255,7 @@ func (s *Service) respondWithSessionRun(
 	if err != nil || run == nil {
 		return nil, svcerr.WithCause(errRunNotReadBack, err)
 	}
-	return connect.NewResponse(&reliantv1.StartRunResponse{Run: runToProto(run)}), nil
+	return &reliantv1.StartRunResponse{Run: runToProto(run)}, nil
 }
 
 // SignalRun delivers an event to a run that is already going, and never starts
@@ -268,16 +268,17 @@ func (s *Service) respondWithSessionRun(
 // for an undelivered signal; the caller owns retrying.
 func (s *Service) SignalRun(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SignalRunRequest],
-) (*connect.Response[reliantv1.SignalRunResponse], error) {
+	req *reliantv1.SignalRunRequest,
+) (*reliantv1.SignalRunResponse, error) {
+	info := serverkit.CallInfoV2(ctx)
 	userID := auth.MustGetUserID(ctx)
 
-	run, chat, err := s.runOwnedBy(ctx, userID, req.Msg.RunId)
+	run, chat, err := s.runOwnedBy(ctx, userID, req.RunId)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(req.Msg.Messages) == 0 {
+	if len(req.Messages) == 0 {
 		return nil, svcerr.InvalidArgument("messages is required")
 	}
 
@@ -286,7 +287,7 @@ func (s *Service) SignalRun(
 	// refuses to start it (the first send is StartChat's), so a signal to it
 	// would surface FailedPrecondition instead of delivered=false.
 	if !run.Status.Live() || run.Status == db.Pending() {
-		return connect.NewResponse(&reliantv1.SignalRunResponse{Delivered: false}), nil
+		return &reliantv1.SignalRunResponse{Delivered: false}, nil
 	}
 
 	// Thread names a thread of the run (its id, or the node of an agent
@@ -295,47 +296,47 @@ func (s *Service) SignalRun(
 	// of a graph run — and is refused, listing them, when several run in
 	// parallel (handlers/chat run_recipient.go). A run that is a sub-agent's
 	// keeps its own thread as the default.
-	thread := req.Msg.Thread
+	thread := req.Thread
 	if thread == "" && run.ParentID != nil && *run.ParentID != "" {
 		thread = run.Thread
 	}
 
 	send := &reliantv1.SendMessageRequest{
 		ChatId:   chat.ID,
-		Messages: req.Msg.Messages,
+		Messages: req.Messages,
 	}
 	if thread != "" {
 		send.TargetThread = &thread
 	}
 
-	resp, err := s.deps.Chats.SendMessage(ctx, connect.NewRequest(send))
+	resp, err := s.deps.Chats.SendMessage(ctx, send)
 	if err != nil {
 		// Live, but no agent is running in it to read the message: nothing
 		// was queued. The documented answer to "nowhere to put the event"
 		// is delivered=false, not an error; the header says why.
 		if errors.Is(err, core.ErrRunNoListeningAgent) {
-			out := connect.NewResponse(&reliantv1.SignalRunResponse{Delivered: false})
-			out.Header().Set(errreason.NotDeliveredHeader, errreason.RunNoListeningAgent)
+			out := &reliantv1.SignalRunResponse{Delivered: false}
+			info.ResponseHeader().Set(errreason.NotDeliveredHeader, errreason.RunNoListeningAgent)
 			return out, nil
 		}
 		return nil, err
 	}
 
 	out := &reliantv1.SignalRunResponse{Delivered: true}
-	if resp.Msg.MessageId != "" {
-		out.MessageIds = []string{resp.Msg.MessageId}
+	if resp.MessageId != "" {
+		out.MessageIds = []string{resp.MessageId}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // GetRun returns one run's current state.
 func (s *Service) GetRun(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetRunRequest],
-) (*connect.Response[reliantv1.GetRunResponse], error) {
+	req *reliantv1.GetRunRequest,
+) (*reliantv1.GetRunResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	run, _, err := s.runOwnedBy(ctx, userID, req.Msg.RunId)
+	run, _, err := s.runOwnedBy(ctx, userID, req.RunId)
 	if err != nil {
 		return nil, err
 	}
@@ -348,9 +349,9 @@ func (s *Service) GetRun(
 	if truncated {
 		rows = rows[:rundiagnostics.RecordLimit]
 	}
-	return connect.NewResponse(&reliantv1.GetRunResponse{
+	return &reliantv1.GetRunResponse{
 		Run: runToProto(run), Nodes: rundiagnostics.Nodes(rows), NodesTruncated: truncated,
-	}), nil
+	}, nil
 }
 
 // ListRuns lists runs. With session_id or parent_id it lists that session's
@@ -359,35 +360,35 @@ func (s *Service) GetRun(
 // owns, narrowed by the request's filters and paged by keyset.
 func (s *Service) ListRuns(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListRunsRequest],
-) (*connect.Response[reliantv1.ListRunsResponse], error) {
+	req *reliantv1.ListRunsRequest,
+) (*reliantv1.ListRunsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// The org a request names is verified (and a machine credential's applied)
 	// before any branch: one chat's runs are its chat's org's, so a session or
 	// parent outside the scope lists nothing.
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
 
 	switch {
-	case req.Msg.GetParentId() != "":
+	case req.GetParentId() != "":
 		// Ownership is checked via the parent, which resolves to a chat.
-		_, chat, err := s.runOwnedBy(ctx, userID, req.Msg.GetParentId())
+		_, chat, err := s.runOwnedBy(ctx, userID, req.GetParentId())
 		if err != nil {
 			return nil, err
 		}
 		if !scope.Includes(chat.OrgID) {
-			return connect.NewResponse(filterRunsToProto(nil, req.Msg)), nil
+			return filterRunsToProto(nil, req), nil
 		}
-		children, err := s.deps.Repo.ListChildWorkflows(ctx, req.Msg.GetParentId())
+		children, err := s.deps.Repo.ListChildWorkflows(ctx, req.GetParentId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list runs"))
 		}
-		return connect.NewResponse(filterRunsToProto(children, req.Msg)), nil
+		return filterRunsToProto(children, req), nil
 
-	case req.Msg.GetSessionId() != "":
-		chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.GetSessionId())
+	case req.GetSessionId() != "":
+		chat, err := s.deps.Repo.GetChatRow(ctx, req.GetSessionId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get session"))
 		}
@@ -395,16 +396,16 @@ func (s *Service) ListRuns(
 			return nil, svcerr.NotFound("session")
 		}
 		if !scope.Includes(chat.OrgID) {
-			return connect.NewResponse(filterRunsToProto(nil, req.Msg)), nil
+			return filterRunsToProto(nil, req), nil
 		}
-		runs, err := s.deps.Repo.ListRootWorkflows(ctx, req.Msg.GetSessionId())
+		runs, err := s.deps.Repo.ListRootWorkflows(ctx, req.GetSessionId())
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list runs"))
 		}
-		return connect.NewResponse(filterRunsToProto(runs, req.Msg)), nil
+		return filterRunsToProto(runs, req), nil
 
 	default:
-		return s.listAllRuns(ctx, userID, scope, req.Msg)
+		return s.listAllRuns(ctx, userID, scope, req)
 	}
 }
 
@@ -418,7 +419,7 @@ func (s *Service) listAllRuns(
 	userID string,
 	scope *core.OrgScope,
 	req *reliantv1.ListRunsRequest,
-) (*connect.Response[reliantv1.ListRunsResponse], error) {
+) (*reliantv1.ListRunsResponse, error) {
 	limit := int(req.Limit)
 	if limit <= 0 {
 		limit = defaultRunsPageSize
@@ -494,7 +495,7 @@ func (s *Service) listAllRuns(
 	if next != nil {
 		resp.NextPageToken = encodeRunCursor(*next)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 func runLogResponse(items []*db.RunListItem, events []*db.UnlaunchedTriggerEvent) *reliantv1.ListRunsResponse {
@@ -577,14 +578,14 @@ func unlaunchedEventToProto(event *db.UnlaunchedTriggerEvent) *reliantv1.Unlaunc
 // LastRunPerWorkflow returns the newest run of each workflow the caller has run.
 func (s *Service) LastRunPerWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.LastRunPerWorkflowRequest],
-) (*connect.Response[reliantv1.LastRunPerWorkflowResponse], error) {
+	req *reliantv1.LastRunPerWorkflowRequest,
+) (*reliantv1.LastRunPerWorkflowResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	items, err := s.deps.Repo.LastRunPerWorkflow(ctx, db.RunListFilters{
 		UserID:    userID,
-		ProjectID: req.Msg.ProjectId,
-		Workflows: req.Msg.Workflow,
+		ProjectID: req.ProjectId,
+		Workflows: req.Workflow,
 	})
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list runs"))
@@ -593,7 +594,7 @@ func (s *Service) LastRunPerWorkflow(
 	for _, item := range items {
 		resp.Runs = append(resp.Runs, runItemToProto(item))
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // runItemToProto converts a run-list row, which carries the chat and trigger
@@ -684,11 +685,11 @@ func filterRunsToProto(runs []*core.Workflow, req *reliantv1.ListRunsRequest) *r
 // PauseRun parks a run, leaving it live and resumable.
 func (s *Service) PauseRun(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PauseRunRequest],
-) (*connect.Response[reliantv1.PauseRunResponse], error) {
+	req *reliantv1.PauseRunRequest,
+) (*reliantv1.PauseRunResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	_, chat, err := s.runOwnedBy(ctx, userID, req.Msg.RunId)
+	_, chat, err := s.runOwnedBy(ctx, userID, req.RunId)
 	if err != nil {
 		return nil, err
 	}
@@ -696,34 +697,34 @@ func (s *Service) PauseRun(
 	// Delegated so the tool-cancel-before-pause ordering is not duplicated:
 	// tools must be cancelled BEFORE the workflow is freed to re-dispatch, or a
 	// successor step can start while a non-idempotent tool is still running.
-	resp, err := s.deps.Chats.PauseChat(ctx, connect.NewRequest(&reliantv1.PauseChatRequest{
+	resp, err := s.deps.Chats.PauseChat(ctx, &reliantv1.PauseChatRequest{
 		ChatId: chat.ID,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.PauseRunResponse{
-		Success: resp.Msg.Success,
-		Message: resp.Msg.Message,
-	}), nil
+	return &reliantv1.PauseRunResponse{
+		Success: resp.Success,
+		Message: resp.Message,
+	}, nil
 }
 
 // ResumeRun continues a paused run from its recorded position.
 func (s *Service) ResumeRun(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ResumeRunRequest],
-) (*connect.Response[reliantv1.ResumeRunResponse], error) {
+	req *reliantv1.ResumeRunRequest,
+) (*reliantv1.ResumeRunResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	_, chat, err := s.runOwnedBy(ctx, userID, req.Msg.RunId)
+	_, chat, err := s.runOwnedBy(ctx, userID, req.RunId)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := s.deps.Chats.ResumeChat(ctx, connect.NewRequest(&reliantv1.ResumeChatRequest{
+	resp, err := s.deps.Chats.ResumeChat(ctx, &reliantv1.ResumeChatRequest{
 		ChatId: chat.ID,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -732,50 +733,50 @@ func (s *Service) ResumeRun(
 	// run can start a NEW execution that continues from the checkpoint, so the
 	// live run is whatever the chat now points at.
 	out := &reliantv1.ResumeRunResponse{
-		Success: resp.Msg.Success,
-		Message: resp.Msg.Message,
+		Success: resp.Success,
+		Message: resp.Message,
 	}
 	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
 		if current, err := s.deps.Repo.GetWorkflow(ctx, *chat.WorkflowID); err == nil {
 			out.Run = runToProto(current)
 		}
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // CancelRun hard-stops a run. Terminal by intent.
 func (s *Service) CancelRun(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CancelRunRequest],
-) (*connect.Response[reliantv1.CancelRunResponse], error) {
+	req *reliantv1.CancelRunRequest,
+) (*reliantv1.CancelRunResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	_, chat, err := s.runOwnedBy(ctx, userID, req.Msg.RunId)
+	_, chat, err := s.runOwnedBy(ctx, userID, req.RunId)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := s.deps.Chats.TerminateChat(ctx, connect.NewRequest(&reliantv1.TerminateChatRequest{
+	resp, err := s.deps.Chats.TerminateChat(ctx, &reliantv1.TerminateChatRequest{
 		ChatId: chat.ID,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.CancelRunResponse{
-		Success: resp.Msg.Success,
-		Message: resp.Msg.Message,
-	}), nil
+	return &reliantv1.CancelRunResponse{
+		Success: resp.Success,
+		Message: resp.Message,
+	}, nil
 }
 
 // InterruptRun stops what a run is doing now without ending it.
 func (s *Service) InterruptRun(
 	ctx context.Context,
-	req *connect.Request[reliantv1.InterruptRunRequest],
-) (*connect.Response[reliantv1.InterruptRunResponse], error) {
+	req *reliantv1.InterruptRunRequest,
+) (*reliantv1.InterruptRunResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	run, chat, err := s.runOwnedBy(ctx, userID, req.Msg.RunId)
+	run, chat, err := s.runOwnedBy(ctx, userID, req.RunId)
 	if err != nil {
 		return nil, err
 	}
@@ -783,21 +784,21 @@ func (s *Service) InterruptRun(
 	// Empty thread means "this run's own thread", which is the useful default
 	// for a run-addressed API. ChatService's equivalent is chat-addressed and
 	// takes the thread explicitly.
-	thread := req.Msg.Thread
+	thread := req.Thread
 	if thread == "" {
 		thread = run.Thread
 	}
 
-	resp, err := s.deps.Chats.InterruptThread(ctx, connect.NewRequest(&reliantv1.InterruptThreadRequest{
+	resp, err := s.deps.Chats.InterruptThread(ctx, &reliantv1.InterruptThreadRequest{
 		ChatId:   chat.ID,
 		ThreadId: thread,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.InterruptRunResponse{
-		CancelledToolCalls:     resp.Msg.CancelledToolCalls,
-		UndeliverableToolCalls: resp.Msg.UndeliverableToolCalls,
-	}), nil
+	return &reliantv1.InterruptRunResponse{
+		CancelledToolCalls:     resp.CancelledToolCalls,
+		UndeliverableToolCalls: resp.UndeliverableToolCalls,
+	}, nil
 }

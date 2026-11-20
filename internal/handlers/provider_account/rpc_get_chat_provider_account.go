@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,13 +18,13 @@ import (
 // every chat before its first model call. A chat that is another user's, or absent, is NotFound.
 func (s *Service) GetChatProviderAccount(
 	ctx context.Context,
-	req *connect.Request[pb.GetChatProviderAccountRequest],
-) (*connect.Response[pb.GetChatProviderAccountResponse], error) {
+	req *pb.GetChatProviderAccountRequest,
+) (*pb.GetChatProviderAccountResponse, error) {
 	userID, err := callerID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	chatID := req.Msg.GetChatId()
+	chatID := req.GetChatId()
 	if chatID == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("chat_id is required"))
 	}
@@ -36,7 +35,7 @@ func (s *Service) GetChatProviderAccount(
 	root, err := s.deps.Store.GetRootThread(ctx, chatID)
 	if err != nil || root == nil {
 		// A chat with no thread has made no model call.
-		return connect.NewResponse(&pb.GetChatProviderAccountResponse{}), nil
+		return &pb.GetChatProviderAccountResponse{}, nil
 	}
 	servingID, err := s.deps.Store.LatestServingAccount(ctx, root.ID)
 	if err != nil {
@@ -47,7 +46,7 @@ func (s *Service) GetChatProviderAccount(
 		return nil, svcerr.Wrap(err)
 	}
 	if servingID == "" && len(assignments) == 0 {
-		return connect.NewResponse(&pb.GetChatProviderAccountResponse{}), nil
+		return &pb.GetChatProviderAccountResponse{}, nil
 	}
 	accounts, err := s.deps.Store.ListProviderAccounts(ctx, userID)
 	if err != nil {
@@ -90,17 +89,17 @@ func (s *Service) GetChatProviderAccount(
 	}
 	for _, acct := range accounts {
 		if servingID != "" && acct.ID == servingID {
-			return connect.NewResponse(&pb.GetChatProviderAccountResponse{Account: render(acct)}), nil
+			return &pb.GetChatProviderAccountResponse{Account: render(acct)}, nil
 		}
 	}
 	for _, a := range assignments {
 		for _, acct := range accounts {
 			if acct.ID == a.AccountID {
-				return connect.NewResponse(&pb.GetChatProviderAccountResponse{Account: render(acct)}), nil
+				return &pb.GetChatProviderAccountResponse{Account: render(acct)}, nil
 			}
 		}
 	}
-	return connect.NewResponse(&pb.GetChatProviderAccountResponse{}), nil
+	return &pb.GetChatProviderAccountResponse{}, nil
 }
 
 // orgAccountForMember narrows an org's account to what any member of the org may see of it

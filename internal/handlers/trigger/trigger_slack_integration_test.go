@@ -19,7 +19,6 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/stretchr/testify/assert"
@@ -135,17 +134,17 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 		conn := connectSlack(userID, team)
 		created, err := svc.CreateTrigger(context.WithValue(ctx, auth.UserIDContextKey, userID),
-			connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+			&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 				Name: "answer mentions", ProjectId: projectID, DaemonId: daemonID, Workflow: "builtin://agent",
 				Message: "Answer the mention.", Params: mockModelTriggerParams(t),
 				Filter: "!trigger.payload.data.text.contains('ignore me')",
 				Source: &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{
 					Integration: "slack", Events: []string{"app_mention"},
 				}},
-			}}))
+			}})
 		require.NoError(t, err)
-		require.Equal(t, conn.ID, created.Msg.GetTrigger().GetConnectionId(), "the trigger listens through the user's Slack connection")
-		return tenant{userID: userID, conn: conn, trigger: created.Msg.GetTrigger()}
+		require.Equal(t, conn.ID, created.GetTrigger().GetConnectionId(), "the trigger listens through the user's Slack connection")
+		return tenant{userID: userID, conn: conn, trigger: created.GetTrigger()}
 	}
 	acme := newTenant("T0ACME")
 	other := newTenant("T0OTHER")

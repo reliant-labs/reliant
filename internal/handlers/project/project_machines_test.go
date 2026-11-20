@@ -3,13 +3,12 @@ package project
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -91,7 +90,7 @@ func (m *machinesDisk) SendDaemonCommandToDaemon(_ context.Context, _, machine, 
 	defer m.mu.Unlock()
 	m.calls = append(m.calls, machine+" "+commandType)
 	if m.offline[machine] {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("no daemon connected"))
+		return nil, connect.NewError(connect.CodeUnavailable, "no daemon connected")
 	}
 	var req struct {
 		Path string `json:"path"`
@@ -179,22 +178,22 @@ func (f *machinesFixture) rows(t *testing.T, projectID string) map[string]string
 	return out
 }
 
-func codeOf(err error) connect.Code { return svcerr.ToConnect(err).Code() }
+func codeOf(err error) connect.Code { return svcerr.ToConnectV2(err).Code() }
 
 func TestCreateProject_NamedMachine_RunsEverythingThereAndRecordsItsRow(t *testing.T) {
 	f := newMachinesFixture(t)
 	path := "/home/workspace/projects/new-" + uuid.NewString()
 
-	resp, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := f.svc.CreateProject(f.ctx, &reliantv1.CreateProjectRequest{
 		Name: "new", Path: path, DaemonId: &f.cloud,
-	}))
+	})
 	require.NoError(t, err)
 
-	assert.False(t, resp.Msg.Attached)
-	require.NotNil(t, resp.Msg.ProjectDaemon)
-	assert.Equal(t, f.cloud, resp.Msg.ProjectDaemon.DaemonId)
-	assert.Equal(t, "cloud-box", resp.Msg.ProjectDaemon.DaemonName)
-	assert.Equal(t, map[string]string{f.cloud: path}, f.rows(t, resp.Msg.Project.Id))
+	assert.False(t, resp.Attached)
+	require.NotNil(t, resp.ProjectDaemon)
+	assert.Equal(t, f.cloud, resp.ProjectDaemon.DaemonId)
+	assert.Equal(t, "cloud-box", resp.ProjectDaemon.DaemonName)
+	assert.Equal(t, map[string]string{f.cloud: path}, f.rows(t, resp.Project.Id))
 	assert.Empty(t, f.disk.callsTo(f.laptop), "nothing may reach the default machine")
 	assert.Contains(t, f.disk.callsTo(f.cloud), "fs.mkdir")
 }
@@ -203,11 +202,11 @@ func TestCreateProject_NoMachine_StillUsesTheDefaultMachine(t *testing.T) {
 	f := newMachinesFixture(t)
 	path := "/home/workspace/projects/default-" + uuid.NewString()
 
-	resp, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "d", Path: path}))
+	resp, err := f.svc.CreateProject(f.ctx, &reliantv1.CreateProjectRequest{Name: "d", Path: path})
 	require.NoError(t, err)
 
-	assert.Nil(t, resp.Msg.ProjectDaemon, "the response is unchanged for a request that names no machine")
-	assert.Equal(t, map[string]string{f.laptop: path}, f.rows(t, resp.Msg.Project.Id))
+	assert.Nil(t, resp.ProjectDaemon, "the response is unchanged for a request that names no machine")
+	assert.Equal(t, map[string]string{f.laptop: path}, f.rows(t, resp.Project.Id))
 	assert.Empty(t, f.disk.callsTo(f.cloud))
 }
 
@@ -217,13 +216,13 @@ func TestCreateProject_NamedMachine_AttachesTheProjectAtThatPath(t *testing.T) {
 	existing := f.project(t, "shared", path, f.laptop, nil)
 	f.disk.folder(f.cloud, path, "")
 
-	resp, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := f.svc.CreateProject(f.ctx, &reliantv1.CreateProjectRequest{
 		Name: "shared", Path: path, DaemonId: &f.cloud,
-	}))
+	})
 	require.NoError(t, err)
 
-	assert.True(t, resp.Msg.Attached)
-	assert.Equal(t, existing.ID, resp.Msg.Project.Id)
+	assert.True(t, resp.Attached)
+	assert.Equal(t, existing.ID, resp.Project.Id)
 	assert.Equal(t, map[string]string{f.laptop: path, f.cloud: path}, f.rows(t, existing.ID))
 	assert.NotContains(t, f.disk.callsTo(f.cloud), "fs.mkdir", "attaching a found project never creates its folder")
 }
@@ -235,12 +234,12 @@ func TestCreateProject_NamedMachine_AttachesTheProjectOfTheFoldersRemote(t *test
 	local := "/Users/me/properties-" + uuid.NewString()
 	f.disk.folder(f.laptop, local, remote)
 
-	resp, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := f.svc.CreateProject(f.ctx, &reliantv1.CreateProjectRequest{
 		Name: "properties", Path: local, DaemonId: &f.laptop,
-	}))
+	})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Attached)
-	assert.Equal(t, existing.ID, resp.Msg.Project.Id)
+	assert.True(t, resp.Attached)
+	assert.Equal(t, existing.ID, resp.Project.Id)
 	assert.Equal(t, map[string]string{f.cloud: existing.Path, f.laptop: local}, f.rows(t, existing.ID))
 }
 
@@ -256,9 +255,9 @@ func TestCreateProject_NamedMachine_ProjectAlreadyThereIsAlreadyExists(t *testin
 	path := "/home/workspace/projects/here-" + uuid.NewString()
 	f.project(t, "here", path, f.cloud, nil)
 
-	_, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	_, err := f.svc.CreateProject(f.ctx, &reliantv1.CreateProjectRequest{
 		Name: "here", Path: path, DaemonId: &f.cloud,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeAlreadyExists, codeOf(err))
 }
@@ -267,12 +266,12 @@ func TestCreateProject_NamedMachine_RefusesAnotherUsersMachineAndAnOfflineOne(t 
 	f := newMachinesFixture(t)
 	path := "/home/workspace/projects/x-" + uuid.NewString()
 
-	_, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "x", Path: path, DaemonId: &f.foreign}))
+	_, err := f.svc.CreateProject(f.ctx, &reliantv1.CreateProjectRequest{Name: "x", Path: path, DaemonId: &f.foreign})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, codeOf(err))
 
 	f.disk.offline[f.desktop] = true
-	_, err = f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "x", Path: path, DaemonId: &f.desktop}))
+	_, err = f.svc.CreateProject(f.ctx, &reliantv1.CreateProjectRequest{Name: "x", Path: path, DaemonId: &f.desktop})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnavailable, codeOf(err))
 	_, lookupErr := f.repo.GetProjectByPathAndUser(f.ctx, path, f.userID)
@@ -286,13 +285,13 @@ func TestAttachProjectToDaemon_RecordsAnExistingFolder(t *testing.T) {
 	local := "/Users/me/a-" + uuid.NewString()
 	f.disk.folder(f.laptop, local, remote)
 
-	resp, err := f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	resp, err := f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop, Path: local,
-	}))
+	})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.Warnings)
-	assert.Equal(t, reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLED, resp.Msg.ProjectDaemon.InstallState)
-	assert.NotNil(t, resp.Msg.ProjectDaemon.VerifiedAt)
+	assert.Empty(t, resp.Warnings)
+	assert.Equal(t, reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLED, resp.ProjectDaemon.InstallState)
+	assert.NotNil(t, resp.ProjectDaemon.VerifiedAt)
 	assert.Equal(t, local, f.rows(t, p.ID)[f.laptop])
 	assert.NotContains(t, f.disk.callsTo(f.laptop), "fs.mkdir")
 }
@@ -302,18 +301,18 @@ func TestAttachProjectToDaemon_RefusesAMissingFolderOrAFile(t *testing.T) {
 	p := f.project(t, "b", "/home/workspace/b-"+uuid.NewString(), f.cloud, nil)
 
 	missing := "/Users/me/typo-" + uuid.NewString()
-	_, err := f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err := f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop, Path: missing,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
 	assert.Contains(t, err.Error(), "does not exist on")
 
 	file := "/Users/me/notes-" + uuid.NewString() + ".txt"
 	f.disk.file(f.laptop, file)
-	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop, Path: file,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
 
@@ -321,9 +320,9 @@ func TestAttachProjectToDaemon_RefusesAMissingFolderOrAFile(t *testing.T) {
 	assert.False(t, recorded, "a refused attach records nothing")
 
 	f.disk.offline[f.desktop] = true
-	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.desktop, Path: "/x",
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnavailable, codeOf(err))
 }
@@ -335,12 +334,12 @@ func TestAttachProjectToDaemon_WarnsOnAFolderOfAnotherRemote(t *testing.T) {
 	local := "/Users/me/c-" + uuid.NewString()
 	f.disk.folder(f.laptop, local, "https://github.com/acme/other.git")
 
-	resp, err := f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	resp, err := f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop, Path: local,
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Warnings, 1)
-	assert.Contains(t, resp.Msg.Warnings[0], "acme/other")
+	require.Len(t, resp.Warnings, 1)
+	assert.Contains(t, resp.Warnings[0], "acme/other")
 }
 
 func TestAttachProjectToDaemon_RefusesAnotherProjectsFolderAndAForeignMachine(t *testing.T) {
@@ -349,15 +348,15 @@ func TestAttachProjectToDaemon_RefusesAnotherProjectsFolderAndAForeignMachine(t 
 	f.project(t, "d", path, f.cloud, nil)
 	other := f.project(t, "e", "/home/workspace/e-"+uuid.NewString(), f.laptop, nil)
 
-	_, err := f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err := f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: other.ID, DaemonId: f.cloud, Path: path,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeAlreadyExists, codeOf(err))
 
-	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: other.ID, DaemonId: f.foreign, Path: path,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, codeOf(err))
 }
@@ -370,9 +369,9 @@ func TestDetachProjectFromDaemon_ForgetsTheRowAndKeepsTheFiles(t *testing.T) {
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, local, nil))
 	f.disk.folder(f.laptop, local, "")
 
-	_, err := f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+	_, err := f.svc.DetachProjectFromDaemon(f.ctx, &reliantv1.DetachProjectFromDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop,
-	}))
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, map[string]string{f.cloud: path}, f.rows(t, p.ID))
@@ -383,9 +382,9 @@ func TestDetachProjectFromDaemon_ForgetsTheRowAndKeepsTheFiles(t *testing.T) {
 	assert.Equal(t, local, detached[0].Path)
 
 	// Idempotent.
-	_, err = f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+	_, err = f.svc.DetachProjectFromDaemon(f.ctx, &reliantv1.DetachProjectFromDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop,
-	}))
+	})
 	require.NoError(t, err)
 
 	// The connect heal leaves the detached pair alone.
@@ -394,9 +393,9 @@ func TestDetachProjectFromDaemon_ForgetsTheRowAndKeepsTheFiles(t *testing.T) {
 	assert.False(t, recorded)
 
 	// Attaching it again ends the detachment.
-	_, err = f.svc.AttachProjectToDaemon(f.ctx, connect.NewRequest(&reliantv1.AttachProjectToDaemonRequest{
+	_, err = f.svc.AttachProjectToDaemon(f.ctx, &reliantv1.AttachProjectToDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop, Path: local,
-	}))
+	})
 	require.NoError(t, err)
 	detached, err = f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
 	require.NoError(t, err)
@@ -407,9 +406,9 @@ func TestDetachProjectFromDaemon_RefusesTheOnlyMachineAndOneWithWorkspaces(t *te
 	f := newMachinesFixture(t)
 	p := f.project(t, "g", "/home/workspace/g-"+uuid.NewString(), f.cloud, nil)
 
-	_, err := f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+	_, err := f.svc.DetachProjectFromDaemon(f.ctx, &reliantv1.DetachProjectFromDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.cloud,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
 	assert.Contains(t, err.Error(), "only machine")
@@ -422,9 +421,9 @@ func TestDetachProjectFromDaemon_RefusesTheOnlyMachineAndOneWithWorkspaces(t *te
 		Status:    int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	_, err = f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+	_, err = f.svc.DetachProjectFromDaemon(f.ctx, &reliantv1.DetachProjectFromDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.cloud,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
 	assert.Contains(t, err.Error(), "workspace")
@@ -454,9 +453,9 @@ func TestDetachProjectFromDaemon_RefusesWhileAnArchivedWorkspaceRetainsItsDirect
 	}))
 
 	detach := func() error {
-		_, err := f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+		_, err := f.svc.DetachProjectFromDaemon(f.ctx, &reliantv1.DetachProjectFromDaemonRequest{
 			ProjectId: p.ID, DaemonId: f.cloud,
-		}))
+		})
 		return err
 	}
 	err := detach()
@@ -478,10 +477,10 @@ func TestListProjectDaemons_NamesEachMachineAndWhenItWasVerified(t *testing.T) {
 	f := newMachinesFixture(t)
 	p := f.project(t, "h", "/home/workspace/h-"+uuid.NewString(), f.cloud, nil)
 
-	resp, err := f.svc.ListProjectDaemons(f.ctx, connect.NewRequest(&reliantv1.ListProjectDaemonsRequest{}))
+	resp, err := f.svc.ListProjectDaemons(f.ctx, &reliantv1.ListProjectDaemonsRequest{})
 	require.NoError(t, err)
 	var found *reliantv1.ProjectDaemon
-	for _, pd := range resp.Msg.ProjectDaemons {
+	for _, pd := range resp.ProjectDaemons {
 		if pd.ProjectId == p.ID {
 			found = pd
 		}
@@ -507,9 +506,9 @@ func TestDetachProjectFromDaemon_ConcurrentDetachesLeaveOneCheckout(t *testing.T
 		wg.Add(1)
 		go func(daemonID string) {
 			defer wg.Done()
-			_, err := f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+			_, err := f.svc.DetachProjectFromDaemon(f.ctx, &reliantv1.DetachProjectFromDaemonRequest{
 				ProjectId: p.ID, DaemonId: daemonID,
-			}))
+			})
 			errs <- err
 		}(id)
 	}
@@ -556,9 +555,9 @@ func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
 		require.NoError(t, f.repo.UpsertProjectDaemon(ctx, p.ID, f.laptop, newPath, nil))
 	}}, f.disk)
 
-	_, err := svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+	_, err := svc.DetachProjectFromDaemon(f.ctx, &reliantv1.DetachProjectFromDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop,
-	}))
+	})
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeAborted, codeOf(err))
 	assert.Equal(t, newPath, f.rows(t, p.ID)[f.laptop], "the moved checkout's row stays")
@@ -566,9 +565,9 @@ func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, detached, "no tombstone for the path it moved away from")
 
-	_, err = f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+	_, err = f.svc.DetachProjectFromDaemon(f.ctx, &reliantv1.DetachProjectFromDaemonRequest{
 		ProjectId: p.ID, DaemonId: f.laptop,
-	}))
+	})
 	require.NoError(t, err)
 	detached, err = f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
 	require.NoError(t, err)

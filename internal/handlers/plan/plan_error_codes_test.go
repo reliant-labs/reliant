@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -35,7 +35,7 @@ func TestPlanRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := newPlanRepo()
 			repo.GetPlanFunc = func(context.Context, string) (*db.Plan, error) { return nil, tc.err }
 			svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
-			_, err := svc.GetPlan(plan.AuthedContext(t), connect.NewRequest(&pb.GetPlanRequest{PlanId: ownPlanID}))
+			_, err := svc.GetPlan(plan.AuthedContext(t), &pb.GetPlanRequest{PlanId: ownPlanID})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("CreatePlan, reading the chat: "+tc.name, func(t *testing.T) {
@@ -43,7 +43,7 @@ func TestPlanRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := newPlanRepo()
 			repo.GetChatRowFunc = func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err }
 			svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
-			_, err := svc.CreatePlan(plan.AuthedContext(t), connect.NewRequest(&pb.CreatePlanRequest{ChatId: ownChatID, Title: "Plan"}))
+			_, err := svc.CreatePlan(plan.AuthedContext(t), &pb.CreatePlanRequest{ChatId: ownChatID, Title: "Plan"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("UpdatePlan, writing: "+tc.name, func(t *testing.T) {
@@ -51,14 +51,14 @@ func TestPlanRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := newPlanRepo()
 			repo.UpdatePlanFunc = func(context.Context, *db.Plan) error { return tc.err }
 			svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: repo}))
-			_, err := svc.UpdatePlan(plan.AuthedContext(t), connect.NewRequest(&pb.UpdatePlanRequest{PlanId: ownPlanID}))
+			_, err := svc.UpdatePlan(plan.AuthedContext(t), &pb.UpdatePlanRequest{PlanId: ownPlanID})
 			requireClientReads(t, err, tc.want)
 		})
 	}
 
 	// A missing plan is still NotFound: the store says so.
 	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: newPlanRepo()}))
-	_, err := svc.GetPlan(plan.AuthedContext(t), connect.NewRequest(&pb.GetPlanRequest{PlanId: missingID}))
+	_, err := svc.GetPlan(plan.AuthedContext(t), &pb.GetPlanRequest{PlanId: missingID})
 	requireClientReads(t, err, connect.CodeNotFound)
 }
 
@@ -69,17 +69,17 @@ func TestPlanRPCs_EmptyIDIsInvalidArgument(t *testing.T) {
 	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: newPlanRepo()}))
 	ctx := plan.AuthedContext(t)
 
-	_, err := svc.GetPlan(ctx, connect.NewRequest(&pb.GetPlanRequest{}))
+	_, err := svc.GetPlan(ctx, &pb.GetPlanRequest{})
 	requireClientReads(t, err, connect.CodeInvalidArgument)
-	_, err = svc.CreatePlan(ctx, connect.NewRequest(&pb.CreatePlanRequest{Title: "Plan"}))
+	_, err = svc.CreatePlan(ctx, &pb.CreatePlanRequest{Title: "Plan"})
 	requireClientReads(t, err, connect.CodeInvalidArgument)
-	_, err = svc.GetPlanByChatId(ctx, connect.NewRequest(&pb.GetPlanByChatIdRequest{}))
+	_, err = svc.GetPlanByChatId(ctx, &pb.GetPlanByChatIdRequest{})
 	requireClientReads(t, err, connect.CodeInvalidArgument)
 }
 
 func requireClientReads(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
-	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+	require.Equal(t, want, svcerr.CodeV2(err), "err = %v", err)
+	require.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 }

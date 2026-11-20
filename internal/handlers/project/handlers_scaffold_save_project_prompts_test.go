@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -30,18 +30,18 @@ func TestSaveProjectPrompts_Generated(t *testing.T) {
 	svc := newService(t, store, nil)
 	prompts := []*pb.Prompt{{Id: "pr-1", Name: "review", Content: "Review this diff"}}
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SaveProjectPromptsRequest, pb.SaveProjectPromptsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.SaveProjectPromptsRequest, pb.SaveProjectPromptsResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.SaveProjectPromptsRequest{ProjectId: "p-2", Prompts: prompts}),
+			Req:     &pb.SaveProjectPromptsRequest{ProjectId: "p-2", Prompts: prompts},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the first save creates the caller's project setting",
-			Req:  connect.NewRequest(&pb.SaveProjectPromptsRequest{ProjectId: "p-1", Prompts: prompts}),
+			Req:  &pb.SaveProjectPromptsRequest{ProjectId: "p-1", Prompts: prompts},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.SaveProjectPromptsResponse]) {
+			Check: func(t *testing.T, resp *pb.SaveProjectPromptsResponse) {
 				if created == nil || created.UserID != "test-user" || created.ProjectID == nil || *created.ProjectID != "p-1" || created.Key != "project.prompts" {
 					t.Fatalf("created = %+v, want test-user's project.prompts on p-1", created)
 				}
@@ -49,7 +49,7 @@ func TestSaveProjectPrompts_Generated(t *testing.T) {
 				if created.Value != want {
 					t.Fatalf("value = %s, want %s", created.Value, want)
 				}
-				if got := resp.Msg.GetPrompts(); len(got) != 1 || got[0].GetId() != "pr-1" {
+				if got := resp.GetPrompts(); len(got) != 1 || got[0].GetId() != "pr-1" {
 					t.Fatalf("prompts = %v, want pr-1 echoed", got)
 				}
 			},

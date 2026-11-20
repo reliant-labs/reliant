@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -32,8 +32,8 @@ var readFailures = []struct {
 func requireClientReads(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
-	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+	require.Equal(t, want, svcerr.CodeV2(err), "err = %v", err)
+	require.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 }
 
 // The run reads (the ownership lookup every run rpc starts with, and the
@@ -48,7 +48,7 @@ func TestRunRPCs_RepositoryFailureCodes(t *testing.T) {
 			svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
 				GetWorkflowFunc: func(context.Context, string) (*db.Workflow, error) { return nil, tc.err },
 			}}))
-			_, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "run-1"}))
+			_, err := svc.GetRun(run.AuthedContext(t), &pb.GetRunRequest{RunId: "run-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("ListRuns: "+tc.name, func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestRunRPCs_RepositoryFailureCodes(t *testing.T) {
 			svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
 				ListRunsFunc: func(context.Context, db.RunListFilters) ([]*db.RunListItem, bool, error) { return nil, false, tc.err },
 			}}))
-			_, err := svc.ListRuns(run.AuthedContext(t), connect.NewRequest(&pb.ListRunsRequest{}))
+			_, err := svc.ListRuns(run.AuthedContext(t), &pb.ListRunsRequest{})
 			requireClientReads(t, err, tc.want)
 		})
 	}
@@ -75,9 +75,9 @@ func TestGetRun_ForeignRunIsNotFound(t *testing.T) {
 			return &db.Chat{ID: id, UserID: "someone-else"}, nil
 		},
 	}}))
-	_, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "run-1"}))
+	_, err := svc.GetRun(run.AuthedContext(t), &pb.GetRunRequest{RunId: "run-1"})
 	requireClientReads(t, err, connect.CodeNotFound)
-	require.Equal(t, "run not found", svcerr.ToConnect(err).Message())
+	require.Equal(t, "run not found", svcerr.ToConnectV2(err).Message())
 }
 
 // Over the wire, through the svcerr interceptor a real server installs: a
@@ -100,19 +100,19 @@ func TestRunService_ErrorsOverTheWire(t *testing.T) {
 	}}))
 	ctx := context.Background()
 
-	_, err := client.GetRun(ctx, connect.NewRequest(&pb.GetRunRequest{}))
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err := client.GetRun(ctx, &pb.GetRunRequest{})
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	require.Equal(t, "run_id is required", connectMessage(t, err))
 
-	_, err = client.GetRun(ctx, connect.NewRequest(&pb.GetRunRequest{RunId: "missing"}))
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	_, err = client.GetRun(ctx, &pb.GetRunRequest{RunId: "missing"})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	require.Equal(t, "workflow not found", connectMessage(t, err))
 
-	_, err = client.GetRun(ctx, connect.NewRequest(&pb.GetRunRequest{RunId: "slow"}))
-	require.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(err))
+	_, err = client.GetRun(ctx, &pb.GetRunRequest{RunId: "slow"})
+	require.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(err))
 
-	_, err = client.GetRun(ctx, connect.NewRequest(&pb.GetRunRequest{RunId: "broken"}))
-	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	_, err = client.GetRun(ctx, &pb.GetRunRequest{RunId: "broken"})
+	require.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 	require.Equal(t, "failed to get run", connectMessage(t, err))
 }
 

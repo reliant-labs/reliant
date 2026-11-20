@@ -3,7 +3,7 @@ package settings_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -18,22 +18,22 @@ func TestCompleteAntigravityOAuth_Generated(t *testing.T) {
 
 	svc := newSettingsService(t, memorySettings{}.repo())
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CompleteAntigravityOAuthRequest, pb.CompleteAntigravityOAuthResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CompleteAntigravityOAuthRequest, pb.CompleteAntigravityOAuthResponse]{
 		{
 			Name:    "code is required",
-			Req:     connect.NewRequest(&pb.CompleteAntigravityOAuthRequest{CodeVerifier: "v", RedirectUri: "http://localhost/cb"}),
+			Req:     &pb.CompleteAntigravityOAuthRequest{CodeVerifier: "v", RedirectUri: "http://localhost/cb"},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "code_verifier is required",
-			Req:     connect.NewRequest(&pb.CompleteAntigravityOAuthRequest{Code: "c", CodeVerifier: " ", RedirectUri: "http://localhost/cb"}),
+			Req:     &pb.CompleteAntigravityOAuthRequest{Code: "c", CodeVerifier: " ", RedirectUri: "http://localhost/cb"},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "redirect_uri is required",
-			Req:     connect.NewRequest(&pb.CompleteAntigravityOAuthRequest{Code: "c", CodeVerifier: "v"}),
+			Req:     &pb.CompleteAntigravityOAuthRequest{Code: "c", CodeVerifier: "v"},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

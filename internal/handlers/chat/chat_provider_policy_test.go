@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -25,7 +24,7 @@ func setPolicy(t *testing.T, ctx context.Context, service *Service, chatID strin
 	if fallback != "" {
 		policy.FallbackModel = &fallback
 	}
-	_, err := service.UpdateChatProviderPolicy(ctx, connect.NewRequest(&reliantv1.UpdateChatProviderPolicyRequest{ChatId: chatID, ProviderPolicy: policy}))
+	_, err := service.UpdateChatProviderPolicy(ctx, &reliantv1.UpdateChatProviderPolicyRequest{ChatId: chatID, ProviderPolicy: policy})
 	require.NoError(t, err)
 }
 

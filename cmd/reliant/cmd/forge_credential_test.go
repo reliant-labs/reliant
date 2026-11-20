@@ -16,10 +16,12 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
 	"github.com/reliant-labs/forge/pkg/credentials"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 
@@ -94,11 +96,11 @@ func serveReliantAPI(t *testing.T, controlPlane string) *reliantAPI {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	// svcerr.Interceptor ends every production chain (serverkit.NewChain): it
+	// svcerr.InterceptorV2 ends every production chain (serverkit.NewChainV2): it
 	// is what gives the handler's svcerr errors their Connect code on the wire.
-	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService,
-		connect.WithInterceptors(svcerr.Interceptor()))
-	mux.Handle(path, handler)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterTokenServiceHandler(rpcServer, tokenService)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &reliantAPI{url: srv.URL, authority: authority}

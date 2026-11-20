@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -33,8 +33,8 @@ var readFailures = []struct {
 func requireClientReads(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
-	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+	require.Equal(t, want, svcerr.CodeV2(err), "err = %v", err)
+	require.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 }
 
 func newChatService(t *testing.T, repo *chat.MockRepository) *chat.Service {
@@ -74,36 +74,36 @@ func TestChatOwnershipRead_RepositoryFailureCodes(t *testing.T) {
 
 		t.Run("GetChat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := byID(t).GetChat(ctx, connect.NewRequest(&pb.GetChatRequest{ChatId: "chat-1"}))
+			_, err := byID(t).GetChat(ctx, &pb.GetChatRequest{ChatId: "chat-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("UpdateChatState: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := byID(t).UpdateChatState(ctx, connect.NewRequest(&pb.UpdateChatStateRequest{
+			_, err := byID(t).UpdateChatState(ctx, &pb.UpdateChatStateRequest{
 				ChatId: "chat-1", State: pb.ChatState_CHAT_STATE_ARCHIVED,
-			}))
+			})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("TerminateChat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := byID(t).TerminateChat(ctx, connect.NewRequest(&pb.TerminateChatRequest{ChatId: "chat-1"}))
+			_, err := byID(t).TerminateChat(ctx, &pb.TerminateChatRequest{ChatId: "chat-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("GetWorkflowExecutions: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := byID(t).GetWorkflowExecutions(ctx, connect.NewRequest(&pb.GetWorkflowExecutionsRequest{ChatId: "chat-1"}))
+			_, err := byID(t).GetWorkflowExecutions(ctx, &pb.GetWorkflowExecutionsRequest{ChatId: "chat-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("SendAgentMessage: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := byOwner(t).SendAgentMessage(ctx, connect.NewRequest(&pb.SendAgentMessageRequest{
+			_, err := byOwner(t).SendAgentMessage(ctx, &pb.SendAgentMessageRequest{
 				ChatId: "chat-1", ThreadId: "thread-1", Message: "hello",
-			}))
+			})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("RetryUsageLimitWait: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := byOwner(t).RetryUsageLimitWait(ctx, connect.NewRequest(&pb.RetryUsageLimitWaitRequest{ChatId: "chat-1"}))
+			_, err := byOwner(t).RetryUsageLimitWait(ctx, &pb.RetryUsageLimitWaitRequest{ChatId: "chat-1"})
 			requireClientReads(t, err, tc.want)
 		})
 	}
@@ -122,7 +122,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 			svc := newChatService(t, &chat.MockRepository{
 				ListChatsFunc: func(context.Context, db.ChatFilters) ([]*db.Chat, error) { return nil, tc.err },
 			})
-			_, err := svc.ListChats(ctx, connect.NewRequest(&pb.ListChatsRequest{ProjectId: "project-1"}))
+			_, err := svc.ListChats(ctx, &pb.ListChatsRequest{ProjectId: "project-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("GetWorkflowExecutions list: "+tc.name, func(t *testing.T) {
@@ -132,7 +132,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 				GetChatRowFunc:          ownedChatRow,
 				ListWorkflowsByChatFunc: func(context.Context, string) ([]*db.Workflow, error) { return nil, tc.err },
 			})
-			_, err := svc.GetWorkflowExecutions(ctx, connect.NewRequest(&pb.GetWorkflowExecutionsRequest{ChatId: "chat-1"}))
+			_, err := svc.GetWorkflowExecutions(ctx, &pb.GetWorkflowExecutionsRequest{ChatId: "chat-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("UpdateChatState write: "+tc.name, func(t *testing.T) {
@@ -144,9 +144,9 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 					return tc.err
 				},
 			})
-			_, err := svc.UpdateChatState(ctx, connect.NewRequest(&pb.UpdateChatStateRequest{
+			_, err := svc.UpdateChatState(ctx, &pb.UpdateChatStateRequest{
 				ChatId: "chat-1", State: pb.ChatState_CHAT_STATE_ARCHIVED,
-			}))
+			})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("BranchChat: "+tc.name, func(t *testing.T) {
@@ -154,7 +154,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 			svc := newChatService(t, &chat.MockRepository{
 				GetMessageFunc: func(context.Context, string) (*db.Message, error) { return nil, tc.err },
 			})
-			_, err := svc.BranchChat(ctx, connect.NewRequest(&pb.BranchChatRequest{MessageId: "message-1"}))
+			_, err := svc.BranchChat(ctx, &pb.BranchChatRequest{MessageId: "message-1"})
 			requireClientReads(t, err, tc.want)
 		})
 	}
@@ -170,9 +170,9 @@ func TestChatOwnership_ForeignChatIsNotFound(t *testing.T) {
 			return &db.Chat{ID: id, UserID: "someone-else"}, nil
 		},
 	})
-	_, err := svc.GetChat(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatRequest{ChatId: "chat-1"}))
+	_, err := svc.GetChat(chat.AuthedContext(t), &pb.GetChatRequest{ChatId: "chat-1"})
 	requireClientReads(t, err, connect.CodeNotFound)
-	require.Equal(t, "chat not found", svcerr.ToConnect(err).Message())
+	require.Equal(t, "chat not found", svcerr.ToConnectV2(err).Message())
 }
 
 // The opaque failure's summary is the rpc's own words, and the cause stays
@@ -188,7 +188,7 @@ func TestChatOpaqueFailure_ReadsTheSummary(t *testing.T) {
 			return nil, errors.New("dsn=postgres://u:secret@h")
 		},
 	})
-	_, err := svc.TerminateChat(chat.AuthedContext(t), connect.NewRequest(&pb.TerminateChatRequest{ChatId: "chat-1"}))
-	require.Equal(t, "failed to get chat", svcerr.ToConnect(err).Message())
+	_, err := svc.TerminateChat(chat.AuthedContext(t), &pb.TerminateChatRequest{ChatId: "chat-1"})
+	require.Equal(t, "failed to get chat", svcerr.ToConnectV2(err).Message())
 	require.ErrorContains(t, svcerr.Cause(err), "secret")
 }

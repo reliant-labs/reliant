@@ -7,7 +7,7 @@ toolchain go1.27.4
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	codeberg.org/readeck/go-readability/v2 v2.1.3
-	connectrpc.com/connect v1.21.1
+	connectrpc.com/connect/v2 v2.0.2
 	connectrpc.com/otelconnect v0.12.0
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/PuerkitoBio/goquery v1.14.0
@@ -39,7 +39,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v1.8.1-0.20261119155832-982c391f6293
+	github.com/reliant-labs/forge v1.8.1-0.20261120010227-ca7c00e56608
 	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261114064850-2b9cece49b8a
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
@@ -73,21 +73,6 @@ require (
 	mvdan.cc/sh/v3 v3.14.1
 )
 
-// The Go SDK (sdk/go) is its own module, published from this repository. The
-// app builds against THIS tree's copy, so a change to a public proto lands in
-// one PR: no pin bump after it, and no re-pin after its squash merge
-// (reliant#2824). A replace binds only this module: a program that requires
-// the SDK, or requires this module, never sees it and resolves the SDK by the
-// require line above.
-//
-// `go install github.com/reliant-labs/reliant/cmd/reliant@<version>` refuses a
-// module whose go.mod has a replace, so a release commit carries none: the RC
-// train's reliant pin commit runs scripts/sdk-release-pin.sh, which drops this
-// line and requires the SDK at the commit the release was cut from (whose
-// sdk/go is byte-identical). internal/buildmode's TestSDKModuleIsSelfContained
-// holds both halves.
-replace github.com/reliant-labs/reliant/sdk/go => ./sdk/go
-
 require (
 	buf.build/gen/go/bufbuild/bufplugin/protocolbuffers/go v1.36.8-20250718181942-e35f9b667443.1 // indirect
 	buf.build/gen/go/bufbuild/registry/connectrpc/go v1.18.1-20250819211657-a3dd0d3ea69b.1 // indirect
@@ -109,7 +94,7 @@ require (
 	cloud.google.com/go/iam v1.15.1 // indirect
 	cloud.google.com/go/monitoring v1.32.1 // indirect
 	cloud.google.com/go/storage v1.71.0 // indirect
-	connectrpc.com/connect/v2 v2.0.2 // indirect
+	connectrpc.com/connect v1.21.1 // indirect
 	connectrpc.com/vanguard v0.5.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20261013165250-51075c6ea6bc // indirect
@@ -380,8 +365,23 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
+// The Go SDK (sdk/go) is its own module, published from this repository. The
+// app builds against THIS tree's copy, so a change to a public proto lands in
+// one PR: no pin bump after it, and no re-pin after its squash merge
+// (reliant#2824). A replace binds only this module: a program that requires
+// the SDK, or requires this module, never sees it and resolves the SDK by the
+// require line above.
+//
+// `go install github.com/reliant-labs/reliant/cmd/reliant@<version>` refuses a
+// module whose go.mod has a replace, so a release commit carries none: the RC
+// train's reliant pin commit runs scripts/sdk-release-pin.sh, which drops this
+// line and requires the SDK at the commit the release was cut from (whose
+// sdk/go is byte-identical). internal/buildmode's TestSDKModuleIsSelfContained
+// holds both halves.
+replace github.com/reliant-labs/reliant/sdk/go => ./sdk/go
+
 tool (
-	connectrpc.com/connect/cmd/protoc-gen-connect-go
+	connectrpc.com/connect/v2/cmd/protoc-gen-connect-go
 	github.com/bufbuild/buf/cmd/buf
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )

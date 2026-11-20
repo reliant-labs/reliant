@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -23,38 +23,38 @@ func TestAuthorizeClient_Generated(t *testing.T) {
 
 	svc := connector.NewTestConnector(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.AuthorizeClientRequest, pb.AuthorizeClientResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.AuthorizeClientRequest, pb.AuthorizeClientResponse]{
 		{
 			Name:    "no caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.AuthorizeClientRequest{ClientId: "client-1", ConnectorId: ptr.Of("c-1")}),
+			Req:     &pb.AuthorizeClientRequest{ClientId: "client-1", ConnectorId: ptr.Of("c-1")},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "client_id is required",
-			Req:     connect.NewRequest(&pb.AuthorizeClientRequest{ConnectorId: ptr.Of("c-1")}),
+			Req:     &pb.AuthorizeClientRequest{ConnectorId: ptr.Of("c-1")},
 			Ctx:     connector.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "an existing and a new connector together are refused",
-			Req: connect.NewRequest(&pb.AuthorizeClientRequest{
+			Req: &pb.AuthorizeClientRequest{
 				ClientId: "client-1", ConnectorId: ptr.Of("c-1"), NewConnector: &pb.CreateConnectorRequest{},
-			}),
+			},
 			Ctx:     connector.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a connector must be chosen",
-			Req:     connect.NewRequest(&pb.AuthorizeClientRequest{ClientId: "client-1"}),
+			Req:     &pb.AuthorizeClientRequest{ClientId: "client-1"},
 			Ctx:     connector.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "an invalid new connector is refused",
-			Req: connect.NewRequest(&pb.AuthorizeClientRequest{
+			Req: &pb.AuthorizeClientRequest{
 				ClientId: "client-1", NewConnector: &pb.CreateConnectorRequest{Name: "no workspace"},
-			}),
+			},
 			Ctx:     connector.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

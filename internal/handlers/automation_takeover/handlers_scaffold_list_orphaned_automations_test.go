@@ -40,7 +40,7 @@ package automation_takeover_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -60,10 +60,10 @@ func TestListOrphanedAutomations_Generated(t *testing.T) {
 	// with automation_takeover.WithAutomationTakeoverDeps(...), or per-row via Case.Setup.
 	svc := automation_takeover.NewTestAutomationTakeover(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListOrphanedAutomationsRequest, pb.ListOrphanedAutomationsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListOrphanedAutomationsRequest, pb.ListOrphanedAutomationsResponse]{
 		{
 			Name:    "an org is required",
-			Req:     connect.NewRequest(&pb.ListOrphanedAutomationsRequest{}),
+			Req:     &pb.ListOrphanedAutomationsRequest{},
 			Ctx:     automation_takeover.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

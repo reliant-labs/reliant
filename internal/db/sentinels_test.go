@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -30,7 +30,7 @@ func TestRepositorySentinelsAreClassified(t *testing.T) {
 		if tc.err.Error() != tc.text {
 			t.Errorf("Error() = %q, want %q", tc.err.Error(), tc.text)
 		}
-		wire := svcerr.ToConnect(wrapped)
+		wire := svcerr.ToConnectV2(wrapped)
 		if wire.Code() != tc.code || wire.Message() != tc.text {
 			t.Errorf("wire = %v %q, want %v %q", wire.Code(), wire.Message(), tc.code, tc.text)
 		}

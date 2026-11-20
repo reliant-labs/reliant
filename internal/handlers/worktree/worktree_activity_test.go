@@ -8,8 +8,11 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/reliant-labs/forge/pkg/activity"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,6 +20,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // fixturePrincipal names every call's caller as the fixture's user.
@@ -35,7 +39,7 @@ func (f *discoverFixture) activityClient(t *testing.T) (reliantv1connect.Worktre
 		mu     sync.Mutex
 		events []activity.Event
 	)
-	ic, err := activity.Interceptor(activity.Deps{
+	ic, err := activity.InterceptorV2(activity.Deps{
 		Principal: fixturePrincipal{userID: f.userID},
 		Writer: activity.WriterFunc(func(_ context.Context, ev activity.Event) error {
 			mu.Lock()
@@ -45,16 +49,18 @@ func (f *discoverFixture) activityClient(t *testing.T) (reliantv1connect.Worktre
 		}),
 	})
 	require.NoError(t, err)
-	authed := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			return next(context.WithValue(ctx, auth.UserIDContextKey, f.userID), req)
+	authed := connect.ServerInterceptor(func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(context.WithValue(ctx, auth.UserIDContextKey, f.userID), spec, stream)
 		}
 	})
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewWorktreeServiceHandler(f.svc, connect.WithInterceptors(authed, ic)))
+	server := connect.NewServer(svcerr.InterceptorV2(), authed, ic)
+	reliantv1connect.RegisterWorktreeServiceHandler(server, f.svc)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return reliantv1connect.NewWorktreeServiceClient(srv.Client(), srv.URL), func() []activity.Event {
+	return reliantv1connect.NewWorktreeServiceClient(rpcclient.New(srv.Client(), srv.URL, nil)), func() []activity.Event {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]activity.Event(nil), events...)
@@ -72,7 +78,7 @@ func TestPruneWorktrees_RecordsAnEventOnlyWhenSomethingWasPruned(t *testing.T) {
 		f.router.pruned = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/gone", "prunable": true}}
 		client, events := f.activityClient(t)
 
-		_, err := client.PruneWorktrees(context.Background(), connect.NewRequest(&reliantv1.PruneWorktreesRequest{ProjectId: f.projectID}))
+		_, err := client.PruneWorktrees(context.Background(), &reliantv1.PruneWorktreesRequest{ProjectId: f.projectID})
 		require.NoError(t, err)
 
 		got := events()
@@ -87,9 +93,9 @@ func TestPruneWorktrees_RecordsAnEventOnlyWhenSomethingWasPruned(t *testing.T) {
 		f := newDiscoverTestFixture(t, "a")
 		client, events := f.activityClient(t)
 
-		resp, err := client.PruneWorktrees(context.Background(), connect.NewRequest(&reliantv1.PruneWorktreesRequest{ProjectId: f.projectID}))
+		resp, err := client.PruneWorktrees(context.Background(), &reliantv1.PruneWorktreesRequest{ProjectId: f.projectID})
 		require.NoError(t, err)
-		require.Empty(t, resp.Msg.GetPruned())
+		require.Empty(t, resp.GetPruned())
 		assert.Empty(t, events(), "a prune that removed nothing must not be recorded as one")
 	})
 }

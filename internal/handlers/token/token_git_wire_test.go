@@ -6,13 +6,15 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -63,14 +65,16 @@ func TestGetGitToken_RefusalsOnTheWire(t *testing.T) {
 			if tc.src != nil {
 				deps.GitTokens = tc.src
 			}
-			_, client := NewTestTokenServer(t, WithTokenDeps(deps))
+			srv, _ := NewTestTokenServer(t, WithTokenDeps(deps))
+			// A client as reliant builds them (rpcclient): svcerr.MetaOf reads the metadata.
+			client := reliantv1connect.NewTokenServiceClient(rpcclient.New(srv.Client(), srv.URL, nil))
 			bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect}})
 
-			_, err := client.GetGitToken(context.Background(), gitReq(bearer, ""))
+			_, err := client.GetGitToken(clientBearer(context.Background(), bearer), gitReq(""))
 			var cerr *connect.Error
 			require.ErrorAs(t, err, &cerr)
 			assert.Equal(t, tc.wantCode, cerr.Code())
-			assert.Equal(t, tc.wantReason, cerr.Meta().Get(svcerr.ReasonHeader))
+			assert.Equal(t, tc.wantReason, svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 			assert.Equal(t, tc.wantMessage, cerr.Message())
 		})
 	}

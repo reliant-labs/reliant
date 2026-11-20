@@ -6,12 +6,11 @@ import (
 	"log/slog"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -48,7 +47,7 @@ func TestRecoveryRefusalLogsBelowErrorInEveryLayer(t *testing.T) {
 			"Error":                Error("daemon command forge.topology", reported),
 		} {
 			t.Run(name+"/"+mapping, func(t *testing.T) {
-				assert.Equal(t, connect.CodeUnavailable, svcerr.Code(mapped), "the wire code is unchanged")
+				assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(mapped), "the wire code is unchanged")
 				assert.Contains(t, mapped.Error(), tc.text)
 
 				// The component chain forge generates for daemoncmd: no
@@ -59,9 +58,9 @@ func TestRecoveryRefusalLogsBelowErrorInEveryLayer(t *testing.T) {
 
 				// The RPC edge, as internal/grpc/user_chain.go wires it.
 				edge := &levelRecorder{}
-				handler := observe.LoggingInterceptor(slog.New(edge), observe.WithErrorClassifier(errclass.Library)).WrapUnary(
-					func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) { return nil, mapped })
-				_, err := handler(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+				handler := observe.LoggingInterceptorV2(slog.New(edge), observe.WithErrorClassifier(errclass.Library))(
+					func(context.Context, connect.Spec, connect.ServerStream) error { return mapped })
+				err := handler(context.Background(), connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: "/reliant.v1.FileSystemService/GetTopology"}, nil)
 				require.Error(t, err)
 
 				assert.Equal(t, []slog.Level{tc.wantLevel}, edge.levels, "rpc failed")

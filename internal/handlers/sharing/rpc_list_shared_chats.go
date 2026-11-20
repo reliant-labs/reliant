@@ -3,7 +3,6 @@ package sharing
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,26 +18,26 @@ import (
 // elsewhere), each in the viewer's shape.
 func (s *Service) ListSharedChats(
 	ctx context.Context,
-	req *connect.Request[pb.ListSharedChatsRequest],
-) (*connect.Response[pb.ListSharedChatsResponse], error) {
+	req *pb.ListSharedChatsRequest,
+) (*pb.ListSharedChatsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	if err := auth.RequirePerson(ctx, "read what others shared with your organization"); err != nil {
 		return nil, err
 	}
-	org, err := s.sharedOrg(ctx, userID, req.Msg.OrgId)
+	org, err := s.sharedOrg(ctx, userID, req.OrgId)
 	if err != nil {
 		return nil, err
 	}
 	out := &pb.ListSharedChatsResponse{Chats: []*pb.Chat{}}
 	if org == "" {
-		return connect.NewResponse(out), nil
+		return out, nil
 	}
-	limit, offset := page(req.Msg.GetLimit(), req.Msg.GetOffset())
+	limit, offset := page(req.GetLimit(), req.GetOffset())
 	filters := core.SharedChatFilters{
-		OrgID: org, ViewerUserID: userID, ProjectID: req.Msg.ProjectId, Limit: limit, Offset: offset,
+		OrgID: org, ViewerUserID: userID, ProjectID: req.ProjectId, Limit: limit, Offset: offset,
 	}
 	// An app's chat list; "" is the same as unset.
-	if app := req.Msg.GetAppName(); app != "" {
+	if app := req.GetAppName(); app != "" {
 		filters.AppName = &app
 	}
 	chats, err := s.deps.Repo.ListSharedChats(ctx, filters)
@@ -49,5 +48,5 @@ func (s *Service) ListSharedChats(
 	for _, c := range authz.SharedChatsFor(ctx, userID, chats) {
 		out.Chats = append(out.Chats, chatproto.ForViewer(chatproto.Chat(c)))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

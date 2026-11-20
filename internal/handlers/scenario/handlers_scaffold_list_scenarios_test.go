@@ -3,7 +3,7 @@ package scenario_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -21,27 +21,27 @@ func TestListScenarios_Generated(t *testing.T) {
 
 	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{})}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListScenariosRequest, pb.ListScenariosResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListScenariosRequest, pb.ListScenariosResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.ListScenariosRequest{ProjectId: ptr.Of(missingID), WorkflowSlug: ownWorkflowSlug}),
+			Req:     &pb.ListScenariosRequest{ProjectId: ptr.Of(missingID), WorkflowSlug: ownWorkflowSlug},
 			Ctx:     scenario.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "without a project, an unknown workflow is not found",
-			Req:     connect.NewRequest(&pb.ListScenariosRequest{WorkflowSlug: "unknown-flow"}),
+			Req:     &pb.ListScenariosRequest{WorkflowSlug: "unknown-flow"},
 			Ctx:     scenario.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the caller's saved scenarios for the workflow",
-			Req:  connect.NewRequest(&pb.ListScenariosRequest{WorkflowSlug: ownWorkflowSlug}),
+			Req:  &pb.ListScenariosRequest{WorkflowSlug: ownWorkflowSlug},
 			Ctx:  scenario.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListScenariosResponse]) {
-				require.Len(t, resp.Msg.GetScenarios(), 1)
-				require.Equal(t, ownScenarioID, resp.Msg.GetScenarios()[0].GetId())
-				require.Equal(t, "user", resp.Msg.GetScenarios()[0].GetSource())
+			Check: func(t *testing.T, resp *pb.ListScenariosResponse) {
+				require.Len(t, resp.GetScenarios(), 1)
+				require.Equal(t, ownScenarioID, resp.GetScenarios()[0].GetId())
+				require.Equal(t, "user", resp.GetScenarios()[0].GetSource())
 			},
 		},
 	}, svc.ListScenarios)

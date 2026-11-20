@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -19,15 +17,15 @@ import (
 // UpdateChat updates chat metadata
 func (s *Service) UpdateChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateChatRequest],
-) (*connect.Response[reliantv1.UpdateChatResponse], error) {
+	req *reliantv1.UpdateChatRequest,
+) (*reliantv1.UpdateChatResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -38,13 +36,13 @@ func (s *Service) UpdateChat(
 
 	// Update fields
 	// NOTE: model/temperature/max_tokens are workflow input params, not stored on chat
-	if req.Msg.Title != nil {
-		chat.Title = *req.Msg.Title
+	if req.Title != nil {
+		chat.Title = *req.Title
 	}
-	if req.Msg.WorktreeId != nil {
+	if req.WorktreeId != nil {
 		// Same invariant as creation: a chat may be moved between the project's
 		// worktrees, but never to a foreign one and never cleared to null.
-		resolved, err := s.launcher().ResolveChatWorktreeID(ctx, chat.ProjectID, req.Msg.WorktreeId)
+		resolved, err := s.launcher().ResolveChatWorktreeID(ctx, chat.ProjectID, req.WorktreeId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve worktree"))
 		}
@@ -59,8 +57,8 @@ func (s *Service) UpdateChat(
 	}
 
 	// Handle workflow name change - only allowed when root workflow is pending
-	if req.Msg.WorkflowName != nil && *req.Msg.WorkflowName != "" {
-		newWorkflowName := *req.Msg.WorkflowName
+	if req.WorkflowName != nil && *req.WorkflowName != "" {
+		newWorkflowName := *req.WorkflowName
 
 		// Validate workflow exists
 		// A failure to read it is classified; anything else is a verdict.
@@ -99,7 +97,7 @@ func (s *Service) UpdateChat(
 	}
 
 	// Emit chat_title_changed if title was updated
-	if req.Msg.Title != nil {
+	if req.Title != nil {
 		titleData, _ := json.Marshal(map[string]string{
 			"chat_id": chat.ID,
 			"title":   chat.Title,
@@ -120,7 +118,7 @@ func (s *Service) UpdateChat(
 
 	// Emit chat_config_changed to user_updates when workflow_name changes.
 	// (Replaces the dropped user_updates_chat_config_update SQL trigger.)
-	if req.Msg.WorkflowName != nil && *req.Msg.WorkflowName != "" {
+	if req.WorkflowName != nil && *req.WorkflowName != "" {
 		configData, _ := json.Marshal(map[string]interface{}{
 			"chat_id":       chat.ID,
 			"workflow_name": *chat.WorkflowName,
@@ -144,7 +142,7 @@ func (s *Service) UpdateChat(
 	// State and title changes already produce their own specific chat_updates
 	// via UpdateChatState and the message paths, but workflow_name changes
 	// previously only had the trigger. Emit a general CHAT_UPDATE for it.
-	if req.Msg.WorkflowName != nil || req.Msg.Title != nil {
+	if req.WorkflowName != nil || req.Title != nil {
 		var wfName string
 		if chat.WorkflowName != nil {
 			wfName = *chat.WorkflowName
@@ -162,7 +160,7 @@ func (s *Service) UpdateChat(
 	}
 
 	updateChatProto := chatToProto(chat)
-	return connect.NewResponse(&reliantv1.UpdateChatResponse{
+	return &reliantv1.UpdateChatResponse{
 		Chat: updateChatProto,
-	}), nil
+	}, nil
 }

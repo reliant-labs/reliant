@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -23,28 +23,28 @@ func TestRestoreInboxItem_Generated(t *testing.T) {
 		RestoreInboxItemsFunc: func(context.Context, string, []string) error { return nil },
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RestoreInboxItemRequest, pb.RestoreInboxItemResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.RestoreInboxItemRequest, pb.RestoreInboxItemResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.RestoreInboxItemRequest{ItemIds: []string{"question:q1"}}),
+			Req:     &pb.RestoreInboxItemRequest{ItemIds: []string{"question:q1"}},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "item_ids is required",
-			Req:     connect.NewRequest(&pb.RestoreInboxItemRequest{}),
+			Req:     &pb.RestoreInboxItemRequest{},
 			Ctx:     inbox.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an id that names no item is rejected",
-			Req:     connect.NewRequest(&pb.RestoreInboxItemRequest{ItemIds: []string{"question:"}}),
+			Req:     &pb.RestoreInboxItemRequest{ItemIds: []string{"question:"}},
 			Ctx:     inbox.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "an item id is restored",
-			Req:  connect.NewRequest(&pb.RestoreInboxItemRequest{ItemIds: []string{"question:q1"}}),
+			Req:  &pb.RestoreInboxItemRequest{ItemIds: []string{"question:q1"}},
 			Ctx:  inbox.AuthedContext(t),
 		},
 	}, svc.RestoreInboxItem)

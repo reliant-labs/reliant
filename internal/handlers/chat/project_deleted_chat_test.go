@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,20 +30,20 @@ func TestAChatOfADeletedProjectIsHiddenFromASavedIDUntilRestored(t *testing.T) {
 	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership, Router: &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}}}))
 
 	transcript := func(ctx context.Context) error {
-		_, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID}))
+		_, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{ChatId: f.ChatID})
 		return err
 	}
 	getChat := func(ctx context.Context) error {
-		_, err := svc.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.ChatID}))
+		_, err := svc.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: f.ChatID})
 		return err
 	}
 	markUnread := func(ctx context.Context) error {
-		_, err := svc.MarkUnreadChat(ctx, connect.NewRequest(&reliantv1.MarkUnreadChatRequest{ChatId: f.ChatID}))
+		_, err := svc.MarkUnreadChat(ctx, &reliantv1.MarkUnreadChatRequest{ChatId: f.ChatID})
 		return err
 	}
 	rename := func(ctx context.Context) error {
 		title := "renamed"
-		_, err := svc.UpdateChat(ctx, connect.NewRequest(&reliantv1.UpdateChatRequest{ChatId: f.ChatID, Title: &title}))
+		_, err := svc.UpdateChat(ctx, &reliantv1.UpdateChatRequest{ChatId: f.ChatID, Title: &title})
 		return err
 	}
 	bareRow := func(ctx context.Context) error {
@@ -67,12 +67,12 @@ func TestAChatOfADeletedProjectIsHiddenFromASavedIDUntilRestored(t *testing.T) {
 	for name, call := range map[string]func(context.Context) error{"transcript": transcript, "chat": getChat, "mark unread": markUnread, "rename": rename} {
 		err := call(f.Owner)
 		require.Error(t, err, "owner %s with a saved id after the delete", name)
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "owner %s: %v", name, err)
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "owner %s: %v", name, err)
 	}
 	for name, call := range map[string]func(context.Context) error{"transcript": transcript, "chat": getChat} {
 		err := call(f.Viewer)
 		require.Error(t, err, "viewer %s with a saved id after the delete", name)
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "viewer %s: %v", name, err)
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "viewer %s: %v", name, err)
 	}
 	assert.True(t, errors.Is(bareRow(f.Owner), core.ErrChatNotFound), "the checked bare-row read refuses it too")
 	row, err := repo.GetChatRow(context.Background(), f.ChatID)

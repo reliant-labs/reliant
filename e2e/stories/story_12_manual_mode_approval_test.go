@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -70,9 +69,9 @@ func TestStory12_ManualModeApprovalRunsToolOnlyAfterApprove(t *testing.T) {
 	requireNoToolResult(t, h, chatID, workflowID)
 
 	// 2. Approve through the production handler.
-	_, err = h.ApprovalSvc.Approve(h.Ctx, connect.NewRequest(&reliantv1.ApproveRequest{
+	_, err = h.ApprovalSvc.Approve(h.Ctx, &reliantv1.ApproveRequest{
 		RequestId: approval.ID,
-	}))
+	})
 	require.NoError(t, err, "Approve")
 
 	// 3. The tool runs, the agent finishes, and the run completes.
@@ -126,10 +125,10 @@ func TestStory12_ManualModeApprovalDenyNeverRunsTool(t *testing.T) {
 	approval := h.WaitPendingApproval(chatID)
 
 	denialReason := "e2e-denied-" + shortID()
-	_, err := h.ApprovalSvc.Deny(h.Ctx, connect.NewRequest(&reliantv1.DenyRequest{
+	_, err := h.ApprovalSvc.Deny(h.Ctx, &reliantv1.DenyRequest{
 		RequestId:    approval.ID,
 		DenialReason: &denialReason,
-	}))
+	})
 	require.NoError(t, err, "Deny")
 
 	h.WaitTemporalWorkflowDone(workflowID)

@@ -3,7 +3,7 @@ package plan_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -17,27 +17,27 @@ func TestGetPlan_Generated(t *testing.T) {
 
 	svc := plan.NewTestPlan(t, plan.WithPlanDeps(plan.Deps{Repo: newPlanRepo()}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetPlanRequest, pb.GetPlanResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetPlanRequest, pb.GetPlanResponse]{
 		{
 			Name:    "unknown plan is not found",
-			Req:     connect.NewRequest(&pb.GetPlanRequest{PlanId: missingID}),
+			Req:     &pb.GetPlanRequest{PlanId: missingID},
 			Ctx:     plan.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's plan is denied",
-			Req:     connect.NewRequest(&pb.GetPlanRequest{PlanId: otherPlanID}),
+			Req:     &pb.GetPlanRequest{PlanId: otherPlanID},
 			Ctx:     plan.AuthedContext(t),
 			WantErr: connect.CodePermissionDenied,
 		},
 		{
 			Name: "the plan carries its chat",
-			Req:  connect.NewRequest(&pb.GetPlanRequest{PlanId: ownPlanID}),
+			Req:  &pb.GetPlanRequest{PlanId: ownPlanID},
 			Ctx:  plan.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetPlanResponse]) {
-				require.Equal(t, ownPlanID, resp.Msg.GetPlan().GetId())
-				require.Equal(t, ownChatID, resp.Msg.GetPlan().GetChatId())
-				require.Equal(t, "Own plan", resp.Msg.GetPlan().GetTitle())
+			Check: func(t *testing.T, resp *pb.GetPlanResponse) {
+				require.Equal(t, ownPlanID, resp.GetPlan().GetId())
+				require.Equal(t, ownChatID, resp.GetPlan().GetChatId())
+				require.Equal(t, "Own plan", resp.GetPlan().GetTitle())
 			},
 		},
 	}, svc.GetPlan)

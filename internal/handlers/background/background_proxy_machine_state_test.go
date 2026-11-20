@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +47,7 @@ var machineStates = []struct {
 	{
 		// As daemonRequestError builds it for nats.ErrNoResponders.
 		name:     "no NATS responder for the machine",
-		err:      connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
+		err:      connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser).Error()).WithCause(svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
 		wantCode: connect.CodeUnavailable,
 	},
 }
@@ -58,9 +58,9 @@ func TestBackgroundProxy_MachineStatesKeepTheirCode(t *testing.T) {
 	for _, state := range machineStates {
 		t.Run(state.name, func(t *testing.T) {
 			svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: &failingCommandRouter{err: state.err}}))
-			_, err := svc.ListProcesses(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
+			_, err := svc.ListProcesses(AuthedContext(t), &reliantv1.ListBackgroundProcessesRequest{})
 			require.Error(t, err)
-			assert.Equal(t, state.wantCode, svcerr.Code(err))
+			assert.Equal(t, state.wantCode, svcerr.CodeV2(err))
 			assert.False(t, errclass.IsServerError(err))
 		})
 	}

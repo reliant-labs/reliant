@@ -466,7 +466,7 @@ func (t *machinePoolTool) change(ctx context.Context, userID string, p ManageMac
 	}
 	if err := machinepool.NormalizeSpec(&next); err != nil {
 		msg := err.Error()
-		if ce := svcerr.ToConnect(err); ce != nil {
+		if ce := svcerr.ToConnectV2(err); ce != nil {
 			msg = ce.Message()
 		}
 		return poolChange{}, fmt.Errorf("the pool definition is not valid: %s", msg)

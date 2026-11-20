@@ -3,7 +3,6 @@ package daemonruntime
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,7 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -42,7 +44,7 @@ type foreignIDGateway struct {
 	asserted []string
 }
 
-func (g *foreignIDGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (g *foreignIDGateway) ConnectDaemon(ctx context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	msg, err := stream.Receive()
 	if err != nil {
 		return err
@@ -75,7 +77,9 @@ func (g *foreignIDGateway) registrations() []string {
 func serveGateway(t *testing.T, gw reliantv1connect.ToolsDaemonServiceHandler) string {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(gw))
+	server := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, gw)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()
@@ -87,14 +91,14 @@ func serveGateway(t *testing.T, gw reliantv1connect.ToolsDaemonServiceHandler) s
 // the refusal with a reason — what production was returning when a laptop
 // wedged on another account's saved id.
 func legacyForeignRefusal() error {
-	return connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
+	return connect.NewError(connect.CodePermissionDenied, "daemon id is owned by another user")
 }
 
 // taggedForeignRefusal is the refusal with its machine-readable reason.
 func taggedForeignRefusal() error {
-	err := connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
-	err.Meta().Set("x-forge-error-reason", "daemon_id_owned_by_another_user")
-	return err
+	return svcerr.ToConnectV2(svcerr.WithReason(
+		connect.NewError(connect.CodePermissionDenied, "daemon id is owned by another user"),
+		"daemon_id_owned_by_another_user"))
 }
 
 func setAsideFiles(t *testing.T, dataDir string) []string {

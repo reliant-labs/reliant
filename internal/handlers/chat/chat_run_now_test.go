@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,11 +85,11 @@ func (f *builderTestFixture) seedText(t *testing.T, chatID string) string {
 	return ""
 }
 
-func (f *builderTestFixture) runNow(req *reliantv1.RunNowRequest) (*connect.Response[reliantv1.RunNowResponse], error) {
+func (f *builderTestFixture) runNow(req *reliantv1.RunNowRequest) (*reliantv1.RunNowResponse, error) {
 	if req.ProjectId == "" {
 		req.ProjectId = f.projectID
 	}
-	return f.service.RunNow(f.ctx, connect.NewRequest(req))
+	return f.service.RunNow(f.ctx, req)
 }
 
 // Run now records a manual.run launch, attended and deduped on the chat id, and
@@ -102,7 +102,7 @@ func TestRunNow_RecordsManualRunKind(t *testing.T) {
 
 	resp, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "triage", Message: "look at the backlog"})
 	require.NoError(t, err)
-	chatID := resp.Msg.GetChat().GetId()
+	chatID := resp.GetChat().GetId()
 
 	assert.Equal(t, "manual.run", f.launchKind(t, chatID))
 	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
@@ -118,7 +118,7 @@ func TestRunNow_RecordsManualRunKind(t *testing.T) {
 	assert.NotNil(t, chat.AdoptedAt, "the person who pressed the button owns the run")
 	assert.Equal(t, core.ChatOriginManualRun, chat.Origin)
 	assert.True(t, chat.ListInSidebar, "so it lists in the sidebar like the chat they are about to open")
-	assert.NotNil(t, resp.Msg.GetChat().AdoptedAt)
+	assert.NotNil(t, resp.GetChat().AdoptedAt)
 }
 
 // Pressing Run now is how an automation-only workflow is run by hand; the same
@@ -131,11 +131,11 @@ func TestRunNow_RunsAnAutomationOnlyWorkflow(t *testing.T) {
 
 	_, err := f.start("nightly-digest", nil, nil)
 	require.Error(t, err, "a chat start of an automation-only workflow stays refused")
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 
 	resp, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "nightly-digest"})
 	require.NoError(t, err)
-	assert.Equal(t, "manual.run", f.launchKind(t, resp.Msg.GetChat().GetId()))
+	assert.Equal(t, "manual.run", f.launchKind(t, resp.GetChat().GetId()))
 }
 
 // A run with no message starts from a stated default rather than failing the
@@ -148,7 +148,7 @@ func TestRunNow_NoMessageStartsFromTheDefault(t *testing.T) {
 
 	resp, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "nightly-digest"})
 	require.NoError(t, err)
-	assert.Equal(t, runNowDefaultMessage, f.seedText(t, resp.Msg.GetChat().GetId()))
+	assert.Equal(t, runNowDefaultMessage, f.seedText(t, resp.GetChat().GetId()))
 }
 
 // A replay seeds the run with the event as the labelled block a real fire uses,
@@ -170,7 +170,7 @@ func TestRunNow_ReplayRecordsAndSeedsTheEvent(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	chatID := resp.Msg.GetChat().GetId()
+	chatID := resp.GetChat().GetId()
 
 	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
 	require.NoError(t, err)
@@ -200,7 +200,7 @@ func TestRunNow_ReplayOfANonTriggerKindIsRefused(t *testing.T) {
 			Replay:   &reliantv1.ReplayEvent{TriggerName: "new-issue", Kind: kind},
 		})
 		require.Error(t, err, kind)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), kind)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), kind)
 	}
 }
 
@@ -213,7 +213,7 @@ func TestRunNow_IsOwnerOnly(t *testing.T) {
 
 	_, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "theirs"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "the same refusal StartChat gives an unresolvable workflow: %v", err)
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "the same refusal StartChat gives an unresolvable workflow: %v", err)
 	assert.Contains(t, err.Error(), "theirs")
 
 	chats, err := f.repo.ListChats(f.ctx, db.ChatFilters{ProjectID: &f.projectID})
@@ -225,12 +225,12 @@ func TestRunNow_RequiresProjectAndWorkflow(t *testing.T) {
 	t.Parallel()
 
 	f := newBuilderTestFixture(t)
-	_, err := f.service.RunNow(f.ctx, connect.NewRequest(&reliantv1.RunNowRequest{Workflow: "x"}))
+	_, err := f.service.RunNow(f.ctx, &reliantv1.RunNowRequest{Workflow: "x"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-	_, err = f.service.RunNow(f.ctx, connect.NewRequest(&reliantv1.RunNowRequest{ProjectId: f.projectID}))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
+	_, err = f.service.RunNow(f.ctx, &reliantv1.RunNowRequest{ProjectId: f.projectID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // manual.run is not a launch kind StartChat can be asked for: the request has no
@@ -243,7 +243,7 @@ func TestStartChat_CannotClaimManualRun(t *testing.T) {
 
 	resp, err := f.start("triage", nil, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "chat.start", f.launchKind(t, resp.Msg.GetChat().GetId()))
+	assert.Equal(t, "chat.start", f.launchKind(t, resp.GetChat().GetId()))
 
 	fields := (&reliantv1.StartChatRequest{}).ProtoReflect().Descriptor().Fields()
 	for _, name := range []string{"launch_kind", "kind", "manual_run", "replay"} {
@@ -259,7 +259,7 @@ func TestRunNow_UsesTheAuthenticatedUser(t *testing.T) {
 	f.saveWorkflow(t, "test-user", "nightly-digest", runNowAutomationOnlyYAML)
 
 	other := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
-	_, err := f.service.RunNow(other, connect.NewRequest(&reliantv1.RunNowRequest{ProjectId: f.projectID, Workflow: "nightly-digest"}))
+	_, err := f.service.RunNow(other, &reliantv1.RunNowRequest{ProjectId: f.projectID, Workflow: "nightly-digest"})
 	require.Error(t, err, "another user cannot run test-user's workflow, or in test-user's project")
 }
 
@@ -305,12 +305,12 @@ func TestRunNow_EnforcesRequiredAndItemBounds(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "review", Inputs: tc.inputs})
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
 
 	resp, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "review", Inputs: repos("a/one")})
 	require.NoError(t, err)
-	assert.NotEmpty(t, resp.Msg.GetChat().GetId())
+	assert.NotEmpty(t, resp.GetChat().GetId())
 }

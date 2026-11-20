@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -37,10 +36,10 @@ const (
 // no activations and so no events; the answer is an empty list, not an error.
 func (s *Service) ListReplayEvents(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListReplayEventsRequest],
-) (*connect.Response[reliantv1.ListReplayEventsResponse], error) {
+	req *reliantv1.ListReplayEventsRequest,
+) (*reliantv1.ListReplayEventsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	msg := req.Msg
+	msg := req
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
 		return nil, svcerr.InvalidArgument("workflow is required")
 	}
@@ -85,7 +84,7 @@ func (s *Service) ListReplayEvents(
 	if len(candidates) > limit {
 		candidates = candidates[:limit]
 	}
-	return connect.NewResponse(&reliantv1.ListReplayEventsResponse{Events: candidates}), nil
+	return &reliantv1.ListReplayEventsResponse{Events: candidates}, nil
 }
 
 // PreviewReplay maps a past event through a declared trigger's inputs and
@@ -97,10 +96,10 @@ func (s *Service) ListReplayEvents(
 // is NotFound here as it is in RunNow.
 func (s *Service) PreviewReplay(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PreviewReplayRequest],
-) (*connect.Response[reliantv1.PreviewReplayResponse], error) {
+	req *reliantv1.PreviewReplayRequest,
+) (*reliantv1.PreviewReplayResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	msg := req.Msg
+	msg := req
 	if msg.GetTriggerId() != "" {
 		return s.previewAutomationEvent(ctx, msg)
 	}
@@ -136,13 +135,13 @@ func (s *Service) PreviewReplay(
 		}
 		inputs[name] = v
 	}
-	return connect.NewResponse(&reliantv1.PreviewReplayResponse{Inputs: inputs, Prompt: mapping.Prompt}), nil
+	return &reliantv1.PreviewReplayResponse{Inputs: inputs, Prompt: mapping.Prompt}, nil
 }
 
 // previewAutomationEvent is a read-only test of the stored automation's mapping.
 // Load by owner before inspecting payloads; project/owner/credentials are never
 // taken from the sample. No event id lookup, intake or launcher is involved.
-func (s *Service) previewAutomationEvent(ctx context.Context, msg *reliantv1.PreviewReplayRequest) (*connect.Response[reliantv1.PreviewReplayResponse], error) {
+func (s *Service) previewAutomationEvent(ctx context.Context, msg *reliantv1.PreviewReplayRequest) (*reliantv1.PreviewReplayResponse, error) {
 	trigger, err := s.ownedTrigger(ctx, msg.GetTriggerId())
 	if err != nil {
 		return nil, err
@@ -178,7 +177,7 @@ func (s *Service) previewAutomationEvent(ctx context.Context, msg *reliantv1.Pre
 	for key, value := range spec.Params {
 		inputs[key] = value
 	}
-	return connect.NewResponse(&reliantv1.PreviewReplayResponse{Inputs: inputs, Prompt: spec.Messages[0].Content}), nil
+	return &reliantv1.PreviewReplayResponse{Inputs: inputs, Prompt: spec.Messages[0].Content}, nil
 }
 
 // activationOf is the caller's own activation of the declared trigger a replay

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -21,34 +21,34 @@ func TestSetLocalModelEndpoints_Generated(t *testing.T) {
 	t.Parallel()
 
 	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(registryWithDaemons()))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SetLocalModelEndpointsRequest, pb.SetLocalModelEndpointsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.SetLocalModelEndpointsRequest, pb.SetLocalModelEndpointsResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
-			Req:     connect.NewRequest(&pb.SetLocalModelEndpointsRequest{DaemonId: "offline"}),
+			Req:     &pb.SetLocalModelEndpointsRequest{DaemonId: "offline"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "daemon_id is required",
-			Req:     connect.NewRequest(&pb.SetLocalModelEndpointsRequest{}),
+			Req:     &pb.SetLocalModelEndpointsRequest{},
 			Ctx:     daemon_registry.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown daemon is not found",
-			Req:     connect.NewRequest(&pb.SetLocalModelEndpointsRequest{DaemonId: "missing"}),
+			Req:     &pb.SetLocalModelEndpointsRequest{DaemonId: "missing"},
 			Ctx:     daemon_registry.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's daemon is not found",
-			Req:     connect.NewRequest(&pb.SetLocalModelEndpointsRequest{DaemonId: "theirs"}),
+			Req:     &pb.SetLocalModelEndpointsRequest{DaemonId: "theirs"},
 			Ctx:     daemon_registry.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "an offline daemon is unavailable",
-			Req:     connect.NewRequest(&pb.SetLocalModelEndpointsRequest{DaemonId: "offline"}),
+			Req:     &pb.SetLocalModelEndpointsRequest{DaemonId: "offline"},
 			Ctx:     daemon_registry.AuthedContext(t),
 			WantErr: connect.CodeUnavailable,
 		},

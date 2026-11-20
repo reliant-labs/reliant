@@ -4,14 +4,17 @@ package mcpserver
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	cpdaemonv1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
 	"github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
 )
@@ -29,17 +32,17 @@ type stubDaemonService struct {
 }
 
 func (s *stubDaemonService) ResumeDaemon(
-	_ context.Context,
-	req *connect.Request[cpdaemonv1.ResumeDaemonRequest],
-) (*connect.Response[cpdaemonv1.ResumeDaemonResponse], error) {
+	ctx context.Context,
+	req *cpdaemonv1.ResumeDaemonRequest,
+) (*cpdaemonv1.ResumeDaemonResponse, error) {
 	s.callCount++
-	s.gotAuth = req.Header().Get("Authorization")
-	s.gotID = req.Msg.GetDaemonId()
+	s.gotAuth = serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")
+	s.gotID = req.GetDaemonId()
 	if !s.resumed {
 		// What control-plane's svcdaemon.ResumeDaemon does for a refusal.
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(s.errMsg))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, s.errMsg)
 	}
-	return connect.NewResponse(&cpdaemonv1.ResumeDaemonResponse{}), nil
+	return &cpdaemonv1.ResumeDaemonResponse{}, nil
 }
 
 // resumeRecorder serves a real Connect handler, so the client's wire format
@@ -50,7 +53,9 @@ func resumeRecorder(t *testing.T, resumed bool, errMsg string) (*httptest.Server
 	stub := &stubDaemonService{resumed: resumed, errMsg: errMsg}
 
 	mux := http.NewServeMux()
-	mux.Handle(controlplanev1connect.NewDaemonServiceHandler(stub))
+	server := connect.NewServer(svcerr.InterceptorV2())
+	controlplanev1connect.RegisterDaemonServiceHandler(server, stub)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("resumer called %s, which the control plane does not serve", r.URL.Path)
 		http.NotFound(w, r)

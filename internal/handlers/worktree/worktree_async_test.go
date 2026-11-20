@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -131,23 +131,23 @@ func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
 	projectID := seedWorktreeProject(t, repo, userID)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
-	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID,
 		Name:      "pending-worktree",
 		Branch:    "pending-worktree",
-	}))
+	})
 	// Returned while `worktree.create` is still blocked inside the daemon.
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.Worktree)
-	assert.Equal(t, reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING, resp.Msg.Worktree.Status,
+	require.NotNil(t, resp.Worktree)
+	assert.Equal(t, reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING, resp.Worktree.Status,
 		"caller must get a pending row it can render, not a finished one")
 
-	stored, err := repo.GetWorktree(ctx, resp.Msg.Worktree.Id)
+	stored, err := repo.GetWorktree(ctx, resp.Worktree.Id)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING), stored.Status)
 
 	close(router.release)
-	settled := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	settled := awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	// The workspace ROOT, not the per-repo checkout: the handler strips the
 	// repo's relative path off what the daemon reported. What matters here is
 	// that the CREATING row's empty path got replaced at all.
@@ -176,11 +176,11 @@ func TestCreateWorktreeSurvivesClientDisconnect(t *testing.T) {
 	// backgrounding mid-create is exactly this.
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), auth.UserIDContextKey, userID))
 
-	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID,
 		Name:      "disconnect-worktree",
 		Branch:    "disconnect-worktree",
-	}))
+	})
 	require.NoError(t, err)
 
 	// Order matters. Cancel FIRST, while the goroutine is parked on `release`,
@@ -190,7 +190,7 @@ func TestCreateWorktreeSurvivesClientDisconnect(t *testing.T) {
 	cancel()
 	close(router.release)
 
-	settled := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	settled := awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	assert.NotEmpty(t, settled.Path,
 		"work must complete, and record its path, after the caller disconnects")
 }
@@ -210,15 +210,15 @@ func TestCreateWorktreeMarksFailedRatherThanVanishing(t *testing.T) {
 	projectID := seedWorktreeProject(t, repo, userID)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
-	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId:  projectID,
 		Name:       "doomed-worktree",
 		Branch:     "doomed-worktree",
 		BaseBranch: stringPtr("nonexistent-base"),
-	}))
+	})
 	require.NoError(t, err, "the failure happens after the response, so the RPC still succeeds")
 
-	awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+	awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 }
 
 // TestCreateWorktreeFailureReasonReachesTheClient: creation settles after the
@@ -246,20 +246,20 @@ func TestCreateWorktreeFailureReasonReachesTheClient(t *testing.T) {
 			projectID := seedWorktreeProject(t, repo, userID)
 			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
-			resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+			resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 				ProjectId:  projectID,
 				Name:       "doomed-worktree",
 				Branch:     "doomed-worktree",
 				BaseBranch: stringPtr("nonexistent-base"),
-			}))
+			})
 			require.NoError(t, err)
-			awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+			awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 
-			list, err := svc.ListWorktrees(ctx, connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: projectID}))
+			list, err := svc.ListWorktrees(ctx, &reliantv1.ListWorktreesRequest{ProjectId: projectID})
 			require.NoError(t, err)
 			var got *reliantv1.Worktree
-			for _, w := range list.Msg.Worktrees {
-				if w.Id == resp.Msg.Worktree.Id {
+			for _, w := range list.Worktrees {
+				if w.Id == resp.Worktree.Id {
 					got = w
 				}
 			}
@@ -287,13 +287,13 @@ func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
 	projectID := seedWorktreeProject(t, repo, userID)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
-	_, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	_, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID,
 		Name:      "bad-branch",
 		Branch:    "feat..x",
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "feat..x")
 
 	rows, err := repo.ListWorktrees(ctx, db.WorktreeFilters{ProjectID: &projectID, Limit: 10})
@@ -321,23 +321,23 @@ func TestCreateWorktreeIdempotencyKeyPreventsDuplicates(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	key := "retry-key-1"
-	first, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	first, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId:      projectID,
 		Name:           "idempotent-worktree",
 		Branch:         "idempotent-worktree",
 		IdempotencyKey: &key,
-	}))
+	})
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, first.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, repo, first.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
-	second, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	second, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId:      projectID,
 		Name:           "idempotent-worktree",
 		Branch:         "idempotent-worktree",
 		IdempotencyKey: &key,
-	}))
+	})
 	require.NoError(t, err, "a retry must not error, it must return the original")
-	assert.Equal(t, first.Msg.Worktree.Id, second.Msg.Worktree.Id,
+	assert.Equal(t, first.Worktree.Id, second.Worktree.Id,
 		"the same key must resolve to the same worktree")
 
 	worktrees, err := repo.ListWorktrees(ctx, core.WorktreeFilters{ProjectID: &projectID})
@@ -360,13 +360,13 @@ func TestCreateWorktreeWithoutIdempotencyKeyStillCreates(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	for _, name := range []string{"first-worktree", "second-worktree"} {
-		resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+		resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 			ProjectId: projectID,
 			Name:      name,
 			Branch:    name,
-		}))
+		})
 		require.NoError(t, err)
-		awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+		awaitWorktreeStatus(t, repo, resp.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	}
 
 	worktrees, err := repo.ListWorktrees(ctx, core.WorktreeFilters{ProjectID: &projectID})

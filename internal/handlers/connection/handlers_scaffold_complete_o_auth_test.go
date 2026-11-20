@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -26,16 +26,16 @@ func TestCompleteOAuth_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CompleteOAuthRequest, pb.CompleteOAuthResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CompleteOAuthRequest, pb.CompleteOAuthResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.CompleteOAuthRequest{State: "s-1", Code: "code"}),
+			Req:     &pb.CompleteOAuthRequest{State: "s-1", Code: "code"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "an unknown state is not found",
-			Req:     connect.NewRequest(&pb.CompleteOAuthRequest{State: "s-1", Code: "code"}),
+			Req:     &pb.CompleteOAuthRequest{State: "s-1", Code: "code"},
 			Ctx:     connection.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

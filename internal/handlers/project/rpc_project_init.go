@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -17,15 +16,15 @@ import (
 // GetProjectInitStatus returns the initialization status of a project
 func (s *Service) GetProjectInitStatus(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetProjectInitStatusRequest],
-) (*connect.Response[reliantv1.GetProjectInitStatusResponse], error) {
+	req *reliantv1.GetProjectInitStatusRequest,
+) (*reliantv1.GetProjectInitStatusResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
@@ -48,42 +47,42 @@ func (s *Service) GetProjectInitStatus(
 		err = s.sendToDaemon(ctx, userID, target.DaemonID, "project.check_init_status", initPayload, &initStatus)
 	}
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to check init status via daemon", "error", err, "projectID", req.Msg.ProjectId)
+		logging.ErrorContext(ctx, "Failed to check init status via daemon", "error", err, "projectID", req.ProjectId)
 		// Fallback: assume initialized since it exists in the database
 		initStatus.Initialized = true
 		initStatus.Message = "Project is initialized"
 	}
 
-	return connect.NewResponse(&reliantv1.GetProjectInitStatusResponse{
+	return &reliantv1.GetProjectInitStatusResponse{
 		Initialized: initStatus.Initialized,
-		ProjectId:   req.Msg.ProjectId,
+		ProjectId:   req.ProjectId,
 		Message:     initStatus.Message,
-	}), nil
+	}, nil
 }
 
 // InitializeProject initializes a project (no-op in V2)
 func (s *Service) InitializeProject(
 	ctx context.Context,
-	req *connect.Request[reliantv1.InitializeProjectRequest],
-) (*connect.Response[reliantv1.InitializeProjectResponse], error) {
+	req *reliantv1.InitializeProjectRequest,
+) (*reliantv1.InitializeProjectResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Project initialization is a no-op in V2 (projects are initialized on creation)
-	return connect.NewResponse(&reliantv1.InitializeProjectResponse{
+	return &reliantv1.InitializeProjectResponse{
 		ProjectId:   project.ID,
 		Status:      "initialized",
 		Message:     "Project already initialized",
 		Initialized: true,
-	}), nil
+	}, nil
 }
 
 // Prompt type for JSON marshaling
@@ -99,21 +98,21 @@ type promptData struct {
 // GetProjectPrompts retrieves project-scoped prompts
 func (s *Service) GetProjectPrompts(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetProjectPromptsRequest],
-) (*connect.Response[reliantv1.GetProjectPromptsResponse], error) {
+	req *reliantv1.GetProjectPromptsRequest,
+) (*reliantv1.GetProjectPromptsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	projectID := req.Msg.ProjectId
+	projectID := req.ProjectId
 	setting, err := s.deps.Repo.GetSetting(ctx, userID, &projectID, "project.prompts")
 	if err != nil {
 		// Return empty prompts if not found
-		return connect.NewResponse(&reliantv1.GetProjectPromptsResponse{
+		return &reliantv1.GetProjectPromptsResponse{
 			Prompts: []*reliantv1.Prompt{},
-		}), nil
+		}, nil
 	}
 
 	var prompts []promptData
@@ -135,25 +134,25 @@ func (s *Service) GetProjectPrompts(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetProjectPromptsResponse{
+	return &reliantv1.GetProjectPromptsResponse{
 		Prompts: protoPrompts,
-	}), nil
+	}, nil
 }
 
 // SaveProjectPrompts saves project-scoped prompts
 func (s *Service) SaveProjectPrompts(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SaveProjectPromptsRequest],
-) (*connect.Response[reliantv1.SaveProjectPromptsResponse], error) {
+	req *reliantv1.SaveProjectPromptsRequest,
+) (*reliantv1.SaveProjectPromptsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
 	// Convert proto prompts to data structure
-	prompts := make([]promptData, len(req.Msg.Prompts))
-	for i, p := range req.Msg.Prompts {
+	prompts := make([]promptData, len(req.Prompts))
+	for i, p := range req.Prompts {
 		prompts[i] = promptData{
 			ID:          p.Id,
 			Name:        p.Name,
@@ -170,7 +169,7 @@ func (s *Service) SaveProjectPrompts(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to serialize prompts"))
 	}
 
-	projectID := req.Msg.ProjectId
+	projectID := req.ProjectId
 
 	// Use upsert pattern: try to get existing, then create or update
 	setting, err := s.deps.Repo.GetSetting(ctx, userID, &projectID, "project.prompts")
@@ -198,8 +197,8 @@ func (s *Service) SaveProjectPrompts(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.SaveProjectPromptsResponse{
+	return &reliantv1.SaveProjectPromptsResponse{
 		Message: "Prompts saved successfully",
-		Prompts: req.Msg.Prompts,
-	}), nil
+		Prompts: req.Prompts,
+	}, nil
 }

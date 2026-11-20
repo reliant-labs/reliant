@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,16 +20,16 @@ func TestAddRepo_Generated(t *testing.T) {
 
 	// Without a daemon router the path cannot be checked.
 	unrouted := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: ownedProjectRepo(t)}))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.AddRepoRequest, pb.AddRepoResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.AddRepoRequest, pb.AddRepoResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.AddRepoRequest{ProjectId: "p-2", RelativePath: "svc"}),
+			Req:     &pb.AddRepoRequest{ProjectId: "p-2", RelativePath: "svc"},
 			Ctx:     repo.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "without a daemon router the path cannot be validated",
-			Req:     connect.NewRequest(&pb.AddRepoRequest{ProjectId: "p-1", RelativePath: "svc"}),
+			Req:     &pb.AddRepoRequest{ProjectId: "p-1", RelativePath: "svc"},
 			Ctx:     repo.AuthedContext(t),
 			WantErr: connect.CodeUnavailable,
 		},
@@ -51,19 +51,19 @@ func TestAddRepo_Generated(t *testing.T) {
 			return []byte(`{"discovered":[]}`), nil
 		}),
 	}))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.AddRepoRequest, pb.AddRepoResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.AddRepoRequest, pb.AddRepoResponse]{
 		{
 			Name:    "a path that is not a git repository is a failed precondition",
-			Req:     connect.NewRequest(&pb.AddRepoRequest{ProjectId: "p-1", RelativePath: "docs"}),
+			Req:     &pb.AddRepoRequest{ProjectId: "p-1", RelativePath: "docs"},
 			Ctx:     repo.AuthedContext(t),
 			WantErr: connect.CodeFailedPrecondition,
 		},
 		{
 			Name: "a git repository is registered under its directory name",
-			Req:  connect.NewRequest(&pb.AddRepoRequest{ProjectId: "p-1", RelativePath: "svc"}),
+			Req:  &pb.AddRepoRequest{ProjectId: "p-1", RelativePath: "svc"},
 			Ctx:  repo.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.AddRepoResponse]) {
-				got := resp.Msg.GetRepo()
+			Check: func(t *testing.T, resp *pb.AddRepoResponse) {
+				got := resp.GetRepo()
 				if got.GetName() != "svc" || got.GetRemoteUrl() != "git@example.com:svc.git" || got.GetId() == "" {
 					t.Fatalf("repo = %v, want svc with its remote and an id", got)
 				}

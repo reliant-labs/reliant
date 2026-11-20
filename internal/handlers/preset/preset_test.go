@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -95,9 +94,9 @@ params:
 	ctx := createTestContext(userID)
 
 	t.Run("ListPresets_ReturnsProjectPresets", func(t *testing.T) {
-		req := connect.NewRequest(&reliantv1.ListPresetsRequest{
+		req := &reliantv1.ListPresetsRequest{
 			ProjectId: projectID,
-		})
+		}
 
 		resp, err := service.ListPresets(ctx, req)
 		if err != nil {
@@ -106,7 +105,7 @@ params:
 
 		// Should include the project preset
 		found := false
-		for _, p := range resp.Msg.Presets {
+		for _, p := range resp.Presets {
 			if p.Name == "project-preset" {
 				found = true
 				if p.Source != "project" {
@@ -120,7 +119,7 @@ params:
 			}
 		}
 		if !found {
-			for _, p := range resp.Msg.Presets {
+			for _, p := range resp.Presets {
 				t.Logf("preset: name=%q slug=%q source=%q tag=%q params=%v", p.Name, p.Slug, p.Source, p.Tag, p.Params)
 			}
 			t.Fatalf("project preset not found in response")
@@ -145,9 +144,9 @@ params:
 			t.Fatalf("CreatePreset failed: %v", err)
 		}
 
-		req := connect.NewRequest(&reliantv1.ListPresetsRequest{
+		req := &reliantv1.ListPresetsRequest{
 			ProjectId: projectID,
-		})
+		}
 
 		resp, err := service.ListPresets(ctx, req)
 		if err != nil {
@@ -156,7 +155,7 @@ params:
 
 		// Should return the user preset (overrides project preset)
 		found := false
-		for _, p := range resp.Msg.Presets {
+		for _, p := range resp.Presets {
 			if p.Slug == "project-preset" {
 				found = true
 				if p.Source != "user" {
@@ -194,22 +193,22 @@ params:
 	ctx := createTestContext(userID)
 
 	t.Run("GetPreset_ReturnsProjectPresetWhenNoUserOverride", func(t *testing.T) {
-		req := connect.NewRequest(&reliantv1.GetPresetRequest{
+		req := &reliantv1.GetPresetRequest{
 			ProjectId: projectID,
 			Name:      "override-test",
-		})
+		}
 
 		resp, err := service.GetPreset(ctx, req)
 		if err != nil {
 			t.Fatalf("GetPreset failed: %v", err)
 		}
 
-		if resp.Msg.Preset.Source != "project" {
-			t.Errorf("expected source 'project', got %q", resp.Msg.Preset.Source)
+		if resp.Preset.Source != "project" {
+			t.Errorf("expected source 'project', got %q", resp.Preset.Source)
 		}
-		modelStruct := resp.Msg.Preset.Params["model"].GetStructValue()
+		modelStruct := resp.Preset.Params["model"].GetStructValue()
 		if modelStruct == nil || modelStruct.Fields["id"].GetStringValue() != "claude-4.5-sonnet" {
-			t.Errorf("expected model.id 'claude-4.5-sonnet', got %v", resp.Msg.Preset.Params["model"])
+			t.Errorf("expected model.id 'claude-4.5-sonnet', got %v", resp.Preset.Params["model"])
 		}
 	})
 
@@ -230,10 +229,10 @@ params:
 			t.Fatalf("CreatePreset failed: %v", err)
 		}
 
-		req := connect.NewRequest(&reliantv1.GetPresetRequest{
+		req := &reliantv1.GetPresetRequest{
 			ProjectId: projectID,
 			Name:      "override-test",
-		})
+		}
 
 		resp, err := service.GetPreset(ctx, req)
 		if err != nil {
@@ -241,12 +240,12 @@ params:
 		}
 
 		// Should return user preset
-		if resp.Msg.Preset.Source != "user" {
-			t.Errorf("expected source 'user', got %q", resp.Msg.Preset.Source)
+		if resp.Preset.Source != "user" {
+			t.Errorf("expected source 'user', got %q", resp.Preset.Source)
 		}
-		modelStruct := resp.Msg.Preset.Params["model"].GetStructValue()
+		modelStruct := resp.Preset.Params["model"].GetStructValue()
 		if modelStruct == nil || modelStruct.Fields["id"].GetStringValue() != "claude-4.6-opus" {
-			t.Errorf("expected model.id 'claude-4.6-opus', got %v", resp.Msg.Preset.Params["model"])
+			t.Errorf("expected model.id 'claude-4.6-opus', got %v", resp.Preset.Params["model"])
 		}
 	})
 }
@@ -309,16 +308,16 @@ nodes:
 		t.Fatalf("CreateWorkflowDraft failed: %v", err)
 	}
 
-	resp, err := service.ListPresetsForWorkflow(ctx, connect.NewRequest(&reliantv1.ListPresetsForWorkflowRequest{
+	resp, err := service.ListPresetsForWorkflow(ctx, &reliantv1.ListPresetsForWorkflowRequest{
 		ProjectId:    projectID,
 		WorkflowName: "Custom Agent Draft",
-	}))
+	})
 	if err != nil {
 		t.Fatalf("ListPresetsForWorkflow failed: %v", err)
 	}
 
 	presetNames := make(map[string]bool)
-	for _, p := range resp.Msg.Presets {
+	for _, p := range resp.Presets {
 		presetNames[p.Name] = true
 	}
 
@@ -338,37 +337,37 @@ func TestPresetService_CreatePreset(t *testing.T) {
 	ctx := createTestContext(userID)
 
 	t.Run("CreatePreset_Success", func(t *testing.T) {
-		req := connect.NewRequest(&reliantv1.CreatePresetRequest{
+		req := &reliantv1.CreatePresetRequest{
 			ProjectId:   projectID,
 			Name:        "My Custom Preset",
 			Description: "A custom preset for testing",
 			Tag:         "agent",
-		})
+		}
 
 		resp, err := service.CreatePreset(ctx, req)
 		if err != nil {
 			t.Fatalf("CreatePreset failed: %v", err)
 		}
 
-		if !resp.Msg.Success {
-			t.Errorf("expected success, got error: %s", resp.Msg.Error)
+		if !resp.Success {
+			t.Errorf("expected success, got error: %s", resp.Error)
 		}
 
-		if resp.Msg.Preset == nil {
+		if resp.Preset == nil {
 			t.Fatal("expected preset in response")
 		}
 
-		if resp.Msg.Preset.Name != "My Custom Preset" {
-			t.Errorf("Name = %q, want 'My Custom Preset'", resp.Msg.Preset.Name)
+		if resp.Preset.Name != "My Custom Preset" {
+			t.Errorf("Name = %q, want 'My Custom Preset'", resp.Preset.Name)
 		}
 
-		if resp.Msg.Preset.Source != "user" {
-			t.Errorf("Source = %q, want 'user'", resp.Msg.Preset.Source)
+		if resp.Preset.Source != "user" {
+			t.Errorf("Source = %q, want 'user'", resp.Preset.Source)
 		}
 
 		// Slug should be generated from name
-		if resp.Msg.Preset.Slug != "my-custom-preset" {
-			t.Errorf("Slug = %q, want 'my-custom-preset'", resp.Msg.Preset.Slug)
+		if resp.Preset.Slug != "my-custom-preset" {
+			t.Errorf("Slug = %q, want 'my-custom-preset'", resp.Preset.Slug)
 		}
 	})
 
@@ -378,26 +377,26 @@ func TestPresetService_CreatePreset(t *testing.T) {
 			t.Fatalf("failed to build tools value: %v", err)
 		}
 
-		req := connect.NewRequest(&reliantv1.CreatePresetRequest{
+		req := &reliantv1.CreatePresetRequest{
 			ProjectId: projectID,
 			Name:      "Tool Preset",
 			Tag:       "agent",
 			Params: map[string]*structpb.Value{
 				"tools": toolParams,
 			},
-		})
+		}
 
 		resp, err := service.CreatePreset(ctx, req)
 		if err != nil {
 			t.Fatalf("CreatePreset failed: %v", err)
 		}
-		if !resp.Msg.Success {
-			t.Fatalf("expected success, got error: %s", resp.Msg.Error)
+		if !resp.Success {
+			t.Fatalf("expected success, got error: %s", resp.Error)
 		}
 
-		tools := resp.Msg.Preset.Params["tools"].GetListValue()
+		tools := resp.Preset.Params["tools"].GetListValue()
 		if tools == nil || len(tools.Values) != 1 {
-			t.Fatalf("expected tools list of len 1, got %v", resp.Msg.Preset.Params["tools"])
+			t.Fatalf("expected tools list of len 1, got %v", resp.Preset.Params["tools"])
 		}
 		if tools.Values[0].GetStringValue() != "tag:coding:default" {
 			t.Errorf("unexpected tools list: %v", tools.Values)
@@ -406,17 +405,17 @@ func TestPresetService_CreatePreset(t *testing.T) {
 
 	t.Run("CreatePreset_DuplicateSlug", func(t *testing.T) {
 		// First create
-		req := connect.NewRequest(&reliantv1.CreatePresetRequest{
+		req := &reliantv1.CreatePresetRequest{
 			ProjectId: projectID,
 			Name:      "Duplicate Test",
 			Tag:       "agent",
-		})
+		}
 
 		resp, err := service.CreatePreset(ctx, req)
 		if err != nil {
 			t.Fatalf("First CreatePreset failed: %v", err)
 		}
-		if !resp.Msg.Success {
+		if !resp.Success {
 			t.Fatalf("First CreatePreset should succeed")
 		}
 
@@ -426,20 +425,20 @@ func TestPresetService_CreatePreset(t *testing.T) {
 			t.Fatalf("Second CreatePreset returned error: %v", err)
 		}
 
-		if resp.Msg.Success {
+		if resp.Success {
 			t.Error("expected failure for duplicate slug")
 		}
-		if resp.Msg.Error == "" {
+		if resp.Error == "" {
 			t.Error("expected error message for duplicate slug")
 		}
 	})
 
 	t.Run("CreatePreset_InvalidName", func(t *testing.T) {
-		req := connect.NewRequest(&reliantv1.CreatePresetRequest{
+		req := &reliantv1.CreatePresetRequest{
 			ProjectId: projectID,
 			Name:      "", // Empty name
 			Tag:       "agent",
-		})
+		}
 
 		_, err := service.CreatePreset(ctx, req)
 		if err == nil {
@@ -454,57 +453,57 @@ func TestPresetService_UpdatePreset(t *testing.T) {
 	ctx := createTestContext(userID)
 
 	// Create a preset first
-	createReq := connect.NewRequest(&reliantv1.CreatePresetRequest{
+	createReq := &reliantv1.CreatePresetRequest{
 		ProjectId:   projectID,
 		Name:        "Update Test Preset",
 		Description: "Original description",
 		Tag:         "agent",
-	})
+	}
 
 	createResp, err := service.CreatePreset(ctx, createReq)
-	if err != nil || !createResp.Msg.Success {
+	if err != nil || !createResp.Success {
 		t.Fatalf("CreatePreset failed: %v", err)
 	}
 
 	t.Run("UpdatePreset_Success", func(t *testing.T) {
-		updateReq := connect.NewRequest(&reliantv1.UpdatePresetRequest{
+		updateReq := &reliantv1.UpdatePresetRequest{
 			ProjectId:      projectID,
 			Name:           "update-test-preset", // Use slug, not display name
 			NewName:        ptr.Of("Updated Preset Name"),
 			NewDescription: ptr.Of("Updated description"),
-		})
+		}
 
 		resp, err := service.UpdatePreset(ctx, updateReq)
 		if err != nil {
 			t.Fatalf("UpdatePreset failed: %v", err)
 		}
 
-		if !resp.Msg.Success {
-			t.Errorf("expected success, got error: %s", resp.Msg.Error)
+		if !resp.Success {
+			t.Errorf("expected success, got error: %s", resp.Error)
 		}
 
-		if resp.Msg.Preset.Name != "Updated Preset Name" {
-			t.Errorf("Name = %q, want 'Updated Preset Name'", resp.Msg.Preset.Name)
+		if resp.Preset.Name != "Updated Preset Name" {
+			t.Errorf("Name = %q, want 'Updated Preset Name'", resp.Preset.Name)
 		}
 
-		if resp.Msg.Preset.Description != "Updated description" {
-			t.Errorf("Description = %q, want 'Updated description'", resp.Msg.Preset.Description)
+		if resp.Preset.Description != "Updated description" {
+			t.Errorf("Description = %q, want 'Updated description'", resp.Preset.Description)
 		}
 	})
 
 	t.Run("UpdatePreset_NotFound", func(t *testing.T) {
-		updateReq := connect.NewRequest(&reliantv1.UpdatePresetRequest{
+		updateReq := &reliantv1.UpdatePresetRequest{
 			ProjectId:      projectID,
 			Name:           "nonexistent-preset",
 			NewDescription: ptr.Of("New description"),
-		})
+		}
 
 		resp, err := service.UpdatePreset(ctx, updateReq)
 		if err != nil {
 			t.Fatalf("UpdatePreset returned error: %v", err)
 		}
 
-		if resp.Msg.Success {
+		if resp.Success {
 			t.Error("expected failure for nonexistent preset")
 		}
 	})
@@ -516,37 +515,37 @@ func TestPresetService_DeletePreset(t *testing.T) {
 	ctx := createTestContext(userID)
 
 	// Create a preset first
-	createReq := connect.NewRequest(&reliantv1.CreatePresetRequest{
+	createReq := &reliantv1.CreatePresetRequest{
 		ProjectId: projectID,
 		Name:      "Delete Test Preset",
 		Tag:       "agent",
-	})
+	}
 
 	createResp, err := service.CreatePreset(ctx, createReq)
-	if err != nil || !createResp.Msg.Success {
+	if err != nil || !createResp.Success {
 		t.Fatalf("CreatePreset failed: %v", err)
 	}
 
 	t.Run("DeletePreset_Success", func(t *testing.T) {
-		deleteReq := connect.NewRequest(&reliantv1.DeletePresetRequest{
+		deleteReq := &reliantv1.DeletePresetRequest{
 			ProjectId: projectID,
 			Name:      "delete-test-preset", // Use slug, not display name
-		})
+		}
 
 		resp, err := service.DeletePreset(ctx, deleteReq)
 		if err != nil {
 			t.Fatalf("DeletePreset failed: %v", err)
 		}
 
-		if !resp.Msg.Success {
-			t.Errorf("expected success, got error: %s", resp.Msg.Error)
+		if !resp.Success {
+			t.Errorf("expected success, got error: %s", resp.Error)
 		}
 
 		// Verify it's gone
-		getReq := connect.NewRequest(&reliantv1.GetPresetRequest{
+		getReq := &reliantv1.GetPresetRequest{
 			ProjectId: projectID,
 			Name:      "delete-test-preset", // Use slug, not display name
-		})
+		}
 
 		_, err = service.GetPreset(ctx, getReq)
 		if err == nil {
@@ -555,17 +554,17 @@ func TestPresetService_DeletePreset(t *testing.T) {
 	})
 
 	t.Run("DeletePreset_NotFound", func(t *testing.T) {
-		deleteReq := connect.NewRequest(&reliantv1.DeletePresetRequest{
+		deleteReq := &reliantv1.DeletePresetRequest{
 			ProjectId: projectID,
 			Name:      "nonexistent-preset",
-		})
+		}
 
 		resp, err := service.DeletePreset(ctx, deleteReq)
 		if err != nil {
 			t.Fatalf("DeletePreset returned error: %v", err)
 		}
 
-		if resp.Msg.Success {
+		if resp.Success {
 			t.Error("expected failure for nonexistent preset")
 		}
 	})
@@ -577,18 +576,18 @@ func TestPresetService_ListPresets_IncludeHidden(t *testing.T) {
 	ctx := createTestContext(userID)
 
 	t.Run("ListPresets_WithoutIncludeHidden_ExcludesHiddenPresets", func(t *testing.T) {
-		req := connect.NewRequest(&reliantv1.ListPresetsRequest{
+		req := &reliantv1.ListPresetsRequest{
 			ProjectId:     projectID,
 			IncludeHidden: false,
-		})
+		}
 
 		resp, err := service.ListPresets(ctx, req)
 		if err != nil {
 			t.Fatalf("ListPresets failed: %v", err)
 		}
 
-		t.Logf("ListPresets(includeHidden=false) returned %d presets", len(resp.Msg.Presets))
-		for _, p := range resp.Msg.Presets {
+		t.Logf("ListPresets(includeHidden=false) returned %d presets", len(resp.Presets))
+		for _, p := range resp.Presets {
 			t.Logf("  name=%s slug=%s source=%s is_hidden=%v", p.Name, p.Slug, p.Source, p.IsHidden)
 			if p.IsHidden {
 				t.Errorf("Hidden preset %q should NOT be returned when includeHidden=false", p.Slug)
@@ -597,33 +596,33 @@ func TestPresetService_ListPresets_IncludeHidden(t *testing.T) {
 	})
 
 	t.Run("ListPresets_WithIncludeHidden_IncludesAllPresets", func(t *testing.T) {
-		reqHidden := connect.NewRequest(&reliantv1.ListPresetsRequest{
+		reqHidden := &reliantv1.ListPresetsRequest{
 			ProjectId:     projectID,
 			IncludeHidden: true,
-		})
+		}
 
 		respHidden, err := service.ListPresets(ctx, reqHidden)
 		if err != nil {
 			t.Fatalf("ListPresets failed: %v", err)
 		}
 
-		reqVisible := connect.NewRequest(&reliantv1.ListPresetsRequest{
+		reqVisible := &reliantv1.ListPresetsRequest{
 			ProjectId:     projectID,
 			IncludeHidden: false,
-		})
+		}
 
 		respVisible, err := service.ListPresets(ctx, reqVisible)
 		if err != nil {
 			t.Fatalf("ListPresets failed: %v", err)
 		}
 
-		t.Logf("ListPresets(includeHidden=true) returned %d presets", len(respHidden.Msg.Presets))
-		t.Logf("ListPresets(includeHidden=false) returned %d presets", len(respVisible.Msg.Presets))
+		t.Logf("ListPresets(includeHidden=true) returned %d presets", len(respHidden.Presets))
+		t.Logf("ListPresets(includeHidden=false) returned %d presets", len(respVisible.Presets))
 
 		// includeHidden=true should return at least as many presets as includeHidden=false
-		if len(respHidden.Msg.Presets) < len(respVisible.Msg.Presets) {
+		if len(respHidden.Presets) < len(respVisible.Presets) {
 			t.Errorf("includeHidden=true returned fewer presets (%d) than includeHidden=false (%d)",
-				len(respHidden.Msg.Presets), len(respVisible.Msg.Presets))
+				len(respHidden.Presets), len(respVisible.Presets))
 		}
 	})
 }

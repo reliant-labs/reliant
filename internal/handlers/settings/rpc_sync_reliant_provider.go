@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -27,7 +25,7 @@ import (
 // plaintext on every call and revokes this device's previous key in the same
 // transaction — it never re-serves a stored plaintext — so created/rotated
 // come from whether a previous key was replaced, not from comparing strings.
-func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[reliantv1.SyncReliantProviderRequest]) (*connect.Response[reliantv1.SyncReliantProviderResponse], error) {
+func (s *Service) SyncReliantProvider(ctx context.Context, req *reliantv1.SyncReliantProviderRequest) (*reliantv1.SyncReliantProviderResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	if s.deps.ControlPlane == nil {
@@ -73,7 +71,7 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 	created := !key.Rotated
 	rotated := key.Rotated
 
-	return connect.NewResponse(&reliantv1.SyncReliantProviderResponse{
+	return &reliantv1.SyncReliantProviderResponse{
 		Success:    true,
 		Message:    "Reliant provider synced",
 		Synced:     true,
@@ -85,5 +83,5 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 			Configured:   true,
 			AccountCount: 1,
 		},
-	}), nil
+	}, nil
 }

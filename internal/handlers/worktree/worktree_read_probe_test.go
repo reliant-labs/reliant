@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,9 +78,9 @@ func TestGitReadSendsTheDirectoryProbeBesideTheRead(t *testing.T) {
 		return json.Marshal(map[string]any{"branch": "feature", "total_files": 1})
 	})
 	resp, err := readService(t, singleRepoStore(t), router).GetWorktreeChanges(worktree.AuthedContext(t),
-		connect.NewRequest(&reliantv1.GetWorktreeChangesRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.GetWorktreeChangesRequest{WorktreeId: ownWorktreeID})
 	require.NoError(t, err)
-	assert.Equal(t, "feature", resp.Msg.GetBranch())
+	assert.Equal(t, "feature", resp.GetBranch())
 }
 
 func TestGitReadThatAnswersDoesNotWaitForTheProbe(t *testing.T) {
@@ -101,9 +101,9 @@ func TestGitReadThatAnswersDoesNotWaitForTheProbe(t *testing.T) {
 	ctx, cancel := context.WithTimeout(worktree.AuthedContext(t), 10*time.Second)
 	defer cancel()
 	resp, err := readService(t, singleRepoStore(t), router).GetWorktreeGitStatus(ctx,
-		connect.NewRequest(&reliantv1.GetWorktreeGitStatusRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.GetWorktreeGitStatusRequest{WorktreeId: ownWorktreeID})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetClean())
+	assert.True(t, resp.GetClean())
 	require.NoError(t, ctx.Err(), "the read waited for the probe")
 	assert.True(t, probeReturned.Load(), "the probe outlived the rpc")
 }
@@ -120,10 +120,10 @@ func TestGitReadOfAMissingDirectoryReportsTheDirectory(t *testing.T) {
 		return nil, fmt.Errorf("unexpected command %s", commandType)
 	})
 	_, err := readService(t, singleRepoStore(t), router).GetWorktreeChanges(worktree.AuthedContext(t),
-		connect.NewRequest(&reliantv1.GetWorktreeChangesRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.GetWorktreeChangesRequest{WorktreeId: ownWorktreeID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "err = %v", err)
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "worktree directory does not exist")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "err = %v", err)
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "worktree directory does not exist")
 }
 
 func TestGitReadFailureWithTheDirectoryPresentIsTheReadsOwn(t *testing.T) {
@@ -138,10 +138,10 @@ func TestGitReadFailureWithTheDirectoryPresentIsTheReadsOwn(t *testing.T) {
 		return nil, fmt.Errorf("unexpected command %s", commandType)
 	})
 	_, err := readService(t, singleRepoStore(t), router).GetWorktreeChanges(worktree.AuthedContext(t),
-		connect.NewRequest(&reliantv1.GetWorktreeChangesRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.GetWorktreeChangesRequest{WorktreeId: ownWorktreeID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err), "err = %v", err)
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "bad revision")
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err), "err = %v", err)
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "bad revision")
 }
 
 func TestGitReadOfAnArchivedWorktreeSendsNothing(t *testing.T) {
@@ -160,10 +160,10 @@ func TestGitReadOfAnArchivedWorktreeSendsNothing(t *testing.T) {
 		return nil, fmt.Errorf("unexpected command %s", commandType)
 	})
 	_, err := readService(t, store, router).GetWorktreeGitStatus(worktree.AuthedContext(t),
-		connect.NewRequest(&reliantv1.GetWorktreeGitStatusRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.GetWorktreeGitStatusRequest{WorktreeId: ownWorktreeID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "err = %v", err)
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "archived")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "err = %v", err)
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "archived")
 }
 
 func TestGitCommitsWithTheDirectoryPresentAnswerEmptyWhenTheSendFails(t *testing.T) {
@@ -178,9 +178,9 @@ func TestGitCommitsWithTheDirectoryPresentAnswerEmptyWhenTheSendFails(t *testing
 		return nil, fmt.Errorf("unexpected command %s", commandType)
 	})
 	resp, err := readService(t, singleRepoStore(t), router).GetWorktreeCommits(worktree.AuthedContext(t),
-		connect.NewRequest(&reliantv1.GetWorktreeCommitsRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.GetWorktreeCommitsRequest{WorktreeId: ownWorktreeID})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.GetCommits())
+	assert.Empty(t, resp.GetCommits())
 }
 
 func TestRepoStatusesAskEveryRepoAtOnce(t *testing.T) {
@@ -216,10 +216,10 @@ func TestRepoStatusesAskEveryRepoAtOnce(t *testing.T) {
 		return json.Marshal(map[string]any{"branch": req["worktree_path"]})
 	})
 	resp, err := readService(t, store, router).ListWorktreeRepoStatuses(worktree.AuthedContext(t),
-		connect.NewRequest(&reliantv1.ListWorktreeRepoStatusesRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.ListWorktreeRepoStatusesRequest{WorktreeId: ownWorktreeID})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.GetStatuses(), 3)
-	for i, st := range resp.Msg.GetStatuses() {
+	require.Len(t, resp.GetStatuses(), 3)
+	for i, st := range resp.GetStatuses() {
 		assert.Equal(t, repos[i].ID, st.GetRepoId(), "rows keep the repos' order")
 		assert.Empty(t, st.GetError())
 		assert.Equal(t, "/work/.reliant/worktrees/w-1/"+repos[i].RelativePath, st.GetCurrentBranch())
@@ -242,9 +242,9 @@ func TestRepoStatusesOfAMissingDirectoryReportTheDirectory(t *testing.T) {
 		return nil, fmt.Errorf("unexpected command %s", commandType)
 	})
 	_, err := readService(t, store, router).ListWorktreeRepoStatuses(worktree.AuthedContext(t),
-		connect.NewRequest(&reliantv1.ListWorktreeRepoStatusesRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.ListWorktreeRepoStatusesRequest{WorktreeId: ownWorktreeID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "err = %v", err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "err = %v", err)
 }
 
 func TestRepoStatusesKeepAOneRepoFailureInItsRow(t *testing.T) {
@@ -268,9 +268,9 @@ func TestRepoStatusesKeepAOneRepoFailureInItsRow(t *testing.T) {
 		return nil, fmt.Errorf("unexpected command %s", commandType)
 	})
 	resp, err := readService(t, store, router).ListWorktreeRepoStatuses(worktree.AuthedContext(t),
-		connect.NewRequest(&reliantv1.ListWorktreeRepoStatusesRequest{WorktreeId: ownWorktreeID}))
+		&reliantv1.ListWorktreeRepoStatusesRequest{WorktreeId: ownWorktreeID})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.GetStatuses(), 2)
-	assert.Empty(t, resp.Msg.GetStatuses()[0].GetError())
-	assert.Equal(t, "not a git repository", resp.Msg.GetStatuses()[1].GetError())
+	require.Len(t, resp.GetStatuses(), 2)
+	assert.Empty(t, resp.GetStatuses()[0].GetError())
+	assert.Equal(t, "not a git repository", resp.GetStatuses()[1].GetError())
 }

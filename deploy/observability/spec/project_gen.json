@@ -1310,7 +1310,8 @@
         },
         {
           "id": "page-views",
-          "title": "Page views",
+          "title": "Page loads",
+          "description": "Document loads and in-app route changes the browser SDK traced (documentLoad and routeChange spans). Page views, the analytics event page_viewed, are the Product dashboard's.",
           "kind": "number",
           "signal": "traces",
           "series": [

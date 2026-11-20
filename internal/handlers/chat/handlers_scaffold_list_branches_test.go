@@ -3,7 +3,7 @@ package chat_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -16,22 +16,22 @@ func TestListBranches_Generated(t *testing.T) {
 
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: newChatRepo()}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListBranchesRequest, pb.ListBranchesResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListBranchesRequest, pb.ListBranchesResponse]{
 		{
 			Name:    "chat_id is required",
-			Req:     connect.NewRequest(&pb.ListBranchesRequest{}),
+			Req:     &pb.ListBranchesRequest{},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown chat is not found",
-			Req:     connect.NewRequest(&pb.ListBranchesRequest{ChatId: missingChatID}),
+			Req:     &pb.ListBranchesRequest{ChatId: missingChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's chat is not found",
-			Req:     connect.NewRequest(&pb.ListBranchesRequest{ChatId: otherChatID}),
+			Req:     &pb.ListBranchesRequest{ChatId: otherChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

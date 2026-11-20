@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -27,16 +27,16 @@ func TestCreateApiKeyConnection_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateApiKeyConnectionRequest, pb.CreateApiKeyConnectionResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CreateApiKeyConnectionRequest, pb.CreateApiKeyConnectionResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.CreateApiKeyConnectionRequest{IntegrationId: "github", Name: "work"}),
+			Req:     &pb.CreateApiKeyConnectionRequest{IntegrationId: "github", Name: "work"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "an integration without an API key method is invalid",
-			Req:     connect.NewRequest(&pb.CreateApiKeyConnectionRequest{IntegrationId: "github", Name: "work"}),
+			Req:     &pb.CreateApiKeyConnectionRequest{IntegrationId: "github", Name: "work"},
 			Ctx:     connection.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

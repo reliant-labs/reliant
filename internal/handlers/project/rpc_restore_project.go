@@ -3,7 +3,6 @@ package project
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -16,10 +15,10 @@ import (
 // Whoever may delete the project may restore it.
 func (s *Service) RestoreProject(
 	ctx context.Context,
-	req *connect.Request[pb.RestoreProjectRequest],
-) (*connect.Response[pb.RestoreProjectResponse], error) {
+	req *pb.RestoreProjectRequest,
+) (*pb.RestoreProjectResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	project, authority, err := s.deletableProject(ctx, userID, req.Msg.GetProjectId(), "restore")
+	project, authority, err := s.deletableProject(ctx, userID, req.GetProjectId(), "restore")
 	if err != nil {
 		return nil, err
 	}
@@ -38,8 +37,8 @@ func (s *Service) RestoreProject(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read the restored project"))
 	}
-	return connect.NewResponse(&pb.RestoreProjectResponse{
+	return &pb.RestoreProjectResponse{
 		Project:         deletedProjectToProto(restored, authority),
 		TriggersResumed: int32(len(resumed)),
-	}), nil
+	}, nil
 }

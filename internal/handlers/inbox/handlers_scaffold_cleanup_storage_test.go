@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,13 +20,13 @@ import (
 func TestCleanupStorage_Generated(t *testing.T) {
 	t.Parallel()
 
-	req := func() *connect.Request[pb.CleanupStorageRequest] {
-		return connect.NewRequest(&pb.CleanupStorageRequest{DaemonId: "d-1", WorktreeIds: []string{"wt-1"}})
+	req := func() *pb.CleanupStorageRequest {
+		return &pb.CleanupStorageRequest{DaemonId: "d-1", WorktreeIds: []string{"wt-1"}}
 	}
 
 	// Without a sweeper (no daemon router) the clean-up is unavailable.
 	unwired := inbox.NewTestInbox(t)
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CleanupStorageRequest, pb.CleanupStorageResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CleanupStorageRequest, pb.CleanupStorageResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
 			Req:     req(),
@@ -35,7 +35,7 @@ func TestCleanupStorage_Generated(t *testing.T) {
 		},
 		{
 			Name:    "daemon_id and worktree_ids are required",
-			Req:     connect.NewRequest(&pb.CleanupStorageRequest{DaemonId: "d-1"}),
+			Req:     &pb.CleanupStorageRequest{DaemonId: "d-1"},
 			Ctx:     inbox.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
@@ -57,7 +57,7 @@ func TestCleanupStorage_Generated(t *testing.T) {
 		},
 		Sweeper: worktreesweep.New(nil, nil),
 	}))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CleanupStorageRequest, pb.CleanupStorageResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CleanupStorageRequest, pb.CleanupStorageResponse]{
 		{
 			Name:    "another user's machine is not found",
 			Req:     req(),

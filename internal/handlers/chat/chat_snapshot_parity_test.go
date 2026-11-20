@@ -3,18 +3,23 @@ package chat
 
 import (
 	"context"
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -22,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -99,11 +105,11 @@ func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
 	require.NotNil(t, fromSnapshot)
 
 	recent := int32(50)
-	resp, err := (&Service{deps: Deps{Repo: repo}}).ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := (&Service{deps: Deps{Repo: repo}}).ListMessages(ctx, &reliantv1.ListMessagesRequest{
 		ChatId: chatID, Recent: &recent,
-	}))
+	})
 	require.NoError(t, err)
-	fromList := findSpawnBlock(resp.Msg.Messages)
+	fromList := findSpawnBlock(resp.Messages)
 	require.NotNil(t, fromList)
 
 	require.Equal(t, fromList.ChildWorkflowId, fromSnapshot.ChildWorkflowId,
@@ -125,11 +131,13 @@ func chatSnapshotOverStream(t *testing.T, repo streaming.Repository, userID, cha
 	})
 	require.NoError(t, err)
 
-	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc)
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.UserIDContextKey, userID)))
-	}))
+	routes := http.NewServeMux()
+	server := connect.NewServer(svcerr.InterceptorV2())
+	svc.RegisterV2(server)
+	mountkit.MountV2(routes, server, connecthttp.WithReadMaxBytes(0))
+	mux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		routes.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.UserIDContextKey, userID)))
+	})
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()
@@ -137,16 +145,25 @@ func chatSnapshotOverStream(t *testing.T, repo streaming.Repository, userID, cha
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{ChatId: chatID}))
+	stream, err := reliantv1connect.NewStreamingServiceClient(rpcclient.New(srv.Client(), srv.URL, nil)).
+		StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{ChatId: chatID})
 	require.NoError(t, err)
 	defer func() { _ = stream.Close() }()
 
-	for stream.Receive() {
-		if snapshot := stream.Msg().GetSnapshot(); snapshot != nil {
+	var streamErr error
+	for {
+		msg, err := stream.Receive()
+		if err != nil {
+			streamErr = err
+			break
+		}
+		if snapshot := msg.GetSnapshot(); snapshot != nil {
 			return snapshot
 		}
 	}
-	t.Fatalf("stream ended before a chat snapshot: %v", stream.Err())
+	if errors.Is(streamErr, io.EOF) {
+		streamErr = nil
+	}
+	t.Fatalf("stream ended before a chat snapshot: %v", streamErr)
 	return nil
 }

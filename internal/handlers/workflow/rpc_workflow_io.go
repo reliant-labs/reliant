@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -21,18 +20,18 @@ import (
 // ImportWorkflow imports a workflow from YAML into the database
 func (s *Service) ImportWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ImportWorkflowRequest],
-) (*connect.Response[reliantv1.ImportWorkflowResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.ImportWorkflowRequest,
+) (*reliantv1.ImportWorkflowResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	if len(req.Msg.YamlContent) == 0 {
+	if len(req.YamlContent) == 0 {
 		return nil, svcerr.InvalidArgument("yaml_content is required")
 	}
 
 	// Parse the YAML into RPC proto
-	protoWf, err := parseWorkflowYAML(req.Msg.YamlContent)
+	protoWf, err := parseWorkflowYAML(req.YamlContent)
 	if err != nil {
 		return nil, svcerr.InvalidArgument("invalid YAML: " + err.Error())
 	}
@@ -55,39 +54,39 @@ func (s *Service) ImportWorkflow(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
 	}
 
-	if existing != nil && !req.Msg.Overwrite {
+	if existing != nil && !req.Overwrite {
 		// Return conflict response. Nothing was imported: no "import" event.
 		activity.Skip(ctx)
-		return connect.NewResponse(&reliantv1.ImportWorkflowResponse{
+		return &reliantv1.ImportWorkflowResponse{
 			Success:    false,
 			Message:    fmt.Sprintf("Workflow '%s' already exists. Set overwrite=true to replace.", protoWf.Name),
 			Conflict:   true,
 			ExistingId: existing.ID,
 			Slug:       slug,
-		}), nil
+		}, nil
 	}
 
 	// Same rule as SaveWorkflow: a draft import is stored as-is with its
 	// findings; a complete one (explicit, or overwriting a complete workflow)
 	// must pass validation.
-	check := s.validateWorkflowDefinition(ctx, userID, req.Msg.YamlContent)
+	check := s.validateWorkflowDefinition(ctx, userID, req.YamlContent)
 	isValid := check.valid()
 	validationErrors := check.protoErrors(true)
-	status := resolveDraftStatus(req.Msg.GetStatus(), existing)
+	status := resolveDraftStatus(req.GetStatus(), existing)
 	if status == db.WorkflowDraftStatusComplete && !isValid {
 		activity.Skip(ctx) // nothing was imported: no "import" event
-		return connect.NewResponse(&reliantv1.ImportWorkflowResponse{
+		return &reliantv1.ImportWorkflowResponse{
 			Success:          false,
 			Message:          "Workflow not imported: a complete workflow must pass validation — fix the errors or import it as a draft. " + check.summary(),
 			Workflow:         protoWf,
 			Slug:             slug,
 			IsValid:          false,
 			ValidationErrors: validationErrors,
-		}), nil
+		}, nil
 	}
 
 	// Use the original YAML content directly for storage (it's already valid YAML)
-	definitionYAML := req.Msg.YamlContent
+	definitionYAML := req.YamlContent
 
 	now := time.Now().UTC()
 	var draftID string
@@ -141,7 +140,7 @@ func (s *Service) ImportWorkflow(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.ImportWorkflowResponse{
+	return &reliantv1.ImportWorkflowResponse{
 		Success:          true,
 		Message:          message,
 		Workflow:         protoWf,
@@ -151,51 +150,51 @@ func (s *Service) ImportWorkflow(
 		ValidationErrors: validationErrors,
 		Conflict:         false,
 		Status:           draftStatusToProto(saved.Status),
-	}), nil
+	}, nil
 }
 
 // ExportWorkflow exports a workflow from the database as YAML
 func (s *Service) ExportWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ExportWorkflowRequest],
-) (*connect.Response[reliantv1.ExportWorkflowResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.ExportWorkflowRequest,
+) (*reliantv1.ExportWorkflowResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	if req.Msg.Slug == "" {
+	if req.Slug == "" {
 		return nil, svcerr.InvalidArgument("slug is required")
 	}
 
 	// Handle builtin:// protocol
-	if strings.HasPrefix(req.Msg.Slug, "builtin://") {
-		builtinName := strings.TrimPrefix(req.Msg.Slug, "builtin://")
+	if strings.HasPrefix(req.Slug, "builtin://") {
+		builtinName := strings.TrimPrefix(req.Slug, "builtin://")
 		filename := builtinName + ".yaml"
 		data, err := builtin.BuiltinWorkflowsFS.ReadFile(filename)
 		if err != nil {
-			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builtin workflow not found: %s", req.Msg.Slug))
+			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builtin workflow not found: %s", req.Slug))
 		}
 		protoWf, err := parseWorkflowYAML(data)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse builtin workflow"))
 		}
-		return connect.NewResponse(&reliantv1.ExportWorkflowResponse{
+		return &reliantv1.ExportWorkflowResponse{
 			Success:     true,
 			YamlContent: data,
 			Filename:    builtinName + ".yaml",
 			Workflow:    protoWf,
-		}), nil
+		}, nil
 	}
 
 	// Look up user's workflow in database
 	userID := auth.MustGetUserID(ctx)
-	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
+	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Slug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow"))
 	}
 
 	if draft == nil {
-		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", req.Msg.Slug))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", req.Slug))
 	}
 
 	// Parse the stored definition into RPC proto
@@ -210,12 +209,12 @@ func (s *Service) ExportWorkflow(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to marshal workflow to YAML"))
 	}
 
-	return connect.NewResponse(&reliantv1.ExportWorkflowResponse{
+	return &reliantv1.ExportWorkflowResponse{
 		Success:     true,
 		YamlContent: yamlData,
 		Filename:    draft.Slug + ".yaml",
 		Workflow:    protoWf,
-	}), nil
+	}, nil
 }
 
 // ValidateWorkflow validates a workflow without saving it.
@@ -231,9 +230,9 @@ func (s *Service) ExportWorkflow(
 // file.
 func (s *Service) ValidateWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ValidateWorkflowRequest],
-) (*connect.Response[reliantv1.ValidateWorkflowResponse], error) {
-	protoWf := req.Msg.Workflow
+	req *reliantv1.ValidateWorkflowRequest,
+) (*reliantv1.ValidateWorkflowResponse, error) {
+	protoWf := req.Workflow
 	if protoWf == nil {
 		return nil, svcerr.InvalidArgument("workflow is required")
 	}
@@ -253,8 +252,8 @@ func (s *Service) ValidateWorkflow(
 	// Errors and warnings both: warnings (type "warning:<category>") are the
 	// stand-in-zero and loose-schema findings an author should still see.
 	check := s.validateWorkflowDefinition(ctx, userID, yamlBytes)
-	return connect.NewResponse(&reliantv1.ValidateWorkflowResponse{
+	return &reliantv1.ValidateWorkflowResponse{
 		Valid:  check.valid(),
 		Errors: check.protoErrors(true),
-	}), nil
+	}, nil
 }

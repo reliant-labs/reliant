@@ -4,7 +4,6 @@ package catalog
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -25,7 +24,7 @@ import (
 // their provider account, and an agent reaches the provider only through the
 // integration tools the workflow or the model was given, each of which is its
 // own action with its own audit.
-func (s *Service) ListInputOptions(ctx context.Context, req *connect.Request[reliantv1.ListInputOptionsRequest]) (*connect.Response[reliantv1.ListInputOptionsResponse], error) {
+func (s *Service) ListInputOptions(ctx context.Context, req *reliantv1.ListInputOptionsRequest) (*reliantv1.ListInputOptionsResponse, error) {
 	if _, machine := auth.MachineTokenFromContext(ctx); machine {
 		return nil, svcerr.PermissionDenied("listing input options requires an interactive session")
 	}
@@ -36,7 +35,7 @@ func (s *Service) ListInputOptions(ctx context.Context, req *connect.Request[rel
 	if s.deps.InputOptions == nil {
 		return nil, svcerr.Unimplemented("input options are not configured")
 	}
-	msg := req.Msg
+	msg := req
 	scope := make(map[string]any, len(msg.GetScope()))
 	for k, v := range msg.GetScope() {
 		scope[k] = v.AsInterface()
@@ -51,10 +50,10 @@ func (s *Service) ListInputOptions(ctx context.Context, req *connect.Request[rel
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("listing input options failed"))
 		}
-		return connect.NewResponse(&reliantv1.ListInputOptionsResponse{
+		return &reliantv1.ListInputOptionsResponse{
 			Options:         inputOptionsToProto(res.Options),
 			ConnectionState: connectionStateToProto(res.State),
-		}), nil
+		}, nil
 	}
 
 	res, err := s.deps.InputOptions.List(ctx, inputoptions.ListRequest{
@@ -64,11 +63,11 @@ func (s *Service) ListInputOptions(ctx context.Context, req *connect.Request[rel
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("listing input options failed"))
 	}
-	return connect.NewResponse(&reliantv1.ListInputOptionsResponse{
+	return &reliantv1.ListInputOptionsResponse{
 		Options:         inputOptionsToProto(res.Options),
 		NextPageToken:   res.NextPageToken,
 		ConnectionState: connectionStateToProto(res.State),
-	}), nil
+	}, nil
 }
 
 func actingIdentityName(i reliantv1.ActingIdentity) string {

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/activity"
@@ -53,10 +52,10 @@ type enableStep struct {
 // the request's settings.
 func (s *Service) EnableWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.EnableWorkflowRequest],
-) (*connect.Response[reliantv1.EnableWorkflowResponse], error) {
+	req *reliantv1.EnableWorkflowRequest,
+) (*reliantv1.EnableWorkflowResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	msg := req.Msg
+	msg := req
 	if strings.TrimSpace(msg.Workflow) == "" {
 		return nil, svcerr.InvalidArgument("workflow is required")
 	}
@@ -187,7 +186,7 @@ func (s *Service) EnableWorkflow(
 		}
 		// All or nothing, and it was nothing: no "enable" event.
 		activity.Skip(ctx)
-		return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Results: results}), nil
+		return &reliantv1.EnableWorkflowResponse{Results: results}, nil
 	}
 
 	// Phase 2: write, undoing everything on the first failure.
@@ -208,7 +207,7 @@ func (s *Service) EnableWorkflow(
 			s.undoEnable(undoCtx, steps, results, undo)
 			cancel()
 			activity.Skip(ctx) // every write was undone: no "enable" event
-			return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Results: results}), nil
+			return &reliantv1.EnableWorkflowResponse{Results: results}, nil
 		}
 	}
 	for i, step := range steps {
@@ -220,7 +219,7 @@ func (s *Service) EnableWorkflow(
 			}
 		}
 	}
-	return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Enabled: true, Results: results}), nil
+	return &reliantv1.EnableWorkflowResponse{Enabled: true, Results: results}, nil
 }
 
 // existingActivationStep decides what enabling does to an activation the user
@@ -354,13 +353,13 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 		return s.applyActivationUpdate(ctx, step, result, undo)
 	}
 	if step.existing != nil {
-		resp, err := s.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: true}))
+		resp, err := s.SetTriggerEnabled(ctx, &reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: true})
 		if err != nil {
 			// SetTriggerEnabled writes the row before it converges, so a
 			// failure can leave it on; put it back.
 			undoCtx, cancel := enableUndoContext(ctx)
 			defer cancel()
-			if _, revertErr := s.SetTriggerEnabled(undoCtx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: false})); revertErr != nil {
+			if _, revertErr := s.SetTriggerEnabled(undoCtx, &reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: false}); revertErr != nil {
 				// SetTriggerEnabled writes the row before it converges, so its
 				// error alone does not say whether the trigger is still on.
 				if cur, getErr := s.deps.Repo.GetTrigger(undoCtx, step.existing.ID); getErr != nil || cur.Enabled {
@@ -373,27 +372,27 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 		}
 		id := step.existing.ID
 		*undo = append(*undo, func(ctx context.Context) error {
-			_, err := s.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+			_, err := s.SetTriggerEnabled(ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 			return err
 		})
 		result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED
-		result.Activation = resp.Msg.GetTrigger()
-		result.FundingWarning = resp.Msg.GetFundingWarning()
+		result.Activation = resp.GetTrigger()
+		result.FundingWarning = resp.GetFundingWarning()
 		return nil
 	}
-	resp, err := s.CreateTrigger(ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: step.def}))
+	resp, err := s.CreateTrigger(ctx, &reliantv1.CreateTriggerRequest{Trigger: step.def})
 	if err != nil {
 		return err
 	}
-	id := resp.Msg.GetTrigger().GetId()
+	id := resp.GetTrigger().GetId()
 	*undo = append(*undo, func(ctx context.Context) error {
-		_, err := s.DeleteTrigger(ctx, connect.NewRequest(&reliantv1.DeleteTriggerRequest{Id: id}))
+		_, err := s.DeleteTrigger(ctx, &reliantv1.DeleteTriggerRequest{Id: id})
 		return err
 	})
 	result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED
-	result.Activation = resp.Msg.GetTrigger()
-	result.Webhook = resp.Msg.GetWebhook()
-	result.FundingWarning = resp.Msg.GetFundingWarning()
+	result.Activation = resp.GetTrigger()
+	result.Webhook = resp.GetWebhook()
+	result.FundingWarning = resp.GetFundingWarning()
 	return nil
 }
 
@@ -406,7 +405,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 	enabled := true
 	def := step.def
 	def.Enabled = &enabled
-	resp, err := s.UpdateTrigger(ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: prev.ID, Trigger: def}))
+	resp, err := s.UpdateTrigger(ctx, &reliantv1.UpdateTriggerRequest{Id: prev.ID, Trigger: def})
 	if err != nil {
 		// UpdateTrigger writes the row before it converges, so a failure
 		// can leave the new settings stored; put the old ones back.
@@ -430,8 +429,8 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 	if !prev.Enabled {
 		result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED
 	}
-	result.Activation = resp.Msg.GetTrigger()
-	result.FundingWarning = resp.Msg.GetFundingWarning()
+	result.Activation = resp.GetTrigger()
+	result.FundingWarning = resp.GetFundingWarning()
 	return nil
 }
 
@@ -631,13 +630,13 @@ func (s *Service) workflowActivationDefinition(
 // DisableWorkflow pauses every activation of a workflow.
 func (s *Service) DisableWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DisableWorkflowRequest],
-) (*connect.Response[reliantv1.DisableWorkflowResponse], error) {
+	req *reliantv1.DisableWorkflowRequest,
+) (*reliantv1.DisableWorkflowResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	if strings.TrimSpace(req.Msg.Workflow) == "" {
+	if strings.TrimSpace(req.Workflow) == "" {
 		return nil, svcerr.InvalidArgument("workflow is required")
 	}
-	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId})
+	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: req.ProjectId})
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
@@ -645,21 +644,21 @@ func (s *Service) DisableWorkflow(
 	// With no project named this is every project's: only activations the
 	// caller may still change are paused or reported.
 	for _, t := range authz.Visible(ctx, userID, mine, authz.CanWriteTrigger) {
-		if t.WorkflowTrigger == nil || !sameWorkflowRef(t.Workflow, req.Msg.Workflow) {
+		if t.WorkflowTrigger == nil || !sameWorkflowRef(t.Workflow, req.Workflow) {
 			continue
 		}
 		if !t.Enabled {
 			resp.Paused = append(resp.Paused, s.render(ctx, t))
 			continue
 		}
-		paused, err := s.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: t.ID, Enabled: false}))
+		paused, err := s.SetTriggerEnabled(ctx, &reliantv1.SetTriggerEnabledRequest{Id: t.ID, Enabled: false})
 		if err != nil {
 			resp.Failed = append(resp.Failed, &reliantv1.TriggerFailure{TriggerId: t.ID, Name: t.Name, Message: connectMessage(err)})
 			continue
 		}
-		resp.Paused = append(resp.Paused, paused.Msg.GetTrigger())
+		resp.Paused = append(resp.Paused, paused.GetTrigger())
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // sameWorkflowRef reports whether two refs name one workflow: a builtin by its
@@ -759,7 +758,7 @@ func sameWorkflowRef(a, b string) bool {
 // the svcerr interceptor would send, so an unclassified error's own text stays
 // withheld here too.
 func connectMessage(err error) string {
-	return svcerr.ToConnect(err).Message()
+	return svcerr.ToConnectV2(err).Message()
 }
 
 // RetireDeletedTriggers stops what outlives the rows of triggers already

@@ -10,11 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
@@ -44,7 +46,7 @@ type hangUpGateway struct {
 	sessions atomic.Int64
 }
 
-func (g *hangUpGateway) ConnectDaemon(_ context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (g *hangUpGateway) ConnectDaemon(_ context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	if _, err := stream.Receive(); err != nil {
 		return err
 	}
@@ -74,7 +76,9 @@ func TestReconnectingDaemonReusesOneGatewayConnection(t *testing.T) {
 	gateway := &hangUpGateway{}
 
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(gateway))
+	server := connect.NewServer()
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, gateway)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	listener := &countingListener{Listener: srv.Listener}
 	srv.Listener = listener

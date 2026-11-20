@@ -3,19 +3,14 @@ package streaming
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -50,28 +45,23 @@ func TestStreamChatUpdates_RemovedMemberStreamEnds(t *testing.T) {
 	svc.reauthorizeInterval = 10 * time.Millisecond
 	membership := &switchableMembership{}
 
-	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
 	// A request through a listener carries the membership authz decides with.
-	mux.Handle(path, authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler.ServeHTTP(w, r.WithContext(authz.WithMembership(r.Context(), membership)))
-	})))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.Start()
-	t.Cleanup(srv.Close)
+	client := serveStreaming(t, svc, func(next http.Handler) http.Handler {
+		return authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(authz.WithMembership(r.Context(), membership)))
+		}))
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID}))
+	stream, err := client.StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID})
 	require.NoError(t, err)
-	events := receiveAll(t, stream)
+	events, streamErr := receiveAll(t, stream)
 
 	for caughtUp := false; !caughtUp; {
 		event, open := <-events
-		if !open { // stream.Err() only once receiveAll has stopped: it races Receive
-			t.Fatalf("the stream ended before its initial sync: %v", stream.Err())
+		if !open { // streamErr() only once receiveAll has stopped: it races Receive
+			t.Fatalf("the stream ended before its initial sync: %v", streamErr())
 		}
 		caughtUp = event.GetCaughtUp() != nil
 	}
@@ -81,7 +71,7 @@ func TestStreamChatUpdates_RemovedMemberStreamEnds(t *testing.T) {
 	select {
 	case event, open := <-events:
 		if !open {
-			t.Fatalf("the stream ended while the caller was still a member: %v", stream.Err())
+			t.Fatalf("the stream ended while the caller was still a member: %v", streamErr())
 		}
 		t.Fatalf("unexpected frame while idle: %v", event)
 	default:
@@ -91,8 +81,8 @@ func TestStreamChatUpdates_RemovedMemberStreamEnds(t *testing.T) {
 	for event := range events {
 		t.Fatalf("a frame after the removal: %v", event)
 	}
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()),
-		"a removed member's stream ends as the open refuses it: %v", stream.Err())
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(streamErr()),
+		"a removed member's stream ends as the open refuses it: %v", streamErr())
 }
 
 // stampableChatRepo serves the stream's chat with no org until it is stamped
@@ -128,26 +118,21 @@ func TestStreamChatUpdates_AnUnassignedChatStampedWhileOpenIsReauthorized(t *tes
 			svc.reauthorizeInterval = 10 * time.Millisecond
 			membership := &orgMembers{orgs: tc.members, def: "home"}
 
-			mux := http.NewServeMux()
-			path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
-			mux.Handle(path, authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				handler.ServeHTTP(w, r.WithContext(authz.WithCredentialOrg(authz.WithMembership(r.Context(), membership), tc.bound)))
-			})))
-			srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-			srv.EnableHTTP2 = true
-			srv.Start()
-			t.Cleanup(srv.Close)
+			client := serveStreaming(t, svc, func(next http.Handler) http.Handler {
+				return authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					next.ServeHTTP(w, r.WithContext(authz.WithCredentialOrg(authz.WithMembership(r.Context(), membership), tc.bound)))
+				}))
+			})
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			t.Cleanup(cancel)
-			stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-				StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID}))
+			stream, err := client.StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID})
 			require.NoError(t, err)
-			events := receiveAll(t, stream)
+			events, streamErr := receiveAll(t, stream)
 			for caughtUp := false; !caughtUp; {
 				event, open := <-events
-				if !open { // stream.Err() only once receiveAll has stopped: it races Receive
-					t.Fatalf("the stream ended before its initial sync: %v", stream.Err())
+				if !open { // streamErr() only once receiveAll has stopped: it races Receive
+					t.Fatalf("the stream ended before its initial sync: %v", streamErr())
 				}
 				caughtUp = event.GetCaughtUp() != nil
 			}
@@ -158,7 +143,7 @@ func TestStreamChatUpdates_AnUnassignedChatStampedWhileOpenIsReauthorized(t *tes
 			select {
 			case event, open := <-events:
 				if !open {
-					t.Fatalf("the stream ended while the chat was unassigned: %v", stream.Err())
+					t.Fatalf("the stream ended while the chat was unassigned: %v", streamErr())
 				}
 				t.Fatalf("unexpected frame while idle: %v", event)
 			default:
@@ -169,8 +154,8 @@ func TestStreamChatUpdates_AnUnassignedChatStampedWhileOpenIsReauthorized(t *tes
 			for event := range events {
 				t.Fatalf("a frame after the stamp: %v", event)
 			}
-			require.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()),
-				"stamped acme, the stream ends as an open would refuse it: %v", stream.Err())
+			require.Equal(t, connect.CodeNotFound, connect.CodeOf(streamErr()),
+				"stamped acme, the stream ends as an open would refuse it: %v", streamErr())
 		})
 	}
 }
@@ -184,22 +169,17 @@ func TestStreamChatUpdates_ForwardsNoUpdateOfALeftOrg(t *testing.T) {
 	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: userHub}))
 	membership := &orgMembers{orgs: map[string]bool{"home": true}}
 
-	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
-	mux.Handle(path, authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler.ServeHTTP(w, r.WithContext(authz.WithMembership(r.Context(), membership)))
-	})))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.Start()
-	t.Cleanup(srv.Close)
+	client := serveStreaming(t, svc, func(next http.Handler) http.Handler {
+		return authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(authz.WithMembership(r.Context(), membership)))
+		}))
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	project := catchupProject
-	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID, SinceSeq: 10, ProjectId: &project}))
+	stream, err := client.StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID, SinceSeq: 10, ProjectId: &project})
 	require.NoError(t, err)
-	events := receiveAll(t, stream)
+	events, _ := receiveAll(t, stream)
 	nextEvent(t, events, "caught_up", func(ev *reliantv1.ChatStreamEvent) bool { return ev.GetCaughtUp() != nil })
 	<-userHub.subscribed
 
@@ -242,26 +222,21 @@ func TestStreamChatUpdates_AnOwnerStreamEndsWhenTheChatMovesOrg(t *testing.T) {
 	// A member of both orgs: only the credential's binding refuses the move.
 	membership := &orgMembers{orgs: map[string]bool{"acme": true, "globex": true}, def: "acme"}
 
-	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
-	mux.Handle(path, authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		handler.ServeHTTP(w, r.WithContext(authz.WithCredentialOrg(authz.WithMembership(r.Context(), membership), "acme")))
-	})))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.Start()
-	t.Cleanup(srv.Close)
+	client := serveStreaming(t, svc, func(next http.Handler) http.Handler {
+		return authInjector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(authz.WithCredentialOrg(authz.WithMembership(r.Context(), membership), "acme")))
+		}))
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL).
-		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID}))
+	stream, err := client.StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID})
 	require.NoError(t, err)
-	events := receiveAll(t, stream)
+	events, streamErr := receiveAll(t, stream)
 	for caughtUp := false; !caughtUp; {
 		event, open := <-events
-		if !open { // stream.Err() only once receiveAll has stopped: it races Receive
-			t.Fatalf("the stream ended before its initial sync: %v", stream.Err())
+		if !open { // streamErr() only once receiveAll has stopped: it races Receive
+			t.Fatalf("the stream ended before its initial sync: %v", streamErr())
 		}
 		caughtUp = event.GetCaughtUp() != nil
 	}
@@ -271,7 +246,7 @@ func TestStreamChatUpdates_AnOwnerStreamEndsWhenTheChatMovesOrg(t *testing.T) {
 	select {
 	case event, open := <-events:
 		if !open {
-			t.Fatalf("the stream ended while the chat was in the credential's org: %v", stream.Err())
+			t.Fatalf("the stream ended while the chat was in the credential's org: %v", streamErr())
 		}
 		t.Fatalf("unexpected frame while idle: %v", event)
 	default:
@@ -282,6 +257,6 @@ func TestStreamChatUpdates_AnOwnerStreamEndsWhenTheChatMovesOrg(t *testing.T) {
 	for event := range events {
 		t.Fatalf("a frame after the move: %v", event)
 	}
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()),
-		"moved to globex, the acme-bound stream ends as an open would refuse it: %v", stream.Err())
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(streamErr()),
+		"moved to globex, the acme-bound stream ends as an open would refuse it: %v", streamErr())
 }

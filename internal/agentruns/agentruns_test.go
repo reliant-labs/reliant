@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
@@ -162,28 +162,29 @@ func (f *fakeRunAPI) record(ctx context.Context, call string) {
 	f.userSeen, _ = auth.GetUserIDFromContext(ctx)
 }
 
-func (f *fakeRunAPI) PauseRun(ctx context.Context, r *connect.Request[reliantv1.PauseRunRequest]) (*connect.Response[reliantv1.PauseRunResponse], error) {
-	f.record(ctx, "pause:"+r.Msg.RunId)
-	return connect.NewResponse(&reliantv1.PauseRunResponse{Success: true}), f.err
+func (f *fakeRunAPI) PauseRun(ctx context.Context, r *reliantv1.PauseRunRequest) (*reliantv1.PauseRunResponse, error) {
+	f.record(ctx, "pause:"+r.RunId)
+	return &reliantv1.PauseRunResponse{Success: true}, f.err
 }
 
-func (f *fakeRunAPI) ResumeRun(ctx context.Context, r *connect.Request[reliantv1.ResumeRunRequest]) (*connect.Response[reliantv1.ResumeRunResponse], error) {
-	f.record(ctx, "resume:"+r.Msg.RunId)
-	return connect.NewResponse(f.resume), f.err
+func (f *fakeRunAPI) ResumeRun(ctx context.Context, r *reliantv1.ResumeRunRequest) (*reliantv1.ResumeRunResponse, error) {
+	f.record(ctx, "resume:"+r.RunId)
+	return f.resume, f.err
 }
 
-func (f *fakeRunAPI) CancelRun(ctx context.Context, r *connect.Request[reliantv1.CancelRunRequest]) (*connect.Response[reliantv1.CancelRunResponse], error) {
-	f.record(ctx, "cancel:"+r.Msg.RunId)
-	return connect.NewResponse(&reliantv1.CancelRunResponse{Success: true}), f.err
+func (f *fakeRunAPI) CancelRun(ctx context.Context, r *reliantv1.CancelRunRequest) (*reliantv1.CancelRunResponse, error) {
+	f.record(ctx, "cancel:"+r.RunId)
+	return &reliantv1.CancelRunResponse{Success: true}, f.err
 }
 
-func (f *fakeRunAPI) SignalRun(ctx context.Context, r *connect.Request[reliantv1.SignalRunRequest]) (*connect.Response[reliantv1.SignalRunResponse], error) {
-	f.record(ctx, "signal:"+r.Msg.RunId)
-	f.signaled = r.Msg
+func (f *fakeRunAPI) SignalRun(ctx context.Context, r *reliantv1.SignalRunRequest) (*reliantv1.SignalRunResponse, error) {
+	info := serverkit.CallInfoV2(ctx)
+	f.record(ctx, "signal:"+r.RunId)
+	f.signaled = r
 	f.originSeen, _ = db.MessageOriginFrom(ctx)
-	resp := connect.NewResponse(f.signal)
+	resp := f.signal
 	if f.signalHeader != "" {
-		resp.Header().Set(errreason.NotDeliveredHeader, f.signalHeader)
+		info.ResponseHeader().Set(errreason.NotDeliveredHeader, f.signalHeader)
 	}
 	return resp, f.err
 }

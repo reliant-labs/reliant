@@ -4,15 +4,13 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 )
 
-func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[reliantv1.SearchCatalogRequest]) (*connect.Response[reliantv1.SearchCatalogResponse], error) {
+func (s *Service) SearchCatalog(ctx context.Context, req *reliantv1.SearchCatalogRequest) (*reliantv1.SearchCatalogResponse, error) {
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
@@ -20,14 +18,14 @@ func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[relian
 	if s.deps.Search == nil {
 		return nil, svcerr.Unimplemented("integration catalog search is not configured")
 	}
-	if req.Msg.GetPageSize() < 0 {
+	if req.GetPageSize() < 0 {
 		return nil, svcerr.InvalidArgument("page_size must not be negative")
 	}
 	q := catalogindex.Query{
-		Text: req.Msg.GetQuery(), Category: req.Msg.GetCategory(), Integration: req.Msg.GetIntegration(),
-		ConnectedOnly: req.Msg.GetConnectedOnly(), PageSize: int(req.Msg.GetPageSize()), PageToken: req.Msg.GetPageToken(),
+		Text: req.GetQuery(), Category: req.GetCategory(), Integration: req.GetIntegration(),
+		ConnectedOnly: req.GetConnectedOnly(), PageSize: int(req.GetPageSize()), PageToken: req.GetPageToken(),
 	}
-	for _, k := range req.Msg.GetKinds() {
+	for _, k := range req.GetKinds() {
 		kind, ok := catalogKindFromProto(k)
 		if !ok {
 			return nil, svcerr.InvalidArgument(fmt.Sprintf("kinds: %s is not a catalog entry kind", k))
@@ -50,5 +48,5 @@ func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[relian
 	for _, f := range res.CategoryFacets {
 		out.CategoryFacets = append(out.CategoryFacets, &reliantv1.CatalogFacet{Value: f.Value, Count: int32(f.Count)})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

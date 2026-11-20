@@ -7,144 +7,141 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// QuestionServiceName is the fully-qualified name of the QuestionService service.
 	QuestionServiceName = "reliant.v1.QuestionService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// QuestionServiceResolveQuestionProcedure is the fully-qualified name of the QuestionService's
+	// QuestionServiceResolveQuestionProcedure is the procedure name of the QuestionService's
 	// ResolveQuestion RPC.
 	QuestionServiceResolveQuestionProcedure = "/reliant.v1.QuestionService/ResolveQuestion"
-	// QuestionServiceListPendingQuestionsProcedure is the fully-qualified name of the QuestionService's
+	// QuestionServiceListPendingQuestionsProcedure is the procedure name of the QuestionService's
 	// ListPendingQuestions RPC.
 	QuestionServiceListPendingQuestionsProcedure = "/reliant.v1.QuestionService/ListPendingQuestions"
+)
+
+var (
+	questionServiceResolveQuestionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_question_proto.Services().ByName("QuestionService").Methods().ByName("ResolveQuestion"),
+			Procedure:  QuestionServiceResolveQuestionProcedure,
+		}
+	})
+	questionServiceListPendingQuestionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_question_proto.Services().ByName("QuestionService").Methods().ByName("ListPendingQuestions"),
+			Procedure:  QuestionServiceListPendingQuestionsProcedure,
+		}
+	})
 )
 
 // QuestionServiceClient is a client for the reliant.v1.QuestionService service.
 type QuestionServiceClient interface {
 	// ResolveQuestion resolves a pending question with the user's answer
-	ResolveQuestion(context.Context, *connect.Request[v1.ResolveQuestionRequest]) (*connect.Response[v1.ResolveQuestionResponse], error)
+	ResolveQuestion(context.Context, *v1.ResolveQuestionRequest) (*v1.ResolveQuestionResponse, error)
 	// ListPendingQuestions lists every pending question in a chat, oldest
 	// first, each naming the thread that asked it. A chat with several spawned
 	// agents can have one question pending per thread, so a client must pick
 	// the one for the thread it is showing rather than "the chat's question".
-	ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error)
+	ListPendingQuestions(context.Context, *v1.ListPendingQuestionsRequest) (*v1.ListPendingQuestionsResponse, error)
 }
 
-// NewQuestionServiceClient constructs a client for the reliant.v1.QuestionService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewQuestionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) QuestionServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	questionServiceMethods := v1.File_reliant_v1_question_proto.Services().ByName("QuestionService").Methods()
-	return &questionServiceClient{
-		resolveQuestion: connect.NewClient[v1.ResolveQuestionRequest, v1.ResolveQuestionResponse](
-			httpClient,
-			baseURL+QuestionServiceResolveQuestionProcedure,
-			connect.WithSchema(questionServiceMethods.ByName("ResolveQuestion")),
-			connect.WithClientOptions(opts...),
-		),
-		listPendingQuestions: connect.NewClient[v1.ListPendingQuestionsRequest, v1.ListPendingQuestionsResponse](
-			httpClient,
-			baseURL+QuestionServiceListPendingQuestionsProcedure,
-			connect.WithSchema(questionServiceMethods.ByName("ListPendingQuestions")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// questionServiceClient implements QuestionServiceClient.
-type questionServiceClient struct {
-	resolveQuestion      *connect.Client[v1.ResolveQuestionRequest, v1.ResolveQuestionResponse]
-	listPendingQuestions *connect.Client[v1.ListPendingQuestionsRequest, v1.ListPendingQuestionsResponse]
-}
-
-// ResolveQuestion calls reliant.v1.QuestionService.ResolveQuestion.
-func (c *questionServiceClient) ResolveQuestion(ctx context.Context, req *connect.Request[v1.ResolveQuestionRequest]) (*connect.Response[v1.ResolveQuestionResponse], error) {
-	return c.resolveQuestion.CallUnary(ctx, req)
-}
-
-// ListPendingQuestions calls reliant.v1.QuestionService.ListPendingQuestions.
-func (c *questionServiceClient) ListPendingQuestions(ctx context.Context, req *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error) {
-	return c.listPendingQuestions.CallUnary(ctx, req)
+// NewQuestionServiceClient constructs a client for the reliant.v1.QuestionService service. Multiple
+// service clients may share a single connect.Client.
+func NewQuestionServiceClient(client *connect.Client) QuestionServiceClient {
+	return &questionServiceClient{client: client}
 }
 
 // QuestionServiceHandler is an implementation of the reliant.v1.QuestionService service.
 type QuestionServiceHandler interface {
 	// ResolveQuestion resolves a pending question with the user's answer
-	ResolveQuestion(context.Context, *connect.Request[v1.ResolveQuestionRequest]) (*connect.Response[v1.ResolveQuestionResponse], error)
+	ResolveQuestion(context.Context, *v1.ResolveQuestionRequest) (*v1.ResolveQuestionResponse, error)
 	// ListPendingQuestions lists every pending question in a chat, oldest
 	// first, each naming the thread that asked it. A chat with several spawned
 	// agents can have one question pending per thread, so a client must pick
 	// the one for the thread it is showing rather than "the chat's question".
-	ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error)
+	ListPendingQuestions(context.Context, *v1.ListPendingQuestionsRequest) (*v1.ListPendingQuestionsResponse, error)
 }
 
-// NewQuestionServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewQuestionServiceHandler(svc QuestionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	questionServiceMethods := v1.File_reliant_v1_question_proto.Services().ByName("QuestionService").Methods()
-	questionServiceResolveQuestionHandler := connect.NewUnaryHandler(
-		QuestionServiceResolveQuestionProcedure,
-		svc.ResolveQuestion,
-		connect.WithSchema(questionServiceMethods.ByName("ResolveQuestion")),
-		connect.WithHandlerOptions(opts...),
+// RegisterQuestionServiceHandler registers svc as the reliant.v1.QuestionService implementation on
+// server.
+func RegisterQuestionServiceHandler(server *connect.Server, svc QuestionServiceHandler) {
+	adapter := questionServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: questionServiceResolveQuestionSpec(), Handler: adapter.resolveQuestion},
+		connect.Method{Spec: questionServiceListPendingQuestionsSpec(), Handler: adapter.listPendingQuestions},
 	)
-	questionServiceListPendingQuestionsHandler := connect.NewUnaryHandler(
-		QuestionServiceListPendingQuestionsProcedure,
-		svc.ListPendingQuestions,
-		connect.WithSchema(questionServiceMethods.ByName("ListPendingQuestions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.QuestionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case QuestionServiceResolveQuestionProcedure:
-			questionServiceResolveQuestionHandler.ServeHTTP(w, r)
-		case QuestionServiceListPendingQuestionsProcedure:
-			questionServiceListPendingQuestionsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedQuestionServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedQuestionServiceHandler struct{}
 
-func (UnimplementedQuestionServiceHandler) ResolveQuestion(context.Context, *connect.Request[v1.ResolveQuestionRequest]) (*connect.Response[v1.ResolveQuestionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.QuestionService.ResolveQuestion is not implemented"))
+func (UnimplementedQuestionServiceHandler) ResolveQuestion(context.Context, *v1.ResolveQuestionRequest) (*v1.ResolveQuestionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.QuestionService.ResolveQuestion is not implemented")
 }
 
-func (UnimplementedQuestionServiceHandler) ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.QuestionService.ListPendingQuestions is not implemented"))
+func (UnimplementedQuestionServiceHandler) ListPendingQuestions(context.Context, *v1.ListPendingQuestionsRequest) (*v1.ListPendingQuestionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.QuestionService.ListPendingQuestions is not implemented")
+}
+
+type questionServiceClient struct {
+	client *connect.Client
+}
+
+func (c *questionServiceClient) ResolveQuestion(ctx context.Context, req *v1.ResolveQuestionRequest) (*v1.ResolveQuestionResponse, error) {
+	var res v1.ResolveQuestionResponse
+	if err := c.client.CallUnary(ctx, questionServiceResolveQuestionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *questionServiceClient) ListPendingQuestions(ctx context.Context, req *v1.ListPendingQuestionsRequest) (*v1.ListPendingQuestionsResponse, error) {
+	var res v1.ListPendingQuestionsResponse
+	if err := c.client.CallUnary(ctx, questionServiceListPendingQuestionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type questionServiceHandler struct{ svc QuestionServiceHandler }
+
+func (h questionServiceHandler) resolveQuestion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResolveQuestionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResolveQuestion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h questionServiceHandler) listPendingQuestions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPendingQuestionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPendingQuestions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,21 +71,21 @@ type fakeTriggerClient struct {
 
 func (c *fakeTriggerClient) GetTrigger(
 	_ context.Context,
-	req *connect.Request[reliantv1.GetTriggerRequest],
-) (*connect.Response[reliantv1.GetTriggerResponse], error) {
+	req *reliantv1.GetTriggerRequest,
+) (*reliantv1.GetTriggerResponse, error) {
 	for _, t := range c.byID {
-		if t.GetId() == req.Msg.GetId() {
-			return connect.NewResponse(&reliantv1.GetTriggerResponse{Trigger: t}), nil
+		if t.GetId() == req.GetId() {
+			return &reliantv1.GetTriggerResponse{Trigger: t}, nil
 		}
 	}
-	return nil, connect.NewError(connect.CodeNotFound, assertNotFound{})
+	return nil, connect.NewError(connect.CodeNotFound, assertNotFound{}.Error())
 }
 
 func (c *fakeTriggerClient) ListTriggers(
 	_ context.Context,
-	_ *connect.Request[reliantv1.ListTriggersRequest],
-) (*connect.Response[reliantv1.ListTriggersResponse], error) {
-	return connect.NewResponse(&reliantv1.ListTriggersResponse{Triggers: c.byID}), nil
+	_ *reliantv1.ListTriggersRequest,
+) (*reliantv1.ListTriggersResponse, error) {
+	return &reliantv1.ListTriggersResponse{Triggers: c.byID}, nil
 }
 
 type assertNotFound struct{}
@@ -250,9 +250,9 @@ type fakeDaemonLister []*reliantv1.DaemonInfo
 
 func (l fakeDaemonLister) ListDaemons(
 	_ context.Context,
-	_ *connect.Request[reliantv1.ListDaemonsRequest],
-) (*connect.Response[reliantv1.ListDaemonsResponse], error) {
-	return connect.NewResponse(&reliantv1.ListDaemonsResponse{Daemons: l}), nil
+	_ *reliantv1.ListDaemonsRequest,
+) (*reliantv1.ListDaemonsResponse, error) {
+	return &reliantv1.ListDaemonsResponse{Daemons: l}, nil
 }
 
 func TestTriggerDefinitionRequiresADaemon(t *testing.T) {

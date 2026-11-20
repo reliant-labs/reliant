@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,9 +32,9 @@ func TestViewerReadsAreReadOnlyAndRedacted(t *testing.T) {
 	before, err := repo.GetChatRow(context.Background(), f.ChatID)
 	require.NoError(t, err)
 
-	got, err := svc.GetChat(f.Viewer, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.ChatID}))
+	got, err := svc.GetChat(f.Viewer, &reliantv1.GetChatRequest{ChatId: f.ChatID})
 	require.NoError(t, err)
-	chat := got.Msg.Chat
+	chat := got.Chat
 	assert.True(t, chat.GetViewerAccess())
 	assert.Equal(t, reliantv1.ResourceVisibility_RESOURCE_VISIBILITY_ORG, chat.GetVisibility())
 	assert.NotEmpty(t, chat.GetSharedAt())
@@ -44,16 +44,16 @@ func TestViewerReadsAreReadOnlyAndRedacted(t *testing.T) {
 	assert.Nil(t, chat.ActiveDaemonId)
 	assert.False(t, chat.GetUnread(), "the owner's unread flag is theirs")
 
-	own, err := svc.GetChat(f.Owner, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.ChatID}))
+	own, err := svc.GetChat(f.Owner, &reliantv1.GetChatRequest{ChatId: f.ChatID})
 	require.NoError(t, err)
-	assert.False(t, own.Msg.Chat.GetViewerAccess())
-	assert.True(t, own.Msg.Chat.GetUnread())
-	assert.Equal(t, reliantv1.ResourceVisibility_RESOURCE_VISIBILITY_ORG, own.Msg.Chat.GetVisibility())
+	assert.False(t, own.Chat.GetViewerAccess())
+	assert.True(t, own.Chat.GetUnread())
+	assert.Equal(t, reliantv1.ResourceVisibility_RESOURCE_VISIBILITY_ORG, own.Chat.GetVisibility())
 
 	for _, mode := range []*reliantv1.ToolBodyMode{nil, reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL.Enum(), reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum()} {
-		viewed, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: mode}))
+		viewed, err := svc.ListMessages(f.Viewer, &reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: mode})
 		require.NoError(t, err)
-		blocks := blocksByID(viewed.Msg.Messages)
+		blocks := blocksByID(viewed.Messages)
 		result := blocks[f.Transcript.ResultBlockID]
 		require.NotNil(t, result, "the result block is listed")
 		assert.Nil(t, result.Content, "a viewer never gets a tool result, mode %v", mode)
@@ -63,15 +63,15 @@ func TestViewerReadsAreReadOnlyAndRedacted(t *testing.T) {
 			assert.Equal(t, f.Transcript.DoneInput, blocks[f.Transcript.DoneCallBlockID].GetInput(), "a tool input is whole")
 		}
 	}
-	owned, err := svc.ListMessages(f.Owner, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID}))
+	owned, err := svc.ListMessages(f.Owner, &reliantv1.ListMessagesRequest{ChatId: f.ChatID})
 	require.NoError(t, err)
-	assert.NotEmpty(t, blocksByID(owned.Msg.Messages)[f.Transcript.ResultBlockID].GetContent(), "the owner reads the result")
+	assert.NotEmpty(t, blocksByID(owned.Messages)[f.Transcript.ResultBlockID].GetContent(), "the owner reads the result")
 
-	_, err = svc.ListChatPlans(f.Viewer, connect.NewRequest(&reliantv1.ListChatPlansRequest{ChatId: f.ChatID}))
+	_, err = svc.ListChatPlans(f.Viewer, &reliantv1.ListChatPlansRequest{ChatId: f.ChatID})
 	require.NoError(t, err)
-	_, err = svc.GetWorkflowExecutions(f.Viewer, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{ChatId: f.ChatID}))
+	_, err = svc.GetWorkflowExecutions(f.Viewer, &reliantv1.GetWorkflowExecutionsRequest{ChatId: f.ChatID})
 	require.NoError(t, err)
-	_, err = svc.ListStepExecutions(f.Viewer, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: f.ChatID}))
+	_, err = svc.ListStepExecutions(f.Viewer, &reliantv1.ListStepExecutionsRequest{ChatId: f.ChatID})
 	require.NoError(t, err)
 
 	after, err := repo.GetChatRow(context.Background(), f.ChatID)
@@ -83,8 +83,8 @@ func TestViewerReadsAreReadOnlyAndRedacted(t *testing.T) {
 
 	// A tool result a viewer's transcript left out cannot be fetched either
 	// (TestViewerExpandsStubInputsButNeverResults covers the body fetch).
-	_, err = svc.GetToolResult(f.Viewer, connect.NewRequest(&reliantv1.GetToolResultRequest{ChatId: f.ChatID, ToolCallId: f.Transcript.DoneCallID}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "GetToolResult: %v", err)
+	_, err = svc.GetToolResult(f.Viewer, &reliantv1.GetToolResultRequest{ChatId: f.ChatID, ToolCallId: f.Transcript.DoneCallID})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "GetToolResult: %v", err)
 }
 
 // A chat that is not shared, in a shared project, is the owner's alone: a
@@ -94,10 +94,10 @@ func TestUnsharedChatInASharedProjectIsPrivate(t *testing.T) {
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
 	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
-	_, err := svc.GetChat(f.Viewer, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.PrivateChatID}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-	_, err = svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.PrivateChatID}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	_, err := svc.GetChat(f.Viewer, &reliantv1.GetChatRequest{ChatId: f.PrivateChatID})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+	_, err = svc.ListMessages(f.Viewer, &reliantv1.ListMessagesRequest{ChatId: f.PrivateChatID})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }
 
 // A STUB transcript leaves a large tool input out (body_elided), so a viewer
@@ -110,42 +110,42 @@ func TestViewerExpandsStubInputsButNeverResults(t *testing.T) {
 	f := viewertest.New(t, repo)
 	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
 
-	stub, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	stub, err := svc.ListMessages(f.Viewer, &reliantv1.ListMessagesRequest{
 		ChatId: f.ChatID, ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum(),
-	}))
+	})
 	require.NoError(t, err)
-	call := blocksByID(stub.Msg.Messages)[f.Transcript.DoneCallBlockID]
+	call := blocksByID(stub.Messages)[f.Transcript.DoneCallBlockID]
 	require.NotNil(t, call)
 	require.True(t, call.GetBodyElided(), "a large completed input is left out of a STUB read")
 
-	bodies, err := svc.GetContentBlockBodies(f.Viewer, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+	bodies, err := svc.GetContentBlockBodies(f.Viewer, &reliantv1.GetContentBlockBodiesRequest{
 		ChatId: f.ChatID, BlockIds: []string{f.Transcript.DoneCallBlockID, f.Transcript.ResultBlockID},
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, bodies.Msg.GetBodies(), 1)
-	assert.Equal(t, f.Transcript.DoneCallBlockID, bodies.Msg.GetBodies()[0].GetBlockId())
-	assert.Equal(t, f.Transcript.DoneInput, bodies.Msg.GetBodies()[0].GetInput(), "the viewer expands the whole input")
-	assert.Equal(t, []string{f.Transcript.ResultBlockID}, bodies.Msg.GetNotFound(), "a tool result is never a viewer's")
+	require.Len(t, bodies.GetBodies(), 1)
+	assert.Equal(t, f.Transcript.DoneCallBlockID, bodies.GetBodies()[0].GetBlockId())
+	assert.Equal(t, f.Transcript.DoneInput, bodies.GetBodies()[0].GetInput(), "the viewer expands the whole input")
+	assert.Equal(t, []string{f.Transcript.ResultBlockID}, bodies.GetNotFound(), "a tool result is never a viewer's")
 	for _, full := range []bool{false, true} {
 		full := full
-		got, err := svc.GetContentBlockBodies(f.Viewer, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+		got, err := svc.GetContentBlockBodies(f.Viewer, &reliantv1.GetContentBlockBodiesRequest{
 			ChatId: f.ChatID, BlockIds: []string{f.Transcript.ResultBlockID}, Full: &full,
-		}))
+		})
 		require.NoError(t, err)
-		assert.Empty(t, got.Msg.GetBodies(), "full=%v", full)
+		assert.Empty(t, got.GetBodies(), "full=%v", full)
 	}
 
-	owned, err := svc.GetContentBlockBodies(f.Owner, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+	owned, err := svc.GetContentBlockBodies(f.Owner, &reliantv1.GetContentBlockBodiesRequest{
 		ChatId: f.ChatID, BlockIds: []string{f.Transcript.ResultBlockID}, Full: ptr.Of(true),
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, owned.Msg.GetBodies(), 1)
-	assert.Equal(t, f.Transcript.Result, owned.Msg.GetBodies()[0].GetContent(), "the owner reads the result")
+	require.Len(t, owned.GetBodies(), 1)
+	assert.Equal(t, f.Transcript.Result, owned.GetBodies()[0].GetContent(), "the owner reads the result")
 
-	_, err = svc.GetContentBlockBodies(f.Outsider, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+	_, err = svc.GetContentBlockBodies(f.Outsider, &reliantv1.GetContentBlockBodiesRequest{
 		ChatId: f.ChatID, BlockIds: []string{f.Transcript.DoneCallBlockID},
-	}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "an outsider: %v", err)
+	})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "an outsider: %v", err)
 }
 
 // A hidden message (a compaction summary, a mailbox envelope, a sub-agent's
@@ -160,21 +160,21 @@ func TestViewerNeverReadsAHiddenMessage(t *testing.T) {
 	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
 
 	for _, mode := range []*reliantv1.ToolBodyMode{nil, reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL.Enum(), reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum()} {
-		got, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: mode}))
+		got, err := svc.ListMessages(f.Viewer, &reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: mode})
 		require.NoError(t, err)
-		wire, err := protojson.Marshal(got.Msg)
+		wire, err := protojson.Marshal(got)
 		require.NoError(t, err)
 		assert.NotContains(t, string(wire), hidden.Secret, "ListMessages, mode %v", mode)
 	}
 
 	for _, full := range []bool{false, true} {
 		full := full
-		got, err := svc.GetContentBlockBodies(f.Viewer, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+		got, err := svc.GetContentBlockBodies(f.Viewer, &reliantv1.GetContentBlockBodiesRequest{
 			ChatId: f.ChatID, BlockIds: []string{hidden.BlockID}, Full: &full,
-		}))
+		})
 		require.NoError(t, err)
-		assert.Empty(t, got.Msg.GetBodies(), "a hidden block's body, full=%v", full)
-		assert.Equal(t, []string{hidden.BlockID}, got.Msg.GetNotFound())
+		assert.Empty(t, got.GetBodies(), "a hidden block's body, full=%v", full)
+		assert.Equal(t, []string{hidden.BlockID}, got.GetNotFound())
 	}
 }
 
@@ -188,10 +188,10 @@ func TestViewerScrollBackCarriesNoErrors(t *testing.T) {
 		`{"update_type":"error","id":"err-1","error_message":"exit 1: SECRET=hunter2","thread":"`+f.Transcript.ThreadID+`"}`))
 	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: f.Membership}))
 	before := int64(1 << 40)
-	got, err := svc.ListMessages(f.Viewer, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, BeforeSeq: &before}))
+	got, err := svc.ListMessages(f.Viewer, &reliantv1.ListMessagesRequest{ChatId: f.ChatID, BeforeSeq: &before})
 	require.NoError(t, err)
-	assert.Empty(t, got.Msg.GetErrors(), "a viewer's scroll-back carries no errors")
-	owned, err := svc.ListMessages(f.Owner, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, BeforeSeq: &before}))
+	assert.Empty(t, got.GetErrors(), "a viewer's scroll-back carries no errors")
+	owned, err := svc.ListMessages(f.Owner, &reliantv1.ListMessagesRequest{ChatId: f.ChatID, BeforeSeq: &before})
 	require.NoError(t, err)
-	require.NotEmpty(t, owned.Msg.GetErrors(), "the owner's scroll-back carries the error")
+	require.NotEmpty(t, owned.GetErrors(), "the owner's scroll-back carries the error")
 }

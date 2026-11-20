@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
@@ -44,20 +44,20 @@ func TestGetWorktreePRLookup(t *testing.T) {
 					return nil, fmt.Errorf("unexpected command %s", command)
 				}
 			})
-			resp, err := readService(t, singleRepoStore(t), router).GetWorktreePR(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.GetWorktreePRRequest{WorktreeId: ownWorktreeID}))
+			resp, err := readService(t, singleRepoStore(t), router).GetWorktreePR(worktree.AuthedContext(t), &reliantv1.GetWorktreePRRequest{WorktreeId: ownWorktreeID})
 			if tc.code != 0 {
 				require.Error(t, err)
 				require.Nil(t, resp)
-				require.Equal(t, tc.code, svcerr.Code(err))
+				require.Equal(t, tc.code, svcerr.CodeV2(err))
 				if tc.name == "daemon error envelope" {
 					require.Contains(t, err.Error(), "install gh")
 				}
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, tc.exists, resp.Msg.Exists)
+			require.Equal(t, tc.exists, resp.Exists)
 			if tc.exists {
-				require.Equal(t, int32(42), resp.Msg.GetNumber())
+				require.Equal(t, int32(42), resp.GetNumber())
 			}
 		})
 	}

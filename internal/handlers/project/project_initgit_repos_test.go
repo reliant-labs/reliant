@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,10 +84,10 @@ func TestInitializeGitRepoDoesNotPolluteNestedRepos(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	s := newProjectService(t, repo, &initGitDaemonRouter{})
 
-	_, err := s.InitializeGitRepo(ctx, connect.NewRequest(&reliantv1.InitializeGitRepoRequest{
+	_, err := s.InitializeGitRepo(ctx, &reliantv1.InitializeGitRepoRequest{
 		ProjectId:     projectID,
 		InitialBranch: "main",
-	}))
+	})
 	require.NoError(t, err)
 
 	repos, err := repo.ListReposByProject(ctx, projectID)
@@ -113,10 +112,10 @@ func TestInitializeGitRepoRegistersRootRepoWhenNoneExist(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	s := newProjectService(t, repo, &initGitDaemonRouter{})
 
-	_, err := s.InitializeGitRepo(ctx, connect.NewRequest(&reliantv1.InitializeGitRepoRequest{
+	_, err := s.InitializeGitRepo(ctx, &reliantv1.InitializeGitRepoRequest{
 		ProjectId:     projectID,
 		InitialBranch: "main",
-	}))
+	})
 	require.NoError(t, err)
 
 	repos, err := repo.ListReposByProject(ctx, projectID)

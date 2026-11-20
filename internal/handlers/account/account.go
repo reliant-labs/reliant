@@ -5,8 +5,9 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accountpurge"
@@ -59,9 +60,9 @@ func (s *Service) callerIdentity(ctx context.Context, authHeader string) (userID
 // PreviewAccountDeletion reports what DeleteAccount would destroy.
 func (s *Service) PreviewAccountDeletion(
 	ctx context.Context,
-	req *connect.Request[reliantv1.PreviewAccountDeletionRequest],
-) (*connect.Response[reliantv1.PreviewAccountDeletionResponse], error) {
-	userID, email, err := s.callerIdentity(ctx, req.Header().Get("Authorization"))
+	req *reliantv1.PreviewAccountDeletionRequest,
+) (*reliantv1.PreviewAccountDeletionResponse, error) {
+	userID, email, err := s.callerIdentity(ctx, serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization"))
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func (s *Service) PreviewAccountDeletion(
 	var wallet *reliantv1.AccountDeletionWalletQuote
 	if s.deps.ControlPlane != nil {
 		quote, cpErr := s.deps.ControlPlane.PreviewAccountDeletionWallet(ctx,
-			auth.BearerToken(req.Header().Get("Authorization")))
+			auth.BearerToken(serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")))
 		if cpErr != nil {
 			// control-plane's error is a remote client's: the logged cause,
 			// never this rpc's verdict.
@@ -88,7 +89,7 @@ func (s *Service) PreviewAccountDeletion(
 		wallet = walletQuoteToProto(quote)
 	}
 
-	return connect.NewResponse(&reliantv1.PreviewAccountDeletionResponse{
+	return &reliantv1.PreviewAccountDeletionResponse{
 		ProjectCount:           counts.Projects,
 		ChatCount:              counts.Chats,
 		WorktreeCount:          counts.Worktrees,
@@ -97,15 +98,15 @@ func (s *Service) PreviewAccountDeletion(
 		ConfirmEmail:           email,
 		RetainedElsewhere:      retainedElsewhere,
 		Wallet:                 wallet,
-	}), nil
+	}, nil
 }
 
 // DeleteAccount permanently removes every row reliant holds for the caller.
 func (s *Service) DeleteAccount(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteAccountRequest],
-) (*connect.Response[reliantv1.DeleteAccountResponse], error) {
-	userID, email, err := s.callerIdentity(ctx, req.Header().Get("Authorization"))
+	req *reliantv1.DeleteAccountRequest,
+) (*reliantv1.DeleteAccountResponse, error) {
+	userID, email, err := s.callerIdentity(ctx, serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization"))
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func (s *Service) DeleteAccount(
 	// exists to rescue, so for them the confirmation is waived — they have no
 	// email to type, and the JWT already proves the session is theirs.
 	if email != "" {
-		got := strings.ToLower(strings.TrimSpace(req.Msg.GetConfirmEmail()))
+		got := strings.ToLower(strings.TrimSpace(req.GetConfirmEmail()))
 		want := strings.ToLower(strings.TrimSpace(email))
 		if got != want {
 			return nil, svcerr.InvalidArgument("confirmation does not match your email address")
@@ -140,12 +141,12 @@ func (s *Service) DeleteAccount(
 	resp := &reliantv1.DeleteAccountResponse{}
 	if s.deps.ControlPlane != nil {
 		result, cpErr := s.deps.ControlPlane.DeleteCurrentUserAccount(ctx,
-			auth.BearerToken(req.Header().Get("Authorization")))
+			auth.BearerToken(serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")))
 		if cpErr != nil {
 			// control-plane's error is a remote client's: it decides which
 			// sentence this rpc says, and is the logged cause, never the
 			// verdict itself (svcerr.Code reads the *connect.Error it is).
-			if svcerr.Code(cpErr) == connect.CodeUnavailable {
+			if svcerr.CodeV2(cpErr) == connect.CodeUnavailable {
 				// A refund's outcome could not be confirmed with the payment
 				// provider. Nothing irreversible happened and retrying replays
 				// the same refund rather than issuing another.
@@ -177,7 +178,7 @@ func (s *Service) DeleteAccount(
 
 	resp.DeletedRowCount = deleted
 	resp.UserId = userID
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 func walletQuoteToProto(q *controlplane.AccountDeletionWalletQuote) *reliantv1.AccountDeletionWalletQuote {

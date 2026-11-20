@@ -8,7 +8,7 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -130,17 +130,17 @@ func TestCreateConnectorReturnsCredentialOnce(t *testing.T) {
 	authority := tokenauthority.NewMemory()
 	svc := newConnectorService(t, store, authority, "https://api.example.com")
 
-	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
+	res, err := svc.CreateConnector(connectorCtx("user-1"), validCreateRequest())
 	require.NoError(t, err)
 
-	require.True(t, fat.HasFormat(res.Msg.GetCredential()), "connector credential must be an rlat_ access token")
-	require.Equal(t, "https://api.example.com/mcp", res.Msg.GetMcpUrl())
+	require.True(t, fat.HasFormat(res.GetCredential()), "connector credential must be an rlat_ access token")
+	require.Equal(t, "https://api.example.com/mcp", res.GetMcpUrl())
 
 	// The grant row holds no credential; the credential lives in the token
 	// authority, bound to this grant, with mcp:connector only.
 	require.Len(t, store.created, 1)
 	stored := store.created[0]
-	p, err := authority.Introspect(context.Background(), res.Msg.GetCredential())
+	p, err := authority.Introspect(context.Background(), res.GetCredential())
 	require.NoError(t, err)
 	require.Equal(t, "user-1", p.ActingUserID)
 	require.True(t, p.Scopes.Permits(fat.ScopeMCPConnector))
@@ -148,16 +148,16 @@ func TestCreateConnectorReturnsCredentialOnce(t *testing.T) {
 	require.Equal(t, &fat.Resource{Kind: fat.ResourceConnector, ID: stored.ID}, p.Resource)
 
 	// The listed form carries the prefix but no credential material.
-	require.Equal(t, stored.TokenPrefix, res.Msg.GetConnector().GetTokenPrefix())
+	require.Equal(t, stored.TokenPrefix, res.GetConnector().GetTokenPrefix())
 	require.Equal(t, "user-1", stored.UserID)
 }
 
 func TestCreateConnectorRequiresAuth(t *testing.T) {
 	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "")
 
-	_, err := svc.CreateConnector(context.Background(), connect.NewRequest(validCreateRequest()))
+	_, err := svc.CreateConnector(context.Background(), validCreateRequest())
 	require.Error(t, err)
-	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 }
 
 func TestCreateConnectorValidation(t *testing.T) {
@@ -239,9 +239,9 @@ func TestCreateConnectorValidation(t *testing.T) {
 			req := validCreateRequest()
 			tc.mutate(req)
 
-			_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(req))
+			_, err := svc.CreateConnector(connectorCtx("user-1"), req)
 			require.Error(t, err, tc.reason)
-			require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 			require.Empty(t, store.created, "an invalid request must not persist a grant")
 		})
 	}
@@ -256,7 +256,7 @@ func TestCreateConnectorAcceptsShellWithAllowlist(t *testing.T) {
 	req.ExecMode = reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_ALLOWLIST
 	req.ExecAllowlist = []string{"git", "go", "git"}
 
-	_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(req))
+	_, err := svc.CreateConnector(connectorCtx("user-1"), req)
 	require.NoError(t, err)
 
 	require.Len(t, store.created, 1)
@@ -275,7 +275,7 @@ func TestCreateConnectorDropsAllowlistWhenUnused(t *testing.T) {
 	req.ExecMode = reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_DENY
 	req.ExecAllowlist = []string{"git"}
 
-	_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(req))
+	_, err := svc.CreateConnector(connectorCtx("user-1"), req)
 	require.NoError(t, err)
 	require.Empty(t, store.created[0].ExecAllowlist)
 }
@@ -287,7 +287,7 @@ func TestUnspecifiedExecModeDeniesShell(t *testing.T) {
 	req := validCreateRequest()
 	req.ExecMode = reliantv1.ConnectorExecMode_CONNECTOR_EXEC_MODE_UNSPECIFIED
 
-	_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(req))
+	_, err := svc.CreateConnector(connectorCtx("user-1"), req)
 	require.NoError(t, err)
 	require.Equal(t, connectorgrant.ExecDeny, store.created[0].ExecMode,
 		"an unset exec mode must resolve to deny, not to unrestricted")
@@ -299,9 +299,9 @@ func TestRevokeConnectorIsScopedToCaller(t *testing.T) {
 	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
 	res, err := svc.RevokeConnector(connectorCtx("user-1"),
-		connect.NewRequest(&reliantv1.RevokeConnectorRequest{Id: "grant-9"}))
+		&reliantv1.RevokeConnectorRequest{Id: "grant-9"})
 	require.NoError(t, err)
-	require.True(t, res.Msg.GetRevoked())
+	require.True(t, res.GetRevoked())
 
 	// The caller's id must reach the store, so one user cannot revoke
 	// another's connector by guessing an id.
@@ -317,14 +317,14 @@ func TestRevokeConnectorRevokesCredential(t *testing.T) {
 	authority := tokenauthority.NewMemory()
 	svc := newConnectorService(t, store, authority, "")
 
-	created, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
+	created, err := svc.CreateConnector(connectorCtx("user-1"), validCreateRequest())
 	require.NoError(t, err)
-	raw := created.Msg.GetCredential()
+	raw := created.GetCredential()
 	_, err = authority.Introspect(context.Background(), raw)
 	require.NoError(t, err)
 
 	_, err = svc.RevokeConnector(connectorCtx("user-1"),
-		connect.NewRequest(&reliantv1.RevokeConnectorRequest{Id: store.created[0].ID}))
+		&reliantv1.RevokeConnectorRequest{Id: store.created[0].ID})
 	require.NoError(t, err)
 	_, err = authority.Introspect(context.Background(), raw)
 	require.ErrorIs(t, err, tokenauthority.ErrInactive)
@@ -334,43 +334,43 @@ func TestRevokeConnectorRequiresID(t *testing.T) {
 	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "")
 
 	_, err := svc.RevokeConnector(connectorCtx("user-1"),
-		connect.NewRequest(&reliantv1.RevokeConnectorRequest{}))
+		&reliantv1.RevokeConnectorRequest{})
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 func TestListConnectorsExcludesCredentials(t *testing.T) {
 	store := newStubStore()
 	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
-	_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
+	_, err := svc.CreateConnector(connectorCtx("user-1"), validCreateRequest())
 	require.NoError(t, err)
 
-	res, err := svc.ListConnectors(connectorCtx("user-1"), connect.NewRequest(&reliantv1.ListConnectorsRequest{}))
+	res, err := svc.ListConnectors(connectorCtx("user-1"), &reliantv1.ListConnectorsRequest{})
 	require.NoError(t, err)
-	require.Len(t, res.Msg.GetConnectors(), 1)
+	require.Len(t, res.GetConnectors(), 1)
 
-	c := res.Msg.GetConnectors()[0]
+	c := res.GetConnectors()[0]
 	require.NotEmpty(t, c.GetTokenPrefix())
 	require.Equal(t, "/workspace", c.GetPathRoot())
 	require.ElementsMatch(t, []string{"read_file", "search"}, c.GetAllowedTools())
 
 	// Another user sees nothing.
-	other, err := svc.ListConnectors(connectorCtx("user-2"), connect.NewRequest(&reliantv1.ListConnectorsRequest{}))
+	other, err := svc.ListConnectors(connectorCtx("user-2"), &reliantv1.ListConnectorsRequest{})
 	require.NoError(t, err)
-	require.Empty(t, other.Msg.GetConnectors())
+	require.Empty(t, other.GetConnectors())
 }
 
 func TestListAvailableToolsDescribesCatalog(t *testing.T) {
 	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "")
 
 	res, err := svc.ListAvailableTools(connectorCtx("user-1"),
-		connect.NewRequest(&reliantv1.ListAvailableToolsRequest{}))
+		&reliantv1.ListAvailableToolsRequest{})
 	require.NoError(t, err)
-	require.NotEmpty(t, res.Msg.GetTools())
+	require.NotEmpty(t, res.GetTools())
 
 	byName := map[string]*reliantv1.ConnectorTool{}
-	for _, tool := range res.Msg.GetTools() {
+	for _, tool := range res.GetTools() {
 		require.NotEmpty(t, tool.GetDescription(), "tool %q needs a description for the consent UI", tool.GetName())
 		byName[tool.GetName()] = tool
 	}
@@ -385,17 +385,17 @@ func TestListAvailableToolsDescribesCatalog(t *testing.T) {
 func TestMCPURLWithoutPublicURL(t *testing.T) {
 	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "")
 
-	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
+	res, err := svc.CreateConnector(connectorCtx("user-1"), validCreateRequest())
 	require.NoError(t, err)
-	require.Equal(t, "/mcp", res.Msg.GetMcpUrl())
+	require.Equal(t, "/mcp", res.GetMcpUrl())
 }
 
 func TestMCPURLTrimsTrailingSlash(t *testing.T) {
 	svc := newConnectorService(t, newStubStore(), tokenauthority.NewMemory(), "https://api.example.com/")
 
-	res, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(validCreateRequest()))
+	res, err := svc.CreateConnector(connectorCtx("user-1"), validCreateRequest())
 	require.NoError(t, err)
-	require.Equal(t, "https://api.example.com/mcp", res.Msg.GetMcpUrl())
+	require.Equal(t, "https://api.example.com/mcp", res.GetMcpUrl())
 }
 
 // TestAuthorizeClientUnknownConnectorIsNotFound: a guessed or someone else's
@@ -404,10 +404,10 @@ func TestAuthorizeClientUnknownConnectorIsNotFound(t *testing.T) {
 	store := newStubStore()
 	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 
-	_, err := svc.AuthorizeClient(connectorCtx("user-1"), connect.NewRequest(&reliantv1.AuthorizeClientRequest{
+	_, err := svc.AuthorizeClient(connectorCtx("user-1"), &reliantv1.AuthorizeClientRequest{
 		ClientId: "chatgpt", ConnectorId: ptr.Of("someone-elses"),
-	}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	require.Empty(t, store.bindings, "nothing is bound to an unknown connector")
 }
 
@@ -419,33 +419,33 @@ func TestClientConsentRoundTrip(t *testing.T) {
 	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
 	owner, other := connectorCtx("user-1"), connectorCtx("user-2")
 
-	authorized, err := svc.AuthorizeClient(owner, connect.NewRequest(&reliantv1.AuthorizeClientRequest{
+	authorized, err := svc.AuthorizeClient(owner, &reliantv1.AuthorizeClientRequest{
 		ClientId: "chatgpt", ClientName: "ChatGPT", NewConnector: validCreateRequest(),
-	}))
+	})
 	require.NoError(t, err)
-	require.NotEmpty(t, authorized.Msg.GetCredential(), "a new connector's credential is returned at consent")
+	require.NotEmpty(t, authorized.GetCredential(), "a new connector's credential is returned at consent")
 	require.Len(t, store.created, 1)
 
-	listed, err := svc.ListAuthorizedClients(owner, connect.NewRequest(&reliantv1.ListAuthorizedClientsRequest{}))
+	listed, err := svc.ListAuthorizedClients(owner, &reliantv1.ListAuthorizedClientsRequest{})
 	require.NoError(t, err)
-	require.Len(t, listed.Msg.GetClients(), 1)
-	require.Equal(t, "ChatGPT on my phone", listed.Msg.GetClients()[0].GetConnectorName())
+	require.Len(t, listed.GetClients(), 1)
+	require.Equal(t, "ChatGPT on my phone", listed.GetClients()[0].GetConnectorName())
 
-	listed, err = svc.ListAuthorizedClients(other, connect.NewRequest(&reliantv1.ListAuthorizedClientsRequest{}))
+	listed, err = svc.ListAuthorizedClients(other, &reliantv1.ListAuthorizedClientsRequest{})
 	require.NoError(t, err)
-	require.Empty(t, listed.Msg.GetClients(), "another user sees no one else's clients")
+	require.Empty(t, listed.GetClients(), "another user sees no one else's clients")
 
-	revoked, err := svc.RevokeClientAuthorization(other, connect.NewRequest(&reliantv1.RevokeClientAuthorizationRequest{ClientId: "chatgpt"}))
+	revoked, err := svc.RevokeClientAuthorization(other, &reliantv1.RevokeClientAuthorizationRequest{ClientId: "chatgpt"})
 	require.NoError(t, err)
-	require.False(t, revoked.Msg.GetRevoked(), "another user cannot disconnect the client")
+	require.False(t, revoked.GetRevoked(), "another user cannot disconnect the client")
 
-	revoked, err = svc.RevokeClientAuthorization(owner, connect.NewRequest(&reliantv1.RevokeClientAuthorizationRequest{ClientId: "chatgpt"}))
+	revoked, err = svc.RevokeClientAuthorization(owner, &reliantv1.RevokeClientAuthorizationRequest{ClientId: "chatgpt"})
 	require.NoError(t, err)
-	require.True(t, revoked.Msg.GetRevoked())
+	require.True(t, revoked.GetRevoked())
 
-	listed, err = svc.ListAuthorizedClients(owner, connect.NewRequest(&reliantv1.ListAuthorizedClientsRequest{}))
+	listed, err = svc.ListAuthorizedClients(owner, &reliantv1.ListAuthorizedClientsRequest{})
 	require.NoError(t, err)
-	require.Empty(t, listed.Msg.GetClients())
+	require.Empty(t, listed.GetClients())
 }
 
 // A Reliant Forge connector names an org (and optionally projects) and forge
@@ -456,14 +456,14 @@ func TestCreateForgeConnector(t *testing.T) {
 	tokens := tokenauthority.NewMemory()
 	svc := newConnectorService(t, store, tokens, "https://api.example.com")
 
-	resp, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(&reliantv1.CreateConnectorRequest{
+	resp, err := svc.CreateConnector(connectorCtx("user-1"), &reliantv1.CreateConnectorRequest{
 		Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, OrgId: "org-1", ProjectNames: []string{"shop", "shop"},
 		AllowedTools: []string{"obs_status", "obs_init"},
-	}))
+	})
 	require.NoError(t, err)
-	require.Empty(t, resp.Msg.GetCredential(), "a forge connector has no credential")
-	require.Equal(t, "https://api.example.com/forge/mcp", resp.Msg.GetMcpUrl())
-	c := resp.Msg.GetConnector()
+	require.Empty(t, resp.GetCredential(), "a forge connector has no credential")
+	require.Equal(t, "https://api.example.com/forge/mcp", resp.GetMcpUrl())
+	c := resp.GetConnector()
 	require.Equal(t, reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, c.GetKind())
 	require.Equal(t, "org-1", c.GetOrgId())
 	require.Equal(t, []string{"shop"}, c.GetProjectNames())
@@ -475,7 +475,7 @@ func TestCreateForgeConnector(t *testing.T) {
 		"bad project":    {Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, OrgId: "org-1", ProjectNames: []string{"Shop!"}, AllowedTools: []string{"obs_status"}},
 		"workspace org":  {DaemonId: "d-1", PathRoot: "/", OrgId: "org-1", AllowedTools: []string{"read_file"}},
 	} {
-		_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(req))
+		_, err := svc.CreateConnector(connectorCtx("user-1"), req)
 		require.Error(t, err, name)
 	}
 }
@@ -485,12 +485,12 @@ func TestCreateForgeConnector(t *testing.T) {
 func TestAuthorizeClientNamespacesForgeBinding(t *testing.T) {
 	store := newStubStore()
 	svc := newConnectorService(t, store, tokenauthority.NewMemory(), "")
-	_, err := svc.AuthorizeClient(connectorCtx("user-1"), connect.NewRequest(&reliantv1.AuthorizeClientRequest{
+	_, err := svc.AuthorizeClient(connectorCtx("user-1"), &reliantv1.AuthorizeClientRequest{
 		ClientId: "claude",
 		NewConnector: &reliantv1.CreateConnectorRequest{
 			Kind: reliantv1.ConnectorKind_CONNECTOR_KIND_FORGE, OrgId: "org-1", AllowedTools: []string{"obs_status"},
 		},
-	}))
+	})
 	require.NoError(t, err)
 	var ids []string
 	for _, b := range store.bindings {

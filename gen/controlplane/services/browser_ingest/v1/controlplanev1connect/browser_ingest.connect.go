@@ -5,43 +5,58 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/browser_ingest/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// BrowserIngestServiceName is the fully-qualified name of the BrowserIngestService service.
 	BrowserIngestServiceName = "controlplane.v1.BrowserIngestService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// BrowserIngestServiceEnsureKeyProcedure is the fully-qualified name of the BrowserIngestService's
+	// BrowserIngestServiceEnsureKeyProcedure is the procedure name of the BrowserIngestService's
 	// EnsureKey RPC.
 	BrowserIngestServiceEnsureKeyProcedure = "/controlplane.v1.BrowserIngestService/EnsureKey"
-	// BrowserIngestServiceListKeysProcedure is the fully-qualified name of the BrowserIngestService's
+	// BrowserIngestServiceListKeysProcedure is the procedure name of the BrowserIngestService's
 	// ListKeys RPC.
 	BrowserIngestServiceListKeysProcedure = "/controlplane.v1.BrowserIngestService/ListKeys"
-	// BrowserIngestServiceRevokeKeyProcedure is the fully-qualified name of the BrowserIngestService's
+	// BrowserIngestServiceRevokeKeyProcedure is the procedure name of the BrowserIngestService's
 	// RevokeKey RPC.
 	BrowserIngestServiceRevokeKeyProcedure = "/controlplane.v1.BrowserIngestService/RevokeKey"
+)
+
+var (
+	browserIngestServiceEnsureKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_browser_ingest_v1_browser_ingest_proto.Services().ByName("BrowserIngestService").Methods().ByName("EnsureKey"),
+			Procedure:  BrowserIngestServiceEnsureKeyProcedure,
+		}
+	})
+	browserIngestServiceListKeysSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_browser_ingest_v1_browser_ingest_proto.Services().ByName("BrowserIngestService").Methods().ByName("ListKeys"),
+			Procedure:  BrowserIngestServiceListKeysProcedure,
+		}
+	})
+	browserIngestServiceRevokeKeySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_browser_ingest_v1_browser_ingest_proto.Services().ByName("BrowserIngestService").Methods().ByName("RevokeKey"),
+			Procedure:  BrowserIngestServiceRevokeKeyProcedure,
+		}
+	})
 )
 
 // BrowserIngestServiceClient is a client for the controlplane.v1.BrowserIngestService service.
@@ -59,73 +74,25 @@ type BrowserIngestServiceClient interface {
 	// wildcard, "null") is InvalidArgument.
 	//
 	// Requires the admin role (deploy:write for a machine credential).
-	EnsureKey(context.Context, *connect.Request[v1.EnsureKeyRequest]) (*connect.Response[v1.EnsureKeyResponse], error)
+	EnsureKey(context.Context, *v1.EnsureKeyRequest) (*v1.EnsureKeyResponse, error)
 	// ListKeys returns the caller's org's keys, newest first, optionally for one
 	// environment. Revoked keys are omitted unless asked for.
 	//
 	// Requires membership (deploy:read for a machine credential).
-	ListKeys(context.Context, *connect.Request[v1.ListKeysRequest]) (*connect.Response[v1.ListKeysResponse], error)
+	ListKeys(context.Context, *v1.ListKeysRequest) (*v1.ListKeysResponse, error)
 	// RevokeKey ends a key: its endpoint answers 404 within the proxy's cache
 	// window (about a minute). Idempotent. A frontend that still ships the key
 	// sends telemetry nowhere until its next deploy mints a replacement with
 	// EnsureKey.
 	//
 	// Requires the admin role (deploy:write for a machine credential).
-	RevokeKey(context.Context, *connect.Request[v1.RevokeKeyRequest]) (*connect.Response[v1.RevokeKeyResponse], error)
+	RevokeKey(context.Context, *v1.RevokeKeyRequest) (*v1.RevokeKeyResponse, error)
 }
 
 // NewBrowserIngestServiceClient constructs a client for the controlplane.v1.BrowserIngestService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewBrowserIngestServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BrowserIngestServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	browserIngestServiceMethods := v1.File_services_browser_ingest_v1_browser_ingest_proto.Services().ByName("BrowserIngestService").Methods()
-	return &browserIngestServiceClient{
-		ensureKey: connect.NewClient[v1.EnsureKeyRequest, v1.EnsureKeyResponse](
-			httpClient,
-			baseURL+BrowserIngestServiceEnsureKeyProcedure,
-			connect.WithSchema(browserIngestServiceMethods.ByName("EnsureKey")),
-			connect.WithClientOptions(opts...),
-		),
-		listKeys: connect.NewClient[v1.ListKeysRequest, v1.ListKeysResponse](
-			httpClient,
-			baseURL+BrowserIngestServiceListKeysProcedure,
-			connect.WithSchema(browserIngestServiceMethods.ByName("ListKeys")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeKey: connect.NewClient[v1.RevokeKeyRequest, v1.RevokeKeyResponse](
-			httpClient,
-			baseURL+BrowserIngestServiceRevokeKeyProcedure,
-			connect.WithSchema(browserIngestServiceMethods.ByName("RevokeKey")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// browserIngestServiceClient implements BrowserIngestServiceClient.
-type browserIngestServiceClient struct {
-	ensureKey *connect.Client[v1.EnsureKeyRequest, v1.EnsureKeyResponse]
-	listKeys  *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
-	revokeKey *connect.Client[v1.RevokeKeyRequest, v1.RevokeKeyResponse]
-}
-
-// EnsureKey calls controlplane.v1.BrowserIngestService.EnsureKey.
-func (c *browserIngestServiceClient) EnsureKey(ctx context.Context, req *connect.Request[v1.EnsureKeyRequest]) (*connect.Response[v1.EnsureKeyResponse], error) {
-	return c.ensureKey.CallUnary(ctx, req)
-}
-
-// ListKeys calls controlplane.v1.BrowserIngestService.ListKeys.
-func (c *browserIngestServiceClient) ListKeys(ctx context.Context, req *connect.Request[v1.ListKeysRequest]) (*connect.Response[v1.ListKeysResponse], error) {
-	return c.listKeys.CallUnary(ctx, req)
-}
-
-// RevokeKey calls controlplane.v1.BrowserIngestService.RevokeKey.
-func (c *browserIngestServiceClient) RevokeKey(ctx context.Context, req *connect.Request[v1.RevokeKeyRequest]) (*connect.Response[v1.RevokeKeyResponse], error) {
-	return c.revokeKey.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewBrowserIngestServiceClient(client *connect.Client) BrowserIngestServiceClient {
+	return &browserIngestServiceClient{client: client}
 }
 
 // BrowserIngestServiceHandler is an implementation of the controlplane.v1.BrowserIngestService
@@ -144,71 +111,109 @@ type BrowserIngestServiceHandler interface {
 	// wildcard, "null") is InvalidArgument.
 	//
 	// Requires the admin role (deploy:write for a machine credential).
-	EnsureKey(context.Context, *connect.Request[v1.EnsureKeyRequest]) (*connect.Response[v1.EnsureKeyResponse], error)
+	EnsureKey(context.Context, *v1.EnsureKeyRequest) (*v1.EnsureKeyResponse, error)
 	// ListKeys returns the caller's org's keys, newest first, optionally for one
 	// environment. Revoked keys are omitted unless asked for.
 	//
 	// Requires membership (deploy:read for a machine credential).
-	ListKeys(context.Context, *connect.Request[v1.ListKeysRequest]) (*connect.Response[v1.ListKeysResponse], error)
+	ListKeys(context.Context, *v1.ListKeysRequest) (*v1.ListKeysResponse, error)
 	// RevokeKey ends a key: its endpoint answers 404 within the proxy's cache
 	// window (about a minute). Idempotent. A frontend that still ships the key
 	// sends telemetry nowhere until its next deploy mints a replacement with
 	// EnsureKey.
 	//
 	// Requires the admin role (deploy:write for a machine credential).
-	RevokeKey(context.Context, *connect.Request[v1.RevokeKeyRequest]) (*connect.Response[v1.RevokeKeyResponse], error)
+	RevokeKey(context.Context, *v1.RevokeKeyRequest) (*v1.RevokeKeyResponse, error)
 }
 
-// NewBrowserIngestServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewBrowserIngestServiceHandler(svc BrowserIngestServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	browserIngestServiceMethods := v1.File_services_browser_ingest_v1_browser_ingest_proto.Services().ByName("BrowserIngestService").Methods()
-	browserIngestServiceEnsureKeyHandler := connect.NewUnaryHandler(
-		BrowserIngestServiceEnsureKeyProcedure,
-		svc.EnsureKey,
-		connect.WithSchema(browserIngestServiceMethods.ByName("EnsureKey")),
-		connect.WithHandlerOptions(opts...),
+// RegisterBrowserIngestServiceHandler registers svc as the controlplane.v1.BrowserIngestService
+// implementation on server.
+func RegisterBrowserIngestServiceHandler(server *connect.Server, svc BrowserIngestServiceHandler) {
+	adapter := browserIngestServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: browserIngestServiceEnsureKeySpec(), Handler: adapter.ensureKey},
+		connect.Method{Spec: browserIngestServiceListKeysSpec(), Handler: adapter.listKeys},
+		connect.Method{Spec: browserIngestServiceRevokeKeySpec(), Handler: adapter.revokeKey},
 	)
-	browserIngestServiceListKeysHandler := connect.NewUnaryHandler(
-		BrowserIngestServiceListKeysProcedure,
-		svc.ListKeys,
-		connect.WithSchema(browserIngestServiceMethods.ByName("ListKeys")),
-		connect.WithHandlerOptions(opts...),
-	)
-	browserIngestServiceRevokeKeyHandler := connect.NewUnaryHandler(
-		BrowserIngestServiceRevokeKeyProcedure,
-		svc.RevokeKey,
-		connect.WithSchema(browserIngestServiceMethods.ByName("RevokeKey")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.BrowserIngestService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case BrowserIngestServiceEnsureKeyProcedure:
-			browserIngestServiceEnsureKeyHandler.ServeHTTP(w, r)
-		case BrowserIngestServiceListKeysProcedure:
-			browserIngestServiceListKeysHandler.ServeHTTP(w, r)
-		case BrowserIngestServiceRevokeKeyProcedure:
-			browserIngestServiceRevokeKeyHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedBrowserIngestServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedBrowserIngestServiceHandler struct{}
 
-func (UnimplementedBrowserIngestServiceHandler) EnsureKey(context.Context, *connect.Request[v1.EnsureKeyRequest]) (*connect.Response[v1.EnsureKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BrowserIngestService.EnsureKey is not implemented"))
+func (UnimplementedBrowserIngestServiceHandler) EnsureKey(context.Context, *v1.EnsureKeyRequest) (*v1.EnsureKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BrowserIngestService.EnsureKey is not implemented")
 }
 
-func (UnimplementedBrowserIngestServiceHandler) ListKeys(context.Context, *connect.Request[v1.ListKeysRequest]) (*connect.Response[v1.ListKeysResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BrowserIngestService.ListKeys is not implemented"))
+func (UnimplementedBrowserIngestServiceHandler) ListKeys(context.Context, *v1.ListKeysRequest) (*v1.ListKeysResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BrowserIngestService.ListKeys is not implemented")
 }
 
-func (UnimplementedBrowserIngestServiceHandler) RevokeKey(context.Context, *connect.Request[v1.RevokeKeyRequest]) (*connect.Response[v1.RevokeKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BrowserIngestService.RevokeKey is not implemented"))
+func (UnimplementedBrowserIngestServiceHandler) RevokeKey(context.Context, *v1.RevokeKeyRequest) (*v1.RevokeKeyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.BrowserIngestService.RevokeKey is not implemented")
+}
+
+type browserIngestServiceClient struct {
+	client *connect.Client
+}
+
+func (c *browserIngestServiceClient) EnsureKey(ctx context.Context, req *v1.EnsureKeyRequest) (*v1.EnsureKeyResponse, error) {
+	var res v1.EnsureKeyResponse
+	if err := c.client.CallUnary(ctx, browserIngestServiceEnsureKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *browserIngestServiceClient) ListKeys(ctx context.Context, req *v1.ListKeysRequest) (*v1.ListKeysResponse, error) {
+	var res v1.ListKeysResponse
+	if err := c.client.CallUnary(ctx, browserIngestServiceListKeysSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *browserIngestServiceClient) RevokeKey(ctx context.Context, req *v1.RevokeKeyRequest) (*v1.RevokeKeyResponse, error) {
+	var res v1.RevokeKeyResponse
+	if err := c.client.CallUnary(ctx, browserIngestServiceRevokeKeySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type browserIngestServiceHandler struct{ svc BrowserIngestServiceHandler }
+
+func (h browserIngestServiceHandler) ensureKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.EnsureKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.EnsureKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h browserIngestServiceHandler) listKeys(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListKeysRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListKeys(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h browserIngestServiceHandler) revokeKey(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeKeyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeKey(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

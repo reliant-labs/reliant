@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -109,39 +108,39 @@ func (s *Service) requestedMachine(ctx context.Context, userID string, daemonID 
 // Taskfile declares.
 func (s *Service) RunCommand(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RunPackageCommandRequest],
-) (*connect.Response[reliantv1.RunPackageCommandResponse], error) {
-	if req.Msg.CommandName == "" {
+	req *reliantv1.RunPackageCommandRequest,
+) (*reliantv1.RunPackageCommandResponse, error) {
+	if req.CommandName == "" {
 		return nil, svcerr.InvalidArgument("command_name is required")
 	}
-	if req.Msg.PackageType == reliantv1.PackageType_PACKAGE_TYPE_UNSPECIFIED {
+	if req.PackageType == reliantv1.PackageType_PACKAGE_TYPE_UNSPECIFIED {
 		return nil, svcerr.InvalidArgument("package_type is required")
 	}
-	packageType, ok := pkgmgrPackageTypeFromProto(req.Msg.PackageType)
+	packageType, ok := pkgmgrPackageTypeFromProto(req.PackageType)
 	if !ok {
-		return nil, svcerr.InvalidArgument(fmt.Sprintf("package_type %q is not supported", req.Msg.PackageType.String()))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("package_type %q is not supported", req.PackageType.String()))
 	}
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	worktreeID := req.Msg.GetWorktreeId()
+	worktreeID := req.GetWorktreeId()
 	var rootDir, daemonID string
 	switch {
 	case worktreeID != "":
-		rootDir, daemonID, err = s.workspace(ctx, userID, worktreeID, req.Msg.GetChatId())
+		rootDir, daemonID, err = s.workspace(ctx, userID, worktreeID, req.GetChatId())
 		if err != nil {
 			return nil, err
 		}
-	case req.Msg.GetPath() != "":
-		rootDir = req.Msg.GetPath()
+	case req.GetPath() != "":
+		rootDir = req.GetPath()
 	default:
 		return nil, svcerr.InvalidArgument("worktree_id or path is required")
 	}
 	workingDir := rootDir
-	if req.Msg.GetWorkingDir() != "" {
-		workingDir = req.Msg.GetWorkingDir()
+	if req.GetWorkingDir() != "" {
+		workingDir = req.GetWorkingDir()
 	}
 
 	var discovered pkgmgr.CommandListResponse
@@ -149,10 +148,10 @@ func (s *Service) RunCommand(
 		pkgListCommandsCmd{WorkingDir: workingDir}, &discovered, pkgListCommandsTimeoutMs); err != nil {
 		return nil, err
 	}
-	command, ok := findCommand(&discovered, packageType, req.Msg.CommandName)
+	command, ok := findCommand(&discovered, packageType, req.CommandName)
 	if !ok {
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound,
-			fmt.Sprintf("%s command %q not found in %s", packageType, req.Msg.CommandName, workingDir))
+			fmt.Sprintf("%s command %q not found in %s", packageType, req.CommandName, workingDir))
 	}
 
 	var started struct {
@@ -161,18 +160,18 @@ func (s *Service) RunCommand(
 	if err := s.daemon(daemonID).Dispatch(ctx, userID, "exec.bg_start", daemon.RunCommandRequest{
 		Command:        command.Command,
 		WorkingDir:     workingDir,
-		Env:            req.Msg.Env,
+		Env:            req.Env,
 		WorktreeID:     worktreeID,
 		PackageCommand: true,
 	}, &started, pkgProcessTimeoutMs); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&reliantv1.RunPackageCommandResponse{
+	return &reliantv1.RunPackageCommandResponse{
 		ProcessId: started.ProcessID,
 		Command:   command.Command,
 		StartTime: time.Now().UTC().Format(time.RFC3339),
 		DaemonId:  daemonID,
-	}), nil
+	}, nil
 }
 
 // findCommand is the command named name of packageType declared in the
@@ -190,24 +189,24 @@ func findCommand(list *pkgmgr.CommandListResponse, packageType pkgmgr.PackageTyp
 // the machine holding it, or every connected machine's.
 func (s *Service) ListProcesses(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListPackageProcessesRequest],
-) (*connect.Response[reliantv1.ListPackageProcessesResponse], error) {
+	req *reliantv1.ListPackageProcessesRequest,
+) (*reliantv1.ListPackageProcessesResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	worktreeID := req.Msg.GetWorktreeId()
+	worktreeID := req.GetWorktreeId()
 	var processes []*reliantv1.PackageProcess
 	if worktreeID != "" {
-		_, daemonID, err := s.workspace(ctx, userID, worktreeID, req.Msg.GetChatId())
+		_, daemonID, err := s.workspace(ctx, userID, worktreeID, req.GetChatId())
 		if err != nil {
 			return nil, err
 		}
 		// A list never wakes a machine: one that is asleep has no running
 		// process to show.
 		if daemonID != "" && !s.online(ctx, userID, daemonID) {
-			return connect.NewResponse(&reliantv1.ListPackageProcessesResponse{}), nil
+			return &reliantv1.ListPackageProcessesResponse{}, nil
 		}
 		listed, err := s.listOn(ctx, userID, daemonID)
 		if err != nil {
@@ -221,7 +220,7 @@ func (s *Service) ListProcesses(
 	} else {
 		processes = s.listEverywhere(ctx, userID)
 	}
-	return connect.NewResponse(&reliantv1.ListPackageProcessesResponse{Processes: processes}), nil
+	return &reliantv1.ListPackageProcessesResponse{Processes: processes}, nil
 }
 
 // livenessProbe is the router's answer to "is this machine connected".
@@ -332,16 +331,16 @@ func packageProcessFromDaemon(p *daemon.ProcessInfo, asked string) *reliantv1.Pa
 // GetProcess returns one package-command process from its machine.
 func (s *Service) GetProcess(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetPackageProcessRequest],
-) (*connect.Response[reliantv1.GetPackageProcessResponse], error) {
-	if req.Msg.ProcessId == "" {
+	req *reliantv1.GetPackageProcessRequest,
+) (*reliantv1.GetPackageProcessResponse, error) {
+	if req.ProcessId == "" {
 		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	daemonID, err := s.requestedMachine(ctx, userID, req.Msg.DaemonId)
+	daemonID, err := s.requestedMachine(ctx, userID, req.DaemonId)
 	if err != nil {
 		return nil, err
 	}
@@ -350,8 +349,8 @@ func (s *Service) GetProcess(
 		return nil, err
 	}
 	for _, p := range listed {
-		if p.Id == req.Msg.ProcessId {
-			return connect.NewResponse(&reliantv1.GetPackageProcessResponse{Process: p}), nil
+		if p.Id == req.ProcessId {
+			return &reliantv1.GetPackageProcessResponse{Process: p}, nil
 		}
 	}
 	return nil, svcerr.NotFound("process")
@@ -361,16 +360,16 @@ func (s *Service) GetProcess(
 // with the stream each line came from.
 func (s *Service) GetProcessLogs(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetPackageProcessLogsRequest],
-) (*connect.Response[reliantv1.GetPackageProcessLogsResponse], error) {
-	if req.Msg.ProcessId == "" {
+	req *reliantv1.GetPackageProcessLogsRequest,
+) (*reliantv1.GetPackageProcessLogsResponse, error) {
+	if req.ProcessId == "" {
 		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	daemonID, err := s.requestedMachine(ctx, userID, req.Msg.DaemonId)
+	daemonID, err := s.requestedMachine(ctx, userID, req.DaemonId)
 	if err != nil {
 		return nil, err
 	}
@@ -378,10 +377,10 @@ func (s *Service) GetProcessLogs(
 	if err := s.daemon(daemonID).Dispatch(ctx, userID, "exec.bg_output", struct {
 		ProcessID string             `json:"process_id"`
 		Opts      *daemon.OutputOpts `json:"opts"`
-	}{ProcessID: req.Msg.ProcessId, Opts: &daemon.OutputOpts{Lines: true}}, &output, pkgProcessTimeoutMs); err != nil {
+	}{ProcessID: req.ProcessId, Opts: &daemon.OutputOpts{Lines: true}}, &output, pkgProcessTimeoutMs); err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(processLogs(&output)), nil
+	return processLogs(&output), nil
 }
 
 // processLogs splits a daemon's output into the rpc's three views. A daemon
@@ -411,27 +410,27 @@ func processLogs(output *daemon.ProcessOutput) *reliantv1.GetPackageProcessLogsR
 // already stopped is success: that is what was asked for.
 func (s *Service) KillProcess(
 	ctx context.Context,
-	req *connect.Request[reliantv1.KillPackageProcessRequest],
-) (*connect.Response[reliantv1.KillPackageProcessResponse], error) {
-	if req.Msg.ProcessId == "" {
+	req *reliantv1.KillPackageProcessRequest,
+) (*reliantv1.KillPackageProcessResponse, error) {
+	if req.ProcessId == "" {
 		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	daemonID, err := s.requestedMachine(ctx, userID, req.Msg.DaemonId)
+	daemonID, err := s.requestedMachine(ctx, userID, req.DaemonId)
 	if err != nil {
 		return nil, err
 	}
 	var ignored struct{}
 	if err := s.daemon(daemonID).Dispatch(ctx, userID, "exec.bg_kill", struct {
 		ProcessID string `json:"process_id"`
-	}{ProcessID: req.Msg.ProcessId}, &ignored, pkgProcessTimeoutMs); err != nil {
+	}{ProcessID: req.ProcessId}, &ignored, pkgProcessTimeoutMs); err != nil {
 		if strings.Contains(err.Error(), "is not running") {
-			return connect.NewResponse(&reliantv1.KillPackageProcessResponse{Message: "Process was already stopped"}), nil
+			return &reliantv1.KillPackageProcessResponse{Message: "Process was already stopped"}, nil
 		}
 		return nil, err
 	}
-	return connect.NewResponse(&reliantv1.KillPackageProcessResponse{Message: "Process killed successfully"}), nil
+	return &reliantv1.KillPackageProcessResponse{Message: "Process killed successfully"}, nil
 }

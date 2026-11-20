@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -21,11 +19,11 @@ import (
 // Unlike CompleteClaudeOAuth there is no state parameter: Google's token
 // endpoint does not require it echoed back. The frontend still generates and
 // verifies state — it just never reaches the backend.
-func (s *Service) CompleteAntigravityOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteAntigravityOAuthRequest]) (*connect.Response[reliantv1.CompleteAntigravityOAuthResponse], error) {
+func (s *Service) CompleteAntigravityOAuth(ctx context.Context, req *reliantv1.CompleteAntigravityOAuthRequest) (*reliantv1.CompleteAntigravityOAuthResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	code := strings.TrimSpace(req.Msg.Code)
-	codeVerifier := strings.TrimSpace(req.Msg.CodeVerifier)
-	redirectURI := strings.TrimSpace(req.Msg.RedirectUri)
+	code := strings.TrimSpace(req.Code)
+	codeVerifier := strings.TrimSpace(req.CodeVerifier)
+	redirectURI := strings.TrimSpace(req.RedirectUri)
 	if err := requireOAuthParams(code, codeVerifier, redirectURI); err != nil {
 		return nil, err
 	}
@@ -42,12 +40,12 @@ func (s *Service) CompleteAntigravityOAuth(ctx context.Context, req *connect.Req
 	if id, ok := core.GoogleIdentityFromIDToken(tokens.IDToken); ok {
 		u.IdentityKey, u.Email, u.ExternalAccountID = id.IdentityKey, id.Email, id.ExternalAccountID
 	}
-	res, err := s.connectAccount(ctx, signIn{userID: userID, provider: antigravity.DriverID, targetID: req.Msg.GetAccountId(), upsert: u})
+	res, err := s.connectAccount(ctx, signIn{userID: userID, provider: antigravity.DriverID, targetID: req.GetAccountId(), upsert: u})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&reliantv1.CompleteAntigravityOAuthResponse{
+	return &reliantv1.CompleteAntigravityOAuthResponse{
 		Success: true, Message: connectedMessage(antigravity.DriverID, res),
 		Account: res.account, Created: res.created, IdentityMismatch: res.mismatch,
-	}), nil
+	}, nil
 }

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,14 +27,14 @@ func (e *startDaemonEnv) startNoMachine(t *testing.T) *db.Chat {
 	t.Helper()
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.NoMachine = boolPtr(true) })
 	require.NoError(t, err)
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := e.repo.GetChat(e.ctx, resp.GetChat().GetId())
 	require.NoError(t, err)
 	require.True(t, chat.NoMachine)
 	return chat
 }
 
-func (e *startDaemonEnv) setDaemon(chatID, daemonID string) (*connect.Response[reliantv1.SetChatDaemonResponse], error) {
-	return e.svc.SetChatDaemon(e.ctx, connect.NewRequest(&reliantv1.SetChatDaemonRequest{ChatId: chatID, DaemonId: daemonID}))
+func (e *startDaemonEnv) setDaemon(chatID, daemonID string) (*reliantv1.SetChatDaemonResponse, error) {
+	return e.svc.SetChatDaemon(e.ctx, &reliantv1.SetChatDaemonRequest{ChatId: chatID, DaemonId: daemonID})
 }
 
 // firstMessageID is the chat's seed user message, a branch point.
@@ -46,13 +46,13 @@ func (e *startDaemonEnv) firstMessageID(t *testing.T, chatID string) string {
 	return msgs[0].ID
 }
 
-func (e *startDaemonEnv) branch(t *testing.T, chatID string, mutate func(*reliantv1.BranchChatRequest)) (*connect.Response[reliantv1.BranchChatResponse], error) {
+func (e *startDaemonEnv) branch(t *testing.T, chatID string, mutate func(*reliantv1.BranchChatRequest)) (*reliantv1.BranchChatResponse, error) {
 	t.Helper()
 	req := &reliantv1.BranchChatRequest{ChatId: chatID, MessageId: e.firstMessageID(t, chatID)}
 	if mutate != nil {
 		mutate(req)
 	}
-	return e.svc.BranchChat(e.ctx, connect.NewRequest(req))
+	return e.svc.BranchChat(e.ctx, req)
 }
 
 // mainWorktreeID is the project's main checkout, which every no-machine chat
@@ -87,8 +87,8 @@ func TestSetChatDaemonConnectsAChatWithNoMachine(t *testing.T) {
 
 	resp, err := e.setDaemon(chat.ID, daemonID)
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.GetChat().GetNoMachine(), "the response is the connected chat")
-	assert.Equal(t, daemonID, resp.Msg.GetChat().GetActiveDaemonId())
+	assert.False(t, resp.GetChat().GetNoMachine(), "the response is the connected chat")
+	assert.Equal(t, daemonID, resp.GetChat().GetActiveDaemonId())
 
 	stored, err := e.repo.GetChat(e.ctx, chat.ID)
 	require.NoError(t, err)
@@ -115,11 +115,11 @@ func TestSetChatDaemonClearingNeverGivesAMachineChatNoMachine(t *testing.T) {
 	daemonID := e.daemon(t, "test-user")
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(daemonID) })
 	require.NoError(t, err)
-	chatID := resp.Msg.GetChat().GetId()
+	chatID := resp.GetChat().GetId()
 
 	cleared, err := e.setDaemon(chatID, "")
 	require.NoError(t, err)
-	assert.False(t, cleared.Msg.GetChat().GetNoMachine())
+	assert.False(t, cleared.GetChat().GetNoMachine())
 
 	stored, err := e.repo.GetChat(e.ctx, chatID)
 	require.NoError(t, err)
@@ -134,7 +134,7 @@ func TestSetChatDaemonRejectsADaemonTheCallerDoesNotOwn(t *testing.T) {
 
 	_, err := e.setDaemon(chat.ID, foreign)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
 	stored, err := e.repo.GetChat(e.ctx, chat.ID)
 	require.NoError(t, err)
@@ -155,14 +155,14 @@ func TestBranchChatWithNoMachineCarriesTheConversationAndNoMachine(t *testing.T)
 		r.DaemonId = ptr.Of(daemonID)
 	})
 	require.NoError(t, err)
-	sourceID := resp.Msg.GetChat().GetId()
+	sourceID := resp.GetChat().GetId()
 	wakesBefore := len(e.router.selectors)
 
 	branched, err := e.branch(t, sourceID, func(r *reliantv1.BranchChatRequest) { r.NoMachine = boolPtr(true) })
 	require.NoError(t, err)
-	assert.True(t, branched.Msg.GetChat().GetNoMachine())
+	assert.True(t, branched.GetChat().GetNoMachine())
 
-	branch, err := e.repo.GetChat(e.ctx, branched.Msg.GetChat().GetId())
+	branch, err := e.repo.GetChat(e.ctx, branched.GetChat().GetId())
 	require.NoError(t, err)
 	assert.True(t, branch.NoMachine)
 	assert.Nil(t, branch.ActiveDaemonID, "a branch with no machine pins no daemon")
@@ -183,7 +183,7 @@ func TestBranchChatWithNoMachineCarriesTheConversationAndNoMachine(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			b, err := e.branch(t, sourceID, func(r *reliantv1.BranchChatRequest) { r.NoMachine = boolPtr(true) })
 			require.NoError(t, err)
-			branchID := b.Msg.GetChat().GetId()
+			branchID := b.GetChat().GetId()
 			wakes := len(e.router.selectors)
 			_, err = e.start(t, func(r *reliantv1.StartChatRequest) {
 				r.ChatId = &branchID
@@ -207,12 +207,12 @@ func TestBranchChatWithNoMachineRejectsAWorktree(t *testing.T) {
 	require.NoError(t, err)
 	mainID := e.mainWorktreeID(t)
 
-	_, err = e.branch(t, resp.Msg.GetChat().GetId(), func(r *reliantv1.BranchChatRequest) {
+	_, err = e.branch(t, resp.GetChat().GetId(), func(r *reliantv1.BranchChatRequest) {
 		r.NoMachine = boolPtr(true)
 		r.WorktreeId = &mainID
 	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // Branching a chat that has no machine keeps the branch without one: there is
@@ -223,14 +223,14 @@ func TestBranchOfAChatWithNoMachineStaysWithoutOne(t *testing.T) {
 
 	branched, err := e.branch(t, source.ID, nil)
 	require.NoError(t, err)
-	assert.True(t, branched.Msg.GetChat().GetNoMachine())
+	assert.True(t, branched.GetChat().GetNoMachine())
 
 	daemonID := e.daemon(t, "test-user")
 	worktreeID := e.machineWorktree(t, daemonID)
 	onMachine, err := e.branch(t, source.ID, func(r *reliantv1.BranchChatRequest) { r.WorktreeId = &worktreeID })
 	require.NoError(t, err)
-	assert.False(t, onMachine.Msg.GetChat().GetNoMachine(), "a branch onto a worktree runs on its machine")
-	assert.Equal(t, daemonID, onMachine.Msg.GetChat().GetActiveDaemonId())
+	assert.False(t, onMachine.GetChat().GetNoMachine(), "a branch onto a worktree runs on its machine")
+	assert.Equal(t, daemonID, onMachine.GetChat().GetActiveDaemonId())
 }
 
 // A branch onto a machine still cannot start with no machine: its worktree is
@@ -239,10 +239,10 @@ func TestStartChatRefusesNoMachineForAMachineBranch(t *testing.T) {
 	e := newStartDaemonEnv(t)
 	resp, err := e.start(t, nil)
 	require.NoError(t, err)
-	branched, err := e.branch(t, resp.Msg.GetChat().GetId(), nil)
+	branched, err := e.branch(t, resp.GetChat().GetId(), nil)
 	require.NoError(t, err)
-	require.False(t, branched.Msg.GetChat().GetNoMachine())
-	branchID := branched.Msg.GetChat().GetId()
+	require.False(t, branched.GetChat().GetNoMachine())
+	branchID := branched.GetChat().GetId()
 
 	_, err = e.start(t, func(r *reliantv1.StartChatRequest) {
 		r.ChatId = &branchID
@@ -250,7 +250,7 @@ func TestStartChatRefusesNoMachineForAMachineBranch(t *testing.T) {
 		r.NoMachine = boolPtr(true)
 	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 
 	stored, err := e.repo.GetChat(context.Background(), branchID)
 	require.NoError(t, err)

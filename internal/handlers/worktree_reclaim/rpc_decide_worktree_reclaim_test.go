@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -55,7 +55,7 @@ type echoSender struct {
 
 func (e *echoSender) SendDaemonCommandToDaemon(_ context.Context, userID, daemonID, command string, payload []byte, _ int32) ([]byte, error) {
 	if userID != testUser || daemonID != testDaemon || command != decideCommand {
-		return nil, connect.NewError(connect.CodeInternal, nil)
+		return nil, connect.NewError(connect.CodeInternal, "")
 	}
 	var req decideRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -84,11 +84,11 @@ func decide(t *testing.T, repo Repository, sender Sender, userID string, decisio
 	t.Helper()
 	svc := NewTestWorktreeReclaim(t, WithWorktreeReclaimDeps(Deps{Repo: repo, Sender: sender}))
 	ctx := auth.WithUser(context.Background(), userID, "user", userID+"@example.com")
-	resp, err := svc.DecideWorktreeReclaim(ctx, connect.NewRequest(&pb.DecideWorktreeReclaimRequest{DaemonId: testDaemon, Decisions: decisions}))
+	resp, err := svc.DecideWorktreeReclaim(ctx, &pb.DecideWorktreeReclaimRequest{DaemonId: testDaemon, Decisions: decisions})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 func shownProposal(key, fp string) *pb.WorktreeReclaimProposal {
@@ -101,7 +101,7 @@ func TestDecideWorktreeReclaim_AnotherUsersMachineIsNotFound(t *testing.T) {
 	sender := &echoSender{}
 	_, err := decide(t, machineRepo(t, true, shownProposal("a", "fa")), sender, "someone-else",
 		&pb.WorktreeReclaimDecision{Key: "a", Fingerprint: "fa", Approve: true})
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.Empty(t, sender.got)
 }
 
@@ -124,7 +124,7 @@ func TestDecideWorktreeReclaim_AuthzDeniesUnownedAndMissingMachines(t *testing.T
 			}
 			sender := &echoSender{}
 			_, err := decide(t, repo, sender, testUser, &pb.WorktreeReclaimDecision{Key: "a", Fingerprint: "fa", Approve: true})
-			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+			assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 			assert.Empty(t, sender.got)
 		})
 	}
@@ -169,7 +169,7 @@ func TestDecideWorktreeReclaim_OfflineMachineIsFailedPrecondition(t *testing.T) 
 	sender := &echoSender{}
 	_, err := decide(t, machineRepo(t, false, shownProposal("a", "fa")), sender, testUser,
 		&pb.WorktreeReclaimDecision{Key: "a", Fingerprint: "fa"})
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Empty(t, sender.got)
 }
 
@@ -178,7 +178,7 @@ func TestDecideWorktreeReclaim_NoSenderIsUnavailable(t *testing.T) {
 	t.Parallel()
 	_, err := decide(t, machineRepo(t, true, shownProposal("a", "fa")), nil, testUser,
 		&pb.WorktreeReclaimDecision{Key: "a", Fingerprint: "fa"})
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 }
 
 // The machine's verdict for each decision comes back in request order; a

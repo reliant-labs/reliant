@@ -3,10 +3,11 @@ package streaming_test
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
@@ -36,21 +37,39 @@ func TestStreams_RepositoryFailureCodes(t *testing.T) {
 	t.Parallel()
 
 	userStream := func(ctx context.Context, client reliantv1connect.StreamingServiceClient) error {
-		stream, err := client.StreamUserUpdates(ctx, connect.NewRequest(&pb.StreamUserUpdatesRequest{}))
+		stream, err := client.StreamUserUpdates(ctx, &pb.StreamUserUpdatesRequest{})
 		require.NoError(t, err)
 		defer func() { _ = stream.Close() }()
-		for stream.Receive() {
+		var streamErr error
+		for {
+			_, err := stream.Receive()
+			if err != nil {
+				streamErr = err
+				break
+			}
 			// Drain the frames sent before the failure.
 		}
-		return stream.Err()
+		if errors.Is(streamErr, io.EOF) {
+			streamErr = nil
+		}
+		return streamErr
 	}
 	chatStream := func(ctx context.Context, client reliantv1connect.StreamingServiceClient) error {
-		stream, err := client.StreamChatUpdates(ctx, connect.NewRequest(&pb.StreamChatUpdatesRequest{ChatId: "chat-1"}))
+		stream, err := client.StreamChatUpdates(ctx, &pb.StreamChatUpdatesRequest{ChatId: "chat-1"})
 		require.NoError(t, err)
 		defer func() { _ = stream.Close() }()
-		for stream.Receive() {
+		var streamErr error
+		for {
+			_, err := stream.Receive()
+			if err != nil {
+				streamErr = err
+				break
+			}
 		}
-		return stream.Err()
+		if errors.Is(streamErr, io.EOF) {
+			streamErr = nil
+		}
+		return streamErr
 	}
 
 	for _, tc := range []struct {

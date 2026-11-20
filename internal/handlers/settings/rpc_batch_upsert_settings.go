@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -25,15 +24,15 @@ import (
 // know which keys already exist. One refetch is emitted for the whole batch
 // rather than one per key — the fan-out this RPC exists to remove would
 // otherwise just reappear on the event side.
-func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[reliantv1.BatchUpsertSettingsRequest]) (*connect.Response[reliantv1.BatchUpsertSettingsResponse], error) {
+func (s *Service) BatchUpsertSettings(ctx context.Context, req *reliantv1.BatchUpsertSettingsRequest) (*reliantv1.BatchUpsertSettingsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	var projectID *string
-	if req.Msg.ProjectId != nil {
-		projectID = req.Msg.ProjectId
+	if req.ProjectId != nil {
+		projectID = req.ProjectId
 	}
 
-	for _, write := range req.Msg.Settings {
+	for _, write := range req.Settings {
 		if write.GetKey() == "" {
 			return nil, svcerr.InvalidArgument("key is required for every setting in a batch")
 		}
@@ -46,9 +45,9 @@ func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[
 	}
 
 	now := time.Now().UTC()
-	written := make([]*reliantv1.Setting, 0, len(req.Msg.Settings))
+	written := make([]*reliantv1.Setting, 0, len(req.Settings))
 
-	for _, write := range req.Msg.Settings {
+	for _, write := range req.Settings {
 		valueType := "string"
 		if write.ValueType != nil && *write.ValueType != "" {
 			valueType = *write.ValueType
@@ -78,7 +77,7 @@ func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.BatchUpsertSettingsResponse{
+	return &reliantv1.BatchUpsertSettingsResponse{
 		Settings: written,
-	}), nil
+	}, nil
 }

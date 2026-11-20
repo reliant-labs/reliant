@@ -8,13 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/wirecheck"
 )
 
 func TestIsForeignDaemonIDError(t *testing.T) {
-	legacy := connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
-	otherDenial := connect.NewError(connect.CodePermissionDenied, errors.New("token is bound to a non-daemon resource"))
-	retagged := connect.NewError(connect.CodeUnauthenticated, errors.New("daemon id is owned by another user"))
+	legacy := connect.NewError(connect.CodePermissionDenied, "daemon id is owned by another user")
+	otherDenial := connect.NewError(connect.CodePermissionDenied, "token is bound to a non-daemon resource")
+	retagged := connect.NewError(connect.CodeUnauthenticated, "daemon id is owned by another user")
 
 	cases := map[string]struct {
 		err  error
@@ -38,7 +41,7 @@ func TestIsForeignDaemonIDError(t *testing.T) {
 // The reserved-id refusal is its own condition: distinct from the foreign one
 // (different recovery wording) and never mistaken for a plain denial.
 func TestIsReservedDaemonIDError(t *testing.T) {
-	otherDenial := connect.NewError(connect.CodePermissionDenied, errors.New("token is bound to a non-daemon resource"))
+	otherDenial := connect.NewError(connect.CodePermissionDenied, "token is bound to a non-daemon resource")
 	cases := map[string]struct {
 		err  error
 		want bool
@@ -64,7 +67,10 @@ func TestNewForeignDaemonIDErrorCarriesReasonNotOwner(t *testing.T) {
 	if err.Code() != connect.CodePermissionDenied {
 		t.Fatalf("code = %s, want permission_denied", err.Code())
 	}
-	if got := err.Meta().Get("x-forge-error-reason"); got != ForeignDaemonIDReason {
+	if _, meta := wirecheck.RoundTripMeta(t, err); meta.Get("x-forge-error-reason") != ForeignDaemonIDReason {
+		t.Fatalf("wire reason = %q, want %q", meta.Get("x-forge-error-reason"), ForeignDaemonIDReason)
+	}
+	if got := svcerr.MetaOf(err).Get(svcerr.ReasonHeader); got != ForeignDaemonIDReason {
 		t.Fatalf("reason = %q, want %q", got, ForeignDaemonIDReason)
 	}
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
@@ -47,9 +47,9 @@ func TestEnableWorkflowRejectsInvalidTreeBeforeWrites(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, env.repo.UpdateWorkflowDraftDefinition(env.ctx, stored.ID, "triage", "triage", tc.definition, db.WorkflowDraftStatusDraft))
 			}
-			resp, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(nil)))
+			resp, err := env.svc.EnableWorkflow(env.ctx, env.enableRequest(nil))
 			if err == nil {
-				require.False(t, resp.Msg.Enabled, "invalid tree was enabled")
+				require.False(t, resp.Enabled, "invalid tree was enabled")
 			}
 			assert.Empty(t, env.storedTriggers(t), "rejected enable must write nothing")
 			assert.Zero(t, env.backend.syncCount())
@@ -86,13 +86,13 @@ func TestLiveInvalidWorkflowIsBrokenBeforeFireAndCannotResume(t *testing.T) {
 		require.NoError(t, err)
 		rendered := env.svc.render(env.ctx, row)
 		assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN, rendered.GetHealth().GetStatus())
-		_, err = env.svc.FireTrigger(env.ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: id}))
+		_, err = env.svc.FireTrigger(env.ctx, &reliantv1.FireTriggerRequest{Id: id})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 		assert.Empty(t, env.backend.fires, "invalid live graph must never reach the fire backend")
-		_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+		_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 		require.NoError(t, err)
-		_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
+		_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true})
 		require.Error(t, err)
 	}
 	syncFile(admissionWorkflow)

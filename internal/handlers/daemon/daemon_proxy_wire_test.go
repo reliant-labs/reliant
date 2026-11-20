@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +44,7 @@ func TestOAuthHelper_OnTheWire(t *testing.T) {
 		},
 		{
 			name:        "no NATS responder",
-			err:         connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
+			err:         connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser).Error()).WithCause(svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
 			wantCode:    connect.CodeUnavailable,
 			wantMessage: "open OAuth helper: no daemon connected for user",
 		},
@@ -82,7 +82,7 @@ func TestOAuthHelper_OnTheWire(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			_, client := NewTestDaemonServer(t, WithDaemonDeps(Deps{Router: &failingCommandRouter{err: tc.err}}))
-			_, err := client.OpenOAuthHelper(context.Background(), connect.NewRequest(&reliantv1.OpenOAuthHelperRequest{WebOrigin: "https://app"}))
+			_, err := client.OpenOAuthHelper(context.Background(), &reliantv1.OpenOAuthHelperRequest{WebOrigin: "https://app"})
 			var cerr *connect.Error
 			require.ErrorAs(t, err, &cerr)
 			assert.Equal(t, tc.wantCode, cerr.Code())

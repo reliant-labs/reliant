@@ -6,12 +6,13 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/http"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -21,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -87,9 +89,9 @@ func newTestDaemonChain(t *testing.T, tokens auth.AccessTokenAccountIntrospector
 }
 
 // toolsDaemonRoutes mounts svc as internal/app's generated DaemonRoutes does.
-func toolsDaemonRoutes(svc *tools_daemon.Service) serverkit.Routes {
-	return serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
-		svc.Register(mux, opts...)
+func toolsDaemonRoutes(svc *tools_daemon.Service) serverkit.RoutesV2 {
+	return serverkit.RoutesFuncV2(func(mux *mountkit.MuxV2) []string {
+		mux.Register(svc.RegisterV2)
 		return []string{reliantv1connect.ToolsDaemonServiceName}
 	})
 }
@@ -111,16 +113,26 @@ func serveDaemonListener(t *testing.T, l *DaemonListener) string {
 
 // attachMovingDaemon opens ConnectDaemon as a current daemon (one that acts
 // on GatewayDrain) and waits for the gateway to acknowledge the registration.
-func attachMovingDaemon(t *testing.T, gatewayURL, bearer string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+// daemonStream is a ConnectDaemon stream and its call's info (the response
+// trailers, once it ends).
+type daemonStream struct {
+	reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream
+	info *connect.CallInfo
+}
+
+func attachMovingDaemon(t *testing.T, gatewayURL, bearer string) daemonStream {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	client := reliantv1connect.NewToolsDaemonServiceClient(priorKnowledgeClient(), gatewayURL, connect.WithGRPC())
-	stream := client.ConnectDaemon(ctx)
-	stream.RequestHeader().Set("Authorization", "Bearer "+bearer)
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+bearer)
+	client := reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(priorKnowledgeClient(), gatewayURL, []connecthttp.Option{connecthttp.WithGRPC()}))
+	raw, err := client.ConnectDaemon(ctx)
+	require.NoError(t, err)
+	stream := daemonStream{ToolsDaemonServiceConnectDaemonClientStream: raw, info: info}
 	t.Cleanup(func() {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 	})
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: &reliantv1.DaemonRegister{Hostname: "drain-host", Platform: "linux", DaemonType: "local", MovesOnDrain: true},
@@ -131,7 +143,7 @@ func attachMovingDaemon(t *testing.T, gatewayURL, bearer string) *connect.BidiSt
 
 // nextMessage receives until match accepts a message, skipping heartbeats and
 // anything else the gateway sends meanwhile.
-func nextMessage(t *testing.T, stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], what string, match func(*reliantv1.ServerMessage) bool) *reliantv1.ServerMessage {
+func nextMessage(t *testing.T, stream daemonStream, what string, match func(*reliantv1.ServerMessage) bool) *reliantv1.ServerMessage {
 	t.Helper()
 	for {
 		msg, err := stream.Receive()
@@ -182,7 +194,7 @@ func TestDaemonListenerDrainWaitsForTheDaemonToMove(t *testing.T) {
 	}
 
 	// The daemon is registered elsewhere and retires its old stream.
-	require.NoError(t, stream.CloseRequest())
+	require.NoError(t, stream.CloseSend())
 	r := <-stopped
 	require.NoError(t, r.err)
 	require.Less(t, r.elapsed, budget/2, "the drain must return once the daemon moved, not wait out its deadline")
@@ -205,8 +217,8 @@ func TestDaemonListenerDrainEndsAStreamThatDidNotMoveWithUnavailable(t *testing.
 		_, err = stream.Receive()
 	}
 	require.False(t, errors.Is(err, io.EOF), "the stream must end with a status, not a clean end")
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "Unavailable puts the daemon on its reconnect path")
-	require.Equal(t, "true", stream.ResponseTrailer().Get(serverkit.DrainedTrailer))
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "Unavailable puts the daemon on its reconnect path")
+	require.Equal(t, "true", stream.info.ResponseTrailer().Get(serverkit.DrainedTrailer))
 
 	r := <-stopped
 	require.NoError(t, r.err, "the drain ended the stream itself; nothing was left for Shutdown to wait on")

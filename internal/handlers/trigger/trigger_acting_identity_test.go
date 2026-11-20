@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,7 +60,7 @@ func TestActingIdentityFor_SourceDefaultsAndStoredChoices(t *testing.T) {
 			got, err := svc.actingIdentityFor(&reliantv1.TriggerDefinition{ActingIdentity: tc.chosen}, tc.existing, tc.source)
 			if tc.refused {
 				require.Error(t, err)
-				assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+				assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 				assert.Empty(t, got, "missing bot configuration must not resolve to owner")
 				return
 			}
@@ -183,9 +183,9 @@ func TestCreateTrigger_ActingAsTheAppIsStoredAndReturned(t *testing.T) {
 	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, got.GetActingIdentity())
 	assert.Equal(t, core.ActingIdentityApp, env.storedIdentity(t, got.GetId()))
 
-	read, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: got.GetId()}))
+	read, err := env.svc.GetTrigger(env.ctx, &reliantv1.GetTriggerRequest{Id: got.GetId()})
 	require.NoError(t, err)
-	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, read.Msg.GetTrigger().GetActingIdentity())
+	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, read.GetTrigger().GetActingIdentity())
 }
 
 // Self-hosted: no control plane, so no App key to mint from. The activation is
@@ -194,9 +194,9 @@ func TestCreateTrigger_AppIdentityIsRefusedWithoutAControlPlane(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t) // no control plane
-	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(asApp)}))
+	_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{Trigger: env.definition(asApp)})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "control plane")
 	assert.Zero(t, env.backend.syncCount(), "a refused activation must not touch the schedule backend")
 }
@@ -221,9 +221,9 @@ func TestUpdateTrigger_OmittedIdentityIsUnchanged(t *testing.T) {
 	env := setupTriggerTest(t).hosted(t)
 	created := env.create(t, env.definition(asApp))
 
-	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	_, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id: created.GetId(), Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.Message = "A new prompt." }),
-	}))
+	})
 	require.NoError(t, err)
 	assert.Equal(t, core.ActingIdentityApp, env.storedIdentity(t, created.GetId()), "an omitted identity must not reset to the owner")
 }
@@ -237,9 +237,9 @@ func TestUpdateTrigger_IdentityCanBeChangedBothWays(t *testing.T) {
 
 	update := func(identity reliantv1.ActingIdentity) {
 		t.Helper()
-		_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+		_, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 			Id: created.GetId(), Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.ActingIdentity = identity }),
-		}))
+		})
 		require.NoError(t, err)
 	}
 	update(reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER)
@@ -255,11 +255,11 @@ func TestUpdateTrigger_AppIdentityIsRefusedWithoutAControlPlane(t *testing.T) {
 
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
-	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	_, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id: created.GetId(), Trigger: env.definition(asApp),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Equal(t, core.ActingIdentityOwner, env.storedIdentity(t, created.GetId()))
 }
 
@@ -273,10 +273,10 @@ func TestListTriggers_CarriesTheIdentity(t *testing.T) {
 	}))
 	bot := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "the bot's"; asApp(d) }))
 
-	resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	resp, err := env.svc.ListTriggers(env.ctx, &reliantv1.ListTriggersRequest{})
 	require.NoError(t, err)
 	got := map[string]reliantv1.ActingIdentity{}
-	for _, tr := range resp.Msg.GetTriggers() {
+	for _, tr := range resp.GetTriggers() {
 		got[tr.GetId()] = tr.GetActingIdentity()
 	}
 	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, got[owner.GetId()])

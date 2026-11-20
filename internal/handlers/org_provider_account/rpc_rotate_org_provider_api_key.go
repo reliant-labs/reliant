@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -16,13 +15,13 @@ import (
 // threads; a needs-attention mark is cleared. Never gated: rotating a leaked key must always work.
 func (s *Service) RotateOrgProviderAPIKey(
 	ctx context.Context,
-	req *connect.Request[pb.RotateOrgProviderAPIKeyRequest],
-) (*connect.Response[pb.RotateOrgProviderAPIKeyResponse], error) {
-	orgID, err := requireOrgID(req.Msg.GetOrgId())
+	req *pb.RotateOrgProviderAPIKeyRequest,
+) (*pb.RotateOrgProviderAPIKeyResponse, error) {
+	orgID, err := requireOrgID(req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
-	apiKey := strings.TrimSpace(req.Msg.GetApiKey())
+	apiKey := strings.TrimSpace(req.GetApiKey())
 	if apiKey == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("api_key is required"))
 	}
@@ -30,7 +29,7 @@ func (s *Service) RotateOrgProviderAPIKey(
 	if err != nil {
 		return nil, err
 	}
-	cur, err := s.find(ctx, orgID, req.Msg.GetAccountId())
+	cur, err := s.find(ctx, orgID, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
@@ -52,5 +51,5 @@ func (s *Service) RotateOrgProviderAPIKey(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.RotateOrgProviderAPIKeyResponse{Account: out}), nil
+	return &pb.RotateOrgProviderAPIKeyResponse{Account: out}, nil
 }

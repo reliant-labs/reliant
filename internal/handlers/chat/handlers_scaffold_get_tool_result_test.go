@@ -11,7 +11,7 @@ package chat_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -25,16 +25,16 @@ func TestGetToolResult_Generated(t *testing.T) {
 
 	svc := chat.NewTestChat(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetToolResultRequest, pb.GetToolResultResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetToolResultRequest, pb.GetToolResultResponse]{
 		{
 			Name:    "missing_chat_id",
-			Req:     connect.NewRequest(&pb.GetToolResultRequest{ToolCallId: "call_1"}),
+			Req:     &pb.GetToolResultRequest{ToolCallId: "call_1"},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "missing_tool_call_id",
-			Req:     connect.NewRequest(&pb.GetToolResultRequest{ChatId: "chat-1"}),
+			Req:     &pb.GetToolResultRequest{ChatId: "chat-1"},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

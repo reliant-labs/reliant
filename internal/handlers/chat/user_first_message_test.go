@@ -216,7 +216,7 @@ func TestStartChatWithoutClientMessageIDClaimsActivationOnce(t *testing.T) {
 
 	first, err := e.start(t, nil)
 	require.NoError(t, err)
-	firstChat := first.Msg.GetChat().GetId()
+	firstChat := first.GetChat().GetId()
 	seedID := e.firstMessageID(t, firstChat)
 	require.NotEqual(t, firstChat, seedID, "the seed's stored id is not the chat's")
 
@@ -234,7 +234,7 @@ func TestStartChatWithoutClientMessageIDClaimsActivationOnce(t *testing.T) {
 	// A second unnamed start is that chat's first message, not the user's.
 	second, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.Messages[0].Content = "again" })
 	require.NoError(t, err)
-	secondChat := second.Msg.GetChat().GetId()
+	secondChat := second.GetChat().GetId()
 	require.Eventually(t, func() bool {
 		return len(eventsForChat(out.records(t), "product.first_message_sent", secondChat)) == 1
 	}, 10*time.Second, 10*time.Millisecond)

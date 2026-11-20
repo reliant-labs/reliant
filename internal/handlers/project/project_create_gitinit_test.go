@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -56,15 +55,15 @@ func TestCreateProjectAutoInitRegistersRootRepo(t *testing.T) {
 	router := &createProjectDaemonRouter{}
 	s := newProjectService(t, repo, router)
 
-	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "fresh-project",
 		Path: "/home/workspace/projects/fresh-project",
-	}))
+	})
 	require.NoError(t, err)
 	require.True(t, router.gitInitCalled, "auto git-init should run for a fresh empty dir")
-	require.True(t, resp.Msg.Project.IsGitRepo, "project should be git after auto-init")
+	require.True(t, resp.Project.IsGitRepo, "project should be git after auto-init")
 
-	repos, err := repo.ListReposByProject(ctx, resp.Msg.Project.Id)
+	repos, err := repo.ListReposByProject(ctx, resp.Project.Id)
 	require.NoError(t, err)
 	require.Len(t, repos, 1, "auto-init must register the root repo row (worktrees gate on it)")
 	assert.Equal(t, "", repos[0].RelativePath)

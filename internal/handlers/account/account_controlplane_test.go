@@ -8,9 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -88,7 +89,7 @@ func TestDeleteAccount_ControlPlaneBlockStopsBeforeLocalPurge(t *testing.T) {
 	if err == nil {
 		t.Fatal("a control-plane block must fail the deletion")
 	}
-	if got := svcerr.Code(err); got != connect.CodeFailedPrecondition {
+	if got := svcerr.CodeV2(err); got != connect.CodeFailedPrecondition {
 		t.Errorf("code = %v, want FailedPrecondition", got)
 	}
 	// The user must be told WHAT to do, not handed a generic failure.
@@ -118,7 +119,7 @@ func TestDeleteAccount_ControlPlaneErrorAbortsWithNothingDeleted(t *testing.T) {
 	if err == nil {
 		t.Fatal("a control-plane failure must abort the deletion")
 	}
-	if got := svcerr.Code(err); got != connect.CodeInternal {
+	if got := svcerr.CodeV2(err); got != connect.CodeInternal {
 		t.Errorf("code = %v, want Internal", got)
 	}
 }
@@ -172,13 +173,14 @@ func TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote(t *testing.T) {
 	}}
 	svc := newAccountService(t, rawDB, cp)
 
-	req := connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{})
-	req.Header().Set("Authorization", "Bearer jwt-abc")
-	resp, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"), req)
+	req := &reliantv1.PreviewAccountDeletionRequest{}
+	info := &connect.CallInfo{}
+	info.RequestHeader().Set("Authorization", "Bearer jwt-abc")
+	resp, err := tdd.CallV2(accountAuthedCtx("u-q", "owner@example.com"), svc.PreviewAccountDeletion, req, info)
 	if err != nil {
 		t.Fatalf("PreviewAccountDeletion: %v", err)
 	}
-	w := resp.Msg.GetWallet()
+	w := resp.GetWallet()
 	if w.GetRefundCents() != 2500 || w.GetForfeitedPromoCents() != 700 ||
 		len(w.GetDestinations()) != 1 || w.GetDestinations()[0].GetCardLast4() != "1234" {
 		t.Fatalf("the quote must be carried verbatim, got %+v", w)
@@ -186,7 +188,7 @@ func TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote(t *testing.T) {
 	if cp.lastJWT != "jwt-abc" {
 		t.Errorf("the caller's JWT must be forwarded, got %q", cp.lastJWT)
 	}
-	for _, line := range resp.Msg.GetRetainedElsewhere() {
+	for _, line := range resp.GetRetainedElsewhere() {
 		if strings.Contains(line, "unspent credit") {
 			t.Errorf("credit no longer blocks deletion; the dialog must not say it does: %q", line)
 		}
@@ -204,8 +206,8 @@ func TestPreviewAccountDeletion_FailsWhenWalletQuoteUnavailable(t *testing.T) {
 	svc := newAccountService(t, rawDB, cp)
 
 	_, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"),
-		connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{}))
-	if svcerr.Code(err) != connect.CodeUnavailable {
+		&reliantv1.PreviewAccountDeletionRequest{})
+	if svcerr.CodeV2(err) != connect.CodeUnavailable {
 		t.Fatalf("want Unavailable, got %v", err)
 	}
 }
@@ -229,7 +231,7 @@ func TestDeleteAccount_ReportsRefundOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeleteAccount: %v", err)
 	}
-	m := resp.Msg
+	m := resp
 	if m.GetRefundedCents() != 1000 || m.GetRefundOwedCents() != 1500 || !m.GetRefundPending() ||
 		m.GetForfeitedPromoCents() != 200 || len(m.GetRefundDestinations()) != 1 {
 		t.Fatalf("the refund outcome must be carried through, got %+v", m)
@@ -243,11 +245,11 @@ func TestDeleteAccount_UnconfirmedRefundIsRetryableAndPurgesNothing(t *testing.T
 	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	cp := &stubControlPlane{err: connect.NewError(connect.CodeUnavailable, errors.New("refund outcome unknown"))}
+	cp := &stubControlPlane{err: connect.NewError(connect.CodeUnavailable, "refund outcome unknown")}
 	svc := newAccountService(t, rawDB, cp)
 
 	_, err := svc.DeleteAccount(accountAuthedCtx("u-u", "owner@example.com"), deleteReq("owner@example.com"))
-	if svcerr.Code(err) != connect.CodeUnavailable {
+	if svcerr.CodeV2(err) != connect.CodeUnavailable {
 		t.Fatalf("want Unavailable, got %v", err)
 	}
 	if !strings.Contains(err.Error(), "nothing was deleted") {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,16 +20,16 @@ func TestDeleteModelEndpoint_Generated(t *testing.T) {
 	t.Parallel()
 
 	svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Repo: unknownEndpointStore{}}), model_endpoint.WithPlaceholderDeps())
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteModelEndpointRequest, pb.DeleteModelEndpointResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DeleteModelEndpointRequest, pb.DeleteModelEndpointResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
-			Req:     connect.NewRequest(&pb.DeleteModelEndpointRequest{Id: "ep-1"}),
+			Req:     &pb.DeleteModelEndpointRequest{Id: "ep-1"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "an endpoint the caller does not have is not found",
-			Req:     connect.NewRequest(&pb.DeleteModelEndpointRequest{Id: "ep-1"}),
+			Req:     &pb.DeleteModelEndpointRequest{Id: "ep-1"},
 			Ctx:     model_endpoint.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

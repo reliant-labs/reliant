@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -23,13 +23,13 @@ func TestUploadScenario_Generated(t *testing.T) {
 		return nil, nil
 	}}
 	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Router: router}))
-	upload := func(mut func(*pb.UploadScenarioRequest)) *connect.Request[pb.UploadScenarioRequest] {
+	upload := func(mut func(*pb.UploadScenarioRequest)) *pb.UploadScenarioRequest {
 		req := &pb.UploadScenarioRequest{ProjectId: ownProjectID, WorkflowSlug: ownWorkflowSlug, Filename: "drafts.yaml", YamlContent: fixtureScenario}
 		mut(req)
-		return connect.NewRequest(req)
+		return req
 	}
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UploadScenarioRequest, pb.UploadScenarioResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.UploadScenarioRequest, pb.UploadScenarioResponse]{
 		{
 			Name:    "project_id is required",
 			Req:     upload(func(r *pb.UploadScenarioRequest) { r.ProjectId = "" }),
@@ -64,7 +64,7 @@ func TestUploadScenario_Generated(t *testing.T) {
 			Name: "the file is written on the caller's machine, under the workflow",
 			Req:  upload(func(*pb.UploadScenarioRequest) {}),
 			Ctx:  scenario.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.UploadScenarioResponse]) {
+			Check: func(t *testing.T, resp *pb.UploadScenarioResponse) {
 				sends := router.Calls("SendDaemonCommandToDaemon")
 				require.Len(t, sends, 1, "only the valid upload reaches the machine")
 				var payload map[string]string
@@ -73,8 +73,8 @@ func TestUploadScenario_Generated(t *testing.T) {
 				require.Equal(t, scenarioDaemon, sends[0].Args[2], "written on the machine holding the checkout")
 				require.Equal(t, "fs.write_file", sends[0].Args[3])
 				require.Equal(t, "/home/test/project/.reliant/workflows/tail-flow/scenarios/drafts.yaml", payload["path"])
-				require.Equal(t, payload["path"], resp.Msg.GetPath())
-				require.Equal(t, "project:tail-flow:drafts", resp.Msg.GetScenario().GetId())
+				require.Equal(t, payload["path"], resp.GetPath())
+				require.Equal(t, "project:tail-flow:drafts", resp.GetScenario().GetId())
 			},
 		},
 	}, svc.UploadScenario)
@@ -82,6 +82,6 @@ func TestUploadScenario_Generated(t *testing.T) {
 	t.Run("without a daemon router the upload is unavailable", func(t *testing.T) {
 		svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{})}))
 		_, err := svc.UploadScenario(scenario.AuthedContext(t), upload(func(*pb.UploadScenarioRequest) {}))
-		require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+		require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 	})
 }

@@ -6,8 +6,6 @@ package reliant
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
 )
@@ -82,14 +80,14 @@ func (i *InboxClient) List(ctx context.Context, f ListInbox) *Iter[*InboxItem] {
 			if f.ProjectID != "" {
 				req.ProjectId = &f.ProjectID
 			}
-			resp, err := i.inbox.ListInbox(ctx, connect.NewRequest(req))
+			resp, err := i.inbox.ListInbox(ctx, req)
 			if err != nil {
 				return nil, "", i.c.wrap("inbox.list", err)
 			}
 			enough := f.Limit > 0 && f.Kinds == nil && f.Automation == ""
-			if !resp.Msg.GetTruncated() || enough || limit >= inboxMaxFetch {
+			if !resp.GetTruncated() || enough || limit >= inboxMaxFetch {
 				var out []*InboxItem
-				for _, it := range resp.Msg.GetItems() {
+				for _, it := range resp.GetItems() {
 					if len(want) > 0 && !want[it.GetKind()] {
 						continue
 					}
@@ -98,7 +96,7 @@ func (i *InboxClient) List(ctx context.Context, f ListInbox) *Iter[*InboxItem] {
 					}
 					out = append(out, it)
 				}
-				if resp.Msg.GetTruncated() && !enough {
+				if resp.GetTruncated() && !enough {
 					// Cut off at inboxMaxFetch: yield these, then fail the
 					// walk on the next fetch so the caller sees the gap.
 					return out, inboxTruncatedToken, nil
@@ -131,14 +129,14 @@ func (i *InboxClient) Counts(ctx context.Context, projectID string) (*InboxCount
 	if projectID != "" {
 		req.ProjectId = &projectID
 	}
-	resp, err := i.inbox.ListInbox(ctx, connect.NewRequest(req))
+	resp, err := i.inbox.ListInbox(ctx, req)
 	if err != nil {
 		return nil, i.c.wrap("inbox.counts", err)
 	}
 	return &InboxCounts{
-		Blocking:         int(resp.Msg.GetBlockingCount()),
-		HasInformational: resp.Msg.GetHasInformational(),
-		OtherProjects:    int(resp.Msg.GetOtherProjectsCount()),
+		Blocking:         int(resp.GetBlockingCount()),
+		HasInformational: resp.GetHasInformational(),
+		OtherProjects:    int(resp.GetOtherProjectsCount()),
 	}, nil
 }
 
@@ -151,7 +149,7 @@ func (i *InboxClient) Dismiss(ctx context.Context, itemIDs ...string) error {
 	if len(itemIDs) == 0 {
 		return i.c.fail(op, ErrInvalidArgument, "at least one item id is required")
 	}
-	if _, err := i.inbox.DismissInboxItem(ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: itemIDs})); err != nil {
+	if _, err := i.inbox.DismissInboxItem(ctx, &reliantv1.DismissInboxItemRequest{ItemIds: itemIDs}); err != nil {
 		return i.c.wrap(op, err)
 	}
 	return nil
@@ -164,7 +162,7 @@ func (i *InboxClient) Restore(ctx context.Context, itemIDs ...string) error {
 	if len(itemIDs) == 0 {
 		return i.c.fail(op, ErrInvalidArgument, "at least one item id is required")
 	}
-	if _, err := i.inbox.RestoreInboxItem(ctx, connect.NewRequest(&reliantv1.RestoreInboxItemRequest{ItemIds: itemIDs})); err != nil {
+	if _, err := i.inbox.RestoreInboxItem(ctx, &reliantv1.RestoreInboxItemRequest{ItemIds: itemIDs}); err != nil {
 		return i.c.wrap(op, err)
 	}
 	return nil
@@ -197,11 +195,11 @@ func (a *ApprovalsClient) List(ctx context.Context, chatID string) ([]*Approval,
 	if chatID == "" {
 		return nil, a.c.fail(op, ErrInvalidArgument, "chat id is required")
 	}
-	resp, err := a.approvals.ListApprovalsByChat(ctx, connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{ChatId: chatID}))
+	resp, err := a.approvals.ListApprovalsByChat(ctx, &reliantv1.ListApprovalsByChatRequest{ChatId: chatID})
 	if err != nil {
 		return nil, a.c.wrap(op, err)
 	}
-	return resp.Msg.GetApprovals(), nil
+	return resp.GetApprovals(), nil
 }
 
 // ListForRun lists the pending approvals raised by one run: those of its
@@ -281,14 +279,14 @@ func (a *ApprovalsClient) Approve(ctx context.Context, approvalID string, opt De
 	if approvalID == "" {
 		return Decision{}, a.c.fail(op, ErrInvalidArgument, "approval id is required")
 	}
-	resp, err := a.approvals.Approve(ctx, connect.NewRequest(&reliantv1.ApproveRequest{RequestId: approvalID, ActionTaken: optString(opt.ActionTaken)}))
+	resp, err := a.approvals.Approve(ctx, &reliantv1.ApproveRequest{RequestId: approvalID, ActionTaken: optString(opt.ActionTaken)})
 	if err != nil {
 		return Decision{}, a.c.wrap(op, err)
 	}
-	if err := a.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+	if err := a.c.applied(op, resp.GetSuccess(), resp.GetMessage()); err != nil {
 		return Decision{}, err
 	}
-	return Decision{Message: resp.Msg.GetMessage()}, nil
+	return Decision{Message: resp.GetMessage()}, nil
 }
 
 // Deny denies one pending approval. The same scope and refusals as
@@ -298,14 +296,14 @@ func (a *ApprovalsClient) Deny(ctx context.Context, approvalID string, opt Decid
 	if approvalID == "" {
 		return Decision{}, a.c.fail(op, ErrInvalidArgument, "approval id is required")
 	}
-	resp, err := a.approvals.Deny(ctx, connect.NewRequest(&reliantv1.DenyRequest{RequestId: approvalID, DenialReason: optString(opt.Reason), ActionTaken: optString(opt.ActionTaken)}))
+	resp, err := a.approvals.Deny(ctx, &reliantv1.DenyRequest{RequestId: approvalID, DenialReason: optString(opt.Reason), ActionTaken: optString(opt.ActionTaken)})
 	if err != nil {
 		return Decision{}, a.c.wrap(op, err)
 	}
-	if err := a.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+	if err := a.c.applied(op, resp.GetSuccess(), resp.GetMessage()); err != nil {
 		return Decision{}, err
 	}
-	return Decision{Message: resp.Msg.GetMessage()}, nil
+	return Decision{Message: resp.GetMessage()}, nil
 }
 
 // BatchApprove approves every listed approval that is still pending, in one
@@ -316,14 +314,14 @@ func (a *ApprovalsClient) BatchApprove(ctx context.Context, approvalIDs []string
 	if len(approvalIDs) == 0 {
 		return BatchDecision{}, a.c.fail(op, ErrInvalidArgument, "at least one approval id is required")
 	}
-	resp, err := a.approvals.BatchApprove(ctx, connect.NewRequest(&reliantv1.BatchApproveRequest{RequestIds: approvalIDs, ActionTaken: optString(opt.ActionTaken)}))
+	resp, err := a.approvals.BatchApprove(ctx, &reliantv1.BatchApproveRequest{RequestIds: approvalIDs, ActionTaken: optString(opt.ActionTaken)})
 	if err != nil {
 		return BatchDecision{}, a.c.wrap(op, err)
 	}
-	if err := a.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+	if err := a.c.applied(op, resp.GetSuccess(), resp.GetMessage()); err != nil {
 		return BatchDecision{}, err
 	}
-	return BatchDecision{Decided: int(resp.Msg.GetApproved()), ChatID: resp.Msg.GetChatId(), Message: resp.Msg.GetMessage()}, nil
+	return BatchDecision{Decided: int(resp.GetApproved()), ChatID: resp.GetChatId(), Message: resp.GetMessage()}, nil
 }
 
 // BatchDeny denies every listed approval that is still pending. See
@@ -333,12 +331,12 @@ func (a *ApprovalsClient) BatchDeny(ctx context.Context, approvalIDs []string, o
 	if len(approvalIDs) == 0 {
 		return BatchDecision{}, a.c.fail(op, ErrInvalidArgument, "at least one approval id is required")
 	}
-	resp, err := a.approvals.BatchDeny(ctx, connect.NewRequest(&reliantv1.BatchDenyRequest{RequestIds: approvalIDs, DenialReason: optString(opt.Reason), ActionTaken: optString(opt.ActionTaken)}))
+	resp, err := a.approvals.BatchDeny(ctx, &reliantv1.BatchDenyRequest{RequestIds: approvalIDs, DenialReason: optString(opt.Reason), ActionTaken: optString(opt.ActionTaken)})
 	if err != nil {
 		return BatchDecision{}, a.c.wrap(op, err)
 	}
-	if err := a.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+	if err := a.c.applied(op, resp.GetSuccess(), resp.GetMessage()); err != nil {
 		return BatchDecision{}, err
 	}
-	return BatchDecision{Decided: int(resp.Msg.GetDenied()), ChatID: resp.Msg.GetChatId(), Message: resp.Msg.GetMessage()}, nil
+	return BatchDecision{Decided: int(resp.GetDenied()), ChatID: resp.GetChatId(), Message: resp.GetMessage()}, nil
 }

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,9 +77,9 @@ func TestListInbox_WorktreeReclaimItemListsTheMachinesProposals(t *testing.T) {
 	assert.Contains(t, it.ItemId, "worktree_reclaim:"+daemonID+":")
 
 	// Project-scoped lists show it too: a machine is not any project's.
-	scoped, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{ProjectId: ptr.Of(f.project())}))
+	scoped, err := f.inbox.ListInbox(f.ctx, &reliantv1.ListInboxRequest{ProjectId: ptr.Of(f.project())})
 	require.NoError(t, err)
-	assert.Len(t, inboxByKind(scoped.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM), 1)
+	assert.Len(t, inboxByKind(scoped.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM), 1)
 }
 
 // The same undecided set is the same item however often the machine reports

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -16,16 +15,16 @@ import (
 // labels are untouched. Refused while a trigger runs on it.
 func (s *Service) DeleteMachinePool(
 	ctx context.Context,
-	req *connect.Request[pb.DeleteMachinePoolRequest],
-) (*connect.Response[pb.DeleteMachinePoolResponse], error) {
+	req *pb.DeleteMachinePoolRequest,
+) (*pb.DeleteMachinePoolResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
-	if req.Msg.GetName() == "" {
+	if req.GetName() == "" {
 		return nil, svcerr.InvalidArgument("name is required")
 	}
-	err := s.deps.Repo.DeleteMachinePoolByName(ctx, userID, req.Msg.GetName())
+	err := s.deps.Repo.DeleteMachinePoolByName(ctx, userID, req.GetName())
 	switch {
 	case errors.Is(err, core.ErrMachinePoolNotFound):
 		return nil, svcerr.NotFound("machine pool")
@@ -34,5 +33,5 @@ func (s *Service) DeleteMachinePool(
 	case err != nil:
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete the machine pool"))
 	}
-	return connect.NewResponse(&pb.DeleteMachinePoolResponse{}), nil
+	return &pb.DeleteMachinePoolResponse{}, nil
 }

@@ -3,9 +3,13 @@ package interceptors
 
 import (
 	"context"
+	"fmt"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
@@ -23,52 +27,91 @@ import (
 // found by its chat. A unary request's ids also scope the logs written
 // inside it (telemetry.WithRunScope). A stream is stamped from its first
 // message.
-func RequestScope(trace connect.Interceptor) connect.Interceptor {
-	return requestScope{trace: trace}
-}
-
-type requestScope struct{ trace connect.Interceptor }
-
-func (s requestScope) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return s.trace.WrapUnary(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx = telemetry.WithRequestScope(ctx)
-		stamper := newRunStamper(trace.SpanFromContext(ctx))
-		if req != nil {
-			if ids := stamper.stamp(req.Any()); len(ids) > 0 {
+func RequestScope(traceIC connect.ServerInterceptor) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return traceIC(func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			ctx = telemetry.WithRequestScope(ctx)
+			stamper := newRunStamper(trace.SpanFromContext(ctx))
+			if spec.StreamType != connect.StreamTypeUnary {
+				return next(ctx, spec, &runStampingStream{ServerStream: stream, stamper: stamper})
+			}
+			// A unary request's ids scope the handler's logs, so the
+			// request is read here, ahead of the handler, and replayed to
+			// it; connect v1 had read it before any interceptor ran.
+			req := newRequest(spec)
+			if req == nil {
+				return next(ctx, spec, &responseStampingStream{ServerStream: stream, stamper: stamper})
+			}
+			if err := stream.Receive(req); err != nil {
+				return err
+			}
+			if ids := stamper.stamp(req); len(ids) > 0 {
 				ctx = telemetry.WithRunScope(ctx, runScope(ids))
 			}
-		}
-		resp, err := next(ctx, req)
-		if err == nil && resp != nil {
-			stamper.stamp(resp.Any())
-		}
-		return resp, err
-	})
+			return next(ctx, spec, &responseStampingStream{ServerStream: &replayStream{ServerStream: stream, req: req}, stamper: stamper})
+		})
+	}
 }
 
-func (s requestScope) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return s.trace.WrapStreamingClient(next)
-}
-
-func (s requestScope) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return s.trace.WrapStreamingHandler(func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx = telemetry.WithRequestScope(ctx)
-		return next(ctx, &runStampingConn{StreamingHandlerConn: conn, stamper: newRunStamper(trace.SpanFromContext(ctx))})
-	})
-}
-
-// runStampingConn stamps the stream's span from the first message it receives
-// that names a run.
-type runStampingConn struct {
-	connect.StreamingHandlerConn
+// runStampingStream stamps the stream's span from the first message it
+// receives that names a run.
+type runStampingStream struct {
+	connect.ServerStream
 	stamper *runStamper
 	done    bool
 }
 
-func (c *runStampingConn) Receive(msg any) error {
-	err := c.StreamingHandlerConn.Receive(msg)
+func (c *runStampingStream) Receive(msg any) error {
+	err := c.ServerStream.Receive(msg)
 	if err == nil && !c.done && len(c.stamper.stamp(msg)) > 0 {
 		c.done = true
 	}
 	return err
+}
+
+// responseStampingStream stamps a unary call's span from its response, for
+// an id the request did not carry (StartChat returns the chat it made).
+type responseStampingStream struct {
+	connect.ServerStream
+	stamper *runStamper
+}
+
+func (c *responseStampingStream) Send(msg any) error {
+	c.stamper.stamp(msg)
+	return c.ServerStream.Send(msg)
+}
+
+// newRequest is an empty request message of spec's procedure, or nil when the
+// spec does not say (a hand-built spec with no protobuf schema).
+func newRequest(spec connect.Spec) proto.Message {
+	md, ok := spec.Schema.(protoreflect.MethodDescriptor)
+	if !ok {
+		return nil
+	}
+	mt, err := protoregistry.GlobalTypes.FindMessageByName(md.Input().FullName())
+	if err != nil {
+		return nil
+	}
+	return mt.New().Interface()
+}
+
+// replayStream hands the handler the request an interceptor already read.
+type replayStream struct {
+	connect.ServerStream
+	req      proto.Message
+	received bool
+}
+
+func (s *replayStream) Receive(msg any) error {
+	if s.received {
+		return s.ServerStream.Receive(msg)
+	}
+	dst, ok := msg.(proto.Message)
+	if !ok {
+		return fmt.Errorf("interceptors: cannot receive into %T", msg)
+	}
+	s.received = true
+	proto.Reset(dst)
+	proto.Merge(dst, s.req)
+	return nil
 }

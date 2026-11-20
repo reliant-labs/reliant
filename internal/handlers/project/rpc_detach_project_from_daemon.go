@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -40,10 +39,10 @@ import (
 // Idempotent: a machine the project is not on succeeds.
 func (s *Service) DetachProjectFromDaemon(
 	ctx context.Context,
-	req *connect.Request[pb.DetachProjectFromDaemonRequest],
-) (*connect.Response[pb.DetachProjectFromDaemonResponse], error) {
+	req *pb.DetachProjectFromDaemonRequest,
+) (*pb.DetachProjectFromDaemonResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	projectID, daemonID := req.Msg.ProjectId, req.Msg.DaemonId
+	projectID, daemonID := req.ProjectId, req.DaemonId
 	if projectID == "" || daemonID == "" {
 		return nil, svcerr.InvalidArgument("project_id and daemon_id are required")
 	}
@@ -59,7 +58,7 @@ func (s *Service) DetachProjectFromDaemon(
 		return nil, err
 	}
 	if row == nil {
-		return connect.NewResponse(&pb.DetachProjectFromDaemonResponse{}), nil
+		return &pb.DetachProjectFromDaemonResponse{}, nil
 	}
 	machine := s.machineName(ctx, daemonID)
 	// The preconditions are judged inside the detach's transaction, under the
@@ -93,7 +92,7 @@ func (s *Service) DetachProjectFromDaemon(
 	if err := s.deps.Repo.DetachProjectFromDaemon(ctx, project.ID, daemonID, row.Path, guard); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to detach the project from the machine"))
 	}
-	return connect.NewResponse(&pb.DetachProjectFromDaemonResponse{}), nil
+	return &pb.DetachProjectFromDaemonResponse{}, nil
 }
 
 // requireCheckoutElsewhere refuses a detach that would leave the project with

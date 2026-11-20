@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -20,10 +19,10 @@ import (
 
 func archivedChatIDs(t *testing.T, ctx context.Context, service *Service) map[string]bool {
 	t.Helper()
-	resp, err := service.ListArchivedChats(ctx, connect.NewRequest(&reliantv1.ListArchivedChatsRequest{}))
+	resp, err := service.ListArchivedChats(ctx, &reliantv1.ListArchivedChatsRequest{})
 	require.NoError(t, err)
 	ids := map[string]bool{}
-	for _, c := range resp.Msg.Chats {
+	for _, c := range resp.Chats {
 		ids[c.Chat.Id] = true
 	}
 	return ids
@@ -31,10 +30,10 @@ func archivedChatIDs(t *testing.T, ctx context.Context, service *Service) map[st
 
 func sidebarChatIDs(t *testing.T, ctx context.Context, service *Service, projectID string) map[string]bool {
 	t.Helper()
-	resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+	resp, err := service.ListChats(ctx, &reliantv1.ListChatsRequest{ProjectId: projectID})
 	require.NoError(t, err)
 	ids := map[string]bool{}
-	for _, c := range resp.Msg.Chats {
+	for _, c := range resp.Chats {
 		ids[c.Id] = true
 	}
 	return ids
@@ -77,13 +76,13 @@ func TestAdoptChat_UnarchivesAnArchivedAutomationRun(t *testing.T) {
 	seedScheduledChat(t, ctx, repo, run.chatID)
 	require.NoError(t, repo.UpdateChatState(ctx, run.chatID, db.ChatStateArchived, "automation_succeeded"))
 
-	resp, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: run.chatID}))
+	resp, err := service.AdoptChat(ctx, &reliantv1.AdoptChatRequest{ChatId: run.chatID})
 	require.NoError(t, err)
-	assert.Equal(t, reliantv1.ChatState_CHAT_STATE_IDLE, resp.Msg.Chat.State, "the adopted run comes out of the archive")
+	assert.Equal(t, reliantv1.ChatState_CHAT_STATE_IDLE, resp.Chat.State, "the adopted run comes out of the archive")
 	assert.True(t, sidebarChatIDs(t, ctx, service, mustChatProject(t, ctx, repo, run.chatID))[run.chatID])
 
 	// Un-adopting is not archiving: the run stays where it is.
-	un, err := service.UnadoptChat(ctx, connect.NewRequest(&reliantv1.UnadoptChatRequest{ChatId: run.chatID}))
+	un, err := service.UnadoptChat(ctx, &reliantv1.UnadoptChatRequest{ChatId: run.chatID})
 	require.NoError(t, err)
-	assert.Equal(t, reliantv1.ChatState_CHAT_STATE_IDLE, un.Msg.Chat.State)
+	assert.Equal(t, reliantv1.ChatState_CHAT_STATE_IDLE, un.Chat.State)
 }

@@ -3,7 +3,7 @@ package settings
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -22,15 +22,15 @@ func TestSettingsService_BatchUpsertSettings_WritesAllKeysInOneCall(t *testing.T
 	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
-	resp, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{
+	resp, err := svc.BatchUpsertSettings(ctx, &reliantv1.BatchUpsertSettingsRequest{
 		Settings: []*reliantv1.SettingWrite{
 			{Key: "tour.completed", Value: "true"},
 			{Key: "tour.completedSteps", Value: `["a","b"]`},
 			{Key: "tour.skippedSteps", Value: "[]"},
 		},
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Settings, 3)
+	require.Len(t, resp.Settings, 3)
 
 	for key, want := range map[string]string{
 		"tour.completed":      "true",
@@ -51,9 +51,9 @@ func TestSettingsService_BatchUpsertSettings_ReplacesExistingValues(t *testing.T
 	ctx := newSettingsServiceTestContext()
 
 	write := func(value string) {
-		_, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{
+		_, err := svc.BatchUpsertSettings(ctx, &reliantv1.BatchUpsertSettingsRequest{
 			Settings: []*reliantv1.SettingWrite{{Key: "appearance.fontSize", Value: value}},
-		}))
+		})
 		require.NoError(t, err)
 	}
 
@@ -78,12 +78,12 @@ func TestSettingsService_BatchUpsertSettings_DefaultsValueTypeToString(t *testin
 	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
-	_, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{
+	_, err := svc.BatchUpsertSettings(ctx, &reliantv1.BatchUpsertSettingsRequest{
 		Settings: []*reliantv1.SettingWrite{
 			{Key: "a", Value: "1"},
 			{Key: "b", Value: "2", ValueType: ptr.Of("json")},
 		},
-	}))
+	})
 	require.NoError(t, err)
 
 	a, err := repo.GetSetting(ctx, "test-user", nil, "a")
@@ -102,14 +102,14 @@ func TestSettingsService_BatchUpsertSettings_RejectsEmptyKey(t *testing.T) {
 	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
-	_, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{
+	_, err := svc.BatchUpsertSettings(ctx, &reliantv1.BatchUpsertSettingsRequest{
 		Settings: []*reliantv1.SettingWrite{
 			{Key: "good", Value: "1"},
 			{Key: "", Value: "2"},
 		},
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 
 	// Validation happens before any write, so the valid key in the same batch
 	// must not have been persisted either.
@@ -124,7 +124,7 @@ func TestSettingsService_BatchUpsertSettings_EmptyBatchIsANoOp(t *testing.T) {
 	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 
-	resp, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{}))
+	resp, err := svc.BatchUpsertSettings(ctx, &reliantv1.BatchUpsertSettingsRequest{})
 	require.NoError(t, err)
-	assert.Empty(t, resp.Msg.Settings)
+	assert.Empty(t, resp.Settings)
 }

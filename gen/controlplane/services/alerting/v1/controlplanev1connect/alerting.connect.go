@@ -5,460 +5,536 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/alerting/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AlertingServiceName is the fully-qualified name of the AlertingService service.
 	AlertingServiceName = "controlplane.v1.AlertingService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AlertingServiceListReceiversProcedure is the fully-qualified name of the AlertingService's
+	// AlertingServiceListReceiversProcedure is the procedure name of the AlertingService's
 	// ListReceivers RPC.
 	AlertingServiceListReceiversProcedure = "/controlplane.v1.AlertingService/ListReceivers"
-	// AlertingServiceCreateReceiverProcedure is the fully-qualified name of the AlertingService's
+	// AlertingServiceCreateReceiverProcedure is the procedure name of the AlertingService's
 	// CreateReceiver RPC.
 	AlertingServiceCreateReceiverProcedure = "/controlplane.v1.AlertingService/CreateReceiver"
-	// AlertingServiceUpdateReceiverProcedure is the fully-qualified name of the AlertingService's
+	// AlertingServiceUpdateReceiverProcedure is the procedure name of the AlertingService's
 	// UpdateReceiver RPC.
 	AlertingServiceUpdateReceiverProcedure = "/controlplane.v1.AlertingService/UpdateReceiver"
-	// AlertingServiceDeleteReceiverProcedure is the fully-qualified name of the AlertingService's
+	// AlertingServiceDeleteReceiverProcedure is the procedure name of the AlertingService's
 	// DeleteReceiver RPC.
 	AlertingServiceDeleteReceiverProcedure = "/controlplane.v1.AlertingService/DeleteReceiver"
-	// AlertingServiceTestReceiverProcedure is the fully-qualified name of the AlertingService's
-	// TestReceiver RPC.
+	// AlertingServiceTestReceiverProcedure is the procedure name of the AlertingService's TestReceiver
+	// RPC.
 	AlertingServiceTestReceiverProcedure = "/controlplane.v1.AlertingService/TestReceiver"
-	// AlertingServiceCreateSilenceProcedure is the fully-qualified name of the AlertingService's
+	// AlertingServiceCreateSilenceProcedure is the procedure name of the AlertingService's
 	// CreateSilence RPC.
 	AlertingServiceCreateSilenceProcedure = "/controlplane.v1.AlertingService/CreateSilence"
-	// AlertingServiceListSilencesProcedure is the fully-qualified name of the AlertingService's
-	// ListSilences RPC.
+	// AlertingServiceListSilencesProcedure is the procedure name of the AlertingService's ListSilences
+	// RPC.
 	AlertingServiceListSilencesProcedure = "/controlplane.v1.AlertingService/ListSilences"
-	// AlertingServiceExpireSilenceProcedure is the fully-qualified name of the AlertingService's
+	// AlertingServiceExpireSilenceProcedure is the procedure name of the AlertingService's
 	// ExpireSilence RPC.
 	AlertingServiceExpireSilenceProcedure = "/controlplane.v1.AlertingService/ExpireSilence"
-	// AlertingServiceListAlertsProcedure is the fully-qualified name of the AlertingService's
-	// ListAlerts RPC.
+	// AlertingServiceListAlertsProcedure is the procedure name of the AlertingService's ListAlerts RPC.
 	AlertingServiceListAlertsProcedure = "/controlplane.v1.AlertingService/ListAlerts"
-	// AlertingServiceListAlertHistoryProcedure is the fully-qualified name of the AlertingService's
+	// AlertingServiceListAlertHistoryProcedure is the procedure name of the AlertingService's
 	// ListAlertHistory RPC.
 	AlertingServiceListAlertHistoryProcedure = "/controlplane.v1.AlertingService/ListAlertHistory"
-	// AlertingServiceListNotificationsProcedure is the fully-qualified name of the AlertingService's
+	// AlertingServiceListNotificationsProcedure is the procedure name of the AlertingService's
 	// ListNotifications RPC.
 	AlertingServiceListNotificationsProcedure = "/controlplane.v1.AlertingService/ListNotifications"
-	// AlertingServiceMarkNotificationsReadProcedure is the fully-qualified name of the
-	// AlertingService's MarkNotificationsRead RPC.
+	// AlertingServiceMarkNotificationsReadProcedure is the procedure name of the AlertingService's
+	// MarkNotificationsRead RPC.
 	AlertingServiceMarkNotificationsReadProcedure = "/controlplane.v1.AlertingService/MarkNotificationsRead"
+)
+
+var (
+	alertingServiceListReceiversSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("ListReceivers"),
+			Procedure:  AlertingServiceListReceiversProcedure,
+		}
+	})
+	alertingServiceCreateReceiverSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("CreateReceiver"),
+			Procedure:  AlertingServiceCreateReceiverProcedure,
+		}
+	})
+	alertingServiceUpdateReceiverSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("UpdateReceiver"),
+			Procedure:  AlertingServiceUpdateReceiverProcedure,
+		}
+	})
+	alertingServiceDeleteReceiverSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("DeleteReceiver"),
+			Procedure:  AlertingServiceDeleteReceiverProcedure,
+		}
+	})
+	alertingServiceTestReceiverSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("TestReceiver"),
+			Procedure:  AlertingServiceTestReceiverProcedure,
+		}
+	})
+	alertingServiceCreateSilenceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("CreateSilence"),
+			Procedure:  AlertingServiceCreateSilenceProcedure,
+		}
+	})
+	alertingServiceListSilencesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("ListSilences"),
+			Procedure:  AlertingServiceListSilencesProcedure,
+		}
+	})
+	alertingServiceExpireSilenceSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("ExpireSilence"),
+			Procedure:  AlertingServiceExpireSilenceProcedure,
+		}
+	})
+	alertingServiceListAlertsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("ListAlerts"),
+			Procedure:  AlertingServiceListAlertsProcedure,
+		}
+	})
+	alertingServiceListAlertHistorySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("ListAlertHistory"),
+			Procedure:  AlertingServiceListAlertHistoryProcedure,
+		}
+	})
+	alertingServiceListNotificationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("ListNotifications"),
+			Procedure:  AlertingServiceListNotificationsProcedure,
+		}
+	})
+	alertingServiceMarkNotificationsReadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods().ByName("MarkNotificationsRead"),
+			Procedure:  AlertingServiceMarkNotificationsReadProcedure,
+		}
+	})
 )
 
 // AlertingServiceClient is a client for the controlplane.v1.AlertingService service.
 type AlertingServiceClient interface {
 	// ListReceivers returns the org's receivers. Never a secret value.
-	ListReceivers(context.Context, *connect.Request[v1.ListReceiversRequest]) (*connect.Response[v1.ListReceiversResponse], error)
+	ListReceivers(context.Context, *v1.ListReceiversRequest) (*v1.ListReceiversResponse, error)
 	// CreateReceiver adds a receiver. The secret (Slack URL, PagerDuty key,
 	// webhook bearer) is sealed at rest and reaches Alertmanager as a mounted
 	// file; it is never returned.
-	CreateReceiver(context.Context, *connect.Request[v1.CreateReceiverRequest]) (*connect.Response[v1.CreateReceiverResponse], error)
+	CreateReceiver(context.Context, *v1.CreateReceiverRequest) (*v1.CreateReceiverResponse, error)
 	// UpdateReceiver changes a receiver's settings and/or replaces its secret.
 	// The name and type are immutable (routes name receivers).
-	UpdateReceiver(context.Context, *connect.Request[v1.UpdateReceiverRequest]) (*connect.Response[v1.UpdateReceiverResponse], error)
+	UpdateReceiver(context.Context, *v1.UpdateReceiverRequest) (*v1.UpdateReceiverResponse, error)
 	// DeleteReceiver removes a receiver. Refused while an env route still names
 	// it: delete the route from the code first.
-	DeleteReceiver(context.Context, *connect.Request[v1.DeleteReceiverRequest]) (*connect.Response[v1.DeleteReceiverResponse], error)
+	DeleteReceiver(context.Context, *v1.DeleteReceiverRequest) (*v1.DeleteReceiverResponse, error)
 	// TestReceiver sends a synthetic alert that is routed to exactly this
 	// receiver, and reports whether Alertmanager accepted it.
-	TestReceiver(context.Context, *connect.Request[v1.TestReceiverRequest]) (*connect.Response[v1.TestReceiverResponse], error)
+	TestReceiver(context.Context, *v1.TestReceiverRequest) (*v1.TestReceiverResponse, error)
 	// CreateSilence mutes matching alerts of THIS org until ends_at.
-	CreateSilence(context.Context, *connect.Request[v1.CreateSilenceRequest]) (*connect.Response[v1.CreateSilenceResponse], error)
+	CreateSilence(context.Context, *v1.CreateSilenceRequest) (*v1.CreateSilenceResponse, error)
 	// ListSilences returns the org's silences (active and pending by default).
-	ListSilences(context.Context, *connect.Request[v1.ListSilencesRequest]) (*connect.Response[v1.ListSilencesResponse], error)
+	ListSilences(context.Context, *v1.ListSilencesRequest) (*v1.ListSilencesResponse, error)
 	// ExpireSilence ends one of the org's silences now.
-	ExpireSilence(context.Context, *connect.Request[v1.ExpireSilenceRequest]) (*connect.Response[v1.ExpireSilenceResponse], error)
+	ExpireSilence(context.Context, *v1.ExpireSilenceRequest) (*v1.ExpireSilenceResponse, error)
 	// ListAlerts returns the org's pending and firing alert instances.
-	ListAlerts(context.Context, *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error)
+	ListAlerts(context.Context, *v1.ListAlertsRequest) (*v1.ListAlertsResponse, error)
 	// ListAlertHistory returns state transitions, newest first.
-	ListAlertHistory(context.Context, *connect.Request[v1.ListAlertHistoryRequest]) (*connect.Response[v1.ListAlertHistoryResponse], error)
+	ListAlertHistory(context.Context, *v1.ListAlertHistoryRequest) (*v1.ListAlertHistoryResponse, error)
 	// ListNotifications returns in-app notifications, newest first.
-	ListNotifications(context.Context, *connect.Request[v1.ListNotificationsRequest]) (*connect.Response[v1.ListNotificationsResponse], error)
+	ListNotifications(context.Context, *v1.ListNotificationsRequest) (*v1.ListNotificationsResponse, error)
 	// MarkNotificationsRead marks notifications read (all of the org's unread
 	// when ids is empty).
-	MarkNotificationsRead(context.Context, *connect.Request[v1.MarkNotificationsReadRequest]) (*connect.Response[v1.MarkNotificationsReadResponse], error)
+	MarkNotificationsRead(context.Context, *v1.MarkNotificationsReadRequest) (*v1.MarkNotificationsReadResponse, error)
 }
 
-// NewAlertingServiceClient constructs a client for the controlplane.v1.AlertingService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAlertingServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AlertingServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	alertingServiceMethods := v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods()
-	return &alertingServiceClient{
-		listReceivers: connect.NewClient[v1.ListReceiversRequest, v1.ListReceiversResponse](
-			httpClient,
-			baseURL+AlertingServiceListReceiversProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("ListReceivers")),
-			connect.WithClientOptions(opts...),
-		),
-		createReceiver: connect.NewClient[v1.CreateReceiverRequest, v1.CreateReceiverResponse](
-			httpClient,
-			baseURL+AlertingServiceCreateReceiverProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("CreateReceiver")),
-			connect.WithClientOptions(opts...),
-		),
-		updateReceiver: connect.NewClient[v1.UpdateReceiverRequest, v1.UpdateReceiverResponse](
-			httpClient,
-			baseURL+AlertingServiceUpdateReceiverProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("UpdateReceiver")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteReceiver: connect.NewClient[v1.DeleteReceiverRequest, v1.DeleteReceiverResponse](
-			httpClient,
-			baseURL+AlertingServiceDeleteReceiverProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("DeleteReceiver")),
-			connect.WithClientOptions(opts...),
-		),
-		testReceiver: connect.NewClient[v1.TestReceiverRequest, v1.TestReceiverResponse](
-			httpClient,
-			baseURL+AlertingServiceTestReceiverProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("TestReceiver")),
-			connect.WithClientOptions(opts...),
-		),
-		createSilence: connect.NewClient[v1.CreateSilenceRequest, v1.CreateSilenceResponse](
-			httpClient,
-			baseURL+AlertingServiceCreateSilenceProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("CreateSilence")),
-			connect.WithClientOptions(opts...),
-		),
-		listSilences: connect.NewClient[v1.ListSilencesRequest, v1.ListSilencesResponse](
-			httpClient,
-			baseURL+AlertingServiceListSilencesProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("ListSilences")),
-			connect.WithClientOptions(opts...),
-		),
-		expireSilence: connect.NewClient[v1.ExpireSilenceRequest, v1.ExpireSilenceResponse](
-			httpClient,
-			baseURL+AlertingServiceExpireSilenceProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("ExpireSilence")),
-			connect.WithClientOptions(opts...),
-		),
-		listAlerts: connect.NewClient[v1.ListAlertsRequest, v1.ListAlertsResponse](
-			httpClient,
-			baseURL+AlertingServiceListAlertsProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("ListAlerts")),
-			connect.WithClientOptions(opts...),
-		),
-		listAlertHistory: connect.NewClient[v1.ListAlertHistoryRequest, v1.ListAlertHistoryResponse](
-			httpClient,
-			baseURL+AlertingServiceListAlertHistoryProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("ListAlertHistory")),
-			connect.WithClientOptions(opts...),
-		),
-		listNotifications: connect.NewClient[v1.ListNotificationsRequest, v1.ListNotificationsResponse](
-			httpClient,
-			baseURL+AlertingServiceListNotificationsProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("ListNotifications")),
-			connect.WithClientOptions(opts...),
-		),
-		markNotificationsRead: connect.NewClient[v1.MarkNotificationsReadRequest, v1.MarkNotificationsReadResponse](
-			httpClient,
-			baseURL+AlertingServiceMarkNotificationsReadProcedure,
-			connect.WithSchema(alertingServiceMethods.ByName("MarkNotificationsRead")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// alertingServiceClient implements AlertingServiceClient.
-type alertingServiceClient struct {
-	listReceivers         *connect.Client[v1.ListReceiversRequest, v1.ListReceiversResponse]
-	createReceiver        *connect.Client[v1.CreateReceiverRequest, v1.CreateReceiverResponse]
-	updateReceiver        *connect.Client[v1.UpdateReceiverRequest, v1.UpdateReceiverResponse]
-	deleteReceiver        *connect.Client[v1.DeleteReceiverRequest, v1.DeleteReceiverResponse]
-	testReceiver          *connect.Client[v1.TestReceiverRequest, v1.TestReceiverResponse]
-	createSilence         *connect.Client[v1.CreateSilenceRequest, v1.CreateSilenceResponse]
-	listSilences          *connect.Client[v1.ListSilencesRequest, v1.ListSilencesResponse]
-	expireSilence         *connect.Client[v1.ExpireSilenceRequest, v1.ExpireSilenceResponse]
-	listAlerts            *connect.Client[v1.ListAlertsRequest, v1.ListAlertsResponse]
-	listAlertHistory      *connect.Client[v1.ListAlertHistoryRequest, v1.ListAlertHistoryResponse]
-	listNotifications     *connect.Client[v1.ListNotificationsRequest, v1.ListNotificationsResponse]
-	markNotificationsRead *connect.Client[v1.MarkNotificationsReadRequest, v1.MarkNotificationsReadResponse]
-}
-
-// ListReceivers calls controlplane.v1.AlertingService.ListReceivers.
-func (c *alertingServiceClient) ListReceivers(ctx context.Context, req *connect.Request[v1.ListReceiversRequest]) (*connect.Response[v1.ListReceiversResponse], error) {
-	return c.listReceivers.CallUnary(ctx, req)
-}
-
-// CreateReceiver calls controlplane.v1.AlertingService.CreateReceiver.
-func (c *alertingServiceClient) CreateReceiver(ctx context.Context, req *connect.Request[v1.CreateReceiverRequest]) (*connect.Response[v1.CreateReceiverResponse], error) {
-	return c.createReceiver.CallUnary(ctx, req)
-}
-
-// UpdateReceiver calls controlplane.v1.AlertingService.UpdateReceiver.
-func (c *alertingServiceClient) UpdateReceiver(ctx context.Context, req *connect.Request[v1.UpdateReceiverRequest]) (*connect.Response[v1.UpdateReceiverResponse], error) {
-	return c.updateReceiver.CallUnary(ctx, req)
-}
-
-// DeleteReceiver calls controlplane.v1.AlertingService.DeleteReceiver.
-func (c *alertingServiceClient) DeleteReceiver(ctx context.Context, req *connect.Request[v1.DeleteReceiverRequest]) (*connect.Response[v1.DeleteReceiverResponse], error) {
-	return c.deleteReceiver.CallUnary(ctx, req)
-}
-
-// TestReceiver calls controlplane.v1.AlertingService.TestReceiver.
-func (c *alertingServiceClient) TestReceiver(ctx context.Context, req *connect.Request[v1.TestReceiverRequest]) (*connect.Response[v1.TestReceiverResponse], error) {
-	return c.testReceiver.CallUnary(ctx, req)
-}
-
-// CreateSilence calls controlplane.v1.AlertingService.CreateSilence.
-func (c *alertingServiceClient) CreateSilence(ctx context.Context, req *connect.Request[v1.CreateSilenceRequest]) (*connect.Response[v1.CreateSilenceResponse], error) {
-	return c.createSilence.CallUnary(ctx, req)
-}
-
-// ListSilences calls controlplane.v1.AlertingService.ListSilences.
-func (c *alertingServiceClient) ListSilences(ctx context.Context, req *connect.Request[v1.ListSilencesRequest]) (*connect.Response[v1.ListSilencesResponse], error) {
-	return c.listSilences.CallUnary(ctx, req)
-}
-
-// ExpireSilence calls controlplane.v1.AlertingService.ExpireSilence.
-func (c *alertingServiceClient) ExpireSilence(ctx context.Context, req *connect.Request[v1.ExpireSilenceRequest]) (*connect.Response[v1.ExpireSilenceResponse], error) {
-	return c.expireSilence.CallUnary(ctx, req)
-}
-
-// ListAlerts calls controlplane.v1.AlertingService.ListAlerts.
-func (c *alertingServiceClient) ListAlerts(ctx context.Context, req *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error) {
-	return c.listAlerts.CallUnary(ctx, req)
-}
-
-// ListAlertHistory calls controlplane.v1.AlertingService.ListAlertHistory.
-func (c *alertingServiceClient) ListAlertHistory(ctx context.Context, req *connect.Request[v1.ListAlertHistoryRequest]) (*connect.Response[v1.ListAlertHistoryResponse], error) {
-	return c.listAlertHistory.CallUnary(ctx, req)
-}
-
-// ListNotifications calls controlplane.v1.AlertingService.ListNotifications.
-func (c *alertingServiceClient) ListNotifications(ctx context.Context, req *connect.Request[v1.ListNotificationsRequest]) (*connect.Response[v1.ListNotificationsResponse], error) {
-	return c.listNotifications.CallUnary(ctx, req)
-}
-
-// MarkNotificationsRead calls controlplane.v1.AlertingService.MarkNotificationsRead.
-func (c *alertingServiceClient) MarkNotificationsRead(ctx context.Context, req *connect.Request[v1.MarkNotificationsReadRequest]) (*connect.Response[v1.MarkNotificationsReadResponse], error) {
-	return c.markNotificationsRead.CallUnary(ctx, req)
+// NewAlertingServiceClient constructs a client for the controlplane.v1.AlertingService service.
+// Multiple service clients may share a single connect.Client.
+func NewAlertingServiceClient(client *connect.Client) AlertingServiceClient {
+	return &alertingServiceClient{client: client}
 }
 
 // AlertingServiceHandler is an implementation of the controlplane.v1.AlertingService service.
 type AlertingServiceHandler interface {
 	// ListReceivers returns the org's receivers. Never a secret value.
-	ListReceivers(context.Context, *connect.Request[v1.ListReceiversRequest]) (*connect.Response[v1.ListReceiversResponse], error)
+	ListReceivers(context.Context, *v1.ListReceiversRequest) (*v1.ListReceiversResponse, error)
 	// CreateReceiver adds a receiver. The secret (Slack URL, PagerDuty key,
 	// webhook bearer) is sealed at rest and reaches Alertmanager as a mounted
 	// file; it is never returned.
-	CreateReceiver(context.Context, *connect.Request[v1.CreateReceiverRequest]) (*connect.Response[v1.CreateReceiverResponse], error)
+	CreateReceiver(context.Context, *v1.CreateReceiverRequest) (*v1.CreateReceiverResponse, error)
 	// UpdateReceiver changes a receiver's settings and/or replaces its secret.
 	// The name and type are immutable (routes name receivers).
-	UpdateReceiver(context.Context, *connect.Request[v1.UpdateReceiverRequest]) (*connect.Response[v1.UpdateReceiverResponse], error)
+	UpdateReceiver(context.Context, *v1.UpdateReceiverRequest) (*v1.UpdateReceiverResponse, error)
 	// DeleteReceiver removes a receiver. Refused while an env route still names
 	// it: delete the route from the code first.
-	DeleteReceiver(context.Context, *connect.Request[v1.DeleteReceiverRequest]) (*connect.Response[v1.DeleteReceiverResponse], error)
+	DeleteReceiver(context.Context, *v1.DeleteReceiverRequest) (*v1.DeleteReceiverResponse, error)
 	// TestReceiver sends a synthetic alert that is routed to exactly this
 	// receiver, and reports whether Alertmanager accepted it.
-	TestReceiver(context.Context, *connect.Request[v1.TestReceiverRequest]) (*connect.Response[v1.TestReceiverResponse], error)
+	TestReceiver(context.Context, *v1.TestReceiverRequest) (*v1.TestReceiverResponse, error)
 	// CreateSilence mutes matching alerts of THIS org until ends_at.
-	CreateSilence(context.Context, *connect.Request[v1.CreateSilenceRequest]) (*connect.Response[v1.CreateSilenceResponse], error)
+	CreateSilence(context.Context, *v1.CreateSilenceRequest) (*v1.CreateSilenceResponse, error)
 	// ListSilences returns the org's silences (active and pending by default).
-	ListSilences(context.Context, *connect.Request[v1.ListSilencesRequest]) (*connect.Response[v1.ListSilencesResponse], error)
+	ListSilences(context.Context, *v1.ListSilencesRequest) (*v1.ListSilencesResponse, error)
 	// ExpireSilence ends one of the org's silences now.
-	ExpireSilence(context.Context, *connect.Request[v1.ExpireSilenceRequest]) (*connect.Response[v1.ExpireSilenceResponse], error)
+	ExpireSilence(context.Context, *v1.ExpireSilenceRequest) (*v1.ExpireSilenceResponse, error)
 	// ListAlerts returns the org's pending and firing alert instances.
-	ListAlerts(context.Context, *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error)
+	ListAlerts(context.Context, *v1.ListAlertsRequest) (*v1.ListAlertsResponse, error)
 	// ListAlertHistory returns state transitions, newest first.
-	ListAlertHistory(context.Context, *connect.Request[v1.ListAlertHistoryRequest]) (*connect.Response[v1.ListAlertHistoryResponse], error)
+	ListAlertHistory(context.Context, *v1.ListAlertHistoryRequest) (*v1.ListAlertHistoryResponse, error)
 	// ListNotifications returns in-app notifications, newest first.
-	ListNotifications(context.Context, *connect.Request[v1.ListNotificationsRequest]) (*connect.Response[v1.ListNotificationsResponse], error)
+	ListNotifications(context.Context, *v1.ListNotificationsRequest) (*v1.ListNotificationsResponse, error)
 	// MarkNotificationsRead marks notifications read (all of the org's unread
 	// when ids is empty).
-	MarkNotificationsRead(context.Context, *connect.Request[v1.MarkNotificationsReadRequest]) (*connect.Response[v1.MarkNotificationsReadResponse], error)
+	MarkNotificationsRead(context.Context, *v1.MarkNotificationsReadRequest) (*v1.MarkNotificationsReadResponse, error)
 }
 
-// NewAlertingServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAlertingServiceHandler(svc AlertingServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	alertingServiceMethods := v1.File_services_alerting_v1_alerting_proto.Services().ByName("AlertingService").Methods()
-	alertingServiceListReceiversHandler := connect.NewUnaryHandler(
-		AlertingServiceListReceiversProcedure,
-		svc.ListReceivers,
-		connect.WithSchema(alertingServiceMethods.ByName("ListReceivers")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAlertingServiceHandler registers svc as the controlplane.v1.AlertingService
+// implementation on server.
+func RegisterAlertingServiceHandler(server *connect.Server, svc AlertingServiceHandler) {
+	adapter := alertingServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: alertingServiceListReceiversSpec(), Handler: adapter.listReceivers},
+		connect.Method{Spec: alertingServiceCreateReceiverSpec(), Handler: adapter.createReceiver},
+		connect.Method{Spec: alertingServiceUpdateReceiverSpec(), Handler: adapter.updateReceiver},
+		connect.Method{Spec: alertingServiceDeleteReceiverSpec(), Handler: adapter.deleteReceiver},
+		connect.Method{Spec: alertingServiceTestReceiverSpec(), Handler: adapter.testReceiver},
+		connect.Method{Spec: alertingServiceCreateSilenceSpec(), Handler: adapter.createSilence},
+		connect.Method{Spec: alertingServiceListSilencesSpec(), Handler: adapter.listSilences},
+		connect.Method{Spec: alertingServiceExpireSilenceSpec(), Handler: adapter.expireSilence},
+		connect.Method{Spec: alertingServiceListAlertsSpec(), Handler: adapter.listAlerts},
+		connect.Method{Spec: alertingServiceListAlertHistorySpec(), Handler: adapter.listAlertHistory},
+		connect.Method{Spec: alertingServiceListNotificationsSpec(), Handler: adapter.listNotifications},
+		connect.Method{Spec: alertingServiceMarkNotificationsReadSpec(), Handler: adapter.markNotificationsRead},
 	)
-	alertingServiceCreateReceiverHandler := connect.NewUnaryHandler(
-		AlertingServiceCreateReceiverProcedure,
-		svc.CreateReceiver,
-		connect.WithSchema(alertingServiceMethods.ByName("CreateReceiver")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceUpdateReceiverHandler := connect.NewUnaryHandler(
-		AlertingServiceUpdateReceiverProcedure,
-		svc.UpdateReceiver,
-		connect.WithSchema(alertingServiceMethods.ByName("UpdateReceiver")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceDeleteReceiverHandler := connect.NewUnaryHandler(
-		AlertingServiceDeleteReceiverProcedure,
-		svc.DeleteReceiver,
-		connect.WithSchema(alertingServiceMethods.ByName("DeleteReceiver")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceTestReceiverHandler := connect.NewUnaryHandler(
-		AlertingServiceTestReceiverProcedure,
-		svc.TestReceiver,
-		connect.WithSchema(alertingServiceMethods.ByName("TestReceiver")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceCreateSilenceHandler := connect.NewUnaryHandler(
-		AlertingServiceCreateSilenceProcedure,
-		svc.CreateSilence,
-		connect.WithSchema(alertingServiceMethods.ByName("CreateSilence")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceListSilencesHandler := connect.NewUnaryHandler(
-		AlertingServiceListSilencesProcedure,
-		svc.ListSilences,
-		connect.WithSchema(alertingServiceMethods.ByName("ListSilences")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceExpireSilenceHandler := connect.NewUnaryHandler(
-		AlertingServiceExpireSilenceProcedure,
-		svc.ExpireSilence,
-		connect.WithSchema(alertingServiceMethods.ByName("ExpireSilence")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceListAlertsHandler := connect.NewUnaryHandler(
-		AlertingServiceListAlertsProcedure,
-		svc.ListAlerts,
-		connect.WithSchema(alertingServiceMethods.ByName("ListAlerts")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceListAlertHistoryHandler := connect.NewUnaryHandler(
-		AlertingServiceListAlertHistoryProcedure,
-		svc.ListAlertHistory,
-		connect.WithSchema(alertingServiceMethods.ByName("ListAlertHistory")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceListNotificationsHandler := connect.NewUnaryHandler(
-		AlertingServiceListNotificationsProcedure,
-		svc.ListNotifications,
-		connect.WithSchema(alertingServiceMethods.ByName("ListNotifications")),
-		connect.WithHandlerOptions(opts...),
-	)
-	alertingServiceMarkNotificationsReadHandler := connect.NewUnaryHandler(
-		AlertingServiceMarkNotificationsReadProcedure,
-		svc.MarkNotificationsRead,
-		connect.WithSchema(alertingServiceMethods.ByName("MarkNotificationsRead")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.AlertingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AlertingServiceListReceiversProcedure:
-			alertingServiceListReceiversHandler.ServeHTTP(w, r)
-		case AlertingServiceCreateReceiverProcedure:
-			alertingServiceCreateReceiverHandler.ServeHTTP(w, r)
-		case AlertingServiceUpdateReceiverProcedure:
-			alertingServiceUpdateReceiverHandler.ServeHTTP(w, r)
-		case AlertingServiceDeleteReceiverProcedure:
-			alertingServiceDeleteReceiverHandler.ServeHTTP(w, r)
-		case AlertingServiceTestReceiverProcedure:
-			alertingServiceTestReceiverHandler.ServeHTTP(w, r)
-		case AlertingServiceCreateSilenceProcedure:
-			alertingServiceCreateSilenceHandler.ServeHTTP(w, r)
-		case AlertingServiceListSilencesProcedure:
-			alertingServiceListSilencesHandler.ServeHTTP(w, r)
-		case AlertingServiceExpireSilenceProcedure:
-			alertingServiceExpireSilenceHandler.ServeHTTP(w, r)
-		case AlertingServiceListAlertsProcedure:
-			alertingServiceListAlertsHandler.ServeHTTP(w, r)
-		case AlertingServiceListAlertHistoryProcedure:
-			alertingServiceListAlertHistoryHandler.ServeHTTP(w, r)
-		case AlertingServiceListNotificationsProcedure:
-			alertingServiceListNotificationsHandler.ServeHTTP(w, r)
-		case AlertingServiceMarkNotificationsReadProcedure:
-			alertingServiceMarkNotificationsReadHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAlertingServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAlertingServiceHandler struct{}
 
-func (UnimplementedAlertingServiceHandler) ListReceivers(context.Context, *connect.Request[v1.ListReceiversRequest]) (*connect.Response[v1.ListReceiversResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.ListReceivers is not implemented"))
+func (UnimplementedAlertingServiceHandler) ListReceivers(context.Context, *v1.ListReceiversRequest) (*v1.ListReceiversResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.ListReceivers is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) CreateReceiver(context.Context, *connect.Request[v1.CreateReceiverRequest]) (*connect.Response[v1.CreateReceiverResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.CreateReceiver is not implemented"))
+func (UnimplementedAlertingServiceHandler) CreateReceiver(context.Context, *v1.CreateReceiverRequest) (*v1.CreateReceiverResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.CreateReceiver is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) UpdateReceiver(context.Context, *connect.Request[v1.UpdateReceiverRequest]) (*connect.Response[v1.UpdateReceiverResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.UpdateReceiver is not implemented"))
+func (UnimplementedAlertingServiceHandler) UpdateReceiver(context.Context, *v1.UpdateReceiverRequest) (*v1.UpdateReceiverResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.UpdateReceiver is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) DeleteReceiver(context.Context, *connect.Request[v1.DeleteReceiverRequest]) (*connect.Response[v1.DeleteReceiverResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.DeleteReceiver is not implemented"))
+func (UnimplementedAlertingServiceHandler) DeleteReceiver(context.Context, *v1.DeleteReceiverRequest) (*v1.DeleteReceiverResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.DeleteReceiver is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) TestReceiver(context.Context, *connect.Request[v1.TestReceiverRequest]) (*connect.Response[v1.TestReceiverResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.TestReceiver is not implemented"))
+func (UnimplementedAlertingServiceHandler) TestReceiver(context.Context, *v1.TestReceiverRequest) (*v1.TestReceiverResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.TestReceiver is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) CreateSilence(context.Context, *connect.Request[v1.CreateSilenceRequest]) (*connect.Response[v1.CreateSilenceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.CreateSilence is not implemented"))
+func (UnimplementedAlertingServiceHandler) CreateSilence(context.Context, *v1.CreateSilenceRequest) (*v1.CreateSilenceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.CreateSilence is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) ListSilences(context.Context, *connect.Request[v1.ListSilencesRequest]) (*connect.Response[v1.ListSilencesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.ListSilences is not implemented"))
+func (UnimplementedAlertingServiceHandler) ListSilences(context.Context, *v1.ListSilencesRequest) (*v1.ListSilencesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.ListSilences is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) ExpireSilence(context.Context, *connect.Request[v1.ExpireSilenceRequest]) (*connect.Response[v1.ExpireSilenceResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.ExpireSilence is not implemented"))
+func (UnimplementedAlertingServiceHandler) ExpireSilence(context.Context, *v1.ExpireSilenceRequest) (*v1.ExpireSilenceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.ExpireSilence is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) ListAlerts(context.Context, *connect.Request[v1.ListAlertsRequest]) (*connect.Response[v1.ListAlertsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.ListAlerts is not implemented"))
+func (UnimplementedAlertingServiceHandler) ListAlerts(context.Context, *v1.ListAlertsRequest) (*v1.ListAlertsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.ListAlerts is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) ListAlertHistory(context.Context, *connect.Request[v1.ListAlertHistoryRequest]) (*connect.Response[v1.ListAlertHistoryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.ListAlertHistory is not implemented"))
+func (UnimplementedAlertingServiceHandler) ListAlertHistory(context.Context, *v1.ListAlertHistoryRequest) (*v1.ListAlertHistoryResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.ListAlertHistory is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) ListNotifications(context.Context, *connect.Request[v1.ListNotificationsRequest]) (*connect.Response[v1.ListNotificationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.ListNotifications is not implemented"))
+func (UnimplementedAlertingServiceHandler) ListNotifications(context.Context, *v1.ListNotificationsRequest) (*v1.ListNotificationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.ListNotifications is not implemented")
 }
 
-func (UnimplementedAlertingServiceHandler) MarkNotificationsRead(context.Context, *connect.Request[v1.MarkNotificationsReadRequest]) (*connect.Response[v1.MarkNotificationsReadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AlertingService.MarkNotificationsRead is not implemented"))
+func (UnimplementedAlertingServiceHandler) MarkNotificationsRead(context.Context, *v1.MarkNotificationsReadRequest) (*v1.MarkNotificationsReadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.AlertingService.MarkNotificationsRead is not implemented")
+}
+
+type alertingServiceClient struct {
+	client *connect.Client
+}
+
+func (c *alertingServiceClient) ListReceivers(ctx context.Context, req *v1.ListReceiversRequest) (*v1.ListReceiversResponse, error) {
+	var res v1.ListReceiversResponse
+	if err := c.client.CallUnary(ctx, alertingServiceListReceiversSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) CreateReceiver(ctx context.Context, req *v1.CreateReceiverRequest) (*v1.CreateReceiverResponse, error) {
+	var res v1.CreateReceiverResponse
+	if err := c.client.CallUnary(ctx, alertingServiceCreateReceiverSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) UpdateReceiver(ctx context.Context, req *v1.UpdateReceiverRequest) (*v1.UpdateReceiverResponse, error) {
+	var res v1.UpdateReceiverResponse
+	if err := c.client.CallUnary(ctx, alertingServiceUpdateReceiverSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) DeleteReceiver(ctx context.Context, req *v1.DeleteReceiverRequest) (*v1.DeleteReceiverResponse, error) {
+	var res v1.DeleteReceiverResponse
+	if err := c.client.CallUnary(ctx, alertingServiceDeleteReceiverSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) TestReceiver(ctx context.Context, req *v1.TestReceiverRequest) (*v1.TestReceiverResponse, error) {
+	var res v1.TestReceiverResponse
+	if err := c.client.CallUnary(ctx, alertingServiceTestReceiverSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) CreateSilence(ctx context.Context, req *v1.CreateSilenceRequest) (*v1.CreateSilenceResponse, error) {
+	var res v1.CreateSilenceResponse
+	if err := c.client.CallUnary(ctx, alertingServiceCreateSilenceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) ListSilences(ctx context.Context, req *v1.ListSilencesRequest) (*v1.ListSilencesResponse, error) {
+	var res v1.ListSilencesResponse
+	if err := c.client.CallUnary(ctx, alertingServiceListSilencesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) ExpireSilence(ctx context.Context, req *v1.ExpireSilenceRequest) (*v1.ExpireSilenceResponse, error) {
+	var res v1.ExpireSilenceResponse
+	if err := c.client.CallUnary(ctx, alertingServiceExpireSilenceSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) ListAlerts(ctx context.Context, req *v1.ListAlertsRequest) (*v1.ListAlertsResponse, error) {
+	var res v1.ListAlertsResponse
+	if err := c.client.CallUnary(ctx, alertingServiceListAlertsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) ListAlertHistory(ctx context.Context, req *v1.ListAlertHistoryRequest) (*v1.ListAlertHistoryResponse, error) {
+	var res v1.ListAlertHistoryResponse
+	if err := c.client.CallUnary(ctx, alertingServiceListAlertHistorySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) ListNotifications(ctx context.Context, req *v1.ListNotificationsRequest) (*v1.ListNotificationsResponse, error) {
+	var res v1.ListNotificationsResponse
+	if err := c.client.CallUnary(ctx, alertingServiceListNotificationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *alertingServiceClient) MarkNotificationsRead(ctx context.Context, req *v1.MarkNotificationsReadRequest) (*v1.MarkNotificationsReadResponse, error) {
+	var res v1.MarkNotificationsReadResponse
+	if err := c.client.CallUnary(ctx, alertingServiceMarkNotificationsReadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type alertingServiceHandler struct{ svc AlertingServiceHandler }
+
+func (h alertingServiceHandler) listReceivers(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListReceiversRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListReceivers(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) createReceiver(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateReceiverRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateReceiver(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) updateReceiver(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateReceiverRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateReceiver(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) deleteReceiver(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteReceiverRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteReceiver(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) testReceiver(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TestReceiverRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TestReceiver(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) createSilence(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateSilenceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateSilence(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) listSilences(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSilencesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSilences(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) expireSilence(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExpireSilenceRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ExpireSilence(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) listAlerts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAlertsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAlerts(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) listAlertHistory(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAlertHistoryRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAlertHistory(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) listNotifications(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListNotificationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListNotifications(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h alertingServiceHandler) markNotificationsRead(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MarkNotificationsReadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MarkNotificationsRead(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

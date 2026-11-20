@@ -9,9 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -234,12 +235,13 @@ func TestConnectionService_StartOAuthRelaysToTheRequestOrigin(t *testing.T) {
 	f := newConnectionFixtureWithEnv(t, func(k string) string {
 		return map[string]string{"RELIANT_OAUTH_SLACK_CLIENT_ID": "id", "RELIANT_OAUTH_SLACK_CLIENT_SECRET": "sec"}[k]
 	})
-	start := func(ctx context.Context, origin, loopback string) (*connect.Response[reliantv1.StartOAuthResponse], error) {
-		req := connect.NewRequest(&reliantv1.StartOAuthRequest{IntegrationId: "slack", RedirectAfter: "/workflow/x", LoopbackRedirect: loopback})
+	start := func(ctx context.Context, origin, loopback string) (*reliantv1.StartOAuthResponse, error) {
+		req := &reliantv1.StartOAuthRequest{IntegrationId: "slack", RedirectAfter: "/workflow/x", LoopbackRedirect: loopback}
+		info := &connect.CallInfo{}
 		if origin != "" {
-			req.Header().Set("Origin", origin)
+			info.RequestHeader().Set("Origin", origin)
 		}
-		return f.svc.StartOAuth(ctx, req)
+		return tdd.CallV2(ctx, f.svc.StartOAuth, req, info)
 	}
 	lastReturnTo := func() string {
 		var v string
@@ -253,8 +255,8 @@ func TestConnectionService_StartOAuthRelaysToTheRequestOrigin(t *testing.T) {
 	alice := asConnUser("alice")
 	resp, err := start(alice, "https://app.reliant.example", "")
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(resp.Msg.AuthorizeUrl, "https://slack.com/oauth/v2/authorize?"), resp.Msg.AuthorizeUrl)
-	require.Contains(t, resp.Msg.AuthorizeUrl, "redirect_uri=https%3A%2F%2Fapi.reliant.example%2Fintegrations%2Foauth%2Fslack%2Fcallback")
+	require.True(t, strings.HasPrefix(resp.AuthorizeUrl, "https://slack.com/oauth/v2/authorize?"), resp.AuthorizeUrl)
+	require.Contains(t, resp.AuthorizeUrl, "redirect_uri=https%3A%2F%2Fapi.reliant.example%2Fintegrations%2Foauth%2Fslack%2Fcallback")
 	require.Equal(t, "https://app.reliant.example/connections/oauth/callback", lastReturnTo())
 
 	_, err = start(alice, "", "http://127.0.0.1:49152/callback")
@@ -275,25 +277,25 @@ func asConnUser(userID string) context.Context {
 
 func (f *connectionFixture) createKey(t *testing.T, user, integration, name string) *reliantv1.Connection {
 	t.Helper()
-	resp, err := f.svc.CreateApiKeyConnection(asConnUser(user), connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+	resp, err := f.svc.CreateApiKeyConnection(asConnUser(user), &reliantv1.CreateApiKeyConnectionRequest{
 		IntegrationId: integration, Name: name, Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 		Fields: map[string]string{"api_key": "sk-secret-value-123"},
-	}))
+	})
 	require.NoError(t, err)
-	return resp.Msg.Connection
+	return resp.Connection
 }
 
 func requireConnectCode(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "%v", err)
+	require.Equal(t, want, svcerr.CodeV2(err), "%v", err)
 }
 
 func TestConnectionService_RequiresAuthentication(t *testing.T) {
 	f := newConnectionFixture(t)
-	_, err := f.svc.ListConnections(context.Background(), connect.NewRequest(&reliantv1.ListConnectionsRequest{}))
+	_, err := f.svc.ListConnections(context.Background(), &reliantv1.ListConnectionsRequest{})
 	requireConnectCode(t, err, connect.CodeUnauthenticated)
-	_, err = f.svc.CreateApiKeyConnection(context.Background(), connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{}))
+	_, err = f.svc.CreateApiKeyConnection(context.Background(), &reliantv1.CreateApiKeyConnectionRequest{})
 	requireConnectCode(t, err, connect.CodeUnauthenticated)
 }
 
@@ -304,12 +306,12 @@ func TestConnectionService_CreateListGetNeverReturnSecret(t *testing.T) {
 	require.Equal(t, reliantv1.ConnectionStatus_CONNECTION_STATUS_ACTIVE, c.Status)
 	require.True(t, c.IsDefault)
 
-	list, err := f.svc.ListConnections(asConnUser("alice"), connect.NewRequest(&reliantv1.ListConnectionsRequest{}))
+	list, err := f.svc.ListConnections(asConnUser("alice"), &reliantv1.ListConnectionsRequest{})
 	require.NoError(t, err)
-	require.Len(t, list.Msg.Connections, 1)
-	get, err := f.svc.GetConnection(asConnUser("alice"), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: c.Id}))
+	require.Len(t, list.Connections, 1)
+	get, err := f.svc.GetConnection(asConnUser("alice"), &reliantv1.GetConnectionRequest{Id: c.Id})
 	require.NoError(t, err)
-	for _, m := range []fmtStringer{c, list.Msg, get.Msg} {
+	for _, m := range []fmtStringer{c, list, get} {
 		require.NotContains(t, m.String(), "sk-secret-value-123")
 	}
 }
@@ -328,22 +330,22 @@ func TestConnectionService_ListConnectionsAddsTheNamedOrgsConnections(t *testing
 	}
 	members := orgMembership{"org-1": {"admin": true, "dana": true}}
 	as := func(user string) context.Context { return authz.WithMembership(asConnUser(user), members) }
-	list := func(ctx context.Context, org *string) (*connect.Response[reliantv1.ListConnectionsResponse], error) {
-		return f.svc.ListConnections(ctx, connect.NewRequest(&reliantv1.ListConnectionsRequest{OrgId: org}))
+	list := func(ctx context.Context, org *string) (*reliantv1.ListConnectionsResponse, error) {
+		return f.svc.ListConnections(ctx, &reliantv1.ListConnectionsRequest{OrgId: org})
 	}
 
 	own, err := list(as("dana"), nil)
 	require.NoError(t, err)
-	require.Len(t, own.Msg.Connections, 1)
-	require.Equal(t, mine.Id, own.Msg.Connections[0].Id)
-	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_USER, own.Msg.Connections[0].OwnerKind)
-	require.Empty(t, own.Msg.Connections[0].OrgId)
+	require.Len(t, own.Connections, 1)
+	require.Equal(t, mine.Id, own.Connections[0].Id)
+	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_USER, own.Connections[0].OwnerKind)
+	require.Empty(t, own.Connections[0].OrgId)
 
 	org := "org-1"
 	both, err := list(as("dana"), &org)
 	require.NoError(t, err)
-	require.Len(t, both.Msg.Connections, 2)
-	got := both.Msg.Connections[1]
+	require.Len(t, both.Connections, 2)
+	got := both.Connections[1]
 	require.Equal(t, "conn-org", got.Id)
 	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_ORG, got.OwnerKind)
 	require.Equal(t, "org-1", got.OrgId)
@@ -351,7 +353,7 @@ func TestConnectionService_ListConnectionsAddsTheNamedOrgsConnections(t *testing
 	_, err = list(as("mallory"), &org)
 	requireConnectCode(t, err, connect.CodePermissionDenied)
 	// The admin who created it reaches it as the org's, never as their own.
-	_, err = f.svc.GetConnection(as("admin"), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: "conn-org"}))
+	_, err = f.svc.GetConnection(as("admin"), &reliantv1.GetConnectionRequest{Id: "conn-org"})
 	requireConnectCode(t, err, connect.CodeNotFound)
 }
 
@@ -366,29 +368,29 @@ func TestConnectionService_OtherUserGetsNotFoundEverywhere(t *testing.T) {
 	c := f.createKey(t, "alice", "http", "work")
 	bob := asConnUser("bob")
 
-	_, err := f.svc.GetConnection(bob, connect.NewRequest(&reliantv1.GetConnectionRequest{Id: c.Id}))
+	_, err := f.svc.GetConnection(bob, &reliantv1.GetConnectionRequest{Id: c.Id})
 	requireConnectCode(t, err, connect.CodeNotFound)
-	_, err = f.svc.RenameConnection(bob, connect.NewRequest(&reliantv1.RenameConnectionRequest{Id: c.Id, Name: "x"}))
+	_, err = f.svc.RenameConnection(bob, &reliantv1.RenameConnectionRequest{Id: c.Id, Name: "x"})
 	requireConnectCode(t, err, connect.CodeNotFound)
-	_, err = f.svc.SetDefaultConnection(bob, connect.NewRequest(&reliantv1.SetDefaultConnectionRequest{Id: c.Id}))
+	_, err = f.svc.SetDefaultConnection(bob, &reliantv1.SetDefaultConnectionRequest{Id: c.Id})
 	requireConnectCode(t, err, connect.CodeNotFound)
-	_, err = f.svc.TestConnection(bob, connect.NewRequest(&reliantv1.TestConnectionRequest{Id: c.Id}))
+	_, err = f.svc.TestConnection(bob, &reliantv1.TestConnectionRequest{Id: c.Id})
 	requireConnectCode(t, err, connect.CodeNotFound)
-	_, err = f.svc.DeleteConnection(bob, connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: c.Id}))
+	_, err = f.svc.DeleteConnection(bob, &reliantv1.DeleteConnectionRequest{Id: c.Id})
 	requireConnectCode(t, err, connect.CodeNotFound)
-	_, err = f.svc.ListConnectionEvents(bob, connect.NewRequest(&reliantv1.ListConnectionEventsRequest{Id: c.Id}))
+	_, err = f.svc.ListConnectionEvents(bob, &reliantv1.ListConnectionEventsRequest{Id: c.Id})
 	requireConnectCode(t, err, connect.CodeNotFound)
 
 	// A truly missing id answers identically.
-	_, err = f.svc.GetConnection(bob, connect.NewRequest(&reliantv1.GetConnectionRequest{Id: "conn_missing"}))
+	_, err = f.svc.GetConnection(bob, &reliantv1.GetConnectionRequest{Id: "conn_missing"})
 	requireConnectCode(t, err, connect.CodeNotFound)
 
-	list, err := f.svc.ListConnections(bob, connect.NewRequest(&reliantv1.ListConnectionsRequest{}))
+	list, err := f.svc.ListConnections(bob, &reliantv1.ListConnectionsRequest{})
 	require.NoError(t, err)
-	require.Empty(t, list.Msg.Connections)
+	require.Empty(t, list.Connections)
 
 	// Still there for alice.
-	_, err = f.svc.GetConnection(asConnUser("alice"), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: c.Id}))
+	_, err = f.svc.GetConnection(asConnUser("alice"), &reliantv1.GetConnectionRequest{Id: c.Id})
 	require.NoError(t, err)
 }
 
@@ -397,45 +399,45 @@ func TestConnectionService_ErrorCodes(t *testing.T) {
 	alice := asConnUser("alice")
 	f.createKey(t, "alice", "http", "work")
 
-	_, err := f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+	_, err := f.svc.CreateApiKeyConnection(alice, &reliantv1.CreateApiKeyConnectionRequest{
 		IntegrationId: "http", Name: "work", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 		Fields: map[string]string{"api_key": "k"},
-	}))
+	})
 	requireConnectCode(t, err, connect.CodeAlreadyExists)
 
-	_, err = f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+	_, err = f.svc.CreateApiKeyConnection(alice, &reliantv1.CreateApiKeyConnectionRequest{
 		IntegrationId: "http", Name: "other", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 		Fields: map[string]string{},
-	}))
+	})
 	requireConnectCode(t, err, connect.CodeInvalidArgument)
 
 	// github declares where its token goes; a per-connection header is refused.
-	_, err = f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+	_, err = f.svc.CreateApiKeyConnection(alice, &reliantv1.CreateApiKeyConnectionRequest{
 		IntegrationId: "github", Name: "n", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 		Fields: map[string]string{"api_key": "k", "header": "x-api-key"},
-	}))
+	})
 	requireConnectCode(t, err, connect.CodeInvalidArgument)
 
 	// github declares no basic method.
-	_, err = f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+	_, err = f.svc.CreateApiKeyConnection(alice, &reliantv1.CreateApiKeyConnectionRequest{
 		IntegrationId: "github", Name: "b", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_BASIC,
 		Fields: map[string]string{"username": "u", "password": "p"},
-	}))
+	})
 	requireConnectCode(t, err, connect.CodeInvalidArgument)
 
 	// A connection is only for a catalog integration.
-	_, err = f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+	_, err = f.svc.CreateApiKeyConnection(alice, &reliantv1.CreateApiKeyConnectionRequest{
 		IntegrationId: "linear", Name: "l", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 		Fields: map[string]string{"api_key": "k"},
-	}))
+	})
 	requireConnectCode(t, err, connect.CodeInvalidArgument)
 
-	_, err = f.svc.StartOAuth(alice, connect.NewRequest(&reliantv1.StartOAuthRequest{IntegrationId: "nope"}))
+	_, err = f.svc.StartOAuth(alice, &reliantv1.StartOAuthRequest{IntegrationId: "nope"})
 	requireConnectCode(t, err, connect.CodeNotFound)
 	// The fixture has no GitHub credentials configured: unavailable, not a crash.
-	_, err = f.svc.StartOAuth(alice, connect.NewRequest(&reliantv1.StartOAuthRequest{IntegrationId: "github"}))
+	_, err = f.svc.StartOAuth(alice, &reliantv1.StartOAuthRequest{IntegrationId: "github"})
 	requireConnectCode(t, err, connect.CodeFailedPrecondition)
-	_, err = f.svc.CompleteOAuth(alice, connect.NewRequest(&reliantv1.CompleteOAuthRequest{State: "never", Code: "c"}))
+	_, err = f.svc.CompleteOAuth(alice, &reliantv1.CompleteOAuthRequest{State: "never", Code: "c"})
 	requireConnectCode(t, err, connect.CodeFailedPrecondition)
 }
 
@@ -443,10 +445,10 @@ func TestConnectionService_ErrorCodes(t *testing.T) {
 // availability; an unconfigured method says why, for an operator.
 func TestConnectionService_ListIntegrationsShowsUnavailableWithReason(t *testing.T) {
 	f := newConnectionFixture(t)
-	resp, err := f.svc.ListIntegrations(asConnUser("alice"), connect.NewRequest(&reliantv1.ListIntegrationsRequest{}))
+	resp, err := f.svc.ListIntegrations(asConnUser("alice"), &reliantv1.ListIntegrationsRequest{})
 	require.NoError(t, err)
 	byID := map[string]*reliantv1.Integration{}
-	for _, in := range resp.Msg.Integrations {
+	for _, in := range resp.Integrations {
 		byID[in.Id] = in
 	}
 	gh := byID["github"]
@@ -476,28 +478,28 @@ func TestConnectionService_DefaultRenameDeleteEvents(t *testing.T) {
 	require.True(t, a.IsDefault)
 	require.False(t, b.IsDefault)
 
-	set, err := f.svc.SetDefaultConnection(alice, connect.NewRequest(&reliantv1.SetDefaultConnectionRequest{Id: b.Id}))
+	set, err := f.svc.SetDefaultConnection(alice, &reliantv1.SetDefaultConnectionRequest{Id: b.Id})
 	require.NoError(t, err)
-	require.True(t, set.Msg.Connection.IsDefault)
-	got, _ := f.svc.GetConnection(alice, connect.NewRequest(&reliantv1.GetConnectionRequest{Id: a.Id}))
-	require.False(t, got.Msg.Connection.IsDefault)
+	require.True(t, set.Connection.IsDefault)
+	got, _ := f.svc.GetConnection(alice, &reliantv1.GetConnectionRequest{Id: a.Id})
+	require.False(t, got.Connection.IsDefault)
 
-	ren, err := f.svc.RenameConnection(alice, connect.NewRequest(&reliantv1.RenameConnectionRequest{Id: b.Id, Name: "renamed"}))
+	ren, err := f.svc.RenameConnection(alice, &reliantv1.RenameConnectionRequest{Id: b.Id, Name: "renamed"})
 	require.NoError(t, err)
-	require.Equal(t, "renamed", ren.Msg.Connection.Name)
+	require.Equal(t, "renamed", ren.Connection.Name)
 
-	evs, err := f.svc.ListConnectionEvents(alice, connect.NewRequest(&reliantv1.ListConnectionEventsRequest{Id: b.Id}))
+	evs, err := f.svc.ListConnectionEvents(alice, &reliantv1.ListConnectionEventsRequest{Id: b.Id})
 	require.NoError(t, err)
 	var kinds []string
-	for _, e := range evs.Msg.Events {
+	for _, e := range evs.Events {
 		kinds = append(kinds, e.Kind)
 	}
 	require.Equal(t, []string{"renamed", "default_changed", "created"}, kinds, "newest first")
-	require.Equal(t, "user:alice", evs.Msg.Events[0].Actor)
+	require.Equal(t, "user:alice", evs.Events[0].Actor)
 
-	_, err = f.svc.DeleteConnection(alice, connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: b.Id}))
+	_, err = f.svc.DeleteConnection(alice, &reliantv1.DeleteConnectionRequest{Id: b.Id})
 	require.NoError(t, err)
-	_, err = f.svc.GetConnection(alice, connect.NewRequest(&reliantv1.GetConnectionRequest{Id: b.Id}))
+	_, err = f.svc.GetConnection(alice, &reliantv1.GetConnectionRequest{Id: b.Id})
 	requireConnectCode(t, err, connect.CodeNotFound)
 }
 
@@ -524,41 +526,40 @@ func TestConnectionService_OrgConnectionAdministrationIsHumanOnly(t *testing.T) 
 		return auth.WithCredential(authz.WithMembership(asConnUser(user), roles), c)
 	}
 	org := "org-1"
-	create := func(ctx context.Context, name string) (*connect.Response[reliantv1.CreateApiKeyConnectionResponse], error) {
-		return f.svc.CreateApiKeyConnection(ctx, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+	create := func(ctx context.Context, name string) (*reliantv1.CreateApiKeyConnectionResponse, error) {
+		return f.svc.CreateApiKeyConnection(ctx, &reliantv1.CreateApiKeyConnectionRequest{
 			IntegrationId: "http", Name: name, Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 			Fields: map[string]string{"api_key": "sk-org-secret-1"}, OwnerOrgId: &org,
-		}))
+		})
 	}
 	for _, c := range []auth.Credential{auth.CredentialAccessToken, auth.CredentialOAuthClient, auth.CredentialUnknown} {
 		_, err := create(as("ada", c), "by-token")
 		requireConnectCode(t, err, connect.CodePermissionDenied)
-		var ce *connect.Error
-		require.ErrorAs(t, err, &ce)
-		require.Equal(t, connections.ReasonHumanOnly, ce.Meta().Get(svcerr.ReasonHeader), "%v", c)
+		reason, _ := svcerr.ReasonOf(err)
+		require.Equal(t, connections.ReasonHumanOnly, reason, "%v", c)
 	}
 	_, err := create(as("dana", auth.CredentialSession), "by-member")
 	requireConnectCode(t, err, connect.CodePermissionDenied)
 
 	made, err := create(as("ada", auth.CredentialSession), "by-person")
 	require.NoError(t, err)
-	got := made.Msg.Connection
+	got := made.Connection
 	require.Equal(t, reliantv1.ConnectionOwnerKind_CONNECTION_OWNER_KIND_ORG, got.OwnerKind)
 	require.Equal(t, "org-1", got.OrgId)
-	require.NotContains(t, made.Msg.String(), "sk-org-secret-1")
+	require.NotContains(t, made.String(), "sk-org-secret-1")
 
 	// A member reads it, with any credential; only a person who is an admin
 	// renames or deletes it.
-	read, err := f.svc.GetConnection(as("dana", auth.CredentialAccessToken), connect.NewRequest(&reliantv1.GetConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	read, err := f.svc.GetConnection(as("dana", auth.CredentialAccessToken), &reliantv1.GetConnectionRequest{Id: got.Id, OwnerOrgId: &org})
 	require.NoError(t, err)
-	require.Equal(t, got.Id, read.Msg.Connection.Id)
-	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialAccessToken), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	require.Equal(t, got.Id, read.Connection.Id)
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialAccessToken), &reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org})
 	requireConnectCode(t, err, connect.CodePermissionDenied)
-	_, err = f.svc.DeleteConnection(as("dana", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	_, err = f.svc.DeleteConnection(as("dana", auth.CredentialSession), &reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org})
 	requireConnectCode(t, err, connect.CodePermissionDenied)
 	// Without owner_org_id the id names the caller's own: the org's is not found.
-	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id}))
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialSession), &reliantv1.DeleteConnectionRequest{Id: got.Id})
 	requireConnectCode(t, err, connect.CodeNotFound)
-	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialSession), connect.NewRequest(&reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org}))
+	_, err = f.svc.DeleteConnection(as("ada", auth.CredentialSession), &reliantv1.DeleteConnectionRequest{Id: got.Id, OwnerOrgId: &org})
 	require.NoError(t, err)
 }

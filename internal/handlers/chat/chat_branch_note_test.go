@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -80,11 +79,11 @@ func setupBranchNoteSource(t *testing.T, repo *db.Repo, ctx context.Context, pro
 func branchNote(t *testing.T, repo *db.Repo, ctx context.Context, sourceChatID, forkPoint string) string {
 	t.Helper()
 	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId: sourceChatID, MessageId: forkPoint,
-	}))
+	})
 	require.NoError(t, err)
-	branchThread := resp.Msg.Chat.Id
+	branchThread := resp.Chat.Id
 
 	count, err := repo.CountMessagesInThread(ctx, branchThread)
 	require.NoError(t, err)

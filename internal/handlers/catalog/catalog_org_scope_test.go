@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -103,10 +103,10 @@ func orgIDPtr(s string) *string { return &s }
 
 func listModelDrivers(t *testing.T, svc *Service, ctx context.Context, orgID *string) map[string]bool {
 	t.Helper()
-	resp, err := svc.ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{OrgId: orgID}))
+	resp, err := svc.ListModels(ctx, &reliantv1.ListModelsRequest{OrgId: orgID})
 	require.NoError(t, err)
 	drivers := map[string]bool{}
-	for _, m := range resp.Msg.GetModels() {
+	for _, m := range resp.GetModels() {
 		drivers[m.GetDriverId()] = true
 	}
 	return drivers
@@ -114,10 +114,10 @@ func listModelDrivers(t *testing.T, svc *Service, ctx context.Context, orgID *st
 
 func availableModelDrivers(t *testing.T, svc *Service, ctx context.Context, orgID *string) map[string]bool {
 	t.Helper()
-	resp, err := svc.ListAvailableModels(ctx, connect.NewRequest(&reliantv1.ListAvailableModelsRequest{OrgId: orgID}))
+	resp, err := svc.ListAvailableModels(ctx, &reliantv1.ListAvailableModelsRequest{OrgId: orgID})
 	require.NoError(t, err)
 	drivers := map[string]bool{}
-	for _, m := range resp.Msg.GetModels() {
+	for _, m := range resp.GetModels() {
 		drivers[m.GetProvider()] = true
 	}
 	return drivers
@@ -156,12 +156,12 @@ func TestPickers_AnOrgWithNoPolicyKeepsThePersonsAccounts(t *testing.T) {
 func TestPickers_RefuseAnOrgTheCallerIsNotAMemberOf(t *testing.T) {
 	svc, _, ctx := newPickerFixture(t)
 
-	_, err := svc.ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{OrgId: orgIDPtr(pickerOtherOrg)}))
+	_, err := svc.ListModels(ctx, &reliantv1.ListModelsRequest{OrgId: orgIDPtr(pickerOtherOrg)})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(svcerr.Wrap(err)))
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(svcerr.Wrap(err)))
 	assert.True(t, strings.Contains(err.Error(), pickerOtherOrg))
 
-	_, err = svc.ListAvailableModels(ctx, connect.NewRequest(&reliantv1.ListAvailableModelsRequest{OrgId: orgIDPtr(pickerOtherOrg)}))
+	_, err = svc.ListAvailableModels(ctx, &reliantv1.ListAvailableModelsRequest{OrgId: orgIDPtr(pickerOtherOrg)})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(svcerr.Wrap(err)))
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(svcerr.Wrap(err)))
 }

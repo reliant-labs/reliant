@@ -3,7 +3,7 @@ package attachment_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -19,28 +19,28 @@ func TestCreateFileReference_Generated(t *testing.T) {
 
 	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{API: &config.ApiServerConfig{MaxUploadSize: 4}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateFileReferenceRequest, pb.CreateFileReferenceResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CreateFileReferenceRequest, pb.CreateFileReferenceResponse]{
 		{
 			Name:    "file_path is required",
-			Req:     connect.NewRequest(&pb.CreateFileReferenceRequest{Content: []byte("abc")}),
+			Req:     &pb.CreateFileReferenceRequest{Content: []byte("abc")},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "content is required",
-			Req:     connect.NewRequest(&pb.CreateFileReferenceRequest{FilePath: "/w/main.go"}),
+			Req:     &pb.CreateFileReferenceRequest{FilePath: "/w/main.go"},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an image goes through UploadAttachment",
-			Req:     connect.NewRequest(&pb.CreateFileReferenceRequest{FilePath: "/w/a.png", Content: []byte("abc")}),
+			Req:     &pb.CreateFileReferenceRequest{FilePath: "/w/a.png", Content: []byte("abc")},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a file over max_upload_size is refused",
-			Req:     connect.NewRequest(&pb.CreateFileReferenceRequest{FilePath: "/w/main.go", Content: []byte("abcde")}),
+			Req:     &pb.CreateFileReferenceRequest{FilePath: "/w/main.go", Content: []byte("abcde")},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeResourceExhausted,
 		},

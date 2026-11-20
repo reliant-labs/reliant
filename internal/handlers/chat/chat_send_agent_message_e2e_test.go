@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -46,14 +45,14 @@ func TestSendAgentMessage_EndToEndDelivery(t *testing.T) {
 		Content:        []byte("fake-png-bytes"),
 	}))
 
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:      fx.chatID,
 		ThreadId:    fx.childThreadID,
 		Message:     "stop and wait for a follow-up before touching the migration",
 		Attachments: []string{attachmentID},
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	// Nothing delivered yet -- it is queued, not synchronous.
 	msgsBefore, err := repo.ListMessages(context.Background(), fx.chatID, db.MessageListOptions{})

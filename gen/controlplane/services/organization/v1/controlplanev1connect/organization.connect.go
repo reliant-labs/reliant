@@ -18,82 +18,188 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/organization/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// OrganizationServiceName is the fully-qualified name of the OrganizationService service.
 	OrganizationServiceName = "controlplane.v1.OrganizationService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// OrganizationServiceListMyOrganizationsProcedure is the fully-qualified name of the
+	// OrganizationServiceListMyOrganizationsProcedure is the procedure name of the
 	// OrganizationService's ListMyOrganizations RPC.
 	OrganizationServiceListMyOrganizationsProcedure = "/controlplane.v1.OrganizationService/ListMyOrganizations"
-	// OrganizationServiceSetDefaultOrganizationProcedure is the fully-qualified name of the
+	// OrganizationServiceSetDefaultOrganizationProcedure is the procedure name of the
 	// OrganizationService's SetDefaultOrganization RPC.
 	OrganizationServiceSetDefaultOrganizationProcedure = "/controlplane.v1.OrganizationService/SetDefaultOrganization"
-	// OrganizationServiceCreateOrganizationProcedure is the fully-qualified name of the
-	// OrganizationService's CreateOrganization RPC.
+	// OrganizationServiceCreateOrganizationProcedure is the procedure name of the OrganizationService's
+	// CreateOrganization RPC.
 	OrganizationServiceCreateOrganizationProcedure = "/controlplane.v1.OrganizationService/CreateOrganization"
-	// OrganizationServiceListMembersProcedure is the fully-qualified name of the OrganizationService's
+	// OrganizationServiceListMembersProcedure is the procedure name of the OrganizationService's
 	// ListMembers RPC.
 	OrganizationServiceListMembersProcedure = "/controlplane.v1.OrganizationService/ListMembers"
-	// OrganizationServiceInviteMemberProcedure is the fully-qualified name of the OrganizationService's
+	// OrganizationServiceInviteMemberProcedure is the procedure name of the OrganizationService's
 	// InviteMember RPC.
 	OrganizationServiceInviteMemberProcedure = "/controlplane.v1.OrganizationService/InviteMember"
-	// OrganizationServiceListInvitationsProcedure is the fully-qualified name of the
-	// OrganizationService's ListInvitations RPC.
+	// OrganizationServiceListInvitationsProcedure is the procedure name of the OrganizationService's
+	// ListInvitations RPC.
 	OrganizationServiceListInvitationsProcedure = "/controlplane.v1.OrganizationService/ListInvitations"
-	// OrganizationServiceRevokeInvitationProcedure is the fully-qualified name of the
-	// OrganizationService's RevokeInvitation RPC.
+	// OrganizationServiceRevokeInvitationProcedure is the procedure name of the OrganizationService's
+	// RevokeInvitation RPC.
 	OrganizationServiceRevokeInvitationProcedure = "/controlplane.v1.OrganizationService/RevokeInvitation"
-	// OrganizationServiceGetInvitationProcedure is the fully-qualified name of the
-	// OrganizationService's GetInvitation RPC.
+	// OrganizationServiceGetInvitationProcedure is the procedure name of the OrganizationService's
+	// GetInvitation RPC.
 	OrganizationServiceGetInvitationProcedure = "/controlplane.v1.OrganizationService/GetInvitation"
-	// OrganizationServiceAcceptInvitationProcedure is the fully-qualified name of the
-	// OrganizationService's AcceptInvitation RPC.
+	// OrganizationServiceAcceptInvitationProcedure is the procedure name of the OrganizationService's
+	// AcceptInvitation RPC.
 	OrganizationServiceAcceptInvitationProcedure = "/controlplane.v1.OrganizationService/AcceptInvitation"
-	// OrganizationServiceRemoveMemberProcedure is the fully-qualified name of the OrganizationService's
+	// OrganizationServiceRemoveMemberProcedure is the procedure name of the OrganizationService's
 	// RemoveMember RPC.
 	OrganizationServiceRemoveMemberProcedure = "/controlplane.v1.OrganizationService/RemoveMember"
-	// OrganizationServiceLeaveOrganizationProcedure is the fully-qualified name of the
-	// OrganizationService's LeaveOrganization RPC.
+	// OrganizationServiceLeaveOrganizationProcedure is the procedure name of the OrganizationService's
+	// LeaveOrganization RPC.
 	OrganizationServiceLeaveOrganizationProcedure = "/controlplane.v1.OrganizationService/LeaveOrganization"
-	// OrganizationServiceUpdateMemberRoleProcedure is the fully-qualified name of the
-	// OrganizationService's UpdateMemberRole RPC.
+	// OrganizationServiceUpdateMemberRoleProcedure is the procedure name of the OrganizationService's
+	// UpdateMemberRole RPC.
 	OrganizationServiceUpdateMemberRoleProcedure = "/controlplane.v1.OrganizationService/UpdateMemberRole"
-	// OrganizationServiceStartGitHubAppInstallProcedure is the fully-qualified name of the
+	// OrganizationServiceStartGitHubAppInstallProcedure is the procedure name of the
 	// OrganizationService's StartGitHubAppInstall RPC.
 	OrganizationServiceStartGitHubAppInstallProcedure = "/controlplane.v1.OrganizationService/StartGitHubAppInstall"
-	// OrganizationServiceLinkGitHubAppInstallationProcedure is the fully-qualified name of the
+	// OrganizationServiceLinkGitHubAppInstallationProcedure is the procedure name of the
 	// OrganizationService's LinkGitHubAppInstallation RPC.
 	OrganizationServiceLinkGitHubAppInstallationProcedure = "/controlplane.v1.OrganizationService/LinkGitHubAppInstallation"
-	// OrganizationServiceListGitHubAppInstallationsProcedure is the fully-qualified name of the
+	// OrganizationServiceListGitHubAppInstallationsProcedure is the procedure name of the
 	// OrganizationService's ListGitHubAppInstallations RPC.
 	OrganizationServiceListGitHubAppInstallationsProcedure = "/controlplane.v1.OrganizationService/ListGitHubAppInstallations"
-	// OrganizationServiceUnlinkGitHubAppInstallationProcedure is the fully-qualified name of the
+	// OrganizationServiceUnlinkGitHubAppInstallationProcedure is the procedure name of the
 	// OrganizationService's UnlinkGitHubAppInstallation RPC.
 	OrganizationServiceUnlinkGitHubAppInstallationProcedure = "/controlplane.v1.OrganizationService/UnlinkGitHubAppInstallation"
+)
+
+var (
+	organizationServiceListMyOrganizationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("ListMyOrganizations"),
+			Procedure:  OrganizationServiceListMyOrganizationsProcedure,
+		}
+	})
+	organizationServiceSetDefaultOrganizationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("SetDefaultOrganization"),
+			Procedure:  OrganizationServiceSetDefaultOrganizationProcedure,
+		}
+	})
+	organizationServiceCreateOrganizationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("CreateOrganization"),
+			Procedure:  OrganizationServiceCreateOrganizationProcedure,
+		}
+	})
+	organizationServiceListMembersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("ListMembers"),
+			Procedure:  OrganizationServiceListMembersProcedure,
+		}
+	})
+	organizationServiceInviteMemberSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("InviteMember"),
+			Procedure:  OrganizationServiceInviteMemberProcedure,
+		}
+	})
+	organizationServiceListInvitationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("ListInvitations"),
+			Procedure:  OrganizationServiceListInvitationsProcedure,
+		}
+	})
+	organizationServiceRevokeInvitationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("RevokeInvitation"),
+			Procedure:  OrganizationServiceRevokeInvitationProcedure,
+		}
+	})
+	organizationServiceGetInvitationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("GetInvitation"),
+			Procedure:  OrganizationServiceGetInvitationProcedure,
+		}
+	})
+	organizationServiceAcceptInvitationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("AcceptInvitation"),
+			Procedure:  OrganizationServiceAcceptInvitationProcedure,
+		}
+	})
+	organizationServiceRemoveMemberSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("RemoveMember"),
+			Procedure:  OrganizationServiceRemoveMemberProcedure,
+		}
+	})
+	organizationServiceLeaveOrganizationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("LeaveOrganization"),
+			Procedure:  OrganizationServiceLeaveOrganizationProcedure,
+		}
+	})
+	organizationServiceUpdateMemberRoleSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("UpdateMemberRole"),
+			Procedure:  OrganizationServiceUpdateMemberRoleProcedure,
+		}
+	})
+	organizationServiceStartGitHubAppInstallSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("StartGitHubAppInstall"),
+			Procedure:  OrganizationServiceStartGitHubAppInstallProcedure,
+		}
+	})
+	organizationServiceLinkGitHubAppInstallationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("LinkGitHubAppInstallation"),
+			Procedure:  OrganizationServiceLinkGitHubAppInstallationProcedure,
+		}
+	})
+	organizationServiceListGitHubAppInstallationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("ListGitHubAppInstallations"),
+			Procedure:  OrganizationServiceListGitHubAppInstallationsProcedure,
+		}
+	})
+	organizationServiceUnlinkGitHubAppInstallationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods().ByName("UnlinkGitHubAppInstallation"),
+			Procedure:  OrganizationServiceUnlinkGitHubAppInstallationProcedure,
+		}
+	})
 )
 
 // OrganizationServiceClient is a client for the controlplane.v1.OrganizationService service.
@@ -101,7 +207,7 @@ type OrganizationServiceClient interface {
 	// ListMyOrganizations lists every org the caller belongs to, with their role
 	// in each, oldest org first, and which one is their default. An org switcher
 	// and `forge login`'s org choice are built on it.
-	ListMyOrganizations(context.Context, *connect.Request[v1.ListMyOrganizationsRequest]) (*connect.Response[v1.ListMyOrganizationsResponse], error)
+	ListMyOrganizations(context.Context, *v1.ListMyOrganizationsRequest) (*v1.ListMyOrganizationsResponse, error)
 	// SetDefaultOrganization makes org_id the org the caller acts in when a
 	// request names none. It is a per-person preference stored server-side, so
 	// it follows them to every device and client. It is not a session: a client
@@ -110,7 +216,7 @@ type OrganizationServiceClient interface {
 	//
 	// PermissionDenied when the caller is not a member of org_id. That includes
 	// an org that does not exist, so the answer does not reveal which orgs exist.
-	SetDefaultOrganization(context.Context, *connect.Request[v1.SetDefaultOrganizationRequest]) (*connect.Response[v1.SetDefaultOrganizationResponse], error)
+	SetDefaultOrganization(context.Context, *v1.SetDefaultOrganizationRequest) (*v1.SetDefaultOrganizationResponse, error)
 	// CreateOrganization creates an org owned by the caller, with them as its
 	// owner member. It becomes their default only when they have none. Anyone
 	// with a verified email may create one (reason "email_unverified"
@@ -119,35 +225,35 @@ type OrganizationServiceClient interface {
 	//
 	// forge:custom — not the generic CRUD of the shared Organization message:
 	// it creates the owner membership and grant preset in the same transaction.
-	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
+	CreateOrganization(context.Context, *v1.CreateOrganizationRequest) (*v1.CreateOrganizationResponse, error)
 	// ListMembers lists the org's members (roster fields only) and its seat
 	// usage. Any member may call it. Which permissions each member holds stays
 	// on AccessTokenService.ListOrgMemberGrants.
-	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
+	ListMembers(context.Context, *v1.ListMembersRequest) (*v1.ListMembersResponse, error)
 	// InviteMember invites an email address into the org with a role. Admin or
 	// owner; only an owner may invite an owner. Idempotent per (org, email): a
 	// second invite of an address with a pending invitation rotates its token,
 	// extends its expiry, re-sends it and answers resent=true (that is the
 	// "resend" action). accept_url is returned to the inviter as a copy-link
 	// fallback; it is useless to anyone whose verified email does not match.
-	InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error)
+	InviteMember(context.Context, *v1.InviteMemberRequest) (*v1.InviteMemberResponse, error)
 	// ListInvitations lists the org's invitations, pending ones by default.
 	// Admin or owner: they are other people's email addresses.
-	ListInvitations(context.Context, *connect.Request[v1.ListInvitationsRequest]) (*connect.Response[v1.ListInvitationsResponse], error)
+	ListInvitations(context.Context, *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error)
 	// RevokeInvitation revokes a pending invitation. Admin or owner; only an
 	// owner may revoke an owner invitation.
-	RevokeInvitation(context.Context, *connect.Request[v1.RevokeInvitationRequest]) (*connect.Response[v1.RevokeInvitationResponse], error)
+	RevokeInvitation(context.Context, *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error)
 	// GetInvitation previews an invitation from its token, for the accept page.
 	// It discloses little: the org's name, the role, the inviter, a masked
 	// address and whether it matches the caller's verified email. An unknown
 	// token is NotFound.
-	GetInvitation(context.Context, *connect.Request[v1.GetInvitationRequest]) (*connect.Response[v1.GetInvitationResponse], error)
+	GetInvitation(context.Context, *v1.GetInvitationRequest) (*v1.GetInvitationResponse, error)
 	// AcceptInvitation joins the caller to the invitation's org with its role.
 	// The caller's VERIFIED email must equal the invitation's
 	// (PermissionDenied, "invite_email_mismatch", and the invitation stays
 	// pending). The seat limit is enforced here, under the org's membership
 	// lock (ResourceExhausted, "seat_limit_reached").
-	AcceptInvitation(context.Context, *connect.Request[v1.AcceptInvitationRequest]) (*connect.Response[v1.AcceptInvitationResponse], error)
+	AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error)
 	// RemoveMember removes another member. Admin or owner; only an owner may
 	// remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
 	// use LeaveOrganization). The last owner cannot be removed ("last_owner").
@@ -155,24 +261,24 @@ type OrganizationServiceClient interface {
 	// daemon-bound tokens of machines they operate here included: the machine
 	// is the org's and stops) and the org-automation tokens they minted, and
 	// retires their LLM gateway keys in this org.
-	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
+	RemoveMember(context.Context, *v1.RemoveMemberRequest) (*v1.RemoveMemberResponse, error)
 	// LeaveOrganization removes the caller from the org, with the same cleanup
 	// as RemoveMember. The last owner cannot leave ("last_owner"). Returns the
 	// caller's default org afterwards ("" when they belong to none).
-	LeaveOrganization(context.Context, *connect.Request[v1.LeaveOrganizationRequest]) (*connect.Response[v1.LeaveOrganizationResponse], error)
+	LeaveOrganization(context.Context, *v1.LeaveOrganizationRequest) (*v1.LeaveOrganizationResponse, error)
 	// UpdateMemberRole changes a member's role. Admin or owner; only an owner
 	// may promote to or demote from owner. The current role is a no-op that
 	// leaves grants alone; a real change resets the member's grants to the new
 	// role's preset, and scopes says what they hold now. Demoting the last
 	// owner is refused ("last_owner").
-	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
+	UpdateMemberRole(context.Context, *v1.UpdateMemberRoleRequest) (*v1.UpdateMemberRoleResponse, error)
 	// StartGitHubAppInstall returns the GitHub URL that installs the App (or
 	// lets the caller pick an existing installation) carrying a signed state
 	// that names this org and the caller. GitHub sends the browser back to the
 	// App's setup URL with installation_id and that state, which the client
 	// passes to LinkGitHubAppInstallation. FAILED_PRECONDITION
 	// "github_app_not_configured" when the deployment has no App.
-	StartGitHubAppInstall(context.Context, *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error)
+	StartGitHubAppInstall(context.Context, *v1.StartGitHubAppInstallRequest) (*v1.StartGitHubAppInstallResponse, error)
 	// LinkGitHubAppInstallation links installation_id to the org the signed
 	// state names. The caller must be the person the state was issued to, and
 	// STILL an admin or owner of that org (read now, not when the link was
@@ -183,226 +289,21 @@ type OrganizationServiceClient interface {
 	// "github_installation_not_visible" (the caller's GitHub account cannot see
 	// it), "github_installation_linked_elsewhere" (another org has it), or the
 	// git credential reasons when the caller has not connected GitHub.
-	LinkGitHubAppInstallation(context.Context, *connect.Request[v1.LinkGitHubAppInstallationRequest]) (*connect.Response[v1.LinkGitHubAppInstallationResponse], error)
+	LinkGitHubAppInstallation(context.Context, *v1.LinkGitHubAppInstallationRequest) (*v1.LinkGitHubAppInstallationResponse, error)
 	// ListGitHubAppInstallations lists the installations linked to the org. Any
 	// member may call it.
-	ListGitHubAppInstallations(context.Context, *connect.Request[v1.ListGitHubAppInstallationsRequest]) (*connect.Response[v1.ListGitHubAppInstallationsResponse], error)
+	ListGitHubAppInstallations(context.Context, *v1.ListGitHubAppInstallationsRequest) (*v1.ListGitHubAppInstallationsResponse, error)
 	// UnlinkGitHubAppInstallation removes the link: the org's runs can no
 	// longer mint bot tokens through it. The installation itself stays on
 	// GitHub. Admin or owner. Unlinking one that is not linked to the org is
 	// NOT_FOUND.
-	UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error)
+	UnlinkGitHubAppInstallation(context.Context, *v1.UnlinkGitHubAppInstallationRequest) (*v1.UnlinkGitHubAppInstallationResponse, error)
 }
 
 // NewOrganizationServiceClient constructs a client for the controlplane.v1.OrganizationService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrganizationServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	organizationServiceMethods := v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods()
-	return &organizationServiceClient{
-		listMyOrganizations: connect.NewClient[v1.ListMyOrganizationsRequest, v1.ListMyOrganizationsResponse](
-			httpClient,
-			baseURL+OrganizationServiceListMyOrganizationsProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("ListMyOrganizations")),
-			connect.WithClientOptions(opts...),
-		),
-		setDefaultOrganization: connect.NewClient[v1.SetDefaultOrganizationRequest, v1.SetDefaultOrganizationResponse](
-			httpClient,
-			baseURL+OrganizationServiceSetDefaultOrganizationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("SetDefaultOrganization")),
-			connect.WithClientOptions(opts...),
-		),
-		createOrganization: connect.NewClient[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse](
-			httpClient,
-			baseURL+OrganizationServiceCreateOrganizationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("CreateOrganization")),
-			connect.WithClientOptions(opts...),
-		),
-		listMembers: connect.NewClient[v1.ListMembersRequest, v1.ListMembersResponse](
-			httpClient,
-			baseURL+OrganizationServiceListMembersProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("ListMembers")),
-			connect.WithClientOptions(opts...),
-		),
-		inviteMember: connect.NewClient[v1.InviteMemberRequest, v1.InviteMemberResponse](
-			httpClient,
-			baseURL+OrganizationServiceInviteMemberProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("InviteMember")),
-			connect.WithClientOptions(opts...),
-		),
-		listInvitations: connect.NewClient[v1.ListInvitationsRequest, v1.ListInvitationsResponse](
-			httpClient,
-			baseURL+OrganizationServiceListInvitationsProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("ListInvitations")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeInvitation: connect.NewClient[v1.RevokeInvitationRequest, v1.RevokeInvitationResponse](
-			httpClient,
-			baseURL+OrganizationServiceRevokeInvitationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("RevokeInvitation")),
-			connect.WithClientOptions(opts...),
-		),
-		getInvitation: connect.NewClient[v1.GetInvitationRequest, v1.GetInvitationResponse](
-			httpClient,
-			baseURL+OrganizationServiceGetInvitationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("GetInvitation")),
-			connect.WithClientOptions(opts...),
-		),
-		acceptInvitation: connect.NewClient[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse](
-			httpClient,
-			baseURL+OrganizationServiceAcceptInvitationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("AcceptInvitation")),
-			connect.WithClientOptions(opts...),
-		),
-		removeMember: connect.NewClient[v1.RemoveMemberRequest, v1.RemoveMemberResponse](
-			httpClient,
-			baseURL+OrganizationServiceRemoveMemberProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("RemoveMember")),
-			connect.WithClientOptions(opts...),
-		),
-		leaveOrganization: connect.NewClient[v1.LeaveOrganizationRequest, v1.LeaveOrganizationResponse](
-			httpClient,
-			baseURL+OrganizationServiceLeaveOrganizationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("LeaveOrganization")),
-			connect.WithClientOptions(opts...),
-		),
-		updateMemberRole: connect.NewClient[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse](
-			httpClient,
-			baseURL+OrganizationServiceUpdateMemberRoleProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("UpdateMemberRole")),
-			connect.WithClientOptions(opts...),
-		),
-		startGitHubAppInstall: connect.NewClient[v1.StartGitHubAppInstallRequest, v1.StartGitHubAppInstallResponse](
-			httpClient,
-			baseURL+OrganizationServiceStartGitHubAppInstallProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("StartGitHubAppInstall")),
-			connect.WithClientOptions(opts...),
-		),
-		linkGitHubAppInstallation: connect.NewClient[v1.LinkGitHubAppInstallationRequest, v1.LinkGitHubAppInstallationResponse](
-			httpClient,
-			baseURL+OrganizationServiceLinkGitHubAppInstallationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("LinkGitHubAppInstallation")),
-			connect.WithClientOptions(opts...),
-		),
-		listGitHubAppInstallations: connect.NewClient[v1.ListGitHubAppInstallationsRequest, v1.ListGitHubAppInstallationsResponse](
-			httpClient,
-			baseURL+OrganizationServiceListGitHubAppInstallationsProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("ListGitHubAppInstallations")),
-			connect.WithClientOptions(opts...),
-		),
-		unlinkGitHubAppInstallation: connect.NewClient[v1.UnlinkGitHubAppInstallationRequest, v1.UnlinkGitHubAppInstallationResponse](
-			httpClient,
-			baseURL+OrganizationServiceUnlinkGitHubAppInstallationProcedure,
-			connect.WithSchema(organizationServiceMethods.ByName("UnlinkGitHubAppInstallation")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// organizationServiceClient implements OrganizationServiceClient.
-type organizationServiceClient struct {
-	listMyOrganizations         *connect.Client[v1.ListMyOrganizationsRequest, v1.ListMyOrganizationsResponse]
-	setDefaultOrganization      *connect.Client[v1.SetDefaultOrganizationRequest, v1.SetDefaultOrganizationResponse]
-	createOrganization          *connect.Client[v1.CreateOrganizationRequest, v1.CreateOrganizationResponse]
-	listMembers                 *connect.Client[v1.ListMembersRequest, v1.ListMembersResponse]
-	inviteMember                *connect.Client[v1.InviteMemberRequest, v1.InviteMemberResponse]
-	listInvitations             *connect.Client[v1.ListInvitationsRequest, v1.ListInvitationsResponse]
-	revokeInvitation            *connect.Client[v1.RevokeInvitationRequest, v1.RevokeInvitationResponse]
-	getInvitation               *connect.Client[v1.GetInvitationRequest, v1.GetInvitationResponse]
-	acceptInvitation            *connect.Client[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse]
-	removeMember                *connect.Client[v1.RemoveMemberRequest, v1.RemoveMemberResponse]
-	leaveOrganization           *connect.Client[v1.LeaveOrganizationRequest, v1.LeaveOrganizationResponse]
-	updateMemberRole            *connect.Client[v1.UpdateMemberRoleRequest, v1.UpdateMemberRoleResponse]
-	startGitHubAppInstall       *connect.Client[v1.StartGitHubAppInstallRequest, v1.StartGitHubAppInstallResponse]
-	linkGitHubAppInstallation   *connect.Client[v1.LinkGitHubAppInstallationRequest, v1.LinkGitHubAppInstallationResponse]
-	listGitHubAppInstallations  *connect.Client[v1.ListGitHubAppInstallationsRequest, v1.ListGitHubAppInstallationsResponse]
-	unlinkGitHubAppInstallation *connect.Client[v1.UnlinkGitHubAppInstallationRequest, v1.UnlinkGitHubAppInstallationResponse]
-}
-
-// ListMyOrganizations calls controlplane.v1.OrganizationService.ListMyOrganizations.
-func (c *organizationServiceClient) ListMyOrganizations(ctx context.Context, req *connect.Request[v1.ListMyOrganizationsRequest]) (*connect.Response[v1.ListMyOrganizationsResponse], error) {
-	return c.listMyOrganizations.CallUnary(ctx, req)
-}
-
-// SetDefaultOrganization calls controlplane.v1.OrganizationService.SetDefaultOrganization.
-func (c *organizationServiceClient) SetDefaultOrganization(ctx context.Context, req *connect.Request[v1.SetDefaultOrganizationRequest]) (*connect.Response[v1.SetDefaultOrganizationResponse], error) {
-	return c.setDefaultOrganization.CallUnary(ctx, req)
-}
-
-// CreateOrganization calls controlplane.v1.OrganizationService.CreateOrganization.
-func (c *organizationServiceClient) CreateOrganization(ctx context.Context, req *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error) {
-	return c.createOrganization.CallUnary(ctx, req)
-}
-
-// ListMembers calls controlplane.v1.OrganizationService.ListMembers.
-func (c *organizationServiceClient) ListMembers(ctx context.Context, req *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error) {
-	return c.listMembers.CallUnary(ctx, req)
-}
-
-// InviteMember calls controlplane.v1.OrganizationService.InviteMember.
-func (c *organizationServiceClient) InviteMember(ctx context.Context, req *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error) {
-	return c.inviteMember.CallUnary(ctx, req)
-}
-
-// ListInvitations calls controlplane.v1.OrganizationService.ListInvitations.
-func (c *organizationServiceClient) ListInvitations(ctx context.Context, req *connect.Request[v1.ListInvitationsRequest]) (*connect.Response[v1.ListInvitationsResponse], error) {
-	return c.listInvitations.CallUnary(ctx, req)
-}
-
-// RevokeInvitation calls controlplane.v1.OrganizationService.RevokeInvitation.
-func (c *organizationServiceClient) RevokeInvitation(ctx context.Context, req *connect.Request[v1.RevokeInvitationRequest]) (*connect.Response[v1.RevokeInvitationResponse], error) {
-	return c.revokeInvitation.CallUnary(ctx, req)
-}
-
-// GetInvitation calls controlplane.v1.OrganizationService.GetInvitation.
-func (c *organizationServiceClient) GetInvitation(ctx context.Context, req *connect.Request[v1.GetInvitationRequest]) (*connect.Response[v1.GetInvitationResponse], error) {
-	return c.getInvitation.CallUnary(ctx, req)
-}
-
-// AcceptInvitation calls controlplane.v1.OrganizationService.AcceptInvitation.
-func (c *organizationServiceClient) AcceptInvitation(ctx context.Context, req *connect.Request[v1.AcceptInvitationRequest]) (*connect.Response[v1.AcceptInvitationResponse], error) {
-	return c.acceptInvitation.CallUnary(ctx, req)
-}
-
-// RemoveMember calls controlplane.v1.OrganizationService.RemoveMember.
-func (c *organizationServiceClient) RemoveMember(ctx context.Context, req *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
-	return c.removeMember.CallUnary(ctx, req)
-}
-
-// LeaveOrganization calls controlplane.v1.OrganizationService.LeaveOrganization.
-func (c *organizationServiceClient) LeaveOrganization(ctx context.Context, req *connect.Request[v1.LeaveOrganizationRequest]) (*connect.Response[v1.LeaveOrganizationResponse], error) {
-	return c.leaveOrganization.CallUnary(ctx, req)
-}
-
-// UpdateMemberRole calls controlplane.v1.OrganizationService.UpdateMemberRole.
-func (c *organizationServiceClient) UpdateMemberRole(ctx context.Context, req *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
-	return c.updateMemberRole.CallUnary(ctx, req)
-}
-
-// StartGitHubAppInstall calls controlplane.v1.OrganizationService.StartGitHubAppInstall.
-func (c *organizationServiceClient) StartGitHubAppInstall(ctx context.Context, req *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error) {
-	return c.startGitHubAppInstall.CallUnary(ctx, req)
-}
-
-// LinkGitHubAppInstallation calls controlplane.v1.OrganizationService.LinkGitHubAppInstallation.
-func (c *organizationServiceClient) LinkGitHubAppInstallation(ctx context.Context, req *connect.Request[v1.LinkGitHubAppInstallationRequest]) (*connect.Response[v1.LinkGitHubAppInstallationResponse], error) {
-	return c.linkGitHubAppInstallation.CallUnary(ctx, req)
-}
-
-// ListGitHubAppInstallations calls controlplane.v1.OrganizationService.ListGitHubAppInstallations.
-func (c *organizationServiceClient) ListGitHubAppInstallations(ctx context.Context, req *connect.Request[v1.ListGitHubAppInstallationsRequest]) (*connect.Response[v1.ListGitHubAppInstallationsResponse], error) {
-	return c.listGitHubAppInstallations.CallUnary(ctx, req)
-}
-
-// UnlinkGitHubAppInstallation calls
-// controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation.
-func (c *organizationServiceClient) UnlinkGitHubAppInstallation(ctx context.Context, req *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error) {
-	return c.unlinkGitHubAppInstallation.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewOrganizationServiceClient(client *connect.Client) OrganizationServiceClient {
+	return &organizationServiceClient{client: client}
 }
 
 // OrganizationServiceHandler is an implementation of the controlplane.v1.OrganizationService
@@ -411,7 +312,7 @@ type OrganizationServiceHandler interface {
 	// ListMyOrganizations lists every org the caller belongs to, with their role
 	// in each, oldest org first, and which one is their default. An org switcher
 	// and `forge login`'s org choice are built on it.
-	ListMyOrganizations(context.Context, *connect.Request[v1.ListMyOrganizationsRequest]) (*connect.Response[v1.ListMyOrganizationsResponse], error)
+	ListMyOrganizations(context.Context, *v1.ListMyOrganizationsRequest) (*v1.ListMyOrganizationsResponse, error)
 	// SetDefaultOrganization makes org_id the org the caller acts in when a
 	// request names none. It is a per-person preference stored server-side, so
 	// it follows them to every device and client. It is not a session: a client
@@ -420,7 +321,7 @@ type OrganizationServiceHandler interface {
 	//
 	// PermissionDenied when the caller is not a member of org_id. That includes
 	// an org that does not exist, so the answer does not reveal which orgs exist.
-	SetDefaultOrganization(context.Context, *connect.Request[v1.SetDefaultOrganizationRequest]) (*connect.Response[v1.SetDefaultOrganizationResponse], error)
+	SetDefaultOrganization(context.Context, *v1.SetDefaultOrganizationRequest) (*v1.SetDefaultOrganizationResponse, error)
 	// CreateOrganization creates an org owned by the caller, with them as its
 	// owner member. It becomes their default only when they have none. Anyone
 	// with a verified email may create one (reason "email_unverified"
@@ -429,35 +330,35 @@ type OrganizationServiceHandler interface {
 	//
 	// forge:custom — not the generic CRUD of the shared Organization message:
 	// it creates the owner membership and grant preset in the same transaction.
-	CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error)
+	CreateOrganization(context.Context, *v1.CreateOrganizationRequest) (*v1.CreateOrganizationResponse, error)
 	// ListMembers lists the org's members (roster fields only) and its seat
 	// usage. Any member may call it. Which permissions each member holds stays
 	// on AccessTokenService.ListOrgMemberGrants.
-	ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error)
+	ListMembers(context.Context, *v1.ListMembersRequest) (*v1.ListMembersResponse, error)
 	// InviteMember invites an email address into the org with a role. Admin or
 	// owner; only an owner may invite an owner. Idempotent per (org, email): a
 	// second invite of an address with a pending invitation rotates its token,
 	// extends its expiry, re-sends it and answers resent=true (that is the
 	// "resend" action). accept_url is returned to the inviter as a copy-link
 	// fallback; it is useless to anyone whose verified email does not match.
-	InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error)
+	InviteMember(context.Context, *v1.InviteMemberRequest) (*v1.InviteMemberResponse, error)
 	// ListInvitations lists the org's invitations, pending ones by default.
 	// Admin or owner: they are other people's email addresses.
-	ListInvitations(context.Context, *connect.Request[v1.ListInvitationsRequest]) (*connect.Response[v1.ListInvitationsResponse], error)
+	ListInvitations(context.Context, *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error)
 	// RevokeInvitation revokes a pending invitation. Admin or owner; only an
 	// owner may revoke an owner invitation.
-	RevokeInvitation(context.Context, *connect.Request[v1.RevokeInvitationRequest]) (*connect.Response[v1.RevokeInvitationResponse], error)
+	RevokeInvitation(context.Context, *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error)
 	// GetInvitation previews an invitation from its token, for the accept page.
 	// It discloses little: the org's name, the role, the inviter, a masked
 	// address and whether it matches the caller's verified email. An unknown
 	// token is NotFound.
-	GetInvitation(context.Context, *connect.Request[v1.GetInvitationRequest]) (*connect.Response[v1.GetInvitationResponse], error)
+	GetInvitation(context.Context, *v1.GetInvitationRequest) (*v1.GetInvitationResponse, error)
 	// AcceptInvitation joins the caller to the invitation's org with its role.
 	// The caller's VERIFIED email must equal the invitation's
 	// (PermissionDenied, "invite_email_mismatch", and the invitation stays
 	// pending). The seat limit is enforced here, under the org's membership
 	// lock (ResourceExhausted, "seat_limit_reached").
-	AcceptInvitation(context.Context, *connect.Request[v1.AcceptInvitationRequest]) (*connect.Response[v1.AcceptInvitationResponse], error)
+	AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error)
 	// RemoveMember removes another member. Admin or owner; only an owner may
 	// remove an owner; not yourself (FailedPrecondition, "cannot_remove_self":
 	// use LeaveOrganization). The last owner cannot be removed ("last_owner").
@@ -465,24 +366,24 @@ type OrganizationServiceHandler interface {
 	// daemon-bound tokens of machines they operate here included: the machine
 	// is the org's and stops) and the org-automation tokens they minted, and
 	// retires their LLM gateway keys in this org.
-	RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error)
+	RemoveMember(context.Context, *v1.RemoveMemberRequest) (*v1.RemoveMemberResponse, error)
 	// LeaveOrganization removes the caller from the org, with the same cleanup
 	// as RemoveMember. The last owner cannot leave ("last_owner"). Returns the
 	// caller's default org afterwards ("" when they belong to none).
-	LeaveOrganization(context.Context, *connect.Request[v1.LeaveOrganizationRequest]) (*connect.Response[v1.LeaveOrganizationResponse], error)
+	LeaveOrganization(context.Context, *v1.LeaveOrganizationRequest) (*v1.LeaveOrganizationResponse, error)
 	// UpdateMemberRole changes a member's role. Admin or owner; only an owner
 	// may promote to or demote from owner. The current role is a no-op that
 	// leaves grants alone; a real change resets the member's grants to the new
 	// role's preset, and scopes says what they hold now. Demoting the last
 	// owner is refused ("last_owner").
-	UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error)
+	UpdateMemberRole(context.Context, *v1.UpdateMemberRoleRequest) (*v1.UpdateMemberRoleResponse, error)
 	// StartGitHubAppInstall returns the GitHub URL that installs the App (or
 	// lets the caller pick an existing installation) carrying a signed state
 	// that names this org and the caller. GitHub sends the browser back to the
 	// App's setup URL with installation_id and that state, which the client
 	// passes to LinkGitHubAppInstallation. FAILED_PRECONDITION
 	// "github_app_not_configured" when the deployment has no App.
-	StartGitHubAppInstall(context.Context, *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error)
+	StartGitHubAppInstall(context.Context, *v1.StartGitHubAppInstallRequest) (*v1.StartGitHubAppInstallResponse, error)
 	// LinkGitHubAppInstallation links installation_id to the org the signed
 	// state names. The caller must be the person the state was issued to, and
 	// STILL an admin or owner of that org (read now, not when the link was
@@ -493,223 +394,430 @@ type OrganizationServiceHandler interface {
 	// "github_installation_not_visible" (the caller's GitHub account cannot see
 	// it), "github_installation_linked_elsewhere" (another org has it), or the
 	// git credential reasons when the caller has not connected GitHub.
-	LinkGitHubAppInstallation(context.Context, *connect.Request[v1.LinkGitHubAppInstallationRequest]) (*connect.Response[v1.LinkGitHubAppInstallationResponse], error)
+	LinkGitHubAppInstallation(context.Context, *v1.LinkGitHubAppInstallationRequest) (*v1.LinkGitHubAppInstallationResponse, error)
 	// ListGitHubAppInstallations lists the installations linked to the org. Any
 	// member may call it.
-	ListGitHubAppInstallations(context.Context, *connect.Request[v1.ListGitHubAppInstallationsRequest]) (*connect.Response[v1.ListGitHubAppInstallationsResponse], error)
+	ListGitHubAppInstallations(context.Context, *v1.ListGitHubAppInstallationsRequest) (*v1.ListGitHubAppInstallationsResponse, error)
 	// UnlinkGitHubAppInstallation removes the link: the org's runs can no
 	// longer mint bot tokens through it. The installation itself stays on
 	// GitHub. Admin or owner. Unlinking one that is not linked to the org is
 	// NOT_FOUND.
-	UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error)
+	UnlinkGitHubAppInstallation(context.Context, *v1.UnlinkGitHubAppInstallationRequest) (*v1.UnlinkGitHubAppInstallationResponse, error)
 }
 
-// NewOrganizationServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	organizationServiceMethods := v1.File_services_organization_v1_organization_proto.Services().ByName("OrganizationService").Methods()
-	organizationServiceListMyOrganizationsHandler := connect.NewUnaryHandler(
-		OrganizationServiceListMyOrganizationsProcedure,
-		svc.ListMyOrganizations,
-		connect.WithSchema(organizationServiceMethods.ByName("ListMyOrganizations")),
-		connect.WithHandlerOptions(opts...),
+// RegisterOrganizationServiceHandler registers svc as the controlplane.v1.OrganizationService
+// implementation on server.
+func RegisterOrganizationServiceHandler(server *connect.Server, svc OrganizationServiceHandler) {
+	adapter := organizationServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: organizationServiceListMyOrganizationsSpec(), Handler: adapter.listMyOrganizations},
+		connect.Method{Spec: organizationServiceSetDefaultOrganizationSpec(), Handler: adapter.setDefaultOrganization},
+		connect.Method{Spec: organizationServiceCreateOrganizationSpec(), Handler: adapter.createOrganization},
+		connect.Method{Spec: organizationServiceListMembersSpec(), Handler: adapter.listMembers},
+		connect.Method{Spec: organizationServiceInviteMemberSpec(), Handler: adapter.inviteMember},
+		connect.Method{Spec: organizationServiceListInvitationsSpec(), Handler: adapter.listInvitations},
+		connect.Method{Spec: organizationServiceRevokeInvitationSpec(), Handler: adapter.revokeInvitation},
+		connect.Method{Spec: organizationServiceGetInvitationSpec(), Handler: adapter.getInvitation},
+		connect.Method{Spec: organizationServiceAcceptInvitationSpec(), Handler: adapter.acceptInvitation},
+		connect.Method{Spec: organizationServiceRemoveMemberSpec(), Handler: adapter.removeMember},
+		connect.Method{Spec: organizationServiceLeaveOrganizationSpec(), Handler: adapter.leaveOrganization},
+		connect.Method{Spec: organizationServiceUpdateMemberRoleSpec(), Handler: adapter.updateMemberRole},
+		connect.Method{Spec: organizationServiceStartGitHubAppInstallSpec(), Handler: adapter.startGitHubAppInstall},
+		connect.Method{Spec: organizationServiceLinkGitHubAppInstallationSpec(), Handler: adapter.linkGitHubAppInstallation},
+		connect.Method{Spec: organizationServiceListGitHubAppInstallationsSpec(), Handler: adapter.listGitHubAppInstallations},
+		connect.Method{Spec: organizationServiceUnlinkGitHubAppInstallationSpec(), Handler: adapter.unlinkGitHubAppInstallation},
 	)
-	organizationServiceSetDefaultOrganizationHandler := connect.NewUnaryHandler(
-		OrganizationServiceSetDefaultOrganizationProcedure,
-		svc.SetDefaultOrganization,
-		connect.WithSchema(organizationServiceMethods.ByName("SetDefaultOrganization")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceCreateOrganizationHandler := connect.NewUnaryHandler(
-		OrganizationServiceCreateOrganizationProcedure,
-		svc.CreateOrganization,
-		connect.WithSchema(organizationServiceMethods.ByName("CreateOrganization")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceListMembersHandler := connect.NewUnaryHandler(
-		OrganizationServiceListMembersProcedure,
-		svc.ListMembers,
-		connect.WithSchema(organizationServiceMethods.ByName("ListMembers")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceInviteMemberHandler := connect.NewUnaryHandler(
-		OrganizationServiceInviteMemberProcedure,
-		svc.InviteMember,
-		connect.WithSchema(organizationServiceMethods.ByName("InviteMember")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceListInvitationsHandler := connect.NewUnaryHandler(
-		OrganizationServiceListInvitationsProcedure,
-		svc.ListInvitations,
-		connect.WithSchema(organizationServiceMethods.ByName("ListInvitations")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceRevokeInvitationHandler := connect.NewUnaryHandler(
-		OrganizationServiceRevokeInvitationProcedure,
-		svc.RevokeInvitation,
-		connect.WithSchema(organizationServiceMethods.ByName("RevokeInvitation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceGetInvitationHandler := connect.NewUnaryHandler(
-		OrganizationServiceGetInvitationProcedure,
-		svc.GetInvitation,
-		connect.WithSchema(organizationServiceMethods.ByName("GetInvitation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceAcceptInvitationHandler := connect.NewUnaryHandler(
-		OrganizationServiceAcceptInvitationProcedure,
-		svc.AcceptInvitation,
-		connect.WithSchema(organizationServiceMethods.ByName("AcceptInvitation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceRemoveMemberHandler := connect.NewUnaryHandler(
-		OrganizationServiceRemoveMemberProcedure,
-		svc.RemoveMember,
-		connect.WithSchema(organizationServiceMethods.ByName("RemoveMember")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceLeaveOrganizationHandler := connect.NewUnaryHandler(
-		OrganizationServiceLeaveOrganizationProcedure,
-		svc.LeaveOrganization,
-		connect.WithSchema(organizationServiceMethods.ByName("LeaveOrganization")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceUpdateMemberRoleHandler := connect.NewUnaryHandler(
-		OrganizationServiceUpdateMemberRoleProcedure,
-		svc.UpdateMemberRole,
-		connect.WithSchema(organizationServiceMethods.ByName("UpdateMemberRole")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceStartGitHubAppInstallHandler := connect.NewUnaryHandler(
-		OrganizationServiceStartGitHubAppInstallProcedure,
-		svc.StartGitHubAppInstall,
-		connect.WithSchema(organizationServiceMethods.ByName("StartGitHubAppInstall")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceLinkGitHubAppInstallationHandler := connect.NewUnaryHandler(
-		OrganizationServiceLinkGitHubAppInstallationProcedure,
-		svc.LinkGitHubAppInstallation,
-		connect.WithSchema(organizationServiceMethods.ByName("LinkGitHubAppInstallation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceListGitHubAppInstallationsHandler := connect.NewUnaryHandler(
-		OrganizationServiceListGitHubAppInstallationsProcedure,
-		svc.ListGitHubAppInstallations,
-		connect.WithSchema(organizationServiceMethods.ByName("ListGitHubAppInstallations")),
-		connect.WithHandlerOptions(opts...),
-	)
-	organizationServiceUnlinkGitHubAppInstallationHandler := connect.NewUnaryHandler(
-		OrganizationServiceUnlinkGitHubAppInstallationProcedure,
-		svc.UnlinkGitHubAppInstallation,
-		connect.WithSchema(organizationServiceMethods.ByName("UnlinkGitHubAppInstallation")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.OrganizationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case OrganizationServiceListMyOrganizationsProcedure:
-			organizationServiceListMyOrganizationsHandler.ServeHTTP(w, r)
-		case OrganizationServiceSetDefaultOrganizationProcedure:
-			organizationServiceSetDefaultOrganizationHandler.ServeHTTP(w, r)
-		case OrganizationServiceCreateOrganizationProcedure:
-			organizationServiceCreateOrganizationHandler.ServeHTTP(w, r)
-		case OrganizationServiceListMembersProcedure:
-			organizationServiceListMembersHandler.ServeHTTP(w, r)
-		case OrganizationServiceInviteMemberProcedure:
-			organizationServiceInviteMemberHandler.ServeHTTP(w, r)
-		case OrganizationServiceListInvitationsProcedure:
-			organizationServiceListInvitationsHandler.ServeHTTP(w, r)
-		case OrganizationServiceRevokeInvitationProcedure:
-			organizationServiceRevokeInvitationHandler.ServeHTTP(w, r)
-		case OrganizationServiceGetInvitationProcedure:
-			organizationServiceGetInvitationHandler.ServeHTTP(w, r)
-		case OrganizationServiceAcceptInvitationProcedure:
-			organizationServiceAcceptInvitationHandler.ServeHTTP(w, r)
-		case OrganizationServiceRemoveMemberProcedure:
-			organizationServiceRemoveMemberHandler.ServeHTTP(w, r)
-		case OrganizationServiceLeaveOrganizationProcedure:
-			organizationServiceLeaveOrganizationHandler.ServeHTTP(w, r)
-		case OrganizationServiceUpdateMemberRoleProcedure:
-			organizationServiceUpdateMemberRoleHandler.ServeHTTP(w, r)
-		case OrganizationServiceStartGitHubAppInstallProcedure:
-			organizationServiceStartGitHubAppInstallHandler.ServeHTTP(w, r)
-		case OrganizationServiceLinkGitHubAppInstallationProcedure:
-			organizationServiceLinkGitHubAppInstallationHandler.ServeHTTP(w, r)
-		case OrganizationServiceListGitHubAppInstallationsProcedure:
-			organizationServiceListGitHubAppInstallationsHandler.ServeHTTP(w, r)
-		case OrganizationServiceUnlinkGitHubAppInstallationProcedure:
-			organizationServiceUnlinkGitHubAppInstallationHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedOrganizationServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedOrganizationServiceHandler struct{}
 
-func (UnimplementedOrganizationServiceHandler) ListMyOrganizations(context.Context, *connect.Request[v1.ListMyOrganizationsRequest]) (*connect.Response[v1.ListMyOrganizationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.ListMyOrganizations is not implemented"))
+func (UnimplementedOrganizationServiceHandler) ListMyOrganizations(context.Context, *v1.ListMyOrganizationsRequest) (*v1.ListMyOrganizationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.ListMyOrganizations is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) SetDefaultOrganization(context.Context, *connect.Request[v1.SetDefaultOrganizationRequest]) (*connect.Response[v1.SetDefaultOrganizationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.SetDefaultOrganization is not implemented"))
+func (UnimplementedOrganizationServiceHandler) SetDefaultOrganization(context.Context, *v1.SetDefaultOrganizationRequest) (*v1.SetDefaultOrganizationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.SetDefaultOrganization is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) CreateOrganization(context.Context, *connect.Request[v1.CreateOrganizationRequest]) (*connect.Response[v1.CreateOrganizationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.CreateOrganization is not implemented"))
+func (UnimplementedOrganizationServiceHandler) CreateOrganization(context.Context, *v1.CreateOrganizationRequest) (*v1.CreateOrganizationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.CreateOrganization is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) ListMembers(context.Context, *connect.Request[v1.ListMembersRequest]) (*connect.Response[v1.ListMembersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.ListMembers is not implemented"))
+func (UnimplementedOrganizationServiceHandler) ListMembers(context.Context, *v1.ListMembersRequest) (*v1.ListMembersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.ListMembers is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) InviteMember(context.Context, *connect.Request[v1.InviteMemberRequest]) (*connect.Response[v1.InviteMemberResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.InviteMember is not implemented"))
+func (UnimplementedOrganizationServiceHandler) InviteMember(context.Context, *v1.InviteMemberRequest) (*v1.InviteMemberResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.InviteMember is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) ListInvitations(context.Context, *connect.Request[v1.ListInvitationsRequest]) (*connect.Response[v1.ListInvitationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.ListInvitations is not implemented"))
+func (UnimplementedOrganizationServiceHandler) ListInvitations(context.Context, *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.ListInvitations is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) RevokeInvitation(context.Context, *connect.Request[v1.RevokeInvitationRequest]) (*connect.Response[v1.RevokeInvitationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.RevokeInvitation is not implemented"))
+func (UnimplementedOrganizationServiceHandler) RevokeInvitation(context.Context, *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.RevokeInvitation is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) GetInvitation(context.Context, *connect.Request[v1.GetInvitationRequest]) (*connect.Response[v1.GetInvitationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.GetInvitation is not implemented"))
+func (UnimplementedOrganizationServiceHandler) GetInvitation(context.Context, *v1.GetInvitationRequest) (*v1.GetInvitationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.GetInvitation is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) AcceptInvitation(context.Context, *connect.Request[v1.AcceptInvitationRequest]) (*connect.Response[v1.AcceptInvitationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.AcceptInvitation is not implemented"))
+func (UnimplementedOrganizationServiceHandler) AcceptInvitation(context.Context, *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.AcceptInvitation is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) RemoveMember(context.Context, *connect.Request[v1.RemoveMemberRequest]) (*connect.Response[v1.RemoveMemberResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.RemoveMember is not implemented"))
+func (UnimplementedOrganizationServiceHandler) RemoveMember(context.Context, *v1.RemoveMemberRequest) (*v1.RemoveMemberResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.RemoveMember is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) LeaveOrganization(context.Context, *connect.Request[v1.LeaveOrganizationRequest]) (*connect.Response[v1.LeaveOrganizationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.LeaveOrganization is not implemented"))
+func (UnimplementedOrganizationServiceHandler) LeaveOrganization(context.Context, *v1.LeaveOrganizationRequest) (*v1.LeaveOrganizationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.LeaveOrganization is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) UpdateMemberRole(context.Context, *connect.Request[v1.UpdateMemberRoleRequest]) (*connect.Response[v1.UpdateMemberRoleResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.UpdateMemberRole is not implemented"))
+func (UnimplementedOrganizationServiceHandler) UpdateMemberRole(context.Context, *v1.UpdateMemberRoleRequest) (*v1.UpdateMemberRoleResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.UpdateMemberRole is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) StartGitHubAppInstall(context.Context, *connect.Request[v1.StartGitHubAppInstallRequest]) (*connect.Response[v1.StartGitHubAppInstallResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.StartGitHubAppInstall is not implemented"))
+func (UnimplementedOrganizationServiceHandler) StartGitHubAppInstall(context.Context, *v1.StartGitHubAppInstallRequest) (*v1.StartGitHubAppInstallResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.StartGitHubAppInstall is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) LinkGitHubAppInstallation(context.Context, *connect.Request[v1.LinkGitHubAppInstallationRequest]) (*connect.Response[v1.LinkGitHubAppInstallationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.LinkGitHubAppInstallation is not implemented"))
+func (UnimplementedOrganizationServiceHandler) LinkGitHubAppInstallation(context.Context, *v1.LinkGitHubAppInstallationRequest) (*v1.LinkGitHubAppInstallationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.LinkGitHubAppInstallation is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) ListGitHubAppInstallations(context.Context, *connect.Request[v1.ListGitHubAppInstallationsRequest]) (*connect.Response[v1.ListGitHubAppInstallationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.ListGitHubAppInstallations is not implemented"))
+func (UnimplementedOrganizationServiceHandler) ListGitHubAppInstallations(context.Context, *v1.ListGitHubAppInstallationsRequest) (*v1.ListGitHubAppInstallationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.ListGitHubAppInstallations is not implemented")
 }
 
-func (UnimplementedOrganizationServiceHandler) UnlinkGitHubAppInstallation(context.Context, *connect.Request[v1.UnlinkGitHubAppInstallationRequest]) (*connect.Response[v1.UnlinkGitHubAppInstallationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation is not implemented"))
+func (UnimplementedOrganizationServiceHandler) UnlinkGitHubAppInstallation(context.Context, *v1.UnlinkGitHubAppInstallationRequest) (*v1.UnlinkGitHubAppInstallationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation is not implemented")
+}
+
+type organizationServiceClient struct {
+	client *connect.Client
+}
+
+func (c *organizationServiceClient) ListMyOrganizations(ctx context.Context, req *v1.ListMyOrganizationsRequest) (*v1.ListMyOrganizationsResponse, error) {
+	var res v1.ListMyOrganizationsResponse
+	if err := c.client.CallUnary(ctx, organizationServiceListMyOrganizationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) SetDefaultOrganization(ctx context.Context, req *v1.SetDefaultOrganizationRequest) (*v1.SetDefaultOrganizationResponse, error) {
+	var res v1.SetDefaultOrganizationResponse
+	if err := c.client.CallUnary(ctx, organizationServiceSetDefaultOrganizationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) CreateOrganization(ctx context.Context, req *v1.CreateOrganizationRequest) (*v1.CreateOrganizationResponse, error) {
+	var res v1.CreateOrganizationResponse
+	if err := c.client.CallUnary(ctx, organizationServiceCreateOrganizationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) ListMembers(ctx context.Context, req *v1.ListMembersRequest) (*v1.ListMembersResponse, error) {
+	var res v1.ListMembersResponse
+	if err := c.client.CallUnary(ctx, organizationServiceListMembersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) InviteMember(ctx context.Context, req *v1.InviteMemberRequest) (*v1.InviteMemberResponse, error) {
+	var res v1.InviteMemberResponse
+	if err := c.client.CallUnary(ctx, organizationServiceInviteMemberSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) ListInvitations(ctx context.Context, req *v1.ListInvitationsRequest) (*v1.ListInvitationsResponse, error) {
+	var res v1.ListInvitationsResponse
+	if err := c.client.CallUnary(ctx, organizationServiceListInvitationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) RevokeInvitation(ctx context.Context, req *v1.RevokeInvitationRequest) (*v1.RevokeInvitationResponse, error) {
+	var res v1.RevokeInvitationResponse
+	if err := c.client.CallUnary(ctx, organizationServiceRevokeInvitationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) GetInvitation(ctx context.Context, req *v1.GetInvitationRequest) (*v1.GetInvitationResponse, error) {
+	var res v1.GetInvitationResponse
+	if err := c.client.CallUnary(ctx, organizationServiceGetInvitationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) AcceptInvitation(ctx context.Context, req *v1.AcceptInvitationRequest) (*v1.AcceptInvitationResponse, error) {
+	var res v1.AcceptInvitationResponse
+	if err := c.client.CallUnary(ctx, organizationServiceAcceptInvitationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) RemoveMember(ctx context.Context, req *v1.RemoveMemberRequest) (*v1.RemoveMemberResponse, error) {
+	var res v1.RemoveMemberResponse
+	if err := c.client.CallUnary(ctx, organizationServiceRemoveMemberSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) LeaveOrganization(ctx context.Context, req *v1.LeaveOrganizationRequest) (*v1.LeaveOrganizationResponse, error) {
+	var res v1.LeaveOrganizationResponse
+	if err := c.client.CallUnary(ctx, organizationServiceLeaveOrganizationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) UpdateMemberRole(ctx context.Context, req *v1.UpdateMemberRoleRequest) (*v1.UpdateMemberRoleResponse, error) {
+	var res v1.UpdateMemberRoleResponse
+	if err := c.client.CallUnary(ctx, organizationServiceUpdateMemberRoleSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) StartGitHubAppInstall(ctx context.Context, req *v1.StartGitHubAppInstallRequest) (*v1.StartGitHubAppInstallResponse, error) {
+	var res v1.StartGitHubAppInstallResponse
+	if err := c.client.CallUnary(ctx, organizationServiceStartGitHubAppInstallSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) LinkGitHubAppInstallation(ctx context.Context, req *v1.LinkGitHubAppInstallationRequest) (*v1.LinkGitHubAppInstallationResponse, error) {
+	var res v1.LinkGitHubAppInstallationResponse
+	if err := c.client.CallUnary(ctx, organizationServiceLinkGitHubAppInstallationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) ListGitHubAppInstallations(ctx context.Context, req *v1.ListGitHubAppInstallationsRequest) (*v1.ListGitHubAppInstallationsResponse, error) {
+	var res v1.ListGitHubAppInstallationsResponse
+	if err := c.client.CallUnary(ctx, organizationServiceListGitHubAppInstallationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *organizationServiceClient) UnlinkGitHubAppInstallation(ctx context.Context, req *v1.UnlinkGitHubAppInstallationRequest) (*v1.UnlinkGitHubAppInstallationResponse, error) {
+	var res v1.UnlinkGitHubAppInstallationResponse
+	if err := c.client.CallUnary(ctx, organizationServiceUnlinkGitHubAppInstallationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type organizationServiceHandler struct{ svc OrganizationServiceHandler }
+
+func (h organizationServiceHandler) listMyOrganizations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMyOrganizationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMyOrganizations(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) setDefaultOrganization(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetDefaultOrganizationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetDefaultOrganization(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) createOrganization(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateOrganizationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateOrganization(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) listMembers(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListMembersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListMembers(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) inviteMember(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InviteMemberRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InviteMember(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) listInvitations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListInvitationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListInvitations(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) revokeInvitation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeInvitationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeInvitation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) getInvitation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetInvitationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetInvitation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) acceptInvitation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AcceptInvitationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AcceptInvitation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) removeMember(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RemoveMemberRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RemoveMember(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) leaveOrganization(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.LeaveOrganizationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.LeaveOrganization(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) updateMemberRole(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateMemberRoleRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateMemberRole(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) startGitHubAppInstall(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartGitHubAppInstallRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartGitHubAppInstall(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) linkGitHubAppInstallation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.LinkGitHubAppInstallationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.LinkGitHubAppInstallation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) listGitHubAppInstallations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListGitHubAppInstallationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListGitHubAppInstallations(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h organizationServiceHandler) unlinkGitHubAppInstallation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UnlinkGitHubAppInstallationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UnlinkGitHubAppInstallation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

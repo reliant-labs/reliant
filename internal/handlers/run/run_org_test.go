@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -56,19 +56,19 @@ func TestListRuns_SessionAndParentHonourTheOrg(t *testing.T) {
 		"parent":  func(org *string) *pb.ListRunsRequest { return &pb.ListRunsRequest{ParentId: str("w-1"), OrgId: org} },
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, err := svc.ListRuns(ctx, connect.NewRequest(req(str("acme"))))
-			if err != nil || len(got.Msg.GetRuns()) != 1 {
-				t.Fatalf("its own org: %v runs, %v; want the run", len(got.Msg.GetRuns()), err)
+			got, err := svc.ListRuns(ctx, req(str("acme")))
+			if err != nil || len(got.GetRuns()) != 1 {
+				t.Fatalf("its own org: %v runs, %v; want the run", len(got.GetRuns()), err)
 			}
-			got, err = svc.ListRuns(ctx, connect.NewRequest(req(str("home"))))
-			if err != nil || len(got.Msg.GetRuns()) != 0 {
-				t.Fatalf("another org: %d runs, %v; want none", len(got.Msg.GetRuns()), err)
+			got, err = svc.ListRuns(ctx, req(str("home")))
+			if err != nil || len(got.GetRuns()) != 0 {
+				t.Fatalf("another org: %d runs, %v; want none", len(got.GetRuns()), err)
 			}
-			if _, err := svc.ListRuns(ctx, connect.NewRequest(req(str("globex")))); svcerr.Code(err) != connect.CodePermissionDenied {
+			if _, err := svc.ListRuns(ctx, req(str("globex"))); svcerr.CodeV2(err) != connect.CodePermissionDenied {
 				t.Fatalf("an org the caller is not in: %v, want PermissionDenied", err)
 			}
-			got, err = svc.ListRuns(ctx, connect.NewRequest(req(nil)))
-			if err != nil || len(got.Msg.GetRuns()) != 1 {
+			got, err = svc.ListRuns(ctx, req(nil))
+			if err != nil || len(got.GetRuns()) != 1 {
 				t.Fatalf("no org named: %v, %v; want the run, as before orgs", got, err)
 			}
 		})
@@ -107,13 +107,13 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 
-	got, err := svc.ListRuns(ctx, connect.NewRequest(&pb.ListRunsRequest{IncludeUnlaunchedEvents: ptrBool(true)}))
+	got, err := svc.ListRuns(ctx, &pb.ListRunsRequest{IncludeUnlaunchedEvents: ptrBool(true)})
 	require.NoError(t, err)
 	var runs, events []string
-	for _, r := range got.Msg.GetRuns() {
+	for _, r := range got.GetRuns() {
 		runs = append(runs, r.GetSessionId())
 	}
-	for _, e := range got.Msg.GetUnlaunchedEvents() {
+	for _, e := range got.GetUnlaunchedEvents() {
 		events = append(events, e.GetId())
 	}
 	require.Equal(t, []string{"c-acme", "c-legacy"}, runs)
@@ -121,17 +121,17 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 
 	// Limit 1: the newest row is a denied firing. The page is empty, but its
 	// cursor continues the log rather than ending it.
-	got, err = svc.ListRuns(ctx, connect.NewRequest(&pb.ListRunsRequest{IncludeUnlaunchedEvents: ptrBool(true), Limit: 1}))
+	got, err = svc.ListRuns(ctx, &pb.ListRunsRequest{IncludeUnlaunchedEvents: ptrBool(true), Limit: 1})
 	require.NoError(t, err)
-	require.Empty(t, got.Msg.GetRuns())
-	require.Empty(t, got.Msg.GetUnlaunchedEvents())
-	require.NotEmpty(t, got.Msg.GetNextPageToken(), "a page of denied rows is not the end of the log")
+	require.Empty(t, got.GetRuns())
+	require.Empty(t, got.GetUnlaunchedEvents())
+	require.NotEmpty(t, got.GetNextPageToken(), "a page of denied rows is not the end of the log")
 
 	// A credential bound to globex, whose acting user is not (or no longer) a
 	// member of it, lists nothing of it.
 	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: globex, ActingUserID: "test-user"})
-	_, err = svc.ListRuns(machine, connect.NewRequest(&pb.ListRunsRequest{}))
-	if svcerr.Code(err) != connect.CodePermissionDenied {
+	_, err = svc.ListRuns(machine, &pb.ListRunsRequest{})
+	if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 		t.Fatalf("a credential of an org its user left: %v, want PermissionDenied", err)
 	}
 }

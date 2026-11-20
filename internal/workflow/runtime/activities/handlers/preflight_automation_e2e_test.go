@@ -10,9 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/google/uuid"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
@@ -47,28 +51,28 @@ type enforcingControlPlane struct {
 	resumes  int
 }
 
-func (c *enforcingControlPlane) authorize(h http.Header, daemonID string) error {
-	if h.Get("Authorization") != "Bearer "+c.token {
-		return connect.NewError(connect.CodeUnauthenticated, nil)
+func (c *enforcingControlPlane) authorize(authorization, daemonID string) error {
+	if authorization != "Bearer "+c.token {
+		return connect.NewError(connect.CodeUnauthenticated, "")
 	}
 	if daemonID == "" {
-		return connect.NewError(connect.CodeInvalidArgument, nil)
+		return connect.NewError(connect.CodeInvalidArgument, "")
 	}
 	if daemonID != c.daemonID {
-		return connect.NewError(connect.CodePermissionDenied, nil)
+		return connect.NewError(connect.CodePermissionDenied, "")
 	}
 	return nil
 }
 
-func (c *enforcingControlPlane) ResumeDaemon(_ context.Context, r *connect.Request[daemonv1.ResumeDaemonRequest]) (*connect.Response[daemonv1.ResumeDaemonResponse], error) {
+func (c *enforcingControlPlane) ResumeDaemon(ctx context.Context, r *daemonv1.ResumeDaemonRequest) (*daemonv1.ResumeDaemonResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.requests++
-	if err := c.authorize(r.Header(), r.Msg.GetDaemonId()); err != nil {
+	if err := c.authorize(serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization"), r.GetDaemonId()); err != nil {
 		return nil, err
 	}
 	c.resumes++
-	return connect.NewResponse(&daemonv1.ResumeDaemonResponse{}), nil
+	return &daemonv1.ResumeDaemonResponse{}, nil
 }
 
 func (c *enforcingControlPlane) resumeCount() int {
@@ -143,7 +147,9 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 
 	cp := &enforcingControlPlane{token: "rlat_stored", daemonID: daemonID}
 	mux := http.NewServeMux()
-	mux.Handle(controlplanev1connect.NewDaemonServiceHandler(cp))
+	server := connect.NewServer(svcerr.InterceptorV2())
+	controlplanev1connect.RegisterDaemonServiceHandler(server, cp)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	cpSrv := httptest.NewServer(mux)
 	t.Cleanup(cpSrv.Close)
 

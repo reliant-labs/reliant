@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -54,9 +53,9 @@ func TestGetDefaultPresetsBatch_ReadsDoNotScaleWithWorkflowNames(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		names = append(names, fmt.Sprintf("mine-%d", i))
 	}
-	_, err := svc.GetDefaultPresetsBatch(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetsBatchRequest{
+	_, err := svc.GetDefaultPresetsBatch(ctx, &reliantv1.GetDefaultPresetsBatchRequest{
 		ProjectId: repo.Project.ID, WorkflowNames: names,
-	}))
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, repo.CallCount("GetProjectWithUserCheck"))
@@ -74,9 +73,9 @@ func TestListPresetsForWorkflow_ReadsRunConcurrently(t *testing.T) {
 	ctx, wr := workflowlisttest.NewFixture(t, 1)
 	repo := &presetReadRepo{wr}
 	svc := NewTestPreset(t, WithPresetDeps(Deps{Repo: repo}))
-	req := connect.NewRequest(&reliantv1.ListPresetsForWorkflowRequest{
+	req := &reliantv1.ListPresetsForWorkflowRequest{
 		ProjectId: repo.Project.ID, WorkflowName: "builtin://agent", IncludeHidden: true,
-	})
+	}
 	_, err := svc.ListPresetsForWorkflow(ctx, req) // warm process caches
 	require.NoError(t, err)
 

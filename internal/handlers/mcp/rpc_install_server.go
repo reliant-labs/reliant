@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -23,9 +21,9 @@ import (
 // InstallServer installs a new MCP server
 func (s *Service) InstallServer(
 	ctx context.Context,
-	req *connect.Request[reliantv1.InstallServerRequest],
-) (*connect.Response[reliantv1.InstallServerResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.InstallServerRequest,
+) (*reliantv1.InstallServerResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -36,12 +34,12 @@ func (s *Service) InstallServer(
 		return nil, svcerr.Wrap(err)
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
 
-	scope := req.Msg.Scope
+	scope := req.Scope
 	logging.DebugContext(ctx, "InstallServer request received", "project_id", projectID, "name", name, "scope", scope.String())
 
 	if s.deps.Router == nil {
@@ -55,7 +53,7 @@ func (s *Service) InstallServer(
 	}
 
 	// Convert proto config to internal format
-	internalConfig := protoConfigToInternal(req.Msg.Config)
+	internalConfig := protoConfigToInternal(req.Config)
 
 	// Load recommended catalog entry for optional bundled skills installation.
 	var recommendedEntry *config.RecommendedMCP
@@ -79,11 +77,11 @@ func (s *Service) InstallServer(
 			"error", err,
 		)
 		activity.Skip(ctx) // refused before any config was written: nothing was installed
-		return connect.NewResponse(&reliantv1.InstallServerResponse{
+		return &reliantv1.InstallServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Preflight failed: %v", err),
 			Name:    name,
-		}), nil
+		}, nil
 	}
 
 	// Add server to config file
@@ -139,11 +137,11 @@ func (s *Service) InstallServer(
 			// Do not expose rollback errors, which may contain storage/transport secrets.
 			message = "Skill bundle installation failed; MCP configuration rollback could not be confirmed. Configuration may remain changed on the machine or in the stored snapshot. Check the server configuration and retry when the machine is connected."
 		}
-		return connect.NewResponse(&reliantv1.InstallServerResponse{
+		return &reliantv1.InstallServerResponse{
 			Success: false,
 			Message: withDaemonText(message, bundleErr),
 			Name:    name,
-		}), nil
+		}, nil
 	}
 
 	// Add the server to the running manager
@@ -158,11 +156,11 @@ func (s *Service) InstallServer(
 				"phase", "startup",
 				"error", err,
 			)
-			return connect.NewResponse(&reliantv1.InstallServerResponse{
+			return &reliantv1.InstallServerResponse{
 				Success: false,
 				Message: fmt.Sprintf("Server configuration saved, but failed to start. Fix configuration/runtime and retry restart. Error: %v", err),
 				Name:    name,
-			}), nil
+			}, nil
 		}
 	}
 
@@ -178,11 +176,11 @@ func (s *Service) InstallServer(
 	if strings.TrimSpace(bundleSummary) != "" {
 		message = message + ". " + bundleSummary
 	}
-	return connect.NewResponse(&reliantv1.InstallServerResponse{
+	return &reliantv1.InstallServerResponse{
 		Success: true,
 		Message: message,
 		Name:    name,
-	}), nil
+	}, nil
 }
 
 func installSkillBundleTargetDir(projectPath string, scope reliantv1.ConfigScope, targetScope string) (string, error) {

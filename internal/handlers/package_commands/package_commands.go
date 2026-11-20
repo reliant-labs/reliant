@@ -4,8 +4,6 @@ package package_commands
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -38,14 +36,14 @@ func convertCommandToProto(cmd pkgmgr.Command) *reliantv1.PackageCommand {
 // GetCommandFavorites returns the list of favorited command keys for a project
 func (s *Service) GetCommandFavorites(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetCommandFavoritesRequest],
-) (*connect.Response[reliantv1.GetCommandFavoritesResponse], error) {
+	req *reliantv1.GetCommandFavoritesRequest,
+) (*reliantv1.GetCommandFavoritesResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
 
-	projectID := req.Msg.ProjectId
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -62,27 +60,27 @@ func (s *Service) GetCommandFavorites(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list command favorites"))
 	}
 
-	return connect.NewResponse(&reliantv1.GetCommandFavoritesResponse{
+	return &reliantv1.GetCommandFavoritesResponse{
 		CommandKeys: commandKeys,
-	}), nil
+	}, nil
 }
 
 // SetCommandFavorite adds or removes a command from favorites
 func (s *Service) SetCommandFavorite(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SetCommandFavoriteRequest],
-) (*connect.Response[reliantv1.SetCommandFavoriteResponse], error) {
+	req *reliantv1.SetCommandFavoriteRequest,
+) (*reliantv1.SetCommandFavoriteResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
 
-	projectID := req.Msg.ProjectId
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	commandKey := req.Msg.CommandKey
+	commandKey := req.CommandKey
 	if commandKey == "" {
 		return nil, svcerr.InvalidArgument("command_key is required")
 	}
@@ -94,7 +92,7 @@ func (s *Service) SetCommandFavorite(
 	}
 
 	// Add or remove favorite based on is_favorite flag
-	if req.Msg.IsFavorite {
+	if req.IsFavorite {
 		err = s.deps.Repo.AddCommandFavorite(ctx, userID, projectID, commandKey)
 	} else {
 		err = s.deps.Repo.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
@@ -104,7 +102,7 @@ func (s *Service) SetCommandFavorite(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update command favorite"))
 	}
 
-	return connect.NewResponse(&reliantv1.SetCommandFavoriteResponse{
+	return &reliantv1.SetCommandFavoriteResponse{
 		Success: true,
-	}), nil
+	}, nil
 }

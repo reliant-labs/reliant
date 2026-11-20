@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,16 +17,16 @@ import (
 // The workflow continues exactly where it left off - all local state is preserved.
 func (s *Service) ResumeChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ResumeChatRequest],
-) (*connect.Response[reliantv1.ResumeChatResponse], error) {
+	req *reliantv1.ResumeChatRequest,
+) (*reliantv1.ResumeChatResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -42,7 +41,7 @@ func (s *Service) ResumeChat(
 	// A resume is a signal plus a status write, like a pause; interleaved
 	// with one, the row can end up saying the opposite of what the run is
 	// doing. See runs.Service.LockRunControl.
-	release := s.runs.LockRunControl(ctx, req.Msg.ChatId)
+	release := s.runs.LockRunControl(ctx, req.ChatId)
 	defer release()
 
 	// Resume is for the whole chat: every blocked thread goes on, not only
@@ -60,16 +59,16 @@ func (s *Service) ResumeChat(
 		if chat.RunID != nil {
 			runID = *chat.RunID
 		}
-		return connect.NewResponse(&reliantv1.ResumeChatResponse{
+		return &reliantv1.ResumeChatResponse{
 			Success:      true,
 			Message:      "Chat resumed successfully",
 			WorkflowId:   *chat.WorkflowID,
 			RunId:        runID,
 			RecoveryType: reliantv1.RecoveryType_RECOVERY_TYPE_RESUMED,
-		}), nil
+		}, nil
 	}
 
-	outcome, err := s.runs.Resume(ctx, req.Msg.ChatId, nil)
+	outcome, err := s.runs.Resume(ctx, req.ChatId, nil)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resume workflow"))
 	}
@@ -89,20 +88,20 @@ func (s *Service) ResumeChat(
 		// The frontend prompts the user to confirm starting a new conversation.
 		// Nothing was resumed, so the call records no "resume" event.
 		activity.Skip(ctx)
-		return connect.NewResponse(&reliantv1.ResumeChatResponse{
+		return &reliantv1.ResumeChatResponse{
 			Success:       false,
 			Message:       "The workflow session was interrupted and cannot be resumed. Your message history is preserved. Would you like to start a new conversation?",
 			WorkflowId:    outcome.WorkflowID,
 			NeedsRecovery: true,
 			RecoveryType:  reliantv1.RecoveryType_RECOVERY_TYPE_WORKFLOW_LOST,
-		}), nil
+		}, nil
 	}
 
-	return connect.NewResponse(&reliantv1.ResumeChatResponse{
+	return &reliantv1.ResumeChatResponse{
 		Success:      true,
 		Message:      "Chat resumed successfully",
 		WorkflowId:   outcome.WorkflowID,
 		RunId:        outcome.RunID,
 		RecoveryType: reliantv1.RecoveryType_RECOVERY_TYPE_RESUMED,
-	}), nil
+	}, nil
 }

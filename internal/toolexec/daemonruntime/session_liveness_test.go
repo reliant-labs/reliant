@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
@@ -102,7 +104,7 @@ type stopsReadingGateway struct {
 	heartbeats atomic.Int32
 }
 
-func (g *stopsReadingGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (g *stopsReadingGateway) ConnectDaemon(ctx context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	session := g.sessions.Add(1)
 	if _, err := stream.Receive(); err != nil {
 		return err
@@ -157,7 +159,9 @@ func (g *stopsReadingGateway) ConnectDaemon(ctx context.Context, stream *connect
 func startGateway(t *testing.T, gw reliantv1connect.ToolsDaemonServiceHandler) string {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(gw))
+	server := connect.NewServer()
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, gw)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()

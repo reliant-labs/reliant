@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -26,19 +26,19 @@ func TestListIntegrations_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListIntegrationsRequest, pb.ListIntegrationsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListIntegrationsRequest, pb.ListIntegrationsResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.ListIntegrationsRequest{}),
+			Req:     &pb.ListIntegrationsRequest{},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name: "the integrations are listed",
-			Req:  connect.NewRequest(&pb.ListIntegrationsRequest{}),
+			Req:  &pb.ListIntegrationsRequest{},
 			Ctx:  connection.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListIntegrationsResponse]) {
-				if got := resp.Msg.GetIntegrations(); len(got) != 1 || got[0].GetId() != "github" {
+			Check: func(t *testing.T, resp *pb.ListIntegrationsResponse) {
+				if got := resp.GetIntegrations(); len(got) != 1 || got[0].GetId() != "github" {
 					t.Fatalf("integrations = %v, want github", got)
 				}
 			},
@@ -65,13 +65,13 @@ func TestListIntegrations_OrgPolicyMarker(t *testing.T) {
 	}}))
 	org := "org-a"
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListIntegrationsRequest, pb.ListIntegrationsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListIntegrationsRequest, pb.ListIntegrationsResponse]{
 		{
 			Name: "no org: no marker, the org's policy is not asked",
-			Req:  connect.NewRequest(&pb.ListIntegrationsRequest{}),
+			Req:  &pb.ListIntegrationsRequest{},
 			Ctx:  connection.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListIntegrationsResponse]) {
-				for _, i := range resp.Msg.GetIntegrations() {
+			Check: func(t *testing.T, resp *pb.ListIntegrationsResponse) {
+				for _, i := range resp.GetIntegrations() {
 					if i.GetOrgPolicy() != nil {
 						t.Fatalf("%s carries an org policy without an org: %v", i.GetId(), i.GetOrgPolicy())
 					}
@@ -80,11 +80,11 @@ func TestListIntegrations_OrgPolicyMarker(t *testing.T) {
 		},
 		{
 			Name: "an org: the governed integration is marked",
-			Req:  connect.NewRequest(&pb.ListIntegrationsRequest{OrgId: &org}),
+			Req:  &pb.ListIntegrationsRequest{OrgId: &org},
 			Ctx:  connection.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListIntegrationsResponse]) {
+			Check: func(t *testing.T, resp *pb.ListIntegrationsResponse) {
 				got := map[string]*pb.IntegrationOrgPolicy{}
-				for _, i := range resp.Msg.GetIntegrations() {
+				for _, i := range resp.GetIntegrations() {
 					got[i.GetId()] = i.GetOrgPolicy()
 				}
 				if gh := got["github"]; gh == nil || gh.GetAllowed() || !gh.GetEnforced() || gh.GetPolicyVersion() != 5 {

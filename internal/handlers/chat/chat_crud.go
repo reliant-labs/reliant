@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -33,7 +32,7 @@ func (s *Service) startChat(
 	msg *reliantv1.StartChatRequest,
 	eventKind core.TriggerEventKind,
 	extraPayload map[string]any,
-) (*connect.Response[reliantv1.StartChatResponse], error) {
+) (*reliantv1.StartChatResponse, error) {
 	clientID, err := parseClientMessageID(msg.GetClientMessageId())
 	if err != nil {
 		return nil, err
@@ -192,11 +191,11 @@ func (s *Service) startChat(
 		s.trackStartedChatMessage(ctx, userID, result.Chat, result.UserMessageID, clientID, msg)
 	}
 
-	return connect.NewResponse(&reliantv1.StartChatResponse{
+	return &reliantv1.StartChatResponse{
 		Chat:       s.chatToProtoWithSelection(ctx, result.Chat),
 		WorkflowId: result.WorkflowID,
 		RunId:      result.RunID,
-	}), nil
+	}, nil
 }
 
 // ghostCheckTimeout bounds GetChat's Temporal describe. A var so a test can

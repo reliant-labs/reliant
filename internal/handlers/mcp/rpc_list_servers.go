@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -25,9 +23,9 @@ import (
 // list renders without waiting on the user's machine.
 func (s *Service) ListServers(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListServersRequest],
-) (*connect.Response[reliantv1.ListServersResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.ListServersRequest,
+) (*reliantv1.ListServersResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -46,10 +44,10 @@ func (s *Service) ListServers(
 
 	// Check if MCP manager is available
 	if s.deps.Router == nil {
-		return connect.NewResponse(&reliantv1.ListServersResponse{
+		return &reliantv1.ListServersResponse{
 			Servers: []*reliantv1.MCPServer{},
 			Total:   int32(len(scopedServers)),
-		}), nil
+		}, nil
 	}
 
 	names := make([]string, 0, len(scopedServers))
@@ -79,18 +77,18 @@ func (s *Service) ListServers(
 		servers = append(servers, server)
 	}
 
-	return connect.NewResponse(&reliantv1.ListServersResponse{
+	return &reliantv1.ListServersResponse{
 		Servers: servers,
 		Total:   int32(len(servers)),
-	}), nil
+	}, nil
 }
 
 // GetServer returns detailed information about a specific MCP server
 func (s *Service) GetServer(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetServerRequest],
-) (*connect.Response[reliantv1.GetServerResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.GetServerRequest,
+) (*reliantv1.GetServerResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -101,7 +99,7 @@ func (s *Service) GetServer(
 		return nil, svcerr.Wrap(err)
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
@@ -129,19 +127,19 @@ func (s *Service) GetServer(
 			lastErr := entry.LastError
 			server.LastError = &lastErr
 		}
-		return connect.NewResponse(&reliantv1.GetServerResponse{Server: server}), nil
+		return &reliantv1.GetServerResponse{Server: server}, nil
 	}
 	applyServerStatus(server, status)
 
-	return connect.NewResponse(&reliantv1.GetServerResponse{Server: server}), nil
+	return &reliantv1.GetServerResponse{Server: server}, nil
 }
 
 // GetServerTools returns the list of tools exposed by a specific MCP server.
 func (s *Service) GetServerTools(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetServerToolsRequest],
-) (*connect.Response[reliantv1.GetServerToolsResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.GetServerToolsRequest,
+) (*reliantv1.GetServerToolsResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -152,7 +150,7 @@ func (s *Service) GetServerTools(
 		return nil, svcerr.Wrap(err)
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
@@ -168,7 +166,7 @@ func (s *Service) GetServerTools(
 	}
 
 	if !scoped.Config.IsEnabled() {
-		return connect.NewResponse(&reliantv1.GetServerToolsResponse{Tools: []*reliantv1.MCPTool{}, Total: 0}), nil
+		return &reliantv1.GetServerToolsResponse{Tools: []*reliantv1.MCPTool{}, Total: 0}, nil
 	}
 
 	if s.deps.Router == nil {
@@ -177,7 +175,7 @@ func (s *Service) GetServerTools(
 
 	// A server the daemon does not have has no tools to list.
 	if _, ok := s.serverStatus(ctx, userID, checkout).entry(name); !ok {
-		return connect.NewResponse(&reliantv1.GetServerToolsResponse{Tools: []*reliantv1.MCPTool{}, Total: 0}), nil
+		return &reliantv1.GetServerToolsResponse{Tools: []*reliantv1.MCPTool{}, Total: 0}, nil
 	}
 
 	// The tools themselves are a live question for the server; ask within
@@ -199,18 +197,18 @@ func (s *Service) GetServerTools(
 		return respTools[i].Name < respTools[j].Name
 	})
 
-	return connect.NewResponse(&reliantv1.GetServerToolsResponse{
+	return &reliantv1.GetServerToolsResponse{
 		Tools: respTools,
 		Total: int32(len(respTools)),
-	}), nil
+	}, nil
 }
 
 // ListRecommended returns a list of recommended MCP servers
 func (s *Service) ListRecommended(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListRecommendedRequest],
-) (*connect.Response[reliantv1.ListRecommendedResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.ListRecommendedRequest,
+) (*reliantv1.ListRecommendedResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -313,8 +311,8 @@ func (s *Service) ListRecommended(
 		recommended = append(recommended, server)
 	}
 
-	return connect.NewResponse(&reliantv1.ListRecommendedResponse{
+	return &reliantv1.ListRecommendedResponse{
 		Recommended: recommended,
 		Total:       int32(len(recommended)),
-	}), nil
+	}, nil
 }

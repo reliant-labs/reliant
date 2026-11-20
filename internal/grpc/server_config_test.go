@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/mountkit"
@@ -36,22 +35,22 @@ type testGrants struct{ connectorgrant.Store }
 // API's plain-HTTP routes (testHTTPRoutes). The API root's own route set is
 // internal/app's; these tests pin the listener, the chain and the handlers
 // behind it, so each mounts only what it calls.
-type testRoute func(mux *http.ServeMux, opts ...connect.HandlerOption) []string
+type testRoute func(mux *mountkit.MuxV2) []string
 
 // mountService mounts svc with the listener's chain and the mount's own
 // options over it, as the generated route set does.
-func mountService(name string, svc mountkit.Registrar, mount ...mountkit.Option) testRoute {
-	return func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
-		mountkit.RegisterService(mux, svc, opts, mount...)
+func mountService(name string, svc mountkit.RegistrarV2, mount ...mountkit.Option) testRoute {
+	return func(mux *mountkit.MuxV2) []string {
+		mountkit.RegisterServiceV2(mux, svc, mount...)
 		return []string{name}
 	}
 }
 
 // plainRoutes mounts plain-HTTP routes of a test's own, outside the chain.
 func plainRoutes(mounts ...func(mux *http.ServeMux)) testRoute {
-	return func(mux *http.ServeMux, _ ...connect.HandlerOption) []string {
+	return func(mux *mountkit.MuxV2) []string {
 		for _, mount := range mounts {
-			mount(mux)
+			mount(mux.Mux())
 		}
 		return nil
 	}
@@ -110,8 +109,8 @@ func testHTTPRoutes(t *testing.T, authn *UserAuth) testRoute {
 		Tokens:  drainTestAuthority{},
 	})
 	require.NoError(t, err)
-	return func(mux *http.ServeMux, _ ...connect.HandlerOption) []string {
-		routes.Register(mux)
+	return func(mux *mountkit.MuxV2) []string {
+		routes.Register(mux.Mux())
 		return nil
 	}
 }
@@ -121,15 +120,15 @@ func testHTTPRoutes(t *testing.T, authn *UserAuth) testRoute {
 // listener and its base URL.
 func startTestServer(t *testing.T, routes ...testRoute) (*APIListener, string) {
 	t.Helper()
-	chain, err := NewUserChain(UserChainDeps{Auth: testUserAuth(t)})
+	chain, err := NewUserChain(UserChainDeps{Auth: testUserAuth(t).Intercept})
 	require.NoError(t, err)
 	listener, err := NewAPIListener(APIListenerDeps{
 		BindAddress: "127.0.0.1",
 		Chain:       chain,
-		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
+		Routes: serverkit.RoutesFuncV2(func(mux *mountkit.MuxV2) []string {
 			var services []string
 			for _, route := range routes {
-				services = append(services, route(mux, opts...)...)
+				services = append(services, route(mux)...)
 			}
 			return services
 		}),

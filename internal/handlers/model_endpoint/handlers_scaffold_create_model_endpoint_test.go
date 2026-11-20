@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,22 +20,22 @@ func TestCreateModelEndpoint_Generated(t *testing.T) {
 	t.Parallel()
 
 	svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithPlaceholderDeps())
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateModelEndpointRequest, pb.CreateModelEndpointResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CreateModelEndpointRequest, pb.CreateModelEndpointResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
-			Req:     connect.NewRequest(&pb.CreateModelEndpointRequest{Endpoint: &pb.ModelEndpointInput{Name: "gpu box"}}),
+			Req:     &pb.CreateModelEndpointRequest{Endpoint: &pb.ModelEndpointInput{Name: "gpu box"}},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "endpoint details are required",
-			Req:     connect.NewRequest(&pb.CreateModelEndpointRequest{}),
+			Req:     &pb.CreateModelEndpointRequest{},
 			Ctx:     model_endpoint.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a name is required",
-			Req:     connect.NewRequest(&pb.CreateModelEndpointRequest{Endpoint: &pb.ModelEndpointInput{Name: "  "}}),
+			Req:     &pb.CreateModelEndpointRequest{Endpoint: &pb.ModelEndpointInput{Name: "  "}},
 			Ctx:     model_endpoint.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -176,11 +175,11 @@ func seedMultiRepoProject(t *testing.T, repo *db.Repo, userID string, relPaths .
 func createWorkspace(t *testing.T, svc *Service, userID, projectID, name string) (context.Context, string) {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+	resp, err := svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID, Name: name, Branch: name,
-	}))
+	})
 	require.NoError(t, err)
-	return ctx, resp.Msg.Worktree.Id
+	return ctx, resp.Worktree.Id
 }
 
 // TestCreateWorktreeChecksOutSiblingReposConcurrently is the change itself.

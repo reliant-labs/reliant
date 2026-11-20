@@ -7,7 +7,6 @@ import (
 	"slices"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -54,13 +53,13 @@ type decideResponse struct {
 // DecideWorktreeReclaim implements the DecideWorktreeReclaim RPC.
 func (s *Service) DecideWorktreeReclaim(
 	ctx context.Context,
-	req *connect.Request[pb.DecideWorktreeReclaimRequest],
-) (*connect.Response[pb.DecideWorktreeReclaimResponse], error) {
+	req *pb.DecideWorktreeReclaimRequest,
+) (*pb.DecideWorktreeReclaimResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
-	msg := req.Msg
+	msg := req
 	if msg.DaemonId == "" || len(msg.Decisions) == 0 {
 		return nil, svcerr.InvalidArgument("daemon_id and decisions are required")
 	}
@@ -108,7 +107,7 @@ func (s *Service) DecideWorktreeReclaim(
 	}
 	if len(send.Decisions) == 0 {
 		activity.Skip(ctx) // nothing reached the machine
-		return connect.NewResponse(&pb.DecideWorktreeReclaimResponse{Results: results}), nil
+		return &pb.DecideWorktreeReclaimResponse{Results: results}, nil
 	}
 
 	connected, err := s.deps.Repo.ListAttachedDaemonIDsForUser(ctx, userID, connectedLease)
@@ -152,5 +151,5 @@ func (s *Service) DecideWorktreeReclaim(
 	if len(approved) > 0 {
 		s.sendApprovals(ctx, userID, msg.DaemonId, msg.Decisions, shown, results, approved)
 	}
-	return connect.NewResponse(&pb.DecideWorktreeReclaimResponse{Results: results}), nil
+	return &pb.DecideWorktreeReclaimResponse{Results: results}, nil
 }

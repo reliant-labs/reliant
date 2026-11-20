@@ -4,7 +4,7 @@ package chat
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +53,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 	require.Error(t, err)
 
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	assert.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	assert.Contains(t, connectErr.Message(), "StartChat",
 		"the error must name the RPC the caller should use instead")
@@ -104,10 +104,10 @@ func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
 				runs: runs.NewService(repo, temporal, nil),
 			}
 
-			resp, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: fx.chatID}))
+			resp, err := service.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: fx.chatID})
 			require.NoError(t, err)
-			assert.Equal(t, tc.wantState, resp.Msg.Chat.WorkflowState)
-			assert.Equal(t, tc.wantReason, resp.Msg.Chat.WorkflowStopReason)
+			assert.Equal(t, tc.wantState, resp.Chat.WorkflowState)
+			assert.Equal(t, tc.wantReason, resp.Chat.WorkflowStopReason)
 		})
 	}
 }

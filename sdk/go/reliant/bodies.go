@@ -6,8 +6,6 @@ package reliant
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
 
@@ -84,7 +82,7 @@ func (r *RunsClient) ContentBlockBodies(ctx context.Context, sessionID string, b
 		if opts.Full {
 			req.Full = &opts.Full
 		}
-		resp, err := r.chat.GetContentBlockBodies(ctx, connect.NewRequest(req))
+		resp, err := r.chat.GetContentBlockBodies(ctx, req)
 		if err != nil {
 			return nil, r.c.wrap(op, err)
 		}
@@ -95,13 +93,13 @@ func (r *RunsClient) ContentBlockBodies(ctx context.Context, sessionID string, b
 			pending[id] = true
 		}
 		answered := map[string]bool{}
-		for _, b := range resp.Msg.GetBodies() {
+		for _, b := range resp.GetBodies() {
 			if id := b.GetBlockId(); pending[id] && !answered[id] {
 				out.Bodies[id] = b
 				answered[id] = true
 			}
 		}
-		for _, id := range resp.Msg.GetNotFound() {
+		for _, id := range resp.GetNotFound() {
 			if pending[id] && !answered[id] {
 				out.NotFound = append(out.NotFound, id)
 				answered[id] = true
@@ -115,7 +113,7 @@ func (r *RunsClient) ContentBlockBodies(ctx context.Context, sessionID string, b
 			return nil, r.c.fail(op, ErrUnavailable, "the server answered none of the %d block ids it was asked for", len(asked))
 		}
 		deferred := map[string]bool{}
-		for _, id := range resp.Msg.GetDeferred() {
+		for _, id := range resp.GetDeferred() {
 			deferred[id] = true
 		}
 		var retry []string

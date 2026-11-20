@@ -8,7 +8,10 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	daemonv1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
 	daemonv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
 )
@@ -20,19 +23,23 @@ type resumeRecorder struct {
 	err     error
 }
 
-func (r *resumeRecorder) ResumeDaemon(_ context.Context, req *connect.Request[daemonv1.ResumeDaemonRequest]) (*connect.Response[daemonv1.ResumeDaemonResponse], error) {
-	r.gotAuth = req.Header().Get("Authorization")
-	r.gotID = req.Msg.GetDaemonId()
+func (r *resumeRecorder) ResumeDaemon(ctx context.Context, req *daemonv1.ResumeDaemonRequest) (*daemonv1.ResumeDaemonResponse, error) {
+	if info, ok := connect.CallInfoForServerContext(ctx); ok {
+		r.gotAuth = info.RequestHeader().Get("Authorization")
+	}
+	r.gotID = req.GetDaemonId()
 	if r.err != nil {
 		return nil, r.err
 	}
-	return connect.NewResponse(&daemonv1.ResumeDaemonResponse{}), nil
+	return &daemonv1.ResumeDaemonResponse{}, nil
 }
 
 func serveDaemonService(t *testing.T, rec *resumeRecorder) string {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.Handle(daemonv1connect.NewDaemonServiceHandler(rec))
+	server := connect.NewServer(svcerr.InterceptorV2())
+	daemonv1connect.RegisterDaemonServiceHandler(server, rec)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv.URL
@@ -58,7 +65,7 @@ func TestResumeDaemon_CallsControlPlaneDaemonServiceAsTheCaller(t *testing.T) {
 // Callers branch on the Connect code (FailedPrecondition: not suspended), so
 // it must survive the client unwrapped.
 func TestResumeDaemon_KeepsTheControlPlaneCode(t *testing.T) {
-	rec := &resumeRecorder{err: connect.NewError(connect.CodeFailedPrecondition, nil)}
+	rec := &resumeRecorder{err: connect.NewError(connect.CodeFailedPrecondition, "")}
 	url := serveDaemonService(t, rec)
 
 	err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: url}}).ResumeDaemon(context.Background(), "jwt", "daemon-1")

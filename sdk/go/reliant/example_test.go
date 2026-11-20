@@ -355,15 +355,15 @@ func Example_retry() {
 	fmt.Println(run.GetDisplayState())
 }
 
-func ExampleClient_HTTPClient() {
+func ExampleClient_RPCClient() {
 	c, err := reliant.FromEnv()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// A generated Connect client for a public procedure the wrappers do not
-	// cover, on the same authenticated HTTP client.
-	runs := reliantv1connect.NewRunServiceClient(c.HTTPClient(), c.BaseURL())
+	// cover, on the SDK's own authenticated client.
+	runs := reliantv1connect.NewRunServiceClient(c.RPCClient())
 	_ = runs
 }
 

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/sdk/temporal"
@@ -32,7 +32,7 @@ func TestClassify(t *testing.T) {
 		// Everything svcerr already knows.
 		{"svcerr user kind", svcerr.FailedPrecondition("no machine"), svcerr.ClassUser},
 		{"marked user", svcerr.WithClass(errors.New("machine offline"), svcerr.ClassUser), svcerr.ClassUser},
-		{"connect 4xx", connect.NewError(connect.CodeInvalidArgument, errors.New("bad")), svcerr.ClassUser},
+		{"connect 4xx", connect.NewError(connect.CodeInvalidArgument, "bad"), svcerr.ClassUser},
 		{"context canceled", context.Canceled, svcerr.ClassCanceled},
 		{"raw error", errors.New("pq: connection refused"), svcerr.ClassServer},
 	}

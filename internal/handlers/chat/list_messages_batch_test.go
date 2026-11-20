@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -133,12 +132,12 @@ func TestListMessages_BatchedContentBlocks_MatchesPerMessageAssembly(t *testing.
 		Tracer("test").Start(ctx, "ListMessages")
 
 	svc := &Service{deps: Deps{Repo: repo}}
-	resp, err := svc.ListMessages(spanCtx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := svc.ListMessages(spanCtx, &reliantv1.ListMessagesRequest{
 		ChatId: chatID,
-	}))
+	})
 	rpcSpan.End()
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Messages, 4, "all four messages must be present")
+	require.Len(t, resp.Messages, 4, "all four messages must be present")
 
 	require.Len(t, recorder.Ended(), 1)
 	attrs := map[attribute.Key]int64{}
@@ -146,7 +145,7 @@ func TestListMessages_BatchedContentBlocks_MatchesPerMessageAssembly(t *testing.
 		attrs[kv.Key] = kv.Value.AsInt64()
 	}
 	var wireBytes int64
-	for _, m := range resp.Msg.Messages {
+	for _, m := range resp.Messages {
 		wireBytes += int64(proto.Size(m))
 	}
 	assert.Equal(t, int64(4), attrs["transcript.messages"])
@@ -160,19 +159,19 @@ func TestListMessages_BatchedContentBlocks_MatchesPerMessageAssembly(t *testing.
 	assert.Contains(t, attrs, attribute.Key("transcript.other_bytes"))
 
 	// Order and identity preserved.
-	assert.Equal(t, msg1ID, resp.Msg.Messages[0].Id)
-	assert.Equal(t, msg2ID, resp.Msg.Messages[1].Id)
-	assert.Equal(t, msg3ID, resp.Msg.Messages[2].Id)
-	assert.Equal(t, msg4ID, resp.Msg.Messages[3].Id)
+	assert.Equal(t, msg1ID, resp.Messages[0].Id)
+	assert.Equal(t, msg2ID, resp.Messages[1].Id)
+	assert.Equal(t, msg3ID, resp.Messages[2].Id)
+	assert.Equal(t, msg4ID, resp.Messages[3].Id)
 
 	// Message 1: single text block.
-	require.Len(t, resp.Msg.Messages[0].ContentBlocks, 1)
-	assert.Equal(t, "please check the weather", *resp.Msg.Messages[0].ContentBlocks[0].Content)
+	require.Len(t, resp.Messages[0].ContentBlocks, 1)
+	assert.Equal(t, "please check the weather", *resp.Messages[0].ContentBlocks[0].Content)
 
 	// Message 2: two blocks in position order, tool_call paired with its result.
-	require.Len(t, resp.Msg.Messages[1].ContentBlocks, 2)
-	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, resp.Msg.Messages[1].ContentBlocks[0].Type)
-	toolCallBlock := resp.Msg.Messages[1].ContentBlocks[1]
+	require.Len(t, resp.Messages[1].ContentBlocks, 2)
+	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, resp.Messages[1].ContentBlocks[0].Type)
+	toolCallBlock := resp.Messages[1].ContentBlocks[1]
 	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL, toolCallBlock.Type)
 	require.NotNil(t, toolCallBlock.ToolCallId)
 	assert.Equal(t, toolCallID, *toolCallBlock.ToolCallId)
@@ -180,8 +179,8 @@ func TestListMessages_BatchedContentBlocks_MatchesPerMessageAssembly(t *testing.
 
 	// Message 3: the tool_result block carries the result, under the same
 	// tool_call_id the call block names.
-	require.Len(t, resp.Msg.Messages[2].ContentBlocks, 1)
-	resultBlock := resp.Msg.Messages[2].ContentBlocks[0]
+	require.Len(t, resp.Messages[2].ContentBlocks, 1)
+	resultBlock := resp.Messages[2].ContentBlocks[0]
 	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, resultBlock.Type)
 	require.NotNil(t, resultBlock.ToolCallId)
 	assert.Equal(t, toolCallID, *resultBlock.ToolCallId)
@@ -189,6 +188,6 @@ func TestListMessages_BatchedContentBlocks_MatchesPerMessageAssembly(t *testing.
 	assert.Equal(t, resultContent, *resultBlock.Content)
 
 	// Message 4: single text block, unrelated to the tool exchange.
-	require.Len(t, resp.Msg.Messages[3].ContentBlocks, 1)
-	assert.Equal(t, "it's 72F in NYC", *resp.Msg.Messages[3].ContentBlocks[0].Content)
+	require.Len(t, resp.Messages[3].ContentBlocks, 1)
+	assert.Equal(t, "it's 72F in NYC", *resp.Messages[3].ContentBlocks[0].Content)
 }

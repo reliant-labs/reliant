@@ -3,8 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -18,20 +16,20 @@ import (
 // projects" view). Chats are filtered by owner in both cases.
 func (s *Service) ListChats(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListChatsRequest],
-) (*connect.Response[reliantv1.ListChatsResponse], error) {
+	req *reliantv1.ListChatsRequest,
+) (*reliantv1.ListChatsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	limit := int(100)
-	if req.Msg.Limit != nil && *req.Msg.Limit > 0 {
-		limit = int(*req.Msg.Limit)
+	if req.Limit != nil && *req.Limit > 0 {
+		limit = int(*req.Limit)
 	}
 
 	var projectID *string
-	if req.Msg.ProjectId != "" {
-		projectID = &req.Msg.ProjectId
+	if req.ProjectId != "" {
+		projectID = &req.ProjectId
 	}
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +38,7 @@ func (s *Service) ListChats(
 		ProjectID:       projectID,
 		Org:             scope,
 		Limit:           limit,
-		AppName:         appNameFilter(req.Msg.AppName),
+		AppName:         appNameFilter(req.AppName),
 		ExcludeArchived: true,
 		// The chat list holds conversations: USER-origin chats and adopted
 		// runs. Every other run lists under Runs (RunService.ListRuns).
@@ -60,7 +58,7 @@ func (s *Service) ListChats(
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
-	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, scope, chats, protoChats)
+	mainWorktrees := s.attachWorktrees(ctx, userID, req.ProjectId, scope, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -70,10 +68,10 @@ func (s *Service) ListChats(
 		logging.WarnContext(ctx, "Failed to get latest user update sequence", "error", err, "userID", userID)
 	}
 
-	return connect.NewResponse(&reliantv1.ListChatsResponse{
+	return &reliantv1.ListChatsResponse{
 		Chats:                  protoChats,
 		Total:                  int32(len(protoChats)),
 		LastUserUpdateSequence: latestSeq,
 		MainWorktrees:          mainWorktrees,
-	}), nil
+	}, nil
 }

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -49,15 +49,15 @@ func TestSettingsService_SyncReliantProvider_PersistsKeyAndEmitsRefetch(t *testi
 
 	ctx := newSettingsServiceTestContext()
 
-	resp, err := svc.SyncReliantProvider(ctx, connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+	resp, err := svc.SyncReliantProvider(ctx, &reliantv1.SyncReliantProviderRequest{})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
-	assert.True(t, resp.Msg.Synced)
-	assert.True(t, resp.Msg.CreatedKey)
-	assert.False(t, resp.Msg.RotatedKey)
-	require.NotNil(t, resp.Msg.Provider)
-	assert.Equal(t, "reliant", resp.Msg.Provider.Provider)
-	assert.True(t, resp.Msg.Provider.Configured)
+	require.True(t, resp.Success)
+	assert.True(t, resp.Synced)
+	assert.True(t, resp.CreatedKey)
+	assert.False(t, resp.RotatedKey)
+	require.NotNil(t, resp.Provider)
+	assert.Equal(t, "reliant", resp.Provider.Provider)
+	assert.True(t, resp.Provider.Configured)
 
 	assert.Equal(t, "rlat_abcdef0123456789abcdef0123456789", managedKey(t, ctx, repo, userID))
 
@@ -85,10 +85,10 @@ func TestSettingsService_SyncReliantProvider_RotationComesFromControlPlane(t *te
 
 	fake := &fakeControlPlaneClient{issueKey: "rlat_next000000000000000000000000000000", issueRotated: true}
 	svc := newTestService(t, Deps{Repo: repo, ControlPlane: fake})
-	resp, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+	resp, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), &reliantv1.SyncReliantProviderRequest{})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.RotatedKey)
-	assert.False(t, resp.Msg.CreatedKey)
+	assert.True(t, resp.RotatedKey)
+	assert.False(t, resp.CreatedKey)
 
 	assert.Equal(t, "rlat_next000000000000000000000000000000", managedKey(t, context.Background(), repo, userID))
 	assert.Len(t, accountsOfProvider(t, context.Background(), repo, userID, "reliant"), 1)
@@ -96,10 +96,10 @@ func TestSettingsService_SyncReliantProvider_RotationComesFromControlPlane(t *te
 	// A local store holding a key does NOT make a fresh control-plane mint a
 	// rotation: control-plane is the authority on whether one was replaced.
 	fake.issueRotated = false
-	resp, err = svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+	resp, err = svc.SyncReliantProvider(newSettingsServiceTestContext(), &reliantv1.SyncReliantProviderRequest{})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.CreatedKey)
-	assert.False(t, resp.Msg.RotatedKey)
+	assert.True(t, resp.CreatedKey)
+	assert.False(t, resp.RotatedKey)
 }
 
 func TestSettingsService_SyncReliantProvider_MissingJWTUnauthenticated(t *testing.T) {
@@ -112,9 +112,9 @@ func TestSettingsService_SyncReliantProvider_MissingJWTUnauthenticated(t *testin
 	fake := &fakeControlPlaneClient{issueKey: "rlat_should_not_be_used"}
 	svc := newTestService(t, Deps{Repo: repo, ControlPlane: fake})
 
-	_, err := svc.SyncReliantProvider(ctx, connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+	_, err := svc.SyncReliantProvider(ctx, &reliantv1.SyncReliantProviderRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 	assert.Equal(t, 0, fake.issueCallCount)
 }
 
@@ -128,7 +128,7 @@ func TestSettingsService_SyncReliantProvider_ControlPlaneErrorPropagates(t *test
 	fake := &fakeControlPlaneClient{issueErr: errors.New("boom")}
 	svc := newTestService(t, Deps{Repo: repo, ControlPlane: fake})
 
-	_, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+	_, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), &reliantv1.SyncReliantProviderRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 }

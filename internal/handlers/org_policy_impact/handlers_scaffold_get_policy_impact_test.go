@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -157,11 +157,11 @@ func TestGetPolicyImpact_CountsTheChatsTheProposedPolicyWouldRefuse(t *testing.T
 		Models: &controlplanev1.ModelsPolicy{Mode: controlplanev1.OrgPolicyMode_ORG_POLICY_MODE_AUDIT, Allowed: []string{"claude-opus-4-6"}},
 	}
 
-	resp, err := svc.GetPolicyImpact(as("ada", auth.CredentialSession), connect.NewRequest(&pb.GetPolicyImpactRequest{
+	resp, err := svc.GetPolicyImpact(as("ada", auth.CredentialSession), &pb.GetPolicyImpactRequest{
 		OrgId: org, PolicyJson: policyJSON(t, doc),
-	}))
+	})
 	require.NoError(t, err)
-	got := resp.Msg
+	got := resp
 	assert.EqualValues(t, 14, got.GetWindowDays())
 	assert.Equal(t, now.Add(-org_policy_impact.ImpactWindow), store.since)
 	assert.False(t, got.GetTruncated())
@@ -176,11 +176,11 @@ func TestGetPolicyImpact_CountsTheChatsTheProposedPolicyWouldRefuse(t *testing.T
 	assert.EqualValues(t, 1, got.GetReasons()[1].GetAutomations())
 
 	// No policy refuses nothing.
-	resp, err = svc.GetPolicyImpact(as("olga", auth.CredentialSession), connect.NewRequest(&pb.GetPolicyImpactRequest{OrgId: org}))
+	resp, err = svc.GetPolicyImpact(as("olga", auth.CredentialSession), &pb.GetPolicyImpactRequest{OrgId: org})
 	require.NoError(t, err)
-	assert.EqualValues(t, 6, resp.Msg.GetChatsConsidered())
-	assert.Zero(t, resp.Msg.GetChatsRefused())
-	assert.Empty(t, resp.Msg.GetReasons())
+	assert.EqualValues(t, 6, resp.GetChatsConsidered())
+	assert.Zero(t, resp.GetChatsRefused())
+	assert.Empty(t, resp.GetReasons())
 }
 
 // The automations section judges exactly the chats it will govern, by the
@@ -214,13 +214,13 @@ func TestGetPolicyImpact_AutomationsFollowTheAttendanceRule(t *testing.T) {
 	doc := &controlplanev1.OrgPolicy{Automations: &controlplanev1.AutomationsPolicy{Mode: enforce, AllowedSources: []controlplanev1.ProviderSource{
 		controlplanev1.ProviderSource_PROVIDER_SOURCE_ORG_ACCOUNTS, controlplanev1.ProviderSource_PROVIDER_SOURCE_RELIANT,
 	}}}
-	resp, err := svc.GetPolicyImpact(as("ada", auth.CredentialSession), connect.NewRequest(&pb.GetPolicyImpactRequest{
+	resp, err := svc.GetPolicyImpact(as("ada", auth.CredentialSession), &pb.GetPolicyImpactRequest{
 		OrgId: org, PolicyJson: policyJSON(t, doc),
-	}))
+	})
 	require.NoError(t, err)
-	assert.EqualValues(t, 6, resp.Msg.GetChatsConsidered())
-	assert.EqualValues(t, 3, resp.Msg.GetChatsRefused(), "fired, descendant and deleted-trigger: nobody is behind them, and a seat is not an automation's source")
-	assert.EqualValues(t, 3, resp.Msg.GetAutomationsRefused())
+	assert.EqualValues(t, 6, resp.GetChatsConsidered())
+	assert.EqualValues(t, 3, resp.GetChatsRefused(), "fired, descendant and deleted-trigger: nobody is behind them, and a seat is not an automation's source")
+	assert.EqualValues(t, 3, resp.GetAutomationsRefused())
 }
 
 // Whatever rule refuses a chat, a refused chat nobody is behind is counted as
@@ -259,15 +259,15 @@ func TestGetPolicyImpact_EveryRuleCountsTheAutomationsItRefuses(t *testing.T) {
 			store := &calls{rows: tc.rows, chats: map[string]*db.Chat{
 				"fired": scheduled("fired", &trigger), "fired-on-org-key": scheduled("fired-on-org-key", &trigger),
 			}}
-			resp, err := newService(t, store).GetPolicyImpact(as("ada", auth.CredentialSession), connect.NewRequest(&pb.GetPolicyImpactRequest{
+			resp, err := newService(t, store).GetPolicyImpact(as("ada", auth.CredentialSession), &pb.GetPolicyImpactRequest{
 				OrgId: org, PolicyJson: policyJSON(t, tc.doc),
-			}))
+			})
 			require.NoError(t, err)
-			assert.EqualValues(t, 2, resp.Msg.GetChatsRefused(), "the fired and the person's chat; the admitted automation is not")
-			assert.EqualValues(t, 1, resp.Msg.GetAutomationsRefused(), "only the fired chat is an automation's")
-			require.Len(t, resp.Msg.GetReasons(), 1)
-			assert.Equal(t, tc.reason, resp.Msg.GetReasons()[0].GetReason())
-			assert.EqualValues(t, 1, resp.Msg.GetReasons()[0].GetAutomations())
+			assert.EqualValues(t, 2, resp.GetChatsRefused(), "the fired and the person's chat; the admitted automation is not")
+			assert.EqualValues(t, 1, resp.GetAutomationsRefused(), "only the fired chat is an automation's")
+			require.Len(t, resp.GetReasons(), 1)
+			assert.Equal(t, tc.reason, resp.GetReasons()[0].GetReason())
+			assert.EqualValues(t, 1, resp.GetReasons()[0].GetAutomations())
 		})
 	}
 }
@@ -279,10 +279,10 @@ func TestGetPolicyImpact_SaysWhenItIsTruncated(t *testing.T) {
 		rows[i] = db.OrgChatCall{ChatID: "c", Provider: "anthropic", Funding: "org_key"}
 	}
 	store := &calls{rows: rows}
-	resp, err := newService(t, store).GetPolicyImpact(as("ada", auth.CredentialSession), connect.NewRequest(&pb.GetPolicyImpactRequest{OrgId: org}))
+	resp, err := newService(t, store).GetPolicyImpact(as("ada", auth.CredentialSession), &pb.GetPolicyImpactRequest{OrgId: org})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetTruncated())
-	assert.EqualValues(t, org_policy_impact.ImpactChatLimit, resp.Msg.GetChatsConsidered())
+	assert.True(t, resp.GetTruncated())
+	assert.EqualValues(t, org_policy_impact.ImpactChatLimit, resp.GetChatsConsidered())
 	assert.Equal(t, org_policy_impact.ImpactChatLimit+1, store.limit, "one more than it reads, to know")
 }
 
@@ -303,11 +303,11 @@ func TestGetPolicyImpact_Refusals(t *testing.T) {
 		"a document that is not": {as("ada", auth.CredentialSession), &pb.GetPolicyImpactRequest{OrgId: org, PolicyJson: `{"providers": 7}`}, connect.CodeInvalidArgument, org_policy_impact.ReasonPolicyInvalid},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := svc.GetPolicyImpact(tc.ctx, connect.NewRequest(tc.req))
+			_, err := svc.GetPolicyImpact(tc.ctx, tc.req)
 			require.Error(t, err)
-			assert.Equal(t, tc.code, connect.CodeOf(err), "%v", err)
+			assert.Equal(t, tc.code, svcerr.CodeV2(err), "%v", err)
 			if tc.reason != "" {
-				assert.Equal(t, tc.reason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+				assert.Equal(t, tc.reason, svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 			}
 		})
 	}

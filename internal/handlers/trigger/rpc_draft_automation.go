@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -28,10 +27,10 @@ const draftTimeout = 60 * time.Second
 // only their Create makes a trigger.
 func (s *Service) DraftAutomation(
 	ctx context.Context,
-	req *connect.Request[pb.DraftAutomationRequest],
-) (*connect.Response[pb.DraftAutomationResponse], error) {
+	req *pb.DraftAutomationRequest,
+) (*pb.DraftAutomationResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	msg := req.Msg
+	msg := req
 	description := strings.TrimSpace(msg.GetDescription())
 	if description == "" {
 		return nil, svcerr.InvalidArgument("describe the automation: when it should run and what it should do")
@@ -76,5 +75,5 @@ func (s *Service) DraftAutomation(
 		}
 		return nil, svcerr.Unavailable("couldn't draft that automation; try rewording it, or fill in the form")
 	}
-	return connect.NewResponse(&pb.DraftAutomationResponse{Draft: draft}), nil
+	return &pb.DraftAutomationResponse{Draft: draft}, nil
 }

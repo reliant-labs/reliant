@@ -10,7 +10,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -637,7 +637,7 @@ func TestScopeRequiredAndValidated(t *testing.T) {
 	require.ErrorIs(t, err, inputoptions.ErrBadScope)
 	// A bad scope is the caller's error: InvalidArgument on the wire, and a
 	// user error to the logger (WARN, never an ERROR or a Sentry event).
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
 
 	res, err := f.svc.List(ctx, inputoptions.ListRequest{UserID: "alice", Type: "acme.tag", Scope: map[string]any{"team": "core", "extra": "ignored"}})
@@ -960,21 +960,21 @@ func TestAMutatingListActionIsRefusedAtCallTime(t *testing.T) {
 func TestTypedFailuresAreSvcerrKinds(t *testing.T) {
 	f := newFixture(t, time.Minute)
 	_, err := f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: "acme.nothing"})
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-	assert.Equal(t, `no integration declares the type "acme.nothing"`, svcerr.ToConnect(err).Message())
-	assert.Equal(t, inputoptions.Message(err), svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+	assert.Equal(t, `no integration declares the type "acme.nothing"`, svcerr.ToConnectV2(err).Message())
+	assert.Equal(t, inputoptions.Message(err), svcerr.ToConnectV2(err).Message())
 
 	_, err = f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: ""})
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-	assert.Equal(t, "type is required", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
+	assert.Equal(t, "type is required", svcerr.ToConnectV2(err).Message())
 	assert.Contains(t, err.Error(), "inputoptions: invalid request", "the log keeps the kind")
 
 	retry := error(&inputoptions.UpstreamError{Message: "GitHub is rate limiting", Retryable: true})
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(retry))
-	assert.Equal(t, "GitHub is rate limiting", svcerr.ToConnect(retry).Message())
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(retry))
+	assert.Equal(t, "GitHub is rate limiting", svcerr.ToConnectV2(retry).Message())
 	refused := error(&inputoptions.UpstreamError{Message: "GitHub refused the request"})
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(refused))
-	assert.Equal(t, "GitHub refused the request", svcerr.ToConnect(refused).Message())
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(refused))
+	assert.Equal(t, "GitHub refused the request", svcerr.ToConnectV2(refused).Message())
 
 	assert.False(t, svcerr.IsClassified(inputoptions.ErrInvalidType), "a defect has no kind: the handler's Internal names it")
 }

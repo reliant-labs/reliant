@@ -7,12 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -203,8 +202,12 @@ type UserChainDeps struct {
 //
 //forge:root-only api
 func NewUserChain(d UserChainDeps) (*grpcserver.UserChain, error) {
+	var authIC connect.ServerInterceptor
+	if d.Auth != nil {
+		authIC = d.Auth.Intercept
+	}
 	return grpcserver.NewUserChain(grpcserver.UserChainDeps{
-		Auth:                d.Auth,
+		Auth:                authIC,
 		AllowedEmailDomains: d.AllowedEmailDomains,
 		Logger:              d.Logger,
 	})
@@ -284,9 +287,9 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 		Chain:              d.Chain,
 		Membership:         d.Membership,
 		Policies:           d.Policies,
-		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
-			services := d.Routes.Register(mux, opts...)
-			d.HTTP.Register(mux)
+		Routes: serverkit.RoutesFuncV2(func(mux *mountkit.MuxV2) []string {
+			services := d.Routes.RegisterV2(mux)
+			d.HTTP.Register(mux.Mux())
 			return services
 		}),
 		Logger: d.Logger,
@@ -1363,14 +1366,14 @@ func (l *LLMUsageRetention) Run(ctx context.Context) error {
 // distinct ones run at once, so a client that storms them (desktop builds
 // before #1865) cannot take the database pool from everyone else.
 func apiMountOptions(disableForgeAPI bool) MountOptions {
-	machineWake := mountkit.WithHandlerOptions(connect.WithInterceptors(machinewake.NewInterceptor()))
-	listReads := mountkit.WithHandlerOptions(connect.WithInterceptors(readguard.NewInstrumented(readguard.Deps{
+	machineWake := mountkit.WithInterceptorsV2(machinewake.NewInterceptor())
+	listReads := mountkit.WithInterceptorsV2(readguard.NewInstrumented(readguard.Deps{
 		Procedures: []readguard.Procedure{
 			readguard.Read[reliantv1.ListChatsResponse](reliantv1connect.ChatServiceListChatsProcedure),
 			readguard.Read[reliantv1.ListArchivedChatsResponse](reliantv1connect.ChatServiceListArchivedChatsProcedure),
 			readguard.Read[reliantv1.ListApprovalsByChatResponse](reliantv1connect.ApprovalServiceListApprovalsByChatProcedure),
 		},
-	})))
+	}).Intercept)
 	opts := MountOptions{
 		Worktree:   []mountkit.Option{machineWake},
 		FileSystem: []mountkit.Option{machineWake},

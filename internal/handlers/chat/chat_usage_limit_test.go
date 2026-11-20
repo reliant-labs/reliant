@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,32 +73,32 @@ func TestRetryUsageLimitWait_SignalsOnlyALiveRun(t *testing.T) {
 	temporal := &usageLimitTemporalClient{}
 	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}}
 
-	resp, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
+	resp, err := svc.RetryUsageLimitWait(ctx, &reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Woken)
+	assert.True(t, resp.Woken)
 	assert.Equal(t, []string{chatID + ":" + v2.CapacityWakeSignalName}, temporal.signals)
 
 	// Only a sub-agent waits now: the chat no longer reads as waiting, and the
 	// run is still woken — the agent's wait is what the click is for.
 	require.NoError(t, repo.ClearUsageLimitWait(ctx, chatID, chatID, time.Now()))
 	require.NoError(t, repo.RecordUsageLimitWait(ctx, chatID, chatID+"-agent", "Anthropic", false, time.Now().Add(time.Hour), time.Now()))
-	resp, err = svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
+	resp, err = svc.RetryUsageLimitWait(ctx, &reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Woken, "a sub-agent's wait is woken from the chat")
+	assert.True(t, resp.Woken, "a sub-agent's wait is woken from the chat")
 	assert.Len(t, temporal.signals, 2)
 
 	// The run is over: a late click is a no-op.
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, chatID, db.Completed()))
-	resp, err = svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
+	resp, err = svc.RetryUsageLimitWait(ctx, &reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Woken, "a run that has ended is left alone")
+	assert.False(t, resp.Woken, "a run that has ended is left alone")
 	assert.Len(t, temporal.signals, 2)
 
 	// Someone else's chat is not found, not woken.
 	other := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
-	_, err = svc.RetryUsageLimitWait(other, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
+	_, err = svc.RetryUsageLimitWait(other, &reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }
 
 // Stop on a waiting run: TerminateWorkflow runs no workflow code, so the stop
@@ -121,7 +121,7 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 		deps: Deps{Repo: repo, Temporal: temporal},
 		runs: runs.NewService(repo, temporal, nil),
 	}
-	_, err = svc.TerminateChat(ctx, connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: chatID}))
+	_, err = svc.TerminateChat(ctx, &reliantv1.TerminateChatRequest{ChatId: chatID})
 	require.NoError(t, err)
 	require.Equal(t, []string{chatID}, temporal.terminated)
 
@@ -149,7 +149,7 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}}
 
 	t.Run("a plain retry carries no model", func(t *testing.T) {
-		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
+		_, err := svc.RetryUsageLimitWait(ctx, &reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID})
 		require.NoError(t, err)
 		require.Len(t, temporal.payloads, 1)
 		assert.Equal(t, v2.CapacityWakeSignal{}, temporal.payloads[0])
@@ -157,17 +157,17 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 
 	t.Run("a model that names no provider is refused", func(t *testing.T) {
 		bad := "gpt-5.6-sol"
-		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &bad}))
+		_, err := svc.RetryUsageLimitWait(ctx, &reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &bad})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 		assert.Len(t, temporal.payloads, 1, "nothing was signalled")
 	})
 
 	t.Run("a model that does not exist is refused", func(t *testing.T) {
 		bad := "no-such-model@codex"
-		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &bad}))
+		_, err := svc.RetryUsageLimitWait(ctx, &reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &bad})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	})
 
 }

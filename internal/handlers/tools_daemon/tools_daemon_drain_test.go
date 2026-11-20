@@ -8,12 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -59,7 +60,7 @@ func TestCloseEndsOpenDaemonStreamsWithUnavailable(t *testing.T) {
 	select {
 	case err := <-handlerErr:
 		require.Error(t, err, "Close must end the stream with a status, not a nil return")
-		require.Equal(t, connect.CodeUnavailable, svcerr.Code(err),
+		require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err),
 			"the daemon must see Unavailable so it redials to a live replica; "+
 				"got %v", err)
 		require.Contains(t, err.Error(), "draining")
@@ -73,8 +74,8 @@ func TestCloseEndsOpenDaemonStreamsWithUnavailable(t *testing.T) {
 // classified terminal, a gateway rollout would permanently disconnect every
 // daemon instead of moving them to the surge pod.
 func TestDrainingErrorIsRecoverableForDaemons(t *testing.T) {
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(errGatewayDraining))
-	require.NotEqual(t, connect.CodeAborted, svcerr.Code(errGatewayDraining),
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(errGatewayDraining))
+	require.NotEqual(t, connect.CodeAborted, svcerr.CodeV2(errGatewayDraining),
 		"Aborted is the supersede signal and is terminal — a draining gateway must not use it")
 }
 
@@ -116,7 +117,7 @@ func TestCloseIsIdempotent(t *testing.T) {
 	svc.Close()
 	svc.Close()
 
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(conn.closedReason()),
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(conn.closedReason()),
 		"the first Close's reason must survive the second")
 }
 
@@ -204,7 +205,7 @@ func TestHandOverEndsAtOnceTheStreamsOfDaemonsThatCannotMove(t *testing.T) {
 	require.Equal(t, 1, drainReplica(svc, time.Now().Add(20*time.Second)), "only the daemon that can move is told to")
 	select {
 	case <-old.done:
-		require.Equal(t, connect.CodeUnavailable, svcerr.Code(old.closedReason()))
+		require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(old.closedReason()))
 	default:
 		t.Fatal("a daemon that cannot move must be ended at once, so it redials straight away")
 	}
@@ -260,8 +261,8 @@ func TestStreamArrivingDuringTheListenerDrainIsRefused(t *testing.T) {
 	ctx, release := streams.Bind(context.Background())
 	defer release()
 
-	err := svc.ConnectDaemon(ctx, nil)
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	err := svc.ConnectDaemon(ctx, reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream{})
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 	require.True(t, svcerr.IsServerDraining(err))
 }
 
@@ -271,12 +272,12 @@ func TestDrainingReplicaRefusesNewDaemonStreams(t *testing.T) {
 	svc := newTestService(nil)
 	drainReplica(svc, time.Now().Add(time.Second))
 
-	err := svc.ConnectDaemon(context.Background(), nil)
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "Unavailable keeps the daemon on its reconnect path")
+	err := svc.ConnectDaemon(context.Background(), reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream{})
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "Unavailable keeps the daemon on its reconnect path")
 	require.True(t, svcerr.IsServerDraining(err))
 
-	_, err = svc.RegisterOutboundConnection(context.Background(), "user-1", "daemon-1", "10.0.0.1", 9190, &reliantv1.DaemonRegister{}, nil, nil, MachineOrg{})
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	_, err = svc.RegisterOutboundConnection(context.Background(), "user-1", "daemon-1", "10.0.0.1", 9190, &reliantv1.DaemonRegister{}, reliantv1connect.ToolsDaemonServiceConnectGatewayClientStream{}, nil, MachineOrg{})
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 }
 
 // Once told to move, the daemon closes its old stream itself when it is done

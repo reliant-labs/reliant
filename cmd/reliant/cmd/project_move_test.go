@@ -4,12 +4,10 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -29,32 +27,32 @@ type fakeMoveClient struct {
 	reads      []reliantv1.ProjectOrgMoveState
 }
 
-func (f *fakeMoveClient) ListProjects(context.Context, *connect.Request[reliantv1.ListProjectsRequest]) (*connect.Response[reliantv1.ListProjectsResponse], error) {
-	return connect.NewResponse(&reliantv1.ListProjectsResponse{Projects: []*reliantv1.Project{
+func (f *fakeMoveClient) ListProjects(context.Context, *reliantv1.ListProjectsRequest) (*reliantv1.ListProjectsResponse, error) {
+	return &reliantv1.ListProjectsResponse{Projects: []*reliantv1.Project{
 		{Id: "p1", Name: "web", Path: "/home/me/web"},
 		{Id: "p2", Name: "api", Path: "/home/me/api"},
 		{Id: "p3", Name: "api", Path: "/home/me/api-2"},
-	}}), nil
+	}}, nil
 }
 
-func (f *fakeMoveClient) PreviewProjectOrgMove(context.Context, *connect.Request[reliantv1.PreviewProjectOrgMoveRequest]) (*connect.Response[reliantv1.PreviewProjectOrgMoveResponse], error) {
+func (f *fakeMoveClient) PreviewProjectOrgMove(context.Context, *reliantv1.PreviewProjectOrgMoveRequest) (*reliantv1.PreviewProjectOrgMoveResponse, error) {
 	if f.previewErr != nil {
 		return nil, f.previewErr
 	}
-	return connect.NewResponse(f.preview), nil
+	return f.preview, nil
 }
 
-func (f *fakeMoveClient) MoveProjectToOrg(_ context.Context, req *connect.Request[reliantv1.MoveProjectToOrgRequest]) (*connect.Response[reliantv1.MoveProjectToOrgResponse], error) {
-	f.moved = req.Msg
-	return connect.NewResponse(&reliantv1.MoveProjectToOrgResponse{Move: &reliantv1.ProjectOrgMove{Id: "m1", ToOrgId: req.Msg.GetToOrgId(), State: f.answer}}), nil
+func (f *fakeMoveClient) MoveProjectToOrg(_ context.Context, req *reliantv1.MoveProjectToOrgRequest) (*reliantv1.MoveProjectToOrgResponse, error) {
+	f.moved = req
+	return &reliantv1.MoveProjectToOrgResponse{Move: &reliantv1.ProjectOrgMove{Id: "m1", ToOrgId: req.GetToOrgId(), State: f.answer}}, nil
 }
 
-func (f *fakeMoveClient) GetProjectOrgMove(context.Context, *connect.Request[reliantv1.GetProjectOrgMoveRequest]) (*connect.Response[reliantv1.GetProjectOrgMoveResponse], error) {
+func (f *fakeMoveClient) GetProjectOrgMove(context.Context, *reliantv1.GetProjectOrgMoveRequest) (*reliantv1.GetProjectOrgMoveResponse, error) {
 	state := f.reads[0]
 	if len(f.reads) > 1 {
 		f.reads = f.reads[1:]
 	}
-	return connect.NewResponse(&reliantv1.GetProjectOrgMoveResponse{Move: &reliantv1.ProjectOrgMove{Id: "m1", ToOrgId: "globex", State: state}}), nil
+	return &reliantv1.GetProjectOrgMoveResponse{Move: &reliantv1.ProjectOrgMove{Id: "m1", ToOrgId: "globex", State: state}}, nil
 }
 
 func idlePreview() *reliantv1.PreviewProjectOrgMoveResponse {
@@ -155,8 +153,7 @@ func TestProjectMove(t *testing.T) {
 	})
 
 	t.Run("a person-only refusal says where to move it", func(t *testing.T) {
-		refusal := connect.NewError(connect.CodePermissionDenied, errors.New("only a person"))
-		refusal.Meta().Set(svcerr.ReasonHeader, "person_required")
+		refusal := svcerr.ToConnectV2(svcerr.WithReason(svcerr.PermissionDenied("only a person"), "person_required"))
 		_, err := runMove(&fakeMoveClient{previewErr: refusal}, "", true, false, "web")
 		require.ErrorContains(t, err, "Settings → Projects → Danger zone")
 	})

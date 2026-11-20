@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -29,22 +29,22 @@ func TestUpdateProject_Generated(t *testing.T) {
 	}
 	svc := newService(t, store, nil)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdateProjectRequest, pb.UpdateProjectResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.UpdateProjectRequest, pb.UpdateProjectResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.UpdateProjectRequest{ProjectId: "p-2", Name: ptr.Of("renamed")}),
+			Req:     &pb.UpdateProjectRequest{ProjectId: "p-2", Name: ptr.Of("renamed")},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "only the fields sent are changed",
-			Req:  connect.NewRequest(&pb.UpdateProjectRequest{ProjectId: "p-1", Name: ptr.Of("renamed")}),
+			Req:  &pb.UpdateProjectRequest{ProjectId: "p-1", Name: ptr.Of("renamed")},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.UpdateProjectResponse]) {
+			Check: func(t *testing.T, resp *pb.UpdateProjectResponse) {
 				if stored == nil || stored.Name != "renamed" || stored.Path != creatorPath || stored.DefaultBranch == nil || *stored.DefaultBranch != "main" {
 					t.Fatalf("stored = %+v, want p-1 renamed and otherwise unchanged", stored)
 				}
-				if got := resp.Msg.GetProject(); got.GetName() != "renamed" || got.GetId() != "p-1" {
+				if got := resp.GetProject(); got.GetName() != "renamed" || got.GetId() != "p-1" {
 					t.Fatalf("project = %v, want p-1 renamed", got)
 				}
 			},

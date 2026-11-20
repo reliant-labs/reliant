@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -29,22 +29,22 @@ func TestGetAttachment_Generated(t *testing.T) {
 
 	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{Repo: getForeignRepo{}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetAttachmentRequest, pb.GetAttachmentResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetAttachmentRequest, pb.GetAttachmentResponse]{
 		{
 			Name:    "attachment_id is required",
-			Req:     connect.NewRequest(&pb.GetAttachmentRequest{}),
+			Req:     &pb.GetAttachmentRequest{},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown attachment is not found",
-			Req:     connect.NewRequest(&pb.GetAttachmentRequest{AttachmentId: "att-missing"}),
+			Req:     &pb.GetAttachmentRequest{AttachmentId: "att-missing"},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's attachment is not found",
-			Req:     connect.NewRequest(&pb.GetAttachmentRequest{AttachmentId: "att-foreign"}),
+			Req:     &pb.GetAttachmentRequest{AttachmentId: "att-foreign"},
 			Ctx:     attachment.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

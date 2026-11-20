@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -23,23 +23,23 @@ func TestSavePrompts_Generated(t *testing.T) {
 		svc := newSettingsService(t, stored.repo())
 		ctx := settings.AuthedContext(t)
 
-		resp, err := svc.SavePrompts(ctx, connect.NewRequest(&pb.SavePromptsRequest{Prompts: []*pb.UserPrompt{
+		resp, err := svc.SavePrompts(ctx, &pb.SavePromptsRequest{Prompts: []*pb.UserPrompt{
 			{Id: "p-1", Title: "Review", Content: "Review this", Category: ptr.Of("code")},
-		}}))
+		}})
 		require.NoError(t, err)
-		require.True(t, resp.Msg.GetSuccess())
+		require.True(t, resp.GetSuccess())
 
-		got, err := svc.GetPrompts(ctx, connect.NewRequest(&pb.GetPromptsRequest{}))
+		got, err := svc.GetPrompts(ctx, &pb.GetPromptsRequest{})
 		require.NoError(t, err)
-		require.Len(t, got.Msg.GetPrompts(), 1)
-		require.Equal(t, "code", got.Msg.GetPrompts()[0].GetCategory())
+		require.Len(t, got.GetPrompts(), 1)
+		require.Equal(t, "code", got.GetPrompts()[0].GetCategory())
 	})
 
 	t.Run("a failed write is internal", func(t *testing.T) {
 		repo := memorySettings{}.repo()
 		repo.CreateSettingFunc = func(context.Context, *db.Setting) error { return errors.New("db down") }
 		svc := newSettingsService(t, repo)
-		_, err := svc.SavePrompts(settings.AuthedContext(t), connect.NewRequest(&pb.SavePromptsRequest{}))
-		require.Equal(t, connect.CodeInternal, svcerr.Code(err))
+		_, err := svc.SavePrompts(settings.AuthedContext(t), &pb.SavePromptsRequest{})
+		require.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 	})
 }

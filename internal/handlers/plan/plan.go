@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -56,16 +55,16 @@ func (s *Service) planBelongsToUser(ctx context.Context, planID string, userID s
 // CreatePlan creates a new plan
 func (s *Service) CreatePlan(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreatePlanRequest],
-) (*connect.Response[reliantv1.CreatePlanResponse], error) {
+	req *reliantv1.CreatePlanRequest,
+) (*reliantv1.CreatePlanResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Verify user owns the chat
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -73,36 +72,36 @@ func (s *Service) CreatePlan(
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 
-	if req.Msg.Title == "" {
+	if req.Title == "" {
 		return nil, svcerr.InvalidArgument("title is required")
 	}
 
-	statusVal := int32(req.Msg.Status)
+	statusVal := int32(req.Status)
 	if statusVal == 0 {
 		statusVal = int32(reliantv1.PlanStatus_PLAN_STATUS_PENDING)
 	}
 
 	plan := &db.Plan{
 		ID:          uuid.New().String(),
-		ThreadID:    req.Msg.ChatId, // gRPC CreatePlan uses chat_id as thread_id for now
-		Title:       req.Msg.Title,
-		Description: ptr.StringIfNotEmpty(req.Msg.Description),
+		ThreadID:    req.ChatId, // gRPC CreatePlan uses chat_id as thread_id for now
+		Title:       req.Title,
+		Description: ptr.StringIfNotEmpty(req.Description),
 		Status:      statusVal,
-		Complexity:  planproto.PlanComplexityToInt32Ptr(&req.Msg.Complexity),
+		Complexity:  planproto.PlanComplexityToInt32Ptr(&req.Complexity),
 	}
 
 	if err := s.deps.Repo.CreatePlan(ctx, plan); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create plan"))
 	}
 
-	if err := s.deps.Repo.EmitChatRefetch(ctx, req.Msg.ChatId, db.RefetchPlanTasks); err != nil {
+	if err := s.deps.Repo.EmitChatRefetch(ctx, req.ChatId, db.RefetchPlanTasks); err != nil {
 		logging.WarnContext(ctx, "[PlanService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
 	resp := &reliantv1.CreatePlanResponse{
 		Plan: &reliantv1.Plan{
 			Id:        plan.ID,
-			ChatId:    req.Msg.ChatId,
+			ChatId:    req.ChatId,
 			Title:     plan.Title,
 			Status:    planproto.PlanStatus(plan.Status),
 			CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -116,21 +115,21 @@ func (s *Service) CreatePlan(
 		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
 	}
 
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // GetPlan retrieves a plan by ID
 func (s *Service) GetPlan(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetPlanRequest],
-) (*connect.Response[reliantv1.GetPlanResponse], error) {
+	req *reliantv1.GetPlanRequest,
+) (*reliantv1.GetPlanResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.planBelongsToUser(ctx, req.Msg.PlanId, userID); err != nil {
+	if err := s.planBelongsToUser(ctx, req.PlanId, userID); err != nil {
 		return nil, err
 	}
 
-	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, req.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
@@ -154,24 +153,24 @@ func (s *Service) GetPlan(
 		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
 	}
 
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // GetPlanByChatId retrieves a plan by chat ID
 func (s *Service) GetPlanByChatId(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetPlanByChatIdRequest],
-) (*connect.Response[reliantv1.GetPlanByChatIdResponse], error) {
+	req *reliantv1.GetPlanByChatIdRequest,
+) (*reliantv1.GetPlanByChatIdResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 	// Serves viewers of a shared chat (authz.WithViewerReads).
 	ctx = authz.WithViewerReads(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// The owner, or a viewer of a shared chat.
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -181,14 +180,14 @@ func (s *Service) GetPlanByChatId(
 	}
 
 	// Get plans for this chat (via thread join)
-	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.Msg.ChatId)
+	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	// If no plans found, return empty response
 	if len(plans) == 0 {
-		return connect.NewResponse(&reliantv1.GetPlanByChatIdResponse{}), nil
+		return &reliantv1.GetPlanByChatIdResponse{}, nil
 	}
 
 	// Return the first plan
@@ -196,7 +195,7 @@ func (s *Service) GetPlanByChatId(
 	resp := &reliantv1.GetPlanByChatIdResponse{
 		Plan: &reliantv1.Plan{
 			Id:        plan.ID,
-			ChatId:    req.Msg.ChatId,
+			ChatId:    req.ChatId,
 			Title:     plan.Title,
 			Status:    planproto.PlanStatus(plan.Status),
 			CreatedAt: plan.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -210,21 +209,21 @@ func (s *Service) GetPlanByChatId(
 		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
 	}
 
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // UpdatePlan updates an existing plan
 func (s *Service) UpdatePlan(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdatePlanRequest],
-) (*connect.Response[reliantv1.UpdatePlanResponse], error) {
+	req *reliantv1.UpdatePlanRequest,
+) (*reliantv1.UpdatePlanResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.planBelongsToUser(ctx, req.Msg.PlanId, userID); err != nil {
+	if err := s.planBelongsToUser(ctx, req.PlanId, userID); err != nil {
 		return nil, err
 	}
 
-	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, req.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
@@ -232,17 +231,17 @@ func (s *Service) UpdatePlan(
 	chatID, _ := s.getChatIDForPlan(ctx, plan)
 
 	// Update fields
-	if req.Msg.Title != nil {
-		plan.Title = *req.Msg.Title
+	if req.Title != nil {
+		plan.Title = *req.Title
 	}
-	if req.Msg.Description != nil {
-		plan.Description = req.Msg.Description
+	if req.Description != nil {
+		plan.Description = req.Description
 	}
-	if req.Msg.Status != nil {
-		plan.Status = int32(*req.Msg.Status)
+	if req.Status != nil {
+		plan.Status = int32(*req.Status)
 	}
-	if req.Msg.Complexity != nil {
-		plan.Complexity = planproto.PlanComplexityToInt32Ptr(req.Msg.Complexity)
+	if req.Complexity != nil {
+		plan.Complexity = planproto.PlanComplexityToInt32Ptr(req.Complexity)
 	}
 
 	if err := s.deps.Repo.UpdatePlan(ctx, plan); err != nil {
@@ -270,29 +269,29 @@ func (s *Service) UpdatePlan(
 		resp.Plan.Complexity = planproto.PlanComplexity(*plan.Complexity)
 	}
 
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // DeletePlan deletes a plan
 func (s *Service) DeletePlan(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeletePlanRequest],
-) (*connect.Response[reliantv1.DeletePlanResponse], error) {
+	req *reliantv1.DeletePlanRequest,
+) (*reliantv1.DeletePlanResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.planBelongsToUser(ctx, req.Msg.PlanId, userID); err != nil {
+	if err := s.planBelongsToUser(ctx, req.PlanId, userID); err != nil {
 		return nil, err
 	}
 
 	// Get chatID before deleting
-	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
+	plan, err := s.deps.Repo.GetPlan(ctx, req.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	chatID, _ := s.getChatIDForPlan(ctx, plan)
 
-	if err := s.deps.Repo.DeletePlan(ctx, req.Msg.PlanId); err != nil {
+	if err := s.deps.Repo.DeletePlan(ctx, req.PlanId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete plan"))
 	}
 
@@ -300,21 +299,21 @@ func (s *Service) DeletePlan(
 		logging.WarnContext(ctx, "[PlanService] Failed to emit plan_tasks refetch", "error", err)
 	}
 
-	return connect.NewResponse(&reliantv1.DeletePlanResponse{Success: true}), nil
+	return &reliantv1.DeletePlanResponse{Success: true}, nil
 }
 
 // ListPlanTasks lists all tasks for a plan
 func (s *Service) ListPlanTasks(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListPlanTasksRequest],
-) (*connect.Response[reliantv1.ListPlanTasksResponse], error) {
+	req *reliantv1.ListPlanTasksRequest,
+) (*reliantv1.ListPlanTasksResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.planBelongsToUser(ctx, req.Msg.PlanId, userID); err != nil {
+	if err := s.planBelongsToUser(ctx, req.PlanId, userID); err != nil {
 		return nil, err
 	}
 
-	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, req.Msg.PlanId)
+	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, req.PlanId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list tasks"))
 	}
@@ -338,8 +337,8 @@ func (s *Service) ListPlanTasks(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.ListPlanTasksResponse{
+	return &reliantv1.ListPlanTasksResponse{
 		Tasks: protoTasks,
 		Total: int32(len(tasks)),
-	}), nil
+	}, nil
 }

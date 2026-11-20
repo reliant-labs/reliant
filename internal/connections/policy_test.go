@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -123,9 +123,9 @@ func requireIntegrationNotAllowed(t *testing.T, err error) {
 	require.True(t, errors.As(err, &ce))
 	require.Equal(t, connections.ReasonIntegrationNotAllowed, ce.Reason)
 	require.Equal(t, "integration_not_allowed", ce.Reason, "the reason is part of the API")
-	wire := svcerr.ToConnect(err)
+	wire := svcerr.ToConnectV2(err)
 	require.Equal(t, connect.CodeFailedPrecondition, wire.Code())
-	require.Equal(t, "integration_not_allowed", wire.Meta().Get(svcerr.ReasonHeader))
+	require.Equal(t, "integration_not_allowed", svcerr.MetaOf(wire).Get(svcerr.ReasonHeader))
 	require.Contains(t, err.Error(), "your organization's policy does not allow the github integration")
 }
 

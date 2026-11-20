@@ -9,10 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -144,11 +143,10 @@ func admits(t *testing.T, domains []string, email string) bool {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-123")
 	ctx = context.WithValue(ctx, auth.UserEmailContextKey, email)
-	call := interceptors.NewDomainWhitelistInterceptor(domains).WrapUnary(
-		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) { return nil, nil })
-	_, err := call(ctx, connect.NewRequest(&emptypb.Empty{}))
-	if err != nil {
-		require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "unexpected whitelist error: %v", err)
+	call := interceptors.NewDomainWhitelistInterceptor(domains).Intercept(
+		func(context.Context, connect.Spec, connect.ServerStream) error { return nil })
+	if err := call(ctx, connect.Spec{StreamType: connect.StreamTypeUnary}, nil); err != nil {
+		require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "unexpected whitelist error: %v", err)
 		return false
 	}
 	return true

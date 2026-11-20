@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -29,28 +29,28 @@ func TestRunCommand_Generated(t *testing.T) {
 
 	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: runNoWorktreeRepo{}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RunPackageCommandRequest, pb.RunPackageCommandResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.RunPackageCommandRequest, pb.RunPackageCommandResponse]{
 		{
 			Name:    "command_name is required",
-			Req:     connect.NewRequest(&pb.RunPackageCommandRequest{PackageType: pb.PackageType_PACKAGE_TYPE_NPM, Path: ptr.Of("/w")}),
+			Req:     &pb.RunPackageCommandRequest{PackageType: pb.PackageType_PACKAGE_TYPE_NPM, Path: ptr.Of("/w")},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "package_type is required",
-			Req:     connect.NewRequest(&pb.RunPackageCommandRequest{CommandName: "build", Path: ptr.Of("/w")}),
+			Req:     &pb.RunPackageCommandRequest{CommandName: "build", Path: ptr.Of("/w")},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a worktree or a path is required",
-			Req:     connect.NewRequest(&pb.RunPackageCommandRequest{CommandName: "build", PackageType: pb.PackageType_PACKAGE_TYPE_NPM}),
+			Req:     &pb.RunPackageCommandRequest{CommandName: "build", PackageType: pb.PackageType_PACKAGE_TYPE_NPM},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown worktree is not found",
-			Req:     connect.NewRequest(&pb.RunPackageCommandRequest{CommandName: "build", PackageType: pb.PackageType_PACKAGE_TYPE_NPM, WorktreeId: ptr.Of("wt-missing")}),
+			Req:     &pb.RunPackageCommandRequest{CommandName: "build", PackageType: pb.PackageType_PACKAGE_TYPE_NPM, WorktreeId: ptr.Of("wt-missing")},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

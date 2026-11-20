@@ -11,12 +11,16 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // chatLists is a ChatService whose ListChats and ListArchivedChats block until
@@ -36,59 +40,67 @@ func newChatLists() *chatLists {
 	return &chatLists{release: make(chan struct{}), running: make(chan string, 100)}
 }
 
-func (s *chatLists) ListChats(ctx context.Context, req *connect.Request[reliantv1.ListChatsRequest]) (*connect.Response[reliantv1.ListChatsResponse], error) {
+func (s *chatLists) ListChats(ctx context.Context, req *reliantv1.ListChatsRequest) (*reliantv1.ListChatsResponse, error) {
+	info := serverkit.CallInfoV2(ctx)
 	s.reads.Add(1)
-	s.running <- req.Msg.ProjectId
+	s.running <- req.ProjectId
 	select {
 	case <-s.release:
 	case <-ctx.Done():
 		s.cancelled.Add(1)
 		return nil, ctx.Err()
 	}
-	resp := connect.NewResponse(&reliantv1.ListChatsResponse{
-		Chats: []*reliantv1.Chat{{Id: "chat-in-" + req.Msg.ProjectId}},
+	resp := &reliantv1.ListChatsResponse{
+		Chats: []*reliantv1.Chat{{Id: "chat-in-" + req.ProjectId}},
 		Total: 1,
-	})
-	resp.Header().Set("X-Read", "1")
+	}
+	info.ResponseHeader().Set("X-Read", "1")
 	return resp, nil
 }
 
-func (s *chatLists) ListArchivedChats(ctx context.Context, _ *connect.Request[reliantv1.ListArchivedChatsRequest]) (*connect.Response[reliantv1.ListArchivedChatsResponse], error) {
+func (s *chatLists) ListArchivedChats(ctx context.Context, _ *reliantv1.ListArchivedChatsRequest) (*reliantv1.ListArchivedChatsResponse, error) {
 	s.reads.Add(1)
 	s.running <- "archived"
 	<-s.release
-	return connect.NewResponse(&reliantv1.ListArchivedChatsResponse{}), nil
+	return &reliantv1.ListArchivedChatsResponse{}, nil
 }
 
-func (s *chatLists) GetChat(ctx context.Context, _ *connect.Request[reliantv1.GetChatRequest]) (*connect.Response[reliantv1.GetChatResponse], error) {
+func (s *chatLists) GetChat(ctx context.Context, _ *reliantv1.GetChatRequest) (*reliantv1.GetChatResponse, error) {
 	s.reads.Add(1)
-	return connect.NewResponse(&reliantv1.GetChatResponse{}), nil
+	return &reliantv1.GetChatResponse{}, nil
 }
 
 // serve mounts svc behind the guard, with the caller's user taken from the
 // X-User header the way the API auth interceptor installs it, and returns a
 // client.
-func serve(t *testing.T, svc *chatLists, cfg Deps) (reliantv1connect.ChatServiceClient, *guard) {
+// outer are interceptors outside the guard (and outside svcerr's, which is
+// outside the guard in production: the mount's interceptors run inside the
+// shared chain).
+func serve(t *testing.T, svc *chatLists, cfg Deps, outer ...connect.ServerInterceptor) (reliantv1connect.ChatServiceClient, *guard) {
 	t.Helper()
 	cfg.Procedures = []Procedure{
 		Read[reliantv1.ListChatsResponse](reliantv1connect.ChatServiceListChatsProcedure),
 		Read[reliantv1.ListArchivedChatsResponse](reliantv1connect.ChatServiceListArchivedChatsProcedure),
 	}
-	authn := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if user := req.Header().Get("X-User"); user != "" {
-				ctx = auth.WithUser(ctx, user, "user", user+"@example.com")
+	authn := func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			if info, ok := connect.CallInfoForServerContext(ctx); ok {
+				if user := info.RequestHeader().Get("X-User"); user != "" {
+					ctx = auth.WithUser(ctx, user, "user", user+"@example.com")
+				}
 			}
-			return next(ctx, req)
+			return next(ctx, spec, stream)
 		}
-	})
+	}
 	g := New(cfg).(*guard)
-	path, handler := reliantv1connect.NewChatServiceHandler(svc, connect.WithInterceptors(authn, g))
+	chain := append(append([]connect.ServerInterceptor{authn}, outer...), svcerr.InterceptorV2(), g.Intercept)
+	srv := connect.NewServer(chain...)
+	reliantv1connect.RegisterChatServiceHandler(srv, svc)
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	mountkit.MountV2(mux, srv)
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
-	return reliantv1connect.NewChatServiceClient(server.Client(), server.URL), g
+	return reliantv1connect.NewChatServiceClient(rpcclient.New(server.Client(), server.URL, nil)), g
 }
 
 // callers is how many callers wait on user's reads in flight.
@@ -114,10 +126,18 @@ func queued(g *guard, user string) int {
 	return 0
 }
 
-func listChats(ctx context.Context, client reliantv1connect.ChatServiceClient, user, project string) (*connect.Response[reliantv1.ListChatsResponse], error) {
-	req := connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: project})
-	req.Header().Set("X-User", user)
-	return client.ListChats(ctx, req)
+func listChats(ctx context.Context, client reliantv1connect.ChatServiceClient, user, project string) (*reliantv1.ListChatsResponse, error) {
+	resp, _, err := listChatsWithHeader(ctx, client, user, project)
+	return resp, err
+}
+
+// listChatsWithHeader is listChats plus the response headers the client got.
+func listChatsWithHeader(ctx context.Context, client reliantv1connect.ChatServiceClient, user, project string) (*reliantv1.ListChatsResponse, *connect.Header, error) {
+	req := &reliantv1.ListChatsRequest{ProjectId: project}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("X-User", user)
+	resp, err := client.ListChats(ctx, req)
+	return resp, info.ResponseHeader(), err
 }
 
 // waitRunning waits for n reads to have reached the service.
@@ -141,13 +161,14 @@ func TestIdenticalReadsShareOneRead(t *testing.T) {
 
 	const burst = 50
 	var wg sync.WaitGroup
-	responses := make([]*connect.Response[reliantv1.ListChatsResponse], burst)
+	responses := make([]*reliantv1.ListChatsResponse, burst)
+	headers := make([]*connect.Header, burst)
 	errs := make([]error, burst)
 	for i := range burst {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			responses[i], errs[i] = listChats(context.Background(), client, "u1", "p1")
+			responses[i], headers[i], errs[i] = listChatsWithHeader(context.Background(), client, "u1", "p1")
 		}()
 	}
 	waitRunning(t, svc, 1)
@@ -159,8 +180,8 @@ func TestIdenticalReadsShareOneRead(t *testing.T) {
 	require.Equal(t, int32(1), svc.reads.Load(), "identical concurrent reads must share one read")
 	for i := range burst {
 		require.NoError(t, errs[i])
-		require.Equal(t, "chat-in-p1", responses[i].Msg.Chats[0].Id)
-		require.Equal(t, "1", responses[i].Header().Get("X-Read"), "a shared answer keeps the read's headers")
+		require.Equal(t, "chat-in-p1", responses[i].Chats[0].Id)
+		require.Equal(t, "1", headers[i].Get("X-Read"), "a shared answer keeps the read's headers")
 	}
 }
 
@@ -178,7 +199,7 @@ func TestReadsAreSharedPerUserAndRequest(t *testing.T) {
 			defer wg.Done()
 			resp, err := listChats(context.Background(), client, call.user, call.project)
 			require.NoError(t, err)
-			require.Equal(t, "chat-in-"+call.project, resp.Msg.Chats[0].Id)
+			require.Equal(t, "chat-in-"+call.project, resp.Chats[0].Id)
 		}()
 	}
 	waitRunning(t, svc, 3)
@@ -197,7 +218,7 @@ func TestDistinctReadsAreBoundedPerUser(t *testing.T) {
 	client, g := serve(t, svc, Deps{Limits: Limits{PerUser: 2, Queue: 1, Wait: 300 * time.Millisecond, RetryAfter: 2 * time.Second}})
 
 	type result struct {
-		resp *connect.Response[reliantv1.ListChatsResponse]
+		resp *reliantv1.ListChatsResponse
 		err  error
 	}
 	start := func(user, project string) chan result {
@@ -243,7 +264,7 @@ func requireRefused(t *testing.T, err error, retryAfter string) {
 	require.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err), "%v", err)
 	var ce *connect.Error
 	require.True(t, errors.As(err, &ce))
-	require.Equal(t, retryAfter, ce.Meta().Get("Retry-After"))
+	require.Equal(t, retryAfter, svcerr.MetaOf(err).Get("Retry-After"))
 }
 
 // A caller that gives up does not cancel a read other callers still wait on;
@@ -285,9 +306,9 @@ func TestUnguardedCallsPassThrough(t *testing.T) {
 	go func() { _, _ = listChats(context.Background(), client, "u1", "p1") }()
 	waitRunning(t, svc, 1)
 	for range 3 {
-		req := connect.NewRequest(&reliantv1.GetChatRequest{ChatId: "c"})
-		req.Header().Set("X-User", "u1")
-		_, err := client.GetChat(context.Background(), req)
+		ctx, info := connect.NewClientContext(context.Background())
+		info.RequestHeader().Set("X-User", "u1")
+		_, err := client.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: "c"})
 		require.NoError(t, err, "GetChat is not guarded")
 	}
 	close(svc.release)

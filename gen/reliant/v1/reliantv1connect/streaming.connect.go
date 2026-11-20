@@ -7,43 +7,61 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// StreamingServiceName is the fully-qualified name of the StreamingService service.
 	StreamingServiceName = "reliant.v1.StreamingService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// StreamingServiceStreamUserUpdatesProcedure is the fully-qualified name of the StreamingService's
+	// StreamingServiceStreamUserUpdatesProcedure is the procedure name of the StreamingService's
 	// StreamUserUpdates RPC.
 	StreamingServiceStreamUserUpdatesProcedure = "/reliant.v1.StreamingService/StreamUserUpdates"
-	// StreamingServiceStreamChatUpdatesProcedure is the fully-qualified name of the StreamingService's
+	// StreamingServiceStreamChatUpdatesProcedure is the procedure name of the StreamingService's
 	// StreamChatUpdates RPC.
 	StreamingServiceStreamChatUpdatesProcedure = "/reliant.v1.StreamingService/StreamChatUpdates"
-	// StreamingServiceStreamOrgUpdatesProcedure is the fully-qualified name of the StreamingService's
+	// StreamingServiceStreamOrgUpdatesProcedure is the procedure name of the StreamingService's
 	// StreamOrgUpdates RPC.
 	StreamingServiceStreamOrgUpdatesProcedure = "/reliant.v1.StreamingService/StreamOrgUpdates"
+)
+
+var (
+	streamingServiceStreamUserUpdatesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeServer,
+			Schema:           v1.File_reliant_v1_streaming_proto.Services().ByName("StreamingService").Methods().ByName("StreamUserUpdates"),
+			Procedure:        StreamingServiceStreamUserUpdatesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	streamingServiceStreamChatUpdatesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeServer,
+			Schema:           v1.File_reliant_v1_streaming_proto.Services().ByName("StreamingService").Methods().ByName("StreamChatUpdates"),
+			Procedure:        StreamingServiceStreamChatUpdatesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	streamingServiceStreamOrgUpdatesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeServer,
+			Schema:           v1.File_reliant_v1_streaming_proto.Services().ByName("StreamingService").Methods().ByName("StreamOrgUpdates"),
+			Procedure:        StreamingServiceStreamOrgUpdatesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // StreamingServiceClient is a client for the reliant.v1.StreamingService service.
@@ -51,13 +69,13 @@ type StreamingServiceClient interface {
 	// StreamUserUpdates opens the user-wide stream: chat state, projects,
 	// processes, daemon signals and every other user-level event. It carries no
 	// per-chat detail; that is StreamChatUpdates.
-	StreamUserUpdates(context.Context, *connect.Request[v1.StreamUserUpdatesRequest]) (*connect.ServerStreamForClient[v1.UserStreamEvent], error)
+	StreamUserUpdates(context.Context, *v1.StreamUserUpdatesRequest) (StreamingServiceStreamUserUpdatesClientStream, error)
 	// StreamChatUpdates opens one chat's detail stream: a snapshot (since_seq 0,
 	// or a cursor the server will not replay from) or a replay of
 	// (since_seq, latest], then exactly one caught_up, then live chat updates
 	// (messages, approvals, tool calls, streaming deltas, ...). Answers NotFound
 	// for a chat that does not exist or is not the caller's.
-	StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest]) (*connect.ServerStreamForClient[v1.ChatStreamEvent], error)
+	StreamChatUpdates(context.Context, *v1.StreamChatUpdatesRequest) (StreamingServiceStreamChatUpdatesClientStream, error)
 	// StreamOrgUpdates opens an organization's feed of what its members shared
 	// (control-plane docs/design/org-sharing.md §5.2): a replay of the org's
 	// coarse events since since_seq, exactly one caught_up, then live events,
@@ -73,64 +91,76 @@ type StreamingServiceClient interface {
 	// the stream ended. since_seq 0 (or a cursor ahead of the feed) replays
 	// nothing: the client reads ListSharedChats/ListSharedProjects and follows
 	// from the caught_up sequence.
-	StreamOrgUpdates(context.Context, *connect.Request[v1.StreamOrgUpdatesRequest]) (*connect.ServerStreamForClient[v1.OrgStreamEvent], error)
+	StreamOrgUpdates(context.Context, *v1.StreamOrgUpdatesRequest) (StreamingServiceStreamOrgUpdatesClientStream, error)
 }
 
-// NewStreamingServiceClient constructs a client for the reliant.v1.StreamingService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewStreamingServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) StreamingServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	streamingServiceMethods := v1.File_reliant_v1_streaming_proto.Services().ByName("StreamingService").Methods()
-	return &streamingServiceClient{
-		streamUserUpdates: connect.NewClient[v1.StreamUserUpdatesRequest, v1.UserStreamEvent](
-			httpClient,
-			baseURL+StreamingServiceStreamUserUpdatesProcedure,
-			connect.WithSchema(streamingServiceMethods.ByName("StreamUserUpdates")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		streamChatUpdates: connect.NewClient[v1.StreamChatUpdatesRequest, v1.ChatStreamEvent](
-			httpClient,
-			baseURL+StreamingServiceStreamChatUpdatesProcedure,
-			connect.WithSchema(streamingServiceMethods.ByName("StreamChatUpdates")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		streamOrgUpdates: connect.NewClient[v1.StreamOrgUpdatesRequest, v1.OrgStreamEvent](
-			httpClient,
-			baseURL+StreamingServiceStreamOrgUpdatesProcedure,
-			connect.WithSchema(streamingServiceMethods.ByName("StreamOrgUpdates")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
+// NewStreamingServiceClient constructs a client for the reliant.v1.StreamingService service.
+// Multiple service clients may share a single connect.Client.
+func NewStreamingServiceClient(client *connect.Client) StreamingServiceClient {
+	return &streamingServiceClient{client: client}
+}
+
+// StreamingServiceStreamUserUpdatesClientStream is the client stream for the StreamingService's
+// StreamUserUpdates RPC.
+type StreamingServiceStreamUserUpdatesClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s StreamingServiceStreamUserUpdatesClientStream) Receive() (*v1.UserStreamEvent, error) {
+	var res v1.UserStreamEvent
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// streamingServiceClient implements StreamingServiceClient.
-type streamingServiceClient struct {
-	streamUserUpdates *connect.Client[v1.StreamUserUpdatesRequest, v1.UserStreamEvent]
-	streamChatUpdates *connect.Client[v1.StreamChatUpdatesRequest, v1.ChatStreamEvent]
-	streamOrgUpdates  *connect.Client[v1.StreamOrgUpdatesRequest, v1.OrgStreamEvent]
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s StreamingServiceStreamUserUpdatesClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// StreamUserUpdates calls reliant.v1.StreamingService.StreamUserUpdates.
-func (c *streamingServiceClient) StreamUserUpdates(ctx context.Context, req *connect.Request[v1.StreamUserUpdatesRequest]) (*connect.ServerStreamForClient[v1.UserStreamEvent], error) {
-	return c.streamUserUpdates.CallServerStream(ctx, req)
+// StreamingServiceStreamChatUpdatesClientStream is the client stream for the StreamingService's
+// StreamChatUpdates RPC.
+type StreamingServiceStreamChatUpdatesClientStream struct {
+	stream connect.ClientStream
 }
 
-// StreamChatUpdates calls reliant.v1.StreamingService.StreamChatUpdates.
-func (c *streamingServiceClient) StreamChatUpdates(ctx context.Context, req *connect.Request[v1.StreamChatUpdatesRequest]) (*connect.ServerStreamForClient[v1.ChatStreamEvent], error) {
-	return c.streamChatUpdates.CallServerStream(ctx, req)
+// Receive returns the next response message from the server.
+func (s StreamingServiceStreamChatUpdatesClientStream) Receive() (*v1.ChatStreamEvent, error) {
+	var res v1.ChatStreamEvent
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
-// StreamOrgUpdates calls reliant.v1.StreamingService.StreamOrgUpdates.
-func (c *streamingServiceClient) StreamOrgUpdates(ctx context.Context, req *connect.Request[v1.StreamOrgUpdatesRequest]) (*connect.ServerStreamForClient[v1.OrgStreamEvent], error) {
-	return c.streamOrgUpdates.CallServerStream(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s StreamingServiceStreamChatUpdatesClientStream) Close() error {
+	return s.stream.Close()
+}
+
+// StreamingServiceStreamOrgUpdatesClientStream is the client stream for the StreamingService's
+// StreamOrgUpdates RPC.
+type StreamingServiceStreamOrgUpdatesClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s StreamingServiceStreamOrgUpdatesClientStream) Receive() (*v1.OrgStreamEvent, error) {
+	var res v1.OrgStreamEvent
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s StreamingServiceStreamOrgUpdatesClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // StreamingServiceHandler is an implementation of the reliant.v1.StreamingService service.
@@ -138,13 +168,13 @@ type StreamingServiceHandler interface {
 	// StreamUserUpdates opens the user-wide stream: chat state, projects,
 	// processes, daemon signals and every other user-level event. It carries no
 	// per-chat detail; that is StreamChatUpdates.
-	StreamUserUpdates(context.Context, *connect.Request[v1.StreamUserUpdatesRequest], *connect.ServerStream[v1.UserStreamEvent]) error
+	StreamUserUpdates(context.Context, *v1.StreamUserUpdatesRequest, StreamingServiceStreamUserUpdatesServerStream) error
 	// StreamChatUpdates opens one chat's detail stream: a snapshot (since_seq 0,
 	// or a cursor the server will not replay from) or a replay of
 	// (since_seq, latest], then exactly one caught_up, then live chat updates
 	// (messages, approvals, tool calls, streaming deltas, ...). Answers NotFound
 	// for a chat that does not exist or is not the caller's.
-	StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest], *connect.ServerStream[v1.ChatStreamEvent]) error
+	StreamChatUpdates(context.Context, *v1.StreamChatUpdatesRequest, StreamingServiceStreamChatUpdatesServerStream) error
 	// StreamOrgUpdates opens an organization's feed of what its members shared
 	// (control-plane docs/design/org-sharing.md §5.2): a replay of the org's
 	// coarse events since since_seq, exactly one caught_up, then live events,
@@ -160,62 +190,133 @@ type StreamingServiceHandler interface {
 	// the stream ended. since_seq 0 (or a cursor ahead of the feed) replays
 	// nothing: the client reads ListSharedChats/ListSharedProjects and follows
 	// from the caught_up sequence.
-	StreamOrgUpdates(context.Context, *connect.Request[v1.StreamOrgUpdatesRequest], *connect.ServerStream[v1.OrgStreamEvent]) error
+	StreamOrgUpdates(context.Context, *v1.StreamOrgUpdatesRequest, StreamingServiceStreamOrgUpdatesServerStream) error
 }
 
-// NewStreamingServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewStreamingServiceHandler(svc StreamingServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	streamingServiceMethods := v1.File_reliant_v1_streaming_proto.Services().ByName("StreamingService").Methods()
-	streamingServiceStreamUserUpdatesHandler := connect.NewServerStreamHandler(
-		StreamingServiceStreamUserUpdatesProcedure,
-		svc.StreamUserUpdates,
-		connect.WithSchema(streamingServiceMethods.ByName("StreamUserUpdates")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterStreamingServiceHandler registers svc as the reliant.v1.StreamingService implementation
+// on server.
+func RegisterStreamingServiceHandler(server *connect.Server, svc StreamingServiceHandler) {
+	adapter := streamingServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: streamingServiceStreamUserUpdatesSpec(), Handler: adapter.streamUserUpdates},
+		connect.Method{Spec: streamingServiceStreamChatUpdatesSpec(), Handler: adapter.streamChatUpdates},
+		connect.Method{Spec: streamingServiceStreamOrgUpdatesSpec(), Handler: adapter.streamOrgUpdates},
 	)
-	streamingServiceStreamChatUpdatesHandler := connect.NewServerStreamHandler(
-		StreamingServiceStreamChatUpdatesProcedure,
-		svc.StreamChatUpdates,
-		connect.WithSchema(streamingServiceMethods.ByName("StreamChatUpdates")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	streamingServiceStreamOrgUpdatesHandler := connect.NewServerStreamHandler(
-		StreamingServiceStreamOrgUpdatesProcedure,
-		svc.StreamOrgUpdates,
-		connect.WithSchema(streamingServiceMethods.ByName("StreamOrgUpdates")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.StreamingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case StreamingServiceStreamUserUpdatesProcedure:
-			streamingServiceStreamUserUpdatesHandler.ServeHTTP(w, r)
-		case StreamingServiceStreamChatUpdatesProcedure:
-			streamingServiceStreamChatUpdatesHandler.ServeHTTP(w, r)
-		case StreamingServiceStreamOrgUpdatesProcedure:
-			streamingServiceStreamOrgUpdatesHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// StreamingServiceStreamUserUpdatesServerStream is the server stream for the StreamingService's
+// StreamUserUpdates RPC.
+type StreamingServiceStreamUserUpdatesServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s StreamingServiceStreamUserUpdatesServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s StreamingServiceStreamUserUpdatesServerStream) Send(res *v1.UserStreamEvent) error {
+	return s.stream.Send(res)
+}
+
+// StreamingServiceStreamChatUpdatesServerStream is the server stream for the StreamingService's
+// StreamChatUpdates RPC.
+type StreamingServiceStreamChatUpdatesServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s StreamingServiceStreamChatUpdatesServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s StreamingServiceStreamChatUpdatesServerStream) Send(res *v1.ChatStreamEvent) error {
+	return s.stream.Send(res)
+}
+
+// StreamingServiceStreamOrgUpdatesServerStream is the server stream for the StreamingService's
+// StreamOrgUpdates RPC.
+type StreamingServiceStreamOrgUpdatesServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s StreamingServiceStreamOrgUpdatesServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s StreamingServiceStreamOrgUpdatesServerStream) Send(res *v1.OrgStreamEvent) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedStreamingServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedStreamingServiceHandler struct{}
 
-func (UnimplementedStreamingServiceHandler) StreamUserUpdates(context.Context, *connect.Request[v1.StreamUserUpdatesRequest], *connect.ServerStream[v1.UserStreamEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.StreamingService.StreamUserUpdates is not implemented"))
+func (UnimplementedStreamingServiceHandler) StreamUserUpdates(context.Context, *v1.StreamUserUpdatesRequest, StreamingServiceStreamUserUpdatesServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "reliant.v1.StreamingService.StreamUserUpdates is not implemented")
 }
 
-func (UnimplementedStreamingServiceHandler) StreamChatUpdates(context.Context, *connect.Request[v1.StreamChatUpdatesRequest], *connect.ServerStream[v1.ChatStreamEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.StreamingService.StreamChatUpdates is not implemented"))
+func (UnimplementedStreamingServiceHandler) StreamChatUpdates(context.Context, *v1.StreamChatUpdatesRequest, StreamingServiceStreamChatUpdatesServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "reliant.v1.StreamingService.StreamChatUpdates is not implemented")
 }
 
-func (UnimplementedStreamingServiceHandler) StreamOrgUpdates(context.Context, *connect.Request[v1.StreamOrgUpdatesRequest], *connect.ServerStream[v1.OrgStreamEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.StreamingService.StreamOrgUpdates is not implemented"))
+func (UnimplementedStreamingServiceHandler) StreamOrgUpdates(context.Context, *v1.StreamOrgUpdatesRequest, StreamingServiceStreamOrgUpdatesServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "reliant.v1.StreamingService.StreamOrgUpdates is not implemented")
+}
+
+type streamingServiceClient struct {
+	client *connect.Client
+}
+
+func (c *streamingServiceClient) StreamUserUpdates(ctx context.Context, req *v1.StreamUserUpdatesRequest) (StreamingServiceStreamUserUpdatesClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, streamingServiceStreamUserUpdatesSpec(), req)
+	if err != nil {
+		return StreamingServiceStreamUserUpdatesClientStream{}, err
+	}
+	return StreamingServiceStreamUserUpdatesClientStream{stream: stream}, nil
+}
+
+func (c *streamingServiceClient) StreamChatUpdates(ctx context.Context, req *v1.StreamChatUpdatesRequest) (StreamingServiceStreamChatUpdatesClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, streamingServiceStreamChatUpdatesSpec(), req)
+	if err != nil {
+		return StreamingServiceStreamChatUpdatesClientStream{}, err
+	}
+	return StreamingServiceStreamChatUpdatesClientStream{stream: stream}, nil
+}
+
+func (c *streamingServiceClient) StreamOrgUpdates(ctx context.Context, req *v1.StreamOrgUpdatesRequest) (StreamingServiceStreamOrgUpdatesClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, streamingServiceStreamOrgUpdatesSpec(), req)
+	if err != nil {
+		return StreamingServiceStreamOrgUpdatesClientStream{}, err
+	}
+	return StreamingServiceStreamOrgUpdatesClientStream{stream: stream}, nil
+}
+
+type streamingServiceHandler struct{ svc StreamingServiceHandler }
+
+func (h streamingServiceHandler) streamUserUpdates(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StreamUserUpdatesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.StreamUserUpdates(ctx, &req, StreamingServiceStreamUserUpdatesServerStream{stream: stream})
+}
+
+func (h streamingServiceHandler) streamChatUpdates(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StreamChatUpdatesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.StreamChatUpdates(ctx, &req, StreamingServiceStreamChatUpdatesServerStream{stream: stream})
+}
+
+func (h streamingServiceHandler) streamOrgUpdates(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StreamOrgUpdatesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.StreamOrgUpdates(ctx, &req, StreamingServiceStreamOrgUpdatesServerStream{stream: stream})
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -56,18 +56,18 @@ func TestDraftAutomation_Generated(t *testing.T) {
 	svc := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: draftAutomationRepo("proj-1"), Drafter: drafter}))
 	noDrafter := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: draftAutomationRepo("proj-1")}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DraftAutomationRequest, pb.DraftAutomationResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DraftAutomationRequest, pb.DraftAutomationResponse]{
 		{
 			Name: "drafts",
-			Req: connect.NewRequest(&pb.DraftAutomationRequest{
+			Req: &pb.DraftAutomationRequest{
 				Description: " every weekday at 9, summarise failed CI ",
 				ProjectId:   "proj-1",
 				Workflow:    "ci-digest",
 				Timezone:    "America/New_York",
-			}),
+			},
 			Ctx: trigger.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.DraftAutomationResponse]) {
-				assert.Equal(t, "Every weekday at 9:00, summarise failed CI", resp.Msg.GetDraft().GetSummary())
+			Check: func(t *testing.T, resp *pb.DraftAutomationResponse) {
+				assert.Equal(t, "Every weekday at 9:00, summarise failed CI", resp.GetDraft().GetSummary())
 				assert.Equal(t, "every weekday at 9, summarise failed CI", drafter.got.Description)
 				assert.Equal(t, "ci-digest", drafter.got.Workflow)
 				assert.Equal(t, "America/New_York", drafter.got.Timezone)
@@ -76,28 +76,28 @@ func TestDraftAutomation_Generated(t *testing.T) {
 		},
 		{
 			Name:    "empty description",
-			Req:     connect.NewRequest(&pb.DraftAutomationRequest{Description: "  ", ProjectId: "proj-1"}),
+			Req:     &pb.DraftAutomationRequest{Description: "  ", ProjectId: "proj-1"},
 			Ctx:     trigger.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "someone else's project",
-			Req:     connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-2"}),
+			Req:     &pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-2"},
 			Ctx:     trigger.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "unknown time zone",
-			Req:     connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1", Timezone: "Mars/Olympus"}),
+			Req:     &pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1", Timezone: "Mars/Olympus"},
 			Ctx:     trigger.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 	}, svc.DraftAutomation)
 
 	// A deployment that cannot draft says so; the dialog is still filled by hand.
-	_, err := noDrafter.DraftAutomation(trigger.AuthedContext(t), connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"}))
+	_, err := noDrafter.DraftAutomation(trigger.AuthedContext(t), &pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 }
 
 // A draft in an org's project is that org's work: the drafter is told the
@@ -113,13 +113,13 @@ func TestDraftAutomation_ScopedToTheProjectsOrg(t *testing.T) {
 	}
 	drafter := &draftAutomationFake{draft: &pb.AutomationDraft{Summary: "hourly"}}
 	svc := trigger.NewTestTrigger(t, trigger.WithTriggerDeps(trigger.Deps{Repo: repo, Drafter: drafter}))
-	_, err := svc.DraftAutomation(trigger.AuthedContext(t), connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"}))
+	_, err := svc.DraftAutomation(trigger.AuthedContext(t), &pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"})
 	require.NoError(t, err)
 	assert.Equal(t, org, drafter.got.OrgID)
 
 	drafter.err = fmt.Errorf("draft workflow: %w", trigger.ErrDraftNeedsConsent)
-	_, err = svc.DraftAutomation(trigger.AuthedContext(t), connect.NewRequest(&pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"}))
+	_, err = svc.DraftAutomation(trigger.AuthedContext(t), &pb.DraftAutomationRequest{Description: "every hour", ProjectId: "proj-1"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "Settings › AI providers")
 }

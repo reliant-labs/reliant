@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -62,15 +62,17 @@ func TestBackgroundProxy_ReconnectingMachineIsUnavailableNotInternal(t *testing.
 			svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: tc.router}))
 			rec := &levelRecorder{}
 			// As internal/grpc/user_chain.go wires the RPC edge.
-			handler := observe.LoggingInterceptor(slog.New(rec), observe.WithErrorClassifier(errclass.Library)).WrapUnary(
-				func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-					return svc.ListProcesses(ctx, req.(*connect.Request[reliantv1.ListBackgroundProcessesRequest]))
+			handler := observe.LoggingInterceptorV2(slog.New(rec), observe.WithErrorClassifier(errclass.Library))(
+				func(ctx context.Context, _ connect.Spec, _ connect.ServerStream) error {
+					_, err := svc.ListProcesses(ctx, &reliantv1.ListBackgroundProcessesRequest{})
+					return err
 				})
 
-			_, err := handler(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
+			err := handler(AuthedContext(t), listProcessesSpec, nil)
 			require.Error(t, err)
-			assert.Equal(t, tc.wantCode, svcerr.Code(err))
-			assert.Equal(t, tc.wantReason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+			assert.Equal(t, tc.wantCode, svcerr.CodeV2(err))
+			reason, _ := svcerr.ReasonOf(err)
+			assert.Equal(t, tc.wantReason, reason)
 			assert.Equal(t, tc.wantServer, errclass.IsServerError(err))
 			assert.Equal(t, []slog.Level{tc.wantLevel}, rec.levels)
 		})

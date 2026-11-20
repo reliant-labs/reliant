@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -45,7 +45,7 @@ func TestListProjects_ByOrg(t *testing.T) {
 	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Orgs: orgs.New(orgSource{})}))
 	ctx := project.AuthedContext(t)
 	list := func(org *string) error {
-		_, err := svc.ListProjects(ctx, connect.NewRequest(&pb.ListProjectsRequest{OrgId: org}))
+		_, err := svc.ListProjects(ctx, &pb.ListProjectsRequest{OrgId: org})
 		return err
 	}
 	str := func(s string) *string { return &s }
@@ -65,7 +65,7 @@ func TestListProjects_ByOrg(t *testing.T) {
 	if len(stamped) != 1 || stamped[0] != "test-user→home" {
 		t.Fatalf("stamped %v, want the caller's unassigned rows given their default org", stamped)
 	}
-	if err := list(str("globex")); svcerr.Code(err) != connect.CodePermissionDenied {
+	if err := list(str("globex")); svcerr.CodeV2(err) != connect.CodePermissionDenied {
 		t.Fatalf("an org the caller is not in: %v, want PermissionDenied", err)
 	}
 }
@@ -80,7 +80,7 @@ func TestListProjects_NoOrgsIgnoresTheOrg(t *testing.T) {
 	}}
 	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Orgs: orgs.New(nil)}))
 	org := "acme"
-	if _, err := svc.ListProjects(project.AuthedContext(t), connect.NewRequest(&pb.ListProjectsRequest{OrgId: &org})); err != nil {
+	if _, err := svc.ListProjects(project.AuthedContext(t), &pb.ListProjectsRequest{OrgId: &org}); err != nil {
 		t.Fatal(err)
 	}
 	if filters.Org != nil {

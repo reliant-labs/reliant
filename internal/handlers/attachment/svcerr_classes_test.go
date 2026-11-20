@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,9 +37,9 @@ func TestAttachment_StoreFailuresOnTheWire(t *testing.T) {
 				GetAttachmentFunc: func(context.Context, string) (*db.Attachment, error) { return nil, tc.err },
 			}
 			_, client := attachment.NewTestAttachmentServer(t, attachment.WithAttachmentDeps(attachment.Deps{Repo: repo}))
-			_, err := client.GetAttachment(context.Background(), connect.NewRequest(&pb.GetAttachmentRequest{AttachmentId: "a1"}))
+			_, err := client.GetAttachment(context.Background(), &pb.GetAttachmentRequest{AttachmentId: "a1"})
 			assertWire(t, err, tc.want)
-			_, err = client.DeleteAttachment(context.Background(), connect.NewRequest(&pb.DeleteAttachmentRequest{AttachmentId: "a1"}))
+			_, err = client.DeleteAttachment(context.Background(), &pb.DeleteAttachmentRequest{AttachmentId: "a1"})
 			assertWire(t, err, tc.want)
 		})
 	}

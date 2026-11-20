@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/errreason"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
@@ -27,8 +28,12 @@ import (
 //     reload on.
 func TestChatService_ErrorsOverTheWire(t *testing.T) {
 	dbCtx, fx, repo, _, service := selectionFixture(t, db.Pending())
-	_, client := testkit.NewConnectClient(t, service.Register, reliantv1connect.NewChatServiceClient,
-		testkit.ServerPrincipal(middleware.ContextWithClaims))
+	srv, _ := testkit.NewConnectClientV2(t, service.RegisterV2, reliantv1connect.NewChatServiceClient,
+		testkit.ServerPrincipalV2(middleware.ContextWithClaims))
+	// rpcclient's client, so the error carries the metadata the server sent
+	// (svcerr.ClientInterceptorV2, read with svcerr.MetaOf), as a production
+	// client's does.
+	client := reliantv1connect.NewChatServiceClient(rpcclient.New(srv.Client(), srv.URL, nil))
 	ctx := context.Background()
 
 	t.Run("a send to a chat that has not started names StartChat", func(t *testing.T) {
@@ -39,7 +44,7 @@ func TestChatService_ErrorsOverTheWire(t *testing.T) {
 	})
 
 	t.Run("a chat that does not exist is the store's NotFound", func(t *testing.T) {
-		_, err := client.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: uuid.NewString()}))
+		_, err := client.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: uuid.NewString()})
 		require.Equal(t, connect.CodeNotFound, wireCode(t, err))
 		require.Equal(t, "chat not found", wireMessage(t, err))
 	})
@@ -49,39 +54,41 @@ func TestChatService_ErrorsOverTheWire(t *testing.T) {
 		setSelection(t, dbCtx, repo, fx.chatID, map[string]any{"mode": "plan"})
 
 		stale := first.Version
-		_, err := client.UpdateChatProviderPolicy(ctx, connect.NewRequest(&reliantv1.UpdateChatProviderPolicyRequest{
+		_, err := client.UpdateChatProviderPolicy(ctx, &reliantv1.UpdateChatProviderPolicyRequest{
 			ChatId:          fx.chatID,
 			ProviderPolicy:  &reliantv1.ProviderPolicy{OnLimit: reliantv1.ProviderPolicy_ON_LIMIT_WAIT},
 			ExpectedVersion: &stale,
-		}))
+		})
 		require.Equal(t, connect.CodeAborted, wireCode(t, err))
 		require.Equal(t, "the chat's selection changed since it was read; reload and try again", wireMessage(t, err))
 	})
 
 	t.Run("a malformed request keeps its validator's words", func(t *testing.T) {
-		_, err := client.InterruptThread(ctx, connect.NewRequest(&reliantv1.InterruptThreadRequest{ChatId: fx.chatID}))
+		_, err := client.InterruptThread(ctx, &reliantv1.InterruptThreadRequest{ChatId: fx.chatID})
 		require.Equal(t, connect.CodeInvalidArgument, wireCode(t, err))
 		require.Equal(t, "thread_id is required", wireMessage(t, err))
 	})
 }
 
 // wireCode and wireMessage read what the client received. It is a
-// *connect.Error, built by the server's interceptor; svcerr hands one back
-// as it is.
+// *connect.Error, built by the server's interceptor (under the client
+// interceptor's wrapper, which carries the response metadata); svcerr hands
+// one back as it is.
 func wireCode(t *testing.T, err error) connect.Code {
 	t.Helper()
-	require.IsType(t, &connect.Error{}, err)
-	return svcerr.Code(err)
+	var ce *connect.Error
+	require.ErrorAs(t, err, &ce)
+	return svcerr.CodeV2(err)
 }
 
 func wireReason(t *testing.T, err error) string {
 	t.Helper()
 	var ce *connect.Error
 	require.ErrorAs(t, err, &ce)
-	return ce.Meta().Get(svcerr.ReasonHeader)
+	return svcerr.MetaOf(err).Get(svcerr.ReasonHeader)
 }
 
 func wireMessage(t *testing.T, err error) string {
 	t.Helper()
-	return svcerr.ToConnect(err).Message()
+	return svcerr.ToConnectV2(err).Message()
 }

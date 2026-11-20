@@ -7,40 +7,49 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AccountServiceName is the fully-qualified name of the AccountService service.
 	AccountServiceName = "reliant.v1.AccountService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AccountServicePreviewAccountDeletionProcedure is the fully-qualified name of the AccountService's
+	// AccountServicePreviewAccountDeletionProcedure is the procedure name of the AccountService's
 	// PreviewAccountDeletion RPC.
 	AccountServicePreviewAccountDeletionProcedure = "/reliant.v1.AccountService/PreviewAccountDeletion"
-	// AccountServiceDeleteAccountProcedure is the fully-qualified name of the AccountService's
-	// DeleteAccount RPC.
+	// AccountServiceDeleteAccountProcedure is the procedure name of the AccountService's DeleteAccount
+	// RPC.
 	AccountServiceDeleteAccountProcedure = "/reliant.v1.AccountService/DeleteAccount"
+)
+
+var (
+	accountServicePreviewAccountDeletionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_account_proto.Services().ByName("AccountService").Methods().ByName("PreviewAccountDeletion"),
+			Procedure:        AccountServicePreviewAccountDeletionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	accountServiceDeleteAccountSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_account_proto.Services().ByName("AccountService").Methods().ByName("DeleteAccount"),
+			Procedure:  AccountServiceDeleteAccountProcedure,
+		}
+	})
 )
 
 // AccountServiceClient is a client for the reliant.v1.AccountService service.
@@ -53,7 +62,7 @@ type AccountServiceClient interface {
 	// It only reads (row counts here, the wallet quote from the control plane),
 	// and says so with NO_SIDE_EFFECTS: its name is not a read verb, so without
 	// it forge generates a mutation hook for it.
-	PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error)
+	PreviewAccountDeletion(context.Context, *v1.PreviewAccountDeletionRequest) (*v1.PreviewAccountDeletionResponse, error)
 	// DeleteAccount permanently removes every row reliant holds for the caller.
 	// Irreversible: there is no soft-delete and no undo.
 	//
@@ -61,50 +70,13 @@ type AccountServiceClient interface {
 	// deliberate speed bump on an unrecoverable action, and it is verified
 	// server-side against the JWT's email claim — a client that skips its own
 	// dialog still cannot delete by accident.
-	DeleteAccount(context.Context, *connect.Request[v1.DeleteAccountRequest]) (*connect.Response[v1.DeleteAccountResponse], error)
+	DeleteAccount(context.Context, *v1.DeleteAccountRequest) (*v1.DeleteAccountResponse, error)
 }
 
-// NewAccountServiceClient constructs a client for the reliant.v1.AccountService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAccountServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AccountServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	accountServiceMethods := v1.File_reliant_v1_account_proto.Services().ByName("AccountService").Methods()
-	return &accountServiceClient{
-		previewAccountDeletion: connect.NewClient[v1.PreviewAccountDeletionRequest, v1.PreviewAccountDeletionResponse](
-			httpClient,
-			baseURL+AccountServicePreviewAccountDeletionProcedure,
-			connect.WithSchema(accountServiceMethods.ByName("PreviewAccountDeletion")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		deleteAccount: connect.NewClient[v1.DeleteAccountRequest, v1.DeleteAccountResponse](
-			httpClient,
-			baseURL+AccountServiceDeleteAccountProcedure,
-			connect.WithSchema(accountServiceMethods.ByName("DeleteAccount")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// accountServiceClient implements AccountServiceClient.
-type accountServiceClient struct {
-	previewAccountDeletion *connect.Client[v1.PreviewAccountDeletionRequest, v1.PreviewAccountDeletionResponse]
-	deleteAccount          *connect.Client[v1.DeleteAccountRequest, v1.DeleteAccountResponse]
-}
-
-// PreviewAccountDeletion calls reliant.v1.AccountService.PreviewAccountDeletion.
-func (c *accountServiceClient) PreviewAccountDeletion(ctx context.Context, req *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error) {
-	return c.previewAccountDeletion.CallUnary(ctx, req)
-}
-
-// DeleteAccount calls reliant.v1.AccountService.DeleteAccount.
-func (c *accountServiceClient) DeleteAccount(ctx context.Context, req *connect.Request[v1.DeleteAccountRequest]) (*connect.Response[v1.DeleteAccountResponse], error) {
-	return c.deleteAccount.CallUnary(ctx, req)
+// NewAccountServiceClient constructs a client for the reliant.v1.AccountService service. Multiple
+// service clients may share a single connect.Client.
+func NewAccountServiceClient(client *connect.Client) AccountServiceClient {
+	return &accountServiceClient{client: client}
 }
 
 // AccountServiceHandler is an implementation of the reliant.v1.AccountService service.
@@ -117,7 +89,7 @@ type AccountServiceHandler interface {
 	// It only reads (row counts here, the wallet quote from the control plane),
 	// and says so with NO_SIDE_EFFECTS: its name is not a read verb, so without
 	// it forge generates a mutation hook for it.
-	PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error)
+	PreviewAccountDeletion(context.Context, *v1.PreviewAccountDeletionRequest) (*v1.PreviewAccountDeletionResponse, error)
 	// DeleteAccount permanently removes every row reliant holds for the caller.
 	// Irreversible: there is no soft-delete and no undo.
 	//
@@ -125,48 +97,72 @@ type AccountServiceHandler interface {
 	// deliberate speed bump on an unrecoverable action, and it is verified
 	// server-side against the JWT's email claim — a client that skips its own
 	// dialog still cannot delete by accident.
-	DeleteAccount(context.Context, *connect.Request[v1.DeleteAccountRequest]) (*connect.Response[v1.DeleteAccountResponse], error)
+	DeleteAccount(context.Context, *v1.DeleteAccountRequest) (*v1.DeleteAccountResponse, error)
 }
 
-// NewAccountServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAccountServiceHandler(svc AccountServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	accountServiceMethods := v1.File_reliant_v1_account_proto.Services().ByName("AccountService").Methods()
-	accountServicePreviewAccountDeletionHandler := connect.NewUnaryHandler(
-		AccountServicePreviewAccountDeletionProcedure,
-		svc.PreviewAccountDeletion,
-		connect.WithSchema(accountServiceMethods.ByName("PreviewAccountDeletion")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterAccountServiceHandler registers svc as the reliant.v1.AccountService implementation on
+// server.
+func RegisterAccountServiceHandler(server *connect.Server, svc AccountServiceHandler) {
+	adapter := accountServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: accountServicePreviewAccountDeletionSpec(), Handler: adapter.previewAccountDeletion},
+		connect.Method{Spec: accountServiceDeleteAccountSpec(), Handler: adapter.deleteAccount},
 	)
-	accountServiceDeleteAccountHandler := connect.NewUnaryHandler(
-		AccountServiceDeleteAccountProcedure,
-		svc.DeleteAccount,
-		connect.WithSchema(accountServiceMethods.ByName("DeleteAccount")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.AccountService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AccountServicePreviewAccountDeletionProcedure:
-			accountServicePreviewAccountDeletionHandler.ServeHTTP(w, r)
-		case AccountServiceDeleteAccountProcedure:
-			accountServiceDeleteAccountHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAccountServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAccountServiceHandler struct{}
 
-func (UnimplementedAccountServiceHandler) PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AccountService.PreviewAccountDeletion is not implemented"))
+func (UnimplementedAccountServiceHandler) PreviewAccountDeletion(context.Context, *v1.PreviewAccountDeletionRequest) (*v1.PreviewAccountDeletionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AccountService.PreviewAccountDeletion is not implemented")
 }
 
-func (UnimplementedAccountServiceHandler) DeleteAccount(context.Context, *connect.Request[v1.DeleteAccountRequest]) (*connect.Response[v1.DeleteAccountResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AccountService.DeleteAccount is not implemented"))
+func (UnimplementedAccountServiceHandler) DeleteAccount(context.Context, *v1.DeleteAccountRequest) (*v1.DeleteAccountResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AccountService.DeleteAccount is not implemented")
+}
+
+type accountServiceClient struct {
+	client *connect.Client
+}
+
+func (c *accountServiceClient) PreviewAccountDeletion(ctx context.Context, req *v1.PreviewAccountDeletionRequest) (*v1.PreviewAccountDeletionResponse, error) {
+	var res v1.PreviewAccountDeletionResponse
+	if err := c.client.CallUnary(ctx, accountServicePreviewAccountDeletionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *accountServiceClient) DeleteAccount(ctx context.Context, req *v1.DeleteAccountRequest) (*v1.DeleteAccountResponse, error) {
+	var res v1.DeleteAccountResponse
+	if err := c.client.CallUnary(ctx, accountServiceDeleteAccountSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type accountServiceHandler struct{ svc AccountServiceHandler }
+
+func (h accountServiceHandler) previewAccountDeletion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PreviewAccountDeletionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PreviewAccountDeletion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h accountServiceHandler) deleteAccount(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteAccountRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteAccount(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

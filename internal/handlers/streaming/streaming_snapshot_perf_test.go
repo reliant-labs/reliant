@@ -4,6 +4,8 @@ package streaming
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -13,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -254,17 +255,26 @@ func timeToCaughtUp(t *testing.T, svc *Service, chatID string, sinceSeq int64) (
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	start := time.Now()
-	stream, err := client.StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{ChatId: chatID, SinceSeq: sinceSeq}))
+	stream, err := client.StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{ChatId: chatID, SinceSeq: sinceSeq})
 	require.NoError(t, err)
 	defer func() { _ = stream.Close() }()
 	size := 0
-	for stream.Receive() {
-		if stream.Msg().GetCaughtUp() != nil {
+	var streamErr error
+	for {
+		msg, err := stream.Receive()
+		if err != nil {
+			streamErr = err
+			break
+		}
+		if msg.GetCaughtUp() != nil {
 			return time.Since(start), size
 		}
-		size += proto.Size(stream.Msg())
+		size += proto.Size(msg)
 	}
-	t.Fatalf("stream ended before caught_up: %v", stream.Err())
+	if errors.Is(streamErr, io.EOF) {
+		streamErr = nil
+	}
+	t.Fatalf("stream ended before caught_up: %v", streamErr)
 	return 0, 0
 }
 

@@ -11,13 +11,14 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/orgfunding"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // `reliant providers` shows the AI accounts a person's chats run on, and who
@@ -42,9 +43,9 @@ const (
 // providersClient is the slice of the ProviderAccountService, the
 // OrgProviderAccountService and the SettingsService `providers list` reads.
 type providersClient interface {
-	ListProviderAccounts(context.Context, *connect.Request[reliantv1.ListProviderAccountsRequest]) (*connect.Response[reliantv1.ListProviderAccountsResponse], error)
-	ListOrgProviderAccounts(context.Context, *connect.Request[reliantv1.ListOrgProviderAccountsRequest]) (*connect.Response[reliantv1.ListOrgProviderAccountsResponse], error)
-	GetSetting(context.Context, *connect.Request[reliantv1.GetSettingRequest]) (*connect.Response[reliantv1.GetSettingResponse], error)
+	ListProviderAccounts(context.Context, *reliantv1.ListProviderAccountsRequest) (*reliantv1.ListProviderAccountsResponse, error)
+	ListOrgProviderAccounts(context.Context, *reliantv1.ListOrgProviderAccountsRequest) (*reliantv1.ListOrgProviderAccountsResponse, error)
+	GetSetting(context.Context, *reliantv1.GetSettingRequest) (*reliantv1.GetSettingResponse, error)
 }
 
 type providersRPC struct {
@@ -53,11 +54,11 @@ type providersRPC struct {
 	settings reliantv1connect.SettingsServiceClient
 }
 
-func (c providersRPC) ListOrgProviderAccounts(ctx context.Context, req *connect.Request[reliantv1.ListOrgProviderAccountsRequest]) (*connect.Response[reliantv1.ListOrgProviderAccountsResponse], error) {
+func (c providersRPC) ListOrgProviderAccounts(ctx context.Context, req *reliantv1.ListOrgProviderAccountsRequest) (*reliantv1.ListOrgProviderAccountsResponse, error) {
 	return c.org.ListOrgProviderAccounts(ctx, req)
 }
 
-func (c providersRPC) GetSetting(ctx context.Context, req *connect.Request[reliantv1.GetSettingRequest]) (*connect.Response[reliantv1.GetSettingResponse], error) {
+func (c providersRPC) GetSetting(ctx context.Context, req *reliantv1.GetSettingRequest) (*reliantv1.GetSettingResponse, error) {
 	return c.settings.GetSetting(ctx, req)
 }
 
@@ -102,9 +103,9 @@ only to a person signed in to the app: from the CLI it says where to see them.`,
 				return err
 			}
 			client := providersRPC{
-				ProviderAccountServiceClient: reliantv1connect.NewProviderAccountServiceClient(conn.httpClient(), conn.ServerURL),
-				org:                          reliantv1connect.NewOrgProviderAccountServiceClient(conn.httpClient(), conn.ServerURL),
-				settings:                     reliantv1connect.NewSettingsServiceClient(conn.httpClient(), conn.ServerURL),
+				ProviderAccountServiceClient: reliantv1connect.NewProviderAccountServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil)),
+				org:                          reliantv1connect.NewOrgProviderAccountServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil)),
+				settings:                     reliantv1connect.NewSettingsServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil)),
 			}
 			view, err := loadProvidersView(cmd.Context(), client, strings.TrimSpace(orgID))
 			if err != nil {
@@ -153,12 +154,12 @@ type providersView struct {
 }
 
 func loadProvidersView(ctx context.Context, c providersClient, orgID string) (providersView, error) {
-	resp, err := c.ListProviderAccounts(ctx, connect.NewRequest(&reliantv1.ListProviderAccountsRequest{}))
+	resp, err := c.ListProviderAccounts(ctx, &reliantv1.ListProviderAccountsRequest{})
 	if err != nil {
 		return providersView{}, fmt.Errorf("listing your AI accounts: %w", err)
 	}
-	view := providersView{Accounts: make([]providerAccountRow, 0, len(resp.Msg.GetAccounts()))}
-	for _, a := range resp.Msg.GetAccounts() {
+	view := providersView{Accounts: make([]providerAccountRow, 0, len(resp.GetAccounts()))}
+	for _, a := range resp.GetAccounts() {
 		view.Accounts = append(view.Accounts, accountRow(a))
 	}
 	if orgID == "" {
@@ -167,17 +168,17 @@ func loadProvidersView(ctx context.Context, c providersClient, orgID string) (pr
 
 	org := &providersOrgView{OrgID: orgID, Keys: []providerAccountRow{}}
 	pref := orgfunding.Default()
-	if s, err := c.GetSetting(ctx, connect.NewRequest(&reliantv1.GetSettingRequest{Key: orgfunding.SettingKey})); err == nil {
-		pref = orgfunding.Parse(s.Msg.GetSetting().GetValue()).For(orgID)
+	if s, err := c.GetSetting(ctx, &reliantv1.GetSettingRequest{Key: orgfunding.SettingKey}); err == nil {
+		pref = orgfunding.Parse(s.GetSetting().GetValue()).For(orgID)
 	} else if connect.CodeOf(err) != connect.CodeNotFound {
 		return providersView{}, fmt.Errorf("reading your choices for the organization: %w", err)
 	}
 	org.Order, org.OnOrgLimit = string(pref.Order), string(pref.OnOrgLimit)
 
-	keys, err := c.ListOrgProviderAccounts(ctx, connect.NewRequest(&reliantv1.ListOrgProviderAccountsRequest{OrgId: orgID}))
+	keys, err := c.ListOrgProviderAccounts(ctx, &reliantv1.ListOrgProviderAccountsRequest{OrgId: orgID})
 	switch {
 	case err == nil:
-		for _, k := range keys.Msg.GetAccounts() {
+		for _, k := range keys.GetAccounts() {
 			if row := accountRow(k.GetAccount()); row.ID != "" {
 				org.Keys = append(org.Keys, row)
 			}
@@ -200,7 +201,7 @@ func isPersonOnlyRefusal(err error) bool {
 	if !errors.As(err, &ce) || ce.Code() != connect.CodePermissionDenied {
 		return false
 	}
-	switch ce.Meta().Get(svcerr.ReasonHeader) {
+	switch svcerr.MetaOf(err).Get(svcerr.ReasonHeader) {
 	case "person_required", "human_only":
 		return true
 	}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -24,18 +24,18 @@ func TestRemoveProjectFromDaemon_Generated(t *testing.T) {
 	}
 	svc := newService(t, store, answering("git.remove", `{"op_id":"op-1","path":"/clone"}`, `{"success":true,"removed":true}`))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RemoveProjectFromDaemonRequest, pb.RemoveProjectFromDaemonResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.RemoveProjectFromDaemonRequest, pb.RemoveProjectFromDaemonResponse]{
 		{
 			Name:    "project_id and daemon_id are required",
-			Req:     connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{DaemonId: "d-1"}),
+			Req:     &pb.RemoveProjectFromDaemonRequest{DaemonId: "d-1"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "removing a clone that is not there succeeds and deletes nothing",
-			Req:  connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-2"}),
+			Req:  &pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-2"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, _ *connect.Response[pb.RemoveProjectFromDaemonResponse]) {
+			Check: func(t *testing.T, _ *pb.RemoveProjectFromDaemonResponse) {
 				if len(deleted) != 0 {
 					t.Fatalf("deleted = %v, want nothing", deleted)
 				}
@@ -43,9 +43,9 @@ func TestRemoveProjectFromDaemon_Generated(t *testing.T) {
 		},
 		{
 			Name: "the clone is removed from disk and its row deleted",
-			Req:  connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}),
+			Req:  &pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, _ *connect.Response[pb.RemoveProjectFromDaemonResponse]) {
+			Check: func(t *testing.T, _ *pb.RemoveProjectFromDaemonResponse) {
 				if len(deleted) != 1 || deleted[0] != "p-1 d-1" {
 					t.Fatalf("deleted = %v, want p-1 on d-1", deleted)
 				}

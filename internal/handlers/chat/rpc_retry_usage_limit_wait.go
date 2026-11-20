@@ -5,8 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -126,28 +124,28 @@ func (s *Service) WakeUserChats(ctx context.Context, userID, why string) int {
 // A chat with no live run is left alone (woken = false).
 func (s *Service) RetryUsageLimitWait(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RetryUsageLimitWaitRequest],
-) (*connect.Response[reliantv1.RetryUsageLimitWaitResponse], error) {
+	req *reliantv1.RetryUsageLimitWaitRequest,
+) (*reliantv1.RetryUsageLimitWaitResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	chat, err := s.getChatForUser(ctx, req.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if !s.runCanBeWoken(ctx, chat) {
-		return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: false}), nil
+		return &reliantv1.RetryUsageLimitWaitResponse{Woken: false}, nil
 	}
 	useModel := ""
-	if req.Msg.UseModel != nil && *req.Msg.UseModel != "" {
+	if req.UseModel != nil && *req.UseModel != "" {
 		var err error
-		if useModel, err = usableFallbackModel(ctx, userID, chat, *req.Msg.UseModel); err != nil {
+		if useModel, err = usableFallbackModel(ctx, userID, chat, *req.UseModel); err != nil {
 			return nil, err
 		}
 	}
 	if err := s.wakeChat(ctx, chat, useModel, "retry now"); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to wake the run"))
 	}
-	return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: true}), nil
+	return &reliantv1.RetryUsageLimitWaitResponse{Woken: true}, nil
 }

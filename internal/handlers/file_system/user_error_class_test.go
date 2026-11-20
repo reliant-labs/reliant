@@ -8,13 +8,12 @@ import (
 	"log/slog"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func TestFsProxyDaemonError_MachineStateIsAUserError(t *testing.T) {
@@ -36,7 +35,7 @@ func TestFsProxyDaemonError_MachineStateIsAUserError(t *testing.T) {
 func TestFsProxyDaemonError_PreviewOfAMissingFileIsNotFound(t *testing.T) {
 	err := toolexec.DaemonReportedFailure("fs.preview_info", "file not found: /home/workspace/projects/x/~/notes/post.md")
 	mapped := fsProxyDaemonError("fs.preview_info", err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(mapped))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(mapped))
 	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(mapped))
 	assert.Contains(t, mapped.Error(), "file not found: /home/workspace/projects/x/~/notes/post.md")
 	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err), "the router's error itself logs at the user level in every component chain")
@@ -63,13 +62,13 @@ func TestFsProxyDaemonError_TimeoutLogsAtWarnNotError(t *testing.T) {
 	timeout := fmt.Errorf("daemon command fs.get_tree (subject s) via NATS failed: %w: %w",
 		toolexec.ErrDaemonTimeout, context.DeadlineExceeded)
 	mapped := fsProxyDaemonError("fs.get_tree", timeout)
-	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(mapped))
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(mapped))
 	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(mapped), "still a server condition, still logged")
 
 	rec := &levelRecorder{}
-	handler := observe.LoggingInterceptor(slog.New(rec)).WrapUnary(
-		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) { return nil, mapped })
-	_, err := handler(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+	handler := observe.LoggingInterceptorV2(slog.New(rec))(
+		func(context.Context, connect.Spec, connect.ServerStream) error { return mapped })
+	err := handler(context.Background(), connect.Spec{StreamType: connect.StreamTypeUnary}, nil)
 	require.Error(t, err)
 	assert.Equal(t, []slog.Level{slog.LevelWarn}, rec.levels)
 }

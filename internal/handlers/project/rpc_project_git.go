@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -20,28 +19,28 @@ import (
 // GetProjectGitInfo returns git repository information
 func (s *Service) GetProjectGitInfo(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetProjectGitInfoRequest],
-) (*connect.Response[reliantv1.GetProjectGitInfoResponse], error) {
+	req *reliantv1.GetProjectGitInfoRequest,
+) (*reliantv1.GetProjectGitInfoResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	if !project.IsGitRepo {
-		return connect.NewResponse(&reliantv1.GetProjectGitInfoResponse{
+		return &reliantv1.GetProjectGitInfoResponse{
 			ProjectId: project.ID,
 			IsGitRepo: false,
 			Message:   "Project is not a git repository",
-		}), nil
+		}, nil
 	}
 
-	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.Msg.RepoId)
+	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +66,7 @@ func (s *Service) GetProjectGitInfo(
 		return nil, daemonerr.Error("get git info", err)
 	}
 
-	return connect.NewResponse(&reliantv1.GetProjectGitInfoResponse{
+	return &reliantv1.GetProjectGitInfoResponse{
 		ProjectId:      project.ID,
 		IsGitRepo:      true,
 		CurrentBranch:  gitInfo.CurrentBranch,
@@ -79,32 +78,32 @@ func (s *Service) GetProjectGitInfo(
 		Ahead:          gitInfo.Ahead,
 		Behind:         gitInfo.Behind,
 		RemoteUrl:      gitremote.StripCredentials(gitInfo.RemoteURL),
-	}), nil
+	}, nil
 }
 
 // GetProjectGitBranches lists all git branches for a project
 func (s *Service) GetProjectGitBranches(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetProjectGitBranchesRequest],
-) (*connect.Response[reliantv1.GetProjectGitBranchesResponse], error) {
+	req *reliantv1.GetProjectGitBranchesRequest,
+) (*reliantv1.GetProjectGitBranchesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	if !project.IsGitRepo {
-		return connect.NewResponse(&reliantv1.GetProjectGitBranchesResponse{
+		return &reliantv1.GetProjectGitBranchesResponse{
 			Branches: []*reliantv1.GitBranch{},
-		}), nil
+		}, nil
 	}
 
-	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.Msg.RepoId)
+	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -113,9 +112,9 @@ func (s *Service) GetProjectGitBranches(
 	target, err := s.checkout(ctx, userID, project, "see its git status")
 	if err != nil {
 		logging.InfoContext(ctx, "No checkout to list git branches from", "error", err, "projectID", project.ID)
-		return connect.NewResponse(&reliantv1.GetProjectGitBranchesResponse{
+		return &reliantv1.GetProjectGitBranchesResponse{
 			Branches: []*reliantv1.GitBranch{},
-		}), nil
+		}, nil
 	}
 	repoPath := target.Join(repoRel)
 
@@ -134,9 +133,9 @@ func (s *Service) GetProjectGitBranches(
 	}
 	if err := s.sendToDaemon(ctx, userID, target.DaemonID, "project.git_branches", map[string]string{"path": repoPath}, &branchResp); err != nil {
 		logging.ErrorContext(ctx, "Failed to get git branches via daemon", "error", err, "projectID", project.ID)
-		return connect.NewResponse(&reliantv1.GetProjectGitBranchesResponse{
+		return &reliantv1.GetProjectGitBranchesResponse{
 			Branches: []*reliantv1.GitBranch{},
-		}), nil
+		}, nil
 	}
 
 	branches := make([]*reliantv1.GitBranch, len(branchResp.Branches))
@@ -152,37 +151,37 @@ func (s *Service) GetProjectGitBranches(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetProjectGitBranchesResponse{
+	return &reliantv1.GetProjectGitBranchesResponse{
 		Branches: branches,
-	}), nil
+	}, nil
 }
 
 // GetProjectChanges returns recent git changes for a project
 func (s *Service) GetProjectChanges(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetProjectChangesRequest],
-) (*connect.Response[reliantv1.GetProjectChangesResponse], error) {
+	req *reliantv1.GetProjectChangesRequest,
+) (*reliantv1.GetProjectChangesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Check if project is a git repository
 	if !project.IsGitRepo {
-		return connect.NewResponse(&reliantv1.GetProjectChangesResponse{
+		return &reliantv1.GetProjectChangesResponse{
 			Branch:     "",
 			Files:      []*reliantv1.FileChange{},
 			TotalFiles: 0,
-		}), nil
+		}, nil
 	}
 
-	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.Msg.RepoId)
+	repoRel, _, err := s.resolveProjectRepo(ctx, project, req.RepoId)
 	if err != nil {
 		return nil, err
 	}
@@ -207,12 +206,12 @@ func (s *Service) GetProjectChanges(
 		TotalFiles int32              `json:"total_files"`
 	}
 	if err := s.sendToDaemon(ctx, userID, target.DaemonID, "project.git_changes", map[string]string{"path": repoPath}, &changesResp); err != nil {
-		logging.ErrorContext(ctx, "Failed to get git changes via daemon", "error", err, "projectID", req.Msg.ProjectId, "path", repoPath)
-		return connect.NewResponse(&reliantv1.GetProjectChangesResponse{
+		logging.ErrorContext(ctx, "Failed to get git changes via daemon", "error", err, "projectID", req.ProjectId, "path", repoPath)
+		return &reliantv1.GetProjectChangesResponse{
 			Branch:     "",
 			Files:      []*reliantv1.FileChange{},
 			TotalFiles: 0,
-		}), nil
+		}, nil
 	}
 
 	files := make([]*reliantv1.FileChange, len(changesResp.Files))
@@ -227,41 +226,41 @@ func (s *Service) GetProjectChanges(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetProjectChangesResponse{
+	return &reliantv1.GetProjectChangesResponse{
 		Branch:     changesResp.Branch,
 		Files:      files,
 		TotalFiles: changesResp.TotalFiles,
-	}), nil
+	}, nil
 }
 
 // InitializeGitRepo initializes a git repository for a project
 func (s *Service) InitializeGitRepo(
 	ctx context.Context,
-	req *connect.Request[reliantv1.InitializeGitRepoRequest],
-) (*connect.Response[reliantv1.InitializeGitRepoResponse], error) {
+	req *reliantv1.InitializeGitRepoRequest,
+) (*reliantv1.InitializeGitRepoResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
+	project, err := s.deps.Repo.GetProject(ctx, req.ProjectId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
-	logging.DebugContext(ctx, "Attempting to initialize git repository", "projectID", req.Msg.ProjectId, "is_git_repo", project.IsGitRepo)
+	logging.DebugContext(ctx, "Attempting to initialize git repository", "projectID", req.ProjectId, "is_git_repo", project.IsGitRepo)
 
 	// Check if already a git repository
 	if project.IsGitRepo {
-		logging.WarnContext(ctx, "Project is already marked as git repository", "projectID", req.Msg.ProjectId)
+		logging.WarnContext(ctx, "Project is already marked as git repository", "projectID", req.ProjectId)
 		return nil, svcerr.FailedPrecondition("project is already a git repository")
 	}
 
 	// Normalize + validate the branch name before anything touches disk or
 	// the DB, so a bad value (e.g. "main " with a trailing space from the
 	// UI) fails as invalid_argument instead of half-initializing the repo.
-	initialBranch := gitref.NormalizeBranchName(req.Msg.InitialBranch)
+	initialBranch := gitref.NormalizeBranchName(req.InitialBranch)
 	if err := gitref.ValidateBranchName(initialBranch); err != nil {
 		// The validator's sentence names the branch and the rule it broke.
 		return nil, svcerr.InvalidArgument(err.Error())
@@ -287,8 +286,8 @@ func (s *Service) InitializeGitRepo(
 	}{
 		Path:              target.Path,
 		InitialBranch:     initialBranch,
-		GitignorePatterns: req.Msg.GitignorePatterns,
-		InitialCommit:     req.Msg.InitialCommit,
+		GitignorePatterns: req.GitignorePatterns,
+		InitialCommit:     req.InitialCommit,
 	}
 	if err := s.sendToDaemon(ctx, userID, target.DaemonID, "project.init_git_repo", initPayload, &initResp); err != nil {
 		return nil, daemonerr.Error("initialize git repository", err)
@@ -342,10 +341,10 @@ func (s *Service) InitializeGitRepo(
 	// This is necessary because the main worktree was created with a default branch name
 	// when the project was first created (before git init)
 	worktrees, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{
-		ProjectID: &req.Msg.ProjectId,
+		ProjectID: &req.ProjectId,
 	})
 	if err != nil {
-		logging.WarnContext(ctx, "Failed to list worktrees for branch update", "error", err, "projectID", req.Msg.ProjectId)
+		logging.WarnContext(ctx, "Failed to list worktrees for branch update", "error", err, "projectID", req.ProjectId)
 	} else {
 		for _, wt := range worktrees {
 			if wt.IsMain {
@@ -363,10 +362,10 @@ func (s *Service) InitializeGitRepo(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.InitializeGitRepoResponse{
+	return &reliantv1.InitializeGitRepoResponse{
 		Message:       "Git repository initialized successfully",
-		ProjectId:     req.Msg.ProjectId,
+		ProjectId:     req.ProjectId,
 		IsGitRepo:     true,
 		DefaultBranch: *project.DefaultBranch,
-	}), nil
+	}, nil
 }

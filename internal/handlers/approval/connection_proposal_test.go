@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -94,7 +94,7 @@ func approveWith(service *Service, ctx context.Context, id, connectionID string)
 	if connectionID != "" {
 		req.ConnectionId = &connectionID
 	}
-	_, err := service.Approve(ctx, connect.NewRequest(req))
+	_, err := service.Approve(ctx, req)
 	return err
 }
 
@@ -104,10 +104,10 @@ func TestConnectionProposalListed(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	createProposalApproval(t, repo, chatID, workflowID, core.ConnectionProposal{IntegrationID: "slack", IntegrationName: "Slack", Scope: core.ConnectionProposalOrg, OrgID: "org-1", Reason: "Post the report."})
 
-	resp, err := service.ListApprovalsByChat(approvalTestCtx(), connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{ChatId: chatID}))
+	resp, err := service.ListApprovalsByChat(approvalTestCtx(), &reliantv1.ListApprovalsByChatRequest{ChatId: chatID})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Approvals, 1)
-	got := resp.Msg.Approvals[0].GetConnectionProposal()
+	require.Len(t, resp.Approvals, 1)
+	got := resp.Approvals[0].GetConnectionProposal()
 	require.Equal(t, "slack", got.GetIntegrationId())
 	require.Equal(t, "Slack", got.GetIntegrationName())
 	require.Equal(t, reliantv1.ConnectionProposalScope_CONNECTION_PROPOSAL_SCOPE_ORG, got.GetScope())
@@ -144,17 +144,17 @@ func TestConnectionProposalNeedsItsConnection(t *testing.T) {
 	id := createProposalApproval(t, repo, chatID, workflowID, core.ConnectionProposal{IntegrationID: "slack", IntegrationName: "Slack", Scope: core.ConnectionProposalPersonal})
 
 	err := approveWith(service, approvalTestCtx(), id, "")
-	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	require.ErrorContains(t, err, "approve it by making the connection from its card")
 
 	other := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
-	resp, err := service.BatchApprove(approvalTestCtx(), connect.NewRequest(&reliantv1.BatchApproveRequest{RequestIds: []string{id, other}}))
+	resp, err := service.BatchApprove(approvalTestCtx(), &reliantv1.BatchApproveRequest{RequestIds: []string{id, other}})
 	require.NoError(t, err)
-	require.EqualValues(t, 1, resp.Msg.Approved, "the batch approves the routine approval only")
+	require.EqualValues(t, 1, resp.Approved, "the batch approves the routine approval only")
 
 	for _, wrong := range []string{"mine-gmail", "theirs", "org-slack", "missing"} {
 		err := approveWith(service, approvalTestCtx(), id, wrong)
-		require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), wrong)
+		require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), wrong)
 	}
 	approval, err := repo.GetApproval(context.Background(), id)
 	require.NoError(t, err)
@@ -171,11 +171,11 @@ func TestConnectionProposalOrgConnectionNeedsAnOrgAdmin(t *testing.T) {
 
 	id := createProposalApproval(t, repo, chatID, workflowID, proposal)
 	err := approveWith(service, asOrgRole("member"), id, "org-slack")
-	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+	require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err))
 	require.ErrorContains(t, err, "only an owner or admin of the organization")
 
 	err = approveWith(service, asOrgRole("admin"), id, "other-org-1")
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "another org's connection is not this chat's org's")
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "another org's connection is not this chat's org's")
 
 	require.NoError(t, approveWith(service, asOrgRole("admin"), id, "org-slack"))
 
@@ -191,7 +191,7 @@ func TestConnectionProposalDeclined(t *testing.T) {
 	id := createProposalApproval(t, repo, chatID, workflowID, core.ConnectionProposal{IntegrationID: "slack", IntegrationName: "Slack"})
 
 	notCompleted := "not_completed"
-	_, err := service.Deny(approvalTestCtx(), connect.NewRequest(&reliantv1.DenyRequest{RequestId: id, ActionTaken: &notCompleted}))
+	_, err := service.Deny(approvalTestCtx(), &reliantv1.DenyRequest{RequestId: id, ActionTaken: &notCompleted})
 	require.NoError(t, err)
 	signal, ok := mockClient.signalArg.(map[string]interface{})
 	require.True(t, ok)

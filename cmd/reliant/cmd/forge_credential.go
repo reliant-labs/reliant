@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
 	"github.com/spf13/cobra"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/forgecred"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // ── forge's credentials come from the Reliant session ─────────────────
@@ -174,13 +174,13 @@ type connectExchanger struct{}
 func (connectExchanger) Exchange(ctx context.Context, server, bearer, audience string, scopes []string, orgID string) (forgecred.Exchanged, error) {
 	httpClient := (&connection{ServerURL: server}).httpClientWithBearer(bearer)
 	httpClient.Timeout = 30 * time.Second
-	resp, err := reliantv1connect.NewTokenServiceClient(httpClient, strings.TrimRight(server, "/")).
-		ExchangeToken(ctx, connect.NewRequest(exchangeRequest(audience, scopes, orgID)))
+	resp, err := reliantv1connect.NewTokenServiceClient(rpcclient.New(httpClient, strings.TrimRight(server, "/"), nil)).
+		ExchangeToken(ctx, exchangeRequest(audience, scopes, orgID))
 	if err != nil {
 		return forgecred.Exchanged{}, err
 	}
-	out := forgecred.Exchanged{Token: resp.Msg.GetToken(), Scopes: resp.Msg.GetScopes()}
-	if at, err := time.Parse(time.RFC3339, resp.Msg.GetExpiresAt()); err == nil {
+	out := forgecred.Exchanged{Token: resp.GetToken(), Scopes: resp.GetScopes()}
+	if at, err := time.Parse(time.RFC3339, resp.GetExpiresAt()); err == nil {
 		out.ExpiresAt = at
 	}
 	return out, nil

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -66,15 +65,15 @@ func TestReady_Generated(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			svc := system.NewTestSystem(t, system.WithSystemDeps(tt.deps))
-			tdd.RunRPCCases(t, []tdd.RPCCase[pb.ReadyRequest, pb.ReadyResponse]{
+			tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ReadyRequest, pb.ReadyResponse]{
 				{
 					Name: "status",
-					Req:  connect.NewRequest(&pb.ReadyRequest{}),
-					Check: func(t *testing.T, resp *connect.Response[pb.ReadyResponse]) {
-						if resp.Msg.Status != tt.wantStatus {
-							t.Fatalf("Ready status = %q, want %q", resp.Msg.Status, tt.wantStatus)
+					Req:  &pb.ReadyRequest{},
+					Check: func(t *testing.T, resp *pb.ReadyResponse) {
+						if resp.Status != tt.wantStatus {
+							t.Fatalf("Ready status = %q, want %q", resp.Status, tt.wantStatus)
 						}
-						if resp.Msg.Timestamp == 0 {
+						if resp.Timestamp == 0 {
 							t.Fatal("Ready timestamp is unset")
 						}
 					},

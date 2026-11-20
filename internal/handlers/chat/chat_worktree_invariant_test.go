@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -144,7 +144,7 @@ func TestResolveChatWorktreeID_RejectsUnknownWorktree(t *testing.T) {
 	err := svcerr.Wrap(resolveErr)
 
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	require.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -168,7 +168,7 @@ func TestResolveChatWorktreeID_RejectsForeignProjectWorktree(t *testing.T) {
 	err := svcerr.Wrap(resolveErr)
 
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	require.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
 }
 
@@ -188,7 +188,7 @@ func TestResolveChatWorktreeID_RejectsProjectWithoutMainWorktree(t *testing.T) {
 	err := svcerr.Wrap(resolveErr)
 
 	require.Error(t, err)
-	connectErr := svcerr.ToConnect(err)
+	connectErr := svcerr.ToConnectV2(err)
 	require.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	require.Contains(t, connectErr.Message(), "no main worktree")
 }
@@ -242,16 +242,16 @@ nodes:
 	}
 
 	// No WorktreeId, exactly as the CLI sends it.
-	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+	resp, err := service.StartChat(ctx, &reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "worktree-invariant-workflow",
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
 			Content: "hello",
 		}},
-	}))
+	})
 	require.NoError(t, err, "omitting worktree_id must not be rejected")
-	require.Equal(t, mainWorktreeID, resp.Msg.GetChat().GetWorktreeId(),
+	require.Equal(t, mainWorktreeID, resp.GetChat().GetWorktreeId(),
 		"the response must report the resolved worktree")
 
 	chats, listErr := repo.ListChats(ctx, db.ChatFilters{

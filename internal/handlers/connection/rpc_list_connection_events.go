@@ -4,16 +4,14 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-func (s *Service) ListConnectionEvents(ctx context.Context, req *connect.Request[reliantv1.ListConnectionEventsRequest]) (*connect.Response[reliantv1.ListConnectionEventsResponse], error) {
-	org := req.Msg.GetOwnerOrgId()
+func (s *Service) ListConnectionEvents(ctx context.Context, req *reliantv1.ListConnectionEventsRequest) (*reliantv1.ListConnectionEventsResponse, error) {
+	org := req.GetOwnerOrgId()
 	caller := connectionrpc.Caller
 	if org != "" {
 		caller = orgAdminCaller
@@ -24,9 +22,9 @@ func (s *Service) ListConnectionEvents(ctx context.Context, req *connect.Request
 	}
 	var evs []core.ConnectionEvent
 	if org != "" {
-		evs, err = s.deps.Connections.EventsOrg(ctx, userID, org, req.Msg.GetId(), int(req.Msg.GetLimit()), req.Msg.GetBeforeId())
+		evs, err = s.deps.Connections.EventsOrg(ctx, userID, org, req.GetId(), int(req.GetLimit()), req.GetBeforeId())
 	} else {
-		evs, err = s.deps.Connections.Events(ctx, userID, req.Msg.GetId(), int(req.Msg.GetLimit()), req.Msg.GetBeforeId())
+		evs, err = s.deps.Connections.Events(ctx, userID, req.GetId(), int(req.GetLimit()), req.GetBeforeId())
 	}
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
@@ -38,5 +36,5 @@ func (s *Service) ListConnectionEvents(ctx context.Context, req *connect.Request
 			ToolCallId: e.ToolCallID, Actor: e.Actor, At: e.At.UTC().Format(time.RFC3339), UserId: e.UserID,
 		})
 	}
-	return connect.NewResponse(&reliantv1.ListConnectionEventsResponse{Events: out}), nil
+	return &reliantv1.ListConnectionEventsResponse{Events: out}, nil
 }

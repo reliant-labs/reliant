@@ -64,7 +64,7 @@ func TestPickerVersionConflictCannotPartiallyChangeBinding(t *testing.T) {
 	original := setSelection(t, ctx, repo, fx.chatID, map[string]any{"model": map[string]any{"id": opusOnClaude}})
 	setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": "auto"})
 	req := updateParams(fx.chatID, paramsOf(t, map[string]any{"model": map[string]any{"id": "gpt-6.1-sol@codex"}}))
-	req.Msg.ExpectedVersion = &original.Version
+	req.ExpectedVersion = &original.Version
 	_, err := svc.UpdateWorkflowParams(ctx, req)
 	require.Error(t, err)
 	selected, err := repo.GetChatSelection(ctx, fx.chatID)

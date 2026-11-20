@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -20,38 +19,38 @@ import (
 // ListWorktrees lists worktrees for a project
 func (s *Service) ListWorktrees(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListWorktreesRequest],
-) (*connect.Response[reliantv1.ListWorktreesResponse], error) {
+	req *reliantv1.ListWorktreesRequest,
+) (*reliantv1.ListWorktreesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ProjectId == "" {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	// Check project permission
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	projectID := req.Msg.ProjectId
+	projectID := req.ProjectId
 	pageSize := defaultListWorktreesPageSize
-	if req.Msg.Limit > 0 {
-		pageSize = int(req.Msg.Limit)
+	if req.Limit > 0 {
+		pageSize = int(req.Limit)
 	}
-	offset, err := decodeWorktreePageToken(req.Msg.GetPageToken())
+	offset, err := decodeWorktreePageToken(req.GetPageToken())
 	if err != nil {
 		return nil, svcerr.InvalidArgument("invalid page_token")
 	}
 	filters := db.WorktreeFilters{
 		ProjectID: &projectID,
-		MainOnly:  req.Msg.GetMainOnly(),
+		MainOnly:  req.GetMainOnly(),
 		// One extra row tells us whether another page follows.
 		Limit:  pageSize + 1,
 		Offset: offset,
 	}
 
-	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
-		filters.ChatID = req.Msg.ChatId
+	if req.ChatId != nil && *req.ChatId != "" {
+		filters.ChatID = req.ChatId
 	}
 
 	worktrees, err := s.deps.Repo.ListWorktrees(ctx, filters)
@@ -68,7 +67,7 @@ func (s *Service) ListWorktrees(
 	// Self-heal invariant: every project should have a main worktree.
 	// This also repairs older projects created while Postgres parity bugs existed.
 	if len(worktrees) == 0 && offset == 0 {
-		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, req.Msg.ProjectId, userID)
+		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, req.ProjectId, userID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 		}
@@ -113,38 +112,38 @@ func (s *Service) ListWorktrees(
 		protoWorktrees[i] = worktreeToProto(w)
 	}
 
-	return connect.NewResponse(&reliantv1.ListWorktreesResponse{
+	return &reliantv1.ListWorktreesResponse{
 		Worktrees:     protoWorktrees,
 		Total:         int32(len(protoWorktrees)),
 		NextPageToken: nextPageToken,
-	}), nil
+	}, nil
 }
 
 // ListArchivedWorktrees pages through the project's archived workspaces, most
 // recently archived first. ListWorktrees never returns them.
 func (s *Service) ListArchivedWorktrees(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListArchivedWorktreesRequest],
-) (*connect.Response[reliantv1.ListArchivedWorktreesResponse], error) {
+	req *reliantv1.ListArchivedWorktreesRequest,
+) (*reliantv1.ListArchivedWorktreesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ProjectId == "" {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
 	pageSize := defaultListWorktreesPageSize
-	if req.Msg.Limit > 0 {
-		pageSize = int(req.Msg.Limit)
+	if req.Limit > 0 {
+		pageSize = int(req.Limit)
 	}
-	offset, err := decodeWorktreePageToken(req.Msg.GetPageToken())
+	offset, err := decodeWorktreePageToken(req.GetPageToken())
 	if err != nil {
 		return nil, svcerr.InvalidArgument("invalid page_token")
 	}
 
-	projectID := req.Msg.ProjectId
+	projectID := req.ProjectId
 	worktrees, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{
 		ProjectID:    &projectID,
 		ArchivedOnly: true,
@@ -166,11 +165,11 @@ func (s *Service) ListArchivedWorktrees(
 	for i, w := range worktrees {
 		protoWorktrees[i] = worktreeToProto(w)
 	}
-	return connect.NewResponse(&reliantv1.ListArchivedWorktreesResponse{
+	return &reliantv1.ListArchivedWorktreesResponse{
 		Worktrees:     protoWorktrees,
 		Total:         int32(len(protoWorktrees)),
 		NextPageToken: nextPageToken,
-	}), nil
+	}, nil
 }
 
 const defaultListWorktreesPageSize = 100
@@ -199,24 +198,24 @@ func decodeWorktreePageToken(token string) (int, error) {
 // GetWorktree retrieves a worktree by ID
 func (s *Service) GetWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetWorktreeRequest],
-) (*connect.Response[reliantv1.GetWorktreeResponse], error) {
+	req *reliantv1.GetWorktreeRequest,
+) (*reliantv1.GetWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 
-	return connect.NewResponse(&reliantv1.GetWorktreeResponse{
+	return &reliantv1.GetWorktreeResponse{
 		Worktree: worktreeToProto(worktree),
-	}), nil
+	}, nil
 }

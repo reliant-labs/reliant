@@ -7,325 +7,370 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// PackageCommandsServiceName is the fully-qualified name of the PackageCommandsService service.
 	PackageCommandsServiceName = "reliant.v1.PackageCommandsService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// PackageCommandsServiceListCommandsProcedure is the fully-qualified name of the
-	// PackageCommandsService's ListCommands RPC.
+	// PackageCommandsServiceListCommandsProcedure is the procedure name of the PackageCommandsService's
+	// ListCommands RPC.
 	PackageCommandsServiceListCommandsProcedure = "/reliant.v1.PackageCommandsService/ListCommands"
-	// PackageCommandsServiceRunCommandProcedure is the fully-qualified name of the
-	// PackageCommandsService's RunCommand RPC.
+	// PackageCommandsServiceRunCommandProcedure is the procedure name of the PackageCommandsService's
+	// RunCommand RPC.
 	PackageCommandsServiceRunCommandProcedure = "/reliant.v1.PackageCommandsService/RunCommand"
-	// PackageCommandsServiceListProcessesProcedure is the fully-qualified name of the
+	// PackageCommandsServiceListProcessesProcedure is the procedure name of the
 	// PackageCommandsService's ListProcesses RPC.
 	PackageCommandsServiceListProcessesProcedure = "/reliant.v1.PackageCommandsService/ListProcesses"
-	// PackageCommandsServiceGetProcessProcedure is the fully-qualified name of the
-	// PackageCommandsService's GetProcess RPC.
+	// PackageCommandsServiceGetProcessProcedure is the procedure name of the PackageCommandsService's
+	// GetProcess RPC.
 	PackageCommandsServiceGetProcessProcedure = "/reliant.v1.PackageCommandsService/GetProcess"
-	// PackageCommandsServiceGetProcessLogsProcedure is the fully-qualified name of the
+	// PackageCommandsServiceGetProcessLogsProcedure is the procedure name of the
 	// PackageCommandsService's GetProcessLogs RPC.
 	PackageCommandsServiceGetProcessLogsProcedure = "/reliant.v1.PackageCommandsService/GetProcessLogs"
-	// PackageCommandsServiceKillProcessProcedure is the fully-qualified name of the
-	// PackageCommandsService's KillProcess RPC.
+	// PackageCommandsServiceKillProcessProcedure is the procedure name of the PackageCommandsService's
+	// KillProcess RPC.
 	PackageCommandsServiceKillProcessProcedure = "/reliant.v1.PackageCommandsService/KillProcess"
-	// PackageCommandsServiceGetCommandFavoritesProcedure is the fully-qualified name of the
+	// PackageCommandsServiceGetCommandFavoritesProcedure is the procedure name of the
 	// PackageCommandsService's GetCommandFavorites RPC.
 	PackageCommandsServiceGetCommandFavoritesProcedure = "/reliant.v1.PackageCommandsService/GetCommandFavorites"
-	// PackageCommandsServiceSetCommandFavoriteProcedure is the fully-qualified name of the
+	// PackageCommandsServiceSetCommandFavoriteProcedure is the procedure name of the
 	// PackageCommandsService's SetCommandFavorite RPC.
 	PackageCommandsServiceSetCommandFavoriteProcedure = "/reliant.v1.PackageCommandsService/SetCommandFavorite"
+)
+
+var (
+	packageCommandsServiceListCommandsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods().ByName("ListCommands"),
+			Procedure:  PackageCommandsServiceListCommandsProcedure,
+		}
+	})
+	packageCommandsServiceRunCommandSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods().ByName("RunCommand"),
+			Procedure:  PackageCommandsServiceRunCommandProcedure,
+		}
+	})
+	packageCommandsServiceListProcessesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods().ByName("ListProcesses"),
+			Procedure:  PackageCommandsServiceListProcessesProcedure,
+		}
+	})
+	packageCommandsServiceGetProcessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods().ByName("GetProcess"),
+			Procedure:  PackageCommandsServiceGetProcessProcedure,
+		}
+	})
+	packageCommandsServiceGetProcessLogsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods().ByName("GetProcessLogs"),
+			Procedure:  PackageCommandsServiceGetProcessLogsProcedure,
+		}
+	})
+	packageCommandsServiceKillProcessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods().ByName("KillProcess"),
+			Procedure:  PackageCommandsServiceKillProcessProcedure,
+		}
+	})
+	packageCommandsServiceGetCommandFavoritesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods().ByName("GetCommandFavorites"),
+			Procedure:  PackageCommandsServiceGetCommandFavoritesProcedure,
+		}
+	})
+	packageCommandsServiceSetCommandFavoriteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods().ByName("SetCommandFavorite"),
+			Procedure:  PackageCommandsServiceSetCommandFavoriteProcedure,
+		}
+	})
 )
 
 // PackageCommandsServiceClient is a client for the reliant.v1.PackageCommandsService service.
 type PackageCommandsServiceClient interface {
 	// ListCommands returns available commands for a directory
-	ListCommands(context.Context, *connect.Request[v1.ListPackageCommandsRequest]) (*connect.Response[v1.ListPackageCommandsResponse], error)
+	ListCommands(context.Context, *v1.ListPackageCommandsRequest) (*v1.ListPackageCommandsResponse, error)
 	// RunCommand executes a package command
-	RunCommand(context.Context, *connect.Request[v1.RunPackageCommandRequest]) (*connect.Response[v1.RunPackageCommandResponse], error)
+	RunCommand(context.Context, *v1.RunPackageCommandRequest) (*v1.RunPackageCommandResponse, error)
 	// ListProcesses returns processes for a worktree
-	ListProcesses(context.Context, *connect.Request[v1.ListPackageProcessesRequest]) (*connect.Response[v1.ListPackageProcessesResponse], error)
+	ListProcesses(context.Context, *v1.ListPackageProcessesRequest) (*v1.ListPackageProcessesResponse, error)
 	// GetProcess returns a specific process
-	GetProcess(context.Context, *connect.Request[v1.GetPackageProcessRequest]) (*connect.Response[v1.GetPackageProcessResponse], error)
+	GetProcess(context.Context, *v1.GetPackageProcessRequest) (*v1.GetPackageProcessResponse, error)
 	// GetProcessLogs returns the logs for a process
-	GetProcessLogs(context.Context, *connect.Request[v1.GetPackageProcessLogsRequest]) (*connect.Response[v1.GetPackageProcessLogsResponse], error)
+	GetProcessLogs(context.Context, *v1.GetPackageProcessLogsRequest) (*v1.GetPackageProcessLogsResponse, error)
 	// KillProcess terminates a process
-	KillProcess(context.Context, *connect.Request[v1.KillPackageProcessRequest]) (*connect.Response[v1.KillPackageProcessResponse], error)
+	KillProcess(context.Context, *v1.KillPackageProcessRequest) (*v1.KillPackageProcessResponse, error)
 	// GetCommandFavorites returns the list of favorited command keys for a project
-	GetCommandFavorites(context.Context, *connect.Request[v1.GetCommandFavoritesRequest]) (*connect.Response[v1.GetCommandFavoritesResponse], error)
+	GetCommandFavorites(context.Context, *v1.GetCommandFavoritesRequest) (*v1.GetCommandFavoritesResponse, error)
 	// SetCommandFavorite adds or removes a command from favorites
-	SetCommandFavorite(context.Context, *connect.Request[v1.SetCommandFavoriteRequest]) (*connect.Response[v1.SetCommandFavoriteResponse], error)
+	SetCommandFavorite(context.Context, *v1.SetCommandFavoriteRequest) (*v1.SetCommandFavoriteResponse, error)
 }
 
 // NewPackageCommandsServiceClient constructs a client for the reliant.v1.PackageCommandsService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewPackageCommandsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) PackageCommandsServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	packageCommandsServiceMethods := v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods()
-	return &packageCommandsServiceClient{
-		listCommands: connect.NewClient[v1.ListPackageCommandsRequest, v1.ListPackageCommandsResponse](
-			httpClient,
-			baseURL+PackageCommandsServiceListCommandsProcedure,
-			connect.WithSchema(packageCommandsServiceMethods.ByName("ListCommands")),
-			connect.WithClientOptions(opts...),
-		),
-		runCommand: connect.NewClient[v1.RunPackageCommandRequest, v1.RunPackageCommandResponse](
-			httpClient,
-			baseURL+PackageCommandsServiceRunCommandProcedure,
-			connect.WithSchema(packageCommandsServiceMethods.ByName("RunCommand")),
-			connect.WithClientOptions(opts...),
-		),
-		listProcesses: connect.NewClient[v1.ListPackageProcessesRequest, v1.ListPackageProcessesResponse](
-			httpClient,
-			baseURL+PackageCommandsServiceListProcessesProcedure,
-			connect.WithSchema(packageCommandsServiceMethods.ByName("ListProcesses")),
-			connect.WithClientOptions(opts...),
-		),
-		getProcess: connect.NewClient[v1.GetPackageProcessRequest, v1.GetPackageProcessResponse](
-			httpClient,
-			baseURL+PackageCommandsServiceGetProcessProcedure,
-			connect.WithSchema(packageCommandsServiceMethods.ByName("GetProcess")),
-			connect.WithClientOptions(opts...),
-		),
-		getProcessLogs: connect.NewClient[v1.GetPackageProcessLogsRequest, v1.GetPackageProcessLogsResponse](
-			httpClient,
-			baseURL+PackageCommandsServiceGetProcessLogsProcedure,
-			connect.WithSchema(packageCommandsServiceMethods.ByName("GetProcessLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		killProcess: connect.NewClient[v1.KillPackageProcessRequest, v1.KillPackageProcessResponse](
-			httpClient,
-			baseURL+PackageCommandsServiceKillProcessProcedure,
-			connect.WithSchema(packageCommandsServiceMethods.ByName("KillProcess")),
-			connect.WithClientOptions(opts...),
-		),
-		getCommandFavorites: connect.NewClient[v1.GetCommandFavoritesRequest, v1.GetCommandFavoritesResponse](
-			httpClient,
-			baseURL+PackageCommandsServiceGetCommandFavoritesProcedure,
-			connect.WithSchema(packageCommandsServiceMethods.ByName("GetCommandFavorites")),
-			connect.WithClientOptions(opts...),
-		),
-		setCommandFavorite: connect.NewClient[v1.SetCommandFavoriteRequest, v1.SetCommandFavoriteResponse](
-			httpClient,
-			baseURL+PackageCommandsServiceSetCommandFavoriteProcedure,
-			connect.WithSchema(packageCommandsServiceMethods.ByName("SetCommandFavorite")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// packageCommandsServiceClient implements PackageCommandsServiceClient.
-type packageCommandsServiceClient struct {
-	listCommands        *connect.Client[v1.ListPackageCommandsRequest, v1.ListPackageCommandsResponse]
-	runCommand          *connect.Client[v1.RunPackageCommandRequest, v1.RunPackageCommandResponse]
-	listProcesses       *connect.Client[v1.ListPackageProcessesRequest, v1.ListPackageProcessesResponse]
-	getProcess          *connect.Client[v1.GetPackageProcessRequest, v1.GetPackageProcessResponse]
-	getProcessLogs      *connect.Client[v1.GetPackageProcessLogsRequest, v1.GetPackageProcessLogsResponse]
-	killProcess         *connect.Client[v1.KillPackageProcessRequest, v1.KillPackageProcessResponse]
-	getCommandFavorites *connect.Client[v1.GetCommandFavoritesRequest, v1.GetCommandFavoritesResponse]
-	setCommandFavorite  *connect.Client[v1.SetCommandFavoriteRequest, v1.SetCommandFavoriteResponse]
-}
-
-// ListCommands calls reliant.v1.PackageCommandsService.ListCommands.
-func (c *packageCommandsServiceClient) ListCommands(ctx context.Context, req *connect.Request[v1.ListPackageCommandsRequest]) (*connect.Response[v1.ListPackageCommandsResponse], error) {
-	return c.listCommands.CallUnary(ctx, req)
-}
-
-// RunCommand calls reliant.v1.PackageCommandsService.RunCommand.
-func (c *packageCommandsServiceClient) RunCommand(ctx context.Context, req *connect.Request[v1.RunPackageCommandRequest]) (*connect.Response[v1.RunPackageCommandResponse], error) {
-	return c.runCommand.CallUnary(ctx, req)
-}
-
-// ListProcesses calls reliant.v1.PackageCommandsService.ListProcesses.
-func (c *packageCommandsServiceClient) ListProcesses(ctx context.Context, req *connect.Request[v1.ListPackageProcessesRequest]) (*connect.Response[v1.ListPackageProcessesResponse], error) {
-	return c.listProcesses.CallUnary(ctx, req)
-}
-
-// GetProcess calls reliant.v1.PackageCommandsService.GetProcess.
-func (c *packageCommandsServiceClient) GetProcess(ctx context.Context, req *connect.Request[v1.GetPackageProcessRequest]) (*connect.Response[v1.GetPackageProcessResponse], error) {
-	return c.getProcess.CallUnary(ctx, req)
-}
-
-// GetProcessLogs calls reliant.v1.PackageCommandsService.GetProcessLogs.
-func (c *packageCommandsServiceClient) GetProcessLogs(ctx context.Context, req *connect.Request[v1.GetPackageProcessLogsRequest]) (*connect.Response[v1.GetPackageProcessLogsResponse], error) {
-	return c.getProcessLogs.CallUnary(ctx, req)
-}
-
-// KillProcess calls reliant.v1.PackageCommandsService.KillProcess.
-func (c *packageCommandsServiceClient) KillProcess(ctx context.Context, req *connect.Request[v1.KillPackageProcessRequest]) (*connect.Response[v1.KillPackageProcessResponse], error) {
-	return c.killProcess.CallUnary(ctx, req)
-}
-
-// GetCommandFavorites calls reliant.v1.PackageCommandsService.GetCommandFavorites.
-func (c *packageCommandsServiceClient) GetCommandFavorites(ctx context.Context, req *connect.Request[v1.GetCommandFavoritesRequest]) (*connect.Response[v1.GetCommandFavoritesResponse], error) {
-	return c.getCommandFavorites.CallUnary(ctx, req)
-}
-
-// SetCommandFavorite calls reliant.v1.PackageCommandsService.SetCommandFavorite.
-func (c *packageCommandsServiceClient) SetCommandFavorite(ctx context.Context, req *connect.Request[v1.SetCommandFavoriteRequest]) (*connect.Response[v1.SetCommandFavoriteResponse], error) {
-	return c.setCommandFavorite.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewPackageCommandsServiceClient(client *connect.Client) PackageCommandsServiceClient {
+	return &packageCommandsServiceClient{client: client}
 }
 
 // PackageCommandsServiceHandler is an implementation of the reliant.v1.PackageCommandsService
 // service.
 type PackageCommandsServiceHandler interface {
 	// ListCommands returns available commands for a directory
-	ListCommands(context.Context, *connect.Request[v1.ListPackageCommandsRequest]) (*connect.Response[v1.ListPackageCommandsResponse], error)
+	ListCommands(context.Context, *v1.ListPackageCommandsRequest) (*v1.ListPackageCommandsResponse, error)
 	// RunCommand executes a package command
-	RunCommand(context.Context, *connect.Request[v1.RunPackageCommandRequest]) (*connect.Response[v1.RunPackageCommandResponse], error)
+	RunCommand(context.Context, *v1.RunPackageCommandRequest) (*v1.RunPackageCommandResponse, error)
 	// ListProcesses returns processes for a worktree
-	ListProcesses(context.Context, *connect.Request[v1.ListPackageProcessesRequest]) (*connect.Response[v1.ListPackageProcessesResponse], error)
+	ListProcesses(context.Context, *v1.ListPackageProcessesRequest) (*v1.ListPackageProcessesResponse, error)
 	// GetProcess returns a specific process
-	GetProcess(context.Context, *connect.Request[v1.GetPackageProcessRequest]) (*connect.Response[v1.GetPackageProcessResponse], error)
+	GetProcess(context.Context, *v1.GetPackageProcessRequest) (*v1.GetPackageProcessResponse, error)
 	// GetProcessLogs returns the logs for a process
-	GetProcessLogs(context.Context, *connect.Request[v1.GetPackageProcessLogsRequest]) (*connect.Response[v1.GetPackageProcessLogsResponse], error)
+	GetProcessLogs(context.Context, *v1.GetPackageProcessLogsRequest) (*v1.GetPackageProcessLogsResponse, error)
 	// KillProcess terminates a process
-	KillProcess(context.Context, *connect.Request[v1.KillPackageProcessRequest]) (*connect.Response[v1.KillPackageProcessResponse], error)
+	KillProcess(context.Context, *v1.KillPackageProcessRequest) (*v1.KillPackageProcessResponse, error)
 	// GetCommandFavorites returns the list of favorited command keys for a project
-	GetCommandFavorites(context.Context, *connect.Request[v1.GetCommandFavoritesRequest]) (*connect.Response[v1.GetCommandFavoritesResponse], error)
+	GetCommandFavorites(context.Context, *v1.GetCommandFavoritesRequest) (*v1.GetCommandFavoritesResponse, error)
 	// SetCommandFavorite adds or removes a command from favorites
-	SetCommandFavorite(context.Context, *connect.Request[v1.SetCommandFavoriteRequest]) (*connect.Response[v1.SetCommandFavoriteResponse], error)
+	SetCommandFavorite(context.Context, *v1.SetCommandFavoriteRequest) (*v1.SetCommandFavoriteResponse, error)
 }
 
-// NewPackageCommandsServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewPackageCommandsServiceHandler(svc PackageCommandsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	packageCommandsServiceMethods := v1.File_reliant_v1_package_commands_proto.Services().ByName("PackageCommandsService").Methods()
-	packageCommandsServiceListCommandsHandler := connect.NewUnaryHandler(
-		PackageCommandsServiceListCommandsProcedure,
-		svc.ListCommands,
-		connect.WithSchema(packageCommandsServiceMethods.ByName("ListCommands")),
-		connect.WithHandlerOptions(opts...),
+// RegisterPackageCommandsServiceHandler registers svc as the reliant.v1.PackageCommandsService
+// implementation on server.
+func RegisterPackageCommandsServiceHandler(server *connect.Server, svc PackageCommandsServiceHandler) {
+	adapter := packageCommandsServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: packageCommandsServiceListCommandsSpec(), Handler: adapter.listCommands},
+		connect.Method{Spec: packageCommandsServiceRunCommandSpec(), Handler: adapter.runCommand},
+		connect.Method{Spec: packageCommandsServiceListProcessesSpec(), Handler: adapter.listProcesses},
+		connect.Method{Spec: packageCommandsServiceGetProcessSpec(), Handler: adapter.getProcess},
+		connect.Method{Spec: packageCommandsServiceGetProcessLogsSpec(), Handler: adapter.getProcessLogs},
+		connect.Method{Spec: packageCommandsServiceKillProcessSpec(), Handler: adapter.killProcess},
+		connect.Method{Spec: packageCommandsServiceGetCommandFavoritesSpec(), Handler: adapter.getCommandFavorites},
+		connect.Method{Spec: packageCommandsServiceSetCommandFavoriteSpec(), Handler: adapter.setCommandFavorite},
 	)
-	packageCommandsServiceRunCommandHandler := connect.NewUnaryHandler(
-		PackageCommandsServiceRunCommandProcedure,
-		svc.RunCommand,
-		connect.WithSchema(packageCommandsServiceMethods.ByName("RunCommand")),
-		connect.WithHandlerOptions(opts...),
-	)
-	packageCommandsServiceListProcessesHandler := connect.NewUnaryHandler(
-		PackageCommandsServiceListProcessesProcedure,
-		svc.ListProcesses,
-		connect.WithSchema(packageCommandsServiceMethods.ByName("ListProcesses")),
-		connect.WithHandlerOptions(opts...),
-	)
-	packageCommandsServiceGetProcessHandler := connect.NewUnaryHandler(
-		PackageCommandsServiceGetProcessProcedure,
-		svc.GetProcess,
-		connect.WithSchema(packageCommandsServiceMethods.ByName("GetProcess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	packageCommandsServiceGetProcessLogsHandler := connect.NewUnaryHandler(
-		PackageCommandsServiceGetProcessLogsProcedure,
-		svc.GetProcessLogs,
-		connect.WithSchema(packageCommandsServiceMethods.ByName("GetProcessLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	packageCommandsServiceKillProcessHandler := connect.NewUnaryHandler(
-		PackageCommandsServiceKillProcessProcedure,
-		svc.KillProcess,
-		connect.WithSchema(packageCommandsServiceMethods.ByName("KillProcess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	packageCommandsServiceGetCommandFavoritesHandler := connect.NewUnaryHandler(
-		PackageCommandsServiceGetCommandFavoritesProcedure,
-		svc.GetCommandFavorites,
-		connect.WithSchema(packageCommandsServiceMethods.ByName("GetCommandFavorites")),
-		connect.WithHandlerOptions(opts...),
-	)
-	packageCommandsServiceSetCommandFavoriteHandler := connect.NewUnaryHandler(
-		PackageCommandsServiceSetCommandFavoriteProcedure,
-		svc.SetCommandFavorite,
-		connect.WithSchema(packageCommandsServiceMethods.ByName("SetCommandFavorite")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.PackageCommandsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case PackageCommandsServiceListCommandsProcedure:
-			packageCommandsServiceListCommandsHandler.ServeHTTP(w, r)
-		case PackageCommandsServiceRunCommandProcedure:
-			packageCommandsServiceRunCommandHandler.ServeHTTP(w, r)
-		case PackageCommandsServiceListProcessesProcedure:
-			packageCommandsServiceListProcessesHandler.ServeHTTP(w, r)
-		case PackageCommandsServiceGetProcessProcedure:
-			packageCommandsServiceGetProcessHandler.ServeHTTP(w, r)
-		case PackageCommandsServiceGetProcessLogsProcedure:
-			packageCommandsServiceGetProcessLogsHandler.ServeHTTP(w, r)
-		case PackageCommandsServiceKillProcessProcedure:
-			packageCommandsServiceKillProcessHandler.ServeHTTP(w, r)
-		case PackageCommandsServiceGetCommandFavoritesProcedure:
-			packageCommandsServiceGetCommandFavoritesHandler.ServeHTTP(w, r)
-		case PackageCommandsServiceSetCommandFavoriteProcedure:
-			packageCommandsServiceSetCommandFavoriteHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedPackageCommandsServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedPackageCommandsServiceHandler struct{}
 
-func (UnimplementedPackageCommandsServiceHandler) ListCommands(context.Context, *connect.Request[v1.ListPackageCommandsRequest]) (*connect.Response[v1.ListPackageCommandsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PackageCommandsService.ListCommands is not implemented"))
+func (UnimplementedPackageCommandsServiceHandler) ListCommands(context.Context, *v1.ListPackageCommandsRequest) (*v1.ListPackageCommandsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PackageCommandsService.ListCommands is not implemented")
 }
 
-func (UnimplementedPackageCommandsServiceHandler) RunCommand(context.Context, *connect.Request[v1.RunPackageCommandRequest]) (*connect.Response[v1.RunPackageCommandResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PackageCommandsService.RunCommand is not implemented"))
+func (UnimplementedPackageCommandsServiceHandler) RunCommand(context.Context, *v1.RunPackageCommandRequest) (*v1.RunPackageCommandResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PackageCommandsService.RunCommand is not implemented")
 }
 
-func (UnimplementedPackageCommandsServiceHandler) ListProcesses(context.Context, *connect.Request[v1.ListPackageProcessesRequest]) (*connect.Response[v1.ListPackageProcessesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PackageCommandsService.ListProcesses is not implemented"))
+func (UnimplementedPackageCommandsServiceHandler) ListProcesses(context.Context, *v1.ListPackageProcessesRequest) (*v1.ListPackageProcessesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PackageCommandsService.ListProcesses is not implemented")
 }
 
-func (UnimplementedPackageCommandsServiceHandler) GetProcess(context.Context, *connect.Request[v1.GetPackageProcessRequest]) (*connect.Response[v1.GetPackageProcessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PackageCommandsService.GetProcess is not implemented"))
+func (UnimplementedPackageCommandsServiceHandler) GetProcess(context.Context, *v1.GetPackageProcessRequest) (*v1.GetPackageProcessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PackageCommandsService.GetProcess is not implemented")
 }
 
-func (UnimplementedPackageCommandsServiceHandler) GetProcessLogs(context.Context, *connect.Request[v1.GetPackageProcessLogsRequest]) (*connect.Response[v1.GetPackageProcessLogsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PackageCommandsService.GetProcessLogs is not implemented"))
+func (UnimplementedPackageCommandsServiceHandler) GetProcessLogs(context.Context, *v1.GetPackageProcessLogsRequest) (*v1.GetPackageProcessLogsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PackageCommandsService.GetProcessLogs is not implemented")
 }
 
-func (UnimplementedPackageCommandsServiceHandler) KillProcess(context.Context, *connect.Request[v1.KillPackageProcessRequest]) (*connect.Response[v1.KillPackageProcessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PackageCommandsService.KillProcess is not implemented"))
+func (UnimplementedPackageCommandsServiceHandler) KillProcess(context.Context, *v1.KillPackageProcessRequest) (*v1.KillPackageProcessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PackageCommandsService.KillProcess is not implemented")
 }
 
-func (UnimplementedPackageCommandsServiceHandler) GetCommandFavorites(context.Context, *connect.Request[v1.GetCommandFavoritesRequest]) (*connect.Response[v1.GetCommandFavoritesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PackageCommandsService.GetCommandFavorites is not implemented"))
+func (UnimplementedPackageCommandsServiceHandler) GetCommandFavorites(context.Context, *v1.GetCommandFavoritesRequest) (*v1.GetCommandFavoritesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PackageCommandsService.GetCommandFavorites is not implemented")
 }
 
-func (UnimplementedPackageCommandsServiceHandler) SetCommandFavorite(context.Context, *connect.Request[v1.SetCommandFavoriteRequest]) (*connect.Response[v1.SetCommandFavoriteResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PackageCommandsService.SetCommandFavorite is not implemented"))
+func (UnimplementedPackageCommandsServiceHandler) SetCommandFavorite(context.Context, *v1.SetCommandFavoriteRequest) (*v1.SetCommandFavoriteResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.PackageCommandsService.SetCommandFavorite is not implemented")
+}
+
+type packageCommandsServiceClient struct {
+	client *connect.Client
+}
+
+func (c *packageCommandsServiceClient) ListCommands(ctx context.Context, req *v1.ListPackageCommandsRequest) (*v1.ListPackageCommandsResponse, error) {
+	var res v1.ListPackageCommandsResponse
+	if err := c.client.CallUnary(ctx, packageCommandsServiceListCommandsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *packageCommandsServiceClient) RunCommand(ctx context.Context, req *v1.RunPackageCommandRequest) (*v1.RunPackageCommandResponse, error) {
+	var res v1.RunPackageCommandResponse
+	if err := c.client.CallUnary(ctx, packageCommandsServiceRunCommandSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *packageCommandsServiceClient) ListProcesses(ctx context.Context, req *v1.ListPackageProcessesRequest) (*v1.ListPackageProcessesResponse, error) {
+	var res v1.ListPackageProcessesResponse
+	if err := c.client.CallUnary(ctx, packageCommandsServiceListProcessesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *packageCommandsServiceClient) GetProcess(ctx context.Context, req *v1.GetPackageProcessRequest) (*v1.GetPackageProcessResponse, error) {
+	var res v1.GetPackageProcessResponse
+	if err := c.client.CallUnary(ctx, packageCommandsServiceGetProcessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *packageCommandsServiceClient) GetProcessLogs(ctx context.Context, req *v1.GetPackageProcessLogsRequest) (*v1.GetPackageProcessLogsResponse, error) {
+	var res v1.GetPackageProcessLogsResponse
+	if err := c.client.CallUnary(ctx, packageCommandsServiceGetProcessLogsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *packageCommandsServiceClient) KillProcess(ctx context.Context, req *v1.KillPackageProcessRequest) (*v1.KillPackageProcessResponse, error) {
+	var res v1.KillPackageProcessResponse
+	if err := c.client.CallUnary(ctx, packageCommandsServiceKillProcessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *packageCommandsServiceClient) GetCommandFavorites(ctx context.Context, req *v1.GetCommandFavoritesRequest) (*v1.GetCommandFavoritesResponse, error) {
+	var res v1.GetCommandFavoritesResponse
+	if err := c.client.CallUnary(ctx, packageCommandsServiceGetCommandFavoritesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *packageCommandsServiceClient) SetCommandFavorite(ctx context.Context, req *v1.SetCommandFavoriteRequest) (*v1.SetCommandFavoriteResponse, error) {
+	var res v1.SetCommandFavoriteResponse
+	if err := c.client.CallUnary(ctx, packageCommandsServiceSetCommandFavoriteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type packageCommandsServiceHandler struct{ svc PackageCommandsServiceHandler }
+
+func (h packageCommandsServiceHandler) listCommands(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPackageCommandsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListCommands(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h packageCommandsServiceHandler) runCommand(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RunPackageCommandRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RunCommand(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h packageCommandsServiceHandler) listProcesses(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPackageProcessesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListProcesses(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h packageCommandsServiceHandler) getProcess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPackageProcessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetProcess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h packageCommandsServiceHandler) getProcessLogs(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPackageProcessLogsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetProcessLogs(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h packageCommandsServiceHandler) killProcess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.KillPackageProcessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.KillProcess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h packageCommandsServiceHandler) getCommandFavorites(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCommandFavoritesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCommandFavorites(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h packageCommandsServiceHandler) setCommandFavorite(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetCommandFavoriteRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetCommandFavorite(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 
@@ -87,7 +87,7 @@ func TestWorktreeCreate_UserErrorClassSurvivesTheDaemonBoundary(t *testing.T) {
 	if got := svcerr.Classify(err); got != svcerr.ClassUser {
 		t.Fatalf("class = %v, want user: the daemon's diagnosis was lost crossing the boundary (err: %v)", got, err)
 	}
-	if got := svcerr.Code(err); got != connect.CodeNotFound {
+	if got := svcerr.CodeV2(err); got != connect.CodeNotFound {
 		t.Errorf("code = %v, want %v", got, connect.CodeNotFound)
 	}
 	want := "base branch 'feat/telemetry-delivery-c2' doesn't exist in reliant"

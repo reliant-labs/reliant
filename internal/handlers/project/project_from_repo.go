@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -51,10 +51,10 @@ import (
 // avoid.
 func (s *Service) CreateProjectFromRepo(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateProjectFromRepoRequest],
-) (*connect.Response[reliantv1.CreateProjectFromRepoResponse], error) {
+	req *reliantv1.CreateProjectFromRepoRequest,
+) (*reliantv1.CreateProjectFromRepoResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	orgID, err := s.actingOrg(ctx, userID, req.Msg.GetOrgId())
+	orgID, err := s.actingOrg(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +62,8 @@ func (s *Service) CreateProjectFromRepo(
 	// Git authenticates through the credential helper, never the URL: a token
 	// in the URL would be stored as the project's remote and written into the
 	// checkout's .git/config.
-	cloneURL := gitremote.StripCredentials(strings.TrimSpace(req.Msg.GetCloneUrl()))
-	daemonID := strings.TrimSpace(req.Msg.GetDaemonId())
+	cloneURL := gitremote.StripCredentials(strings.TrimSpace(req.GetCloneUrl()))
+	daemonID := strings.TrimSpace(req.GetDaemonId())
 	if cloneURL == "" {
 		return nil, svcerr.InvalidArgument("clone_url is required")
 	}
@@ -77,15 +77,15 @@ func (s *Service) CreateProjectFromRepo(
 		return nil, svcerr.FailedPrecondition("cloning from GitHub requires a Reliant Cloud account")
 	}
 
-	name := strings.TrimSpace(req.Msg.GetName())
+	name := strings.TrimSpace(req.GetName())
 	if name == "" {
 		name = repoNameFromCloneURL(cloneURL)
 	}
 	if name == "" {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("could not derive a project name from %q — pass name explicitly", cloneURL))
 	}
-	branch := strings.TrimSpace(req.Msg.GetBranch())
-	path := strings.TrimSpace(req.Msg.GetPath())
+	branch := strings.TrimSpace(req.GetBranch())
+	path := strings.TrimSpace(req.GetPath())
 	if path == "" {
 		path = cloudProjectPath(name)
 	}
@@ -145,7 +145,7 @@ func (s *Service) CreateProjectFromRepo(
 	// row. If this is going to be refused — no credential, machine failed,
 	// not the caller's daemon — it must fail with nothing persisted, rather
 	// than leaving a project the user then has to clean up by hand.
-	cloneResult, err := s.deps.ControlPlane.CloneRepoOntoDaemon(ctx, auth.BearerToken(req.Header().Get("Authorization")),
+	cloneResult, err := s.deps.ControlPlane.CloneRepoOntoDaemon(ctx, auth.BearerToken(serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization")),
 		controlplane.CloneRepoRequest{
 			DaemonID:  daemonID,
 			CloneURL:  cloneURL,
@@ -206,12 +206,12 @@ func (s *Service) CreateProjectFromRepo(
 		"project_id", project.ID, "daemon_id", daemonID,
 		"queued", cloneResult.Queued, "repo", gitremote.Redacted(cloneURL))
 
-	return connect.NewResponse(&reliantv1.CreateProjectFromRepoResponse{
+	return &reliantv1.CreateProjectFromRepoResponse{
 		Project:       projectToProto(project),
 		ProjectDaemon: projectDaemonToProto(pd),
 		Queued:        cloneResult.Queued,
 		DaemonName:    cloneResult.DaemonName,
-	}), nil
+	}, nil
 }
 
 // existingProjectForRepo returns the caller's existing project for this repo,

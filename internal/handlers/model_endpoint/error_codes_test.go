@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -37,10 +37,10 @@ func TestModelEndpointStoreErrorCodes(t *testing.T) {
 				ListModelEndpointsFunc: func(context.Context, string) ([]*db.ModelEndpoint, error) { return nil, tc.err },
 			}
 			svc := model_endpoint.NewTestModelEndpoint(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Repo: repo}), model_endpoint.WithPlaceholderDeps())
-			_, err := svc.ListModelEndpoints(model_endpoint.AuthedContext(t), connect.NewRequest(&pb.ListModelEndpointsRequest{}))
+			_, err := svc.ListModelEndpoints(model_endpoint.AuthedContext(t), &pb.ListModelEndpointsRequest{})
 			require.Error(t, err)
-			assert.Equal(t, tc.wantCode, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.wantCode, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.NotContains(t, msg, "secret")
 			if tc.wantMsg != "" {
 				assert.Equal(t, tc.wantMsg, msg)
@@ -61,15 +61,15 @@ func TestModelEndpointErrorsOnTheWire(t *testing.T) {
 	}
 	_, client := model_endpoint.NewTestModelEndpointServer(t, model_endpoint.WithModelEndpointDeps(model_endpoint.Deps{Repo: repo}), model_endpoint.WithPlaceholderDeps())
 
-	_, err := client.ListModelEndpoints(context.Background(), connect.NewRequest(&pb.ListModelEndpointsRequest{}))
+	_, err := client.ListModelEndpoints(context.Background(), &pb.ListModelEndpointsRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
-	assert.Equal(t, "model endpoint request failed", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
+	assert.Equal(t, "model endpoint request failed", svcerr.ToConnectV2(err).Message())
 
-	_, err = client.CreateModelEndpoint(context.Background(), connect.NewRequest(&pb.CreateModelEndpointRequest{
+	_, err = client.CreateModelEndpoint(context.Background(), &pb.CreateModelEndpointRequest{
 		Endpoint: &pb.ModelEndpointInput{Name: "gpu box", BaseUrl: "ftp://llm.example.com"},
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-	assert.Equal(t, "The URL must start with http:// or https://.", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
+	assert.Equal(t, "The URL must start with http:// or https://.", svcerr.ToConnectV2(err).Message())
 }

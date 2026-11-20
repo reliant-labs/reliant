@@ -6,13 +6,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 )
@@ -25,7 +28,7 @@ type stubToolsDaemonService struct {
 	got chan *reliantv1.DaemonMessage
 }
 
-func (s *stubToolsDaemonService) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (s *stubToolsDaemonService) ConnectDaemon(ctx context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	msg, err := stream.Receive()
 	if err != nil {
 		return err
@@ -44,7 +47,9 @@ func startStubGateway(t *testing.T) (string, chan *reliantv1.DaemonMessage) {
 	t.Helper()
 	stub := &stubToolsDaemonService{got: make(chan *reliantv1.DaemonMessage, 1)}
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewToolsDaemonServiceHandler(stub))
+	server := connect.NewServer()
+	reliantv1connect.RegisterToolsDaemonServiceHandler(server, stub)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.EnableHTTP2 = true
 	srv.Start()
@@ -69,9 +74,12 @@ func TestDaemonDialsGatewayByURLScheme(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			client := reliantv1connect.NewToolsDaemonServiceClient(httpClient, resolvedURL, connect.WithGRPC())
-			stream := client.ConnectDaemon(context.Background())
-			t.Cleanup(func() { _ = stream.CloseRequest() })
+			client := reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(httpClient, resolvedURL, []connecthttp.Option{connecthttp.WithGRPC()}))
+			stream, err := client.ConnectDaemon(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = stream.CloseSend() })
 
 			err = stream.Send(&reliantv1.DaemonMessage{
 				Message: &reliantv1.DaemonMessage_Register{

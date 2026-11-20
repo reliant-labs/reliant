@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,9 +16,9 @@ import (
 // UninstallServer removes an MCP server
 func (s *Service) UninstallServer(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UninstallServerRequest],
-) (*connect.Response[reliantv1.UninstallServerResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.UninstallServerRequest,
+) (*reliantv1.UninstallServerResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -31,7 +29,7 @@ func (s *Service) UninstallServer(
 		return nil, svcerr.Wrap(err)
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
@@ -61,19 +59,19 @@ func (s *Service) UninstallServer(
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after UninstallServer", "error", err)
 	}
 
-	return connect.NewResponse(&reliantv1.UninstallServerResponse{
+	return &reliantv1.UninstallServerResponse{
 		Success: true,
 		Message: "Server uninstalled successfully",
 		Name:    name,
-	}), nil
+	}, nil
 }
 
 // RestartServer restarts an MCP server
 func (s *Service) RestartServer(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RestartServerRequest],
-) (*connect.Response[reliantv1.RestartServerResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.RestartServerRequest,
+) (*reliantv1.RestartServerResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -84,7 +82,7 @@ func (s *Service) RestartServer(
 		return nil, svcerr.Wrap(err)
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
@@ -110,11 +108,11 @@ func (s *Service) RestartServer(
 	}
 
 	if !scoped.Config.IsEnabled() {
-		return connect.NewResponse(&reliantv1.RestartServerResponse{
+		return &reliantv1.RestartServerResponse{
 			Success: true,
 			Message: "Server is disabled; no restart performed",
 			Name:    name,
-		}), nil
+		}, nil
 	}
 
 	intCfg := scopedConfigToInternal(scoped.Config)
@@ -126,11 +124,11 @@ func (s *Service) RestartServer(
 			"phase", "preflight",
 			"error", err,
 		)
-		return connect.NewResponse(&reliantv1.RestartServerResponse{
+		return &reliantv1.RestartServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Preflight failed: %v", err),
 			Name:    name,
-		}), nil
+		}, nil
 	}
 
 	startCtx, cancel := context.WithTimeout(ctx, installServerStartupTimeout)
@@ -143,11 +141,11 @@ func (s *Service) RestartServer(
 			"phase", "startup",
 			"error", err,
 		)
-		return connect.NewResponse(&reliantv1.RestartServerResponse{
+		return &reliantv1.RestartServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Failed to restart server: %v", err),
 			Name:    name,
-		}), nil
+		}, nil
 	}
 
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
@@ -156,19 +154,19 @@ func (s *Service) RestartServer(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.RestartServerResponse{
+	return &reliantv1.RestartServerResponse{
 		Success: true,
 		Message: "Server restarted successfully",
 		Name:    name,
-	}), nil
+	}, nil
 }
 
 // UpdateServerConfig updates the configuration of an MCP server
 func (s *Service) UpdateServerConfig(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateServerConfigRequest],
-) (*connect.Response[reliantv1.UpdateServerConfigResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.UpdateServerConfigRequest,
+) (*reliantv1.UpdateServerConfigResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
@@ -179,12 +177,12 @@ func (s *Service) UpdateServerConfig(
 		return nil, svcerr.Wrap(err)
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
 
-	logging.DebugContext(ctx, "UpdateServerConfig request", "project_id", projectID, "name", name, "env_keys", len(req.Msg.Env))
+	logging.DebugContext(ctx, "UpdateServerConfig request", "project_id", projectID, "name", name, "env_keys", len(req.Env))
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
@@ -208,7 +206,7 @@ func (s *Service) UpdateServerConfig(
 	if serverCfg.Env == nil {
 		serverCfg.Env = make(map[string]string)
 	}
-	for k, v := range req.Msg.Env {
+	for k, v := range req.Env {
 		if v != "" {
 			serverCfg.Env[k] = v
 		}
@@ -245,20 +243,20 @@ func (s *Service) UpdateServerConfig(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.UpdateServerConfigResponse{Success: true, Message: "Configuration updated successfully"}), nil
+	return &reliantv1.UpdateServerConfigResponse{Success: true, Message: "Configuration updated successfully"}, nil
 }
 
 // SetServerEnabled toggles whether a server is enabled without uninstalling.
 func (s *Service) SetServerEnabled(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SetServerEnabledRequest],
-) (*connect.Response[reliantv1.SetServerEnabledResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.SetServerEnabledRequest,
+) (*reliantv1.SetServerEnabledResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
@@ -288,7 +286,7 @@ func (s *Service) SetServerEnabled(
 	if !existsInTargetScope {
 		serverCfg = scoped.Config
 	}
-	serverCfg.Enabled = ptr.Of(req.Msg.Enabled)
+	serverCfg.Enabled = ptr.Of(req.Enabled)
 	mcpConfig.MCPServers[name] = serverCfg
 
 	if err := s.writeMCPConfigViaDaemon(ctx, checkout, scoped.Scope, mcpConfig); err != nil {
@@ -303,7 +301,7 @@ func (s *Service) SetServerEnabled(
 
 	if s.deps.Router != nil {
 		mgr := s.mcpManagerFor(userID, checkout)
-		if req.Msg.Enabled {
+		if req.Enabled {
 			if err := mgr.RemoveProjectServer(checkout.Path, name); err != nil {
 				logging.WarnContext(ctx, "Failed to remove server before enable restart", "name", name, "error", err)
 			}
@@ -319,12 +317,12 @@ func (s *Service) SetServerEnabled(
 					"phase", "preflight",
 					"error", err,
 				)
-				return connect.NewResponse(&reliantv1.SetServerEnabledResponse{
+				return &reliantv1.SetServerEnabledResponse{
 					Success: false,
 					Message: fmt.Sprintf("Server enabled in config, but preflight failed: %v", err),
 					Name:    name,
 					Enabled: true,
-				}), nil
+				}, nil
 			}
 
 			if err := mgr.AddProjectServer(startCtx, checkout.Path, name, intCfg); err != nil {
@@ -334,12 +332,12 @@ func (s *Service) SetServerEnabled(
 					"phase", "startup",
 					"error", err,
 				)
-				return connect.NewResponse(&reliantv1.SetServerEnabledResponse{
+				return &reliantv1.SetServerEnabledResponse{
 					Success: false,
 					Message: fmt.Sprintf("Server enabled in config, but failed to start: %v", err),
 					Name:    name,
 					Enabled: true,
-				}), nil
+				}, nil
 			}
 		} else {
 			if err := mgr.RemoveProjectServer(checkout.Path, name); err != nil {
@@ -349,29 +347,29 @@ func (s *Service) SetServerEnabled(
 	}
 
 	stateText := "disabled"
-	if req.Msg.Enabled {
+	if req.Enabled {
 		stateText = "enabled"
 	}
 
-	return connect.NewResponse(&reliantv1.SetServerEnabledResponse{
+	return &reliantv1.SetServerEnabledResponse{
 		Success: true,
 		Message: fmt.Sprintf("Server %s", stateText),
 		Name:    name,
-		Enabled: req.Msg.Enabled,
-	}), nil
+		Enabled: req.Enabled,
+	}, nil
 }
 
 // MoveServerScope moves a server configuration between scopes.
 func (s *Service) MoveServerScope(
 	ctx context.Context,
-	req *connect.Request[reliantv1.MoveServerScopeRequest],
-) (*connect.Response[reliantv1.MoveServerScopeResponse], error) {
-	projectID := req.Msg.ProjectId
+	req *reliantv1.MoveServerScopeRequest,
+) (*reliantv1.MoveServerScopeResponse, error) {
+	projectID := req.ProjectId
 	if projectID == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
-	name := req.Msg.Name
+	name := req.Name
 	if name == "" {
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
@@ -382,7 +380,7 @@ func (s *Service) MoveServerScope(
 		return nil, svcerr.Wrap(err)
 	}
 
-	targetScope := normalizeScope(req.Msg.Scope)
+	targetScope := normalizeScope(req.Scope)
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
@@ -397,12 +395,12 @@ func (s *Service) MoveServerScope(
 
 	if scoped.Scope == targetScope {
 		activity.Skip(ctx) // already stored there: nothing moved
-		return connect.NewResponse(&reliantv1.MoveServerScopeResponse{
+		return &reliantv1.MoveServerScopeResponse{
 			Success: true,
 			Message: "Server is already stored in the requested scope",
 			Name:    name,
 			Scope:   targetScope,
-		}), nil
+		}, nil
 	}
 
 	sourceConfig, err := s.readMCPConfigForScope(ctx, projectID, sourceScope)
@@ -462,20 +460,20 @@ func (s *Service) MoveServerScope(
 					"target_scope", targetScope.String(),
 					"error", err,
 				)
-				return connect.NewResponse(&reliantv1.MoveServerScopeResponse{
+				return &reliantv1.MoveServerScopeResponse{
 					Success: false,
 					Message: fmt.Sprintf("Server moved to %s, but failed to start: %v", targetScope.String(), err),
 					Name:    name,
 					Scope:   targetScope,
-				}), nil
+				}, nil
 			}
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.MoveServerScopeResponse{
+	return &reliantv1.MoveServerScopeResponse{
 		Success: true,
 		Message: fmt.Sprintf("Server moved to %s scope", targetScope.String()),
 		Name:    name,
 		Scope:   targetScope,
-	}), nil
+	}, nil
 }

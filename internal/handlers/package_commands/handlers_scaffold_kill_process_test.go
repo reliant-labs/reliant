@@ -3,7 +3,7 @@ package package_commands_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -21,16 +21,16 @@ func TestKillProcess_Generated(t *testing.T) {
 
 	svc := package_commands.NewTestPackageCommands(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.KillPackageProcessRequest, pb.KillPackageProcessResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.KillPackageProcessRequest, pb.KillPackageProcessResponse]{
 		{
 			Name:    "process_id is required",
-			Req:     connect.NewRequest(&pb.KillPackageProcessRequest{}),
+			Req:     &pb.KillPackageProcessRequest{},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a machine that is not the caller's is not found",
-			Req:     connect.NewRequest(&pb.KillPackageProcessRequest{ProcessId: "p1", DaemonId: ptr.Of("someone-elses-machine")}),
+			Req:     &pb.KillPackageProcessRequest{ProcessId: "p1", DaemonId: ptr.Of("someone-elses-machine")},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

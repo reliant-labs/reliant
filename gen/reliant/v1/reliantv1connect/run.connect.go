@@ -7,53 +7,111 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// RunServiceName is the fully-qualified name of the RunService service.
 	RunServiceName = "reliant.v1.RunService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// RunServiceStartRunProcedure is the fully-qualified name of the RunService's StartRun RPC.
+	// RunServiceStartRunProcedure is the procedure name of the RunService's StartRun RPC.
 	RunServiceStartRunProcedure = "/reliant.v1.RunService/StartRun"
-	// RunServiceSignalRunProcedure is the fully-qualified name of the RunService's SignalRun RPC.
+	// RunServiceSignalRunProcedure is the procedure name of the RunService's SignalRun RPC.
 	RunServiceSignalRunProcedure = "/reliant.v1.RunService/SignalRun"
-	// RunServiceGetRunProcedure is the fully-qualified name of the RunService's GetRun RPC.
+	// RunServiceGetRunProcedure is the procedure name of the RunService's GetRun RPC.
 	RunServiceGetRunProcedure = "/reliant.v1.RunService/GetRun"
-	// RunServiceListRunsProcedure is the fully-qualified name of the RunService's ListRuns RPC.
+	// RunServiceListRunsProcedure is the procedure name of the RunService's ListRuns RPC.
 	RunServiceListRunsProcedure = "/reliant.v1.RunService/ListRuns"
-	// RunServiceLastRunPerWorkflowProcedure is the fully-qualified name of the RunService's
+	// RunServiceLastRunPerWorkflowProcedure is the procedure name of the RunService's
 	// LastRunPerWorkflow RPC.
 	RunServiceLastRunPerWorkflowProcedure = "/reliant.v1.RunService/LastRunPerWorkflow"
-	// RunServicePauseRunProcedure is the fully-qualified name of the RunService's PauseRun RPC.
+	// RunServicePauseRunProcedure is the procedure name of the RunService's PauseRun RPC.
 	RunServicePauseRunProcedure = "/reliant.v1.RunService/PauseRun"
-	// RunServiceResumeRunProcedure is the fully-qualified name of the RunService's ResumeRun RPC.
+	// RunServiceResumeRunProcedure is the procedure name of the RunService's ResumeRun RPC.
 	RunServiceResumeRunProcedure = "/reliant.v1.RunService/ResumeRun"
-	// RunServiceCancelRunProcedure is the fully-qualified name of the RunService's CancelRun RPC.
+	// RunServiceCancelRunProcedure is the procedure name of the RunService's CancelRun RPC.
 	RunServiceCancelRunProcedure = "/reliant.v1.RunService/CancelRun"
-	// RunServiceInterruptRunProcedure is the fully-qualified name of the RunService's InterruptRun RPC.
+	// RunServiceInterruptRunProcedure is the procedure name of the RunService's InterruptRun RPC.
 	RunServiceInterruptRunProcedure = "/reliant.v1.RunService/InterruptRun"
+)
+
+var (
+	runServiceStartRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("StartRun"),
+			Procedure:  RunServiceStartRunProcedure,
+		}
+	})
+	runServiceSignalRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("SignalRun"),
+			Procedure:  RunServiceSignalRunProcedure,
+		}
+	})
+	runServiceGetRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("GetRun"),
+			Procedure:  RunServiceGetRunProcedure,
+		}
+	})
+	runServiceListRunsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("ListRuns"),
+			Procedure:  RunServiceListRunsProcedure,
+		}
+	})
+	runServiceLastRunPerWorkflowSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("LastRunPerWorkflow"),
+			Procedure:        RunServiceLastRunPerWorkflowProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	runServicePauseRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("PauseRun"),
+			Procedure:  RunServicePauseRunProcedure,
+		}
+	})
+	runServiceResumeRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("ResumeRun"),
+			Procedure:  RunServiceResumeRunProcedure,
+		}
+	})
+	runServiceCancelRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("CancelRun"),
+			Procedure:  RunServiceCancelRunProcedure,
+		}
+	})
+	runServiceInterruptRunSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods().ByName("InterruptRun"),
+			Procedure:  RunServiceInterruptRunProcedure,
+		}
+	})
 )
 
 // RunServiceClient is a client for the reliant.v1.RunService service.
@@ -65,23 +123,23 @@ type RunServiceClient interface {
 	// engine invariant: WorkflowInput carries no message field, and the start
 	// event is emitted with no content. A message reaches the agent as thread
 	// history, which is a property of running WITH a session.
-	StartRun(context.Context, *connect.Request[v1.StartRunRequest]) (*connect.Response[v1.StartRunResponse], error)
+	StartRun(context.Context, *v1.StartRunRequest) (*v1.StartRunResponse, error)
 	// SignalRun delivers an event to a run that is already going. It never
 	// starts one.
 	//
 	// This is the half of ChatService.SendMessage that is not "start": that RPC
 	// means both, disambiguated by the run's status rather than by anything in
 	// the request, which is why callers cannot express which they intended.
-	SignalRun(context.Context, *connect.Request[v1.SignalRunRequest]) (*connect.Response[v1.SignalRunResponse], error)
+	SignalRun(context.Context, *v1.SignalRunRequest) (*v1.SignalRunResponse, error)
 	// GetRun returns one run's current state.
-	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunResponse], error)
+	GetRun(context.Context, *v1.GetRunRequest) (*v1.GetRunResponse, error)
 	// ListRuns lists runs, newest first.
 	//
 	// With neither session_id nor parent_id it is the cross-cutting run list:
 	// every root run the caller owns, narrowed by the filters on the request and
 	// paged by page_token. With one of them it lists that session's runs or that
 	// run's children.
-	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
+	ListRuns(context.Context, *v1.ListRunsRequest) (*v1.ListRunsResponse, error)
 	// LastRunPerWorkflow returns the most recent root run of each workflow the
 	// caller has run, one Run per workflow name. It is the Library's "last run"
 	// column in one round trip, where ListRuns would need a query per workflow.
@@ -93,146 +151,25 @@ type RunServiceClient interface {
 	//
 	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
 	// verb, so without it forge generates a mutation hook for it.
-	LastRunPerWorkflow(context.Context, *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error)
+	LastRunPerWorkflow(context.Context, *v1.LastRunPerWorkflowRequest) (*v1.LastRunPerWorkflowResponse, error)
 	// PauseRun parks a run. It stays live and resumable — see
 	// WORKFLOW_STOP_REASON_PAUSED.
-	PauseRun(context.Context, *connect.Request[v1.PauseRunRequest]) (*connect.Response[v1.PauseRunResponse], error)
+	PauseRun(context.Context, *v1.PauseRunRequest) (*v1.PauseRunResponse, error)
 	// ResumeRun continues a paused run from its recorded position.
-	ResumeRun(context.Context, *connect.Request[v1.ResumeRunRequest]) (*connect.Response[v1.ResumeRunResponse], error)
+	ResumeRun(context.Context, *v1.ResumeRunRequest) (*v1.ResumeRunResponse, error)
 	// CancelRun hard-stops a run. Terminal by intent: the position checkpoint is
 	// dropped, so there is nothing to resume.
-	CancelRun(context.Context, *connect.Request[v1.CancelRunRequest]) (*connect.Response[v1.CancelRunResponse], error)
+	CancelRun(context.Context, *v1.CancelRunRequest) (*v1.CancelRunResponse, error)
 	// InterruptRun stops what the run is doing now without ending it — the
 	// in-flight LLM call and any executing tools are cancelled, and the run
 	// parks. Distinct from Cancel, which ends it.
-	InterruptRun(context.Context, *connect.Request[v1.InterruptRunRequest]) (*connect.Response[v1.InterruptRunResponse], error)
+	InterruptRun(context.Context, *v1.InterruptRunRequest) (*v1.InterruptRunResponse, error)
 }
 
-// NewRunServiceClient constructs a client for the reliant.v1.RunService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewRunServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) RunServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	runServiceMethods := v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods()
-	return &runServiceClient{
-		startRun: connect.NewClient[v1.StartRunRequest, v1.StartRunResponse](
-			httpClient,
-			baseURL+RunServiceStartRunProcedure,
-			connect.WithSchema(runServiceMethods.ByName("StartRun")),
-			connect.WithClientOptions(opts...),
-		),
-		signalRun: connect.NewClient[v1.SignalRunRequest, v1.SignalRunResponse](
-			httpClient,
-			baseURL+RunServiceSignalRunProcedure,
-			connect.WithSchema(runServiceMethods.ByName("SignalRun")),
-			connect.WithClientOptions(opts...),
-		),
-		getRun: connect.NewClient[v1.GetRunRequest, v1.GetRunResponse](
-			httpClient,
-			baseURL+RunServiceGetRunProcedure,
-			connect.WithSchema(runServiceMethods.ByName("GetRun")),
-			connect.WithClientOptions(opts...),
-		),
-		listRuns: connect.NewClient[v1.ListRunsRequest, v1.ListRunsResponse](
-			httpClient,
-			baseURL+RunServiceListRunsProcedure,
-			connect.WithSchema(runServiceMethods.ByName("ListRuns")),
-			connect.WithClientOptions(opts...),
-		),
-		lastRunPerWorkflow: connect.NewClient[v1.LastRunPerWorkflowRequest, v1.LastRunPerWorkflowResponse](
-			httpClient,
-			baseURL+RunServiceLastRunPerWorkflowProcedure,
-			connect.WithSchema(runServiceMethods.ByName("LastRunPerWorkflow")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		pauseRun: connect.NewClient[v1.PauseRunRequest, v1.PauseRunResponse](
-			httpClient,
-			baseURL+RunServicePauseRunProcedure,
-			connect.WithSchema(runServiceMethods.ByName("PauseRun")),
-			connect.WithClientOptions(opts...),
-		),
-		resumeRun: connect.NewClient[v1.ResumeRunRequest, v1.ResumeRunResponse](
-			httpClient,
-			baseURL+RunServiceResumeRunProcedure,
-			connect.WithSchema(runServiceMethods.ByName("ResumeRun")),
-			connect.WithClientOptions(opts...),
-		),
-		cancelRun: connect.NewClient[v1.CancelRunRequest, v1.CancelRunResponse](
-			httpClient,
-			baseURL+RunServiceCancelRunProcedure,
-			connect.WithSchema(runServiceMethods.ByName("CancelRun")),
-			connect.WithClientOptions(opts...),
-		),
-		interruptRun: connect.NewClient[v1.InterruptRunRequest, v1.InterruptRunResponse](
-			httpClient,
-			baseURL+RunServiceInterruptRunProcedure,
-			connect.WithSchema(runServiceMethods.ByName("InterruptRun")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// runServiceClient implements RunServiceClient.
-type runServiceClient struct {
-	startRun           *connect.Client[v1.StartRunRequest, v1.StartRunResponse]
-	signalRun          *connect.Client[v1.SignalRunRequest, v1.SignalRunResponse]
-	getRun             *connect.Client[v1.GetRunRequest, v1.GetRunResponse]
-	listRuns           *connect.Client[v1.ListRunsRequest, v1.ListRunsResponse]
-	lastRunPerWorkflow *connect.Client[v1.LastRunPerWorkflowRequest, v1.LastRunPerWorkflowResponse]
-	pauseRun           *connect.Client[v1.PauseRunRequest, v1.PauseRunResponse]
-	resumeRun          *connect.Client[v1.ResumeRunRequest, v1.ResumeRunResponse]
-	cancelRun          *connect.Client[v1.CancelRunRequest, v1.CancelRunResponse]
-	interruptRun       *connect.Client[v1.InterruptRunRequest, v1.InterruptRunResponse]
-}
-
-// StartRun calls reliant.v1.RunService.StartRun.
-func (c *runServiceClient) StartRun(ctx context.Context, req *connect.Request[v1.StartRunRequest]) (*connect.Response[v1.StartRunResponse], error) {
-	return c.startRun.CallUnary(ctx, req)
-}
-
-// SignalRun calls reliant.v1.RunService.SignalRun.
-func (c *runServiceClient) SignalRun(ctx context.Context, req *connect.Request[v1.SignalRunRequest]) (*connect.Response[v1.SignalRunResponse], error) {
-	return c.signalRun.CallUnary(ctx, req)
-}
-
-// GetRun calls reliant.v1.RunService.GetRun.
-func (c *runServiceClient) GetRun(ctx context.Context, req *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunResponse], error) {
-	return c.getRun.CallUnary(ctx, req)
-}
-
-// ListRuns calls reliant.v1.RunService.ListRuns.
-func (c *runServiceClient) ListRuns(ctx context.Context, req *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error) {
-	return c.listRuns.CallUnary(ctx, req)
-}
-
-// LastRunPerWorkflow calls reliant.v1.RunService.LastRunPerWorkflow.
-func (c *runServiceClient) LastRunPerWorkflow(ctx context.Context, req *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error) {
-	return c.lastRunPerWorkflow.CallUnary(ctx, req)
-}
-
-// PauseRun calls reliant.v1.RunService.PauseRun.
-func (c *runServiceClient) PauseRun(ctx context.Context, req *connect.Request[v1.PauseRunRequest]) (*connect.Response[v1.PauseRunResponse], error) {
-	return c.pauseRun.CallUnary(ctx, req)
-}
-
-// ResumeRun calls reliant.v1.RunService.ResumeRun.
-func (c *runServiceClient) ResumeRun(ctx context.Context, req *connect.Request[v1.ResumeRunRequest]) (*connect.Response[v1.ResumeRunResponse], error) {
-	return c.resumeRun.CallUnary(ctx, req)
-}
-
-// CancelRun calls reliant.v1.RunService.CancelRun.
-func (c *runServiceClient) CancelRun(ctx context.Context, req *connect.Request[v1.CancelRunRequest]) (*connect.Response[v1.CancelRunResponse], error) {
-	return c.cancelRun.CallUnary(ctx, req)
-}
-
-// InterruptRun calls reliant.v1.RunService.InterruptRun.
-func (c *runServiceClient) InterruptRun(ctx context.Context, req *connect.Request[v1.InterruptRunRequest]) (*connect.Response[v1.InterruptRunResponse], error) {
-	return c.interruptRun.CallUnary(ctx, req)
+// NewRunServiceClient constructs a client for the reliant.v1.RunService service. Multiple service
+// clients may share a single connect.Client.
+func NewRunServiceClient(client *connect.Client) RunServiceClient {
+	return &runServiceClient{client: client}
 }
 
 // RunServiceHandler is an implementation of the reliant.v1.RunService service.
@@ -244,23 +181,23 @@ type RunServiceHandler interface {
 	// engine invariant: WorkflowInput carries no message field, and the start
 	// event is emitted with no content. A message reaches the agent as thread
 	// history, which is a property of running WITH a session.
-	StartRun(context.Context, *connect.Request[v1.StartRunRequest]) (*connect.Response[v1.StartRunResponse], error)
+	StartRun(context.Context, *v1.StartRunRequest) (*v1.StartRunResponse, error)
 	// SignalRun delivers an event to a run that is already going. It never
 	// starts one.
 	//
 	// This is the half of ChatService.SendMessage that is not "start": that RPC
 	// means both, disambiguated by the run's status rather than by anything in
 	// the request, which is why callers cannot express which they intended.
-	SignalRun(context.Context, *connect.Request[v1.SignalRunRequest]) (*connect.Response[v1.SignalRunResponse], error)
+	SignalRun(context.Context, *v1.SignalRunRequest) (*v1.SignalRunResponse, error)
 	// GetRun returns one run's current state.
-	GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunResponse], error)
+	GetRun(context.Context, *v1.GetRunRequest) (*v1.GetRunResponse, error)
 	// ListRuns lists runs, newest first.
 	//
 	// With neither session_id nor parent_id it is the cross-cutting run list:
 	// every root run the caller owns, narrowed by the filters on the request and
 	// paged by page_token. With one of them it lists that session's runs or that
 	// run's children.
-	ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error)
+	ListRuns(context.Context, *v1.ListRunsRequest) (*v1.ListRunsResponse, error)
 	// LastRunPerWorkflow returns the most recent root run of each workflow the
 	// caller has run, one Run per workflow name. It is the Library's "last run"
 	// column in one round trip, where ListRuns would need a query per workflow.
@@ -272,144 +209,258 @@ type RunServiceHandler interface {
 	//
 	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
 	// verb, so without it forge generates a mutation hook for it.
-	LastRunPerWorkflow(context.Context, *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error)
+	LastRunPerWorkflow(context.Context, *v1.LastRunPerWorkflowRequest) (*v1.LastRunPerWorkflowResponse, error)
 	// PauseRun parks a run. It stays live and resumable — see
 	// WORKFLOW_STOP_REASON_PAUSED.
-	PauseRun(context.Context, *connect.Request[v1.PauseRunRequest]) (*connect.Response[v1.PauseRunResponse], error)
+	PauseRun(context.Context, *v1.PauseRunRequest) (*v1.PauseRunResponse, error)
 	// ResumeRun continues a paused run from its recorded position.
-	ResumeRun(context.Context, *connect.Request[v1.ResumeRunRequest]) (*connect.Response[v1.ResumeRunResponse], error)
+	ResumeRun(context.Context, *v1.ResumeRunRequest) (*v1.ResumeRunResponse, error)
 	// CancelRun hard-stops a run. Terminal by intent: the position checkpoint is
 	// dropped, so there is nothing to resume.
-	CancelRun(context.Context, *connect.Request[v1.CancelRunRequest]) (*connect.Response[v1.CancelRunResponse], error)
+	CancelRun(context.Context, *v1.CancelRunRequest) (*v1.CancelRunResponse, error)
 	// InterruptRun stops what the run is doing now without ending it — the
 	// in-flight LLM call and any executing tools are cancelled, and the run
 	// parks. Distinct from Cancel, which ends it.
-	InterruptRun(context.Context, *connect.Request[v1.InterruptRunRequest]) (*connect.Response[v1.InterruptRunResponse], error)
+	InterruptRun(context.Context, *v1.InterruptRunRequest) (*v1.InterruptRunResponse, error)
 }
 
-// NewRunServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewRunServiceHandler(svc RunServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	runServiceMethods := v1.File_reliant_v1_run_proto.Services().ByName("RunService").Methods()
-	runServiceStartRunHandler := connect.NewUnaryHandler(
-		RunServiceStartRunProcedure,
-		svc.StartRun,
-		connect.WithSchema(runServiceMethods.ByName("StartRun")),
-		connect.WithHandlerOptions(opts...),
+// RegisterRunServiceHandler registers svc as the reliant.v1.RunService implementation on server.
+func RegisterRunServiceHandler(server *connect.Server, svc RunServiceHandler) {
+	adapter := runServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: runServiceStartRunSpec(), Handler: adapter.startRun},
+		connect.Method{Spec: runServiceSignalRunSpec(), Handler: adapter.signalRun},
+		connect.Method{Spec: runServiceGetRunSpec(), Handler: adapter.getRun},
+		connect.Method{Spec: runServiceListRunsSpec(), Handler: adapter.listRuns},
+		connect.Method{Spec: runServiceLastRunPerWorkflowSpec(), Handler: adapter.lastRunPerWorkflow},
+		connect.Method{Spec: runServicePauseRunSpec(), Handler: adapter.pauseRun},
+		connect.Method{Spec: runServiceResumeRunSpec(), Handler: adapter.resumeRun},
+		connect.Method{Spec: runServiceCancelRunSpec(), Handler: adapter.cancelRun},
+		connect.Method{Spec: runServiceInterruptRunSpec(), Handler: adapter.interruptRun},
 	)
-	runServiceSignalRunHandler := connect.NewUnaryHandler(
-		RunServiceSignalRunProcedure,
-		svc.SignalRun,
-		connect.WithSchema(runServiceMethods.ByName("SignalRun")),
-		connect.WithHandlerOptions(opts...),
-	)
-	runServiceGetRunHandler := connect.NewUnaryHandler(
-		RunServiceGetRunProcedure,
-		svc.GetRun,
-		connect.WithSchema(runServiceMethods.ByName("GetRun")),
-		connect.WithHandlerOptions(opts...),
-	)
-	runServiceListRunsHandler := connect.NewUnaryHandler(
-		RunServiceListRunsProcedure,
-		svc.ListRuns,
-		connect.WithSchema(runServiceMethods.ByName("ListRuns")),
-		connect.WithHandlerOptions(opts...),
-	)
-	runServiceLastRunPerWorkflowHandler := connect.NewUnaryHandler(
-		RunServiceLastRunPerWorkflowProcedure,
-		svc.LastRunPerWorkflow,
-		connect.WithSchema(runServiceMethods.ByName("LastRunPerWorkflow")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	runServicePauseRunHandler := connect.NewUnaryHandler(
-		RunServicePauseRunProcedure,
-		svc.PauseRun,
-		connect.WithSchema(runServiceMethods.ByName("PauseRun")),
-		connect.WithHandlerOptions(opts...),
-	)
-	runServiceResumeRunHandler := connect.NewUnaryHandler(
-		RunServiceResumeRunProcedure,
-		svc.ResumeRun,
-		connect.WithSchema(runServiceMethods.ByName("ResumeRun")),
-		connect.WithHandlerOptions(opts...),
-	)
-	runServiceCancelRunHandler := connect.NewUnaryHandler(
-		RunServiceCancelRunProcedure,
-		svc.CancelRun,
-		connect.WithSchema(runServiceMethods.ByName("CancelRun")),
-		connect.WithHandlerOptions(opts...),
-	)
-	runServiceInterruptRunHandler := connect.NewUnaryHandler(
-		RunServiceInterruptRunProcedure,
-		svc.InterruptRun,
-		connect.WithSchema(runServiceMethods.ByName("InterruptRun")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.RunService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case RunServiceStartRunProcedure:
-			runServiceStartRunHandler.ServeHTTP(w, r)
-		case RunServiceSignalRunProcedure:
-			runServiceSignalRunHandler.ServeHTTP(w, r)
-		case RunServiceGetRunProcedure:
-			runServiceGetRunHandler.ServeHTTP(w, r)
-		case RunServiceListRunsProcedure:
-			runServiceListRunsHandler.ServeHTTP(w, r)
-		case RunServiceLastRunPerWorkflowProcedure:
-			runServiceLastRunPerWorkflowHandler.ServeHTTP(w, r)
-		case RunServicePauseRunProcedure:
-			runServicePauseRunHandler.ServeHTTP(w, r)
-		case RunServiceResumeRunProcedure:
-			runServiceResumeRunHandler.ServeHTTP(w, r)
-		case RunServiceCancelRunProcedure:
-			runServiceCancelRunHandler.ServeHTTP(w, r)
-		case RunServiceInterruptRunProcedure:
-			runServiceInterruptRunHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedRunServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedRunServiceHandler struct{}
 
-func (UnimplementedRunServiceHandler) StartRun(context.Context, *connect.Request[v1.StartRunRequest]) (*connect.Response[v1.StartRunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.StartRun is not implemented"))
+func (UnimplementedRunServiceHandler) StartRun(context.Context, *v1.StartRunRequest) (*v1.StartRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.StartRun is not implemented")
 }
 
-func (UnimplementedRunServiceHandler) SignalRun(context.Context, *connect.Request[v1.SignalRunRequest]) (*connect.Response[v1.SignalRunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.SignalRun is not implemented"))
+func (UnimplementedRunServiceHandler) SignalRun(context.Context, *v1.SignalRunRequest) (*v1.SignalRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.SignalRun is not implemented")
 }
 
-func (UnimplementedRunServiceHandler) GetRun(context.Context, *connect.Request[v1.GetRunRequest]) (*connect.Response[v1.GetRunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.GetRun is not implemented"))
+func (UnimplementedRunServiceHandler) GetRun(context.Context, *v1.GetRunRequest) (*v1.GetRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.GetRun is not implemented")
 }
 
-func (UnimplementedRunServiceHandler) ListRuns(context.Context, *connect.Request[v1.ListRunsRequest]) (*connect.Response[v1.ListRunsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.ListRuns is not implemented"))
+func (UnimplementedRunServiceHandler) ListRuns(context.Context, *v1.ListRunsRequest) (*v1.ListRunsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.ListRuns is not implemented")
 }
 
-func (UnimplementedRunServiceHandler) LastRunPerWorkflow(context.Context, *connect.Request[v1.LastRunPerWorkflowRequest]) (*connect.Response[v1.LastRunPerWorkflowResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.LastRunPerWorkflow is not implemented"))
+func (UnimplementedRunServiceHandler) LastRunPerWorkflow(context.Context, *v1.LastRunPerWorkflowRequest) (*v1.LastRunPerWorkflowResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.LastRunPerWorkflow is not implemented")
 }
 
-func (UnimplementedRunServiceHandler) PauseRun(context.Context, *connect.Request[v1.PauseRunRequest]) (*connect.Response[v1.PauseRunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.PauseRun is not implemented"))
+func (UnimplementedRunServiceHandler) PauseRun(context.Context, *v1.PauseRunRequest) (*v1.PauseRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.PauseRun is not implemented")
 }
 
-func (UnimplementedRunServiceHandler) ResumeRun(context.Context, *connect.Request[v1.ResumeRunRequest]) (*connect.Response[v1.ResumeRunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.ResumeRun is not implemented"))
+func (UnimplementedRunServiceHandler) ResumeRun(context.Context, *v1.ResumeRunRequest) (*v1.ResumeRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.ResumeRun is not implemented")
 }
 
-func (UnimplementedRunServiceHandler) CancelRun(context.Context, *connect.Request[v1.CancelRunRequest]) (*connect.Response[v1.CancelRunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.CancelRun is not implemented"))
+func (UnimplementedRunServiceHandler) CancelRun(context.Context, *v1.CancelRunRequest) (*v1.CancelRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.CancelRun is not implemented")
 }
 
-func (UnimplementedRunServiceHandler) InterruptRun(context.Context, *connect.Request[v1.InterruptRunRequest]) (*connect.Response[v1.InterruptRunResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.RunService.InterruptRun is not implemented"))
+func (UnimplementedRunServiceHandler) InterruptRun(context.Context, *v1.InterruptRunRequest) (*v1.InterruptRunResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.RunService.InterruptRun is not implemented")
+}
+
+type runServiceClient struct {
+	client *connect.Client
+}
+
+func (c *runServiceClient) StartRun(ctx context.Context, req *v1.StartRunRequest) (*v1.StartRunResponse, error) {
+	var res v1.StartRunResponse
+	if err := c.client.CallUnary(ctx, runServiceStartRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runServiceClient) SignalRun(ctx context.Context, req *v1.SignalRunRequest) (*v1.SignalRunResponse, error) {
+	var res v1.SignalRunResponse
+	if err := c.client.CallUnary(ctx, runServiceSignalRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runServiceClient) GetRun(ctx context.Context, req *v1.GetRunRequest) (*v1.GetRunResponse, error) {
+	var res v1.GetRunResponse
+	if err := c.client.CallUnary(ctx, runServiceGetRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runServiceClient) ListRuns(ctx context.Context, req *v1.ListRunsRequest) (*v1.ListRunsResponse, error) {
+	var res v1.ListRunsResponse
+	if err := c.client.CallUnary(ctx, runServiceListRunsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runServiceClient) LastRunPerWorkflow(ctx context.Context, req *v1.LastRunPerWorkflowRequest) (*v1.LastRunPerWorkflowResponse, error) {
+	var res v1.LastRunPerWorkflowResponse
+	if err := c.client.CallUnary(ctx, runServiceLastRunPerWorkflowSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runServiceClient) PauseRun(ctx context.Context, req *v1.PauseRunRequest) (*v1.PauseRunResponse, error) {
+	var res v1.PauseRunResponse
+	if err := c.client.CallUnary(ctx, runServicePauseRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runServiceClient) ResumeRun(ctx context.Context, req *v1.ResumeRunRequest) (*v1.ResumeRunResponse, error) {
+	var res v1.ResumeRunResponse
+	if err := c.client.CallUnary(ctx, runServiceResumeRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runServiceClient) CancelRun(ctx context.Context, req *v1.CancelRunRequest) (*v1.CancelRunResponse, error) {
+	var res v1.CancelRunResponse
+	if err := c.client.CallUnary(ctx, runServiceCancelRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *runServiceClient) InterruptRun(ctx context.Context, req *v1.InterruptRunRequest) (*v1.InterruptRunResponse, error) {
+	var res v1.InterruptRunResponse
+	if err := c.client.CallUnary(ctx, runServiceInterruptRunSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type runServiceHandler struct{ svc RunServiceHandler }
+
+func (h runServiceHandler) startRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartRun(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runServiceHandler) signalRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SignalRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SignalRun(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runServiceHandler) getRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetRun(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runServiceHandler) listRuns(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListRunsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListRuns(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runServiceHandler) lastRunPerWorkflow(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.LastRunPerWorkflowRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.LastRunPerWorkflow(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runServiceHandler) pauseRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PauseRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PauseRun(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runServiceHandler) resumeRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ResumeRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ResumeRun(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runServiceHandler) cancelRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CancelRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CancelRun(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h runServiceHandler) interruptRun(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InterruptRunRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.InterruptRun(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

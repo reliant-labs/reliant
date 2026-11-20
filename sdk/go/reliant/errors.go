@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 )
 
 // Sentinel errors for errors.Is. Every error the client returns for a failed
@@ -125,8 +125,8 @@ func (c *Client) wrap(op string, err error) error {
 		return &Error{Op: op, Server: c.baseURL, Code: connect.CodeUnavailable, Message: err.Error(), kind: ErrUnavailable, cause: err}
 	}
 	e := &Error{Op: op, Server: c.baseURL, Code: ce.Code(), Message: ce.Message(), cause: err}
-	e.Reason = ce.Meta().Get(headerErrorReason)
-	if v := ce.Meta().Get(headerErrorScopes); v != "" {
+	e.Reason = errorMeta(err).Get(headerErrorReason)
+	if v := errorMeta(err).Get(headerErrorScopes); v != "" {
 		e.Scopes = strings.Split(v, ",")
 	}
 	switch ce.Code() {

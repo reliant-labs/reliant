@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -25,19 +24,19 @@ import (
 // GetWorktreeChanges gets file changes for a worktree
 func (s *Service) GetWorktreeChanges(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetWorktreeChangesRequest],
-) (*connect.Response[reliantv1.GetWorktreeChangesResponse], error) {
+	req *reliantv1.GetWorktreeChangesRequest,
+) (*reliantv1.GetWorktreeChangesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -60,7 +59,7 @@ func (s *Service) GetWorktreeChanges(
 		Error         string            `json:"error,omitempty"`
 	}
 	if err := s.gitReadOnDisk(ctx, userID, worktree, func() error {
-		repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+		repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 		if err != nil {
 			return err
 		}
@@ -103,32 +102,32 @@ func (s *Service) GetWorktreeChanges(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetWorktreeChangesResponse{
+	return &reliantv1.GetWorktreeChangesResponse{
 		Branch:        changesResp.Branch,
 		Files:         files,
 		TotalFiles:    changesResp.TotalFiles,
 		Ahead:         changesResp.Ahead,
 		Behind:        changesResp.Behind,
 		DefaultBranch: changesResp.DefaultBranch,
-	}), nil
+	}, nil
 }
 
 // GetWorktreeGitStatus gets the overall git status for a worktree
 func (s *Service) GetWorktreeGitStatus(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetWorktreeGitStatusRequest],
-) (*connect.Response[reliantv1.GetWorktreeGitStatusResponse], error) {
+	req *reliantv1.GetWorktreeGitStatusRequest,
+) (*reliantv1.GetWorktreeGitStatusResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -147,7 +146,7 @@ func (s *Service) GetWorktreeGitStatus(
 	var repoPath string
 	if err := s.gitReadOnDisk(ctx, userID, worktree, func() error {
 		var err error
-		repoPath, _, err = s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+		repoPath, _, err = s.resolveRepoPath(ctx, worktree, req.RepoId)
 		if err != nil {
 			return err
 		}
@@ -162,7 +161,7 @@ func (s *Service) GetWorktreeGitStatus(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.GetWorktreeGitStatusResponse{
+	return &reliantv1.GetWorktreeGitStatusResponse{
 		WorktreeId:     worktree.ID,
 		Path:           repoPath,
 		Branch:         statusResp.Branch,
@@ -173,33 +172,33 @@ func (s *Service) GetWorktreeGitStatus(
 		UntrackedFiles: statusResp.UntrackedFiles,
 		Ahead:          statusResp.Ahead,
 		Behind:         statusResp.Behind,
-	}), nil
+	}, nil
 }
 
 // GetWorktreeCommits gets commit history for a worktree
 func (s *Service) GetWorktreeCommits(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetWorktreeCommitsRequest],
-) (*connect.Response[reliantv1.GetWorktreeCommitsResponse], error) {
+	req *reliantv1.GetWorktreeCommitsRequest,
+) (*reliantv1.GetWorktreeCommitsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 
 	// Get commit limit (default 20, max 100)
 	limit := int32(20)
-	if req.Msg.Limit > 0 && req.Msg.Limit <= 100 {
-		limit = req.Msg.Limit
+	if req.Limit > 0 && req.Limit <= 100 {
+		limit = req.Limit
 	}
 
 	// Determine base branch
@@ -236,7 +235,7 @@ func (s *Service) GetWorktreeCommits(
 	// be there.
 	var sendErr error
 	if err := s.gitReadOnDisk(ctx, userID, worktree, func() error {
-		repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+		repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.RepoId)
 		if err != nil {
 			return err
 		}
@@ -252,9 +251,9 @@ func (s *Service) GetWorktreeCommits(
 			return nil, err
 		}
 		logging.WarnContext(ctx, "Failed to get git commits via daemon", "error", err)
-		return connect.NewResponse(&reliantv1.GetWorktreeCommitsResponse{
+		return &reliantv1.GetWorktreeCommitsResponse{
 			Commits: []*reliantv1.GitCommit{},
-		}), nil
+		}, nil
 	}
 
 	// Convert to proto
@@ -270,7 +269,7 @@ func (s *Service) GetWorktreeCommits(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetWorktreeCommitsResponse{
+	return &reliantv1.GetWorktreeCommitsResponse{
 		Commits:        commits,
 		Total:          commitsResp.Total,
 		Branch:         worktree.Branch,
@@ -278,7 +277,7 @@ func (s *Service) GetWorktreeCommits(
 		ComparisonMode: commitsResp.ComparisonMode,
 		ComparisonRef:  commitsResp.ComparisonRef,
 		CurrentBranch:  commitsResp.CurrentBranch,
-	}), nil
+	}, nil
 }
 
 // ListWorktreeRepoStatuses returns per-repo git status across every nested
@@ -290,19 +289,19 @@ func (s *Service) GetWorktreeCommits(
 // and zero-repo projects collapse to a single-element (or empty) response.
 func (s *Service) ListWorktreeRepoStatuses(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListWorktreeRepoStatusesRequest],
-) (*connect.Response[reliantv1.ListWorktreeRepoStatusesResponse], error) {
+	req *reliantv1.ListWorktreeRepoStatusesRequest,
+) (*reliantv1.ListWorktreeRepoStatusesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -342,9 +341,9 @@ func (s *Service) ListWorktreeRepoStatuses(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.ListWorktreeRepoStatusesResponse{
+	return &reliantv1.ListWorktreeRepoStatusesResponse{
 		Statuses: statuses,
-	}), nil
+	}, nil
 }
 
 // repoStatus is one ListWorktreeRepoStatuses row: r's git status in worktree,

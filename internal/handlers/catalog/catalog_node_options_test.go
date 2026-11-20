@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,11 +17,11 @@ import (
 // node exposure. Naming any other tool is an error, so offering the whole
 // registry would offer mostly wrong answers.
 func TestListNodes_InvokeToolOffersTheNodeExposedTools(t *testing.T) {
-	resp, err := NewTestCatalog(t).ListNodes(context.Background(), connect.NewRequest(&reliantv1.ListNodesRequest{}))
+	resp, err := NewTestCatalog(t).ListNodes(context.Background(), &reliantv1.ListNodesRequest{})
 	require.NoError(t, err)
 
 	var tool *reliantv1.NodeInputField
-	for _, node := range resp.Msg.GetNodes() {
+	for _, node := range resp.GetNodes() {
 		if node.GetId() != "invoke_tool" {
 			continue
 		}

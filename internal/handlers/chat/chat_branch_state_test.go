@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -35,17 +34,17 @@ func TestBranchChatResponseCarriesPendingWorkflowState(t *testing.T) {
 	sourceChatID, messageID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
 	service := &Service{deps: Deps{Repo: repo}, threads: threads.NewService(repo)}
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    sourceChatID,
 		MessageId: messageID,
-	}))
+	})
 	require.NoError(t, err)
 
-	require.Equal(t, reliantv1.WorkflowState_WORKFLOW_STATE_PENDING, resp.Msg.Chat.WorkflowState,
+	require.Equal(t, reliantv1.WorkflowState_WORKFLOW_STATE_PENDING, resp.Chat.WorkflowState,
 		"BranchChat's response must carry PENDING so the first send routes to StartChat")
 
-	got, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: resp.Msg.Chat.Id}))
+	got, err := service.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: resp.Chat.Id})
 	require.NoError(t, err)
-	require.Equal(t, got.Msg.Chat.WorkflowState, resp.Msg.Chat.WorkflowState,
+	require.Equal(t, got.Chat.WorkflowState, resp.Chat.WorkflowState,
 		"the response and a fresh GetChat must agree")
 }

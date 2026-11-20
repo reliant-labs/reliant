@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,7 +105,7 @@ func TestListInbox_ReadsRunConcurrentlyWithinTheBound(t *testing.T) {
 	repo := newInflightRepo(hold)
 	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
 
-	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	_, err := svc.ListInbox(userCtx(), &reliantv1.ListInboxRequest{})
 	require.NoError(t, err)
 
 	// The peak in flight is what proves the reads overlap. A wall-clock bound
@@ -154,7 +153,7 @@ func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
 	}
 	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
 
-	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	_, err := svc.ListInbox(userCtx(), &reliantv1.ListInboxRequest{})
 	require.NoError(t, err)
 	select {
 	case <-bothIn:
@@ -180,7 +179,7 @@ func TestListInbox_ConcurrentCallsShareOneRead(t *testing.T) {
 				limit := int32(0)
 				req.Limit = &limit // the badge's shape
 			}
-			_, err := svc.ListInbox(userCtx(), connect.NewRequest(req))
+			_, err := svc.ListInbox(userCtx(), req)
 			errs <- err
 		}()
 	}
@@ -199,12 +198,12 @@ func TestListInbox_ACancelledCallerDoesNotFailASharedRead(t *testing.T) {
 	first, cancel := context.WithCancel(userCtx())
 	done := make(chan error, 1)
 	go func() {
-		_, err := svc.ListInbox(first, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+		_, err := svc.ListInbox(first, &reliantv1.ListInboxRequest{})
 		done <- err
 	}()
 	time.Sleep(20 * time.Millisecond) // the first call's read is in flight
 	cancel()
-	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	_, err := svc.ListInbox(userCtx(), &reliantv1.ListInboxRequest{})
 	require.NoError(t, err)
 	<-done
 }
@@ -227,7 +226,7 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 			repo := newInflightRepo(0)
 			tc.breakIt(repo.MockRepository)
 			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
-			_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+			_, err := svc.ListInbox(userCtx(), &reliantv1.ListInboxRequest{})
 			require.Error(t, err)
 		})
 	}
@@ -242,10 +241,10 @@ func TestListInbox_AnAdvisoryReadFailingStillAnswers(t *testing.T) {
 		return []*core.InboxPending{{Kind: core.InboxPendingApproval, ItemKey: "a1", ProjectID: "p1", WaitingSince: time.Now()}}, nil
 	}
 	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
-	resp, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	resp, err := svc.ListInbox(userCtx(), &reliantv1.ListInboxRequest{})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Items, 1)
-	assert.EqualValues(t, 1, resp.Msg.BlockingCount)
+	require.Len(t, resp.Items, 1)
+	assert.EqualValues(t, 1, resp.BlockingCount)
 }
 
 // A user shaped like prod's heaviest (2026-10-23): six enabled automations,
@@ -297,7 +296,7 @@ func TestListInbox_HeavyAutomationUser(t *testing.T) {
 	errs := make(chan error, burst)
 	for range burst {
 		go func() {
-			_, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+			_, err := f.inbox.ListInbox(f.ctx, &reliantv1.ListInboxRequest{})
 			errs <- err
 		}()
 	}

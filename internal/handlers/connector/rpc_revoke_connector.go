@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -15,14 +14,14 @@ import (
 // RevokeConnector revokes one of the caller's connectors.
 func (s *Service) RevokeConnector(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RevokeConnectorRequest],
-) (*connect.Response[reliantv1.RevokeConnectorResponse], error) {
+	req *reliantv1.RevokeConnectorRequest,
+) (*reliantv1.RevokeConnectorResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
 
-	id := strings.TrimSpace(req.Msg.GetId())
+	id := strings.TrimSpace(req.GetId())
 	if id == "" {
 		return nil, svcerr.InvalidArgument("connector id is required")
 	}
@@ -42,5 +41,5 @@ func (s *Service) RevokeConnector(
 	} else {
 		activity.Skip(ctx) // already revoked: nothing changed
 	}
-	return connect.NewResponse(&reliantv1.RevokeConnectorResponse{Revoked: revoked}), nil
+	return &reliantv1.RevokeConnectorResponse{Revoked: revoked}, nil
 }

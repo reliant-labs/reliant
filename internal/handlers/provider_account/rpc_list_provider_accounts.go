@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -14,8 +13,8 @@ import (
 // with its derived status and latest usage windows.
 func (s *Service) ListProviderAccounts(
 	ctx context.Context,
-	_ *connect.Request[pb.ListProviderAccountsRequest],
-) (*connect.Response[pb.ListProviderAccountsResponse], error) {
+	_ *pb.ListProviderAccountsRequest,
+) (*pb.ListProviderAccountsResponse, error) {
 	userID, err := callerID(ctx)
 	if err != nil {
 		return nil, err
@@ -28,7 +27,7 @@ func (s *Service) ListProviderAccounts(
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	return connect.NewResponse(&pb.ListProviderAccountsResponse{
+	return &pb.ListProviderAccountsResponse{
 		Accounts: protoAll(accounts, limits, "", time.Now()),
-	}), nil
+	}, nil
 }

@@ -7,46 +7,68 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ToolsDaemonServiceName is the fully-qualified name of the ToolsDaemonService service.
 	ToolsDaemonServiceName = "reliant.v1.ToolsDaemonService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ToolsDaemonServiceConnectDaemonProcedure is the fully-qualified name of the ToolsDaemonService's
+	// ToolsDaemonServiceConnectDaemonProcedure is the procedure name of the ToolsDaemonService's
 	// ConnectDaemon RPC.
 	ToolsDaemonServiceConnectDaemonProcedure = "/reliant.v1.ToolsDaemonService/ConnectDaemon"
-	// ToolsDaemonServiceConnectGatewayProcedure is the fully-qualified name of the ToolsDaemonService's
+	// ToolsDaemonServiceConnectGatewayProcedure is the procedure name of the ToolsDaemonService's
 	// ConnectGateway RPC.
 	ToolsDaemonServiceConnectGatewayProcedure = "/reliant.v1.ToolsDaemonService/ConnectGateway"
-	// ToolsDaemonServiceReportToolResultProcedure is the fully-qualified name of the
-	// ToolsDaemonService's ReportToolResult RPC.
+	// ToolsDaemonServiceReportToolResultProcedure is the procedure name of the ToolsDaemonService's
+	// ReportToolResult RPC.
 	ToolsDaemonServiceReportToolResultProcedure = "/reliant.v1.ToolsDaemonService/ReportToolResult"
-	// ToolsDaemonServiceWhoAmIProcedure is the fully-qualified name of the ToolsDaemonService's WhoAmI
-	// RPC.
+	// ToolsDaemonServiceWhoAmIProcedure is the procedure name of the ToolsDaemonService's WhoAmI RPC.
 	ToolsDaemonServiceWhoAmIProcedure = "/reliant.v1.ToolsDaemonService/WhoAmI"
+)
+
+var (
+	toolsDaemonServiceConnectDaemonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeBidi,
+			Schema:     v1.File_reliant_v1_tools_daemon_proto.Services().ByName("ToolsDaemonService").Methods().ByName("ConnectDaemon"),
+			Procedure:  ToolsDaemonServiceConnectDaemonProcedure,
+		}
+	})
+	toolsDaemonServiceConnectGatewaySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeBidi,
+			Schema:     v1.File_reliant_v1_tools_daemon_proto.Services().ByName("ToolsDaemonService").Methods().ByName("ConnectGateway"),
+			Procedure:  ToolsDaemonServiceConnectGatewayProcedure,
+		}
+	})
+	toolsDaemonServiceReportToolResultSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_tools_daemon_proto.Services().ByName("ToolsDaemonService").Methods().ByName("ReportToolResult"),
+			Procedure:  ToolsDaemonServiceReportToolResultProcedure,
+		}
+	})
+	toolsDaemonServiceWhoAmISpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_tools_daemon_proto.Services().ByName("ToolsDaemonService").Methods().ByName("WhoAmI"),
+			Procedure:        ToolsDaemonServiceWhoAmIProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // ToolsDaemonServiceClient is a client for the reliant.v1.ToolsDaemonService service.
@@ -55,16 +77,16 @@ type ToolsDaemonServiceClient interface {
 	// - Server sends ToolRequest messages when tools need to be executed
 	// - Client sends ToolResponse messages with execution results
 	// - On connect, server streams any pending requests from the database
-	ConnectDaemon(context.Context) *connect.BidiStreamForClient[v1.DaemonMessage, v1.ServerMessage]
+	ConnectDaemon(context.Context) (ToolsDaemonServiceConnectDaemonClientStream, error)
 	// ConnectGateway is the reverse of ConnectDaemon: the daemon listens as a
 	// gRPC server and the gateway dials in. The gateway sends ServerMessages and
 	// receives DaemonMessages — same message types, but the connection direction
 	// is flipped.
-	ConnectGateway(context.Context) *connect.BidiStreamForClient[v1.ServerMessage, v1.DaemonMessage]
+	ConnectGateway(context.Context) (ToolsDaemonServiceConnectGatewayClientStream, error)
 	// ReportToolResult is a unary fallback for reporting tool execution results
 	// when the bidirectional stream is unavailable. The daemon calls this when
 	// a tool completes but the bidi stream send fails (e.g. temporary disconnect).
-	ReportToolResult(context.Context, *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error)
+	ReportToolResult(context.Context, *v1.ReportToolResultRequest) (*v1.ReportToolResultResponse, error)
 	// WhoAmI names the account the presented daemon credential acts as, and
 	// does nothing else: no daemon row is read or written and nothing connects.
 	//
@@ -77,74 +99,87 @@ type ToolsDaemonServiceClient interface {
 	//
 	// It answers only about the caller's own credential.
 	//   - UNAUTHENTICATED: not a live daemon credential.
-	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
+	WhoAmI(context.Context, *v1.WhoAmIRequest) (*v1.WhoAmIResponse, error)
 }
 
-// NewToolsDaemonServiceClient constructs a client for the reliant.v1.ToolsDaemonService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewToolsDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ToolsDaemonServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	toolsDaemonServiceMethods := v1.File_reliant_v1_tools_daemon_proto.Services().ByName("ToolsDaemonService").Methods()
-	return &toolsDaemonServiceClient{
-		connectDaemon: connect.NewClient[v1.DaemonMessage, v1.ServerMessage](
-			httpClient,
-			baseURL+ToolsDaemonServiceConnectDaemonProcedure,
-			connect.WithSchema(toolsDaemonServiceMethods.ByName("ConnectDaemon")),
-			connect.WithClientOptions(opts...),
-		),
-		connectGateway: connect.NewClient[v1.ServerMessage, v1.DaemonMessage](
-			httpClient,
-			baseURL+ToolsDaemonServiceConnectGatewayProcedure,
-			connect.WithSchema(toolsDaemonServiceMethods.ByName("ConnectGateway")),
-			connect.WithClientOptions(opts...),
-		),
-		reportToolResult: connect.NewClient[v1.ReportToolResultRequest, v1.ReportToolResultResponse](
-			httpClient,
-			baseURL+ToolsDaemonServiceReportToolResultProcedure,
-			connect.WithSchema(toolsDaemonServiceMethods.ByName("ReportToolResult")),
-			connect.WithClientOptions(opts...),
-		),
-		whoAmI: connect.NewClient[v1.WhoAmIRequest, v1.WhoAmIResponse](
-			httpClient,
-			baseURL+ToolsDaemonServiceWhoAmIProcedure,
-			connect.WithSchema(toolsDaemonServiceMethods.ByName("WhoAmI")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
+// NewToolsDaemonServiceClient constructs a client for the reliant.v1.ToolsDaemonService service.
+// Multiple service clients may share a single connect.Client.
+func NewToolsDaemonServiceClient(client *connect.Client) ToolsDaemonServiceClient {
+	return &toolsDaemonServiceClient{client: client}
+}
+
+// ToolsDaemonServiceConnectDaemonClientStream is the client stream for the ToolsDaemonService's
+// ConnectDaemon RPC.
+type ToolsDaemonServiceConnectDaemonClientStream struct {
+	stream connect.ClientStream
+}
+
+// SendHeaders opens the stream and flushes the request headers without a message. The first Send or
+// Receive does this implicitly.
+func (s ToolsDaemonServiceConnectDaemonClientStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a request message to the server.
+func (s ToolsDaemonServiceConnectDaemonClientStream) Send(req *v1.DaemonMessage) error {
+	return s.stream.Send(req)
+}
+
+// CloseSend closes the request side of the stream.
+func (s ToolsDaemonServiceConnectDaemonClientStream) CloseSend() error {
+	return s.stream.CloseSend()
+}
+
+// Receive returns the next response message from the server.
+func (s ToolsDaemonServiceConnectDaemonClientStream) Receive() (*v1.ServerMessage, error) {
+	var res v1.ServerMessage
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// toolsDaemonServiceClient implements ToolsDaemonServiceClient.
-type toolsDaemonServiceClient struct {
-	connectDaemon    *connect.Client[v1.DaemonMessage, v1.ServerMessage]
-	connectGateway   *connect.Client[v1.ServerMessage, v1.DaemonMessage]
-	reportToolResult *connect.Client[v1.ReportToolResultRequest, v1.ReportToolResultResponse]
-	whoAmI           *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s ToolsDaemonServiceConnectDaemonClientStream) Close() error {
+	return s.stream.Close()
 }
 
-// ConnectDaemon calls reliant.v1.ToolsDaemonService.ConnectDaemon.
-func (c *toolsDaemonServiceClient) ConnectDaemon(ctx context.Context) *connect.BidiStreamForClient[v1.DaemonMessage, v1.ServerMessage] {
-	return c.connectDaemon.CallBidiStream(ctx)
+// ToolsDaemonServiceConnectGatewayClientStream is the client stream for the ToolsDaemonService's
+// ConnectGateway RPC.
+type ToolsDaemonServiceConnectGatewayClientStream struct {
+	stream connect.ClientStream
 }
 
-// ConnectGateway calls reliant.v1.ToolsDaemonService.ConnectGateway.
-func (c *toolsDaemonServiceClient) ConnectGateway(ctx context.Context) *connect.BidiStreamForClient[v1.ServerMessage, v1.DaemonMessage] {
-	return c.connectGateway.CallBidiStream(ctx)
+// SendHeaders opens the stream and flushes the request headers without a message. The first Send or
+// Receive does this implicitly.
+func (s ToolsDaemonServiceConnectGatewayClientStream) SendHeaders() error {
+	return s.stream.SendHeaders()
 }
 
-// ReportToolResult calls reliant.v1.ToolsDaemonService.ReportToolResult.
-func (c *toolsDaemonServiceClient) ReportToolResult(ctx context.Context, req *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error) {
-	return c.reportToolResult.CallUnary(ctx, req)
+// Send sends a request message to the server.
+func (s ToolsDaemonServiceConnectGatewayClientStream) Send(req *v1.ServerMessage) error {
+	return s.stream.Send(req)
 }
 
-// WhoAmI calls reliant.v1.ToolsDaemonService.WhoAmI.
-func (c *toolsDaemonServiceClient) WhoAmI(ctx context.Context, req *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
-	return c.whoAmI.CallUnary(ctx, req)
+// CloseSend closes the request side of the stream.
+func (s ToolsDaemonServiceConnectGatewayClientStream) CloseSend() error {
+	return s.stream.CloseSend()
+}
+
+// Receive returns the next response message from the server.
+func (s ToolsDaemonServiceConnectGatewayClientStream) Receive() (*v1.DaemonMessage, error) {
+	var res v1.DaemonMessage
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s ToolsDaemonServiceConnectGatewayClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // ToolsDaemonServiceHandler is an implementation of the reliant.v1.ToolsDaemonService service.
@@ -153,16 +188,16 @@ type ToolsDaemonServiceHandler interface {
 	// - Server sends ToolRequest messages when tools need to be executed
 	// - Client sends ToolResponse messages with execution results
 	// - On connect, server streams any pending requests from the database
-	ConnectDaemon(context.Context, *connect.BidiStream[v1.DaemonMessage, v1.ServerMessage]) error
+	ConnectDaemon(context.Context, ToolsDaemonServiceConnectDaemonServerStream) error
 	// ConnectGateway is the reverse of ConnectDaemon: the daemon listens as a
 	// gRPC server and the gateway dials in. The gateway sends ServerMessages and
 	// receives DaemonMessages — same message types, but the connection direction
 	// is flipped.
-	ConnectGateway(context.Context, *connect.BidiStream[v1.ServerMessage, v1.DaemonMessage]) error
+	ConnectGateway(context.Context, ToolsDaemonServiceConnectGatewayServerStream) error
 	// ReportToolResult is a unary fallback for reporting tool execution results
 	// when the bidirectional stream is unavailable. The daemon calls this when
 	// a tool completes but the bidi stream send fails (e.g. temporary disconnect).
-	ReportToolResult(context.Context, *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error)
+	ReportToolResult(context.Context, *v1.ReportToolResultRequest) (*v1.ReportToolResultResponse, error)
 	// WhoAmI names the account the presented daemon credential acts as, and
 	// does nothing else: no daemon row is read or written and nothing connects.
 	//
@@ -175,72 +210,156 @@ type ToolsDaemonServiceHandler interface {
 	//
 	// It answers only about the caller's own credential.
 	//   - UNAUTHENTICATED: not a live daemon credential.
-	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
+	WhoAmI(context.Context, *v1.WhoAmIRequest) (*v1.WhoAmIResponse, error)
 }
 
-// NewToolsDaemonServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewToolsDaemonServiceHandler(svc ToolsDaemonServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	toolsDaemonServiceMethods := v1.File_reliant_v1_tools_daemon_proto.Services().ByName("ToolsDaemonService").Methods()
-	toolsDaemonServiceConnectDaemonHandler := connect.NewBidiStreamHandler(
-		ToolsDaemonServiceConnectDaemonProcedure,
-		svc.ConnectDaemon,
-		connect.WithSchema(toolsDaemonServiceMethods.ByName("ConnectDaemon")),
-		connect.WithHandlerOptions(opts...),
+// RegisterToolsDaemonServiceHandler registers svc as the reliant.v1.ToolsDaemonService
+// implementation on server.
+func RegisterToolsDaemonServiceHandler(server *connect.Server, svc ToolsDaemonServiceHandler) {
+	adapter := toolsDaemonServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: toolsDaemonServiceConnectDaemonSpec(), Handler: adapter.connectDaemon},
+		connect.Method{Spec: toolsDaemonServiceConnectGatewaySpec(), Handler: adapter.connectGateway},
+		connect.Method{Spec: toolsDaemonServiceReportToolResultSpec(), Handler: adapter.reportToolResult},
+		connect.Method{Spec: toolsDaemonServiceWhoAmISpec(), Handler: adapter.whoAmI},
 	)
-	toolsDaemonServiceConnectGatewayHandler := connect.NewBidiStreamHandler(
-		ToolsDaemonServiceConnectGatewayProcedure,
-		svc.ConnectGateway,
-		connect.WithSchema(toolsDaemonServiceMethods.ByName("ConnectGateway")),
-		connect.WithHandlerOptions(opts...),
-	)
-	toolsDaemonServiceReportToolResultHandler := connect.NewUnaryHandler(
-		ToolsDaemonServiceReportToolResultProcedure,
-		svc.ReportToolResult,
-		connect.WithSchema(toolsDaemonServiceMethods.ByName("ReportToolResult")),
-		connect.WithHandlerOptions(opts...),
-	)
-	toolsDaemonServiceWhoAmIHandler := connect.NewUnaryHandler(
-		ToolsDaemonServiceWhoAmIProcedure,
-		svc.WhoAmI,
-		connect.WithSchema(toolsDaemonServiceMethods.ByName("WhoAmI")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.ToolsDaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ToolsDaemonServiceConnectDaemonProcedure:
-			toolsDaemonServiceConnectDaemonHandler.ServeHTTP(w, r)
-		case ToolsDaemonServiceConnectGatewayProcedure:
-			toolsDaemonServiceConnectGatewayHandler.ServeHTTP(w, r)
-		case ToolsDaemonServiceReportToolResultProcedure:
-			toolsDaemonServiceReportToolResultHandler.ServeHTTP(w, r)
-		case ToolsDaemonServiceWhoAmIProcedure:
-			toolsDaemonServiceWhoAmIHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// ToolsDaemonServiceConnectDaemonServerStream is the server stream for the ToolsDaemonService's
+// ConnectDaemon RPC.
+type ToolsDaemonServiceConnectDaemonServerStream struct {
+	stream connect.ServerStream
+}
+
+// Receive returns the next request message from the client.
+func (s ToolsDaemonServiceConnectDaemonServerStream) Receive() (*v1.DaemonMessage, error) {
+	var req v1.DaemonMessage
+	if err := s.stream.Receive(&req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s ToolsDaemonServiceConnectDaemonServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s ToolsDaemonServiceConnectDaemonServerStream) Send(res *v1.ServerMessage) error {
+	return s.stream.Send(res)
+}
+
+// ToolsDaemonServiceConnectGatewayServerStream is the server stream for the ToolsDaemonService's
+// ConnectGateway RPC.
+type ToolsDaemonServiceConnectGatewayServerStream struct {
+	stream connect.ServerStream
+}
+
+// Receive returns the next request message from the client.
+func (s ToolsDaemonServiceConnectGatewayServerStream) Receive() (*v1.ServerMessage, error) {
+	var req v1.ServerMessage
+	if err := s.stream.Receive(&req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s ToolsDaemonServiceConnectGatewayServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s ToolsDaemonServiceConnectGatewayServerStream) Send(res *v1.DaemonMessage) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedToolsDaemonServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedToolsDaemonServiceHandler struct{}
 
-func (UnimplementedToolsDaemonServiceHandler) ConnectDaemon(context.Context, *connect.BidiStream[v1.DaemonMessage, v1.ServerMessage]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolsDaemonService.ConnectDaemon is not implemented"))
+func (UnimplementedToolsDaemonServiceHandler) ConnectDaemon(context.Context, ToolsDaemonServiceConnectDaemonServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "reliant.v1.ToolsDaemonService.ConnectDaemon is not implemented")
 }
 
-func (UnimplementedToolsDaemonServiceHandler) ConnectGateway(context.Context, *connect.BidiStream[v1.ServerMessage, v1.DaemonMessage]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolsDaemonService.ConnectGateway is not implemented"))
+func (UnimplementedToolsDaemonServiceHandler) ConnectGateway(context.Context, ToolsDaemonServiceConnectGatewayServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "reliant.v1.ToolsDaemonService.ConnectGateway is not implemented")
 }
 
-func (UnimplementedToolsDaemonServiceHandler) ReportToolResult(context.Context, *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolsDaemonService.ReportToolResult is not implemented"))
+func (UnimplementedToolsDaemonServiceHandler) ReportToolResult(context.Context, *v1.ReportToolResultRequest) (*v1.ReportToolResultResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ToolsDaemonService.ReportToolResult is not implemented")
 }
 
-func (UnimplementedToolsDaemonServiceHandler) WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolsDaemonService.WhoAmI is not implemented"))
+func (UnimplementedToolsDaemonServiceHandler) WhoAmI(context.Context, *v1.WhoAmIRequest) (*v1.WhoAmIResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ToolsDaemonService.WhoAmI is not implemented")
+}
+
+type toolsDaemonServiceClient struct {
+	client *connect.Client
+}
+
+func (c *toolsDaemonServiceClient) ConnectDaemon(ctx context.Context) (ToolsDaemonServiceConnectDaemonClientStream, error) {
+	stream, err := c.client.CallClientStream(ctx, toolsDaemonServiceConnectDaemonSpec())
+	if err != nil {
+		return ToolsDaemonServiceConnectDaemonClientStream{}, err
+	}
+	return ToolsDaemonServiceConnectDaemonClientStream{stream: stream}, nil
+}
+
+func (c *toolsDaemonServiceClient) ConnectGateway(ctx context.Context) (ToolsDaemonServiceConnectGatewayClientStream, error) {
+	stream, err := c.client.CallClientStream(ctx, toolsDaemonServiceConnectGatewaySpec())
+	if err != nil {
+		return ToolsDaemonServiceConnectGatewayClientStream{}, err
+	}
+	return ToolsDaemonServiceConnectGatewayClientStream{stream: stream}, nil
+}
+
+func (c *toolsDaemonServiceClient) ReportToolResult(ctx context.Context, req *v1.ReportToolResultRequest) (*v1.ReportToolResultResponse, error) {
+	var res v1.ReportToolResultResponse
+	if err := c.client.CallUnary(ctx, toolsDaemonServiceReportToolResultSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *toolsDaemonServiceClient) WhoAmI(ctx context.Context, req *v1.WhoAmIRequest) (*v1.WhoAmIResponse, error) {
+	var res v1.WhoAmIResponse
+	if err := c.client.CallUnary(ctx, toolsDaemonServiceWhoAmISpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type toolsDaemonServiceHandler struct{ svc ToolsDaemonServiceHandler }
+
+func (h toolsDaemonServiceHandler) connectDaemon(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	return h.svc.ConnectDaemon(ctx, ToolsDaemonServiceConnectDaemonServerStream{stream: stream})
+}
+
+func (h toolsDaemonServiceHandler) connectGateway(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	return h.svc.ConnectGateway(ctx, ToolsDaemonServiceConnectGatewayServerStream{stream: stream})
+}
+
+func (h toolsDaemonServiceHandler) reportToolResult(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportToolResultRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportToolResult(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h toolsDaemonServiceHandler) whoAmI(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WhoAmIRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.WhoAmI(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

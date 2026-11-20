@@ -7,20 +7,11 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// AutomationTakeoverServiceName is the fully-qualified name of the AutomationTakeoverService
@@ -28,29 +19,67 @@ const (
 	AutomationTakeoverServiceName = "reliant.v1.AutomationTakeoverService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AutomationTakeoverServiceListOrphanedAutomationsProcedure is the fully-qualified name of the
+	// AutomationTakeoverServiceListOrphanedAutomationsProcedure is the procedure name of the
 	// AutomationTakeoverService's ListOrphanedAutomations RPC.
 	AutomationTakeoverServiceListOrphanedAutomationsProcedure = "/reliant.v1.AutomationTakeoverService/ListOrphanedAutomations"
-	// AutomationTakeoverServiceAdoptTriggerProcedure is the fully-qualified name of the
+	// AutomationTakeoverServiceAdoptTriggerProcedure is the procedure name of the
 	// AutomationTakeoverService's AdoptTrigger RPC.
 	AutomationTakeoverServiceAdoptTriggerProcedure = "/reliant.v1.AutomationTakeoverService/AdoptTrigger"
-	// AutomationTakeoverServiceAcceptTriggerOfferProcedure is the fully-qualified name of the
+	// AutomationTakeoverServiceAcceptTriggerOfferProcedure is the procedure name of the
 	// AutomationTakeoverService's AcceptTriggerOffer RPC.
 	AutomationTakeoverServiceAcceptTriggerOfferProcedure = "/reliant.v1.AutomationTakeoverService/AcceptTriggerOffer"
-	// AutomationTakeoverServiceListTriggerOffersProcedure is the fully-qualified name of the
+	// AutomationTakeoverServiceListTriggerOffersProcedure is the procedure name of the
 	// AutomationTakeoverService's ListTriggerOffers RPC.
 	AutomationTakeoverServiceListTriggerOffersProcedure = "/reliant.v1.AutomationTakeoverService/ListTriggerOffers"
-	// AutomationTakeoverServiceRevokeTriggerOfferProcedure is the fully-qualified name of the
+	// AutomationTakeoverServiceRevokeTriggerOfferProcedure is the procedure name of the
 	// AutomationTakeoverService's RevokeTriggerOffer RPC.
 	AutomationTakeoverServiceRevokeTriggerOfferProcedure = "/reliant.v1.AutomationTakeoverService/RevokeTriggerOffer"
+)
+
+var (
+	automationTakeoverServiceListOrphanedAutomationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_automation_takeover_proto.Services().ByName("AutomationTakeoverService").Methods().ByName("ListOrphanedAutomations"),
+			Procedure:  AutomationTakeoverServiceListOrphanedAutomationsProcedure,
+		}
+	})
+	automationTakeoverServiceAdoptTriggerSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_automation_takeover_proto.Services().ByName("AutomationTakeoverService").Methods().ByName("AdoptTrigger"),
+			Procedure:  AutomationTakeoverServiceAdoptTriggerProcedure,
+		}
+	})
+	automationTakeoverServiceAcceptTriggerOfferSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_automation_takeover_proto.Services().ByName("AutomationTakeoverService").Methods().ByName("AcceptTriggerOffer"),
+			Procedure:  AutomationTakeoverServiceAcceptTriggerOfferProcedure,
+		}
+	})
+	automationTakeoverServiceListTriggerOffersSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_automation_takeover_proto.Services().ByName("AutomationTakeoverService").Methods().ByName("ListTriggerOffers"),
+			Procedure:  AutomationTakeoverServiceListTriggerOffersProcedure,
+		}
+	})
+	automationTakeoverServiceRevokeTriggerOfferSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_automation_takeover_proto.Services().ByName("AutomationTakeoverService").Methods().ByName("RevokeTriggerOffer"),
+			Procedure:  AutomationTakeoverServiceRevokeTriggerOfferProcedure,
+		}
+	})
 )
 
 // AutomationTakeoverServiceClient is a client for the reliant.v1.AutomationTakeoverService service.
@@ -61,7 +90,7 @@ type AutomationTakeoverServiceClient interface {
 	// withheld (param_names says which are set), and no secret, connection or
 	// event payload is returned.
 	// forge:custom — an org-wide read for admins, filtered to creators who left, with values withheld
-	ListOrphanedAutomations(context.Context, *connect.Request[v1.ListOrphanedAutomationsRequest]) (*connect.Response[v1.ListOrphanedAutomationsResponse], error)
+	ListOrphanedAutomations(context.Context, *v1.ListOrphanedAutomationsRequest) (*v1.ListOrphanedAutomationsResponse, error)
 	// AdoptTrigger takes an orphaned trigger back for the org. Org admins
 	// only. With new_owner_user_id empty or the caller, the caller adopts it
 	// now, supplying `rebinding`; the response carries the trigger (disabled)
@@ -71,97 +100,26 @@ type AutomationTakeoverServiceClient interface {
 	// machine and connections are the accepting member's to choose. An offer
 	// expires after 7 days, supersedes any earlier one, and is revoked when
 	// either party leaves the org.
-	AdoptTrigger(context.Context, *connect.Request[v1.AdoptTriggerRequest]) (*connect.Response[v1.AdoptTriggerResponse], error)
+	AdoptTrigger(context.Context, *v1.AdoptTriggerRequest) (*v1.AdoptTriggerResponse, error)
 	// AcceptTriggerOffer adopts the trigger an admin offered the caller, a
 	// person signed in to the app. Only the offeree: anyone else's offer is
 	// NOT_FOUND. A dead offer (expired, revoked, a party left, the trigger
 	// re-owned) is FAILED_PRECONDITION saying why.
-	AcceptTriggerOffer(context.Context, *connect.Request[v1.AcceptTriggerOfferRequest]) (*connect.Response[v1.AcceptTriggerOfferResponse], error)
+	AcceptTriggerOffer(context.Context, *v1.AcceptTriggerOfferRequest) (*v1.AcceptTriggerOfferResponse, error)
 	// ListTriggerOffers lists the live offers made to the caller, each with
 	// the offered trigger (param values withheld).
 	// forge:custom — only the caller's live offers; a dead one is settled as it is read
-	ListTriggerOffers(context.Context, *connect.Request[v1.ListTriggerOffersRequest]) (*connect.Response[v1.ListTriggerOffersResponse], error)
+	ListTriggerOffers(context.Context, *v1.ListTriggerOffersRequest) (*v1.ListTriggerOffersResponse, error)
 	// RevokeTriggerOffer withdraws a pending offer (an org admin) or declines
 	// it (its offeree). Anyone else's is NOT_FOUND.
-	RevokeTriggerOffer(context.Context, *connect.Request[v1.RevokeTriggerOfferRequest]) (*connect.Response[v1.RevokeTriggerOfferResponse], error)
+	RevokeTriggerOffer(context.Context, *v1.RevokeTriggerOfferRequest) (*v1.RevokeTriggerOfferResponse, error)
 }
 
 // NewAutomationTakeoverServiceClient constructs a client for the
-// reliant.v1.AutomationTakeoverService service. By default, it uses the Connect protocol with the
-// binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use the
-// gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewAutomationTakeoverServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AutomationTakeoverServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	automationTakeoverServiceMethods := v1.File_reliant_v1_automation_takeover_proto.Services().ByName("AutomationTakeoverService").Methods()
-	return &automationTakeoverServiceClient{
-		listOrphanedAutomations: connect.NewClient[v1.ListOrphanedAutomationsRequest, v1.ListOrphanedAutomationsResponse](
-			httpClient,
-			baseURL+AutomationTakeoverServiceListOrphanedAutomationsProcedure,
-			connect.WithSchema(automationTakeoverServiceMethods.ByName("ListOrphanedAutomations")),
-			connect.WithClientOptions(opts...),
-		),
-		adoptTrigger: connect.NewClient[v1.AdoptTriggerRequest, v1.AdoptTriggerResponse](
-			httpClient,
-			baseURL+AutomationTakeoverServiceAdoptTriggerProcedure,
-			connect.WithSchema(automationTakeoverServiceMethods.ByName("AdoptTrigger")),
-			connect.WithClientOptions(opts...),
-		),
-		acceptTriggerOffer: connect.NewClient[v1.AcceptTriggerOfferRequest, v1.AcceptTriggerOfferResponse](
-			httpClient,
-			baseURL+AutomationTakeoverServiceAcceptTriggerOfferProcedure,
-			connect.WithSchema(automationTakeoverServiceMethods.ByName("AcceptTriggerOffer")),
-			connect.WithClientOptions(opts...),
-		),
-		listTriggerOffers: connect.NewClient[v1.ListTriggerOffersRequest, v1.ListTriggerOffersResponse](
-			httpClient,
-			baseURL+AutomationTakeoverServiceListTriggerOffersProcedure,
-			connect.WithSchema(automationTakeoverServiceMethods.ByName("ListTriggerOffers")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeTriggerOffer: connect.NewClient[v1.RevokeTriggerOfferRequest, v1.RevokeTriggerOfferResponse](
-			httpClient,
-			baseURL+AutomationTakeoverServiceRevokeTriggerOfferProcedure,
-			connect.WithSchema(automationTakeoverServiceMethods.ByName("RevokeTriggerOffer")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// automationTakeoverServiceClient implements AutomationTakeoverServiceClient.
-type automationTakeoverServiceClient struct {
-	listOrphanedAutomations *connect.Client[v1.ListOrphanedAutomationsRequest, v1.ListOrphanedAutomationsResponse]
-	adoptTrigger            *connect.Client[v1.AdoptTriggerRequest, v1.AdoptTriggerResponse]
-	acceptTriggerOffer      *connect.Client[v1.AcceptTriggerOfferRequest, v1.AcceptTriggerOfferResponse]
-	listTriggerOffers       *connect.Client[v1.ListTriggerOffersRequest, v1.ListTriggerOffersResponse]
-	revokeTriggerOffer      *connect.Client[v1.RevokeTriggerOfferRequest, v1.RevokeTriggerOfferResponse]
-}
-
-// ListOrphanedAutomations calls reliant.v1.AutomationTakeoverService.ListOrphanedAutomations.
-func (c *automationTakeoverServiceClient) ListOrphanedAutomations(ctx context.Context, req *connect.Request[v1.ListOrphanedAutomationsRequest]) (*connect.Response[v1.ListOrphanedAutomationsResponse], error) {
-	return c.listOrphanedAutomations.CallUnary(ctx, req)
-}
-
-// AdoptTrigger calls reliant.v1.AutomationTakeoverService.AdoptTrigger.
-func (c *automationTakeoverServiceClient) AdoptTrigger(ctx context.Context, req *connect.Request[v1.AdoptTriggerRequest]) (*connect.Response[v1.AdoptTriggerResponse], error) {
-	return c.adoptTrigger.CallUnary(ctx, req)
-}
-
-// AcceptTriggerOffer calls reliant.v1.AutomationTakeoverService.AcceptTriggerOffer.
-func (c *automationTakeoverServiceClient) AcceptTriggerOffer(ctx context.Context, req *connect.Request[v1.AcceptTriggerOfferRequest]) (*connect.Response[v1.AcceptTriggerOfferResponse], error) {
-	return c.acceptTriggerOffer.CallUnary(ctx, req)
-}
-
-// ListTriggerOffers calls reliant.v1.AutomationTakeoverService.ListTriggerOffers.
-func (c *automationTakeoverServiceClient) ListTriggerOffers(ctx context.Context, req *connect.Request[v1.ListTriggerOffersRequest]) (*connect.Response[v1.ListTriggerOffersResponse], error) {
-	return c.listTriggerOffers.CallUnary(ctx, req)
-}
-
-// RevokeTriggerOffer calls reliant.v1.AutomationTakeoverService.RevokeTriggerOffer.
-func (c *automationTakeoverServiceClient) RevokeTriggerOffer(ctx context.Context, req *connect.Request[v1.RevokeTriggerOfferRequest]) (*connect.Response[v1.RevokeTriggerOfferResponse], error) {
-	return c.revokeTriggerOffer.CallUnary(ctx, req)
+// reliant.v1.AutomationTakeoverService service. Multiple service clients may share a single
+// connect.Client.
+func NewAutomationTakeoverServiceClient(client *connect.Client) AutomationTakeoverServiceClient {
+	return &automationTakeoverServiceClient{client: client}
 }
 
 // AutomationTakeoverServiceHandler is an implementation of the reliant.v1.AutomationTakeoverService
@@ -173,7 +131,7 @@ type AutomationTakeoverServiceHandler interface {
 	// withheld (param_names says which are set), and no secret, connection or
 	// event payload is returned.
 	// forge:custom — an org-wide read for admins, filtered to creators who left, with values withheld
-	ListOrphanedAutomations(context.Context, *connect.Request[v1.ListOrphanedAutomationsRequest]) (*connect.Response[v1.ListOrphanedAutomationsResponse], error)
+	ListOrphanedAutomations(context.Context, *v1.ListOrphanedAutomationsRequest) (*v1.ListOrphanedAutomationsResponse, error)
 	// AdoptTrigger takes an orphaned trigger back for the org. Org admins
 	// only. With new_owner_user_id empty or the caller, the caller adopts it
 	// now, supplying `rebinding`; the response carries the trigger (disabled)
@@ -183,95 +141,161 @@ type AutomationTakeoverServiceHandler interface {
 	// machine and connections are the accepting member's to choose. An offer
 	// expires after 7 days, supersedes any earlier one, and is revoked when
 	// either party leaves the org.
-	AdoptTrigger(context.Context, *connect.Request[v1.AdoptTriggerRequest]) (*connect.Response[v1.AdoptTriggerResponse], error)
+	AdoptTrigger(context.Context, *v1.AdoptTriggerRequest) (*v1.AdoptTriggerResponse, error)
 	// AcceptTriggerOffer adopts the trigger an admin offered the caller, a
 	// person signed in to the app. Only the offeree: anyone else's offer is
 	// NOT_FOUND. A dead offer (expired, revoked, a party left, the trigger
 	// re-owned) is FAILED_PRECONDITION saying why.
-	AcceptTriggerOffer(context.Context, *connect.Request[v1.AcceptTriggerOfferRequest]) (*connect.Response[v1.AcceptTriggerOfferResponse], error)
+	AcceptTriggerOffer(context.Context, *v1.AcceptTriggerOfferRequest) (*v1.AcceptTriggerOfferResponse, error)
 	// ListTriggerOffers lists the live offers made to the caller, each with
 	// the offered trigger (param values withheld).
 	// forge:custom — only the caller's live offers; a dead one is settled as it is read
-	ListTriggerOffers(context.Context, *connect.Request[v1.ListTriggerOffersRequest]) (*connect.Response[v1.ListTriggerOffersResponse], error)
+	ListTriggerOffers(context.Context, *v1.ListTriggerOffersRequest) (*v1.ListTriggerOffersResponse, error)
 	// RevokeTriggerOffer withdraws a pending offer (an org admin) or declines
 	// it (its offeree). Anyone else's is NOT_FOUND.
-	RevokeTriggerOffer(context.Context, *connect.Request[v1.RevokeTriggerOfferRequest]) (*connect.Response[v1.RevokeTriggerOfferResponse], error)
+	RevokeTriggerOffer(context.Context, *v1.RevokeTriggerOfferRequest) (*v1.RevokeTriggerOfferResponse, error)
 }
 
-// NewAutomationTakeoverServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewAutomationTakeoverServiceHandler(svc AutomationTakeoverServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	automationTakeoverServiceMethods := v1.File_reliant_v1_automation_takeover_proto.Services().ByName("AutomationTakeoverService").Methods()
-	automationTakeoverServiceListOrphanedAutomationsHandler := connect.NewUnaryHandler(
-		AutomationTakeoverServiceListOrphanedAutomationsProcedure,
-		svc.ListOrphanedAutomations,
-		connect.WithSchema(automationTakeoverServiceMethods.ByName("ListOrphanedAutomations")),
-		connect.WithHandlerOptions(opts...),
+// RegisterAutomationTakeoverServiceHandler registers svc as the
+// reliant.v1.AutomationTakeoverService implementation on server.
+func RegisterAutomationTakeoverServiceHandler(server *connect.Server, svc AutomationTakeoverServiceHandler) {
+	adapter := automationTakeoverServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: automationTakeoverServiceListOrphanedAutomationsSpec(), Handler: adapter.listOrphanedAutomations},
+		connect.Method{Spec: automationTakeoverServiceAdoptTriggerSpec(), Handler: adapter.adoptTrigger},
+		connect.Method{Spec: automationTakeoverServiceAcceptTriggerOfferSpec(), Handler: adapter.acceptTriggerOffer},
+		connect.Method{Spec: automationTakeoverServiceListTriggerOffersSpec(), Handler: adapter.listTriggerOffers},
+		connect.Method{Spec: automationTakeoverServiceRevokeTriggerOfferSpec(), Handler: adapter.revokeTriggerOffer},
 	)
-	automationTakeoverServiceAdoptTriggerHandler := connect.NewUnaryHandler(
-		AutomationTakeoverServiceAdoptTriggerProcedure,
-		svc.AdoptTrigger,
-		connect.WithSchema(automationTakeoverServiceMethods.ByName("AdoptTrigger")),
-		connect.WithHandlerOptions(opts...),
-	)
-	automationTakeoverServiceAcceptTriggerOfferHandler := connect.NewUnaryHandler(
-		AutomationTakeoverServiceAcceptTriggerOfferProcedure,
-		svc.AcceptTriggerOffer,
-		connect.WithSchema(automationTakeoverServiceMethods.ByName("AcceptTriggerOffer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	automationTakeoverServiceListTriggerOffersHandler := connect.NewUnaryHandler(
-		AutomationTakeoverServiceListTriggerOffersProcedure,
-		svc.ListTriggerOffers,
-		connect.WithSchema(automationTakeoverServiceMethods.ByName("ListTriggerOffers")),
-		connect.WithHandlerOptions(opts...),
-	)
-	automationTakeoverServiceRevokeTriggerOfferHandler := connect.NewUnaryHandler(
-		AutomationTakeoverServiceRevokeTriggerOfferProcedure,
-		svc.RevokeTriggerOffer,
-		connect.WithSchema(automationTakeoverServiceMethods.ByName("RevokeTriggerOffer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.AutomationTakeoverService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case AutomationTakeoverServiceListOrphanedAutomationsProcedure:
-			automationTakeoverServiceListOrphanedAutomationsHandler.ServeHTTP(w, r)
-		case AutomationTakeoverServiceAdoptTriggerProcedure:
-			automationTakeoverServiceAdoptTriggerHandler.ServeHTTP(w, r)
-		case AutomationTakeoverServiceAcceptTriggerOfferProcedure:
-			automationTakeoverServiceAcceptTriggerOfferHandler.ServeHTTP(w, r)
-		case AutomationTakeoverServiceListTriggerOffersProcedure:
-			automationTakeoverServiceListTriggerOffersHandler.ServeHTTP(w, r)
-		case AutomationTakeoverServiceRevokeTriggerOfferProcedure:
-			automationTakeoverServiceRevokeTriggerOfferHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedAutomationTakeoverServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedAutomationTakeoverServiceHandler struct{}
 
-func (UnimplementedAutomationTakeoverServiceHandler) ListOrphanedAutomations(context.Context, *connect.Request[v1.ListOrphanedAutomationsRequest]) (*connect.Response[v1.ListOrphanedAutomationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AutomationTakeoverService.ListOrphanedAutomations is not implemented"))
+func (UnimplementedAutomationTakeoverServiceHandler) ListOrphanedAutomations(context.Context, *v1.ListOrphanedAutomationsRequest) (*v1.ListOrphanedAutomationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AutomationTakeoverService.ListOrphanedAutomations is not implemented")
 }
 
-func (UnimplementedAutomationTakeoverServiceHandler) AdoptTrigger(context.Context, *connect.Request[v1.AdoptTriggerRequest]) (*connect.Response[v1.AdoptTriggerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AutomationTakeoverService.AdoptTrigger is not implemented"))
+func (UnimplementedAutomationTakeoverServiceHandler) AdoptTrigger(context.Context, *v1.AdoptTriggerRequest) (*v1.AdoptTriggerResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AutomationTakeoverService.AdoptTrigger is not implemented")
 }
 
-func (UnimplementedAutomationTakeoverServiceHandler) AcceptTriggerOffer(context.Context, *connect.Request[v1.AcceptTriggerOfferRequest]) (*connect.Response[v1.AcceptTriggerOfferResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AutomationTakeoverService.AcceptTriggerOffer is not implemented"))
+func (UnimplementedAutomationTakeoverServiceHandler) AcceptTriggerOffer(context.Context, *v1.AcceptTriggerOfferRequest) (*v1.AcceptTriggerOfferResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AutomationTakeoverService.AcceptTriggerOffer is not implemented")
 }
 
-func (UnimplementedAutomationTakeoverServiceHandler) ListTriggerOffers(context.Context, *connect.Request[v1.ListTriggerOffersRequest]) (*connect.Response[v1.ListTriggerOffersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AutomationTakeoverService.ListTriggerOffers is not implemented"))
+func (UnimplementedAutomationTakeoverServiceHandler) ListTriggerOffers(context.Context, *v1.ListTriggerOffersRequest) (*v1.ListTriggerOffersResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AutomationTakeoverService.ListTriggerOffers is not implemented")
 }
 
-func (UnimplementedAutomationTakeoverServiceHandler) RevokeTriggerOffer(context.Context, *connect.Request[v1.RevokeTriggerOfferRequest]) (*connect.Response[v1.RevokeTriggerOfferResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.AutomationTakeoverService.RevokeTriggerOffer is not implemented"))
+func (UnimplementedAutomationTakeoverServiceHandler) RevokeTriggerOffer(context.Context, *v1.RevokeTriggerOfferRequest) (*v1.RevokeTriggerOfferResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.AutomationTakeoverService.RevokeTriggerOffer is not implemented")
+}
+
+type automationTakeoverServiceClient struct {
+	client *connect.Client
+}
+
+func (c *automationTakeoverServiceClient) ListOrphanedAutomations(ctx context.Context, req *v1.ListOrphanedAutomationsRequest) (*v1.ListOrphanedAutomationsResponse, error) {
+	var res v1.ListOrphanedAutomationsResponse
+	if err := c.client.CallUnary(ctx, automationTakeoverServiceListOrphanedAutomationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *automationTakeoverServiceClient) AdoptTrigger(ctx context.Context, req *v1.AdoptTriggerRequest) (*v1.AdoptTriggerResponse, error) {
+	var res v1.AdoptTriggerResponse
+	if err := c.client.CallUnary(ctx, automationTakeoverServiceAdoptTriggerSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *automationTakeoverServiceClient) AcceptTriggerOffer(ctx context.Context, req *v1.AcceptTriggerOfferRequest) (*v1.AcceptTriggerOfferResponse, error) {
+	var res v1.AcceptTriggerOfferResponse
+	if err := c.client.CallUnary(ctx, automationTakeoverServiceAcceptTriggerOfferSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *automationTakeoverServiceClient) ListTriggerOffers(ctx context.Context, req *v1.ListTriggerOffersRequest) (*v1.ListTriggerOffersResponse, error) {
+	var res v1.ListTriggerOffersResponse
+	if err := c.client.CallUnary(ctx, automationTakeoverServiceListTriggerOffersSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *automationTakeoverServiceClient) RevokeTriggerOffer(ctx context.Context, req *v1.RevokeTriggerOfferRequest) (*v1.RevokeTriggerOfferResponse, error) {
+	var res v1.RevokeTriggerOfferResponse
+	if err := c.client.CallUnary(ctx, automationTakeoverServiceRevokeTriggerOfferSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type automationTakeoverServiceHandler struct {
+	svc AutomationTakeoverServiceHandler
+}
+
+func (h automationTakeoverServiceHandler) listOrphanedAutomations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOrphanedAutomationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOrphanedAutomations(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h automationTakeoverServiceHandler) adoptTrigger(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AdoptTriggerRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AdoptTrigger(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h automationTakeoverServiceHandler) acceptTriggerOffer(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AcceptTriggerOfferRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AcceptTriggerOffer(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h automationTakeoverServiceHandler) listTriggerOffers(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListTriggerOffersRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListTriggerOffers(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h automationTakeoverServiceHandler) revokeTriggerOffer(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeTriggerOfferRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeTriggerOffer(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 
@@ -15,7 +13,7 @@ import (
 )
 
 // GetPreferences retrieves user preferences
-func (s *Service) GetPreferences(ctx context.Context, req *connect.Request[reliantv1.GetPreferencesRequest]) (*connect.Response[reliantv1.GetPreferencesResponse], error) {
+func (s *Service) GetPreferences(ctx context.Context, req *reliantv1.GetPreferencesRequest) (*reliantv1.GetPreferencesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Every preference below lives in the same user-global scope
@@ -94,7 +92,7 @@ func (s *Service) GetPreferences(ctx context.Context, req *connect.Request[relia
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get hidden presets"))
 	}
 
-	return connect.NewResponse(&reliantv1.GetPreferencesResponse{
+	return &reliantv1.GetPreferencesResponse{
 		StreamingEnabled:                  streamingEnabled,
 		WorktreeArchiveMode:               worktreeArchiveMode,
 		WorktreeDefaultDeleteBranch:       worktreeDeleteBranch,
@@ -107,7 +105,7 @@ func (s *Service) GetPreferences(ctx context.Context, req *connect.Request[relia
 		HideBuiltinPresets:                hideBuiltinPresets,
 		HiddenWorkflowSlugs:               hiddenWorkflows,
 		HiddenPresetSlugs:                 hiddenPresets,
-	}), nil
+	}, nil
 }
 
 // getEffectiveHiddenItems computes the list of hidden items for a user.

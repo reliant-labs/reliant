@@ -3,7 +3,7 @@ package question_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -21,22 +21,22 @@ func TestResolveQuestion_Generated(t *testing.T) {
 	// No question or chat exists (emptyQuestionRepo).
 	svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Repo: emptyQuestionRepo()}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ResolveQuestionRequest, pb.ResolveQuestionResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ResolveQuestionRequest, pb.ResolveQuestionResponse]{
 		{
 			Name:    "question_id is required",
-			Req:     connect.NewRequest(&pb.ResolveQuestionRequest{Action: "reply"}),
+			Req:     &pb.ResolveQuestionRequest{Action: "reply"},
 			Ctx:     question.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "action is required",
-			Req:     connect.NewRequest(&pb.ResolveQuestionRequest{QuestionId: "q-1"}),
+			Req:     &pb.ResolveQuestionRequest{QuestionId: "q-1"},
 			Ctx:     question.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown question is not found",
-			Req:     connect.NewRequest(&pb.ResolveQuestionRequest{QuestionId: "q-1", Action: "reply"}),
+			Req:     &pb.ResolveQuestionRequest{QuestionId: "q-1", Action: "reply"},
 			Ctx:     question.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

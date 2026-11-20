@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -46,17 +46,17 @@ func testResumeAfterRejoining(t *testing.T, ownOrg bool) {
 	paused, err := env.repo.PauseTrigger(context.Background(), created.GetId(), core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 	require.True(t, paused)
-	got, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: created.GetId()}))
+	got, err := env.svc.GetTrigger(env.ctx, &reliantv1.GetTriggerRequest{Id: created.GetId()})
 	require.NoError(t, err)
-	assert.False(t, got.Msg.GetTrigger().GetEnabled())
-	assert.Equal(t, core.TriggerPausedCreatorLeftOrg, got.Msg.GetTrigger().GetPausedReason(), "the API says why")
+	assert.False(t, got.GetTrigger().GetEnabled())
+	assert.Equal(t, core.TriggerPausedCreatorLeftOrg, got.GetTrigger().GetPausedReason(), "the API says why")
 
 	resume := func(ctx context.Context) (*reliantv1.Trigger, error) {
-		resp, err := env.svc.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: true}))
+		resp, err := env.svc.SetTriggerEnabled(ctx, &reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: true})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg.GetTrigger(), nil
+		return resp.GetTrigger(), nil
 	}
 	stored := func() *core.Trigger {
 		t.Helper()
@@ -81,9 +81,9 @@ func testResumeAfterRejoining(t *testing.T, ownOrg bool) {
 	if ownOrg {
 		// The trigger's own check meets it first, and fails closed as it
 		// does for any refused caller.
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "error: %v", err)
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "error: %v", err)
 	} else {
-		assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "error: %v", err)
+		assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err), "error: %v", err)
 	}
 	assert.False(t, stored().Enabled)
 
@@ -115,7 +115,7 @@ func TestSetTriggerEnabled_APersonsPauseClearsTheReason(t *testing.T) {
 	_, err = env.repo.PauseTrigger(context.Background(), created.GetId(), core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 
-	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: false}))
+	_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: false})
 	require.NoError(t, err)
 	row, err := env.repo.GetTrigger(context.Background(), created.GetId())
 	require.NoError(t, err)

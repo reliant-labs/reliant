@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 )
@@ -18,7 +18,7 @@ func TestVersionConflictIsAUserErrorThatStaysAborted(t *testing.T) {
 	t.Parallel()
 	err := fmt.Errorf("update selection: %w", ErrVersionConflict)
 	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
-	assert.Equal(t, connect.CodeAborted, svcerr.Code(err))
+	assert.Equal(t, connect.CodeAborted, svcerr.CodeV2(err))
 	assert.True(t, errors.Is(err, ErrVersionConflict))
 	assert.Contains(t, err.Error(), "the chat's selection changed since it was read; reload and try again")
 }

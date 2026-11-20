@@ -4,8 +4,6 @@ package package_commands
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
@@ -40,14 +38,14 @@ type pkgListCommandsCmd struct {
 // the daemon's filesystem via the pkg.list_commands command.
 func (s *Service) ListCommands(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListPackageCommandsRequest],
-) (*connect.Response[reliantv1.ListPackageCommandsResponse], error) {
+	req *reliantv1.ListPackageCommandsRequest,
+) (*reliantv1.ListPackageCommandsResponse, error) {
 	userID, err := daemoncmd.UserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	workingDir, daemonID, err := s.resolveWorkingDir(ctx, userID, req.Msg)
+	workingDir, daemonID, err := s.resolveWorkingDir(ctx, userID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +60,7 @@ func (s *Service) ListCommands(
 		return nil, err
 	}
 
-	return connect.NewResponse(packageCommandListToProto(&result)), nil
+	return packageCommandListToProto(&result), nil
 }
 
 // resolveWorkingDir prefers the worktree's stored path (a daemon-side path),

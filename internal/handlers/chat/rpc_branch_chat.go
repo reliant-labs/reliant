@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -24,23 +23,23 @@ import (
 // BranchChat creates a new chat branched from a specific message ordinal
 func (s *Service) BranchChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.BranchChatRequest],
-) (*connect.Response[reliantv1.BranchChatResponse], error) {
+	req *reliantv1.BranchChatRequest,
+) (*reliantv1.BranchChatResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// message_id is the primary way to identify the branch point
-	if req.Msg.MessageId == "" {
+	if req.MessageId == "" {
 		return nil, svcerr.InvalidArgument("message_id is required")
 	}
 	// A worktree is a checkout on one machine, so a branch with no machine
 	// cannot name one, nor the workspace switch that describes copying into it.
-	requestedWorktree := req.Msg.WorktreeId != nil && *req.Msg.WorktreeId != ""
-	if req.Msg.GetNoMachine() && (requestedWorktree || req.Msg.WorkspaceContext != nil) {
+	requestedWorktree := req.WorktreeId != nil && *req.WorktreeId != ""
+	if req.GetNoMachine() && (requestedWorktree || req.WorkspaceContext != nil) {
 		return nil, svcerr.InvalidArgument("no_machine and worktree_id/workspace_context are mutually exclusive: a worktree lives on a machine")
 	}
 
 	// Get the message directly by ID - simple and unambiguous
-	branchPointMsg, err := s.deps.Repo.GetMessage(ctx, req.Msg.MessageId)
+	branchPointMsg, err := s.deps.Repo.GetMessage(ctx, req.MessageId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
 	}
@@ -139,8 +138,8 @@ func (s *Service) BranchChat(
 
 	// Prepare title
 	title := ""
-	if req.Msg.Title != nil {
-		title = *req.Msg.Title
+	if req.Title != nil {
+		title = *req.Title
 	}
 	if title == "" {
 		title = fmt.Sprintf("%s (branch)", sourceChat.Title)
@@ -153,8 +152,8 @@ func (s *Service) BranchChat(
 	fromChat := sourceChat
 	// If the requesting chat differs from the source chat (branching from an inherited message),
 	// use the requesting chat's worktree as the default instead of the message's original chat's worktree.
-	if req.Msg.ChatId != "" && req.Msg.ChatId != sourceChatID {
-		requestingChat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	if req.ChatId != "" && req.ChatId != sourceChatID {
+		requestingChat, err := s.deps.Repo.GetChat(ctx, req.ChatId)
 		if err == nil && authz.CanWriteChat(ctx, userID, requestingChat) {
 			worktreeID = requestingChat.WorktreeID
 			fromChat = requestingChat
@@ -167,7 +166,7 @@ func (s *Service) BranchChat(
 	// no-machine chat does (the chat list groups by worktree), and pins no
 	// daemon. A branch of a chat that already has no machine stays without one
 	// unless it names a worktree, which is a machine's checkout.
-	noMachine := req.Msg.GetNoMachine() || (fromChat.NoMachine && !requestedWorktree)
+	noMachine := req.GetNoMachine() || (fromChat.NoMachine && !requestedWorktree)
 	if noMachine {
 		mainWorktreeID, err := s.launcher().ResolveChatWorktreeID(ctx, sourceChat.ProjectID, nil)
 		if err != nil {
@@ -176,16 +175,16 @@ func (s *Service) BranchChat(
 		worktreeID = mainWorktreeID
 	}
 	var targetWorktree *db.Worktree // Store for system message creation
-	if req.Msg.WorktreeId != nil && *req.Msg.WorktreeId != "" {
+	if req.WorktreeId != nil && *req.WorktreeId != "" {
 		// Verify the worktree exists and belongs to the same project
-		worktree, err := s.deps.Repo.GetWorktree(ctx, *req.Msg.WorktreeId)
+		worktree, err := s.deps.Repo.GetWorktree(ctx, *req.WorktreeId)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 		}
 		if worktree.ProjectID != sourceChat.ProjectID {
 			return nil, svcerr.InvalidArgument("worktree must belong to the same project")
 		}
-		worktreeID = req.Msg.WorktreeId
+		worktreeID = req.WorktreeId
 		targetWorktree = worktree
 	}
 
@@ -342,7 +341,7 @@ func (s *Service) BranchChat(
 		// is. Read after the thread exists, inside this transaction, so the
 		// inherited sub-agents it counts are exactly the ones spawn_status
 		// will list for this branch.
-		if err := s.createBranchNoteMessage(txCtx, branchChat, branchWorkflowID, sourceChat, branchPointMsg, targetWorktree, req.Msg.WorkspaceContext); err != nil {
+		if err := s.createBranchNoteMessage(txCtx, branchChat, branchWorkflowID, sourceChat, branchPointMsg, targetWorktree, req.WorkspaceContext); err != nil {
 			return fmt.Errorf("failed to create branch note: %w", err)
 		}
 
@@ -376,12 +375,12 @@ func (s *Service) BranchChat(
 	}
 	// "Continue without machine" ends the chat it leaves waiting for its
 	// machine: the conversation now continues in the branch.
-	if req.Msg.GetNoMachine() && !fromChat.NoMachine {
+	if req.GetNoMachine() && !fromChat.NoMachine {
 		s.abandonMachineWait(ctx, fromChat)
 	}
-	return connect.NewResponse(&reliantv1.BranchChatResponse{
+	return &reliantv1.BranchChatResponse{
 		Chat: s.chatToProtoWithSelection(ctx, committed),
-	}), nil
+	}, nil
 }
 
 // createBranchNoteMessage writes the hidden note every branch starts with.

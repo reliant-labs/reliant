@@ -8,7 +8,7 @@ import (
 	"sort"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -54,16 +54,16 @@ func TestEveryTriggerMutationActsInItsOrg(t *testing.T) {
 	env.saveWorkflow(t, "nightly", scheduledWorkflowYAML)
 	scheduled, err := env.createIn(env.ctx, acmeProject, nil)
 	require.NoError(t, err)
-	webhook, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	webhook, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) { d.ProjectId = acmeProject }),
-	}))
+	})
 	require.NoError(t, err)
 	// An activation of the saved workflow, so DisableWorkflow has one to pause.
-	enabled, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(&reliantv1.EnableWorkflowRequest{
+	enabled, err := env.svc.EnableWorkflow(env.ctx, &reliantv1.EnableWorkflowRequest{
 		Workflow: "nightly", ProjectId: acmeProject, DaemonId: env.daemonID, Message: "Run the nightly job.",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, enabled.Msg.GetEnabled(), "the activation the DisableWorkflow case pauses: %v", enabled.Msg.GetResults())
+	require.True(t, enabled.GetEnabled(), "the activation the DisableWorkflow case pauses: %v", enabled.GetResults())
 
 	id := scheduled.GetId()
 	calls := map[string]func(ctx context.Context) error{
@@ -72,34 +72,34 @@ func TestEveryTriggerMutationActsInItsOrg(t *testing.T) {
 			return err
 		},
 		"UpdateTrigger": func(ctx context.Context) error {
-			_, err := env.svc.UpdateTrigger(ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+			_, err := env.svc.UpdateTrigger(ctx, &reliantv1.UpdateTriggerRequest{
 				Id: id, Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 					d.ProjectId = acmeProject
 					d.Message = "Reconfigured."
 				}),
-			}))
+			})
 			return err
 		},
 		"DeleteTrigger": func(ctx context.Context) error {
-			_, err := env.svc.DeleteTrigger(ctx, connect.NewRequest(&reliantv1.DeleteTriggerRequest{Id: id}))
+			_, err := env.svc.DeleteTrigger(ctx, &reliantv1.DeleteTriggerRequest{Id: id})
 			return err
 		},
 		"SetTriggerEnabled": func(ctx context.Context) error {
-			_, err := env.svc.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+			_, err := env.svc.SetTriggerEnabled(ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 			return err
 		},
 		"FireTrigger": func(ctx context.Context) error {
-			_, err := env.svc.FireTrigger(ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: id}))
+			_, err := env.svc.FireTrigger(ctx, &reliantv1.FireTriggerRequest{Id: id})
 			return err
 		},
 		"RotateWebhookToken": func(ctx context.Context) error {
-			_, err := env.svc.RotateWebhookToken(ctx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: webhook.Msg.GetTrigger().GetId()}))
+			_, err := env.svc.RotateWebhookToken(ctx, &reliantv1.RotateWebhookTokenRequest{Id: webhook.GetTrigger().GetId()})
 			return err
 		},
 		"EnableWorkflow": func(ctx context.Context) error {
-			_, err := env.svc.EnableWorkflow(ctx, connect.NewRequest(&reliantv1.EnableWorkflowRequest{
+			_, err := env.svc.EnableWorkflow(ctx, &reliantv1.EnableWorkflowRequest{
 				Workflow: "nightly", ProjectId: acmeProject, DaemonId: env.daemonID, NamePrefix: "again", Message: "Again.",
-			}))
+			})
 			return err
 		},
 		// DisableWorkflow with no project names every project's activations,
@@ -107,11 +107,11 @@ func TestEveryTriggerMutationActsInItsOrg(t *testing.T) {
 		// answer that names none of acme's, and the unchanged store, are the
 		// refusal.
 		"DisableWorkflow": func(ctx context.Context) error {
-			resp, err := env.svc.DisableWorkflow(ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "nightly"}))
+			resp, err := env.svc.DisableWorkflow(ctx, &reliantv1.DisableWorkflowRequest{Workflow: "nightly"})
 			if err != nil {
 				return err
 			}
-			if n := len(resp.Msg.GetPaused()) + len(resp.Msg.GetFailed()); n > 0 {
+			if n := len(resp.GetPaused()) + len(resp.GetFailed()); n > 0 {
 				return fmt.Errorf("DisableWorkflow reported %d of acme's activations", n)
 			}
 			return svcerr.NotFound("trigger")
@@ -158,7 +158,7 @@ func TestEveryTriggerMutationActsInItsOrg(t *testing.T) {
 		for name, call := range calls {
 			before := snapshot()
 			err := call(ctx)
-			code := svcerr.Code(err)
+			code := svcerr.CodeV2(err)
 			require.Truef(t, code == connect.CodeNotFound || code == connect.CodePermissionDenied,
 				"%s: %s was not refused for its org: %v", who, name, err)
 			require.Equal(t, before, snapshot(), "%s: %s changed what is stored", who, name)

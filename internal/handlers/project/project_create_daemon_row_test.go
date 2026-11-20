@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -79,13 +78,13 @@ func TestCreateProjectRecordsProjectDaemonRow_ConnectedDaemon(t *testing.T) {
 
 	// Unique path: the test DB is shared, so a fixed path collides across runs.
 	projectPath := "/home/workspace/projects/connected-" + uuid.New().String()
-	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "connected-project",
 		Path: projectPath,
-	}))
+	})
 	require.NoError(t, err)
 
-	rows, err := repo.ListProjectDaemonsForProject(ctx, resp.Msg.Project.Id)
+	rows, err := repo.ListProjectDaemonsForProject(ctx, resp.Project.Id)
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "connected daemon must get a project_daemons row at creation")
 	assert.Equal(t, "daemon-abc", rows[0].DaemonID)
@@ -108,14 +107,14 @@ func TestCreateProjectSkipsProjectDaemonRow_PendingDaemon(t *testing.T) {
 	s := newProjectService(t, repo, router)
 
 	projectPath := "/home/workspace/projects/pending-" + uuid.New().String()
-	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "pending-project",
 		Path: projectPath,
-	}))
+	})
 	require.NoError(t, err, "creation must still succeed when the daemon is pending")
 	require.Positive(t, router.enqueued, "mkdir should be enqueued for the pending daemon")
 
-	rows, err := repo.ListProjectDaemonsForProject(ctx, resp.Msg.Project.Id)
+	rows, err := repo.ListProjectDaemonsForProject(ctx, resp.Project.Id)
 	require.NoError(t, err)
 	assert.Empty(t, rows, "pending daemon must NOT get a project_daemons row (reconcile heals it)")
 }

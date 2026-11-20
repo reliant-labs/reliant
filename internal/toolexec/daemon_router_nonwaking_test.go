@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -105,8 +105,8 @@ func TestEnsureAwakeAsksTheControlPlaneAboutAnUnattachedManagedDaemonWithNoLifec
 		resumeErr error
 	}{
 		{name: "control plane resumes it"},
-		{name: "control plane says it is not suspended", resumeErr: connect.NewError(connect.CodeFailedPrecondition, nil)},
-		{name: "control plane does not know it", resumeErr: connect.NewError(connect.CodeNotFound, nil)},
+		{name: "control plane says it is not suspended", resumeErr: connect.NewError(connect.CodeFailedPrecondition, "")},
+		{name: "control plane does not know it", resumeErr: connect.NewError(connect.CodeNotFound, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resumer := &fakeResumer{err: tc.resumeErr}
@@ -145,7 +145,7 @@ func TestEnsureAwakeReportsAResumeRefusal(t *testing.T) {
 	auth.SetUserJWT(userID, "jwt")
 	t.Cleanup(func() { auth.SetUserJWT(userID, "") })
 	router, resumer := newSuspendedRouter(t, userID)
-	resumer.err = connect.NewError(connect.CodeResourceExhausted, nil)
+	resumer.err = connect.NewError(connect.CodeResourceExhausted, "")
 
 	_, err := router.EnsureAwake(context.Background(), userID, pinned)
 	require.Error(t, err)
@@ -178,7 +178,7 @@ func TestWakeReportsWhetherItResumed(t *testing.T) {
 	// The mirror says suspended but the control plane no longer holds it so
 	// (an earlier request woke it): treated as awake, and not a fresh wake.
 	refused := NewNATSDaemonRouter(nil,
-		WithDaemonResumer(&fakeResumer{err: connect.NewError(connect.CodeFailedPrecondition, nil)}),
+		WithDaemonResumer(&fakeResumer{err: connect.NewError(connect.CodeFailedPrecondition, "")}),
 		WithDatabase(&fakeDaemonRecords{daemons: []*db.Daemon{
 			{ID: "daemon-waking", UserID: userID, LifecyclePhase: strPtr("suspended")},
 		}}))

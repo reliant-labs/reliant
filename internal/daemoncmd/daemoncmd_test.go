@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +29,7 @@ func TestDispatch_LocalCodecFailuresAreInternalAndRedacted(t *testing.T) {
 		err := New(Deps{Sender: fakeSender{}}).Dispatch(context.Background(), "u", "fs.list", make(chan int), nil, 1000)
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
-		assert.Equal(t, "marshal fs.list request failed", svcerr.ToConnect(err).Message())
+		assert.Equal(t, "marshal fs.list request failed", svcerr.ToConnectV2(err).Message())
 		assert.NotNil(t, svcerr.Cause(err), "the marshal error is the logged cause")
 	})
 	t.Run("reply does not unmarshal", func(t *testing.T) {
@@ -37,7 +37,7 @@ func TestDispatch_LocalCodecFailuresAreInternalAndRedacted(t *testing.T) {
 		err := New(Deps{Sender: fakeSender{reply: []byte(`{"N":"secret-payload"}`)}}).Dispatch(context.Background(), "u", "fs.list", struct{}{}, &resp, 1000)
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
-		assert.Equal(t, "unmarshal fs.list response failed", svcerr.ToConnect(err).Message())
+		assert.Equal(t, "unmarshal fs.list response failed", svcerr.ToConnectV2(err).Message())
 		assert.NotNil(t, svcerr.Cause(err), "the unmarshal error is the logged cause")
 	})
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -29,21 +29,21 @@ func TestGetCommandFavorites_Generated(t *testing.T) {
 
 	svc := package_commands.NewTestPackageCommands(t, package_commands.WithPackageCommandsDeps(package_commands.Deps{Repo: favoritesNoProjectRepo{}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetCommandFavoritesRequest, pb.GetCommandFavoritesResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetCommandFavoritesRequest, pb.GetCommandFavoritesResponse]{
 		{
 			Name:    "anonymous caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.GetCommandFavoritesRequest{ProjectId: "p-1"}),
+			Req:     &pb.GetCommandFavoritesRequest{ProjectId: "p-1"},
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "project_id is required",
-			Req:     connect.NewRequest(&pb.GetCommandFavoritesRequest{}),
+			Req:     &pb.GetCommandFavoritesRequest{},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown project is not found",
-			Req:     connect.NewRequest(&pb.GetCommandFavoritesRequest{ProjectId: "p-missing"}),
+			Req:     &pb.GetCommandFavoritesRequest{ProjectId: "p-missing"},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

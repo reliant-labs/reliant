@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -54,9 +55,9 @@ func as(user string) context.Context {
 
 func (e *env) addKey(user, provider, key string) *pb.AddProviderAPIKeyResponse {
 	e.t.Helper()
-	resp, err := e.svc.AddProviderAPIKey(as(user), connect.NewRequest(&pb.AddProviderAPIKeyRequest{Provider: provider, ApiKey: key}))
+	resp, err := e.svc.AddProviderAPIKey(as(user), &pb.AddProviderAPIKeyRequest{Provider: provider, ApiKey: key})
 	require.NoError(e.t, err)
-	return resp.Msg
+	return resp
 }
 
 func (e *env) oauthAccount(user, provider, id string) core.ProviderAccount {
@@ -71,9 +72,9 @@ func (e *env) oauthAccount(user, provider, id string) core.ProviderAccount {
 
 func (e *env) list(user string) []*pb.ProviderAccount {
 	e.t.Helper()
-	resp, err := e.svc.ListProviderAccounts(as(user), connect.NewRequest(&pb.ListProviderAccountsRequest{}))
+	resp, err := e.svc.ListProviderAccounts(as(user), &pb.ListProviderAccountsRequest{})
 	require.NoError(e.t, err)
-	return resp.Msg.Accounts
+	return resp.Accounts
 }
 
 func TestAddProviderAPIKeyValidatesAndDedupes(t *testing.T) {
@@ -94,11 +95,11 @@ func TestAddProviderAPIKeyValidatesAndDedupes(t *testing.T) {
 
 	// A second key is a second account behind the first; a label names it.
 	e.valid = func(string, string) (bool, string) { return true, "ok" }
-	resp, err := e.svc.AddProviderAPIKey(as(user), connect.NewRequest(&pb.AddProviderAPIKeyRequest{
-		Provider: "openai", ApiKey: "sk-second-2222", Label: ptr("work")}))
+	resp, err := e.svc.AddProviderAPIKey(as(user), &pb.AddProviderAPIKeyRequest{
+		Provider: "openai", ApiKey: "sk-second-2222", Label: ptr("work")})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Created)
-	assert.Equal(t, "work", resp.Msg.Account.Label)
+	assert.True(t, resp.Created)
+	assert.Equal(t, "work", resp.Account.Label)
 	accounts := e.list(user)
 	require.Len(t, accounts, 2)
 	assert.EqualValues(t, 0, accounts[0].Priority)
@@ -117,18 +118,18 @@ func TestAddProviderAPIKeyValidatesAndDedupes(t *testing.T) {
 func TestAddProviderAPIKeyRejectsBadInput(t *testing.T) {
 	e := newEnv(t)
 	call := func(provider, key string) error {
-		_, err := e.svc.AddProviderAPIKey(as("u-bad"), connect.NewRequest(&pb.AddProviderAPIKeyRequest{Provider: provider, ApiKey: key}))
+		_, err := e.svc.AddProviderAPIKey(as("u-bad"), &pb.AddProviderAPIKeyRequest{Provider: provider, ApiKey: key})
 		return err
 	}
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call("claude", "sk-x")), "subscription providers sign in, they take no key")
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call("reliant", "sk-x")), "the managed key is minted, never pasted")
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call("nonsense", "sk-x")))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(call("openai", "   ")))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(call("claude", "sk-x")), "subscription providers sign in, they take no key")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(call("reliant", "sk-x")), "the managed key is minted, never pasted")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(call("nonsense", "sk-x")))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(call("openai", "   ")))
 
 	e.valid = func(string, string) (bool, string) { return false, "Invalid API key" }
 	err := call("openai", "sk-bad")
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "Invalid API key")
 	assert.Empty(t, e.list("u-bad"), "a key the provider rejects is never stored")
 }
@@ -140,7 +141,7 @@ func TestDeleteProviderAccountReDensifies(t *testing.T) {
 	b := e.addKey(user, "openai", "sk-b-2222").Account
 	c := e.addKey(user, "openai", "sk-c-3333").Account
 
-	_, err := e.svc.DeleteProviderAccount(as(user), connect.NewRequest(&pb.DeleteProviderAccountRequest{AccountId: b.Id}))
+	_, err := e.svc.DeleteProviderAccount(as(user), &pb.DeleteProviderAccountRequest{AccountId: b.Id})
 	require.NoError(t, err)
 	accounts := e.list(user)
 	require.Len(t, accounts, 2)
@@ -149,7 +150,7 @@ func TestDeleteProviderAccountReDensifies(t *testing.T) {
 	assert.EqualValues(t, 1, accounts[1].Priority, "priorities re-densify after a delete")
 
 	// Deleting the default promotes the next key to the default.
-	_, err = e.svc.DeleteProviderAccount(as(user), connect.NewRequest(&pb.DeleteProviderAccountRequest{AccountId: a.Id}))
+	_, err = e.svc.DeleteProviderAccount(as(user), &pb.DeleteProviderAccountRequest{AccountId: a.Id})
 	require.NoError(t, err)
 	withSecrets, err := e.repo.ListProviderAccountsWithSecrets(as(user), user)
 	require.NoError(t, err)
@@ -158,7 +159,7 @@ func TestDeleteProviderAccountReDensifies(t *testing.T) {
 	assert.EqualValues(t, 0, withSecrets[0].Priority)
 
 	// Deleting the last one disconnects the provider.
-	_, err = e.svc.DeleteProviderAccount(as(user), connect.NewRequest(&pb.DeleteProviderAccountRequest{AccountId: c.Id}))
+	_, err = e.svc.DeleteProviderAccount(as(user), &pb.DeleteProviderAccountRequest{AccountId: c.Id})
 	require.NoError(t, err)
 	assert.Empty(t, e.list(user))
 }
@@ -170,15 +171,15 @@ func TestAnotherUsersAccountIsNotFoundNeverPermissionDenied(t *testing.T) {
 	notFound := func(name string, err error) {
 		t.Helper()
 		require.Error(t, err, name)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), name)
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), name)
 	}
-	_, err := e.svc.UpdateProviderAccount(as("intruder"), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: acct.ID, Paused: ptr(true)}))
+	_, err := e.svc.UpdateProviderAccount(as("intruder"), &pb.UpdateProviderAccountRequest{AccountId: acct.ID, Paused: ptr(true)})
 	notFound("update", err)
-	_, err = e.svc.DeleteProviderAccount(as("intruder"), connect.NewRequest(&pb.DeleteProviderAccountRequest{AccountId: acct.ID}))
+	_, err = e.svc.DeleteProviderAccount(as("intruder"), &pb.DeleteProviderAccountRequest{AccountId: acct.ID})
 	notFound("delete", err)
-	_, err = e.svc.UpdateProviderAccount(as("intruder"), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: "no-such-id", Paused: ptr(true)}))
+	_, err = e.svc.UpdateProviderAccount(as("intruder"), &pb.UpdateProviderAccountRequest{AccountId: "no-such-id", Paused: ptr(true)})
 	notFound("missing", err)
-	_, err = e.svc.RefreshProviderAccountUsage(as("intruder"), connect.NewRequest(&pb.RefreshProviderAccountUsageRequest{AccountId: acct.ID}))
+	_, err = e.svc.RefreshProviderAccountUsage(as("intruder"), &pb.RefreshProviderAccountUsageRequest{AccountId: acct.ID})
 	assert.Error(t, err)
 
 	assert.Empty(t, e.list("intruder"))
@@ -194,9 +195,9 @@ func TestUpdateRenamesPausesAndRestoresTheEmailLabel(t *testing.T) {
 	update := func(req *pb.UpdateProviderAccountRequest) *pb.ProviderAccount {
 		t.Helper()
 		req.AccountId = acct.ID
-		resp, err := e.svc.UpdateProviderAccount(as(user), connect.NewRequest(req))
+		resp, err := e.svc.UpdateProviderAccount(as(user), req)
 		require.NoError(t, err)
-		return resp.Msg.Account
+		return resp.Account
 	}
 	assert.Equal(t, "alice@example.com", e.list(user)[0].Label, "an account is labelled by its detected email")
 
@@ -206,10 +207,10 @@ func TestUpdateRenamesPausesAndRestoresTheEmailLabel(t *testing.T) {
 	assert.Equal(t, pb.ProviderAccountStatus_PROVIDER_ACCOUNT_STATUS_PAUSED, update(&pb.UpdateProviderAccountRequest{Paused: ptr(true)}).Status)
 	assert.Equal(t, pb.ProviderAccountStatus_PROVIDER_ACCOUNT_STATUS_AVAILABLE, update(&pb.UpdateProviderAccountRequest{Paused: ptr(false)}).Status)
 
-	_, err := e.svc.UpdateProviderAccount(as(user), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: acct.ID, Label: ptr(string(make([]byte, 200)))}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	_, err = e.svc.UpdateProviderAccount(as(user), connect.NewRequest(&pb.UpdateProviderAccountRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err := e.svc.UpdateProviderAccount(as(user), &pb.UpdateProviderAccountRequest{AccountId: acct.ID, Label: ptr(string(make([]byte, 200)))})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
+	_, err = e.svc.UpdateProviderAccount(as(user), &pb.UpdateProviderAccountRequest{})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 func TestReorderMustBeAPermutationOfTheProvidersAccounts(t *testing.T) {
@@ -219,12 +220,12 @@ func TestReorderMustBeAPermutationOfTheProvidersAccounts(t *testing.T) {
 	b := e.oauthAccount(user, "claude", "bob")
 	other := e.oauthAccount(user, "codex", "carol")
 
-	resp, err := e.svc.ReorderProviderAccounts(as(user), connect.NewRequest(&pb.ReorderProviderAccountsRequest{
-		Provider: "claude", AccountIds: []string{b.ID, a.ID}}))
+	resp, err := e.svc.ReorderProviderAccounts(as(user), &pb.ReorderProviderAccountsRequest{
+		Provider: "claude", AccountIds: []string{b.ID, a.ID}})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Accounts, 2, "the response lists only that provider")
-	assert.Equal(t, b.ID, resp.Msg.Accounts[0].Id)
-	assert.EqualValues(t, 0, resp.Msg.Accounts[0].Priority)
+	require.Len(t, resp.Accounts, 2, "the response lists only that provider")
+	assert.Equal(t, b.ID, resp.Accounts[0].Id)
+	assert.EqualValues(t, 0, resp.Accounts[0].Priority)
 
 	for name, ids := range map[string][]string{
 		"missing":   {a.ID},
@@ -232,12 +233,12 @@ func TestReorderMustBeAPermutationOfTheProvidersAccounts(t *testing.T) {
 		"foreign":   {a.ID, other.ID},
 		"unknown":   {a.ID, "nope"},
 	} {
-		_, err := e.svc.ReorderProviderAccounts(as(user), connect.NewRequest(&pb.ReorderProviderAccountsRequest{Provider: "claude", AccountIds: ids}))
+		_, err := e.svc.ReorderProviderAccounts(as(user), &pb.ReorderProviderAccountsRequest{Provider: "claude", AccountIds: ids})
 		require.Error(t, err, name)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), name)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), name)
 	}
-	_, err = e.svc.ReorderProviderAccounts(as("someone-else"), connect.NewRequest(&pb.ReorderProviderAccountsRequest{
-		Provider: "claude", AccountIds: []string{a.ID, b.ID}}))
+	_, err = e.svc.ReorderProviderAccounts(as("someone-else"), &pb.ReorderProviderAccountsRequest{
+		Provider: "claude", AccountIds: []string{a.ID, b.ID}})
 	assert.Error(t, err, "another user's order is not theirs to set")
 }
 
@@ -273,11 +274,11 @@ func TestGetChatProviderAccount(t *testing.T) {
 
 	chat, root := seedChat(t, e.repo, user)
 	get := func(chatID string, who string) (*pb.GetChatProviderAccountResponse, error) {
-		resp, err := e.svc.GetChatProviderAccount(as(who), connect.NewRequest(&pb.GetChatProviderAccountRequest{ChatId: chatID}))
+		resp, err := e.svc.GetChatProviderAccount(as(who), &pb.GetChatProviderAccountRequest{ChatId: chatID})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg, nil
+		return resp, nil
 	}
 
 	// Before the first model call there is no assignment.
@@ -308,11 +309,11 @@ func TestGetChatProviderAccount(t *testing.T) {
 
 	// A chat that is another user's, or absent, is NotFound; an empty id is invalid.
 	_, err = get(chat, "intruder")
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	_, err = get("no-such-chat", user)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	_, err = get("", user)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // A chat that fell back to Codex and came back runs on Claude again, though its newest sticky
@@ -338,9 +339,9 @@ func TestGetChatProviderAccountFollowsTheAccountThatServedTheLastReply(t *testin
 	}
 	chipAccount := func() string {
 		t.Helper()
-		resp, err := e.svc.GetChatProviderAccount(ctx, connect.NewRequest(&pb.GetChatProviderAccountRequest{ChatId: chat}))
+		resp, err := e.svc.GetChatProviderAccount(ctx, &pb.GetChatProviderAccountRequest{ChatId: chat})
 		require.NoError(t, err)
-		return resp.Msg.GetAccount().GetId()
+		return resp.GetAccount().GetId()
 	}
 
 	_, err = e.repo.SetThreadAssignment(ctx, core.Assignment{ThreadID: root, Provider: "claude", AccountID: claude.ID, AssignedAt: time.Now().Add(-2 * time.Hour), Reason: "initial"}, "")
@@ -420,9 +421,9 @@ func TestGetChatProviderAccountNamesTheOrgKeyItRunsOn(t *testing.T) {
 	}
 	get := func(chatID string) *pb.ProviderAccount {
 		t.Helper()
-		resp, err := e.svc.GetChatProviderAccount(ctx, connect.NewRequest(&pb.GetChatProviderAccountRequest{ChatId: chatID}))
+		resp, err := e.svc.GetChatProviderAccount(ctx, &pb.GetChatProviderAccountRequest{ChatId: chatID})
 		require.NoError(t, err)
-		return resp.Msg.GetAccount()
+		return resp.GetAccount()
 	}
 
 	// A key open to every member: shown as a member sees it.
@@ -506,20 +507,20 @@ func TestAccountThatAddsCapacityWakesTheUsersBlockedChats(t *testing.T) {
 	}))
 	const user = "u-capacity"
 
-	added, err := svc.AddProviderAPIKey(as(user), connect.NewRequest(&pb.AddProviderAPIKeyRequest{Provider: "anthropic", ApiKey: "sk-ant-new-1234"}))
+	added, err := svc.AddProviderAPIKey(as(user), &pb.AddProviderAPIKeyRequest{Provider: "anthropic", ApiKey: "sk-ant-new-1234"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{user}, w.users, "a new key wakes the user's blocked chats")
 
-	id := added.Msg.Account.Id
-	_, err = svc.UpdateProviderAccount(as(user), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: id, Paused: ptr(true)}))
+	id := added.Account.Id
+	_, err = svc.UpdateProviderAccount(as(user), &pb.UpdateProviderAccountRequest{AccountId: id, Paused: ptr(true)})
 	require.NoError(t, err)
 	assert.Len(t, w.users, 1, "pausing an account adds no capacity, so nothing is woken")
 
-	_, err = svc.UpdateProviderAccount(as(user), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: id, Paused: ptr(false)}))
+	_, err = svc.UpdateProviderAccount(as(user), &pb.UpdateProviderAccountRequest{AccountId: id, Paused: ptr(false)})
 	require.NoError(t, err)
 	assert.Equal(t, []string{user, user}, w.users, "un-pausing it does")
 
-	_, err = svc.UpdateProviderAccount(as(user), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: id, Label: ptr("work")}))
+	_, err = svc.UpdateProviderAccount(as(user), &pb.UpdateProviderAccountRequest{AccountId: id, Label: ptr("work")})
 	require.NoError(t, err)
 	assert.Len(t, w.users, 2, "a rename changes no capacity")
 }

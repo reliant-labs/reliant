@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,12 +72,12 @@ func seedProject(t *testing.T, repo *db.Repo, ctx context.Context, path string) 
 	// checkout, and the find branch asks that machine about the path.
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: "daemon-stale-path", UserID: auth.MustGetUserID(ctx)}))
 	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
-	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	resp, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: path,
-	}))
+	})
 	require.NoError(t, err)
-	return resp.Msg.GetProject().GetId()
+	return resp.GetProject().GetId()
 }
 
 // TestCreateProject_RefusesStaleProjectRowWhoseDirectoryIsGone is the
@@ -103,12 +103,12 @@ func TestCreateProject_RefusesStaleProjectRowWhoseDirectoryIsGone(t *testing.T) 
 	router := &stalePathRouter{dirExists: false}
 	s := newProjectService(t, repo, router)
 
-	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	_, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: projectPath,
-	}))
+	})
 	require.Error(t, err, "resolving a project whose directory is gone must not succeed")
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err),
 		"a stale registry row is a precondition failure, not AlreadyExists")
 	assert.Contains(t, err.Error(), projectPath, "the refusal must name the missing directory")
 	assert.Contains(t, err.Error(), projectID, "the refusal must name the project row to act on")
@@ -129,12 +129,12 @@ func TestCreateProject_AcceptsExistingProjectWhoseDirectoryExists(t *testing.T) 
 	seedProject(t, repo, ctx, projectPath)
 
 	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
-	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	_, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: projectPath,
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err))
 }
 
 // TestCreateProject_UnreachableDaemonDoesNotRefuse guards the boundary of the
@@ -153,12 +153,12 @@ func TestCreateProject_UnreachableDaemonDoesNotRefuse(t *testing.T) {
 	seedProject(t, repo, ctx, projectPath)
 
 	s := newProjectService(t, repo, &stalePathRouter{daemonDown: true})
-	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+	_, err := s.CreateProject(ctx, &reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: projectPath,
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err),
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err),
 		"an unreachable daemon must fall through to the normal found answer")
 	if strings.Contains(err.Error(), "does not exist") {
 		t.Errorf("error = %q, must not claim the directory is missing when the daemon never answered", err)
@@ -206,16 +206,16 @@ func TestCreateProject_FindAsksTheMachineTheRequestRunsOn(t *testing.T) {
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, b, projectPath, nil))
 
 	router := &statByMachineRouter{exists: map[string]bool{a: false, b: true}}
-	_, err := newProjectService(t, repo, router).CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "find", Path: projectPath}))
+	_, err := newProjectService(t, repo, router).CreateProject(ctx, &reliantv1.CreateProjectRequest{Name: "find", Path: projectPath})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err), "found on B, where its checkout is: err = %v", err)
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err), "found on B, where its checkout is: err = %v", err)
 	assert.Equal(t, []string{b}, router.asked)
 
 	// A request on A's own credentials asks A, which says the path is gone.
 	router.asked = nil
 	onA := context.WithValue(ctx, auth.DaemonIDContextKey, a)
-	_, err = newProjectService(t, repo, router).CreateProject(onA, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "find", Path: projectPath}))
+	_, err = newProjectService(t, repo, router).CreateProject(onA, &reliantv1.CreateProjectRequest{Name: "find", Path: projectPath})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Equal(t, []string{a}, router.asked)
 }

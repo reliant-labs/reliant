@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -27,16 +27,16 @@ func TestListConnectionEvents_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListConnectionEventsRequest, pb.ListConnectionEventsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListConnectionEventsRequest, pb.ListConnectionEventsResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.ListConnectionEventsRequest{Id: "c-1"}),
+			Req:     &pb.ListConnectionEventsRequest{Id: "c-1"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "a connection the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.ListConnectionEventsRequest{Id: "c-1"}),
+			Req:     &pb.ListConnectionEventsRequest{Id: "c-1"},
 			Ctx:     connection.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

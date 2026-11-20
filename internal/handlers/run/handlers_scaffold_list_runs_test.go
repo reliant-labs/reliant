@@ -3,7 +3,7 @@ package run_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -21,30 +21,30 @@ func TestListRuns_Generated(t *testing.T) {
 	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo()}))
 	parent, session, badToken := "run-1", "chat-1", "not-a-token!!"
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListRunsRequest, pb.ListRunsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListRunsRequest, pb.ListRunsResponse]{
 		{
 			Name:    "unknown parent run is not found",
-			Req:     connect.NewRequest(&pb.ListRunsRequest{ParentId: &parent}),
+			Req:     &pb.ListRunsRequest{ParentId: &parent},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "unknown session is not found",
-			Req:     connect.NewRequest(&pb.ListRunsRequest{SessionId: &session}),
+			Req:     &pb.ListRunsRequest{SessionId: &session},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "malformed page_token is rejected",
-			Req:     connect.NewRequest(&pb.ListRunsRequest{PageToken: &badToken}),
+			Req:     &pb.ListRunsRequest{PageToken: &badToken},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "UNSPECIFIED display state is rejected",
-			Req: connect.NewRequest(&pb.ListRunsRequest{
+			Req: &pb.ListRunsRequest{
 				DisplayStates: []pb.RunDisplayState{pb.RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED},
-			}),
+			},
 			Ctx:     run.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

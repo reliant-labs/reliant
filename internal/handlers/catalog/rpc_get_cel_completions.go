@@ -5,8 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/reference"
@@ -16,12 +14,12 @@ import (
 // The response is computed once and cached since the data is static.
 func (s *Service) GetCELCompletions(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetCELCompletionsRequest],
-) (*connect.Response[reliantv1.GetCELCompletionsResponse], error) {
+	req *reliantv1.GetCELCompletionsRequest,
+) (*reliantv1.GetCELCompletionsResponse, error) {
 	s.celCompletionsOnce.Do(func() {
 		s.celCompletionsResp = s.buildCELCompletionsResponse()
 	})
-	return connect.NewResponse(s.celCompletionsResp), nil
+	return s.celCompletionsResp, nil
 }
 
 // buildCELCompletionsResponse assembles CEL completion data from reference and type registry.

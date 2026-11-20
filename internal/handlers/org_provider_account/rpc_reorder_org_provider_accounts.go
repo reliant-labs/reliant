@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -15,13 +14,13 @@ import (
 // of the org's tier). account_ids must be exactly the org's accounts of that provider.
 func (s *Service) ReorderOrgProviderAccounts(
 	ctx context.Context,
-	req *connect.Request[pb.ReorderOrgProviderAccountsRequest],
-) (*connect.Response[pb.ReorderOrgProviderAccountsResponse], error) {
-	orgID, err := requireOrgID(req.Msg.GetOrgId())
+	req *pb.ReorderOrgProviderAccountsRequest,
+) (*pb.ReorderOrgProviderAccountsResponse, error) {
+	orgID, err := requireOrgID(req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
-	provider := strings.TrimSpace(req.Msg.GetProvider())
+	provider := strings.TrimSpace(req.GetProvider())
 	if provider == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("provider is required"))
 	}
@@ -29,7 +28,7 @@ func (s *Service) ReorderOrgProviderAccounts(
 		return nil, err
 	}
 	owner := core.OrgAccountOwner(orgID)
-	if err := s.deps.Store.ReorderOwnedProviderAccounts(ctx, owner, provider, req.Msg.GetAccountIds()); err != nil {
+	if err := s.deps.Store.ReorderOwnedProviderAccounts(ctx, owner, provider, req.GetAccountIds()); err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 	accounts, err := s.deps.Store.ListOwnedProviderAccounts(ctx, owner)
@@ -40,5 +39,5 @@ func (s *Service) ReorderOrgProviderAccounts(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.ReorderOrgProviderAccountsResponse{Accounts: v.protoAll(accounts, provider)}), nil
+	return &pb.ReorderOrgProviderAccountsResponse{Accounts: v.protoAll(accounts, provider)}, nil
 }

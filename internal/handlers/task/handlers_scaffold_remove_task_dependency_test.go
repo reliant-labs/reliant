@@ -3,7 +3,7 @@ package task_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -17,7 +17,7 @@ func TestRemoveTaskDependency_AnswersUnimplemented(t *testing.T) {
 	t.Parallel()
 
 	svc := task.NewTestTask(t)
-	_, err := svc.RemoveTaskDependency(task.AuthedContext(t), connect.NewRequest(&pb.RemoveTaskDependencyRequest{}))
-	require.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
+	_, err := svc.RemoveTaskDependency(task.AuthedContext(t), &pb.RemoveTaskDependencyRequest{})
+	require.Equal(t, connect.CodeUnimplemented, svcerr.CodeV2(err))
 	require.ErrorContains(t, err, "reliant.v1.TaskService.RemoveTaskDependency is not implemented")
 }

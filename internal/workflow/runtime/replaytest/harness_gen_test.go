@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	enums "go.temporal.io/api/enums/v1"
@@ -447,18 +446,18 @@ func (h *Harness) StartChat(workflowRef, prompt string, params map[string]any) *
 		protoParams[k] = pv
 	}
 
-	req := connect.NewRequest(&reliantv1.StartChatRequest{
+	req := &reliantv1.StartChatRequest{
 		ProjectId: h.ProjectID,
 		Workflow:  workflowRef,
 		Messages: []*reliantv1.InputMessage{
 			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: prompt},
 		},
 		WorkflowParams: protoParams,
-	})
+	}
 	resp, err := h.ChatSvc.StartChat(h.Ctx, req)
 	require.NoError(h.T, err, "StartChat")
-	require.NotNil(h.T, resp.Msg.Chat)
-	return resp.Msg
+	require.NotNil(h.T, resp.Chat)
+	return resp
 }
 
 // SendMessage sends a follow-up user message to a started chat through the
@@ -470,13 +469,13 @@ func (h *Harness) SendMessage(chatID, content string) error {
 	if err != nil {
 		return err
 	}
-	_, err = h.ChatSvc.SendMessage(h.Ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+	_, err = h.ChatSvc.SendMessage(h.Ctx, &reliantv1.SendMessageRequest{
 		ChatId: chatID,
 		Messages: []*reliantv1.InputMessage{
 			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: content},
 		},
 		WorkflowParams: map[string]*structpb.Value{"model": model},
-	}))
+	})
 	return err
 }
 
@@ -485,15 +484,15 @@ func (h *Harness) SendMessage(chatID, content string) error {
 // SendMessage it returns rather than failing the test, so a During hook can
 // call it.
 func (h *Harness) SendAgentMessage(chatID, threadID, content string) (*reliantv1.SendAgentMessageResponse, error) {
-	resp, err := h.ChatSvc.SendAgentMessage(h.Ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := h.ChatSvc.SendAgentMessage(h.Ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   chatID,
 		ThreadId: threadID,
 		Message:  content,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 // ResolveQuestion answers a pending ask_question through the production
@@ -517,11 +516,11 @@ func (h *Harness) ResolveQuestion(questionID string, selected []string, freetext
 	require.NoError(h.T, err)
 	dataStr := string(data)
 
-	_, err = h.QuestionSvc.ResolveQuestion(h.Ctx, connect.NewRequest(&reliantv1.ResolveQuestionRequest{
+	_, err = h.QuestionSvc.ResolveQuestion(h.Ctx, &reliantv1.ResolveQuestionRequest{
 		QuestionId:   questionID,
 		Action:       "reply",
 		ResponseData: &dataStr,
-	}))
+	})
 	require.NoError(h.T, err, "ResolveQuestion")
 }
 

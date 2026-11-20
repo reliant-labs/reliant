@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -38,13 +38,13 @@ func TestIsForgeClusterReadTimeout_AcrossDispatchShapes(t *testing.T) {
 			assert.False(t, isForgeClusterReadTimeout(dispatch(missingDir)))
 
 			// Off a cluster read, the same failures keep their classes.
-			assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(remapForgeDispatchError("forge.env_verify", dispatch(natsTimeout))))
-			assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(remapForgeDispatchError("forge.env_verify", dispatch(forgeTimedOut))))
+			assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(remapForgeDispatchError("forge.env_verify", dispatch(natsTimeout))))
+			assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(remapForgeDispatchError("forge.env_verify", dispatch(forgeTimedOut))))
 			failed := remapForgeDispatchError("forge.env_verify", dispatch(forgeFailed))
-			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(failed))
-			assert.Contains(t, svcerr.ToConnect(failed).Message(), "forge command failed: exit 1: timeout reading config",
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(failed))
+			assert.Contains(t, svcerr.ToConnectV2(failed).Message(), "forge command failed: exit 1: timeout reading config",
 				"the daemon's words are the message")
-			assert.Equal(t, connect.CodeNotFound, svcerr.Code(remapForgeDispatchError("forge.env_verify", dispatch(missingDir))))
+			assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(remapForgeDispatchError("forge.env_verify", dispatch(missingDir))))
 		})
 	}
 }

@@ -5,12 +5,14 @@ package reliant
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
@@ -60,15 +62,15 @@ type fake struct {
 }
 
 // call runs fn if set, else answers Unimplemented.
-func call[Req, Resp any](f func(*Req) (*Resp, error), req *Req) (*connect.Response[Resp], error) {
+func call[Req, Resp any](f func(*Req) (*Resp, error), req *Req) (*Resp, error) {
 	if f == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, nil)
+		return nil, connect.NewError(connect.CodeUnimplemented, "")
 	}
 	resp, err := f(req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 type runSvc struct {
@@ -76,29 +78,29 @@ type runSvc struct {
 	f *fake
 }
 
-func (s runSvc) StartRun(_ context.Context, r *connect.Request[reliantv1.StartRunRequest]) (*connect.Response[reliantv1.StartRunResponse], error) {
-	return call(s.f.startRun, r.Msg)
+func (s runSvc) StartRun(_ context.Context, r *reliantv1.StartRunRequest) (*reliantv1.StartRunResponse, error) {
+	return call(s.f.startRun, r)
 }
-func (s runSvc) GetRun(_ context.Context, r *connect.Request[reliantv1.GetRunRequest]) (*connect.Response[reliantv1.GetRunResponse], error) {
-	return call(s.f.getRun, r.Msg)
+func (s runSvc) GetRun(_ context.Context, r *reliantv1.GetRunRequest) (*reliantv1.GetRunResponse, error) {
+	return call(s.f.getRun, r)
 }
-func (s runSvc) ListRuns(_ context.Context, r *connect.Request[reliantv1.ListRunsRequest]) (*connect.Response[reliantv1.ListRunsResponse], error) {
-	return call(s.f.listRuns, r.Msg)
+func (s runSvc) ListRuns(_ context.Context, r *reliantv1.ListRunsRequest) (*reliantv1.ListRunsResponse, error) {
+	return call(s.f.listRuns, r)
 }
-func (s runSvc) SignalRun(_ context.Context, r *connect.Request[reliantv1.SignalRunRequest]) (*connect.Response[reliantv1.SignalRunResponse], error) {
-	return call(s.f.signalRun, r.Msg)
+func (s runSvc) SignalRun(_ context.Context, r *reliantv1.SignalRunRequest) (*reliantv1.SignalRunResponse, error) {
+	return call(s.f.signalRun, r)
 }
-func (s runSvc) CancelRun(_ context.Context, r *connect.Request[reliantv1.CancelRunRequest]) (*connect.Response[reliantv1.CancelRunResponse], error) {
-	return call(s.f.cancelRun, r.Msg)
+func (s runSvc) CancelRun(_ context.Context, r *reliantv1.CancelRunRequest) (*reliantv1.CancelRunResponse, error) {
+	return call(s.f.cancelRun, r)
 }
-func (s runSvc) PauseRun(_ context.Context, r *connect.Request[reliantv1.PauseRunRequest]) (*connect.Response[reliantv1.PauseRunResponse], error) {
-	return call(s.f.pauseRun, r.Msg)
+func (s runSvc) PauseRun(_ context.Context, r *reliantv1.PauseRunRequest) (*reliantv1.PauseRunResponse, error) {
+	return call(s.f.pauseRun, r)
 }
-func (s runSvc) ResumeRun(_ context.Context, r *connect.Request[reliantv1.ResumeRunRequest]) (*connect.Response[reliantv1.ResumeRunResponse], error) {
-	return call(s.f.resumeRun, r.Msg)
+func (s runSvc) ResumeRun(_ context.Context, r *reliantv1.ResumeRunRequest) (*reliantv1.ResumeRunResponse, error) {
+	return call(s.f.resumeRun, r)
 }
-func (s runSvc) InterruptRun(_ context.Context, r *connect.Request[reliantv1.InterruptRunRequest]) (*connect.Response[reliantv1.InterruptRunResponse], error) {
-	return call(s.f.interruptRun, r.Msg)
+func (s runSvc) InterruptRun(_ context.Context, r *reliantv1.InterruptRunRequest) (*reliantv1.InterruptRunResponse, error) {
+	return call(s.f.interruptRun, r)
 }
 
 type chatSvc struct {
@@ -106,14 +108,14 @@ type chatSvc struct {
 	f *fake
 }
 
-func (s chatSvc) GetChatUpdates(_ context.Context, r *connect.Request[reliantv1.GetChatUpdatesRequest]) (*connect.Response[reliantv1.GetChatUpdatesResponse], error) {
-	return call(s.f.getChatUpdates, r.Msg)
+func (s chatSvc) GetChatUpdates(_ context.Context, r *reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error) {
+	return call(s.f.getChatUpdates, r)
 }
-func (s chatSvc) GetWorkflowExecutions(_ context.Context, r *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
-	return call(s.f.getWorkflowExecutions, r.Msg)
+func (s chatSvc) GetWorkflowExecutions(_ context.Context, r *reliantv1.GetWorkflowExecutionsRequest) (*reliantv1.GetWorkflowExecutionsResponse, error) {
+	return call(s.f.getWorkflowExecutions, r)
 }
-func (s chatSvc) GetContentBlockBodies(_ context.Context, r *connect.Request[reliantv1.GetContentBlockBodiesRequest]) (*connect.Response[reliantv1.GetContentBlockBodiesResponse], error) {
-	return call(s.f.getContentBlockBodies, r.Msg)
+func (s chatSvc) GetContentBlockBodies(_ context.Context, r *reliantv1.GetContentBlockBodiesRequest) (*reliantv1.GetContentBlockBodiesResponse, error) {
+	return call(s.f.getContentBlockBodies, r)
 }
 
 type questionSvc struct {
@@ -121,11 +123,11 @@ type questionSvc struct {
 	f *fake
 }
 
-func (s questionSvc) ListPendingQuestions(_ context.Context, r *connect.Request[reliantv1.ListPendingQuestionsRequest]) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
-	return call(s.f.listPendingQuestions, r.Msg)
+func (s questionSvc) ListPendingQuestions(_ context.Context, r *reliantv1.ListPendingQuestionsRequest) (*reliantv1.ListPendingQuestionsResponse, error) {
+	return call(s.f.listPendingQuestions, r)
 }
-func (s questionSvc) ResolveQuestion(_ context.Context, r *connect.Request[reliantv1.ResolveQuestionRequest]) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
-	return call(s.f.resolveQuestion, r.Msg)
+func (s questionSvc) ResolveQuestion(_ context.Context, r *reliantv1.ResolveQuestionRequest) (*reliantv1.ResolveQuestionResponse, error) {
+	return call(s.f.resolveQuestion, r)
 }
 
 type approvalSvc struct {
@@ -133,21 +135,21 @@ type approvalSvc struct {
 	f *fake
 }
 
-func (s approvalSvc) ListApprovalsByChat(_ context.Context, r *connect.Request[reliantv1.ListApprovalsByChatRequest]) (*connect.Response[reliantv1.ListApprovalsByChatResponse], error) {
-	return call(s.f.listApprovals, r.Msg)
+func (s approvalSvc) ListApprovalsByChat(_ context.Context, r *reliantv1.ListApprovalsByChatRequest) (*reliantv1.ListApprovalsByChatResponse, error) {
+	return call(s.f.listApprovals, r)
 }
 
-func (s approvalSvc) Approve(_ context.Context, r *connect.Request[reliantv1.ApproveRequest]) (*connect.Response[reliantv1.ApproveResponse], error) {
-	return call(s.f.approve, r.Msg)
+func (s approvalSvc) Approve(_ context.Context, r *reliantv1.ApproveRequest) (*reliantv1.ApproveResponse, error) {
+	return call(s.f.approve, r)
 }
-func (s approvalSvc) Deny(_ context.Context, r *connect.Request[reliantv1.DenyRequest]) (*connect.Response[reliantv1.DenyResponse], error) {
-	return call(s.f.deny, r.Msg)
+func (s approvalSvc) Deny(_ context.Context, r *reliantv1.DenyRequest) (*reliantv1.DenyResponse, error) {
+	return call(s.f.deny, r)
 }
-func (s approvalSvc) BatchApprove(_ context.Context, r *connect.Request[reliantv1.BatchApproveRequest]) (*connect.Response[reliantv1.BatchApproveResponse], error) {
-	return call(s.f.batchApprove, r.Msg)
+func (s approvalSvc) BatchApprove(_ context.Context, r *reliantv1.BatchApproveRequest) (*reliantv1.BatchApproveResponse, error) {
+	return call(s.f.batchApprove, r)
 }
-func (s approvalSvc) BatchDeny(_ context.Context, r *connect.Request[reliantv1.BatchDenyRequest]) (*connect.Response[reliantv1.BatchDenyResponse], error) {
-	return call(s.f.batchDeny, r.Msg)
+func (s approvalSvc) BatchDeny(_ context.Context, r *reliantv1.BatchDenyRequest) (*reliantv1.BatchDenyResponse, error) {
+	return call(s.f.batchDeny, r)
 }
 
 type triggerSvc struct {
@@ -155,20 +157,20 @@ type triggerSvc struct {
 	f *fake
 }
 
-func (s triggerSvc) GetTrigger(_ context.Context, r *connect.Request[reliantv1.GetTriggerRequest]) (*connect.Response[reliantv1.GetTriggerResponse], error) {
-	return call(s.f.getTrigger, r.Msg)
+func (s triggerSvc) GetTrigger(_ context.Context, r *reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error) {
+	return call(s.f.getTrigger, r)
 }
-func (s triggerSvc) ListTriggers(_ context.Context, r *connect.Request[reliantv1.ListTriggersRequest]) (*connect.Response[reliantv1.ListTriggersResponse], error) {
-	return call(s.f.listTriggers, r.Msg)
+func (s triggerSvc) ListTriggers(_ context.Context, r *reliantv1.ListTriggersRequest) (*reliantv1.ListTriggersResponse, error) {
+	return call(s.f.listTriggers, r)
 }
-func (s triggerSvc) FireTrigger(_ context.Context, r *connect.Request[reliantv1.FireTriggerRequest]) (*connect.Response[reliantv1.FireTriggerResponse], error) {
-	return call(s.f.fireTrigger, r.Msg)
+func (s triggerSvc) FireTrigger(_ context.Context, r *reliantv1.FireTriggerRequest) (*reliantv1.FireTriggerResponse, error) {
+	return call(s.f.fireTrigger, r)
 }
-func (s triggerSvc) ListTriggerEvents(_ context.Context, r *connect.Request[reliantv1.ListTriggerEventsRequest]) (*connect.Response[reliantv1.ListTriggerEventsResponse], error) {
-	return call(s.f.listTriggerEvents, r.Msg)
+func (s triggerSvc) ListTriggerEvents(_ context.Context, r *reliantv1.ListTriggerEventsRequest) (*reliantv1.ListTriggerEventsResponse, error) {
+	return call(s.f.listTriggerEvents, r)
 }
-func (s triggerSvc) GetLaunchEvent(_ context.Context, r *connect.Request[reliantv1.GetLaunchEventRequest]) (*connect.Response[reliantv1.GetLaunchEventResponse], error) {
-	return call(s.f.getLaunchEvent, r.Msg)
+func (s triggerSvc) GetLaunchEvent(_ context.Context, r *reliantv1.GetLaunchEventRequest) (*reliantv1.GetLaunchEventResponse, error) {
+	return call(s.f.getLaunchEvent, r)
 }
 
 type inboxSvc struct {
@@ -176,31 +178,28 @@ type inboxSvc struct {
 	f *fake
 }
 
-func (s inboxSvc) ListInbox(_ context.Context, r *connect.Request[reliantv1.ListInboxRequest]) (*connect.Response[reliantv1.ListInboxResponse], error) {
-	return call(s.f.listInbox, r.Msg)
+func (s inboxSvc) ListInbox(_ context.Context, r *reliantv1.ListInboxRequest) (*reliantv1.ListInboxResponse, error) {
+	return call(s.f.listInbox, r)
 }
-func (s inboxSvc) DismissInboxItem(_ context.Context, r *connect.Request[reliantv1.DismissInboxItemRequest]) (*connect.Response[reliantv1.DismissInboxItemResponse], error) {
-	return call(s.f.dismissInbox, r.Msg)
+func (s inboxSvc) DismissInboxItem(_ context.Context, r *reliantv1.DismissInboxItemRequest) (*reliantv1.DismissInboxItemResponse, error) {
+	return call(s.f.dismissInbox, r)
 }
-func (s inboxSvc) RestoreInboxItem(_ context.Context, r *connect.Request[reliantv1.RestoreInboxItemRequest]) (*connect.Response[reliantv1.RestoreInboxItemResponse], error) {
-	return call(s.f.restoreInbox, r.Msg)
+func (s inboxSvc) RestoreInboxItem(_ context.Context, r *reliantv1.RestoreInboxItemRequest) (*reliantv1.RestoreInboxItemResponse, error) {
+	return call(s.f.restoreInbox, r)
 }
 
 // start serves f and returns a client for it.
 func (f *fake) start(t *testing.T, opts ...Option) (*Client, *httptest.Server) {
 	t.Helper()
+	server := connect.NewServer(sendErrorMeta())
+	reliantv1connect.RegisterRunServiceHandler(server, runSvc{f: f})
+	reliantv1connect.RegisterChatServiceHandler(server, chatSvc{f: f})
+	reliantv1connect.RegisterQuestionServiceHandler(server, questionSvc{f: f})
+	reliantv1connect.RegisterApprovalServiceHandler(server, approvalSvc{f: f})
+	reliantv1connect.RegisterTriggerServiceHandler(server, triggerSvc{f: f})
+	reliantv1connect.RegisterInboxServiceHandler(server, inboxSvc{f: f})
 	mux := http.NewServeMux()
-	for _, mount := range []func() (string, http.Handler){
-		func() (string, http.Handler) { return reliantv1connect.NewRunServiceHandler(runSvc{f: f}) },
-		func() (string, http.Handler) { return reliantv1connect.NewChatServiceHandler(chatSvc{f: f}) },
-		func() (string, http.Handler) { return reliantv1connect.NewQuestionServiceHandler(questionSvc{f: f}) },
-		func() (string, http.Handler) { return reliantv1connect.NewApprovalServiceHandler(approvalSvc{f: f}) },
-		func() (string, http.Handler) { return reliantv1connect.NewTriggerServiceHandler(triggerSvc{f: f}) },
-		func() (string, http.Handler) { return reliantv1connect.NewInboxServiceHandler(inboxSvc{f: f}) },
-	} {
-		path, h := mount()
-		mux.Handle(path, h)
-	}
+	connecthttp.Mount(mux, server)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.authHeaders = append(f.authHeaders, r.Header.Get("Authorization"))
@@ -222,4 +221,45 @@ func (f *fake) callLog() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.calls...)
+}
+
+// withMeta is a refusal that carries response metadata, as the real server's
+// svcerr reasons do: sendErrorMeta writes meta onto the response, where a
+// connect-go v2 error, which carries none itself, cannot hold it.
+func withMeta(err *connect.Error, kv ...string) error {
+	meta := http.Header{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		meta.Set(kv[i], kv[i+1])
+	}
+	return &serverMetaError{err: err, meta: meta}
+}
+
+type serverMetaError struct {
+	err  *connect.Error
+	meta http.Header
+}
+
+func (e *serverMetaError) Error() string { return e.err.Error() }
+func (e *serverMetaError) Unwrap() error { return e.err }
+
+// sendErrorMeta delivers a withMeta error's metadata: the response headers of
+// a unary call, where the server's svcerr interceptor puts a reason.
+func sendErrorMeta() connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			err := next(ctx, spec, stream)
+			var me *serverMetaError
+			if errors.As(err, &me) {
+				if info, ok := connect.CallInfoForServerContext(ctx); ok {
+					for k, vs := range me.meta {
+						for _, v := range vs {
+							info.ResponseHeader().Add(k, v)
+						}
+					}
+				}
+				return me.err
+			}
+			return err
+		}
+	}
 }

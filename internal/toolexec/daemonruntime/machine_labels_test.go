@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
@@ -25,7 +25,7 @@ type recordingGateway struct {
 	regs []*reliantv1.DaemonRegister
 }
 
-func (g *recordingGateway) ConnectDaemon(ctx context.Context, stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (g *recordingGateway) ConnectDaemon(ctx context.Context, stream reliantv1connect.ToolsDaemonServiceConnectDaemonServerStream) error {
 	msg, err := stream.Receive()
 	if err != nil {
 		return err
@@ -40,7 +40,7 @@ func (g *recordingGateway) ConnectDaemon(ctx context.Context, stream *connect.Bi
 		return err
 	}
 	if first {
-		return connect.NewError(connect.CodeUnavailable, nil)
+		return connect.NewError(connect.CodeUnavailable, "")
 	}
 	<-ctx.Done()
 	return ctx.Err()

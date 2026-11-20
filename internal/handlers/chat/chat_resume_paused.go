@@ -4,7 +4,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -120,7 +119,7 @@ func (s *Service) resumePausedRun(
 // is not resumed here: the queued message is withdrawn and the user is told to
 // send it to the chat, where SendMessage recovers the run at its position. The
 // composer keeps the text on a refusal, so nothing is lost.
-func (s *Service) resumePausedRunForMessage(ctx context.Context, userID string, chat *db.Chat, threadID, messageID string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+func (s *Service) resumePausedRunForMessage(ctx context.Context, userID string, chat *db.Chat, threadID, messageID string) (*reliantv1.SendAgentMessageResponse, error) {
 	if s.runs == nil || s.deps.Temporal == nil {
 		return nil, nil
 	}
@@ -144,11 +143,11 @@ func (s *Service) resumePausedRunForMessage(ctx context.Context, userID string, 
 		if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
 			logging.WarnContext(ctx, "Could not withdraw the queued message", "error", err, "chatID", chat.ID, "messageID", messageID)
 		}
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+		return &reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: "This chat is paused and its run could not be resumed where it stopped. " +
 				"Send this as a normal message to the chat instead — that restarts it from where it was.",
-		}), nil
+		}, nil
 	}
 	logging.InfoContext(ctx, "Resumed a paused chat for a message queued to it",
 		"chatID", chat.ID, "threadID", threadID, "runID", outcome.RunID)

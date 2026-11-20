@@ -6,8 +6,6 @@ package reliant
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
 
@@ -144,12 +142,12 @@ func (s *runScope) filter(gates []Gate) []Gate {
 
 // sessionTree reads a session's root executions, newest first.
 func (r *RunsClient) sessionTree(ctx context.Context, sessionID string, view reliantv1.WorkflowExecutionView) ([]*reliantv1.WorkflowExecution, error) {
-	resp, err := r.chat.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
+	resp, err := r.chat.GetWorkflowExecutions(ctx, &reliantv1.GetWorkflowExecutionsRequest{
 		ChatId: sessionID,
 		View:   view,
-	}))
+	})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg.GetAllRootWorkflows(), nil
+	return resp.GetAllRootWorkflows(), nil
 }

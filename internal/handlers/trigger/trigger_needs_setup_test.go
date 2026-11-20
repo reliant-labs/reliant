@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,9 +78,9 @@ func (e *needsSetupEnv) enableReq(params map[string]*structpb.Value) *reliantv1.
 
 func (e *needsSetupEnv) get(t *testing.T, id string) *reliantv1.Trigger {
 	t.Helper()
-	resp, err := e.svc.GetTrigger(e.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: id}))
+	resp, err := e.svc.GetTrigger(e.ctx, &reliantv1.GetTriggerRequest{Id: id})
 	require.NoError(t, err)
-	return resp.Msg.GetTrigger()
+	return resp.GetTrigger()
 }
 
 // seedUnfinished stores an activation the way the owner's existing `{}` ones
@@ -107,10 +107,10 @@ func TestCreateActivationRefusesAMissingRequiredParam(t *testing.T) {
 
 	env := setupNeedsSetup(t)
 
-	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.activationDef(nil)}))
+	_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{Trigger: env.activationDef(nil)})
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "repos is required")
 	assert.Empty(t, env.storedTriggers(t), "nothing was written")
 }
@@ -127,11 +127,11 @@ func TestCreateActivationEnforcesItemBounds(t *testing.T) {
 		"more than max_items":  {[]any{"a/one", "a/two", "a/three"}, "at most 2"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+			_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 				Trigger: env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam(tc.repos...) }),
-			}))
+			})
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
@@ -155,12 +155,12 @@ func TestUpdateActivationCannotClearARequiredParam(t *testing.T) {
 	env := setupNeedsSetup(t)
 	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam("acme/web") }))
 
-	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	_, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id: created.GetId(), Trigger: env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = nil }),
-	}))
+	})
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "repos is required")
 	assert.Equal(t, []any{"acme/web"}, env.storedTriggers(t)[0].Params["repos"], "the stored setup is untouched")
 }
@@ -235,14 +235,14 @@ func TestSetTriggerEnabledDoesNotResumeAnUnfinishedActivation(t *testing.T) {
 	env := setupNeedsSetup(t)
 	row := env.seedUnfinished(t, false)
 
-	_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: row.ID, Enabled: true}))
+	_, err := env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: row.ID, Enabled: true})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "needs setup: repos is required")
 
 	// Pausing needs no setup.
 	enabled := env.seedUnfinished(t, true)
-	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: enabled.ID, Enabled: false}))
+	_, err = env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: enabled.ID, Enabled: false})
 	require.NoError(t, err)
 }
 
@@ -254,10 +254,10 @@ func TestRunNowOfAnUnfinishedActivationSaysWhatToFinish(t *testing.T) {
 	env := setupNeedsSetup(t)
 	row := env.seedUnfinished(t, true)
 
-	_, err := env.svc.FireTrigger(env.ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: row.ID}))
+	_, err := env.svc.FireTrigger(env.ctx, &reliantv1.FireTriggerRequest{Id: row.ID})
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "needs setup: repos is required")
 	assert.Contains(t, err.Error(), "Finish setting up")
 }
@@ -268,7 +268,7 @@ func TestRunNowOfACompleteActivationStillFires(t *testing.T) {
 
 	env := setupNeedsSetup(t)
 	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam("acme/web") }))
-	_, err := env.svc.FireTrigger(env.ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: created.GetId()}))
+	_, err := env.svc.FireTrigger(env.ctx, &reliantv1.FireTriggerRequest{Id: created.GetId()})
 	require.NoError(t, err)
 }
 
@@ -287,10 +287,10 @@ func TestHealthIsNeedsSetupForAnActivationMissingARequiredParam(t *testing.T) {
 	require.Len(t, got.GetHealth().GetSetupIssues(), 1)
 	assert.Equal(t, "repos", got.GetHealth().GetSetupIssues()[0].GetInput())
 
-	listed, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	listed, err := env.svc.ListTriggers(env.ctx, &reliantv1.ListTriggersRequest{})
 	require.NoError(t, err)
-	require.Len(t, listed.Msg.GetTriggers(), 1)
-	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_NEEDS_SETUP, listed.Msg.GetTriggers()[0].GetHealth().GetStatus(), "the list reads it the same way")
+	require.Len(t, listed.GetTriggers(), 1)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_NEEDS_SETUP, listed.GetTriggers()[0].GetHealth().GetStatus(), "the list reads it the same way")
 
 	// Paused or running makes no difference: resuming would not make it fire.
 	paused := env.seedUnfinished(t, false)

@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // connectFailedPublisher is the narrow surface the connector uses to report
@@ -177,10 +178,7 @@ func (dc *DaemonConnector) connectWithRetry(ctx context.Context, daemonID, userI
 func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, podIP string, podPort int, org tools_daemon.MachineOrg) error {
 	baseURL := fmt.Sprintf("http://%s:%d", podIP, podPort)
 
-	client := reliantv1connect.NewToolsDaemonServiceClient(
-		h2cClient(),
-		baseURL,
-	)
+	client := reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(h2cClient(), baseURL, nil))
 
 	// Use a derived context that is cancelled only if the daemon takes too
 	// long to send its DaemonRegister. The stream is bound to regCtx for its
@@ -192,7 +190,10 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	defer regCancel()
 	regTimer := time.AfterFunc(10*time.Second, regCancel)
 
-	stream := client.ConnectGateway(regCtx)
+	stream, err := client.ConnectGateway(regCtx)
+	if err != nil {
+		return err
+	}
 
 	// Kick the stream so the underlying HTTP request actually gets dispatched.
 	// connect-go's bidi defers makeRequest() until the first Send/CloseRequest;
@@ -207,8 +208,8 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	}
 	if err := stream.Send(hello); err != nil {
 		regCancel()
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 		return fmt.Errorf("sending gateway hello: %w", err)
 	}
 
@@ -220,21 +221,21 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	// Receive returned.
 	if !regTimer.Stop() {
 		regCancel()
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 		return fmt.Errorf("receiving registration: timed out after 10s")
 	}
 	if err != nil {
 		regCancel()
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 		return fmt.Errorf("receiving registration: %w", err)
 	}
 
 	reg := msg.GetRegister()
 	if reg == nil {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 		return fmt.Errorf("first message was not DaemonRegister")
 	}
 
@@ -254,8 +255,8 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 		},
 	}
 	if err := stream.Send(regAck); err != nil {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 		return fmt.Errorf("sending registration ack: %w", err)
 	}
 
@@ -266,8 +267,8 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	// The machine's org rides the same trusted snapshot as its identity.
 	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, userID, daemonID, podIP, podPort, reg, stream, regCancel, org)
 	if err != nil {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
+		_ = stream.CloseSend()
+		_ = stream.Close()
 		return fmt.Errorf("registering outbound connection: %w", err)
 	}
 
@@ -276,7 +277,7 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	// stream, so it runs BEFORE the stream is closed (defers run in reverse).
 	// It is idempotent — if the sweeper already nuked this connection, the
 	// teardown half is a no-op.
-	defer func() { _ = stream.CloseResponse() }()
+	defer func() { _ = stream.Close() }()
 	defer outbound.Disconnect()
 
 	// Run the receive loop — blocks until the stream ends.

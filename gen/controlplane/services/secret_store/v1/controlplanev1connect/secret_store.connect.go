@@ -11,519 +11,604 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/secret_store/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SecretStoreServiceName is the fully-qualified name of the SecretStoreService service.
 	SecretStoreServiceName = "controlplane.v1.SecretStoreService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SecretStoreServiceGrantHostedHTTPUseProcedure is the fully-qualified name of the
-	// SecretStoreService's GrantHostedHTTPUse RPC.
+	// SecretStoreServiceGrantHostedHTTPUseProcedure is the procedure name of the SecretStoreService's
+	// GrantHostedHTTPUse RPC.
 	SecretStoreServiceGrantHostedHTTPUseProcedure = "/controlplane.v1.SecretStoreService/GrantHostedHTTPUse"
-	// SecretStoreServiceRevokeHostedHTTPUseProcedure is the fully-qualified name of the
-	// SecretStoreService's RevokeHostedHTTPUse RPC.
+	// SecretStoreServiceRevokeHostedHTTPUseProcedure is the procedure name of the SecretStoreService's
+	// RevokeHostedHTTPUse RPC.
 	SecretStoreServiceRevokeHostedHTTPUseProcedure = "/controlplane.v1.SecretStoreService/RevokeHostedHTTPUse"
-	// SecretStoreServiceAllowSecretUseProcedure is the fully-qualified name of the SecretStoreService's
+	// SecretStoreServiceAllowSecretUseProcedure is the procedure name of the SecretStoreService's
 	// AllowSecretUse RPC.
 	SecretStoreServiceAllowSecretUseProcedure = "/controlplane.v1.SecretStoreService/AllowSecretUse"
-	// SecretStoreServiceDenySecretUseProcedure is the fully-qualified name of the SecretStoreService's
+	// SecretStoreServiceDenySecretUseProcedure is the procedure name of the SecretStoreService's
 	// DenySecretUse RPC.
 	SecretStoreServiceDenySecretUseProcedure = "/controlplane.v1.SecretStoreService/DenySecretUse"
-	// SecretStoreServiceListSecretAccessProcedure is the fully-qualified name of the
-	// SecretStoreService's ListSecretAccess RPC.
+	// SecretStoreServiceListSecretAccessProcedure is the procedure name of the SecretStoreService's
+	// ListSecretAccess RPC.
 	SecretStoreServiceListSecretAccessProcedure = "/controlplane.v1.SecretStoreService/ListSecretAccess"
-	// SecretStoreServiceListSecretsProcedure is the fully-qualified name of the SecretStoreService's
+	// SecretStoreServiceListSecretsProcedure is the procedure name of the SecretStoreService's
 	// ListSecrets RPC.
 	SecretStoreServiceListSecretsProcedure = "/controlplane.v1.SecretStoreService/ListSecrets"
-	// SecretStoreServiceGetSecretVersionsProcedure is the fully-qualified name of the
-	// SecretStoreService's GetSecretVersions RPC.
+	// SecretStoreServiceGetSecretVersionsProcedure is the procedure name of the SecretStoreService's
+	// GetSecretVersions RPC.
 	SecretStoreServiceGetSecretVersionsProcedure = "/controlplane.v1.SecretStoreService/GetSecretVersions"
-	// SecretStoreServiceSetSecretProcedure is the fully-qualified name of the SecretStoreService's
-	// SetSecret RPC.
+	// SecretStoreServiceSetSecretProcedure is the procedure name of the SecretStoreService's SetSecret
+	// RPC.
 	SecretStoreServiceSetSecretProcedure = "/controlplane.v1.SecretStoreService/SetSecret"
-	// SecretStoreServiceDeleteSecretProcedure is the fully-qualified name of the SecretStoreService's
+	// SecretStoreServiceDeleteSecretProcedure is the procedure name of the SecretStoreService's
 	// DeleteSecret RPC.
 	SecretStoreServiceDeleteSecretProcedure = "/controlplane.v1.SecretStoreService/DeleteSecret"
-	// SecretStoreServiceUndeleteSecretProcedure is the fully-qualified name of the SecretStoreService's
+	// SecretStoreServiceUndeleteSecretProcedure is the procedure name of the SecretStoreService's
 	// UndeleteSecret RPC.
 	SecretStoreServiceUndeleteSecretProcedure = "/controlplane.v1.SecretStoreService/UndeleteSecret"
-	// SecretStoreServiceDestroySecretProcedure is the fully-qualified name of the SecretStoreService's
+	// SecretStoreServiceDestroySecretProcedure is the procedure name of the SecretStoreService's
 	// DestroySecret RPC.
 	SecretStoreServiceDestroySecretProcedure = "/controlplane.v1.SecretStoreService/DestroySecret"
-	// SecretStoreServiceBeginStepUpProcedure is the fully-qualified name of the SecretStoreService's
+	// SecretStoreServiceBeginStepUpProcedure is the procedure name of the SecretStoreService's
 	// BeginStepUp RPC.
 	SecretStoreServiceBeginStepUpProcedure = "/controlplane.v1.SecretStoreService/BeginStepUp"
-	// SecretStoreServiceCompleteStepUpProcedure is the fully-qualified name of the SecretStoreService's
+	// SecretStoreServiceCompleteStepUpProcedure is the procedure name of the SecretStoreService's
 	// CompleteStepUp RPC.
 	SecretStoreServiceCompleteStepUpProcedure = "/controlplane.v1.SecretStoreService/CompleteStepUp"
+)
+
+var (
+	secretStoreServiceGrantHostedHTTPUseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("GrantHostedHTTPUse"),
+			Procedure:  SecretStoreServiceGrantHostedHTTPUseProcedure,
+		}
+	})
+	secretStoreServiceRevokeHostedHTTPUseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("RevokeHostedHTTPUse"),
+			Procedure:  SecretStoreServiceRevokeHostedHTTPUseProcedure,
+		}
+	})
+	secretStoreServiceAllowSecretUseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("AllowSecretUse"),
+			Procedure:  SecretStoreServiceAllowSecretUseProcedure,
+		}
+	})
+	secretStoreServiceDenySecretUseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("DenySecretUse"),
+			Procedure:  SecretStoreServiceDenySecretUseProcedure,
+		}
+	})
+	secretStoreServiceListSecretAccessSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("ListSecretAccess"),
+			Procedure:  SecretStoreServiceListSecretAccessProcedure,
+		}
+	})
+	secretStoreServiceListSecretsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("ListSecrets"),
+			Procedure:  SecretStoreServiceListSecretsProcedure,
+		}
+	})
+	secretStoreServiceGetSecretVersionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("GetSecretVersions"),
+			Procedure:  SecretStoreServiceGetSecretVersionsProcedure,
+		}
+	})
+	secretStoreServiceSetSecretSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("SetSecret"),
+			Procedure:  SecretStoreServiceSetSecretProcedure,
+		}
+	})
+	secretStoreServiceDeleteSecretSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("DeleteSecret"),
+			Procedure:  SecretStoreServiceDeleteSecretProcedure,
+		}
+	})
+	secretStoreServiceUndeleteSecretSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("UndeleteSecret"),
+			Procedure:  SecretStoreServiceUndeleteSecretProcedure,
+		}
+	})
+	secretStoreServiceDestroySecretSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("DestroySecret"),
+			Procedure:  SecretStoreServiceDestroySecretProcedure,
+		}
+	})
+	secretStoreServiceBeginStepUpSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("BeginStepUp"),
+			Procedure:  SecretStoreServiceBeginStepUpProcedure,
+		}
+	})
+	secretStoreServiceCompleteStepUpSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods().ByName("CompleteStepUp"),
+			Procedure:  SecretStoreServiceCompleteStepUpProcedure,
+		}
+	})
 )
 
 // SecretStoreServiceClient is a client for the controlplane.v1.SecretStoreService service.
 type SecretStoreServiceClient interface {
 	// GrantHostedHTTPUse authorizes fixed workflow nodes to use one secret at one destination.
 	// Human environment owner/admin only; protected environments require step-up.
-	GrantHostedHTTPUse(context.Context, *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error)
+	GrantHostedHTTPUse(context.Context, *v1.GrantHostedHTTPUseRequest) (*v1.GrantHostedHTTPUseResponse, error)
 	// RevokeHostedHTTPUse stops future uses. Does not return a credential.
-	RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error)
+	RevokeHostedHTTPUse(context.Context, *v1.RevokeHostedHTTPUseRequest) (*v1.RevokeHostedHTTPUseResponse, error)
 	// AllowSecretUse puts a principal on a secret's access list. Idempotent.
 	// Human org owner/admin only (the authorization GrantHostedHTTPUse applies);
 	// protected environments require step-up.
-	AllowSecretUse(context.Context, *connect.Request[v1.AllowSecretUseRequest]) (*connect.Response[v1.AllowSecretUseResponse], error)
+	AllowSecretUse(context.Context, *v1.AllowSecretUseRequest) (*v1.AllowSecretUseResponse, error)
 	// DenySecretUse removes a principal from a secret's access list. Idempotent.
-	DenySecretUse(context.Context, *connect.Request[v1.DenySecretUseRequest]) (*connect.Response[v1.DenySecretUseResponse], error)
+	DenySecretUse(context.Context, *v1.DenySecretUseRequest) (*v1.DenySecretUseResponse, error)
 	// ListSecretAccess returns the active access entries of one secret, or of
 	// every secret in the environment when secret_name is empty. Same
 	// authorization as AllowSecretUse, without the step-up gate (read-only).
-	ListSecretAccess(context.Context, *connect.Request[v1.ListSecretAccessRequest]) (*connect.Response[v1.ListSecretAccessResponse], error)
+	ListSecretAccess(context.Context, *v1.ListSecretAccessRequest) (*v1.ListSecretAccessResponse, error)
 	// ListSecrets returns METADATA ONLY for every secret in one deploy
 	// environment: name, presence, current version, timestamps, and the
 	// deleted/destroyed state of the current version. Never a value.
-	ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error)
+	ListSecrets(context.Context, *v1.ListSecretsRequest) (*v1.ListSecretsResponse, error)
 	// GetSecretVersions returns one secret's full version history —
 	// per-version created_time / deletion_time / destroyed. Never a value.
-	GetSecretVersions(context.Context, *connect.Request[v1.GetSecretVersionsRequest]) (*connect.Response[v1.GetSecretVersionsResponse], error)
+	GetSecretVersions(context.Context, *v1.GetSecretVersionsRequest) (*v1.GetSecretVersionsResponse, error)
 	// SetSecret writes a new version. WRITE-ONLY: the response carries the
 	// version number that was created, never the value that was written.
-	SetSecret(context.Context, *connect.Request[v1.SetSecretRequest]) (*connect.Response[v1.SetSecretResponse], error)
+	SetSecret(context.Context, *v1.SetSecretRequest) (*v1.SetSecretResponse, error)
 	// DeleteSecret soft-deletes versions. Reversible via UndeleteSecret —
 	// KV-v2 keeps soft delete, undelete and destroy on distinct paths with
 	// distinct capabilities, and so does this API.
-	DeleteSecret(context.Context, *connect.Request[v1.DeleteSecretRequest]) (*connect.Response[v1.DeleteSecretResponse], error)
+	DeleteSecret(context.Context, *v1.DeleteSecretRequest) (*v1.DeleteSecretResponse, error)
 	// UndeleteSecret restores soft-deleted versions. Cannot restore a
 	// destroyed version — that data is gone.
-	UndeleteSecret(context.Context, *connect.Request[v1.UndeleteSecretRequest]) (*connect.Response[v1.UndeleteSecretResponse], error)
+	UndeleteSecret(context.Context, *v1.UndeleteSecretRequest) (*v1.UndeleteSecretResponse, error)
 	// DestroySecret permanently destroys versions. IRREVERSIBLE, which is why
 	// it is a distinct RPC on a distinct Bao path rather than a flag on
 	// DeleteSecret.
-	DestroySecret(context.Context, *connect.Request[v1.DestroySecretRequest]) (*connect.Response[v1.DestroySecretResponse], error)
+	DestroySecret(context.Context, *v1.DestroySecretRequest) (*v1.DestroySecretResponse, error)
 	// BeginStepUp starts a step-up re-authentication for ONE environment: the
 	// server emails a one-time code to the caller's verified account address.
 	// Nothing changes until CompleteStepUp. Required before any secret MUTATION
 	// in a `protected` environment (ListSecretsResponse.protected); a caller who
 	// skips it is refused with reason `step_up_required`.
-	BeginStepUp(context.Context, *connect.Request[v1.BeginStepUpRequest]) (*connect.Response[v1.BeginStepUpResponse], error)
+	BeginStepUp(context.Context, *v1.BeginStepUpRequest) (*v1.BeginStepUpResponse, error)
 	// CompleteStepUp redeems the code. On success the caller may mutate this
 	// environment's secrets until `valid_until`; the grant belongs to the
 	// caller, to this environment, and to nothing else.
-	CompleteStepUp(context.Context, *connect.Request[v1.CompleteStepUpRequest]) (*connect.Response[v1.CompleteStepUpResponse], error)
+	CompleteStepUp(context.Context, *v1.CompleteStepUpRequest) (*v1.CompleteStepUpResponse, error)
 }
 
 // NewSecretStoreServiceClient constructs a client for the controlplane.v1.SecretStoreService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSecretStoreServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SecretStoreServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	secretStoreServiceMethods := v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods()
-	return &secretStoreServiceClient{
-		grantHostedHTTPUse: connect.NewClient[v1.GrantHostedHTTPUseRequest, v1.GrantHostedHTTPUseResponse](
-			httpClient,
-			baseURL+SecretStoreServiceGrantHostedHTTPUseProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("GrantHostedHTTPUse")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeHostedHTTPUse: connect.NewClient[v1.RevokeHostedHTTPUseRequest, v1.RevokeHostedHTTPUseResponse](
-			httpClient,
-			baseURL+SecretStoreServiceRevokeHostedHTTPUseProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("RevokeHostedHTTPUse")),
-			connect.WithClientOptions(opts...),
-		),
-		allowSecretUse: connect.NewClient[v1.AllowSecretUseRequest, v1.AllowSecretUseResponse](
-			httpClient,
-			baseURL+SecretStoreServiceAllowSecretUseProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("AllowSecretUse")),
-			connect.WithClientOptions(opts...),
-		),
-		denySecretUse: connect.NewClient[v1.DenySecretUseRequest, v1.DenySecretUseResponse](
-			httpClient,
-			baseURL+SecretStoreServiceDenySecretUseProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("DenySecretUse")),
-			connect.WithClientOptions(opts...),
-		),
-		listSecretAccess: connect.NewClient[v1.ListSecretAccessRequest, v1.ListSecretAccessResponse](
-			httpClient,
-			baseURL+SecretStoreServiceListSecretAccessProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("ListSecretAccess")),
-			connect.WithClientOptions(opts...),
-		),
-		listSecrets: connect.NewClient[v1.ListSecretsRequest, v1.ListSecretsResponse](
-			httpClient,
-			baseURL+SecretStoreServiceListSecretsProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("ListSecrets")),
-			connect.WithClientOptions(opts...),
-		),
-		getSecretVersions: connect.NewClient[v1.GetSecretVersionsRequest, v1.GetSecretVersionsResponse](
-			httpClient,
-			baseURL+SecretStoreServiceGetSecretVersionsProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("GetSecretVersions")),
-			connect.WithClientOptions(opts...),
-		),
-		setSecret: connect.NewClient[v1.SetSecretRequest, v1.SetSecretResponse](
-			httpClient,
-			baseURL+SecretStoreServiceSetSecretProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("SetSecret")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteSecret: connect.NewClient[v1.DeleteSecretRequest, v1.DeleteSecretResponse](
-			httpClient,
-			baseURL+SecretStoreServiceDeleteSecretProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("DeleteSecret")),
-			connect.WithClientOptions(opts...),
-		),
-		undeleteSecret: connect.NewClient[v1.UndeleteSecretRequest, v1.UndeleteSecretResponse](
-			httpClient,
-			baseURL+SecretStoreServiceUndeleteSecretProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("UndeleteSecret")),
-			connect.WithClientOptions(opts...),
-		),
-		destroySecret: connect.NewClient[v1.DestroySecretRequest, v1.DestroySecretResponse](
-			httpClient,
-			baseURL+SecretStoreServiceDestroySecretProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("DestroySecret")),
-			connect.WithClientOptions(opts...),
-		),
-		beginStepUp: connect.NewClient[v1.BeginStepUpRequest, v1.BeginStepUpResponse](
-			httpClient,
-			baseURL+SecretStoreServiceBeginStepUpProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("BeginStepUp")),
-			connect.WithClientOptions(opts...),
-		),
-		completeStepUp: connect.NewClient[v1.CompleteStepUpRequest, v1.CompleteStepUpResponse](
-			httpClient,
-			baseURL+SecretStoreServiceCompleteStepUpProcedure,
-			connect.WithSchema(secretStoreServiceMethods.ByName("CompleteStepUp")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// secretStoreServiceClient implements SecretStoreServiceClient.
-type secretStoreServiceClient struct {
-	grantHostedHTTPUse  *connect.Client[v1.GrantHostedHTTPUseRequest, v1.GrantHostedHTTPUseResponse]
-	revokeHostedHTTPUse *connect.Client[v1.RevokeHostedHTTPUseRequest, v1.RevokeHostedHTTPUseResponse]
-	allowSecretUse      *connect.Client[v1.AllowSecretUseRequest, v1.AllowSecretUseResponse]
-	denySecretUse       *connect.Client[v1.DenySecretUseRequest, v1.DenySecretUseResponse]
-	listSecretAccess    *connect.Client[v1.ListSecretAccessRequest, v1.ListSecretAccessResponse]
-	listSecrets         *connect.Client[v1.ListSecretsRequest, v1.ListSecretsResponse]
-	getSecretVersions   *connect.Client[v1.GetSecretVersionsRequest, v1.GetSecretVersionsResponse]
-	setSecret           *connect.Client[v1.SetSecretRequest, v1.SetSecretResponse]
-	deleteSecret        *connect.Client[v1.DeleteSecretRequest, v1.DeleteSecretResponse]
-	undeleteSecret      *connect.Client[v1.UndeleteSecretRequest, v1.UndeleteSecretResponse]
-	destroySecret       *connect.Client[v1.DestroySecretRequest, v1.DestroySecretResponse]
-	beginStepUp         *connect.Client[v1.BeginStepUpRequest, v1.BeginStepUpResponse]
-	completeStepUp      *connect.Client[v1.CompleteStepUpRequest, v1.CompleteStepUpResponse]
-}
-
-// GrantHostedHTTPUse calls controlplane.v1.SecretStoreService.GrantHostedHTTPUse.
-func (c *secretStoreServiceClient) GrantHostedHTTPUse(ctx context.Context, req *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error) {
-	return c.grantHostedHTTPUse.CallUnary(ctx, req)
-}
-
-// RevokeHostedHTTPUse calls controlplane.v1.SecretStoreService.RevokeHostedHTTPUse.
-func (c *secretStoreServiceClient) RevokeHostedHTTPUse(ctx context.Context, req *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error) {
-	return c.revokeHostedHTTPUse.CallUnary(ctx, req)
-}
-
-// AllowSecretUse calls controlplane.v1.SecretStoreService.AllowSecretUse.
-func (c *secretStoreServiceClient) AllowSecretUse(ctx context.Context, req *connect.Request[v1.AllowSecretUseRequest]) (*connect.Response[v1.AllowSecretUseResponse], error) {
-	return c.allowSecretUse.CallUnary(ctx, req)
-}
-
-// DenySecretUse calls controlplane.v1.SecretStoreService.DenySecretUse.
-func (c *secretStoreServiceClient) DenySecretUse(ctx context.Context, req *connect.Request[v1.DenySecretUseRequest]) (*connect.Response[v1.DenySecretUseResponse], error) {
-	return c.denySecretUse.CallUnary(ctx, req)
-}
-
-// ListSecretAccess calls controlplane.v1.SecretStoreService.ListSecretAccess.
-func (c *secretStoreServiceClient) ListSecretAccess(ctx context.Context, req *connect.Request[v1.ListSecretAccessRequest]) (*connect.Response[v1.ListSecretAccessResponse], error) {
-	return c.listSecretAccess.CallUnary(ctx, req)
-}
-
-// ListSecrets calls controlplane.v1.SecretStoreService.ListSecrets.
-func (c *secretStoreServiceClient) ListSecrets(ctx context.Context, req *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error) {
-	return c.listSecrets.CallUnary(ctx, req)
-}
-
-// GetSecretVersions calls controlplane.v1.SecretStoreService.GetSecretVersions.
-func (c *secretStoreServiceClient) GetSecretVersions(ctx context.Context, req *connect.Request[v1.GetSecretVersionsRequest]) (*connect.Response[v1.GetSecretVersionsResponse], error) {
-	return c.getSecretVersions.CallUnary(ctx, req)
-}
-
-// SetSecret calls controlplane.v1.SecretStoreService.SetSecret.
-func (c *secretStoreServiceClient) SetSecret(ctx context.Context, req *connect.Request[v1.SetSecretRequest]) (*connect.Response[v1.SetSecretResponse], error) {
-	return c.setSecret.CallUnary(ctx, req)
-}
-
-// DeleteSecret calls controlplane.v1.SecretStoreService.DeleteSecret.
-func (c *secretStoreServiceClient) DeleteSecret(ctx context.Context, req *connect.Request[v1.DeleteSecretRequest]) (*connect.Response[v1.DeleteSecretResponse], error) {
-	return c.deleteSecret.CallUnary(ctx, req)
-}
-
-// UndeleteSecret calls controlplane.v1.SecretStoreService.UndeleteSecret.
-func (c *secretStoreServiceClient) UndeleteSecret(ctx context.Context, req *connect.Request[v1.UndeleteSecretRequest]) (*connect.Response[v1.UndeleteSecretResponse], error) {
-	return c.undeleteSecret.CallUnary(ctx, req)
-}
-
-// DestroySecret calls controlplane.v1.SecretStoreService.DestroySecret.
-func (c *secretStoreServiceClient) DestroySecret(ctx context.Context, req *connect.Request[v1.DestroySecretRequest]) (*connect.Response[v1.DestroySecretResponse], error) {
-	return c.destroySecret.CallUnary(ctx, req)
-}
-
-// BeginStepUp calls controlplane.v1.SecretStoreService.BeginStepUp.
-func (c *secretStoreServiceClient) BeginStepUp(ctx context.Context, req *connect.Request[v1.BeginStepUpRequest]) (*connect.Response[v1.BeginStepUpResponse], error) {
-	return c.beginStepUp.CallUnary(ctx, req)
-}
-
-// CompleteStepUp calls controlplane.v1.SecretStoreService.CompleteStepUp.
-func (c *secretStoreServiceClient) CompleteStepUp(ctx context.Context, req *connect.Request[v1.CompleteStepUpRequest]) (*connect.Response[v1.CompleteStepUpResponse], error) {
-	return c.completeStepUp.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewSecretStoreServiceClient(client *connect.Client) SecretStoreServiceClient {
+	return &secretStoreServiceClient{client: client}
 }
 
 // SecretStoreServiceHandler is an implementation of the controlplane.v1.SecretStoreService service.
 type SecretStoreServiceHandler interface {
 	// GrantHostedHTTPUse authorizes fixed workflow nodes to use one secret at one destination.
 	// Human environment owner/admin only; protected environments require step-up.
-	GrantHostedHTTPUse(context.Context, *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error)
+	GrantHostedHTTPUse(context.Context, *v1.GrantHostedHTTPUseRequest) (*v1.GrantHostedHTTPUseResponse, error)
 	// RevokeHostedHTTPUse stops future uses. Does not return a credential.
-	RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error)
+	RevokeHostedHTTPUse(context.Context, *v1.RevokeHostedHTTPUseRequest) (*v1.RevokeHostedHTTPUseResponse, error)
 	// AllowSecretUse puts a principal on a secret's access list. Idempotent.
 	// Human org owner/admin only (the authorization GrantHostedHTTPUse applies);
 	// protected environments require step-up.
-	AllowSecretUse(context.Context, *connect.Request[v1.AllowSecretUseRequest]) (*connect.Response[v1.AllowSecretUseResponse], error)
+	AllowSecretUse(context.Context, *v1.AllowSecretUseRequest) (*v1.AllowSecretUseResponse, error)
 	// DenySecretUse removes a principal from a secret's access list. Idempotent.
-	DenySecretUse(context.Context, *connect.Request[v1.DenySecretUseRequest]) (*connect.Response[v1.DenySecretUseResponse], error)
+	DenySecretUse(context.Context, *v1.DenySecretUseRequest) (*v1.DenySecretUseResponse, error)
 	// ListSecretAccess returns the active access entries of one secret, or of
 	// every secret in the environment when secret_name is empty. Same
 	// authorization as AllowSecretUse, without the step-up gate (read-only).
-	ListSecretAccess(context.Context, *connect.Request[v1.ListSecretAccessRequest]) (*connect.Response[v1.ListSecretAccessResponse], error)
+	ListSecretAccess(context.Context, *v1.ListSecretAccessRequest) (*v1.ListSecretAccessResponse, error)
 	// ListSecrets returns METADATA ONLY for every secret in one deploy
 	// environment: name, presence, current version, timestamps, and the
 	// deleted/destroyed state of the current version. Never a value.
-	ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error)
+	ListSecrets(context.Context, *v1.ListSecretsRequest) (*v1.ListSecretsResponse, error)
 	// GetSecretVersions returns one secret's full version history —
 	// per-version created_time / deletion_time / destroyed. Never a value.
-	GetSecretVersions(context.Context, *connect.Request[v1.GetSecretVersionsRequest]) (*connect.Response[v1.GetSecretVersionsResponse], error)
+	GetSecretVersions(context.Context, *v1.GetSecretVersionsRequest) (*v1.GetSecretVersionsResponse, error)
 	// SetSecret writes a new version. WRITE-ONLY: the response carries the
 	// version number that was created, never the value that was written.
-	SetSecret(context.Context, *connect.Request[v1.SetSecretRequest]) (*connect.Response[v1.SetSecretResponse], error)
+	SetSecret(context.Context, *v1.SetSecretRequest) (*v1.SetSecretResponse, error)
 	// DeleteSecret soft-deletes versions. Reversible via UndeleteSecret —
 	// KV-v2 keeps soft delete, undelete and destroy on distinct paths with
 	// distinct capabilities, and so does this API.
-	DeleteSecret(context.Context, *connect.Request[v1.DeleteSecretRequest]) (*connect.Response[v1.DeleteSecretResponse], error)
+	DeleteSecret(context.Context, *v1.DeleteSecretRequest) (*v1.DeleteSecretResponse, error)
 	// UndeleteSecret restores soft-deleted versions. Cannot restore a
 	// destroyed version — that data is gone.
-	UndeleteSecret(context.Context, *connect.Request[v1.UndeleteSecretRequest]) (*connect.Response[v1.UndeleteSecretResponse], error)
+	UndeleteSecret(context.Context, *v1.UndeleteSecretRequest) (*v1.UndeleteSecretResponse, error)
 	// DestroySecret permanently destroys versions. IRREVERSIBLE, which is why
 	// it is a distinct RPC on a distinct Bao path rather than a flag on
 	// DeleteSecret.
-	DestroySecret(context.Context, *connect.Request[v1.DestroySecretRequest]) (*connect.Response[v1.DestroySecretResponse], error)
+	DestroySecret(context.Context, *v1.DestroySecretRequest) (*v1.DestroySecretResponse, error)
 	// BeginStepUp starts a step-up re-authentication for ONE environment: the
 	// server emails a one-time code to the caller's verified account address.
 	// Nothing changes until CompleteStepUp. Required before any secret MUTATION
 	// in a `protected` environment (ListSecretsResponse.protected); a caller who
 	// skips it is refused with reason `step_up_required`.
-	BeginStepUp(context.Context, *connect.Request[v1.BeginStepUpRequest]) (*connect.Response[v1.BeginStepUpResponse], error)
+	BeginStepUp(context.Context, *v1.BeginStepUpRequest) (*v1.BeginStepUpResponse, error)
 	// CompleteStepUp redeems the code. On success the caller may mutate this
 	// environment's secrets until `valid_until`; the grant belongs to the
 	// caller, to this environment, and to nothing else.
-	CompleteStepUp(context.Context, *connect.Request[v1.CompleteStepUpRequest]) (*connect.Response[v1.CompleteStepUpResponse], error)
+	CompleteStepUp(context.Context, *v1.CompleteStepUpRequest) (*v1.CompleteStepUpResponse, error)
 }
 
-// NewSecretStoreServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	secretStoreServiceMethods := v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods()
-	secretStoreServiceGrantHostedHTTPUseHandler := connect.NewUnaryHandler(
-		SecretStoreServiceGrantHostedHTTPUseProcedure,
-		svc.GrantHostedHTTPUse,
-		connect.WithSchema(secretStoreServiceMethods.ByName("GrantHostedHTTPUse")),
-		connect.WithHandlerOptions(opts...),
+// RegisterSecretStoreServiceHandler registers svc as the controlplane.v1.SecretStoreService
+// implementation on server.
+func RegisterSecretStoreServiceHandler(server *connect.Server, svc SecretStoreServiceHandler) {
+	adapter := secretStoreServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: secretStoreServiceGrantHostedHTTPUseSpec(), Handler: adapter.grantHostedHTTPUse},
+		connect.Method{Spec: secretStoreServiceRevokeHostedHTTPUseSpec(), Handler: adapter.revokeHostedHTTPUse},
+		connect.Method{Spec: secretStoreServiceAllowSecretUseSpec(), Handler: adapter.allowSecretUse},
+		connect.Method{Spec: secretStoreServiceDenySecretUseSpec(), Handler: adapter.denySecretUse},
+		connect.Method{Spec: secretStoreServiceListSecretAccessSpec(), Handler: adapter.listSecretAccess},
+		connect.Method{Spec: secretStoreServiceListSecretsSpec(), Handler: adapter.listSecrets},
+		connect.Method{Spec: secretStoreServiceGetSecretVersionsSpec(), Handler: adapter.getSecretVersions},
+		connect.Method{Spec: secretStoreServiceSetSecretSpec(), Handler: adapter.setSecret},
+		connect.Method{Spec: secretStoreServiceDeleteSecretSpec(), Handler: adapter.deleteSecret},
+		connect.Method{Spec: secretStoreServiceUndeleteSecretSpec(), Handler: adapter.undeleteSecret},
+		connect.Method{Spec: secretStoreServiceDestroySecretSpec(), Handler: adapter.destroySecret},
+		connect.Method{Spec: secretStoreServiceBeginStepUpSpec(), Handler: adapter.beginStepUp},
+		connect.Method{Spec: secretStoreServiceCompleteStepUpSpec(), Handler: adapter.completeStepUp},
 	)
-	secretStoreServiceRevokeHostedHTTPUseHandler := connect.NewUnaryHandler(
-		SecretStoreServiceRevokeHostedHTTPUseProcedure,
-		svc.RevokeHostedHTTPUse,
-		connect.WithSchema(secretStoreServiceMethods.ByName("RevokeHostedHTTPUse")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceAllowSecretUseHandler := connect.NewUnaryHandler(
-		SecretStoreServiceAllowSecretUseProcedure,
-		svc.AllowSecretUse,
-		connect.WithSchema(secretStoreServiceMethods.ByName("AllowSecretUse")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceDenySecretUseHandler := connect.NewUnaryHandler(
-		SecretStoreServiceDenySecretUseProcedure,
-		svc.DenySecretUse,
-		connect.WithSchema(secretStoreServiceMethods.ByName("DenySecretUse")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceListSecretAccessHandler := connect.NewUnaryHandler(
-		SecretStoreServiceListSecretAccessProcedure,
-		svc.ListSecretAccess,
-		connect.WithSchema(secretStoreServiceMethods.ByName("ListSecretAccess")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceListSecretsHandler := connect.NewUnaryHandler(
-		SecretStoreServiceListSecretsProcedure,
-		svc.ListSecrets,
-		connect.WithSchema(secretStoreServiceMethods.ByName("ListSecrets")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceGetSecretVersionsHandler := connect.NewUnaryHandler(
-		SecretStoreServiceGetSecretVersionsProcedure,
-		svc.GetSecretVersions,
-		connect.WithSchema(secretStoreServiceMethods.ByName("GetSecretVersions")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceSetSecretHandler := connect.NewUnaryHandler(
-		SecretStoreServiceSetSecretProcedure,
-		svc.SetSecret,
-		connect.WithSchema(secretStoreServiceMethods.ByName("SetSecret")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceDeleteSecretHandler := connect.NewUnaryHandler(
-		SecretStoreServiceDeleteSecretProcedure,
-		svc.DeleteSecret,
-		connect.WithSchema(secretStoreServiceMethods.ByName("DeleteSecret")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceUndeleteSecretHandler := connect.NewUnaryHandler(
-		SecretStoreServiceUndeleteSecretProcedure,
-		svc.UndeleteSecret,
-		connect.WithSchema(secretStoreServiceMethods.ByName("UndeleteSecret")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceDestroySecretHandler := connect.NewUnaryHandler(
-		SecretStoreServiceDestroySecretProcedure,
-		svc.DestroySecret,
-		connect.WithSchema(secretStoreServiceMethods.ByName("DestroySecret")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceBeginStepUpHandler := connect.NewUnaryHandler(
-		SecretStoreServiceBeginStepUpProcedure,
-		svc.BeginStepUp,
-		connect.WithSchema(secretStoreServiceMethods.ByName("BeginStepUp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	secretStoreServiceCompleteStepUpHandler := connect.NewUnaryHandler(
-		SecretStoreServiceCompleteStepUpProcedure,
-		svc.CompleteStepUp,
-		connect.WithSchema(secretStoreServiceMethods.ByName("CompleteStepUp")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.SecretStoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SecretStoreServiceGrantHostedHTTPUseProcedure:
-			secretStoreServiceGrantHostedHTTPUseHandler.ServeHTTP(w, r)
-		case SecretStoreServiceRevokeHostedHTTPUseProcedure:
-			secretStoreServiceRevokeHostedHTTPUseHandler.ServeHTTP(w, r)
-		case SecretStoreServiceAllowSecretUseProcedure:
-			secretStoreServiceAllowSecretUseHandler.ServeHTTP(w, r)
-		case SecretStoreServiceDenySecretUseProcedure:
-			secretStoreServiceDenySecretUseHandler.ServeHTTP(w, r)
-		case SecretStoreServiceListSecretAccessProcedure:
-			secretStoreServiceListSecretAccessHandler.ServeHTTP(w, r)
-		case SecretStoreServiceListSecretsProcedure:
-			secretStoreServiceListSecretsHandler.ServeHTTP(w, r)
-		case SecretStoreServiceGetSecretVersionsProcedure:
-			secretStoreServiceGetSecretVersionsHandler.ServeHTTP(w, r)
-		case SecretStoreServiceSetSecretProcedure:
-			secretStoreServiceSetSecretHandler.ServeHTTP(w, r)
-		case SecretStoreServiceDeleteSecretProcedure:
-			secretStoreServiceDeleteSecretHandler.ServeHTTP(w, r)
-		case SecretStoreServiceUndeleteSecretProcedure:
-			secretStoreServiceUndeleteSecretHandler.ServeHTTP(w, r)
-		case SecretStoreServiceDestroySecretProcedure:
-			secretStoreServiceDestroySecretHandler.ServeHTTP(w, r)
-		case SecretStoreServiceBeginStepUpProcedure:
-			secretStoreServiceBeginStepUpHandler.ServeHTTP(w, r)
-		case SecretStoreServiceCompleteStepUpProcedure:
-			secretStoreServiceCompleteStepUpHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSecretStoreServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSecretStoreServiceHandler struct{}
 
-func (UnimplementedSecretStoreServiceHandler) GrantHostedHTTPUse(context.Context, *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.GrantHostedHTTPUse is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) GrantHostedHTTPUse(context.Context, *v1.GrantHostedHTTPUseRequest) (*v1.GrantHostedHTTPUseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.GrantHostedHTTPUse is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.RevokeHostedHTTPUse is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) RevokeHostedHTTPUse(context.Context, *v1.RevokeHostedHTTPUseRequest) (*v1.RevokeHostedHTTPUseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.RevokeHostedHTTPUse is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) AllowSecretUse(context.Context, *connect.Request[v1.AllowSecretUseRequest]) (*connect.Response[v1.AllowSecretUseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.AllowSecretUse is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) AllowSecretUse(context.Context, *v1.AllowSecretUseRequest) (*v1.AllowSecretUseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.AllowSecretUse is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) DenySecretUse(context.Context, *connect.Request[v1.DenySecretUseRequest]) (*connect.Response[v1.DenySecretUseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.DenySecretUse is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) DenySecretUse(context.Context, *v1.DenySecretUseRequest) (*v1.DenySecretUseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.DenySecretUse is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) ListSecretAccess(context.Context, *connect.Request[v1.ListSecretAccessRequest]) (*connect.Response[v1.ListSecretAccessResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.ListSecretAccess is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) ListSecretAccess(context.Context, *v1.ListSecretAccessRequest) (*v1.ListSecretAccessResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.ListSecretAccess is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.ListSecrets is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) ListSecrets(context.Context, *v1.ListSecretsRequest) (*v1.ListSecretsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.ListSecrets is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) GetSecretVersions(context.Context, *connect.Request[v1.GetSecretVersionsRequest]) (*connect.Response[v1.GetSecretVersionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.GetSecretVersions is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) GetSecretVersions(context.Context, *v1.GetSecretVersionsRequest) (*v1.GetSecretVersionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.GetSecretVersions is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) SetSecret(context.Context, *connect.Request[v1.SetSecretRequest]) (*connect.Response[v1.SetSecretResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.SetSecret is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) SetSecret(context.Context, *v1.SetSecretRequest) (*v1.SetSecretResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.SetSecret is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) DeleteSecret(context.Context, *connect.Request[v1.DeleteSecretRequest]) (*connect.Response[v1.DeleteSecretResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.DeleteSecret is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) DeleteSecret(context.Context, *v1.DeleteSecretRequest) (*v1.DeleteSecretResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.DeleteSecret is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) UndeleteSecret(context.Context, *connect.Request[v1.UndeleteSecretRequest]) (*connect.Response[v1.UndeleteSecretResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.UndeleteSecret is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) UndeleteSecret(context.Context, *v1.UndeleteSecretRequest) (*v1.UndeleteSecretResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.UndeleteSecret is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) DestroySecret(context.Context, *connect.Request[v1.DestroySecretRequest]) (*connect.Response[v1.DestroySecretResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.DestroySecret is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) DestroySecret(context.Context, *v1.DestroySecretRequest) (*v1.DestroySecretResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.DestroySecret is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) BeginStepUp(context.Context, *connect.Request[v1.BeginStepUpRequest]) (*connect.Response[v1.BeginStepUpResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.BeginStepUp is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) BeginStepUp(context.Context, *v1.BeginStepUpRequest) (*v1.BeginStepUpResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.BeginStepUp is not implemented")
 }
 
-func (UnimplementedSecretStoreServiceHandler) CompleteStepUp(context.Context, *connect.Request[v1.CompleteStepUpRequest]) (*connect.Response[v1.CompleteStepUpResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.CompleteStepUp is not implemented"))
+func (UnimplementedSecretStoreServiceHandler) CompleteStepUp(context.Context, *v1.CompleteStepUpRequest) (*v1.CompleteStepUpResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.SecretStoreService.CompleteStepUp is not implemented")
+}
+
+type secretStoreServiceClient struct {
+	client *connect.Client
+}
+
+func (c *secretStoreServiceClient) GrantHostedHTTPUse(ctx context.Context, req *v1.GrantHostedHTTPUseRequest) (*v1.GrantHostedHTTPUseResponse, error) {
+	var res v1.GrantHostedHTTPUseResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceGrantHostedHTTPUseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) RevokeHostedHTTPUse(ctx context.Context, req *v1.RevokeHostedHTTPUseRequest) (*v1.RevokeHostedHTTPUseResponse, error) {
+	var res v1.RevokeHostedHTTPUseResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceRevokeHostedHTTPUseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) AllowSecretUse(ctx context.Context, req *v1.AllowSecretUseRequest) (*v1.AllowSecretUseResponse, error) {
+	var res v1.AllowSecretUseResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceAllowSecretUseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) DenySecretUse(ctx context.Context, req *v1.DenySecretUseRequest) (*v1.DenySecretUseResponse, error) {
+	var res v1.DenySecretUseResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceDenySecretUseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) ListSecretAccess(ctx context.Context, req *v1.ListSecretAccessRequest) (*v1.ListSecretAccessResponse, error) {
+	var res v1.ListSecretAccessResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceListSecretAccessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) ListSecrets(ctx context.Context, req *v1.ListSecretsRequest) (*v1.ListSecretsResponse, error) {
+	var res v1.ListSecretsResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceListSecretsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) GetSecretVersions(ctx context.Context, req *v1.GetSecretVersionsRequest) (*v1.GetSecretVersionsResponse, error) {
+	var res v1.GetSecretVersionsResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceGetSecretVersionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) SetSecret(ctx context.Context, req *v1.SetSecretRequest) (*v1.SetSecretResponse, error) {
+	var res v1.SetSecretResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceSetSecretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) DeleteSecret(ctx context.Context, req *v1.DeleteSecretRequest) (*v1.DeleteSecretResponse, error) {
+	var res v1.DeleteSecretResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceDeleteSecretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) UndeleteSecret(ctx context.Context, req *v1.UndeleteSecretRequest) (*v1.UndeleteSecretResponse, error) {
+	var res v1.UndeleteSecretResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceUndeleteSecretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) DestroySecret(ctx context.Context, req *v1.DestroySecretRequest) (*v1.DestroySecretResponse, error) {
+	var res v1.DestroySecretResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceDestroySecretSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) BeginStepUp(ctx context.Context, req *v1.BeginStepUpRequest) (*v1.BeginStepUpResponse, error) {
+	var res v1.BeginStepUpResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceBeginStepUpSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *secretStoreServiceClient) CompleteStepUp(ctx context.Context, req *v1.CompleteStepUpRequest) (*v1.CompleteStepUpResponse, error) {
+	var res v1.CompleteStepUpResponse
+	if err := c.client.CallUnary(ctx, secretStoreServiceCompleteStepUpSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type secretStoreServiceHandler struct{ svc SecretStoreServiceHandler }
+
+func (h secretStoreServiceHandler) grantHostedHTTPUse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GrantHostedHTTPUseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GrantHostedHTTPUse(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) revokeHostedHTTPUse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeHostedHTTPUseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeHostedHTTPUse(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) allowSecretUse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AllowSecretUseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AllowSecretUse(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) denySecretUse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DenySecretUseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DenySecretUse(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) listSecretAccess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSecretAccessRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSecretAccess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) listSecrets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSecretsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSecrets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) getSecretVersions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSecretVersionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSecretVersions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) setSecret(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetSecretRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetSecret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) deleteSecret(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteSecretRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteSecret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) undeleteSecret(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UndeleteSecretRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UndeleteSecret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) destroySecret(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DestroySecretRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DestroySecret(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) beginStepUp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.BeginStepUpRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.BeginStepUp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h secretStoreServiceHandler) completeStepUp(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteStepUpRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteStepUp(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

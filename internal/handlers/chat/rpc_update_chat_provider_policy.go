@@ -7,7 +7,6 @@ import (
 	"errors"
 	"strings"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -317,17 +316,17 @@ func validatePolicy(p chatselection.ProviderPolicy) error {
 // sub-agents inherit it the next time they are spawned.
 func (s *Service) UpdateChatProviderPolicy(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateChatProviderPolicyRequest],
-) (*connect.Response[reliantv1.UpdateChatProviderPolicyResponse], error) {
+	req *reliantv1.UpdateChatProviderPolicyRequest,
+) (*reliantv1.UpdateChatProviderPolicyResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	chat, err := s.getChatForUser(ctx, req.ChatId, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	policy := policyFromProto(req.Msg.ProviderPolicy)
+	policy := policyFromProto(req.ProviderPolicy)
 	if err := validatePolicy(policy); err != nil {
 		return nil, err
 	}
@@ -336,7 +335,7 @@ func (s *Service) UpdateChatProviderPolicy(
 		workflowName = *chat.WorkflowName
 	}
 	before, _ := s.selections().Get(ctx, chat.ID)
-	sel, err := s.selections().SetPolicy(ctx, chat.ID, userID, workflowName, policy, req.Msg.GetExpectedVersion())
+	sel, err := s.selections().SetPolicy(ctx, chat.ID, userID, workflowName, policy, req.GetExpectedVersion())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update provider policy"))
 	}
@@ -345,7 +344,7 @@ func (s *Service) UpdateChatProviderPolicy(
 		s.signalProviderPolicy(ctx, userID, chat)
 		s.wakeUsageLimitWait(ctx, chat, sel.Policy.OnLimit == chatselection.OnLimitFallback)
 	}
-	return connect.NewResponse(&reliantv1.UpdateChatProviderPolicyResponse{Selection: selectionToProto(sel)}), nil
+	return &reliantv1.UpdateChatProviderPolicyResponse{Selection: selectionToProto(sel)}, nil
 }
 
 // underSelection lays the chat's stored selection (for workflowName) UNDER

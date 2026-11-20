@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -37,7 +37,7 @@ func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
 
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+	_, err := service.StartChat(ctx, &reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "builtin://agent",
 		Messages: []*reliantv1.InputMessage{{
@@ -47,9 +47,9 @@ func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
 		WorkflowParams: map[string]*structpb.Value{
 			"agent.model": mustStructValue(t, map[string]interface{}{"id": "gpt-4o"}),
 		},
-	}))
+	})
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	require.Contains(t, err.Error(), "agent.model")
 	require.Contains(t, err.Error(), "nested objects")
 }
@@ -89,7 +89,7 @@ func TestChatService_SendMessage_RejectsDottedWorkflowParamsForActiveWorkflowUpd
 
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.SendMessage(ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+	_, err := service.SendMessage(ctx, &reliantv1.SendMessageRequest{
 		ChatId: chatID,
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -98,9 +98,9 @@ func TestChatService_SendMessage_RejectsDottedWorkflowParamsForActiveWorkflowUpd
 		WorkflowParams: map[string]*structpb.Value{
 			"agent.model": mustStructValue(t, map[string]interface{}{"id": "gpt-4o"}),
 		},
-	}))
+	})
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	require.Contains(t, err.Error(), "agent.model")
 	require.Contains(t, err.Error(), "nested objects")
 }
@@ -140,14 +140,14 @@ func TestChatService_UpdateWorkflowParams_RejectsDottedKeysForActiveWorkflowUpda
 
 	service := &Service{deps: Deps{Repo: repo}}
 
-	_, err := service.UpdateWorkflowParams(ctx, connect.NewRequest(&reliantv1.UpdateWorkflowParamsRequest{
+	_, err := service.UpdateWorkflowParams(ctx, &reliantv1.UpdateWorkflowParamsRequest{
 		ChatId: chatID,
 		Params: map[string]*structpb.Value{
 			"agent.model": mustStructValue(t, map[string]interface{}{"id": "gpt-4o"}),
 		},
-	}))
+	})
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	require.Contains(t, err.Error(), "agent.model")
 	require.Contains(t, err.Error(), "nested objects")
 }

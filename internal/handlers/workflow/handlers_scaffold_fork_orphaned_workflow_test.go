@@ -8,8 +8,8 @@
 // the whole file was deleted before either wrote a test. Anything forge
 // scaffolds once has to survive the way forge's own output says to grow.
 //
-// TestForkOrphanedWorkflow_Generated is a thin shim over `tdd.RunRPCCases`
-// (== `tdd.TableRPC`, see pkg/tdd/rpc.go). Rows declare the request, the
+// TestForkOrphanedWorkflow_Generated is a thin shim over `tdd.RunRPCCasesV2`
+// (== `tdd.TableRPCV2`, see pkg/tdd/rpc_v2.go). Rows declare the request, the
 // expected outcome, and (optionally) a Setup/Check hook — the runner
 // iterates rows as t.Run subtests and asserts on either a Connect error
 // code or a happy-path response.
@@ -41,7 +41,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -53,7 +53,7 @@ import (
 )
 
 // TestForkOrphanedWorkflow_Generated runs the canonical scaffold rows for ForkOrphanedWorkflow.
-// Add more rows by appending tdd.RPCCase entries — never write a new
+// Add more rows by appending tdd.RPCCaseV2 entries — never write a new
 // Test<X> function for what is really a new row in this table.
 func TestForkOrphanedWorkflow_Generated(t *testing.T) {
 	t.Parallel()
@@ -67,10 +67,10 @@ func TestForkOrphanedWorkflow_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ForkOrphanedWorkflowRequest, pb.ForkOrphanedWorkflowResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ForkOrphanedWorkflowRequest, pb.ForkOrphanedWorkflowResponse]{
 		{
 			Name:    "an unknown workflow is not found",
-			Req:     connect.NewRequest(&pb.ForkOrphanedWorkflowRequest{WorkflowId: "missing", ProjectId: "p"}),
+			Req:     &pb.ForkOrphanedWorkflowRequest{WorkflowId: "missing", ProjectId: "p"},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

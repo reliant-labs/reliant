@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
@@ -85,7 +86,7 @@ func (f *inboxFixture) storage(t *testing.T) []*reliantv1.InboxItem {
 
 func (f *inboxFixture) dismiss(t *testing.T, ids ...string) {
 	t.Helper()
-	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: ids}))
+	_, err := f.inbox.DismissInboxItem(f.ctx, &reliantv1.DismissInboxItemRequest{ItemIds: ids})
 	require.NoError(t, err)
 }
 
@@ -129,9 +130,9 @@ func TestListInbox_StorageItemShowsDiskAndHeldWorktrees(t *testing.T) {
 
 func TestListInbox_StorageItemAppearsInEveryProjectScope(t *testing.T) {
 	f, _, _ := storageFixture(t)
-	resp, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{ProjectId: ptr.Of("some-other-project")}))
+	resp, err := f.inbox.ListInbox(f.ctx, &reliantv1.ListInboxRequest{ProjectId: ptr.Of("some-other-project")})
 	require.NoError(t, err)
-	assert.Len(t, inboxByKind(resp.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE), 1)
+	assert.Len(t, inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE), 1)
 }
 
 func TestListInbox_NoStorageItemWhenDiskIsFineAndNothingHeld(t *testing.T) {
@@ -229,7 +230,7 @@ func TestStorageItem_ANewPressureEpisodeIsANewItem(t *testing.T) {
 	require.Len(t, again, 1, "the disk filling up again is a new problem")
 	assert.NotEqual(t, first[0].ItemId, again[0].ItemId)
 
-	_, err := f.inbox.RestoreInboxItem(f.ctx, connect.NewRequest(&reliantv1.RestoreInboxItemRequest{ItemIds: []string{first[0].ItemId}}))
+	_, err := f.inbox.RestoreInboxItem(f.ctx, &reliantv1.RestoreInboxItemRequest{ItemIds: []string{first[0].ItemId}})
 	require.NoError(t, err)
 	putCacheVolume(t, f, daemonID, 12<<30, false, 0)
 	kept := f.storage(t)
@@ -314,13 +315,13 @@ func TestCleanupStorage_RejectsAnotherUsersMachineAndAskedNothing(t *testing.T) 
 	f.withSweeper(t, worktreesweep.New(f.repo, sender))
 
 	otherCtx, _, _ := f.otherUser(t)
-	_, err := f.inbox.CleanupStorage(otherCtx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
+	_, err := f.inbox.CleanupStorage(otherCtx, &reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	assert.False(t, sender.called, "another user's machine must never be contacted")
 
-	_, err = f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = f.inbox.CleanupStorage(f.ctx, &reliantv1.CleanupStorageRequest{DaemonId: daemonID})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 func TestCleanupStorage_OfflineMachineIsAPreconditionNotAnError(t *testing.T) {
@@ -328,14 +329,14 @@ func TestCleanupStorage_OfflineMachineIsAPreconditionNotAnError(t *testing.T) {
 	_, err := f.repo.DB.DB(f.ctx).ExecContext(f.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
 	require.NoError(t, err)
 	f.withSweeper(t, worktreesweep.New(f.repo, &neverSender{}))
-	_, err = f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	_, err = f.inbox.CleanupStorage(f.ctx, &reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}})
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 }
 
 func TestCleanupStorage_UnavailableWithoutASweeper(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
-	_, err := f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
-	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	_, err := f.inbox.CleanupStorage(f.ctx, &reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}})
+	assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 }
 
 // heldSender does not answer until the test releases it, so an RPC that waits
@@ -361,23 +362,26 @@ func TestCleanupStorage_ReturnsAtOnceAndSurvivesTheRequestContext(t *testing.T) 
 	sender := &heldSender{release: make(chan struct{}), done: make(chan struct{})}
 	f.withSweeper(t, worktreesweep.New(f.repo, sender))
 
-	ic := serverkit.Deadline{Unary: interceptors.UnaryTimeout, Procedures: interceptors.ProcedureTimeouts()}.WrapUnary
+	ic := serverkit.Deadline{Unary: interceptors.UnaryTimeout, Procedures: interceptors.ProcedureTimeouts()}.InterceptorV2()
 	reqCtx, cancelReq := context.WithCancel(f.ctx)
-	call := ic(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		return f.inbox.CleanupStorage(ctx, req.(*connect.Request[reliantv1.CleanupStorageRequest]))
-	})
-	req := connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}})
+	req := &reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}
+	spec := connect.Spec{Procedure: reliantv1connect.InboxServiceCleanupStorageProcedure, StreamType: connect.StreamTypeUnary}
 
 	// The machine is held for the whole call: an RPC that waits for it never
 	// returns, and fails here rather than by a wall-clock bound a loaded host
 	// can miss.
 	type result struct {
-		resp connect.AnyResponse
+		resp *reliantv1.CleanupStorageResponse
 		err  error
 	}
 	returned := make(chan result, 1)
 	go func() {
-		resp, err := call(reqCtx, req)
+		var resp *reliantv1.CleanupStorageResponse
+		err := ic(func(ctx context.Context, _ connect.Spec, _ connect.ServerStream) error {
+			var err error
+			resp, err = f.inbox.CleanupStorage(ctx, req)
+			return err
+		})(reqCtx, spec, nil)
 		returned <- result{resp, err}
 	}()
 	var res result
@@ -388,7 +392,7 @@ func TestCleanupStorage_ReturnsAtOnceAndSurvivesTheRequestContext(t *testing.T) 
 		t.Fatal("the RPC waited for the machine")
 	}
 	require.NoError(t, res.err)
-	out := res.resp.(*connect.Response[reliantv1.CleanupStorageResponse]).Msg
+	out := res.resp
 	require.Len(t, out.Results, 1)
 	assert.Equal(t, reliantv1.CleanupStorageOutcome_CLEANUP_STORAGE_OUTCOME_ACCEPTED, out.Results[0].Outcome)
 
@@ -412,10 +416,10 @@ func TestCleanupStorage_NotRemovableWorktreesAreSkippedNotAccepted(t *testing.T)
 	require.NoError(t, f.repo.UpdateWorktreeCleanupMetadata(f.ctx, wtID, &db.CleanupMetadata{HeldReason: "data"}))
 	sender := &neverSender{}
 	f.withSweeper(t, worktreesweep.New(f.repo, sender))
-	resp, err := f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
+	resp, err := f.inbox.CleanupStorage(f.ctx, &reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Results, 1)
-	assert.Equal(t, reliantv1.CleanupStorageOutcome_CLEANUP_STORAGE_OUTCOME_SKIPPED, resp.Msg.Results[0].Outcome)
+	require.Len(t, resp.Results, 1)
+	assert.Equal(t, reliantv1.CleanupStorageOutcome_CLEANUP_STORAGE_OUTCOME_SKIPPED, resp.Results[0].Outcome)
 	assert.False(t, sender.called)
 }
 
@@ -437,9 +441,9 @@ func TestListInbox_StorageViewIsCachedBetweenPolls(t *testing.T) {
 
 func (s *Service) mustList(t *testing.T, f *inboxFixture) []*reliantv1.InboxItem {
 	t.Helper()
-	resp, err := s.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	resp, err := s.ListInbox(f.ctx, &reliantv1.ListInboxRequest{})
 	require.NoError(t, err)
-	return resp.Msg.Items
+	return resp.Items
 }
 
 // A machine near its process limit gets an item of its own, naming the

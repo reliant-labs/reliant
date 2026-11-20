@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,10 +42,10 @@ func TestInboxStoreErrorCodes(t *testing.T) {
 				ListTriggersFunc: func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil },
 			}
 			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}), WithPlaceholderDeps())
-			_, err := svc.ListInbox(AuthedContext(t), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+			_, err := svc.ListInbox(AuthedContext(t), &reliantv1.ListInboxRequest{})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.code, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.NotContains(t, msg, "secret")
 			if tc.msg != "" {
 				assert.Equal(t, tc.msg, msg)
@@ -62,8 +62,8 @@ func TestInboxErrorsOnTheWire(t *testing.T) {
 		return nil, errors.New("dsn=postgres://u:secret@h")
 	}}
 	_, client := NewTestInboxServer(t, WithInboxDeps(Deps{Repo: repo}), WithPlaceholderDeps())
-	_, err := client.ListInbox(context.Background(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	_, err := client.ListInbox(context.Background(), &reliantv1.ListInboxRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
-	assert.Equal(t, "failed to list inbox", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
+	assert.Equal(t, "failed to list inbox", svcerr.ToConnectV2(err).Message())
 }

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
@@ -416,7 +416,7 @@ func TestResumeWithResultReportsADeclineWithoutClaimingWhy(t *testing.T) {
 	}
 
 	// An rpc error is an error on both, never Declined.
-	answer, rpcErr = nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("cannot be resumed"))
+	answer, rpcErr = nil, connect.NewError(connect.CodeFailedPrecondition, "cannot be resumed")
 	if res, err := c.Runs.ResumeWithResult(ctx, "r1"); !errors.Is(err, ErrFailedPrecondition) || res.Declined {
 		t.Fatalf("rpc error = %+v, %v", res, err)
 	}

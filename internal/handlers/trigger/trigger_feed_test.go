@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -57,9 +57,9 @@ func (e *triggerTestEnv) seedFiring(t *testing.T, triggerID string, at time.Time
 
 func (e *triggerTestEnv) listEvents(t *testing.T, req *reliantv1.ListTriggerEventsRequest) *reliantv1.ListTriggerEventsResponse {
 	t.Helper()
-	resp, err := e.svc.ListTriggerEvents(e.ctx, connect.NewRequest(req))
+	resp, err := e.svc.ListTriggerEvents(e.ctx, req)
 	require.NoError(t, err)
-	return resp.Msg
+	return resp
 }
 
 func TestListTriggerEventsPagesWithTiedOccurredAt(t *testing.T) {
@@ -97,8 +97,8 @@ func TestListTriggerEventsPagesWithTiedOccurredAt(t *testing.T) {
 	}
 
 	bad := "not-a-token"
-	_, err := env.svc.ListTriggerEvents(env.ctx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: trig.Id, PageToken: &bad}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err := env.svc.ListTriggerEvents(env.ctx, &reliantv1.ListTriggerEventsRequest{TriggerId: trig.Id, PageToken: &bad})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 func TestListTriggerEventsFiltersByOutcomeAndCarriesRun(t *testing.T) {
@@ -129,10 +129,10 @@ func TestListTriggerEventsFiltersByOutcomeAndCarriesRun(t *testing.T) {
 	require.Len(t, only.Events, 1)
 	assert.Equal(t, reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_SKIPPED, only.Events[0].Outcome)
 
-	_, err := env.svc.ListTriggerEvents(env.ctx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{
+	_, err := env.svc.ListTriggerEvents(env.ctx, &reliantv1.ListTriggerEventsRequest{
 		TriggerId: trig.Id, Outcomes: []reliantv1.TriggerEventOutcome{reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_UNSPECIFIED},
-	}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 func TestListTriggersCarriesNamesHealthAndLastRun(t *testing.T) {
@@ -154,10 +154,10 @@ func TestListTriggersCarriesNamesHealthAndLastRun(t *testing.T) {
 	env.seedFiring(t, failing.Id, base.Add(time.Hour), core.TriggerEventLaunched, &died)
 	env.seedFiring(t, healthy.Id, base, core.TriggerEventLaunched, &done)
 
-	resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	resp, err := env.svc.ListTriggers(env.ctx, &reliantv1.ListTriggersRequest{})
 	require.NoError(t, err)
 	byID := map[string]*reliantv1.Trigger{}
-	for _, tr := range resp.Msg.Triggers {
+	for _, tr := range resp.Triggers {
 		byID[tr.Id] = tr
 	}
 	require.Len(t, byID, 3)
@@ -183,10 +183,10 @@ func TestListTriggersCarriesNamesHealthAndLastRun(t *testing.T) {
 	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_UNKNOWN, n.Health.Status)
 	assert.Nil(t, n.LastEvent)
 
-	got, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: failing.Id}))
+	got, err := env.svc.GetTrigger(env.ctx, &reliantv1.GetTriggerRequest{Id: failing.Id})
 	require.NoError(t, err)
-	assert.Equal(t, "build-box", got.Msg.Trigger.DaemonName)
-	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, got.Msg.Trigger.Health.Status)
+	assert.Equal(t, "build-box", got.Trigger.DaemonName)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, got.Trigger.Health.Status)
 }
 
 func TestListTriggersUsesConstantQueries(t *testing.T) {
@@ -201,9 +201,9 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 	}
 	counting := &triggerQueryCounter{Repository: env.repo}
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: counting, Syncer: env.backend, Fires: env.backend}))
-	resp, err := svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	resp, err := svc.ListTriggers(env.ctx, &reliantv1.ListTriggersRequest{})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Triggers, 6)
+	require.Len(t, resp.Triggers, 6)
 	assert.Equal(t, 1, counting.recent, "one batched firings query, not one per trigger")
 }
 
@@ -231,12 +231,12 @@ func TestTriggerFeedHidesOtherUsersData(t *testing.T) {
 	env.seedFiring(t, trig.Id, time.Now().UTC(), core.TriggerEventSkipped, nil)
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
-	_, err := env.svc.ListTriggerEvents(otherCtx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: trig.Id}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	_, err := env.svc.ListTriggerEvents(otherCtx, &reliantv1.ListTriggerEventsRequest{TriggerId: trig.Id})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
-	list, err := env.svc.ListTriggers(otherCtx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	list, err := env.svc.ListTriggers(otherCtx, &reliantv1.ListTriggersRequest{})
 	require.NoError(t, err)
-	assert.Empty(t, list.Msg.Triggers)
+	assert.Empty(t, list.Triggers)
 }
 
 // seedLaunchedChat creates an owned chat launched by an event of the given
@@ -266,11 +266,11 @@ func (e *triggerTestEnv) seedLaunchedChat(t *testing.T, kind core.TriggerEventKi
 
 func (e *triggerTestEnv) launchEvent(t *testing.T, ctx context.Context, chatID string) (*reliantv1.GetLaunchEventResponse, error) {
 	t.Helper()
-	resp, err := e.svc.GetLaunchEvent(ctx, connect.NewRequest(&reliantv1.GetLaunchEventRequest{ChatId: chatID}))
+	resp, err := e.svc.GetLaunchEvent(ctx, &reliantv1.GetLaunchEventRequest{ChatId: chatID})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 func TestGetLaunchEventForScheduleChatCarriesSlotManualFlagAndStart(t *testing.T) {
@@ -340,10 +340,10 @@ func TestGetLaunchEventIsOwnerOnly(t *testing.T) {
 	other := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err := env.launchEvent(t, other, chatID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
 	_, err = env.launchEvent(t, env.ctx, "no-such-chat")
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	_, err = env.launchEvent(t, env.ctx, "")
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }

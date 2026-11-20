@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -30,9 +29,9 @@ func TestGetMessageToolBodies(t *testing.T) {
 
 	get := func(t *testing.T, svc *message.Service, mode *reliantv1.ToolBodyMode) *reliantv1.Message {
 		t.Helper()
-		resp, err := svc.GetMessage(ctx, connect.NewRequest(&reliantv1.GetMessageRequest{MessageId: f.AssistantMessageID, ToolBodies: mode}))
+		resp, err := svc.GetMessage(ctx, &reliantv1.GetMessageRequest{MessageId: f.AssistantMessageID, ToolBodies: mode})
 		require.NoError(t, err)
-		return resp.Msg.Message
+		return resp.Message
 	}
 	marshal := func(t *testing.T, m *reliantv1.Message) []byte {
 		t.Helper()

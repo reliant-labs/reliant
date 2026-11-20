@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,16 +17,16 @@ import (
 // has a parent thread in the requested chat
 func (s *Service) ListBranches(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListBranchesRequest],
-) (*connect.Response[reliantv1.ListBranchesResponse], error) {
+	req *reliantv1.ListBranchesRequest,
+) (*reliantv1.ListBranchesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Verify user owns the parent chat
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChatRow(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -64,7 +63,7 @@ func (s *Service) ListBranches(
 		// it came from; the parent chat_id comparison does that part, and
 		// also establishes the crossing (this chat differs from the parent's,
 		// or it would not be listed as a branch OF that chat).
-		if threadRecord.Origin == db.ThreadOriginFork && parentChatID != nil && *parentChatID == req.Msg.ChatId {
+		if threadRecord.Origin == db.ThreadOriginFork && parentChatID != nil && *parentChatID == req.ChatId {
 			branch := &reliantv1.BranchInfo{
 				Id:         chat.ID,
 				Title:      chat.Title,
@@ -80,8 +79,8 @@ func (s *Service) ListBranches(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.ListBranchesResponse{
+	return &reliantv1.ListBranchesResponse{
 		Branches: branches,
 		Total:    int32(len(branches)),
-	}), nil
+	}, nil
 }

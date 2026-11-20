@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
@@ -140,9 +139,9 @@ func TestListMessages_StatementCount_LongCompactedSpawnHeavyChat(t *testing.T) {
 		}
 		start := counter.n.Load()
 		t0 := time.Now()
-		resp, err := svc.ListMessages(ctx, connect.NewRequest(req))
+		resp, err := svc.ListMessages(ctx, req)
 		require.NoError(t, err)
-		return resp.Msg, counter.n.Load() - start, time.Since(t0)
+		return resp, counter.n.Load() - start, time.Since(t0)
 	}
 
 	newest, newestStatements, _ := list(0)

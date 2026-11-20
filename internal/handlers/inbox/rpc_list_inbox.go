@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -41,27 +41,28 @@ const defaultInboxLimit = 100
 // many items wait in the caller's other projects (one read, not two).
 func (s *Service) ListInbox(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListInboxRequest],
-) (*connect.Response[reliantv1.ListInboxResponse], error) {
+	req *reliantv1.ListInboxRequest,
+) (*reliantv1.ListInboxResponse, error) {
+	info := serverkit.CallInfoV2(ctx)
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	limit := defaultInboxLimit
-	if req.Msg.Limit != nil {
-		limit = int(*req.Msg.Limit)
+	if req.Limit != nil {
+		limit = int(*req.Limit)
 		if limit < 0 {
 			return nil, svcerr.InvalidArgument("limit must not be negative")
 		}
 	}
 
-	projectID := strings.TrimSpace(req.Msg.GetProjectId())
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	projectID := strings.TrimSpace(req.GetProjectId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
 
-	read, err := s.sharedRead(withCallerJWT(ctx, auth.BearerToken(req.Header().Get("Authorization"))), userID)
+	read, err := s.sharedRead(withCallerJWT(ctx, auth.BearerToken(info.RequestHeader().Get("Authorization"))), userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
@@ -123,7 +124,7 @@ func (s *Service) ListInbox(
 		resp.Truncated = true
 	}
 	resp.Items = items
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // inboxReadTimeout bounds a shared read (sharedRead), which runs detached

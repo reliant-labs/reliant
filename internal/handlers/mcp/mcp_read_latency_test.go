@@ -12,7 +12,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -154,9 +153,9 @@ func newMCPReadFixture(t *testing.T, n int) (context.Context, *Service, *mcpRead
 
 func listMCPServers(t *testing.T, ctx context.Context, svc *Service, projectID string) []*reliantv1.MCPServer {
 	t.Helper()
-	resp, err := svc.ListServers(ctx, connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: projectID}))
+	resp, err := svc.ListServers(ctx, &reliantv1.ListServersRequest{ProjectId: projectID})
 	require.NoError(t, err)
-	return resp.Msg.GetServers()
+	return resp.GetServers()
 }
 
 // Listing used to make 2+2N daemon round trips in a row — a status call each
@@ -192,7 +191,7 @@ func TestMCPListServers_ServesTheLastStatusWithoutAskingAgain(t *testing.T) {
 
 	listMCPServers(t, ctx, svc, repo.project.ID)
 	listMCPServers(t, ctx, svc, repo.project.ID)
-	_, err := svc.GetServer(ctx, connect.NewRequest(&reliantv1.GetServerRequest{ProjectId: repo.project.ID, Name: "server-1"}))
+	_, err := svc.GetServer(ctx, &reliantv1.GetServerRequest{ProjectId: repo.project.ID, Name: "server-1"})
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, router.count("mcp.server_status"), "a fresh status is not fetched again")
@@ -242,9 +241,9 @@ func TestMCPListServers_RespectsTheRequestDeadline(t *testing.T) {
 		ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer cancel()
 		start := time.Now()
-		resp, err := svc.ListServers(ctx, connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: repo.project.ID}))
+		resp, err := svc.ListServers(ctx, &reliantv1.ListServersRequest{ProjectId: repo.project.ID})
 		require.NoError(t, err)
-		assert.Len(t, resp.Msg.GetServers(), 1)
+		assert.Len(t, resp.GetServers(), 1)
 		assert.Less(t, time.Since(start), time.Second)
 
 		// The hung fetch ends at its own timeout; the bubble's clock moves

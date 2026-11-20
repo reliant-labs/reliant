@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -21,8 +21,8 @@ func accountAuthedCtx(userID, email string) context.Context {
 	return context.WithValue(ctx, auth.UserEmailContextKey, email)
 }
 
-func deleteReq(confirmEmail string) *connect.Request[reliantv1.DeleteAccountRequest] {
-	return connect.NewRequest(&reliantv1.DeleteAccountRequest{ConfirmEmail: confirmEmail})
+func deleteReq(confirmEmail string) *reliantv1.DeleteAccountRequest {
+	return &reliantv1.DeleteAccountRequest{ConfirmEmail: confirmEmail}
 }
 
 // TestDeleteAccount_ConfirmEmailMismatch: the typed confirmation is enforced
@@ -39,7 +39,7 @@ func TestDeleteAccount_ConfirmEmailMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("DeleteAccount accepted a mismatched confirmation")
 	}
-	if got := svcerr.Code(err); got != connect.CodeInvalidArgument {
+	if got := svcerr.CodeV2(err); got != connect.CodeInvalidArgument {
 		t.Errorf("code = %v, want InvalidArgument", got)
 	}
 }
@@ -59,8 +59,8 @@ func TestDeleteAccount_ConfirmEmailIsCaseAndSpaceInsensitive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeleteAccount rejected an equivalent email: %v", err)
 	}
-	if resp.Msg.GetDeletedRowCount() != 0 {
-		t.Errorf("deleted %d rows for an empty account, want 0", resp.Msg.GetDeletedRowCount())
+	if resp.GetDeletedRowCount() != 0 {
+		t.Errorf("deleted %d rows for an empty account, want 0", resp.GetDeletedRowCount())
 	}
 }
 
@@ -89,7 +89,7 @@ func TestDeleteAccount_RequiresAuth(t *testing.T) {
 	if err == nil {
 		t.Fatal("DeleteAccount succeeded with no authenticated user")
 	}
-	if got := svcerr.Code(err); got != connect.CodeUnauthenticated {
+	if got := svcerr.CodeV2(err); got != connect.CodeUnauthenticated {
 		t.Errorf("code = %v, want Unauthenticated", got)
 	}
 }
@@ -105,15 +105,15 @@ func TestPreviewAccountDeletion_ReportsScopeBoundary(t *testing.T) {
 
 	resp, err := svc.PreviewAccountDeletion(
 		accountAuthedCtx("u-preview", "owner@example.com"),
-		connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{}))
+		&reliantv1.PreviewAccountDeletionRequest{})
 	if err != nil {
 		t.Fatalf("PreviewAccountDeletion: %v", err)
 	}
-	if len(resp.Msg.GetRetainedElsewhere()) == 0 {
+	if len(resp.GetRetainedElsewhere()) == 0 {
 		t.Error("retained_elsewhere is empty; the UI cannot state what survives")
 	}
-	if resp.Msg.GetConfirmEmail() != "owner@example.com" {
+	if resp.GetConfirmEmail() != "owner@example.com" {
 		t.Errorf("confirm_email = %q, want the caller's email",
-			resp.Msg.GetConfirmEmail())
+			resp.GetConfirmEmail())
 	}
 }

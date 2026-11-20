@@ -4,18 +4,22 @@ package readguard
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"io"
+	"net/http"
 	"runtime/debug"
 	"slices"
 	"strconv"
 	"sync"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -30,7 +34,9 @@ const (
 	DefaultRetryAfter  = time.Second
 )
 
-// Read names the unary read procedure whose response message is *Res.
+// Read names the unary read procedure whose response message is *Res. The
+// guard needs only the name (it takes the request's message type from the
+// call's Spec); Res keeps each declaration naming the read it guards.
 func Read[Res any](procedure string) Procedure {
 	return read[Res]{name: procedure}
 }
@@ -39,10 +45,6 @@ func Read[Res any](procedure string) Procedure {
 type read[Res any] struct{ name string }
 
 func (r read[Res]) Name() string { return r.name }
-
-func (r read[Res]) Respond(msg proto.Message) connect.AnyResponse {
-	return connect.NewResponse(any(msg).(*Res))
-}
 
 func (c Limits) withDefaults() Limits {
 	if c.PerUser <= 0 {
@@ -93,7 +95,7 @@ type userReads struct {
 // flight is one shared read.
 type flight struct {
 	done chan struct{}
-	resp connect.AnyResponse
+	resp *answer
 	err  error
 	// callers still waiting for it; when the last one leaves, cancel stops the
 	// read.
@@ -101,37 +103,119 @@ type flight struct {
 	cancel  context.CancelFunc
 }
 
-func (g *guard) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		proc, ok := g.procs[req.Spec().Procedure]
-		if !ok {
-			return next(ctx, req)
+// answer is what a shared read sent: its response message and the response
+// metadata the handler set, held apart from every caller's own call.
+type answer struct {
+	msg     proto.Message
+	header  http.Header
+	trailer http.Header
+}
+
+func (g *guard) Intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+		proc, ok := g.procs[spec.Procedure]
+		if !ok || spec.StreamType != connect.StreamTypeUnary {
+			return next(ctx, spec, stream)
 		}
 		userID, _ := auth.GetUserIDFromContext(ctx)
-		msg, isMsg := req.Any().(proto.Message)
-		if userID == "" || !isMsg {
-			return next(ctx, req)
+		req := newRequest(spec)
+		if userID == "" || req == nil {
+			return next(ctx, spec, stream)
 		}
-		body, err := proto.MarshalOptions{Deterministic: true}.Marshal(msg)
+		if err := stream.Receive(req); err != nil {
+			return err
+		}
+		body, err := proto.MarshalOptions{Deterministic: true}.Marshal(req)
 		if err != nil {
-			return next(ctx, req)
+			return next(ctx, spec, &replayStream{ServerStream: stream, req: req})
 		}
-		run := func(ctx context.Context) (connect.AnyResponse, error) { return next(ctx, req) }
-		return g.do(ctx, userID, proc.Name()+"\x00"+string(body), proc, run)
+		run := func(rctx context.Context) (*answer, error) {
+			own := &replayStream{req: req}
+			if err := next(rctx, spec, own); err != nil {
+				return nil, err
+			}
+			if own.resp == nil {
+				return nil, nil
+			}
+			ans := &answer{msg: own.resp}
+			if info, ok := connect.CallInfoForServerContext(rctx); ok {
+				ans.header, ans.trailer = cloneHeader(info.ResponseHeader()), cloneHeader(info.ResponseTrailer())
+			}
+			return ans, nil
+		}
+		ans, err := g.do(ctx, userID, proc.Name()+"\x00"+string(body), proc, run)
+		if err != nil || ans == nil {
+			return err
+		}
+		if info, ok := connect.CallInfoForServerContext(ctx); ok {
+			addHeader(info.ResponseHeader(), ans.header)
+			addHeader(info.ResponseTrailer(), ans.trailer)
+		}
+		return stream.Send(proto.Clone(ans.msg))
 	}
 }
 
-func (g *guard) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
+// newRequest is an empty request message of spec's procedure, or nil when the
+// spec does not say (a hand-built spec with no protobuf schema).
+func newRequest(spec connect.Spec) proto.Message {
+	md, ok := spec.Schema.(protoreflect.MethodDescriptor)
+	if !ok {
+		return nil
+	}
+	mt, err := protoregistry.GlobalTypes.FindMessageByName(md.Input().FullName())
+	if err != nil {
+		return nil
+	}
+	return mt.New().Interface()
 }
 
-func (g *guard) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
+// replayStream is the stream a guarded handler runs on: it receives the
+// request the guard already read, and keeps the response for the guard to
+// hand every caller. With a ServerStream (a request passed through unshared)
+// it sends on that stream instead.
+type replayStream struct {
+	connect.ServerStream
+	req      proto.Message
+	received bool
+	resp     proto.Message
+}
+
+func (s *replayStream) Receive(msg any) error {
+	if s.received {
+		return io.EOF
+	}
+	dst, ok := msg.(proto.Message)
+	if !ok {
+		return fmt.Errorf("readguard: cannot receive into %T", msg)
+	}
+	s.received = true
+	proto.Reset(dst)
+	proto.Merge(dst, s.req)
+	return nil
+}
+
+func (s *replayStream) SendHeaders() error {
+	if s.ServerStream != nil {
+		return s.ServerStream.SendHeaders()
+	}
+	return nil
+}
+
+func (s *replayStream) Send(msg any) error {
+	if s.ServerStream != nil {
+		return s.ServerStream.Send(msg)
+	}
+	m, ok := msg.(proto.Message)
+	if !ok {
+		return fmt.Errorf("readguard: cannot send %T", msg)
+	}
+	s.resp = m
+	return nil
 }
 
 // do answers one caller's read: from an identical read in flight, from a read
 // it starts, or with a refusal.
-func (g *guard) do(ctx context.Context, userID, key string, proc Procedure, run func(context.Context) (connect.AnyResponse, error)) (connect.AnyResponse, error) {
+func (g *guard) do(ctx context.Context, userID, key string, proc Procedure, run func(context.Context) (*answer, error)) (*answer, error) {
 	var deadline <-chan time.Time
 	queued := false
 
@@ -195,25 +279,17 @@ func (g *guard) do(ctx context.Context, userID, key string, proc Procedure, run 
 
 // startLocked starts the read for key in a goroutine of its own, on a context
 // detached from the caller's cancellation (but carrying its values: the
-// authenticated user, the trace) and bounded by ReadTimeout.
-func (g *guard) startLocked(ctx context.Context, userID string, u *userReads, key string, run func(context.Context) (connect.AnyResponse, error)) *flight {
-	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), g.cfg.ReadTimeout)
+// authenticated user, the trace) and bounded by ReadTimeout. The read gets a
+// call info of its own (ownCall), so nothing it writes lands on the call that
+// started it, which may have ended by the time the read finishes.
+func (g *guard) startLocked(ctx context.Context, userID string, u *userReads, key string, run func(context.Context) (*answer, error)) *flight {
+	rctx, cancel := context.WithTimeout(ownCall(context.WithoutCancel(ctx)), g.cfg.ReadTimeout)
 	f := &flight{done: make(chan struct{}), callers: 1, cancel: cancel}
 	u.flights[key] = f
 	g.signalLocked(u)
 	go func() {
 		defer cancel()
 		resp, err := runSafely(rctx, run)
-		// Connect initializes metadata lazily. Initialize while exclusively
-		// owned, before publishing; the original is never returned to a waiter.
-		if resp != nil {
-			resp.Header()
-			resp.Trailer()
-		}
-		var ce *connect.Error
-		if errors.As(err, &ce) {
-			ce.Meta()
-		}
 		g.mu.Lock()
 		f.resp, f.err = resp, err
 		delete(u.flights, key)
@@ -226,8 +302,10 @@ func (g *guard) startLocked(ctx context.Context, userID string, u *userReads, ke
 }
 
 // await waits for f's answer, or for the caller to give up. The last caller
-// to give up cancels the read.
-func (g *guard) await(ctx context.Context, userID string, u *userReads, f *flight, proc Procedure) (connect.AnyResponse, error) {
+// to give up cancels the read. The answer is shared, never written: each
+// caller sends a clone of its message and copies its metadata, and a v2
+// *connect.Error (or any svcerr wrapper) is immutable.
+func (g *guard) await(ctx context.Context, userID string, u *userReads, f *flight, proc Procedure) (*answer, error) {
 	select {
 	case <-f.done:
 	case <-ctx.Done():
@@ -239,19 +317,16 @@ func (g *guard) await(ctx context.Context, userID string, u *userReads, f *fligh
 		g.mu.Unlock()
 		return nil, ctx.Err()
 	}
-	if f.err != nil {
-		return nil, copyError(f.err)
-	}
-	return copyResponse(f.resp, proc), nil
+	return f.resp, f.err
 }
 
 // The caller's recovery interceptor cannot catch a panic on this goroutine.
-func runSafely(ctx context.Context, run func(context.Context) (connect.AnyResponse, error)) (resp connect.AnyResponse, err error) {
+func runSafely(ctx context.Context, run func(context.Context) (*answer, error)) (resp *answer, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			logging.ErrorContext(ctx, "[ReadGuard] list handler panicked", "panic", p, "stack", string(debug.Stack()))
 			resp = nil
-			err = svcerr.ToConnect(svcerr.Internal(svcerr.InternalMessage))
+			err = svcerr.ToConnectV2(svcerr.Internal(svcerr.InternalMessage))
 		}
 	}()
 	return run(ctx)
@@ -274,7 +349,7 @@ func (g *guard) refuse(ctx context.Context, userID string, proc Procedure, why s
 		"userID", userID, "procedure", proc.Name(), "reason", why,
 		"perUser", g.cfg.PerUser, "queue", g.cfg.Queue)
 	retryAfter := strconv.Itoa(int(max(g.cfg.RetryAfter.Round(time.Second), time.Second) / time.Second))
-	return svcerr.ToConnect(svcerr.WithMetadata(
+	return svcerr.ToConnectV2(svcerr.WithMetadata(
 		svcerr.ResourceExhausted("too many list requests at once; retry shortly"), "Retry-After", retryAfter))
 }
 
@@ -283,41 +358,57 @@ func annotate(ctx context.Context, outcome string) {
 	trace.SpanFromContext(ctx).SetAttributes(attribute.String("reliant.read_guard", outcome))
 }
 
-// copyResponse is resp for one more caller: its own message and headers, so
-// nothing the transport or an outer interceptor writes is shared.
-func copyResponse(resp connect.AnyResponse, proc Procedure) connect.AnyResponse {
-	msg, ok := resp.Any().(proto.Message)
+// ownCall returns ctx with a server call info of its own in place of the
+// call's: the same spec, peer and protocol, a copy of the request headers, and
+// empty response metadata. connect has no constructor for a server call
+// context, so the call's info is swapped where ctx yields it.
+func ownCall(ctx context.Context) context.Context {
+	shared, ok := connect.CallInfoForServerContext(ctx)
 	if !ok {
-		return resp
+		return ctx
 	}
-	out := proc.Respond(proto.Clone(msg))
-	for k, v := range resp.Header() {
-		out.Header()[k] = slices.Clone(v)
+	own := &connect.CallInfo{
+		Spec:             shared.Spec,
+		PeerAddr:         shared.PeerAddr,
+		Protocol:         shared.Protocol,
+		Codec:            shared.Codec,
+		RequestEncoding:  shared.RequestEncoding,
+		ResponseEncoding: shared.ResponseEncoding,
+		TransportInfo:    shared.TransportInfo,
 	}
-	for k, v := range resp.Trailer() {
-		out.Trailer()[k] = slices.Clone(v)
+	addHeader(own.RequestHeader(), cloneHeader(shared.RequestHeader()))
+	return callInfoContext{Context: ctx, shared: shared, own: own}
+}
+
+// callInfoContext yields own wherever its parent yields the shared call info.
+type callInfoContext struct {
+	context.Context
+	shared, own *connect.CallInfo
+}
+
+func (c callInfoContext) Value(key any) any {
+	v := c.Context.Value(key)
+	if info, ok := v.(*connect.CallInfo); ok && info == c.shared {
+		return c.own
+	}
+	return v
+}
+
+func cloneHeader(h *connect.Header) http.Header {
+	if h.Len() == 0 {
+		return nil
+	}
+	out := make(http.Header, h.Len())
+	for k, v := range h.All() {
+		out[k] = slices.Clone(v)
 	}
 	return out
 }
 
-// copyError is err for one more caller. A *connect.Error carries metadata an
-// outer interceptor may write to, so each caller gets its own; any other error
-// is a value the callers only read.
-func copyError(err error) error {
-	var ce *connect.Error
-	if !errors.As(err, &ce) {
-		return err
+func addHeader(dst *connect.Header, src http.Header) {
+	for k, vs := range src {
+		for _, v := range vs {
+			dst.Add(k, v)
+		}
 	}
-	cause := ce.Unwrap()
-	if cause == nil {
-		cause = errors.New(ce.Message())
-	}
-	out := connect.NewError(ce.Code(), cause)
-	for k, v := range ce.Meta() {
-		out.Meta()[k] = slices.Clone(v)
-	}
-	for _, d := range ce.Details() {
-		out.AddDetail(d)
-	}
-	return out
 }

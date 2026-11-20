@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,36 +17,36 @@ import (
 // instead of it being invisible until the agent happens to drain it.
 func (s *Service) ListQueuedAgentMessages(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListQueuedAgentMessagesRequest],
-) (*connect.Response[reliantv1.ListQueuedAgentMessagesResponse], error) {
+	req *reliantv1.ListQueuedAgentMessagesRequest,
+) (*reliantv1.ListQueuedAgentMessagesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	if req.Msg.ThreadId == "" {
+	if req.ThreadId == "" {
 		return nil, svcerr.InvalidArgument("thread_id is required")
 	}
 
 	// Ownership check: mirrors SendAgentMessage exactly -- the chat must
 	// belong to the caller, and the thread must belong to that chat, both
 	// returning the same NotFound so thread IDs can't be enumerated.
-	if err := s.requireChatOwner(ctx, req.Msg.ChatId, userID); err != nil {
+	if err := s.requireChatOwner(ctx, req.ChatId, userID); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
+	target, err := s.deps.Repo.GetThread(ctx, req.ThreadId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get thread"))
 	}
 	if target == nil {
 		return nil, svcerr.NotFound("thread")
 	}
-	if target.ChatID != req.Msg.ChatId {
+	if target.ChatID != req.ChatId {
 		return nil, svcerr.NotFound("thread")
 	}
 
-	queued, err := s.deps.Repo.ListQueuedAgentMessagesForThread(ctx, req.Msg.ThreadId)
+	queued, err := s.deps.Repo.ListQueuedAgentMessagesForThread(ctx, req.ThreadId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list queued messages"))
 	}
@@ -69,7 +68,7 @@ func (s *Service) ListQueuedAgentMessages(
 		})
 	}
 
-	return connect.NewResponse(&reliantv1.ListQueuedAgentMessagesResponse{
+	return &reliantv1.ListQueuedAgentMessagesResponse{
 		Messages: messages,
-	}), nil
+	}, nil
 }

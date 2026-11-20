@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,7 +25,7 @@ func TestRepoOwnership_ErrorClasses(t *testing.T) {
 	t.Parallel()
 	remove := func(t *testing.T, store *repo.MockRepository) error {
 		svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store}))
-		_, err := svc.RemoveRepo(repo.AuthedContext(t), connect.NewRequest(&pb.RemoveRepoRequest{RepoId: "r-1"}))
+		_, err := svc.RemoveRepo(repo.AuthedContext(t), &pb.RemoveRepoRequest{RepoId: "r-1"})
 		return err
 	}
 	foreign := ownedProjectRepo(t)
@@ -34,8 +34,8 @@ func TestRepoOwnership_ErrorClasses(t *testing.T) {
 	}
 	err := remove(t, foreign)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-	assert.Equal(t, "repo not found", svcerr.ToConnect(err).Message(), "nothing says the project exists")
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+	assert.Equal(t, "repo not found", svcerr.ToConnectV2(err).Message(), "nothing says the project exists")
 
 	for _, tc := range []struct {
 		name string
@@ -53,8 +53,8 @@ func TestRepoOwnership_ErrorClasses(t *testing.T) {
 			t.Run(what+": "+tc.name, func(t *testing.T) {
 				err := remove(t, store)
 				require.Error(t, err)
-				assert.Equal(t, tc.code, svcerr.Code(err), "err = %v", err)
-				assert.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+				assert.Equal(t, tc.code, svcerr.CodeV2(err), "err = %v", err)
+				assert.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 			})
 		}
 	}

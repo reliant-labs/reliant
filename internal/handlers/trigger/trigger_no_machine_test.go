@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -21,22 +21,22 @@ func TestCreateTrigger_EmptyDaemonWithoutNoMachineIsStillRequired(t *testing.T) 
 	t.Parallel()
 
 	env := setupTriggerTest(t)
-	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = "" }),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 func TestCreateTrigger_NoMachineWithADaemonIsInvalid(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t)
-	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.NoMachine = true }),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // The default builtin agent is given tag:coding:default — shell, view, edit —
@@ -46,29 +46,29 @@ func TestCreateTrigger_NoMachineRefusesAWorkflowThatNeedsAMachine(t *testing.T) 
 	t.Parallel()
 
 	env := setupTriggerTest(t)
-	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	_, err := env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 			d.DaemonId = ""
 			d.NoMachine = true
 		}),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "needs a machine")
 	assert.Contains(t, err.Error(), "shell", "the error names what needs the machine")
 	assert.Contains(t, err.Error(), "Pick a machine", "the error says how to fix it")
 	assert.Zero(t, env.backend.syncCount(), "a refused trigger must not touch the schedule backend")
 
 	// A workflow that hard-requires a machine is refused whatever its params.
-	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+	_, err = env.svc.CreateTrigger(env.ctx, &reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 			d.Workflow = "builtin://parallel-compete"
 			d.DaemonId = ""
 			d.NoMachine = true
 		}),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 }
 
 // The same agent given only web tools runs without a machine, so the trigger is
@@ -94,15 +94,15 @@ func TestCreateTrigger_NoMachineAcceptsAServerOnlyWorkflow(t *testing.T) {
 	assert.Empty(t, stored.DaemonID)
 
 	// Switching it back to a machine is an ordinary update.
-	updated, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	updated, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id: got.GetId(),
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 			d.Params = map[string]*structpb.Value{"tools": webOnly}
 		}),
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, updated.Msg.GetTrigger().GetNoMachine())
-	assert.Equal(t, env.daemonID, updated.Msg.GetTrigger().GetDaemonId())
+	assert.False(t, updated.GetTrigger().GetNoMachine())
+	assert.Equal(t, env.daemonID, updated.GetTrigger().GetDaemonId())
 }
 
 // An update that turns an existing trigger into a no-machine one is checked the
@@ -113,13 +113,13 @@ func TestUpdateTrigger_NoMachineIsValidatedLikeCreate(t *testing.T) {
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
-	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
+	_, err := env.svc.UpdateTrigger(env.ctx, &reliantv1.UpdateTriggerRequest{
 		Id: created.GetId(),
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 			d.DaemonId = ""
 			d.NoMachine = true
 		}),
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 }

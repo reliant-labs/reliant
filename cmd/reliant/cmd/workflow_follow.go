@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/execfollow"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
@@ -113,7 +114,7 @@ func runWorkflowFollow(cmd *cobra.Command, executionID string, flags *followFlag
 		},
 		out:     cmd.OutOrStdout(),
 		hooks:   hooks,
-		funding: reliantv1connect.NewProviderAccountServiceClient(conn.httpClient(), conn.ServerURL),
+		funding: reliantv1connect.NewProviderAccountServiceClient(rpcclient.New(conn.httpClient(), conn.ServerURL, nil)),
 	})
 	if err != nil {
 		return err

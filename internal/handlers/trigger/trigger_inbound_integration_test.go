@@ -12,7 +12,6 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,10 +95,10 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	hookDef := base("deploy hook")
 	hookDef.Filter = "trigger.payload.body.action == 'deploy'"
 	hookDef.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{}}
-	created, err := svc.CreateTrigger(authCtx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: hookDef}))
+	created, err := svc.CreateTrigger(authCtx, &reliantv1.CreateTriggerRequest{Trigger: hookDef})
 	require.NoError(t, err)
-	hook := created.Msg.GetTrigger()
-	token := created.Msg.GetWebhook().GetToken()
+	hook := created.GetTrigger()
+	token := created.GetWebhook().GetToken()
 
 	post := func(path, body string, headers map[string]string) int {
 		req, err := http.NewRequest(http.MethodPost, server.URL+path, strings.NewReader(body))
@@ -144,9 +143,9 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	intDef.Source = &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{
 		Integration: "test", Events: []string{"issues.opened"}, Match: map[string]string{"repository": "acme/app"},
 	}}
-	createdInt, err := svc.CreateTrigger(authCtx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: intDef}))
+	createdInt, err := svc.CreateTrigger(authCtx, &reliantv1.CreateTriggerRequest{Trigger: intDef})
 	require.NoError(t, err)
-	intTrigger := createdInt.Msg.GetTrigger()
+	intTrigger := createdInt.GetTrigger()
 	assert.Equal(t, mine.ID, intTrigger.GetConnectionId())
 
 	deliver := func(d webhook.TestDelivery) int {

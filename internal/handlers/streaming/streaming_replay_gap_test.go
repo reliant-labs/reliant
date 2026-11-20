@@ -3,11 +3,11 @@ package streaming
 import (
 	"context"
 	"errors"
+	"io"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -97,21 +97,25 @@ func firstChatSyncEvent(t *testing.T, repo Repository, chatSinceSeq int64) *reli
 	t.Cleanup(cancel)
 
 	stream, err := streamingTestClient(t, svc).
-		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{
+		StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{
 			ChatId:   raceTestChatID,
 			SinceSeq: chatSinceSeq,
-		}))
+		})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
-	for stream.Receive() {
-		msg := stream.Msg()
+	for {
+		msg, err := stream.Receive()
+		if errors.Is(err, io.EOF) {
+			err = nil
+		}
+		if err != nil || msg == nil {
+			t.Fatalf("stream ended before any chat state arrived: %v", err)
+		}
 		if msg.GetSnapshot() != nil || msg.GetUpdates() != nil {
 			return msg
 		}
 	}
-	t.Fatalf("stream ended before any chat state arrived: %v", stream.Err())
-	return nil
 }
 
 func newReplayGapRepo(latest int64) *replayGapRepo {
@@ -202,14 +206,20 @@ func replayEvents(t *testing.T, repo *replayGapRepo, cursor int64) (batches []*r
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	t.Cleanup(cancel)
 	stream, err := streamingTestClient(t, svc).
-		StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{
+		StreamChatUpdates(ctx, &reliantv1.StreamChatUpdatesRequest{
 			ChatId:   raceTestChatID,
 			SinceSeq: cursor,
-		}))
+		})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
-	for stream.Receive() {
-		msg := stream.Msg()
+	for {
+		msg, err := stream.Receive()
+		if errors.Is(err, io.EOF) {
+			return batches, nil, nil
+		}
+		if err != nil {
+			return batches, nil, err
+		}
 		if b := msg.GetUpdates(); b != nil {
 			batches = append(batches, b)
 			continue
@@ -218,7 +228,6 @@ func replayEvents(t *testing.T, repo *replayGapRepo, cursor int64) (batches []*r
 			return batches, s, nil
 		}
 	}
-	return batches, nil, stream.Err()
 }
 
 // Compaction raises the watermark before it deletes. When it passes the

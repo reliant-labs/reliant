@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -23,10 +21,10 @@ import (
 
 // PollCopilotDeviceAuth performs a single poll of the GitHub device flow. On success it stores
 // the GitHub token as a Copilot account keyed by the GitHub user id.
-func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Request[reliantv1.PollCopilotDeviceAuthRequest]) (*connect.Response[reliantv1.PollCopilotDeviceAuthResponse], error) {
+func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *reliantv1.PollCopilotDeviceAuthRequest) (*reliantv1.PollCopilotDeviceAuthResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	deviceCode := strings.TrimSpace(req.Msg.DeviceCode)
+	deviceCode := strings.TrimSpace(req.DeviceCode)
 	if deviceCode == "" {
 		return nil, svcerr.InvalidArgument("device_code is required")
 	}
@@ -38,23 +36,23 @@ func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Reques
 		activity.Skip(ctx)
 		switch {
 		case errors.Is(err, copilot.ErrAuthorizationPending), errors.Is(err, copilot.ErrSlowDown):
-			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+			return &reliantv1.PollCopilotDeviceAuthResponse{
 				Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_PENDING,
-			}), nil
+			}, nil
 		case errors.Is(err, copilot.ErrDeviceCodeExpired):
-			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+			return &reliantv1.PollCopilotDeviceAuthResponse{
 				Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_EXPIRED,
-			}), nil
+			}, nil
 		case errors.Is(err, copilot.ErrAccessDenied):
-			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+			return &reliantv1.PollCopilotDeviceAuthResponse{
 				Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_DENIED,
-			}), nil
+			}, nil
 		default:
 			logging.ErrorContext(ctx, "Copilot device authorization poll failed", "error", err)
-			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+			return &reliantv1.PollCopilotDeviceAuthResponse{
 				Status:       reliantv1.PollCopilotDeviceAuthResponse_STATUS_ERROR,
 				ErrorMessage: err.Error(),
-			}), nil
+			}, nil
 		}
 	}
 
@@ -76,7 +74,7 @@ func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Reques
 			u.ExternalAccountID, u.Email, label = strconv.FormatInt(gh.ID, 10), gh.Email, gh.Login
 		}
 	}
-	res, err := s.connectAccount(ctx, signIn{userID: userID, provider: "copilot", targetID: req.Msg.GetAccountId(), upsert: u, label: label})
+	res, err := s.connectAccount(ctx, signIn{userID: userID, provider: "copilot", targetID: req.GetAccountId(), upsert: u, label: label})
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +83,8 @@ func (s *Service) PollCopilotDeviceAuth(ctx context.Context, req *connect.Reques
 	// /models for the freshly-connected account on its next load.
 	copilot.EvictAvailabilityCache(tokens.AccessToken)
 
-	return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+	return &reliantv1.PollCopilotDeviceAuthResponse{
 		Status:  reliantv1.PollCopilotDeviceAuthResponse_STATUS_AUTHORIZED,
 		Account: res.account, Created: res.created, IdentityMismatch: res.mismatch,
-	}), nil
+	}, nil
 }

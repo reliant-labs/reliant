@@ -3,7 +3,6 @@ package org_provider_account
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -14,34 +13,34 @@ import (
 // Never gated: pausing is how an admin stops the org's spend.
 func (s *Service) UpdateOrgProviderAccount(
 	ctx context.Context,
-	req *connect.Request[pb.UpdateOrgProviderAccountRequest],
-) (*connect.Response[pb.UpdateOrgProviderAccountResponse], error) {
-	orgID, err := requireOrgID(req.Msg.GetOrgId())
+	req *pb.UpdateOrgProviderAccountRequest,
+) (*pb.UpdateOrgProviderAccountResponse, error) {
+	orgID, err := requireOrgID(req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
-	if req.Msg.GetAccountId() == "" {
+	if req.GetAccountId() == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("account_id is required"))
 	}
-	patch := core.AccountPatch{Paused: req.Msg.Paused}
-	if req.Msg.Label != nil {
-		name, err := label(req.Msg.GetLabel())
+	patch := core.AccountPatch{Paused: req.Paused}
+	if req.Label != nil {
+		name, err := label(req.GetLabel())
 		if err != nil {
 			return nil, err
 		}
 		patch.Label = &name
 	}
 	var access string
-	if req.Msg.Access != nil {
+	if req.Access != nil {
 		var ok bool
-		if access, ok = accessToCore(req.Msg.GetAccess()); !ok {
+		if access, ok = accessToCore(req.GetAccess()); !ok {
 			return nil, svcerr.Wrap(svcerr.InvalidArgument("unknown access"))
 		}
 	}
 	if _, err := admin(ctx, orgID); err != nil {
 		return nil, err
 	}
-	acct, err := s.find(ctx, orgID, req.Msg.GetAccountId())
+	acct, err := s.find(ctx, orgID, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
@@ -62,5 +61,5 @@ func (s *Service) UpdateOrgProviderAccount(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.UpdateOrgProviderAccountResponse{Account: out}), nil
+	return &pb.UpdateOrgProviderAccountResponse{Account: out}, nil
 }

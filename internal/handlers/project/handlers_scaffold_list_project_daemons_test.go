@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -34,13 +32,13 @@ func TestListProjectDaemons_Generated(t *testing.T) {
 	}
 	svc := newService(t, store, nil)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListProjectDaemonsRequest, pb.ListProjectDaemonsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListProjectDaemonsRequest, pb.ListProjectDaemonsResponse]{
 		{
 			Name: "every daemon of every one of the caller's projects is listed, with its install state",
-			Req:  connect.NewRequest(&pb.ListProjectDaemonsRequest{}),
+			Req:  &pb.ListProjectDaemonsRequest{},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListProjectDaemonsResponse]) {
-				got := resp.Msg.GetProjectDaemons()
+			Check: func(t *testing.T, resp *pb.ListProjectDaemonsResponse) {
+				got := resp.GetProjectDaemons()
 				if len(got) != 2 || got[0].GetDaemonId() != "d-1" || got[1].GetDaemonId() != "d-2" {
 					t.Fatalf("project daemons = %v, want p-1 on d-1 and d-2", got)
 				}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -22,16 +22,16 @@ func TestCloseOAuthHelper_Generated(t *testing.T) {
 	// The generated harness leaves the optional Router nil.
 	svc := daemon.NewTestDaemon(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CloseOAuthHelperRequest, pb.CloseOAuthHelperResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CloseOAuthHelperRequest, pb.CloseOAuthHelperResponse]{
 		{
 			Name:    "a caller is required",
-			Req:     connect.NewRequest(&pb.CloseOAuthHelperRequest{}),
+			Req:     &pb.CloseOAuthHelperRequest{},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "no daemon router is unavailable",
-			Req:     connect.NewRequest(&pb.CloseOAuthHelperRequest{}),
+			Req:     &pb.CloseOAuthHelperRequest{},
 			Ctx:     daemon.AuthedContext(t),
 			WantErr: connect.CodeUnavailable,
 		},

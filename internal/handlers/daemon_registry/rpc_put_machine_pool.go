@@ -3,7 +3,6 @@ package daemon_registry
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -17,13 +16,13 @@ import (
 // labels match the selector.
 func (s *Service) PutMachinePool(
 	ctx context.Context,
-	req *connect.Request[pb.PutMachinePoolRequest],
-) (*connect.Response[pb.PutMachinePoolResponse], error) {
+	req *pb.PutMachinePoolRequest,
+) (*pb.PutMachinePoolResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
-	spec := req.Msg.GetPool()
+	spec := req.GetPool()
 	if spec == nil {
 		return nil, svcerr.InvalidArgument("pool is required")
 	}
@@ -49,5 +48,5 @@ func (s *Service) PutMachinePool(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&pb.PutMachinePoolResponse{Pool: out}), nil
+	return &pb.PutMachinePoolResponse{Pool: out}, nil
 }

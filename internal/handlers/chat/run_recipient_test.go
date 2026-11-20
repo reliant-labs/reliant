@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
@@ -89,7 +91,7 @@ func TestSendMessage_GraphRunRoutesToItsOneRunningAgent(t *testing.T) {
 
 	resp, err := routedService(repo, temporal).SendMessage(ctx, sendMessageRequest(t, fx.chatID, "the lease moved to 1899b37a"))
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Queued)
+	assert.True(t, resp.Queued)
 	assert.Equal(t, []string{"the lease moved to 1899b37a"}, queuedBodies(t, ctx, repo, implement),
 		"the run's one running agent gets the message")
 	assert.Empty(t, queuedBodies(t, ctx, repo, fx.rootThreadID),
@@ -112,15 +114,15 @@ func TestSendMessage_ParallelAgentsAreRefusedNotGuessed(t *testing.T) {
 	_, err := svc.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "which one?"))
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, core.ErrRunRecipientAmbiguous))
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	for _, want := range []string{implement, review, "implement.agent_loop", "review.agent_loop", `"implement"`, `"review"`} {
 		assert.Contains(t, err.Error(), want, "the refusal lists every running agent so the sender can pick one")
 	}
 	// reliant#2465: the same list rides as a RunRecipientAmbiguous detail, so
 	// a client can offer the agents as choices instead of parsing the prose.
 	var listed []*reliantv1.RunRecipientAmbiguous_Agent
-	for _, d := range svcerr.ToConnect(err).Details() {
-		if v, derr := d.Value(); derr == nil {
+	for _, d := range svcerr.ToConnectV2(err).Details() {
+		if v, derr := connectproto.UnmarshalErrorDetail(d); derr == nil {
 			if ambiguous, ok := v.(*reliantv1.RunRecipientAmbiguous); ok {
 				listed = append(listed, ambiguous.GetAgents()...)
 			}
@@ -139,13 +141,13 @@ func TestSendMessage_ParallelAgentsAreRefusedNotGuessed(t *testing.T) {
 	// Naming one delivers to it: by node name, or by thread id.
 	byNode := sendMessageRequest(t, fx.chatID, "for the reviewer")
 	node := "review"
-	byNode.Msg.TargetThread = &node
+	byNode.TargetThread = &node
 	_, err = svc.SendMessage(ctx, byNode)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"for the reviewer"}, queuedBodies(t, ctx, repo, review))
 
 	byID := sendMessageRequest(t, fx.chatID, "for the implementer")
-	byID.Msg.TargetThread = &implement
+	byID.TargetThread = &implement
 	_, err = svc.SendMessage(ctx, byID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"for the implementer"}, queuedBodies(t, ctx, repo, implement))
@@ -231,26 +233,30 @@ func TestSignalRun_RoutesToTheRunsRunningAgent(t *testing.T) {
 		Chats:  routedService(repo, temporal),
 	})
 	require.NoError(t, err)
-	signal := func(thread, content string) (*connect.Response[reliantv1.SignalRunResponse], error) {
-		return runs.SignalRun(ctx, connect.NewRequest(&reliantv1.SignalRunRequest{
+	// Through tdd.CallV2, so SignalRun has the CallInfo its response header
+	// goes on.
+	var info *connect.CallInfo
+	signal := func(thread, content string) (*reliantv1.SignalRunResponse, error) {
+		info = &connect.CallInfo{}
+		return tdd.CallV2(ctx, runs.SignalRun, &reliantv1.SignalRunRequest{
 			RunId:    fx.chatID,
 			Thread:   thread,
 			Messages: []*reliantv1.InputMessage{{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: content}},
-		}))
+		}, info)
 	}
 
 	// Between agent steps: nothing to read it.
 	resp, err := signal("", "nobody home")
 	require.NoError(t, err, "a live run with no agent running reports delivered=false, never an error")
-	assert.False(t, resp.Msg.Delivered)
-	assert.Equal(t, errreason.RunNoListeningAgent, resp.Header().Get(errreason.NotDeliveredHeader))
+	assert.False(t, resp.Delivered)
+	assert.Equal(t, errreason.RunNoListeningAgent, info.ResponseHeader().Get(errreason.NotDeliveredHeader))
 	assert.Empty(t, queuedBodies(t, ctx, repo, fx.rootThreadID))
 
 	// One agent running: it gets the message.
 	temporal.listeners = []v2.AgentLoopThread{{Thread: implement, Node: "implement.agent_loop"}}
 	resp, err = signal("", "for the one agent")
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Delivered)
+	assert.True(t, resp.Delivered)
 	assert.Equal(t, []string{"for the one agent"}, queuedBodies(t, ctx, repo, implement))
 
 	// Two in parallel: refused with both listed, nothing queued.
@@ -265,7 +271,7 @@ func TestSignalRun_RoutesToTheRunsRunningAgent(t *testing.T) {
 	// Named by node.
 	resp, err = signal("review", "for the reviewer")
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Delivered)
+	assert.True(t, resp.Delivered)
 	assert.Equal(t, []string{"for the reviewer"}, queuedBodies(t, ctx, repo, review))
 }
 
@@ -281,23 +287,23 @@ func TestSendAgentMessage_MainThreadOfAGraphRunRoutesToItsAgent(t *testing.T) {
 	temporal := &agentLoopTemporal{listeners: []v2.AgentLoopThread{{Thread: implement, Node: "implement.agent_loop"}}}
 	svc := routedService(repo, temporal)
 
-	resp, err := svc.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := svc.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "queued from the main view",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success, resp.Msg.Message)
+	require.True(t, resp.Success, resp.Message)
 	assert.Equal(t, []string{"queued from the main view"}, queuedBodies(t, ctx, repo, implement))
 	assert.Empty(t, queuedBodies(t, ctx, repo, fx.rootThreadID))
 
 	review := addNodeThread(t, ctx, repo, fx.chatID, "review")
 	temporal.listeners = append(temporal.listeners, v2.AgentLoopThread{Thread: review, Node: "review.agent_loop"})
-	resp, err = svc.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err = svc.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "which one?",
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Success)
-	assert.Contains(t, resp.Msg.Message, review)
-	assert.Contains(t, resp.Msg.Message, implement)
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.Message, review)
+	assert.Contains(t, resp.Message, implement)
 }
 
 // addSpawnedThread is a sub-agent's thread and its run, spawned by the run
@@ -337,13 +343,13 @@ func TestSendMessage_TargetSubAgentMustBeRunningInThisRun(t *testing.T) {
 	svc := routedService(repo, temporal)
 
 	toLive := sendMessageRequest(t, fx.chatID, "for the helper")
-	toLive.Msg.TargetThread = &live
+	toLive.TargetThread = &live
 	_, err := svc.SendMessage(ctx, toLive)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"for the helper"}, queuedBodies(t, ctx, repo, live))
 
 	toStale := sendMessageRequest(t, fx.chatID, "for a finished helper")
-	toStale.Msg.TargetThread = &stale
+	toStale.TargetThread = &stale
 	_, err = svc.SendMessage(ctx, toStale)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, core.ErrRunNoListeningAgent))

@@ -3,7 +3,7 @@ package settings_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -19,27 +19,27 @@ func TestGetSetting_Generated(t *testing.T) {
 		"theme": {ID: "s-1", UserID: "test-user", Key: "theme", Value: "dark", ValueType: "string"},
 	}.repo())
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetSettingRequest, pb.GetSettingResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetSettingRequest, pb.GetSettingResponse]{
 		{
 			Name:    "key is required",
-			Req:     connect.NewRequest(&pb.GetSettingRequest{}),
+			Req:     &pb.GetSettingRequest{},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name: "an unset key answers an empty response, not an error",
-			Req:  connect.NewRequest(&pb.GetSettingRequest{Key: "unset"}),
+			Req:  &pb.GetSettingRequest{Key: "unset"},
 			Ctx:  settings.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetSettingResponse]) {
-				require.Nil(t, resp.Msg.GetSetting())
+			Check: func(t *testing.T, resp *pb.GetSettingResponse) {
+				require.Nil(t, resp.GetSetting())
 			},
 		},
 		{
 			Name: "a stored key",
-			Req:  connect.NewRequest(&pb.GetSettingRequest{Key: "theme"}),
+			Req:  &pb.GetSettingRequest{Key: "theme"},
 			Ctx:  settings.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetSettingResponse]) {
-				require.Equal(t, "dark", resp.Msg.GetSetting().GetValue())
+			Check: func(t *testing.T, resp *pb.GetSettingResponse) {
+				require.Equal(t, "dark", resp.GetSetting().GetValue())
 			},
 		},
 	}, svc.GetSetting)

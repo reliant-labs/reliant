@@ -3,7 +3,6 @@ package connector
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -13,8 +12,8 @@ import (
 // ListConnectors returns the caller's connectors.
 func (s *Service) ListConnectors(
 	ctx context.Context,
-	_ *connect.Request[reliantv1.ListConnectorsRequest],
-) (*connect.Response[reliantv1.ListConnectorsResponse], error) {
+	_ *reliantv1.ListConnectorsRequest,
+) (*reliantv1.ListConnectorsResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
@@ -29,5 +28,5 @@ func (s *Service) ListConnectors(
 	for _, g := range grants {
 		out = append(out, toProtoConnector(g))
 	}
-	return connect.NewResponse(&reliantv1.ListConnectorsResponse{Connectors: out}), nil
+	return &reliantv1.ListConnectorsResponse{Connectors: out}, nil
 }

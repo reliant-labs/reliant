@@ -9,7 +9,7 @@
 #
 #   protoc-gen-go, protoc-gen-connect-go
 #       `go tool` directives in go.mod, so the version is the
-#       google.golang.org/protobuf / connectrpc.com/connect the code links
+#       google.golang.org/protobuf / connectrpc.com/connect/v2 the code links
 #       against, and the binary is built by the module's toolchain.
 #   protoc-gen-es
 #       tools/protoc-gen-es/package.json (+ package-lock.json). The alias
@@ -90,7 +90,7 @@ plugins:
       - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
 
-  # Generate Connect-Go service code. Matches the connectrpc.com/connect
+  # Generate Connect-Go (v2) service code. Matches the connectrpc.com/connect/v2
   # runtime in go.mod by construction: it is the same module. The app gets
   # every service, whole (handlers need every rpc); the types it names for the
   # public files come from the SDK package through the same M mapping.

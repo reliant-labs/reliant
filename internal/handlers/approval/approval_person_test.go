@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -46,19 +46,19 @@ var decisions = []struct {
 	call func(*approval.Service, context.Context) error
 }{
 	{"Approve", func(s *approval.Service, ctx context.Context) error {
-		_, err := s.Approve(ctx, connect.NewRequest(&pb.ApproveRequest{RequestId: "a-1"}))
+		_, err := s.Approve(ctx, &pb.ApproveRequest{RequestId: "a-1"})
 		return err
 	}},
 	{"Deny", func(s *approval.Service, ctx context.Context) error {
-		_, err := s.Deny(ctx, connect.NewRequest(&pb.DenyRequest{RequestId: "a-1"}))
+		_, err := s.Deny(ctx, &pb.DenyRequest{RequestId: "a-1"})
 		return err
 	}},
 	{"BatchApprove", func(s *approval.Service, ctx context.Context) error {
-		_, err := s.BatchApprove(ctx, connect.NewRequest(&pb.BatchApproveRequest{RequestIds: []string{"a-1", "a-2"}}))
+		_, err := s.BatchApprove(ctx, &pb.BatchApproveRequest{RequestIds: []string{"a-1", "a-2"}})
 		return err
 	}},
 	{"BatchDeny", func(s *approval.Service, ctx context.Context) error {
-		_, err := s.BatchDeny(ctx, connect.NewRequest(&pb.BatchDenyRequest{RequestIds: []string{"a-1", "a-2"}}))
+		_, err := s.BatchDeny(ctx, &pb.BatchDenyRequest{RequestIds: []string{"a-1", "a-2"}})
 		return err
 	}},
 }
@@ -94,9 +94,10 @@ func TestDecisionsRefuseCredentialsSoftwareHolds(t *testing.T) {
 				err := d.call(svc, asCaller(cred))
 
 				require.Error(t, err)
-				require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "err = %v", err)
-				ce := svcerr.ToConnect(err)
-				require.Equal(t, auth.ReasonPersonRequired, ce.Meta().Get(svcerr.ReasonHeader))
+				require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "err = %v", err)
+				ce := svcerr.ToConnectV2(err)
+				reason, _ := svcerr.ReasonOf(err)
+				require.Equal(t, auth.ReasonPersonRequired, reason)
 				require.Contains(t, ce.Message(), "Reliant app")
 				require.Zero(t, repo.CallCount("GetApproval"), "nothing is read for a refused caller")
 				require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
@@ -132,7 +133,7 @@ func TestListApprovalsAcceptsAnAccessToken(t *testing.T) {
 	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo}))
 
 	_, err := svc.ListApprovalsByChat(asCaller(auth.CredentialAccessToken),
-		connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}))
+		&pb.ListApprovalsByChatRequest{ChatId: "chat-1"})
 	require.NoError(t, err)
 }
 
@@ -175,10 +176,10 @@ func TestDecisionsCredentialMatrix(t *testing.T) {
 					return
 				}
 				require.Error(t, err)
-				require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "err = %v", err)
-				ce := svcerr.ToConnect(err)
-				require.Equal(t, tc.reason, ce.Meta().Get(svcerr.ReasonHeader))
-				require.Equal(t, tc.scopes, ce.Meta().Get(fat.ScopesHeader))
+				require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "err = %v", err)
+				meta := svcerr.MetaOf(err)
+				require.Equal(t, tc.reason, meta.Get(svcerr.ReasonHeader))
+				require.Equal(t, tc.scopes, meta.Get(fat.ScopesHeader))
 				require.Zero(t, repo.CallCount("GetApproval"), "nothing is read for a refused caller")
 				require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
 			})
@@ -214,8 +215,9 @@ func TestDecisionsRefuseAnIntrospectedWildcard(t *testing.T) {
 			err := d.call(svc, asToken(p))
 
 			require.Error(t, err)
-			require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "err = %v", err)
-			require.Equal(t, auth.ReasonMachineCredentialCannotDecide, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+			require.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "err = %v", err)
+			reason, _ := svcerr.ReasonOf(err)
+			require.Equal(t, auth.ReasonMachineCredentialCannotDecide, reason)
 			require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
 		})
 	}

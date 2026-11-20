@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -87,10 +87,10 @@ func TestRequirePerson(t *testing.T) {
 				}
 				return
 			}
-			if svcerr.Code(err) != connect.CodePermissionDenied {
+			if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 				t.Fatalf("RequirePerson = %v, want PermissionDenied", err)
 			}
-			if got := svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader); got != ReasonPersonRequired {
+			if got := svcerr.MetaOf(err).Get(svcerr.ReasonHeader); got != ReasonPersonRequired {
 				t.Errorf("reason = %q, want %q", got, ReasonPersonRequired)
 			}
 		})

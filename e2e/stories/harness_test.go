@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -484,13 +483,13 @@ func (h *Harness) StartChat(workflowRef, prompt string, params map[string]any) *
 	h.T.Helper()
 	resp, err := h.TryStartChat(workflowRef, prompt, params)
 	require.NoError(h.T, err, "StartChat")
-	require.NotNil(h.T, resp.Msg.Chat)
-	return resp.Msg
+	require.NotNil(h.T, resp.Chat)
+	return resp
 }
 
 // TryStartChat is StartChat without asserting success (for validation-error
 // stories).
-func (h *Harness) TryStartChat(workflowRef, prompt string, params map[string]any) (*connect.Response[reliantv1.StartChatResponse], error) {
+func (h *Harness) TryStartChat(workflowRef, prompt string, params map[string]any) (*reliantv1.StartChatResponse, error) {
 	h.T.Helper()
 	return h.tryStartChat(workflowRef, prompt, params, false)
 }
@@ -501,10 +500,10 @@ func (h *Harness) StartNoMachineChat(workflowRef, prompt string, params map[stri
 	h.T.Helper()
 	resp, err := h.tryStartChat(workflowRef, prompt, params, true)
 	require.NoError(h.T, err, "StartChat(no_machine)")
-	return resp.Msg
+	return resp
 }
 
-func (h *Harness) tryStartChat(workflowRef, prompt string, params map[string]any, noMachine bool) (*connect.Response[reliantv1.StartChatResponse], error) {
+func (h *Harness) tryStartChat(workflowRef, prompt string, params map[string]any, noMachine bool) (*reliantv1.StartChatResponse, error) {
 	h.T.Helper()
 
 	if params == nil {
@@ -521,16 +520,16 @@ func (h *Harness) tryStartChat(workflowRef, prompt string, params map[string]any
 		protoParams[k] = pv
 	}
 
-	req := connect.NewRequest(&reliantv1.StartChatRequest{
+	req := &reliantv1.StartChatRequest{
 		ProjectId: h.ProjectID,
 		Workflow:  workflowRef,
 		Messages: []*reliantv1.InputMessage{
 			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: prompt},
 		},
 		WorkflowParams: protoParams,
-	})
+	}
 	if noMachine {
-		req.Msg.NoMachine = &noMachine
+		req.NoMachine = &noMachine
 	}
 	return h.ChatSvc.StartChat(h.Ctx, req)
 }
@@ -539,14 +538,14 @@ func (h *Harness) tryStartChat(workflowRef, prompt string, params map[string]any
 // paused workflows and continue conversations).
 func (h *Harness) SendMessage(chatID, prompt string) *reliantv1.SendMessageResponse {
 	h.T.Helper()
-	resp, err := h.ChatSvc.SendMessage(h.Ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+	resp, err := h.ChatSvc.SendMessage(h.Ctx, &reliantv1.SendMessageRequest{
 		ChatId: chatID,
 		Messages: []*reliantv1.InputMessage{
 			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: prompt},
 		},
-	}))
+	})
 	require.NoError(h.T, err, "SendMessage")
-	return resp.Msg
+	return resp
 }
 
 // ResolveQuestion answers a pending ask_question through the production
@@ -585,11 +584,11 @@ func (h *Harness) ResolveQuestion(questionID string, selected []string, freetext
 	require.NoError(h.T, err)
 	dataStr := string(data)
 
-	_, err = h.QuestionSvc.ResolveQuestion(h.Ctx, connect.NewRequest(&reliantv1.ResolveQuestionRequest{
+	_, err = h.QuestionSvc.ResolveQuestion(h.Ctx, &reliantv1.ResolveQuestionRequest{
 		QuestionId:   questionID,
 		Action:       "reply",
 		ResponseData: &dataStr,
-	}))
+	})
 	require.NoError(h.T, err, "ResolveQuestion")
 }
 

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
@@ -34,19 +34,19 @@ type chatSource struct {
 }
 
 func (s *chatSource) Updates(ctx context.Context, sinceSeq int64) ([]follow.RawUpdate, int64, error) {
-	resp, err := s.chat.GetChatUpdates(ctx, connect.NewRequest(&reliantv1.GetChatUpdatesRequest{
+	resp, err := s.chat.GetChatUpdates(ctx, &reliantv1.GetChatUpdatesRequest{
 		ChatId:   s.sessionID,
 		SinceSeq: sinceSeq,
-	}))
+	})
 	if err != nil {
 		if through, ok := historyCompactedThrough(err); ok {
 			return nil, sinceSeq, &follow.HistoryCompactedError{Through: through}
 		}
 		return nil, sinceSeq, err
 	}
-	updates := make([]follow.RawUpdate, 0, len(resp.Msg.GetUpdates()))
+	updates := make([]follow.RawUpdate, 0, len(resp.GetUpdates()))
 	var poll pollState
-	for _, u := range resp.Msg.GetUpdates() {
+	for _, u := range resp.GetUpdates() {
 		createdAt, err := time.Parse(time.RFC3339, u.GetCreatedAt())
 		if err != nil {
 			createdAt = time.Now().UTC()
@@ -59,7 +59,7 @@ func (s *chatSource) Updates(ctx context.Context, sinceSeq int64) ([]follow.RawU
 		}
 		updates = append(updates, s.narrow(ctx, raw, &poll))
 	}
-	return updates, resp.Msg.GetLatestSequence(), nil
+	return updates, resp.GetLatestSequence(), nil
 }
 
 // chatCompactedThroughHeader carries a session's compaction watermark on a
@@ -74,7 +74,7 @@ func historyCompactedThrough(err error) (int64, bool) {
 	if !errors.As(err, &cerr) || cerr.Code() != connect.CodeOutOfRange {
 		return 0, false
 	}
-	through, perr := strconv.ParseInt(cerr.Meta().Get(chatCompactedThroughHeader), 10, 64)
+	through, perr := strconv.ParseInt(errorMeta(err).Get(chatCompactedThroughHeader), 10, 64)
 	if perr != nil || through <= 0 {
 		return 0, false
 	}
@@ -195,11 +195,11 @@ func (s *chatSource) learnApprovals(ctx context.Context) error {
 	if !s.scope.pinned() {
 		return errors.New("no run pinned yet")
 	}
-	a, err := s.gates.approvals.ListApprovalsByChat(ctx, connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{ChatId: s.sessionID}))
+	a, err := s.gates.approvals.ListApprovalsByChat(ctx, &reliantv1.ListApprovalsByChatRequest{ChatId: s.sessionID})
 	if err != nil {
 		return err
 	}
-	for _, ap := range a.Msg.GetApprovals() {
+	for _, ap := range a.GetApprovals() {
 		if g := (Gate{ID: ap.GetId(), RunID: ap.GetWorkflowId()}); s.scope.owns(g) {
 			s.scope.gates[g.ID] = true
 		}

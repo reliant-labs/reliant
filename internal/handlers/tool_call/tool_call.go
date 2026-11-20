@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -23,14 +22,14 @@ import (
 // CancelToolCall cancels an executing tool call by setting an in-memory cancel signal and cancelling the Temporal workflow.
 func (s *Service) CancelToolCall(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CancelToolCallRequest],
-) (*connect.Response[reliantv1.CancelToolCallResponse], error) {
+	req *reliantv1.CancelToolCallRequest,
+) (*reliantv1.CancelToolCallResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.Unauthenticated("not authenticated")
 	}
 
-	toolCallID := req.Msg.ToolCallId
+	toolCallID := req.ToolCallId
 	if toolCallID == "" {
 		return nil, svcerr.InvalidArgument("tool_call_id is required")
 	}
@@ -97,13 +96,13 @@ func (s *Service) CancelToolCall(
 		sessionID = *chat.WorkflowID
 	}
 
-	return connect.NewResponse(&reliantv1.CancelToolCallResponse{
+	return &reliantv1.CancelToolCallResponse{
 		Success:    true,
 		Message:    "Tool call cancellation requested",
 		ToolCallId: toolCallID,
 		SessionId:  sessionID,
 		ChatId:     chatID,
-	}), nil
+	}, nil
 }
 
 // cancelChildWorkflowForToolCall stops the workflow a spawn tool call started.
@@ -211,14 +210,14 @@ func chatWorkflowIDLookup(repo chatReader) func(ctx context.Context, chatID stri
 // This allows the tool to continue running while the workflow can proceed
 func (s *Service) ConvertToBackground(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ConvertToBackgroundRequest],
-) (*connect.Response[reliantv1.ConvertToBackgroundResponse], error) {
+	req *reliantv1.ConvertToBackgroundRequest,
+) (*reliantv1.ConvertToBackgroundResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.Unauthenticated("not authenticated")
 	}
 
-	toolCallID := req.Msg.ToolCallId
+	toolCallID := req.ToolCallId
 	if toolCallID == "" {
 		return nil, svcerr.InvalidArgument("tool_call_id is required")
 	}
@@ -262,14 +261,14 @@ func (s *Service) ConvertToBackground(
 				sessionID = *chat.WorkflowID
 			}
 
-			return connect.NewResponse(&reliantv1.ConvertToBackgroundResponse{
+			return &reliantv1.ConvertToBackgroundResponse{
 				Success:    true,
 				Message:    "Tool execution is already running as background process",
 				ProcessId:  p.ID,
 				ToolCallId: toolCallID,
 				SessionId:  sessionID,
 				ChatId:     chatID,
-			}), nil
+			}, nil
 		}
 	}
 
@@ -305,14 +304,14 @@ func (s *Service) ConvertToBackground(
 	}
 
 	// Return success - the tool executor will handle the actual background conversion
-	return connect.NewResponse(&reliantv1.ConvertToBackgroundResponse{
+	return &reliantv1.ConvertToBackgroundResponse{
 		Success:    true,
 		Message:    "Background conversion requested - tool will be converted to background process",
 		ProcessId:  "", // Process ID will be assigned when the tool converts
 		ToolCallId: toolCallID,
 		SessionId:  sessionID,
 		ChatId:     chatID,
-	}), nil
+	}, nil
 }
 
 // emitToolCallCancelled emits a tool_call cancelled status update to chat_updates.

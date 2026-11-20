@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
@@ -130,7 +130,7 @@ func TestDaemonMCPRuntime_FailedMachineIsLeftAloneForTheCooldown(t *testing.T) {
 func TestDaemonMCPRuntime_AbsentMachineGetsItsServersOnReconnect(t *testing.T) {
 	for name, absent := range map[string]error{
 		"suspended":     machineState("machine m1 is suspended", ErrDaemonSuspended),
-		"not connected": connect.NewError(connect.CodeUnavailable, errDaemonNotConnected),
+		"not connected": connect.NewError(connect.CodeUnavailable, errDaemonNotConnected.Error()).WithCause(errDaemonNotConnected),
 		"reconnecting":  notDispatched(ErrDaemonReconnecting, "m1"),
 		"no machine":    noMachine("none registered"),
 	} {

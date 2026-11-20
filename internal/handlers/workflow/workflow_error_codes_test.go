@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -43,7 +43,7 @@ func TestWorkflowRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := draftsRepo()
 			repo.GetProjectWithUserCheckFunc = func(context.Context, string, string) (*db.Project, error) { return nil, tc.err }
 			svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: repo}))
-			_, err := svc.ListWorkflows(workflow.AuthedContext(t), connect.NewRequest(&pb.ListWorkflowsRequest{ProjectId: "p-1"}))
+			_, err := svc.ListWorkflows(workflow.AuthedContext(t), &pb.ListWorkflowsRequest{ProjectId: "p-1"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("ExportWorkflow, reading the draft: "+tc.name, func(t *testing.T) {
@@ -51,7 +51,7 @@ func TestWorkflowRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := draftsRepo()
 			repo.GetWorkflowDraftBySlugFunc = func(context.Context, string, string) (*db.WorkflowDraft, error) { return nil, tc.err }
 			svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: repo}))
-			_, err := svc.ExportWorkflow(workflow.AuthedContext(t), connect.NewRequest(&pb.ExportWorkflowRequest{ProjectId: "p-1", Slug: "flow"}))
+			_, err := svc.ExportWorkflow(workflow.AuthedContext(t), &pb.ExportWorkflowRequest{ProjectId: "p-1", Slug: "flow"})
 			requireClientReads(t, err, tc.want)
 		})
 		t.Run("SetWorkflowStatus, reading the draft: "+tc.name, func(t *testing.T) {
@@ -59,9 +59,9 @@ func TestWorkflowRPCs_RepositoryFailureCodes(t *testing.T) {
 			repo := draftsRepo()
 			repo.GetWorkflowDraftFunc = func(context.Context, string) (*db.WorkflowDraft, error) { return nil, tc.err }
 			svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: repo}))
-			_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), connect.NewRequest(&pb.SetWorkflowStatusRequest{
+			_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), &pb.SetWorkflowStatusRequest{
 				ProjectId: "p-1", DraftId: "wf-flow", Status: pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
-			}))
+			})
 			requireClientReads(t, err, tc.want)
 		})
 	}
@@ -77,9 +77,9 @@ func TestSetWorkflowStatus_MissingDraftIsNotFound(t *testing.T) {
 		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("workflow draft"), id)
 	}
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: repo}))
-	_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), connect.NewRequest(&pb.SetWorkflowStatusRequest{
+	_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), &pb.SetWorkflowStatusRequest{
 		ProjectId: "p-1", DraftId: "wf-missing", Status: pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
-	}))
+	})
 	requireClientReads(t, err, connect.CodeNotFound)
 }
 
@@ -95,16 +95,16 @@ func TestCreateWorkflowDraft_SlugTakenIsAlreadyExists(t *testing.T) {
 		return fmt.Errorf("%w: %q", db.ErrWorkflowSlugTaken, d.Slug)
 	}
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: repo}))
-	_, err := svc.CreateWorkflowDraft(workflow.AuthedContext(t), connect.NewRequest(&pb.CreateWorkflowDraftRequest{ProjectId: "p-1"}))
+	_, err := svc.CreateWorkflowDraft(workflow.AuthedContext(t), &pb.CreateWorkflowDraftRequest{ProjectId: "p-1"})
 	requireClientReads(t, err, connect.CodeAlreadyExists)
-	require.Equal(t, "workflow slug already taken", svcerr.ToConnect(err).Message())
+	require.Equal(t, "workflow slug already taken", svcerr.ToConnectV2(err).Message())
 }
 
 func requireClientReads(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
-	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+	require.Equal(t, want, svcerr.CodeV2(err), "err = %v", err)
+	require.NotContains(t, svcerr.ToConnectV2(err).Message(), "secret")
 }
 
 // A status change that raced a newer revision is Aborted with stale_revision
@@ -119,10 +119,10 @@ func TestSetWorkflowStatus_StaleRevisionOnTheWire(t *testing.T) {
 	}
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: repo}))
 	stale := int64(3)
-	_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), connect.NewRequest(&pb.SetWorkflowStatusRequest{
+	_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), &pb.SetWorkflowStatusRequest{
 		ProjectId: "p-1", DraftId: "wf-flow", Status: pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
 		ExpectedVersion: &stale,
-	}))
+	})
 	wirecheck.Assert(t, err, wirecheck.Want{
 		Code:    connect.CodeAborted,
 		Message: "workflow was modified since you last loaded it (expected version: 3, current version: 4) - please reload and retry",

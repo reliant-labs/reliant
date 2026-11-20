@@ -3,7 +3,7 @@ package settings_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -18,22 +18,22 @@ func TestCompleteCodexOAuth_Generated(t *testing.T) {
 
 	svc := newSettingsService(t, memorySettings{}.repo())
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CompleteCodexOAuthRequest, pb.CompleteCodexOAuthResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CompleteCodexOAuthRequest, pb.CompleteCodexOAuthResponse]{
 		{
 			Name:    "code is required",
-			Req:     connect.NewRequest(&pb.CompleteCodexOAuthRequest{Code: "  ", CodeVerifier: "v", RedirectUri: "http://localhost/cb"}),
+			Req:     &pb.CompleteCodexOAuthRequest{Code: "  ", CodeVerifier: "v", RedirectUri: "http://localhost/cb"},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "code_verifier is required",
-			Req:     connect.NewRequest(&pb.CompleteCodexOAuthRequest{Code: "c", RedirectUri: "http://localhost/cb"}),
+			Req:     &pb.CompleteCodexOAuthRequest{Code: "c", RedirectUri: "http://localhost/cb"},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "redirect_uri is required",
-			Req:     connect.NewRequest(&pb.CompleteCodexOAuthRequest{Code: "c", CodeVerifier: "v"}),
+			Req:     &pb.CompleteCodexOAuthRequest{Code: "c", CodeVerifier: "v"},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

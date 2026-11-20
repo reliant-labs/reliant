@@ -3,7 +3,7 @@ package package_commands_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -21,16 +21,16 @@ func TestGetProcess_Generated(t *testing.T) {
 
 	svc := package_commands.NewTestPackageCommands(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetPackageProcessRequest, pb.GetPackageProcessResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetPackageProcessRequest, pb.GetPackageProcessResponse]{
 		{
 			Name:    "process_id is required",
-			Req:     connect.NewRequest(&pb.GetPackageProcessRequest{}),
+			Req:     &pb.GetPackageProcessRequest{},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a machine that is not the caller's is not found",
-			Req:     connect.NewRequest(&pb.GetPackageProcessRequest{ProcessId: "p1", DaemonId: ptr.Of("someone-elses-machine")}),
+			Req:     &pb.GetPackageProcessRequest{ProcessId: "p1", DaemonId: ptr.Of("someone-elses-machine")},
 			Ctx:     package_commands.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

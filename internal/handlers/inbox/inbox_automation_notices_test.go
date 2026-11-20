@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/tdd"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -45,14 +46,15 @@ func (m *memberCounts) LiveMembersFresh(_ context.Context, _, orgID string) (int
 
 func listKinds(t *testing.T, svc *Service, ctx context.Context, jwt string, kind reliantv1.InboxItemKind) []*reliantv1.InboxItem {
 	t.Helper()
-	req := connect.NewRequest(&reliantv1.ListInboxRequest{})
+	req := &reliantv1.ListInboxRequest{}
+	info := &connect.CallInfo{}
 	if jwt != "" {
-		req.Header().Set("Authorization", "Bearer "+jwt)
+		info.RequestHeader().Set("Authorization", "Bearer "+jwt)
 	}
-	resp, err := svc.ListInbox(ctx, req)
+	resp, err := tdd.CallV2(ctx, svc.ListInbox, req, info)
 	require.NoError(t, err)
 	var got []*reliantv1.InboxItem
-	for _, it := range resp.Msg.Items {
+	for _, it := range resp.Items {
 		if it.Kind == kind {
 			got = append(got, it)
 		}

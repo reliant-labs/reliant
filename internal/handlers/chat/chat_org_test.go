@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -41,7 +41,7 @@ func TestNewChatOrgs_ProjectOrgNeedsLiveMembership(t *testing.T) {
 
 	for _, blank := range []string{"", " ", "\t\n"} {
 		_, _, err := orgService(t, &acme).newChatOrgs(ctx, "alice", "p-1", blank)
-		if svcerr.Code(err) != connect.CodePermissionDenied {
+		if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 			t.Fatalf("a project of an org the caller left, org_id %q: %v, want PermissionDenied", blank, err)
 		}
 	}

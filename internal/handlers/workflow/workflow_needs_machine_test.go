@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -48,10 +47,10 @@ nodes:
 
 	// include_hidden: the fixtures are minimal and need not pass the chat-safe
 	// listing's validation to carry a needs_machine verdict.
-	resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, IncludeHidden: proto.Bool(true)}))
+	resp, err := svc.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{ProjectId: projectID, IncludeHidden: proto.Bool(true)})
 	require.NoError(t, err)
 	byName := map[string]*reliantv1.WorkflowListItem{}
-	for _, wf := range resp.Msg.GetWorkflows() {
+	for _, wf := range resp.GetWorkflows() {
 		byName[wf.GetName()] = wf
 	}
 

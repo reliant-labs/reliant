@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
@@ -62,14 +61,14 @@ func questionResumeResponseData(answer string) (string, error) {
 // inputUpdate reaches the replayed run before the answer does.
 func (s *Service) resumeFailedQuestionWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SendMessageRequest],
+	req *reliantv1.SendMessageRequest,
 	chat *db.Chat,
 	existingWorkflow *db.Workflow,
 	question *db.Question,
 	targetThread, userID, userContent string,
 	systemMessages []*reliantv1.InputMessage,
 	inputUpdate map[string]interface{},
-) (*connect.Response[reliantv1.SendMessageResponse], bool, string) {
+) (*reliantv1.SendMessageResponse, bool, string) {
 	workflowID := existingWorkflow.ID
 
 	// The delivered answer carries the resume marker; the raw message is the
@@ -120,7 +119,7 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	// the reset guard), re-sends the signal on the new run, and refreshes the
 	// chat's run id.
 	outcome, err := s.runs.ResumeViaSignal(ctx, runs.ResumeViaSignalInput{
-		ChatID:           req.Msg.ChatId,
+		ChatID:           req.ChatId,
 		WorkflowID:       workflowID,
 		TargetWorkflowID: question.TemporalWorkflowID,
 		SignalName:       "signal.question." + question.ID,
@@ -132,24 +131,24 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	})
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		logging.InfoContext(ctx, "Question-parked workflow not reset-resumable - coarse restart at position",
-			"chatID", req.Msg.ChatId, "workflowID", workflowID, "questionID", question.ID, "error", err)
+			"chatID", req.ChatId, "workflowID", workflowID, "questionID", question.ID, "error", err)
 		return nil, false, presavedID
 	}
 	newRunID := outcome.RunID
 
 	logging.InfoContext(ctx, "Question-parked workflow reset-and-resumed via answer (precise nested resume)",
-		"chatID", req.Msg.ChatId, "workflowID", workflowID, "questionID", question.ID, "newRunID", newRunID)
+		"chatID", req.ChatId, "workflowID", workflowID, "questionID", question.ID, "newRunID", newRunID)
 
 	workflowStatus := fmt.Sprintf("%d", db.Active())
-	go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
-	return connect.NewResponse(&reliantv1.SendMessageResponse{
-		ChatId:         req.Msg.ChatId,
+	go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Attachments))
+	return &reliantv1.SendMessageResponse{
+		ChatId:         req.ChatId,
 		WorkflowId:     workflowID,
 		RunId:          newRunID,
 		Status:         "processing",
 		WorkflowStatus: &workflowStatus,
 		MessageId:      presavedID,
-	}), true, presavedID
+	}, true, presavedID
 }
 
 // resurrectGhostWorkflow handles the case where a workflow exists in DB as running/paused
@@ -160,12 +159,12 @@ func (s *Service) resumeFailedQuestionWorkflow(
 // a working state, even after Temporal data loss or server restarts.
 func (s *Service) resurrectGhostWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SendMessageRequest],
+	req *reliantv1.SendMessageRequest,
 	chat *db.Chat,
 	existingWorkflow *db.Workflow,
 	workflowID string,
 	userID string,
-) (*connect.Response[reliantv1.SendMessageResponse], error) {
+) (*reliantv1.SendMessageResponse, error) {
 	// Restart the workflow the CHAT currently points at, not the (possibly
 	// stale) db.Workflow ROW name. After a transition_to handoff the row still
 	// records the completed one-shot pipeline while chat.WorkflowName holds the
@@ -174,16 +173,16 @@ func (s *Service) resurrectGhostWorkflow(
 	workflowName := activeWorkflowNameForResume(chat, existingWorkflow)
 
 	// Extract user and system messages from input
-	userContent, systemMessages, hasUserContent := extractMessagesFromInput(req.Msg.Messages)
+	userContent, systemMessages, hasUserContent := extractMessagesFromInput(req.Messages)
 
 	// The request's presets replace the chat's; persisted once the inputs
 	// below pass validation.
-	presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
+	presetsChanged := applyRequestPresets(chat, req.SelectedPresets)
 
 	// Determine target thread - default to root workflow thread
 	targetThread := existingWorkflow.Thread
-	if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
-		targetThread = *req.Msg.TargetThread
+	if req.TargetThread != nil && *req.TargetThread != "" {
+		targetThread = *req.TargetThread
 	}
 
 	// Step 1: Build workflow options - same ID, fresh execution
@@ -203,7 +202,7 @@ func (s *Service) resurrectGhostWorkflow(
 			effectivePresets[k] = v
 		}
 	}
-	for k, v := range req.Msg.SelectedPresets {
+	for k, v := range req.SelectedPresets {
 		if v != "" {
 			effectivePresets[k] = v
 		}
@@ -215,7 +214,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// read the union for a chat with no pin yet, then ran another machine's
 	// definition.
 	s.chatPinner().Pin(ctx, chat)
-	initialData, err := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData, err := s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, effectivePresets, req.WorkflowParams)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
@@ -238,15 +237,15 @@ func (s *Service) resurrectGhostWorkflow(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 	}
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, chat, workflowName, workflowID, targetThread, initialData,
-		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
+		s.selectionStoredModelIsCurrent(ctx, req.ChatId, initialData))
 	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
-	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
+	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.WorkflowParams, initialData, modelMoves, 0)
 
 	// Step 4: Build execution context - inheriting existing thread
 	// We use ThreadModeInherit because we're continuing an existing conversation
 	execContext := &v2.ExecutionContext{
 		WorkflowID:   workflowID,
-		ChatID:       req.Msg.ChatId,
+		ChatID:       req.ChatId,
 		WorkflowName: workflowName,
 		Thread:       targetThread,
 		ThreadMode:   model.ThreadModeInherit, // Inherit existing thread context
@@ -261,14 +260,14 @@ func (s *Service) resurrectGhostWorkflow(
 	launch.InjectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{
-		ChatID:       req.Msg.ChatId,
+		ChatID:       req.ChatId,
 		WorkflowName: workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
-		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
+		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, req.ChatId),
 		// A ghost (Temporal lost the running execution) is an infra failure,
 		// not user intent — the fresh execution resumes at position.
-		Resume: resumeWholeChatInput(v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)),
+		Resume: resumeWholeChatInput(v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.ChatId, workflowID)),
 	}
 
 	// Step 5: Start fresh Temporal execution
@@ -279,7 +278,7 @@ func (s *Service) resurrectGhostWorkflow(
 
 	runID := workflowRun.GetRunID()
 	logging.InfoContext(ctx, "[Ghost Recovery] Successfully resurrected workflow",
-		"chatID", req.Msg.ChatId,
+		"chatID", req.ChatId,
 		"workflowID", workflowID,
 		"newRunID", runID,
 		"workflowName", workflowName,
@@ -287,19 +286,19 @@ func (s *Service) resurrectGhostWorkflow(
 	)
 
 	// Step 6: Update run IDs and workflow status
-	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
+	s.runs.RecordRun(ctx, req.ChatId, workflowID, runID)
 	// Only over the status the row had before the start: the new run may
 	// already have written its own (workflow.MarkWokenRunActive).
 	workflow.MarkWokenRunActive(ctx, s.deps.Repo, workflowID, existingWorkflow.Status, true)
 
 	workflowStatus := fmt.Sprintf("%d", db.Active())
-	go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
-	return connect.NewResponse(&reliantv1.SendMessageResponse{
-		ChatId:         req.Msg.ChatId,
+	go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Attachments))
+	return &reliantv1.SendMessageResponse{
+		ChatId:         req.ChatId,
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Status:         "processing",
 		WorkflowStatus: &workflowStatus,
 		MessageId:      savedMessageID,
-	}), nil
+	}, nil
 }

@@ -11,7 +11,7 @@ import (
 	"slices"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
@@ -134,7 +134,7 @@ func TestInboxListReportsTruncationAtTheCap(t *testing.T) {
 
 func TestInboxListErrorIsWrapped(t *testing.T) {
 	f := &fake{listInbox: func(*reliantv1.ListInboxRequest) (*reliantv1.ListInboxResponse, error) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("scope"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "scope")
 	}}
 	c, _ := f.start(t)
 	_, err := c.Inbox.List(context.Background(), ListInbox{}).All()
@@ -167,7 +167,7 @@ func TestInboxDismissAndRestore(t *testing.T) {
 	f := &fake{
 		dismissInbox: func(r *reliantv1.DismissInboxItemRequest) (*reliantv1.DismissInboxItemResponse, error) {
 			if slices.Contains(r.GetItemIds(), "bad") {
-				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown item"))
+				return nil, connect.NewError(connect.CodeInvalidArgument, "unknown item")
 			}
 			dismissed = r.GetItemIds()
 			return &reliantv1.DismissInboxItemResponse{}, nil

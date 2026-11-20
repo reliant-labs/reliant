@@ -8,8 +8,11 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/reliant-labs/forge/pkg/activity"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -40,7 +43,7 @@ func presetActivityClient(t *testing.T, svc reliantv1connect.PresetServiceHandle
 		mu     sync.Mutex
 		events []activity.Event
 	)
-	ic, err := activity.Interceptor(activity.Deps{
+	ic, err := activity.InterceptorV2(activity.Deps{
 		Principal: testPrincipal{},
 		Writer: activity.WriterFunc(func(_ context.Context, ev activity.Event) error {
 			mu.Lock()
@@ -50,16 +53,18 @@ func presetActivityClient(t *testing.T, svc reliantv1connect.PresetServiceHandle
 		}),
 	})
 	require.NoError(t, err)
-	authed := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			return next(auth.WithUser(ctx, userID, "user", ""), req)
+	authed := connect.ServerInterceptor(func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(auth.WithUser(ctx, userID, "user", ""), spec, stream)
 		}
 	})
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewPresetServiceHandler(svc, connect.WithInterceptors(authed, ic)))
+	server := connect.NewServer(svcerr.InterceptorV2(), authed, ic)
+	reliantv1connect.RegisterPresetServiceHandler(server, svc)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return reliantv1connect.NewPresetServiceClient(srv.Client(), srv.URL), func() []activity.Event {
+	return reliantv1connect.NewPresetServiceClient(connect.NewClient(connecthttp.NewTransport(srv.Client(), srv.URL, connecthttp.WithReadMaxBytes(0)))), func() []activity.Event {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]activity.Event(nil), events...)
@@ -74,32 +79,32 @@ func TestPresetWrites_RecordActivityOnlyWhenTheyChangeSomething(t *testing.T) {
 	client, events := presetActivityClient(t, service, userID)
 	ctx := context.Background()
 
-	created, err := client.CreatePreset(ctx, connect.NewRequest(&reliantv1.CreatePresetRequest{
+	created, err := client.CreatePreset(ctx, &reliantv1.CreatePresetRequest{
 		ProjectId: projectID, Name: "careful", Tag: "agent",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, created.Msg.GetSuccess(), created.Msg.GetError())
-	presetID := created.Msg.GetPreset().GetId()
+	require.True(t, created.GetSuccess(), created.GetError())
+	presetID := created.GetPreset().GetId()
 	require.NotEmpty(t, presetID)
 
-	clash, err := client.CreatePreset(ctx, connect.NewRequest(&reliantv1.CreatePresetRequest{
+	clash, err := client.CreatePreset(ctx, &reliantv1.CreatePresetRequest{
 		ProjectId: projectID, Name: "careful", Tag: "agent",
-	}))
+	})
 	require.NoError(t, err)
-	require.False(t, clash.Msg.GetSuccess(), "a second preset with the same slug is refused")
+	require.False(t, clash.GetSuccess(), "a second preset with the same slug is refused")
 
-	deleted, err := client.DeletePreset(ctx, connect.NewRequest(&reliantv1.DeletePresetRequest{
+	deleted, err := client.DeletePreset(ctx, &reliantv1.DeletePresetRequest{
 		ProjectId: projectID, Name: "careful",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, deleted.Msg.GetSuccess(), deleted.Msg.GetError())
-	assert.Equal(t, presetID, deleted.Msg.GetId())
+	require.True(t, deleted.GetSuccess(), deleted.GetError())
+	assert.Equal(t, presetID, deleted.GetId())
 
-	missing, err := client.DeletePreset(ctx, connect.NewRequest(&reliantv1.DeletePresetRequest{
+	missing, err := client.DeletePreset(ctx, &reliantv1.DeletePresetRequest{
 		ProjectId: projectID, Name: "careful",
-	}))
+	})
 	require.NoError(t, err)
-	require.False(t, missing.Msg.GetSuccess(), "deleting a preset that is gone is refused")
+	require.False(t, missing.GetSuccess(), "deleting a preset that is gone is refused")
 
 	got := events()
 	require.Len(t, got, 2, "only the create and the delete that changed something record an event")

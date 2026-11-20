@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,9 +100,9 @@ func TestResumeChat_LiveRunIsWokenNotResumed(t *testing.T) {
 	temporal := &usageLimitTemporalClient{}
 	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}, runs: runs.NewService(repo, temporal, nil)}
 
-	resp, err := svc.ResumeChat(ctx, connect.NewRequest(&reliantv1.ResumeChatRequest{ChatId: chatID}))
+	resp, err := svc.ResumeChat(ctx, &reliantv1.ResumeChatRequest{ChatId: chatID})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Success)
+	assert.True(t, resp.Success)
 	assert.Equal(t, []string{chatID + ":" + v2.CapacityWakeSignalName}, temporal.signals,
 		"only the capacity wake: every blocked thread goes on, and no resume is left held")
 	assert.Equal(t, v2.CapacityWakeSignal{AllStopped: true}, temporal.payloads[0],
@@ -124,9 +123,9 @@ func TestResumeChat_PausedRunResumesThenWakesEveryThread(t *testing.T) {
 	temporal := &usageLimitTemporalClient{}
 	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}, runs: runs.NewService(repo, temporal, succeedingPauseController{})}
 
-	resp, err := svc.ResumeChat(ctx, connect.NewRequest(&reliantv1.ResumeChatRequest{ChatId: chatID}))
+	resp, err := svc.ResumeChat(ctx, &reliantv1.ResumeChatRequest{ChatId: chatID})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Success)
+	assert.True(t, resp.Success)
 	assert.Equal(t, []string{chatID + ":" + v2.CapacityWakeSignalName}, temporal.signals,
 		"after the resume (the pause controller's), the whole chat is woken")
 	assert.Equal(t, v2.CapacityWakeSignal{AllStopped: true}, temporal.payloads[0])

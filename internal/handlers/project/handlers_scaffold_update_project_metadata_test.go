@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -26,22 +26,22 @@ func TestUpdateProjectMetadata_Generated(t *testing.T) {
 	}
 	svc := newService(t, store, nil)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdateProjectMetadataRequest, pb.UpdateProjectMetadataResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.UpdateProjectMetadataRequest, pb.UpdateProjectMetadataResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.UpdateProjectMetadataRequest{ProjectId: "p-2", Description: ptr.Of("d")}),
+			Req:     &pb.UpdateProjectMetadataRequest{ProjectId: "p-2", Description: ptr.Of("d")},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the description is stored",
-			Req:  connect.NewRequest(&pb.UpdateProjectMetadataRequest{ProjectId: "p-1", Description: ptr.Of("the widgets service")}),
+			Req:  &pb.UpdateProjectMetadataRequest{ProjectId: "p-1", Description: ptr.Of("the widgets service")},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.UpdateProjectMetadataResponse]) {
+			Check: func(t *testing.T, resp *pb.UpdateProjectMetadataResponse) {
 				if stored == nil || stored.Description == nil || *stored.Description != "the widgets service" || stored.Name != "proj" {
 					t.Fatalf("stored = %+v, want p-1 with the new description", stored)
 				}
-				if got := resp.Msg.GetProject().GetDescription(); got != "the widgets service" {
+				if got := resp.GetProject().GetDescription(); got != "the widgets service" {
 					t.Fatalf("description = %q", got)
 				}
 			},

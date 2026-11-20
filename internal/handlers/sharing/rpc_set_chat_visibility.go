@@ -3,7 +3,6 @@ package sharing
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,16 +18,16 @@ import (
 // decided on a row that moved since writes nothing.
 func (s *Service) SetChatVisibility(
 	ctx context.Context,
-	req *connect.Request[pb.SetChatVisibilityRequest],
-) (*connect.Response[pb.SetChatVisibilityResponse], error) {
+	req *pb.SetChatVisibilityRequest,
+) (*pb.SetChatVisibilityResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	to, err := visibilityFrom(req.Msg.GetVisibility())
+	to, err := visibilityFrom(req.GetVisibility())
 	if err != nil {
 		return nil, err
 	}
 	// Deciding who may change it reads the row as a viewer could.
 	ctx = authz.WithViewerReads(ctx)
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.GetChatId())
+	chat, err := s.deps.Repo.GetChat(ctx, req.GetChatId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -54,5 +53,5 @@ func (s *Service) SetChatVisibility(
 			}
 		}
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

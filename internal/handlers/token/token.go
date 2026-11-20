@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -112,8 +111,8 @@ func authorityError(op string, err error) error {
 // CreateToken mints a token acting as the caller. Interactive session only: a
 // machine credential never mints a credential.
 func (s *Service) CreateToken(
-	ctx context.Context, req *connect.Request[reliantv1.CreateTokenRequest],
-) (*connect.Response[reliantv1.CreateTokenResponse], error) {
+	ctx context.Context, req *reliantv1.CreateTokenRequest,
+) (*reliantv1.CreateTokenResponse, error) {
 	userID, isMachine, err := callerUser(ctx)
 	if err != nil {
 		return nil, err
@@ -121,19 +120,19 @@ func (s *Service) CreateToken(
 	if isMachine {
 		return nil, svcerr.PermissionDenied("token management requires an interactive session; a token cannot mint a token")
 	}
-	scope, err := scopeForKind(req.Msg.GetKind())
+	scope, err := scopeForKind(req.GetKind())
 	if err != nil {
 		return nil, err
 	}
-	name := strings.TrimSpace(req.Msg.GetName())
+	name := strings.TrimSpace(req.GetName())
 	if name == "" || len(name) > maxTokenNameLen {
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("name is required (at most %d characters)", maxTokenNameLen))
 	}
-	if req.Msg.GetTtlSeconds() < 0 {
+	if req.GetTtlSeconds() < 0 {
 		return nil, svcerr.InvalidArgument("ttl_seconds must not be negative")
 	}
 	var expiresAt *time.Time
-	if ttl := req.Msg.GetTtlSeconds(); ttl > 0 {
+	if ttl := req.GetTtlSeconds(); ttl > 0 {
 		at := time.Now().Add(time.Duration(ttl) * time.Second)
 		expiresAt = &at
 	}
@@ -151,14 +150,14 @@ func (s *Service) CreateToken(
 	}
 	scopes := minted.Scopes
 	logging.InfoContext(ctx, "access token created", "user_id", userID, "token_id", minted.TokenID, "scopes", strings.Join(scopes, " "))
-	return connect.NewResponse(&reliantv1.CreateTokenResponse{
+	return &reliantv1.CreateTokenResponse{
 		Info: &reliantv1.TokenInfo{
 			Id:          minted.TokenID,
 			Name:        name,
 			TokenPrefix: minted.DisplayPrefix,
 			CreatedAt:   time.Now().UTC().Format(time.RFC3339),
 			ExpiresAt:   formatTime(minted.ExpiresAt),
-			Kind:        req.Msg.GetKind(),
+			Kind:        req.GetKind(),
 			// What the token carries, as the authority reports it — for a
 			// daemon credential, its resolved wildcard. Built by hand rather than through
 			// tokenInfoProto because a mint returns Minted, not TokenInfo —
@@ -167,20 +166,20 @@ func (s *Service) CreateToken(
 			Scopes: scopes,
 		},
 		Token: minted.Plaintext,
-	}), nil
+	}, nil
 }
 
 // ListTokens lists the caller's live tokens, optionally of one kind.
 func (s *Service) ListTokens(
-	ctx context.Context, req *connect.Request[reliantv1.ListTokensRequest],
-) (*connect.Response[reliantv1.ListTokensResponse], error) {
+	ctx context.Context, req *reliantv1.ListTokensRequest,
+) (*reliantv1.ListTokensResponse, error) {
 	userID, _, err := callerUser(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var scope fat.Scope
-	if req.Msg.GetKind() != reliantv1.TokenKind_TOKEN_KIND_UNSPECIFIED {
-		if scope, err = scopeForKind(req.Msg.GetKind()); err != nil {
+	if req.GetKind() != reliantv1.TokenKind_TOKEN_KIND_UNSPECIFIED {
+		if scope, err = scopeForKind(req.GetKind()); err != nil {
 			return nil, err
 		}
 	}
@@ -197,18 +196,18 @@ func (s *Service) ListTokens(
 		}
 		out = append(out, tokenInfoProto(t))
 	}
-	return connect.NewResponse(&reliantv1.ListTokensResponse{Tokens: out}), nil
+	return &reliantv1.ListTokensResponse{Tokens: out}, nil
 }
 
 // RevokeToken revokes one of the caller's tokens.
 func (s *Service) RevokeToken(
-	ctx context.Context, req *connect.Request[reliantv1.RevokeTokenRequest],
-) (*connect.Response[reliantv1.RevokeTokenResponse], error) {
+	ctx context.Context, req *reliantv1.RevokeTokenRequest,
+) (*reliantv1.RevokeTokenResponse, error) {
 	userID, _, err := callerUser(ctx)
 	if err != nil {
 		return nil, err
 	}
-	id := strings.TrimSpace(req.Msg.GetId())
+	id := strings.TrimSpace(req.GetId())
 	if id == "" {
 		return nil, svcerr.InvalidArgument("token id is required")
 	}
@@ -216,7 +215,7 @@ func (s *Service) RevokeToken(
 		return nil, authorityError("revoke", err)
 	}
 	logging.InfoContext(ctx, "access token revoked", "user_id", userID, "token_id", id)
-	return connect.NewResponse(&reliantv1.RevokeTokenResponse{}), nil
+	return &reliantv1.RevokeTokenResponse{}, nil
 }
 
 // UpdateToken changes one of the caller's tokens' name and/or permissions.
@@ -232,8 +231,8 @@ func (s *Service) RevokeToken(
 // same path rather than carved out: one rule is easier to reason about than a
 // field-by-field exception, and headless automation has no reason to rename.
 func (s *Service) UpdateToken(
-	ctx context.Context, req *connect.Request[reliantv1.UpdateTokenRequest],
-) (*connect.Response[reliantv1.UpdateTokenResponse], error) {
+	ctx context.Context, req *reliantv1.UpdateTokenRequest,
+) (*reliantv1.UpdateTokenResponse, error) {
 	userID, isMachine, err := callerUser(ctx)
 	if err != nil {
 		return nil, err
@@ -241,14 +240,14 @@ func (s *Service) UpdateToken(
 	if isMachine {
 		return nil, svcerr.PermissionDenied("a machine credential cannot edit a credential; sign in to change a token's permissions")
 	}
-	id := strings.TrimSpace(req.Msg.GetId())
+	id := strings.TrimSpace(req.GetId())
 	if id == "" {
 		return nil, svcerr.InvalidArgument("token id is required")
 	}
 
 	var name *string
-	if req.Msg.Name != nil {
-		trimmed := strings.TrimSpace(req.Msg.GetName())
+	if req.Name != nil {
+		trimmed := strings.TrimSpace(req.GetName())
 		if trimmed == "" {
 			return nil, svcerr.InvalidArgument("name cannot be blank")
 		}
@@ -259,8 +258,8 @@ func (s *Service) UpdateToken(
 	// downstream. The wrapper in the request is what keeps those apart — a
 	// bare repeated field would make a rename strip every permission.
 	var scopes fat.Set
-	if req.Msg.Scopes != nil {
-		scopes, err = fat.NewSet(req.Msg.GetScopes().GetScopes())
+	if req.Scopes != nil {
+		scopes, err = fat.NewSet(req.GetScopes().GetScopes())
 		if err != nil {
 			// fat's refusal names the scope it does not know: the caller's to fix.
 			return nil, svcerr.InvalidArgument(err.Error())
@@ -276,5 +275,5 @@ func (s *Service) UpdateToken(
 	}
 	logging.InfoContext(ctx, "access token updated", "user_id", userID, "token_id", id,
 		"renamed", name != nil, "rescoped", scopes != nil)
-	return connect.NewResponse(&reliantv1.UpdateTokenResponse{Info: tokenInfoProto(info)}), nil
+	return &reliantv1.UpdateTokenResponse{Info: tokenInfoProto(info)}, nil
 }

@@ -4,7 +4,7 @@ package toolexec
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/nats-io/nats.go"
 
 	"github.com/reliant-labs/reliant/internal/errreason"

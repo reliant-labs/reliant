@@ -11,7 +11,10 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -62,23 +65,24 @@ type fakeControlPlane struct {
 	notSuspended bool     // answer ResumeDaemon as the real one does for a daemon it no longer holds suspended
 }
 
-func (f *fakeControlPlane) ResumeDaemon(_ context.Context, req *connect.Request[cpdaemonv1.ResumeDaemonRequest]) (*connect.Response[cpdaemonv1.ResumeDaemonResponse], error) {
+func (f *fakeControlPlane) ResumeDaemon(ctx context.Context, req *cpdaemonv1.ResumeDaemonRequest) (*cpdaemonv1.ResumeDaemonResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.resumes = append(f.resumes, req.Msg.GetDaemonId())
-	f.resumeAuth = append(f.resumeAuth, req.Header().Get("Authorization"))
+	f.resumes = append(f.resumes, req.GetDaemonId())
+	f.resumeAuth = append(f.resumeAuth, serverkit.CallInfoV2(ctx).RequestHeader().Get("Authorization"))
 	if f.notSuspended {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, nil)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, "")
 	}
-	return connect.NewResponse(&cpdaemonv1.ResumeDaemonResponse{}), nil
+	return &cpdaemonv1.ResumeDaemonResponse{}, nil
 }
 
 func startFakeControlPlane(t *testing.T) (*fakeControlPlane, string) {
 	t.Helper()
 	cp := &fakeControlPlane{}
-	path, handler := controlplanev1connect.NewDaemonServiceHandler(cp)
+	server := connect.NewServer(svcerr.InterceptorV2())
+	controlplanev1connect.RegisterDaemonServiceHandler(server, cp)
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	mountkit.MountV2(mux, server)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		cp.mu.Lock()
 		cp.strayPaths = append(cp.strayPaths, r.URL.Path)

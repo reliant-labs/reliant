@@ -7,7 +7,7 @@
 // the wire. In process they are wrappers that svcerr.ToConnect materializes,
 // and a test that inspects the wrapper proves nothing about the response the
 // web actually reads. So RoundTrip serves the error from a real Connect
-// handler, behind svcerr.Interceptor as every reliant server is, and returns what
+// handler, behind svcerr.InterceptorV2 as every reliant server is, and returns what
 // a real Connect client received: the code, the message and the response
 // metadata.
 //
@@ -21,33 +21,71 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
-const procedure = "/wirecheck.v1.Wirecheck/Fail"
+var spec = connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: "/wirecheck.v1.Wirecheck/Fail"}
 
 // RoundTrip returns the *connect.Error a real client receives when a unary
 // handler returns err. It fails the test if the call succeeded or the client
-// got something other than a Connect error.
+// got something other than a Connect error. A v2 *connect.Error carries no
+// metadata: RoundTripMeta also returns the response metadata the client got.
 func RoundTrip(t testing.TB, err error) *connect.Error {
 	t.Helper()
-	mux := http.NewServeMux()
-	mux.Handle(procedure, connect.NewUnaryHandler(procedure,
-		func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
-			return nil, err
-		}, connect.WithInterceptors(svcerr.Interceptor())))
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
+	ce, _ := RoundTripMeta(t, err)
+	return ce
+}
 
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](srv.Client(), srv.URL+procedure)
-	_, callErr := client.CallUnary(t.Context(), connect.NewRequest(&emptypb.Empty{}))
+// RoundTripMeta is RoundTrip plus the metadata (response headers and
+// trailers) the client received with the error, as a v1 *connect.Error's
+// Meta() held it: read the reason with meta.Get(svcerr.ReasonHeader). It is
+// never nil.
+func RoundTripMeta(t testing.TB, err error) (*connect.Error, http.Header) {
+	t.Helper()
+	callErr := ClientError(t, err)
 	var ce *connect.Error
 	if !errors.As(callErr, &ce) {
 		t.Fatalf("want a Connect error over the wire, got %v", callErr)
 	}
-	return ce
+	meta := svcerr.MetaOf(callErr)
+	if meta == nil {
+		meta = http.Header{}
+	}
+	return ce, meta
+}
+
+// ClientError returns the error a real client's call returned when a unary
+// handler returns err, with the response metadata attached the way every
+// rpcclient client attaches it (svcerr.MetaOf reads it). Use
+// it to hand code under test an error exactly as it arrives off the wire. It
+// fails the test if the call succeeded.
+func ClientError(t testing.TB, err error) error {
+	t.Helper()
+	server := connect.NewServer(svcerr.InterceptorV2())
+	server.Register(connect.Method{
+		Spec: spec,
+		Handler: func(_ context.Context, _ connect.Spec, stream connect.ServerStream) error {
+			if recvErr := stream.Receive(&emptypb.Empty{}); recvErr != nil {
+				return recvErr
+			}
+			return err
+		},
+	})
+	mux := http.NewServeMux()
+	mountkit.MountV2(mux, server)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	callErr := rpcclient.New(srv.Client(), srv.URL, nil).CallUnary(t.Context(), spec, &emptypb.Empty{}, &emptypb.Empty{})
+	if callErr == nil {
+		t.Fatalf("the call succeeded; want the handler's error %v", err)
+	}
+	return callErr
 }
 
 // Want is what a client must see.
@@ -68,21 +106,21 @@ const retiredReasonHeader = "X-Reliant-Reason"
 // on it, so a reason must never come with rewritten copy.
 func Assert(t testing.TB, err error, want Want) {
 	t.Helper()
-	ce := RoundTrip(t, err)
+	ce, meta := RoundTripMeta(t, err)
 	if ce.Code() != want.Code {
 		t.Errorf("code = %v, want %v", ce.Code(), want.Code)
 	}
 	if ce.Message() != want.Message {
 		t.Errorf("message = %q, want %q (byte-identical)", ce.Message(), want.Message)
 	}
-	if got := ce.Meta().Get(svcerr.ReasonHeader); got != want.Reason {
+	if got := meta.Get(svcerr.ReasonHeader); got != want.Reason {
 		t.Errorf("%s = %q, want %q", svcerr.ReasonHeader, got, want.Reason)
 	}
-	if got := ce.Meta().Get(retiredReasonHeader); got != "" {
+	if got := meta.Get(retiredReasonHeader); got != "" {
 		t.Errorf("%s = %q, want it absent (retired)", retiredReasonHeader, got)
 	}
 	for k, v := range want.Meta {
-		if got := ce.Meta().Get(k); got != v {
+		if got := meta.Get(k); got != v {
 			t.Errorf("%s = %q, want %q", k, got, v)
 		}
 	}

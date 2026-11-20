@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -147,7 +146,7 @@ func TestSendMessage_RacingAnInFlightPauseResumesTheRun(t *testing.T) {
 
 	pauseDone := make(chan error, 1)
 	go func() {
-		_, err := service.PauseChat(ctx, connect.NewRequest(&reliantv1.PauseChatRequest{ChatId: fx.chatID}))
+		_, err := service.PauseChat(ctx, &reliantv1.PauseChatRequest{ChatId: fx.chatID})
 		pauseDone <- err
 	}()
 

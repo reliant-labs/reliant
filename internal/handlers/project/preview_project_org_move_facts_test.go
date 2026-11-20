@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,11 +39,11 @@ func previewWithFacts(t *testing.T, facts project.MoveFacts) (*pb.ProjectOrgMove
 	}
 	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, MoveFacts: facts}))
 	ctx := authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), moveOrgs{}), authz.CredentialKindPerson)
-	resp, err := svc.PreviewProjectOrgMove(ctx, connect.NewRequest(&pb.PreviewProjectOrgMoveRequest{ProjectId: "p-mine", ToOrgId: "globex"}))
+	resp, err := svc.PreviewProjectOrgMove(ctx, &pb.PreviewProjectOrgMoveRequest{ProjectId: "p-mine", ToOrgId: "globex"})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg.GetEffects(), nil
+	return resp.GetEffects(), nil
 }
 
 // Control-plane's half fills the preview: secret access to revoke, the hosted
@@ -128,10 +128,11 @@ func TestPreviewProjectOrgMove_ControlPlaneRefusalIsTheRefusal(t *testing.T) {
 			_, err := previewWithFacts(t, &project.MockMoveFacts{PreviewProjectOrgMoveFunc: func(context.Context, controlplane.ProjectOrgMovePreviewQuery) (*controlplane.ProjectOrgMovePreview, error) {
 				return nil, &controlplane.ProjectOrgMoveError{Code: "permission_denied", Reason: reason}
 			}})
-			ce := svcerr.ToConnect(err)
+			ce := svcerr.ToConnectV2(err)
 			require.NotNil(t, ce)
 			assert.Equal(t, connect.CodePermissionDenied, ce.Code())
-			assert.Equal(t, want, ce.Meta().Get(svcerr.ReasonHeader))
+			reason, _ := svcerr.ReasonOf(err)
+			assert.Equal(t, want, reason)
 		})
 	}
 }

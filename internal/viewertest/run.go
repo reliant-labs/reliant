@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -181,7 +181,7 @@ func RunService(t *testing.T, f *Fixture, svc any, service string, requests map[
 }
 
 // invoke calls svc's method name with ctx and msg as a Connect unary handler
-// (func(ctx, *connect.Request[T]) (*connect.Response[U], error)).
+// (func(ctx, *Req) (*Resp, error)).
 func invoke(t *testing.T, svc any, name string, ctx context.Context, msg proto.Message) (a answer) {
 	t.Helper()
 	method := reflect.ValueOf(svc).MethodByName(name)
@@ -192,8 +192,10 @@ func invoke(t *testing.T, svc any, name string, ctx context.Context, msg proto.M
 	if mt.NumIn() != 2 || mt.NumOut() != 2 {
 		t.Fatalf("viewertest: %s is not a unary handler (%v)", name, mt)
 	}
-	req := reflect.New(mt.In(1).Elem())
-	req.Elem().FieldByName("Msg").Set(reflect.ValueOf(msg))
+	req := reflect.ValueOf(msg)
+	if mt.In(1) != req.Type() {
+		t.Fatalf("viewertest: %s takes %v, not the %T built for it", name, mt.In(1), msg)
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			a = answer{panic: r}
@@ -202,12 +204,12 @@ func invoke(t *testing.T, svc any, name string, ctx context.Context, msg proto.M
 	out := method.Call([]reflect.Value{reflect.ValueOf(ctx), req})
 	if errV := out[1]; !errV.IsNil() {
 		err := errV.Interface().(error)
-		return answer{code: svcerr.Code(err), err: err}
+		return answer{code: svcerr.CodeV2(err), err: err}
 	}
 	if out[0].IsNil() {
 		return answer{}
 	}
-	resp, _ := out[0].Elem().FieldByName("Msg").Interface().(proto.Message)
+	resp, _ := out[0].Interface().(proto.Message)
 	return answer{resp: resp}
 }
 

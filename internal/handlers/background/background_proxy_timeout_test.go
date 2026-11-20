@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -51,7 +51,7 @@ func TestBackgroundProxy_ListProcesses_UsesAShortDaemonTimeout(t *testing.T) {
 	router := &bgProxyRouter{reply: reply}
 	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: router}))
 
-	_, err = svc.ListProcesses(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
+	_, err = svc.ListProcesses(AuthedContext(t), &reliantv1.ListBackgroundProcessesRequest{})
 	require.NoError(t, err)
 
 	assert.Equal(t, "exec.bg_list", router.lastCommandType)
@@ -68,9 +68,9 @@ func TestBackgroundProxy_DaemonTimeoutIsDeadlineExceeded(t *testing.T) {
 		toolexec.ErrDaemonTimeout, context.DeadlineExceeded)}
 	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: router}))
 
-	_, err := svc.ListProcesses(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
+	_, err := svc.ListProcesses(AuthedContext(t), &reliantv1.ListBackgroundProcessesRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err), "error: %v", err)
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(err), "error: %v", err)
 }
 
 // The mutating commands keep the longer budget: killing a process group can
@@ -83,9 +83,9 @@ func TestBackgroundProxy_KillProcess_KeepsTheLongerTimeout(t *testing.T) {
 	router := &bgProxyRouter{reply: reply}
 	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: router}))
 
-	_, err = svc.KillProcess(AuthedContext(t), connect.NewRequest(&reliantv1.KillProcessRequest{
+	_, err = svc.KillProcess(AuthedContext(t), &reliantv1.KillProcessRequest{
 		ProcessId: "proc-1",
-	}))
+	})
 	require.NoError(t, err)
 
 	assert.Equal(t, "exec.bg_kill", router.lastCommandType)
@@ -101,7 +101,7 @@ func TestBackgroundProxy_KillProcess_NotRunningOnTheWire(t *testing.T) {
 		"process proc-1 is not running (status: completed)")}
 	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: router}))
 
-	_, err := svc.KillProcess(AuthedContext(t), connect.NewRequest(&reliantv1.KillProcessRequest{ProcessId: "proc-1"}))
+	_, err := svc.KillProcess(AuthedContext(t), &reliantv1.KillProcessRequest{ProcessId: "proc-1"})
 	wirecheck.Assert(t, err, wirecheck.Want{
 		Code:    connect.CodeFailedPrecondition,
 		Message: "daemon command exec.bg_kill failed: process proc-1 is not running (status: completed)",
@@ -110,7 +110,7 @@ func TestBackgroundProxy_KillProcess_NotRunningOnTheWire(t *testing.T) {
 
 	// Any other kill failure is unchanged: no reason, Internal.
 	router.err = toolexec.DaemonReportedFailure("exec.bg_kill", "permission denied")
-	_, err = svc.KillProcess(AuthedContext(t), connect.NewRequest(&reliantv1.KillProcessRequest{ProcessId: "proc-1"}))
+	_, err = svc.KillProcess(AuthedContext(t), &reliantv1.KillProcessRequest{ProcessId: "proc-1"})
 	wirecheck.Assert(t, err, wirecheck.Want{
 		Code:    connect.CodeInternal,
 		Message: "daemon command exec.bg_kill failed: permission denied",

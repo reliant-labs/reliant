@@ -4,7 +4,7 @@ package chat
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,13 +16,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-func (f *builderTestFixture) startCLI(req *reliantv1.StartChatRequest) (*connect.Response[reliantv1.StartChatResponse], error) {
+func (f *builderTestFixture) startCLI(req *reliantv1.StartChatRequest) (*reliantv1.StartChatResponse, error) {
 	req.ProjectId = f.projectID
 	req.CliRun = proto.Bool(true)
 	if len(req.Messages) == 0 {
 		req.Messages = []*reliantv1.InputMessage{{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "inventory the machine\nand report"}}
 	}
-	return f.service.StartChat(f.ctx, connect.NewRequest(req))
+	return f.service.StartChat(f.ctx, req)
 }
 
 // `reliant workflow run` records cli.run: deduped on the chat id like any
@@ -36,7 +36,7 @@ func TestStartChat_CLIRunRecordsCLIRunKindOutOfTheSidebar(t *testing.T) {
 
 	resp, err := f.startCLI(&reliantv1.StartChatRequest{Workflow: "cicd-probe"})
 	require.NoError(t, err)
-	chatID := resp.Msg.GetChat().GetId()
+	chatID := resp.GetChat().GetId()
 
 	assert.Equal(t, "cli.run", f.launchKind(t, chatID))
 	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
@@ -73,7 +73,7 @@ func TestStartChat_CLIRunKeepsAnExplicitTitle(t *testing.T) {
 
 	resp, err := f.startCLI(&reliantv1.StartChatRequest{Workflow: "cicd-probe", Title: proto.String("probe: kube access")})
 	require.NoError(t, err)
-	chat, err := f.repo.GetChat(f.ctx, resp.Msg.GetChat().GetId())
+	chat, err := f.repo.GetChat(f.ctx, resp.GetChat().GetId())
 	require.NoError(t, err)
 	assert.Equal(t, "probe: kube access", chat.Title)
 }
@@ -93,7 +93,7 @@ func TestStartChat_CLIRunRefusesAChatIDOrBuilderTest(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := f.startCLI(req)
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), err.Error())
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), err.Error())
 		})
 	}
 

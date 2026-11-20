@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -57,13 +58,13 @@ func newOrgAuthority() *orgAuthority {
 	}
 }
 
-func exchangeIn(t *testing.T, a *orgAuthority, org *string) (*connect.Response[reliantv1.ExchangeTokenResponse], error) {
+func exchangeIn(t *testing.T, a *orgAuthority, org *string) (*reliantv1.ExchangeTokenResponse, error) {
 	t.Helper()
 	svc := newTokenService(t, a, TokenControlPlane{Issuer: testControlPlane})
 	bearer := mintSession(t, a, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
-	return svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+	return tdd.CallV2(context.Background(), svc.ExchangeToken, &reliantv1.ExchangeTokenRequest{
 		Audience: testControlPlane, Scopes: []string{"deploy:write"}, OrgId: org,
-	}))
+	}, bearerInfo(bearer))
 }
 
 func ptr(s string) *string { return &s }
@@ -74,10 +75,10 @@ func TestExchangeToken_MintsForTheNamedOrgOfTheSamePerson(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Msg.GetOrgId() != "org-b" {
-		t.Fatalf("response org = %q, want org-b", resp.Msg.GetOrgId())
+	if resp.GetOrgId() != "org-b" {
+		t.Fatalf("response org = %q, want org-b", resp.GetOrgId())
 	}
-	if got := a.orgOf[resp.Msg.GetToken()]; got != "org-b" {
+	if got := a.orgOf[resp.GetToken()]; got != "org-b" {
 		t.Fatalf("token minted in %q, want org-b even though the session's default is org-a", got)
 	}
 }
@@ -88,8 +89,8 @@ func TestExchangeToken_NoOrgNamedStaysInTheSessionsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.Msg.GetOrgId() != "org-a" || a.orgOf[resp.Msg.GetToken()] != "org-a" {
-		t.Fatalf("org = %q / %q, want the session's own org-a", resp.Msg.GetOrgId(), a.orgOf[resp.Msg.GetToken()])
+	if resp.GetOrgId() != "org-a" || a.orgOf[resp.GetToken()] != "org-a" {
+		t.Fatalf("org = %q / %q, want the session's own org-a", resp.GetOrgId(), a.orgOf[resp.GetToken()])
 	}
 }
 
@@ -97,7 +98,7 @@ func TestExchangeToken_AnOrgThePersonIsNotInMintsNothing(t *testing.T) {
 	a := newOrgAuthority()
 	before := len(a.minted)
 	_, err := exchangeIn(t, a, ptr("org-c"))
-	if svcerr.Code(err) != connect.CodePermissionDenied {
+	if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 		t.Fatalf("err = %v, want PermissionDenied from the control plane's membership check", err)
 	}
 	// Only the session itself was minted (by the test), never an exchanged token.

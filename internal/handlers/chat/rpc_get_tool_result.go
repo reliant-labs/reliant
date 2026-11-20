@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -21,21 +20,21 @@ import (
 // chats, so the id alone never selects a block.
 func (s *Service) GetToolResult(
 	ctx context.Context,
-	req *connect.Request[pb.GetToolResultRequest],
-) (*connect.Response[pb.GetToolResultResponse], error) {
+	req *pb.GetToolResultRequest,
+) (*pb.GetToolResultResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
-	if req.Msg.ToolCallId == "" {
+	if req.ToolCallId == "" {
 		return nil, svcerr.InvalidArgument("tool_call_id is required")
 	}
 
-	if err := s.requireChatOwner(ctx, req.Msg.ChatId, userID); err != nil {
+	if err := s.requireChatOwner(ctx, req.ChatId, userID); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	block, err := s.chatToolResultBlock(ctx, req.Msg.ChatId, userID, req.Msg.ToolCallId)
+	block, err := s.chatToolResultBlock(ctx, req.ChatId, userID, req.ToolCallId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get tool result"))
 	}
@@ -43,7 +42,7 @@ func (s *Service) GetToolResult(
 		return nil, svcerr.Wrap(svcerr.NotFound("tool result"))
 	}
 
-	resp := &pb.GetToolResultResponse{ToolCallId: req.Msg.ToolCallId}
+	resp := &pb.GetToolResultResponse{ToolCallId: req.ToolCallId}
 	if block.Content != nil {
 		resp.Content = *block.Content
 		resp.Size = int64(len(*block.Content))
@@ -51,7 +50,7 @@ func (s *Service) GetToolResult(
 	if block.IsError != nil {
 		resp.IsError = *block.IsError
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // chatToolResultBlock finds the tool_result block for toolCallID that chatID

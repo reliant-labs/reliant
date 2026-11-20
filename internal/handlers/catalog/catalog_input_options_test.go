@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -29,18 +29,18 @@ func newInputOptionsService(t *testing.T, io *StubInputOptions) *Service {
 }
 
 func listInputOptions(ctx context.Context, svc *Service, req *reliantv1.ListInputOptionsRequest) (*reliantv1.ListInputOptionsResponse, error) {
-	resp, err := svc.ListInputOptions(ctx, connect.NewRequest(req))
+	resp, err := svc.ListInputOptions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 // codeOf is the code the svcerr interceptor sends for err.
 func codeOf(t *testing.T, err error) connect.Code {
 	t.Helper()
 	require.Error(t, err)
-	return svcerr.Code(err)
+	return svcerr.CodeV2(err)
 }
 
 func TestListInputOptions_ProjectsTheListingOntoTheWire(t *testing.T) {
@@ -195,7 +195,7 @@ func TestListInputOptions_MapsTypedFailuresToCodes(t *testing.T) {
 			_, err := listInputOptions(asUser("alice"), newInputOptionsService(t, io), &reliantv1.ListInputOptionsRequest{Type: ptr("github.repository")})
 			require.Error(t, err)
 			assert.Equal(t, c.code, codeOf(t, err))
-			msg := svcerr.ToConnect(err).Message()
+			msg := svcerr.ToConnectV2(err).Message()
 			if c.msg != "" {
 				assert.Equal(t, c.msg, msg)
 			}

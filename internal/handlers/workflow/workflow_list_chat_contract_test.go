@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -99,13 +98,13 @@ nodes:
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), nil, nil, "")
 
 	t.Run("default listing is create-chat safe", func(t *testing.T) {
-		resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
+		resp, err := workflowService.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{
 			ProjectId: projectID,
-		}))
+		})
 		require.NoError(t, err)
 
 		userWorkflowSlugs := make(map[string]*reliantv1.WorkflowListItem)
-		for _, workflow := range resp.Msg.Workflows {
+		for _, workflow := range resp.Workflows {
 			if workflow.Source == "user" {
 				userWorkflowSlugs[workflow.Filename] = workflow
 			}
@@ -125,14 +124,14 @@ nodes:
 	})
 
 	t.Run("include_hidden exposes management drafts for workflow hub", func(t *testing.T) {
-		resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
+		resp, err := workflowService.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{
 			ProjectId:     projectID,
 			IncludeHidden: proto.Bool(true),
-		}))
+		})
 		require.NoError(t, err)
 
 		userWorkflowSlugs := make(map[string]*reliantv1.WorkflowListItem)
-		for _, workflow := range resp.Msg.Workflows {
+		for _, workflow := range resp.Workflows {
 			if workflow.Source == "user" {
 				userWorkflowSlugs[workflow.Filename] = workflow
 			}
@@ -201,10 +200,10 @@ nodes:
 	// one the chat service builds over the same store.
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), nil, nil, "")
 
-	resp, err := workflowService.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID}))
+	resp, err := workflowService.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{ProjectId: projectID})
 	require.NoError(t, err)
 	bySlug := map[string]*reliantv1.WorkflowListItem{}
-	for _, item := range resp.Msg.Workflows {
+	for _, item := range resp.Workflows {
 		bySlug[item.Filename] = item
 	}
 

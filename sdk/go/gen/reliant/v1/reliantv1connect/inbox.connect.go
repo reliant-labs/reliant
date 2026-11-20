@@ -7,42 +7,57 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// InboxServiceName is the fully-qualified name of the InboxService service.
 	InboxServiceName = "reliant.v1.InboxService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// InboxServiceListInboxProcedure is the fully-qualified name of the InboxService's ListInbox RPC.
+	// InboxServiceListInboxProcedure is the procedure name of the InboxService's ListInbox RPC.
 	InboxServiceListInboxProcedure = "/reliant.v1.InboxService/ListInbox"
-	// InboxServiceDismissInboxItemProcedure is the fully-qualified name of the InboxService's
+	// InboxServiceDismissInboxItemProcedure is the procedure name of the InboxService's
 	// DismissInboxItem RPC.
 	InboxServiceDismissInboxItemProcedure = "/reliant.v1.InboxService/DismissInboxItem"
-	// InboxServiceRestoreInboxItemProcedure is the fully-qualified name of the InboxService's
+	// InboxServiceRestoreInboxItemProcedure is the procedure name of the InboxService's
 	// RestoreInboxItem RPC.
 	InboxServiceRestoreInboxItemProcedure = "/reliant.v1.InboxService/RestoreInboxItem"
+)
+
+var (
+	inboxServiceListInboxSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_inbox_proto.Services().ByName("InboxService").Methods().ByName("ListInbox"),
+			Procedure:  InboxServiceListInboxProcedure,
+		}
+	})
+	inboxServiceDismissInboxItemSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_inbox_proto.Services().ByName("InboxService").Methods().ByName("DismissInboxItem"),
+			Procedure:  InboxServiceDismissInboxItemProcedure,
+		}
+	})
+	inboxServiceRestoreInboxItemSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_inbox_proto.Services().ByName("InboxService").Methods().ByName("RestoreInboxItem"),
+			Procedure:  InboxServiceRestoreInboxItemProcedure,
+		}
+	})
 )
 
 // InboxServiceClient is a client for the reliant.v1.InboxService service.
@@ -50,70 +65,22 @@ type InboxServiceClient interface {
 	// ListInbox returns the caller's inbox items in priority order. One round
 	// trip. With limit = 0 it returns no items, only the counts, which is the
 	// cheap call the nav badge makes.
-	ListInbox(context.Context, *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error)
+	ListInbox(context.Context, *v1.ListInboxRequest) (*v1.ListInboxResponse, error)
 	// DismissInboxItem hides items from the caller's inbox. Every kind can be
 	// dismissed. Hiding an approval or a question does not resolve it: the run
 	// still waits, and the chat still shows it. A newer failure of the same
 	// automation, or a new block on the same machine, has a new item_id and so
 	// appears again. Unknown ids are rejected with INVALID_ARGUMENT.
-	DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error)
+	DismissInboxItem(context.Context, *v1.DismissInboxItemRequest) (*v1.DismissInboxItemResponse, error)
 	// RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
 	// dismissed is a no-op.
-	RestoreInboxItem(context.Context, *connect.Request[v1.RestoreInboxItemRequest]) (*connect.Response[v1.RestoreInboxItemResponse], error)
+	RestoreInboxItem(context.Context, *v1.RestoreInboxItemRequest) (*v1.RestoreInboxItemResponse, error)
 }
 
-// NewInboxServiceClient constructs a client for the reliant.v1.InboxService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) InboxServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	inboxServiceMethods := v1.File_reliant_v1_inbox_proto.Services().ByName("InboxService").Methods()
-	return &inboxServiceClient{
-		listInbox: connect.NewClient[v1.ListInboxRequest, v1.ListInboxResponse](
-			httpClient,
-			baseURL+InboxServiceListInboxProcedure,
-			connect.WithSchema(inboxServiceMethods.ByName("ListInbox")),
-			connect.WithClientOptions(opts...),
-		),
-		dismissInboxItem: connect.NewClient[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse](
-			httpClient,
-			baseURL+InboxServiceDismissInboxItemProcedure,
-			connect.WithSchema(inboxServiceMethods.ByName("DismissInboxItem")),
-			connect.WithClientOptions(opts...),
-		),
-		restoreInboxItem: connect.NewClient[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse](
-			httpClient,
-			baseURL+InboxServiceRestoreInboxItemProcedure,
-			connect.WithSchema(inboxServiceMethods.ByName("RestoreInboxItem")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// inboxServiceClient implements InboxServiceClient.
-type inboxServiceClient struct {
-	listInbox        *connect.Client[v1.ListInboxRequest, v1.ListInboxResponse]
-	dismissInboxItem *connect.Client[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse]
-	restoreInboxItem *connect.Client[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse]
-}
-
-// ListInbox calls reliant.v1.InboxService.ListInbox.
-func (c *inboxServiceClient) ListInbox(ctx context.Context, req *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error) {
-	return c.listInbox.CallUnary(ctx, req)
-}
-
-// DismissInboxItem calls reliant.v1.InboxService.DismissInboxItem.
-func (c *inboxServiceClient) DismissInboxItem(ctx context.Context, req *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error) {
-	return c.dismissInboxItem.CallUnary(ctx, req)
-}
-
-// RestoreInboxItem calls reliant.v1.InboxService.RestoreInboxItem.
-func (c *inboxServiceClient) RestoreInboxItem(ctx context.Context, req *connect.Request[v1.RestoreInboxItemRequest]) (*connect.Response[v1.RestoreInboxItemResponse], error) {
-	return c.restoreInboxItem.CallUnary(ctx, req)
+// NewInboxServiceClient constructs a client for the reliant.v1.InboxService service. Multiple
+// service clients may share a single connect.Client.
+func NewInboxServiceClient(client *connect.Client) InboxServiceClient {
+	return &inboxServiceClient{client: client}
 }
 
 // InboxServiceHandler is an implementation of the reliant.v1.InboxService service.
@@ -121,68 +88,106 @@ type InboxServiceHandler interface {
 	// ListInbox returns the caller's inbox items in priority order. One round
 	// trip. With limit = 0 it returns no items, only the counts, which is the
 	// cheap call the nav badge makes.
-	ListInbox(context.Context, *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error)
+	ListInbox(context.Context, *v1.ListInboxRequest) (*v1.ListInboxResponse, error)
 	// DismissInboxItem hides items from the caller's inbox. Every kind can be
 	// dismissed. Hiding an approval or a question does not resolve it: the run
 	// still waits, and the chat still shows it. A newer failure of the same
 	// automation, or a new block on the same machine, has a new item_id and so
 	// appears again. Unknown ids are rejected with INVALID_ARGUMENT.
-	DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error)
+	DismissInboxItem(context.Context, *v1.DismissInboxItemRequest) (*v1.DismissInboxItemResponse, error)
 	// RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
 	// dismissed is a no-op.
-	RestoreInboxItem(context.Context, *connect.Request[v1.RestoreInboxItemRequest]) (*connect.Response[v1.RestoreInboxItemResponse], error)
+	RestoreInboxItem(context.Context, *v1.RestoreInboxItemRequest) (*v1.RestoreInboxItemResponse, error)
 }
 
-// NewInboxServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	inboxServiceMethods := v1.File_reliant_v1_inbox_proto.Services().ByName("InboxService").Methods()
-	inboxServiceListInboxHandler := connect.NewUnaryHandler(
-		InboxServiceListInboxProcedure,
-		svc.ListInbox,
-		connect.WithSchema(inboxServiceMethods.ByName("ListInbox")),
-		connect.WithHandlerOptions(opts...),
+// RegisterInboxServiceHandler registers svc as the reliant.v1.InboxService implementation on
+// server.
+func RegisterInboxServiceHandler(server *connect.Server, svc InboxServiceHandler) {
+	adapter := inboxServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: inboxServiceListInboxSpec(), Handler: adapter.listInbox},
+		connect.Method{Spec: inboxServiceDismissInboxItemSpec(), Handler: adapter.dismissInboxItem},
+		connect.Method{Spec: inboxServiceRestoreInboxItemSpec(), Handler: adapter.restoreInboxItem},
 	)
-	inboxServiceDismissInboxItemHandler := connect.NewUnaryHandler(
-		InboxServiceDismissInboxItemProcedure,
-		svc.DismissInboxItem,
-		connect.WithSchema(inboxServiceMethods.ByName("DismissInboxItem")),
-		connect.WithHandlerOptions(opts...),
-	)
-	inboxServiceRestoreInboxItemHandler := connect.NewUnaryHandler(
-		InboxServiceRestoreInboxItemProcedure,
-		svc.RestoreInboxItem,
-		connect.WithSchema(inboxServiceMethods.ByName("RestoreInboxItem")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.InboxService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case InboxServiceListInboxProcedure:
-			inboxServiceListInboxHandler.ServeHTTP(w, r)
-		case InboxServiceDismissInboxItemProcedure:
-			inboxServiceDismissInboxItemHandler.ServeHTTP(w, r)
-		case InboxServiceRestoreInboxItemProcedure:
-			inboxServiceRestoreInboxItemHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedInboxServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedInboxServiceHandler struct{}
 
-func (UnimplementedInboxServiceHandler) ListInbox(context.Context, *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.ListInbox is not implemented"))
+func (UnimplementedInboxServiceHandler) ListInbox(context.Context, *v1.ListInboxRequest) (*v1.ListInboxResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.InboxService.ListInbox is not implemented")
 }
 
-func (UnimplementedInboxServiceHandler) DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.DismissInboxItem is not implemented"))
+func (UnimplementedInboxServiceHandler) DismissInboxItem(context.Context, *v1.DismissInboxItemRequest) (*v1.DismissInboxItemResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.InboxService.DismissInboxItem is not implemented")
 }
 
-func (UnimplementedInboxServiceHandler) RestoreInboxItem(context.Context, *connect.Request[v1.RestoreInboxItemRequest]) (*connect.Response[v1.RestoreInboxItemResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.RestoreInboxItem is not implemented"))
+func (UnimplementedInboxServiceHandler) RestoreInboxItem(context.Context, *v1.RestoreInboxItemRequest) (*v1.RestoreInboxItemResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.InboxService.RestoreInboxItem is not implemented")
+}
+
+type inboxServiceClient struct {
+	client *connect.Client
+}
+
+func (c *inboxServiceClient) ListInbox(ctx context.Context, req *v1.ListInboxRequest) (*v1.ListInboxResponse, error) {
+	var res v1.ListInboxResponse
+	if err := c.client.CallUnary(ctx, inboxServiceListInboxSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *inboxServiceClient) DismissInboxItem(ctx context.Context, req *v1.DismissInboxItemRequest) (*v1.DismissInboxItemResponse, error) {
+	var res v1.DismissInboxItemResponse
+	if err := c.client.CallUnary(ctx, inboxServiceDismissInboxItemSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *inboxServiceClient) RestoreInboxItem(ctx context.Context, req *v1.RestoreInboxItemRequest) (*v1.RestoreInboxItemResponse, error) {
+	var res v1.RestoreInboxItemResponse
+	if err := c.client.CallUnary(ctx, inboxServiceRestoreInboxItemSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type inboxServiceHandler struct{ svc InboxServiceHandler }
+
+func (h inboxServiceHandler) listInbox(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListInboxRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListInbox(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h inboxServiceHandler) dismissInboxItem(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DismissInboxItemRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DismissInboxItem(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h inboxServiceHandler) restoreInboxItem(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RestoreInboxItemRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RestoreInboxItem(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

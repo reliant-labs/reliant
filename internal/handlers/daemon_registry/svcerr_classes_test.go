@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,14 +38,14 @@ func TestDaemonRegistry_StoreFailuresOnTheWire(t *testing.T) {
 			}
 			_, client := daemon_registry.NewTestDaemonRegistryServer(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo}))
 
-			_, err := client.GetDaemon(context.Background(), connect.NewRequest(&pb.GetDaemonRequest{DaemonId: "d1"}))
+			_, err := client.GetDaemon(context.Background(), &pb.GetDaemonRequest{DaemonId: "d1"})
 			assertWire(t, err, tc.want)
-			_, err = client.ResumeDaemon(context.Background(), connect.NewRequest(&pb.ResumeDaemonRequest{DaemonId: "d1"}))
+			_, err = client.ResumeDaemon(context.Background(), &pb.ResumeDaemonRequest{DaemonId: "d1"})
 			assertWire(t, err, tc.want)
-			_, err = client.RefreshLocalModels(context.Background(), connect.NewRequest(&pb.RefreshLocalModelsRequest{DaemonId: "d1"}))
+			_, err = client.RefreshLocalModels(context.Background(), &pb.RefreshLocalModelsRequest{DaemonId: "d1"})
 			assertWire(t, err, tc.want)
 			if tc.want != connect.CodeNotFound {
-				_, err = client.ListDaemons(context.Background(), connect.NewRequest(&pb.ListDaemonsRequest{}))
+				_, err = client.ListDaemons(context.Background(), &pb.ListDaemonsRequest{})
 				assertWire(t, err, tc.want)
 			}
 		})

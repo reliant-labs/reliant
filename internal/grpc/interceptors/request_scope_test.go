@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/attribute"
@@ -13,20 +13,69 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
-type passthrough struct{}
+func passthrough(next connect.ServerFunc) connect.ServerFunc { return next }
 
-func (passthrough) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc { return next }
-func (passthrough) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
+// unaryHandler is a unary rpc's handler as a v2 ServerFunc, as the generated
+// adapter runs it: receive the request, answer, send the response.
+type unaryHandler func(ctx context.Context, req proto.Message) (proto.Message, error)
+
+func (h unaryHandler) serve(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+	req := newRequest(spec)
+	if req != nil {
+		if err := stream.Receive(req); err != nil {
+			return err
+		}
+	}
+	resp, err := h(ctx, req)
+	if err != nil || resp == nil {
+		return err
+	}
+	return stream.Send(resp)
 }
-func (passthrough) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
+
+// unarySpec is the spec of the unary rpc whose request is req's type.
+func unarySpec(t *testing.T, req proto.Message) connect.Spec {
+	t.Helper()
+	spec := connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: "/test.v1.Test/Call"}
+	if req == nil {
+		return spec
+	}
+	want := req.ProtoReflect().Descriptor().FullName()
+	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		for i := range fd.Services().Len() {
+			methods := fd.Services().Get(i).Methods()
+			for j := range methods.Len() {
+				if md := methods.Get(j); md.Input().FullName() == want && !md.IsStreamingClient() && !md.IsStreamingServer() {
+					spec.Schema = md
+					return false
+				}
+			}
+		}
+		return true
+	})
+	require.NotNil(t, spec.Schema, "no unary rpc takes %s", want)
+	return spec
 }
+
+// fakeStream is a unary call's stream: it receives req, keeps what is sent.
+type fakeStream struct {
+	req  proto.Message
+	sent []any
+}
+
+func (s *fakeStream) Receive(msg any) error {
+	proto.Merge(msg.(proto.Message), s.req)
+	return nil
+}
+func (s *fakeStream) SendHeaders() error { return nil }
+func (s *fakeStream) Send(msg any) error { s.sent = append(s.sent, msg); return nil }
 
 // The layer that logs a failed RPC sits outside authentication; the user the
 // authenticator binds must still reach it, and the server span.
@@ -36,12 +85,12 @@ func TestRequestScopeLetsAuthAttributeOuterLayers(t *testing.T) {
 	ctx, span := tp.Tracer("t").Start(context.Background(), "rpc")
 
 	var outer context.Context
-	handler := RequestScope(passthrough{}).WrapUnary(func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	handler := RequestScope(passthrough)(unaryHandler(func(ctx context.Context, _ proto.Message) (proto.Message, error) {
 		outer = ctx
 		telemetry.BindUser(ctx, "user-1")
 		return nil, nil
-	})
-	_, err := handler(ctx, nil)
+	}).serve)
+	err := handler(ctx, unarySpec(t, nil), &fakeStream{})
 	require.NoError(t, err)
 	span.End()
 
@@ -54,12 +103,12 @@ func TestRequestScopeLetsAuthAttributeOuterLayers(t *testing.T) {
 
 // serverSpan runs one unary call of handler through RequestScope inside a
 // recorded server span and returns the span's attributes.
-func serverSpan(t *testing.T, req connect.AnyRequest, handler connect.UnaryFunc) []attribute.KeyValue {
+func serverSpan(t *testing.T, req proto.Message, handler unaryHandler) []attribute.KeyValue {
 	t.Helper()
 	recorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	ctx, span := tp.Tracer("t").Start(context.Background(), "rpc")
-	_, _ = RequestScope(passthrough{}).WrapUnary(handler)(ctx, req)
+	_ = RequestScope(passthrough)(handler.serve)(ctx, unarySpec(t, req), &fakeStream{req: req})
 	span.End()
 	ended := recorder.Ended()
 	require.Len(t, ended, 1)
@@ -71,10 +120,10 @@ func serverSpan(t *testing.T, req connect.AnyRequest, handler connect.UnaryFunc)
 func TestRequestScopeStampsTheRunTheRequestNames(t *testing.T) {
 	var inner context.Context
 	attrs := serverSpan(t,
-		connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: "chat-1", ThreadId: proto.String("thread-1")}),
-		func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+		&reliantv1.ListMessagesRequest{ChatId: "chat-1", ThreadId: proto.String("thread-1")},
+		func(ctx context.Context, _ proto.Message) (proto.Message, error) {
 			inner = ctx
-			return connect.NewResponse(&reliantv1.ListMessagesResponse{}), nil
+			return &reliantv1.ListMessagesResponse{}, nil
 		})
 	assert.Contains(t, attrs, attribute.String("chat.id", "chat-1"))
 	assert.Contains(t, attrs, attribute.String("thread.id", "thread-1"))
@@ -88,9 +137,9 @@ func TestRequestScopeStampsTheRunTheRequestNames(t *testing.T) {
 // and the workflow running it.
 func TestRequestScopeStampsTheRunTheResponseNames(t *testing.T) {
 	attrs := serverSpan(t,
-		connect.NewRequest(&reliantv1.StartChatRequest{}),
-		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-			return connect.NewResponse(&reliantv1.StartChatResponse{Chat: &reliantv1.Chat{Id: "chat-2"}, WorkflowId: "wf-2"}), nil
+		&reliantv1.StartChatRequest{},
+		func(context.Context, proto.Message) (proto.Message, error) {
+			return &reliantv1.StartChatResponse{Chat: &reliantv1.Chat{Id: "chat-2"}, WorkflowId: "wf-2"}, nil
 		})
 	assert.Contains(t, attrs, attribute.String("chat.id", "chat-2"))
 	assert.Contains(t, attrs, attribute.String("workflow.id", "wf-2"))
@@ -100,9 +149,9 @@ func TestRequestScopeStampsTheRunTheResponseNames(t *testing.T) {
 // the span, and a failed call stamps only what the request named.
 func TestRequestScopeKeepsTheRequestsRun(t *testing.T) {
 	attrs := serverSpan(t,
-		connect.NewRequest(&reliantv1.GetChatRequest{ChatId: "chat-3"}),
-		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-			return connect.NewResponse(&reliantv1.GetChatResponse{Chat: &reliantv1.Chat{Id: "other"}}), nil
+		&reliantv1.GetChatRequest{ChatId: "chat-3"},
+		func(context.Context, proto.Message) (proto.Message, error) {
+			return &reliantv1.GetChatResponse{Chat: &reliantv1.Chat{Id: "other"}}, nil
 		})
 	var chats []string
 	for _, kv := range attrs {
@@ -112,22 +161,11 @@ func TestRequestScopeKeepsTheRequestsRun(t *testing.T) {
 	}
 	assert.Equal(t, []string{"chat-3"}, chats)
 
-	failed := serverSpan(t, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: "chat-4"}),
-		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-			return nil, connect.NewError(connect.CodeNotFound, nil)
+	failed := serverSpan(t, &reliantv1.GetChatRequest{ChatId: "chat-4"},
+		func(context.Context, proto.Message) (proto.Message, error) {
+			return nil, connect.NewError(connect.CodeNotFound, "")
 		})
 	assert.Contains(t, failed, attribute.String("chat.id", "chat-4"))
-}
-
-// receivingConn is a stream whose client sends one message.
-type receivingConn struct {
-	connect.StreamingHandlerConn
-	send proto.Message
-}
-
-func (c receivingConn) Receive(msg any) error {
-	proto.Merge(msg.(proto.Message), c.send)
-	return nil
 }
 
 // A stream names its run in its first message, after the span opened.
@@ -135,19 +173,20 @@ func TestRequestScopeStampsAStreamFromItsFirstMessage(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	ctx, span := tp.Tracer("t").Start(context.Background(), "rpc")
-	handler := RequestScope(passthrough{}).WrapStreamingHandler(func(_ context.Context, conn connect.StreamingHandlerConn) error {
-		return conn.Receive(&reliantv1.ListMessagesRequest{})
+	handler := RequestScope(passthrough)(func(_ context.Context, _ connect.Spec, stream connect.ServerStream) error {
+		return stream.Receive(&reliantv1.ListMessagesRequest{})
 	})
-	require.NoError(t, handler(ctx, receivingConn{send: &reliantv1.ListMessagesRequest{ChatId: "chat-5"}}))
+	spec := connect.Spec{StreamType: connect.StreamTypeBidi, Procedure: "/test.v1.Test/Stream"}
+	require.NoError(t, handler(ctx, spec, &fakeStream{req: &reliantv1.ListMessagesRequest{ChatId: "chat-5"}}))
 	span.End()
 	require.Len(t, recorder.Ended(), 1)
 	assert.Contains(t, recorder.Ended()[0].Attributes(), attribute.String("chat.id", "chat-5"))
 }
 
 func TestRequestScopeIgnoresMessagesThatNameNoRun(t *testing.T) {
-	attrs := serverSpan(t, connect.NewRequest(&reliantv1.ListInboxRequest{}),
-		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
-			return connect.NewResponse(&reliantv1.ListInboxResponse{}), nil
+	attrs := serverSpan(t, &reliantv1.ListInboxRequest{},
+		func(context.Context, proto.Message) (proto.Message, error) {
+			return &reliantv1.ListInboxResponse{}, nil
 		})
 	assert.Empty(t, attrs)
 }

@@ -3,8 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -17,31 +15,31 @@ import (
 // named org's chats (orgs.ListScope), or in every org's when it names none.
 func (s *Service) SearchChats(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SearchChatsRequest],
-) (*connect.Response[reliantv1.SearchChatsResponse], error) {
+	req *reliantv1.SearchChatsRequest,
+) (*reliantv1.SearchChatsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
 	// Return empty results if no query
-	if req.Msg.Query == "" {
-		return connect.NewResponse(&reliantv1.SearchChatsResponse{
+	if req.Query == "" {
+		return &reliantv1.SearchChatsResponse{
 			Chats: []*reliantv1.Chat{},
 			Total: 0,
-		}), nil
+		}, nil
 	}
 
 	limit := 100
-	if req.Msg.Limit != nil && *req.Msg.Limit > 0 {
-		limit = int(*req.Msg.Limit)
+	if req.Limit != nil && *req.Limit > 0 {
+		limit = int(*req.Limit)
 	}
 
-	scope, err := s.listScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.listScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
 	filters := db.ChatSearchFilters{
 		UserID:      userID,
-		ProjectID:   req.Msg.ProjectId,
-		SearchQuery: req.Msg.Query,
+		ProjectID:   req.ProjectId,
+		SearchQuery: req.Query,
 		Org:         scope,
 		Limit:       limit,
 	}
@@ -57,8 +55,8 @@ func (s *Service) SearchChats(
 		protoChats[i] = chatToProto(c)
 	}
 
-	return connect.NewResponse(&reliantv1.SearchChatsResponse{
+	return &reliantv1.SearchChatsResponse{
 		Chats: protoChats,
 		Total: int32(len(protoChats)),
-	}), nil
+	}, nil
 }

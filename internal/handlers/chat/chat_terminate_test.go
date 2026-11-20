@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -146,9 +145,9 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 		runs: runs.NewService(repo, temporal, nil),
 	}
 
-	resp, err := service.TerminateChat(ctx, connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: chatID}))
+	resp, err := service.TerminateChat(ctx, &reliantv1.TerminateChatRequest{ChatId: chatID})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 	require.Equal(t, []string{rootID}, temporal.terminated)
 	checkpoint, err := repo.GetWorkflowCheckpoint(ctx, rootID)
 	require.NoError(t, err)

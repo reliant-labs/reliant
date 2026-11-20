@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -49,12 +47,12 @@ func TestViewerQuestionsCarryNoResolvedPrompt(t *testing.T) {
 	}
 	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
 	list := func(ctx context.Context) map[string]*reliantv1.QuestionInfo {
-		resp, err := svc.ListAsyncQuestions(ctx, connect.NewRequest(&reliantv1.ListAsyncQuestionsRequest{ChatId: f.ChatID}))
+		resp, err := svc.ListAsyncQuestions(ctx, &reliantv1.ListAsyncQuestionsRequest{ChatId: f.ChatID})
 		if err != nil {
 			t.Fatal(err)
 		}
 		out := map[string]*reliantv1.QuestionInfo{}
-		for _, q := range resp.Msg.GetQuestions() {
+		for _, q := range resp.GetQuestions() {
 			out[q.GetQuestionId()] = q
 		}
 		return out

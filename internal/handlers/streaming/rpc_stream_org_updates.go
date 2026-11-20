@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -38,8 +38,8 @@ const orgFeedBatchSize = 200
 // The client reconnects and the open decides.
 func (s *Service) StreamOrgUpdates(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StreamOrgUpdatesRequest],
-	stream *connect.ServerStream[reliantv1.OrgStreamEvent],
+	req *reliantv1.StreamOrgUpdatesRequest,
+	stream reliantv1connect.StreamingServiceStreamOrgUpdatesServerStream,
 ) error {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
@@ -48,7 +48,7 @@ func (s *Service) StreamOrgUpdates(
 	if err := auth.RequirePerson(ctx, "follow what your organization shares"); err != nil {
 		return err
 	}
-	orgID, err := s.orgFeedOrg(ctx, userID, req.Msg.GetOrgId())
+	orgID, err := s.orgFeedOrg(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (s *Service) StreamOrgUpdates(
 		}
 		// A fresh start (0), or a cursor from another database (ahead of
 		// the feed), replays nothing: the client lists what is shared now.
-		cursor = req.Msg.GetSinceSeq()
+		cursor = req.GetSinceSeq()
 		if cursor <= 0 || cursor > latest {
 			cursor = latest
 		}
@@ -156,7 +156,7 @@ func (s *Service) orgFeedOrg(ctx context.Context, userID, requested string) (str
 
 // sendOrgUpdates sends orgID's feed after cursor, in batches, and returns the
 // new cursor: the last sequence read, sent or skipped (the caller's own).
-func (s *Service) sendOrgUpdates(ctx context.Context, orgID, userID string, cursor int64, stream *connect.ServerStream[reliantv1.OrgStreamEvent]) (int64, error) {
+func (s *Service) sendOrgUpdates(ctx context.Context, orgID, userID string, cursor int64, stream reliantv1connect.StreamingServiceStreamOrgUpdatesServerStream) (int64, error) {
 	for {
 		rows, err := s.deps.Repo.OrgUpdatesSince(ctx, orgID, cursor, orgFeedBatchSize)
 		if err != nil {

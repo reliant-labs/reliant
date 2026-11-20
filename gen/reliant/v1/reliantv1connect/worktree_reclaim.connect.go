@@ -7,37 +7,38 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// WorktreeReclaimServiceName is the fully-qualified name of the WorktreeReclaimService service.
 	WorktreeReclaimServiceName = "reliant.v1.WorktreeReclaimService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// WorktreeReclaimServiceDecideWorktreeReclaimProcedure is the fully-qualified name of the
+	// WorktreeReclaimServiceDecideWorktreeReclaimProcedure is the procedure name of the
 	// WorktreeReclaimService's DecideWorktreeReclaim RPC.
 	WorktreeReclaimServiceDecideWorktreeReclaimProcedure = "/reliant.v1.WorktreeReclaimService/DecideWorktreeReclaim"
+)
+
+var (
+	worktreeReclaimServiceDecideWorktreeReclaimSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_worktree_reclaim_proto.Services().ByName("WorktreeReclaimService").Methods().ByName("DecideWorktreeReclaim"),
+			Procedure:  WorktreeReclaimServiceDecideWorktreeReclaimProcedure,
+		}
+	})
 )
 
 // WorktreeReclaimServiceClient is a client for the reliant.v1.WorktreeReclaimService service.
@@ -57,37 +58,13 @@ type WorktreeReclaimServiceClient interface {
 	// is in the result's removal fields and puts the proposal back in the
 	// item. FAILED_PRECONDITION when the machine is offline; NOT_FOUND for a
 	// machine the caller may not write.
-	DecideWorktreeReclaim(context.Context, *connect.Request[v1.DecideWorktreeReclaimRequest]) (*connect.Response[v1.DecideWorktreeReclaimResponse], error)
+	DecideWorktreeReclaim(context.Context, *v1.DecideWorktreeReclaimRequest) (*v1.DecideWorktreeReclaimResponse, error)
 }
 
 // NewWorktreeReclaimServiceClient constructs a client for the reliant.v1.WorktreeReclaimService
-// service. By default, it uses the Connect protocol with the binary Protobuf Codec, asks for
-// gzipped responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply
-// the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewWorktreeReclaimServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) WorktreeReclaimServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	worktreeReclaimServiceMethods := v1.File_reliant_v1_worktree_reclaim_proto.Services().ByName("WorktreeReclaimService").Methods()
-	return &worktreeReclaimServiceClient{
-		decideWorktreeReclaim: connect.NewClient[v1.DecideWorktreeReclaimRequest, v1.DecideWorktreeReclaimResponse](
-			httpClient,
-			baseURL+WorktreeReclaimServiceDecideWorktreeReclaimProcedure,
-			connect.WithSchema(worktreeReclaimServiceMethods.ByName("DecideWorktreeReclaim")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// worktreeReclaimServiceClient implements WorktreeReclaimServiceClient.
-type worktreeReclaimServiceClient struct {
-	decideWorktreeReclaim *connect.Client[v1.DecideWorktreeReclaimRequest, v1.DecideWorktreeReclaimResponse]
-}
-
-// DecideWorktreeReclaim calls reliant.v1.WorktreeReclaimService.DecideWorktreeReclaim.
-func (c *worktreeReclaimServiceClient) DecideWorktreeReclaim(ctx context.Context, req *connect.Request[v1.DecideWorktreeReclaimRequest]) (*connect.Response[v1.DecideWorktreeReclaimResponse], error) {
-	return c.decideWorktreeReclaim.CallUnary(ctx, req)
+// service. Multiple service clients may share a single connect.Client.
+func NewWorktreeReclaimServiceClient(client *connect.Client) WorktreeReclaimServiceClient {
+	return &worktreeReclaimServiceClient{client: client}
 }
 
 // WorktreeReclaimServiceHandler is an implementation of the reliant.v1.WorktreeReclaimService
@@ -108,35 +85,47 @@ type WorktreeReclaimServiceHandler interface {
 	// is in the result's removal fields and puts the proposal back in the
 	// item. FAILED_PRECONDITION when the machine is offline; NOT_FOUND for a
 	// machine the caller may not write.
-	DecideWorktreeReclaim(context.Context, *connect.Request[v1.DecideWorktreeReclaimRequest]) (*connect.Response[v1.DecideWorktreeReclaimResponse], error)
+	DecideWorktreeReclaim(context.Context, *v1.DecideWorktreeReclaimRequest) (*v1.DecideWorktreeReclaimResponse, error)
 }
 
-// NewWorktreeReclaimServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewWorktreeReclaimServiceHandler(svc WorktreeReclaimServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	worktreeReclaimServiceMethods := v1.File_reliant_v1_worktree_reclaim_proto.Services().ByName("WorktreeReclaimService").Methods()
-	worktreeReclaimServiceDecideWorktreeReclaimHandler := connect.NewUnaryHandler(
-		WorktreeReclaimServiceDecideWorktreeReclaimProcedure,
-		svc.DecideWorktreeReclaim,
-		connect.WithSchema(worktreeReclaimServiceMethods.ByName("DecideWorktreeReclaim")),
-		connect.WithHandlerOptions(opts...),
+// RegisterWorktreeReclaimServiceHandler registers svc as the reliant.v1.WorktreeReclaimService
+// implementation on server.
+func RegisterWorktreeReclaimServiceHandler(server *connect.Server, svc WorktreeReclaimServiceHandler) {
+	adapter := worktreeReclaimServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: worktreeReclaimServiceDecideWorktreeReclaimSpec(), Handler: adapter.decideWorktreeReclaim},
 	)
-	return "/reliant.v1.WorktreeReclaimService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case WorktreeReclaimServiceDecideWorktreeReclaimProcedure:
-			worktreeReclaimServiceDecideWorktreeReclaimHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedWorktreeReclaimServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedWorktreeReclaimServiceHandler struct{}
 
-func (UnimplementedWorktreeReclaimServiceHandler) DecideWorktreeReclaim(context.Context, *connect.Request[v1.DecideWorktreeReclaimRequest]) (*connect.Response[v1.DecideWorktreeReclaimResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeReclaimService.DecideWorktreeReclaim is not implemented"))
+func (UnimplementedWorktreeReclaimServiceHandler) DecideWorktreeReclaim(context.Context, *v1.DecideWorktreeReclaimRequest) (*v1.DecideWorktreeReclaimResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.WorktreeReclaimService.DecideWorktreeReclaim is not implemented")
+}
+
+type worktreeReclaimServiceClient struct {
+	client *connect.Client
+}
+
+func (c *worktreeReclaimServiceClient) DecideWorktreeReclaim(ctx context.Context, req *v1.DecideWorktreeReclaimRequest) (*v1.DecideWorktreeReclaimResponse, error) {
+	var res v1.DecideWorktreeReclaimResponse
+	if err := c.client.CallUnary(ctx, worktreeReclaimServiceDecideWorktreeReclaimSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type worktreeReclaimServiceHandler struct{ svc WorktreeReclaimServiceHandler }
+
+func (h worktreeReclaimServiceHandler) decideWorktreeReclaim(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DecideWorktreeReclaimRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DecideWorktreeReclaim(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

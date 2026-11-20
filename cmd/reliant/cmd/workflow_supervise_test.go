@@ -11,7 +11,10 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -32,20 +35,20 @@ type fakeQuestionService struct {
 	resolveCalled   bool
 }
 
-func (f *fakeQuestionService) ListPendingQuestions(_ context.Context, _ *connect.Request[reliantv1.ListPendingQuestionsRequest]) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
+func (f *fakeQuestionService) ListPendingQuestions(_ context.Context, _ *reliantv1.ListPendingQuestionsRequest) (*reliantv1.ListPendingQuestionsResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return connect.NewResponse(&reliantv1.ListPendingQuestionsResponse{Questions: f.pending}), nil
+	return &reliantv1.ListPendingQuestionsResponse{Questions: f.pending}, nil
 }
 
-func (f *fakeQuestionService) ResolveQuestion(_ context.Context, req *connect.Request[reliantv1.ResolveQuestionRequest]) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
+func (f *fakeQuestionService) ResolveQuestion(_ context.Context, req *reliantv1.ResolveQuestionRequest) (*reliantv1.ResolveQuestionResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.resolveCalled = true
-	f.gotQuestionID = req.Msg.GetQuestionId()
-	f.gotAction = req.Msg.GetAction()
-	f.gotResponseData = req.Msg.GetResponseData()
-	return connect.NewResponse(&reliantv1.ResolveQuestionResponse{Success: true}), nil
+	f.gotQuestionID = req.GetQuestionId()
+	f.gotAction = req.GetAction()
+	f.gotResponseData = req.GetResponseData()
+	return &reliantv1.ResolveQuestionResponse{Success: true}, nil
 }
 
 type fakeApprovalService struct {
@@ -53,8 +56,8 @@ type fakeApprovalService struct {
 	approvals []*reliantv1.Approval
 }
 
-func (f *fakeApprovalService) ListApprovalsByChat(_ context.Context, _ *connect.Request[reliantv1.ListApprovalsByChatRequest]) (*connect.Response[reliantv1.ListApprovalsByChatResponse], error) {
-	return connect.NewResponse(&reliantv1.ListApprovalsByChatResponse{Approvals: f.approvals}), nil
+func (f *fakeApprovalService) ListApprovalsByChat(_ context.Context, _ *reliantv1.ListApprovalsByChatRequest) (*reliantv1.ListApprovalsByChatResponse, error) {
+	return &reliantv1.ListApprovalsByChatResponse{Approvals: f.approvals}, nil
 }
 
 // superviseChatService serves the ChatService RPCs the supervision verbs need.
@@ -74,21 +77,21 @@ func rootsOf(root *reliantv1.WorkflowExecution) []*reliantv1.WorkflowExecution {
 	return []*reliantv1.WorkflowExecution{root}
 }
 
-func (f *superviseChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
-	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{AllRootWorkflows: rootsOf(f.root)}), nil
+func (f *superviseChatService) GetWorkflowExecutions(_ context.Context, _ *reliantv1.GetWorkflowExecutionsRequest) (*reliantv1.GetWorkflowExecutionsResponse, error) {
+	return &reliantv1.GetWorkflowExecutionsResponse{AllRootWorkflows: rootsOf(f.root)}, nil
 }
 
-func (f *superviseChatService) ListMessages(_ context.Context, _ *connect.Request[reliantv1.ListMessagesRequest]) (*connect.Response[reliantv1.ListMessagesResponse], error) {
-	return connect.NewResponse(&reliantv1.ListMessagesResponse{
+func (f *superviseChatService) ListMessages(_ context.Context, _ *reliantv1.ListMessagesRequest) (*reliantv1.ListMessagesResponse, error) {
+	return &reliantv1.ListMessagesResponse{
 		Messages: f.messages,
 		Total:    int32(len(f.messages)),
 		Count:    int32(len(f.messages)),
-	}), nil
+	}, nil
 }
 
-func (f *superviseChatService) TerminateChat(_ context.Context, req *connect.Request[reliantv1.TerminateChatRequest]) (*connect.Response[reliantv1.TerminateChatResponse], error) {
-	f.terminatedChatID = req.Msg.GetChatId()
-	return connect.NewResponse(&reliantv1.TerminateChatResponse{Success: true, Message: "terminated"}), nil
+func (f *superviseChatService) TerminateChat(_ context.Context, req *reliantv1.TerminateChatRequest) (*reliantv1.TerminateChatResponse, error) {
+	f.terminatedChatID = req.GetChatId()
+	return &reliantv1.TerminateChatResponse{Success: true, Message: "terminated"}, nil
 }
 
 // superviseRunService serves the run-control rpcs the supervision verbs use.
@@ -99,9 +102,9 @@ type superviseRunService struct {
 	chat *superviseChatService
 }
 
-func (f *superviseRunService) CancelRun(_ context.Context, req *connect.Request[reliantv1.CancelRunRequest]) (*connect.Response[reliantv1.CancelRunResponse], error) {
-	f.chat.terminatedChatID = req.Msg.GetRunId()
-	return connect.NewResponse(&reliantv1.CancelRunResponse{Success: true, Message: "terminated"}), nil
+func (f *superviseRunService) CancelRun(_ context.Context, req *reliantv1.CancelRunRequest) (*reliantv1.CancelRunResponse, error) {
+	f.chat.terminatedChatID = req.GetRunId()
+	return &reliantv1.CancelRunResponse{Success: true, Message: "terminated"}, nil
 }
 
 // --- harness -------------------------------------------------------------
@@ -126,14 +129,12 @@ func newSuperviseHarness(t *testing.T) *superviseHarness {
 	}
 
 	mux := http.NewServeMux()
-	p1, h1 := reliantv1connect.NewChatServiceHandler(h.chat)
-	mux.Handle(p1, h1)
-	p2, h2 := reliantv1connect.NewQuestionServiceHandler(h.question)
-	mux.Handle(p2, h2)
-	p3, h3 := reliantv1connect.NewApprovalServiceHandler(h.approval)
-	mux.Handle(p3, h3)
-	p4, h4 := reliantv1connect.NewRunServiceHandler(&superviseRunService{chat: h.chat})
-	mux.Handle(p4, h4)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterChatServiceHandler(rpcServer, h.chat)
+	reliantv1connect.RegisterQuestionServiceHandler(rpcServer, h.question)
+	reliantv1connect.RegisterApprovalServiceHandler(rpcServer, h.approval)
+	reliantv1connect.RegisterRunServiceHandler(rpcServer, &superviseRunService{chat: h.chat})
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	h.server = httptest.NewServer(mux)
 	t.Cleanup(h.server.Close)
 
@@ -531,8 +532,9 @@ func TestWatchRendersBoundariesAndQuestion(t *testing.T) {
 	}
 	// Swap the chat handler for the watch-specific one on a fresh server.
 	mux := http.NewServeMux()
-	p, hnd := reliantv1connect.NewChatServiceHandler(watchChat)
-	mux.Handle(p, hnd)
+	rpcServer := connect.NewServer(svcerr.InterceptorV2())
+	reliantv1connect.RegisterChatServiceHandler(rpcServer, watchChat)
+	mountkit.MountV2(mux, rpcServer, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -640,24 +642,24 @@ type watchChatService struct {
 	rootReason reliantv1.WorkflowStopReason
 }
 
-func (f *watchChatService) GetChatUpdates(_ context.Context, req *connect.Request[reliantv1.GetChatUpdatesRequest]) (*connect.Response[reliantv1.GetChatUpdatesResponse], error) {
+func (f *watchChatService) GetChatUpdates(_ context.Context, req *reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error) {
 	var out []*reliantv1.ChatUpdate
 	var latest int64
 	for _, u := range f.updates {
 		if u.SequenceNumber > latest {
 			latest = u.SequenceNumber
 		}
-		if u.SequenceNumber > req.Msg.GetSinceSeq() {
+		if u.SequenceNumber > req.GetSinceSeq() {
 			out = append(out, u)
 		}
 	}
-	return connect.NewResponse(&reliantv1.GetChatUpdatesResponse{Updates: out, LatestSequence: latest}), nil
+	return &reliantv1.GetChatUpdatesResponse{Updates: out, LatestSequence: latest}, nil
 }
 
-func (f *watchChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
-	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
+func (f *watchChatService) GetWorkflowExecutions(_ context.Context, _ *reliantv1.GetWorkflowExecutionsRequest) (*reliantv1.GetWorkflowExecutionsResponse, error) {
+	return &reliantv1.GetWorkflowExecutionsResponse{
 		AllRootWorkflows: []*reliantv1.WorkflowExecution{{Id: "wf-1", State: f.rootState, StopReason: f.rootReason}},
-	}), nil
+	}, nil
 }
 
 // --- small builders ------------------------------------------------------

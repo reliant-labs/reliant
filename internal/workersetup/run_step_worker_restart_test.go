@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -223,8 +222,8 @@ func serveGateway(t *testing.T, tokens *tokenauthority.Memory, svc *tools_daemon
 	chain, err := reliantgrpc.NewDaemonChain(reliantgrpc.DaemonChainDeps{Auth: daemonAuth})
 	require.NoError(t, err)
 	listener, err := reliantgrpc.NewDaemonListener(reliantgrpc.DaemonListenerDeps{BindAddress: "127.0.0.1", Chain: chain,
-		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
-			svc.Register(mux, opts...)
+		Routes: serverkit.RoutesFuncV2(func(mux *mountkit.MuxV2) []string {
+			mux.Register(svc.RegisterV2)
 			return []string{reliantv1connect.ToolsDaemonServiceName}
 		})})
 	require.NoError(t, err)

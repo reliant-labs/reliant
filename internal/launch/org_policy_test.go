@@ -72,7 +72,7 @@ func TestLaunchValidation_FailsWithThePolicysReason(t *testing.T) {
 	assert.Equal(t, "model", refused.Input)
 	assert.Equal(t, orgpolicy.ReasonProviderNotAllowed, refused.Refusal.Reason)
 	assert.True(t, svcerr.IsFailedPrecondition(refused), "a verdict, not a malformed input")
-	assert.Equal(t, orgpolicy.ReasonProviderNotAllowed, svcerr.ToConnect(refused).Meta().Get(svcerr.ReasonHeader))
+	assert.Equal(t, orgpolicy.ReasonProviderNotAllowed, svcerr.MetaOf(svcerr.ToConnectV2(refused)).Get(svcerr.ReasonHeader))
 	assert.Contains(t, refused.Error(), "Your organization's policy does not allow this provider")
 	assert.NotContains(t, refused.Error(), "RELIANT_ORG_POLICY_REFUSED", "an rpc's message carries no chat marker")
 

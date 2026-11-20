@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,11 +44,11 @@ func TestSettings_StoreFailuresOnTheWire(t *testing.T) {
 			}
 			_, client := NewTestSettingsServer(t, WithSettingsDeps(Deps{Repo: repo}), WithPlaceholderDeps())
 
-			_, err := client.ListSettings(context.Background(), connect.NewRequest(&reliantv1.ListSettingsRequest{}))
+			_, err := client.ListSettings(context.Background(), &reliantv1.ListSettingsRequest{})
 			assertWire(t, err, tc.want)
 
 			value := "dark"
-			_, err = client.UpdateSetting(context.Background(), connect.NewRequest(&reliantv1.UpdateSettingRequest{Key: "theme", Value: &value}))
+			_, err = client.UpdateSetting(context.Background(), &reliantv1.UpdateSettingRequest{Key: "theme", Value: &value})
 			assertWire(t, err, tc.want)
 		})
 	}
@@ -58,7 +58,7 @@ func TestSettings_StoreFailuresOnTheWire(t *testing.T) {
 // never the verdict. The client reads this rpc's sentence and code whatever
 // control-plane said.
 func TestSettings_MintReliantKey_ControlPlaneErrorIsTheCause(t *testing.T) {
-	remote := connect.NewError(connect.CodeNotFound, errors.New("billing-svc.internal:8443: no wallet row for user"))
+	remote := connect.NewError(connect.CodeNotFound, "billing-svc.internal:8443: no wallet row for user")
 	cp := &StubControlPlane{MintLLMKeyFunc: func(context.Context, string, string) (controlplane.LLMKey, error) {
 		return controlplane.LLMKey{}, remote
 	}}
@@ -67,10 +67,10 @@ func TestSettings_MintReliantKey_ControlPlaneErrorIsTheCause(t *testing.T) {
 	auth.SetUserJWT(userID, "test-jwt")
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
-	_, err := svc.SyncReliantProvider(ctx, connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+	_, err := svc.SyncReliantProvider(ctx, &reliantv1.SyncReliantProviderRequest{})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err), "control-plane's NotFound is not this rpc's")
-	msg := svcerr.ToConnect(err).Message()
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err), "control-plane's NotFound is not this rpc's")
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.Equal(t, "failed to mint Reliant LLM key", msg)
 	assert.NotContains(t, msg, "billing-svc")
 	assert.Same(t, remote, svcerr.Cause(err), "the remote error is the logged cause")

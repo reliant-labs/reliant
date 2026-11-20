@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -80,56 +81,56 @@ func TestGetToolResult(t *testing.T) {
 	theirs := seedToolResult(t, repo, "someone-else", reused, "the other user's output", nil)
 
 	t.Run("returns the full stored content to the chat's owner", func(t *testing.T) {
-		resp, err := svc.GetToolResult(as("test-user"), connect.NewRequest(&reliantv1.GetToolResultRequest{
+		resp, err := svc.GetToolResult(as("test-user"), &reliantv1.GetToolResultRequest{
 			ChatId: mine.chatID, ToolCallId: reused,
-		}))
+		})
 		require.NoError(t, err)
-		assert.Equal(t, full, resp.Msg.Content, "the whole result, not the preview")
-		assert.Equal(t, int64(len(full)), resp.Msg.Size)
-		assert.True(t, resp.Msg.IsError)
-		assert.Equal(t, reused, resp.Msg.ToolCallId)
+		assert.Equal(t, full, resp.Content, "the whole result, not the preview")
+		assert.Equal(t, int64(len(full)), resp.Size)
+		assert.True(t, resp.IsError)
+		assert.Equal(t, reused, resp.ToolCallId)
 	})
 
 	t.Run("a reused call id never reads another chat's result", func(t *testing.T) {
-		resp, err := svc.GetToolResult(as("someone-else"), connect.NewRequest(&reliantv1.GetToolResultRequest{
+		resp, err := svc.GetToolResult(as("someone-else"), &reliantv1.GetToolResultRequest{
 			ChatId: theirs.chatID, ToolCallId: reused,
-		}))
+		})
 		require.NoError(t, err)
-		assert.Equal(t, "the other user's output", resp.Msg.Content)
+		assert.Equal(t, "the other user's output", resp.Content)
 	})
 
 	t.Run("another user's chat is not found", func(t *testing.T) {
-		_, err := svc.GetToolResult(as("someone-else"), connect.NewRequest(&reliantv1.GetToolResultRequest{
+		_, err := svc.GetToolResult(as("someone-else"), &reliantv1.GetToolResultRequest{
 			ChatId: mine.chatID, ToolCallId: reused,
-		}))
+		})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("an unknown call id is not found", func(t *testing.T) {
-		_, err := svc.GetToolResult(as("test-user"), connect.NewRequest(&reliantv1.GetToolResultRequest{
+		_, err := svc.GetToolResult(as("test-user"), &reliantv1.GetToolResultRequest{
 			ChatId: mine.chatID, ToolCallId: "call_missing",
-		}))
+		})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("a call id from another of the caller's chats, not inherited, is not found", func(t *testing.T) {
 		unrelated := seedToolResult(t, repo, "test-user", "", "", nil)
-		_, err := svc.GetToolResult(as("test-user"), connect.NewRequest(&reliantv1.GetToolResultRequest{
+		_, err := svc.GetToolResult(as("test-user"), &reliantv1.GetToolResultRequest{
 			ChatId: unrelated.chatID, ToolCallId: reused,
-		}))
+		})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("a branch reads the result it inherited from its source chat", func(t *testing.T) {
 		branch := seedToolResult(t, repo, "test-user", "", "", ptr.Of(mine.cwID))
-		resp, err := svc.GetToolResult(as("test-user"), connect.NewRequest(&reliantv1.GetToolResultRequest{
+		resp, err := svc.GetToolResult(as("test-user"), &reliantv1.GetToolResultRequest{
 			ChatId: branch.chatID, ToolCallId: reused,
-		}))
+		})
 		require.NoError(t, err)
-		assert.Equal(t, full, resp.Msg.Content)
+		assert.Equal(t, full, resp.Content)
 	})
 
 	t.Run("a branch of another user's chat never reads it", func(t *testing.T) {
@@ -137,18 +138,18 @@ func TestGetToolResult(t *testing.T) {
 		// user's), so this pins the explicit ownership check, not the
 		// context-window walk.
 		branch := seedToolResult(t, repo, "test-user", "", "", ptr.Of(theirs.cwID))
-		_, err := svc.GetToolResult(as("test-user"), connect.NewRequest(&reliantv1.GetToolResultRequest{
+		_, err := svc.GetToolResult(as("test-user"), &reliantv1.GetToolResultRequest{
 			ChatId: branch.chatID, ToolCallId: reused,
-		}))
+		})
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("ListMessages sends the same result as a preview", func(t *testing.T) {
-		resp, err := svc.ListMessages(as("test-user"), connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: mine.chatID}))
+		resp, err := svc.ListMessages(as("test-user"), &reliantv1.ListMessagesRequest{ChatId: mine.chatID})
 		require.NoError(t, err)
-		require.Len(t, resp.Msg.Messages, 1)
-		block := resp.Msg.Messages[0].ContentBlocks[0]
+		require.Len(t, resp.Messages, 1)
+		block := resp.Messages[0].ContentBlocks[0]
 		assert.True(t, block.GetTruncated())
 		assert.Equal(t, int64(len(full)), block.GetOriginalSize())
 		assert.LessOrEqual(t, len(block.GetContent()), messageproto.ToolResultPreviewBytes)

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -102,7 +102,7 @@ func TestSendDaemonCommand_DeadlineIsADaemonTimeout(t *testing.T) {
 
 	require.Error(t, err)
 	assert.True(t, IsDaemonTimeout(err), "error: %v", err)
-	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err))
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(err))
 	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(err), "a slow machine stays visible")
 	assert.Contains(t, err.Error(), "fs.get_tree")
 	assert.Contains(t, err.Error(), daemonSubject(daemonCommandSubject, "user-1", "daemon-1"))
@@ -116,7 +116,7 @@ func TestSendDaemonCommand_CommandBudgetIsADaemonTimeout(t *testing.T) {
 
 	require.Error(t, err)
 	assert.True(t, IsDaemonTimeout(err), "error: %v", err)
-	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err))
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(err))
 }
 
 // The caller going away ends the send at once, well inside the command's

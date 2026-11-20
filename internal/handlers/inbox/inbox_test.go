@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -60,9 +60,9 @@ func (f *inboxFixture) otherUser(t *testing.T) (context.Context, string, string)
 func (f *inboxFixture) list(t *testing.T, limit *int32) *reliantv1.ListInboxResponse {
 	t.Helper()
 	f.inbox.storageCache.Delete(f.userID) // tests change state between reads; production caches for 60s
-	resp, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{Limit: limit}))
+	resp, err := f.inbox.ListInbox(f.ctx, &reliantv1.ListInboxRequest{Limit: limit})
 	require.NoError(t, err)
-	return resp.Msg
+	return resp
 }
 
 func (f *inboxFixture) approval(t *testing.T, id, chatID string, at time.Time) {
@@ -260,7 +260,7 @@ func TestListInbox_LaunchFailedDismissalAndNewerFailureReappears(t *testing.T) {
 	assert.Equal(t, "daemon gone", it.GetAutomationLaunchFailed().Reason)
 	assert.Equal(t, "trg-l", it.TriggerId)
 
-	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{it.ItemId}}))
+	_, err := f.inbox.DismissInboxItem(f.ctx, &reliantv1.DismissInboxItemRequest{ItemIds: []string{it.ItemId}})
 	require.NoError(t, err)
 	assert.Empty(t, f.list(t, nil).Items, "dismissed")
 
@@ -349,7 +349,7 @@ func TestListInbox_FailingItemIDIsStableAcrossAStreakAndNewForANewOne(t *testing
 	assert.EqualValues(t, 4, later[0].GetAutomationFailing().Health.ConsecutiveFailures, "the count is the whole streak")
 
 	// Dismissing the episode hides the rest of it.
-	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{later[0].ItemId}}))
+	_, err := f.inbox.DismissInboxItem(f.ctx, &reliantv1.DismissInboxItemRequest{ItemIds: []string{later[0].ItemId}})
 	require.NoError(t, err)
 	f.launched(t, "s5", "chat-s5", "trg-s", base.Add(4*time.Hour), db.Failed())
 	assert.Empty(t, failing(), "a further failure of a dismissed episode stays hidden")
@@ -481,7 +481,7 @@ func TestListInbox_PausedAutomationRunNamesTheRunAndTheCause(t *testing.T) {
 	resp := f.list(t, nil)
 	assert.EqualValues(t, 0, resp.BlockingCount, "informational: the run retries or ends on its own")
 
-	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{item.ItemId}}))
+	_, err := f.inbox.DismissInboxItem(f.ctx, &reliantv1.DismissInboxItemRequest{ItemIds: []string{item.ItemId}})
 	require.NoError(t, err)
 	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED))
 }
@@ -489,9 +489,9 @@ func TestListInbox_PausedAutomationRunNamesTheRunAndTheCause(t *testing.T) {
 func TestDismissInboxItem_RejectsIDsThatNameNoItem(t *testing.T) {
 	f := newInboxFixture(t)
 	for _, id := range []string{"appr-1", "q-1", "", "automation_failing:", "approval:"} {
-		_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{id}}))
+		_, err := f.inbox.DismissInboxItem(f.ctx, &reliantv1.DismissInboxItemRequest{ItemIds: []string{id}})
 		require.Error(t, err, id)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), id)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), id)
 	}
 }
 
@@ -571,7 +571,7 @@ func TestListInbox_ScopedToCallerAcrossEveryKind(t *testing.T) {
 
 	// ...and the other user does see all of it (so the empty result is scoping,
 	// not a broken fixture).
-	other, err := f.inbox.ListInbox(otherCtx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	other, err := f.inbox.ListInbox(otherCtx, &reliantv1.ListInboxRequest{})
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []reliantv1.InboxItemKind{
 		reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
@@ -579,15 +579,15 @@ func TestListInbox_ScopedToCallerAcrossEveryKind(t *testing.T) {
 		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE,
 		reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING,
 		reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED,
-	}, inboxKinds(other.Msg.Items))
+	}, inboxKinds(other.Items))
 
 	// A user cannot dismiss into another user's inbox: dismissals are keyed by
 	// the caller, so the other user's failure stays.
-	_, err = f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{"automation_launch_failed:o-e2"}}))
+	_, err = f.inbox.DismissInboxItem(f.ctx, &reliantv1.DismissInboxItemRequest{ItemIds: []string{"automation_launch_failed:o-e2"}})
 	require.NoError(t, err)
-	other, err = f.inbox.ListInbox(otherCtx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	other, err = f.inbox.ListInbox(otherCtx, &reliantv1.ListInboxRequest{})
 	require.NoError(t, err)
-	assert.Len(t, inboxByKind(other.Msg.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED), 1)
+	assert.Len(t, inboxByKind(other.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED), 1)
 }
 
 func TestListInbox_LimitZeroReturnsCountsOnly(t *testing.T) {
@@ -712,12 +712,12 @@ func TestListInbox_ProjectScopeAndOtherProjectsCount(t *testing.T) {
 	assert.EqualValues(t, 0, all.OtherProjectsCount)
 
 	here := f.project()
-	resp, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{ProjectId: &here}))
+	resp, err := f.inbox.ListInbox(f.ctx, &reliantv1.ListInboxRequest{ProjectId: &here})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Items, 1)
-	assert.Equal(t, "c-here", resp.Msg.Items[0].ChatId)
-	assert.EqualValues(t, 1, resp.Msg.BlockingCount, "counts follow the scope")
-	assert.EqualValues(t, 1, resp.Msg.OtherProjectsCount)
+	require.Len(t, resp.Items, 1)
+	assert.Equal(t, "c-here", resp.Items[0].ChatId)
+	assert.EqualValues(t, 1, resp.BlockingCount, "counts follow the scope")
+	assert.EqualValues(t, 1, resp.OtherProjectsCount)
 }
 
 // Every kind can be dismissed: hiding an approval or a question takes it out of
@@ -739,13 +739,13 @@ func TestDismissInboxItem_EveryKindAndRestore(t *testing.T) {
 	for i, it := range items {
 		ids[i] = it.ItemId
 	}
-	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: ids}))
+	_, err := f.inbox.DismissInboxItem(f.ctx, &reliantv1.DismissInboxItemRequest{ItemIds: ids})
 	require.NoError(t, err)
 	resp := f.list(t, nil)
 	assert.Empty(t, resp.Items)
 	assert.EqualValues(t, 0, resp.BlockingCount)
 
-	_, err = f.inbox.RestoreInboxItem(f.ctx, connect.NewRequest(&reliantv1.RestoreInboxItemRequest{ItemIds: ids[:1]}))
+	_, err = f.inbox.RestoreInboxItem(f.ctx, &reliantv1.RestoreInboxItemRequest{ItemIds: ids[:1]})
 	require.NoError(t, err)
 	resp = f.list(t, nil)
 	require.Len(t, resp.Items, 1)
@@ -760,7 +760,7 @@ func TestListInbox_WaitingForMachineIsANewItemPerBlock(t *testing.T) {
 	require.NoError(t, f.repo.SetChatDaemonBlocked(f.ctx, "c-w", true))
 	first := f.list(t, nil).Items
 	require.Len(t, first, 1)
-	_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{first[0].ItemId}}))
+	_, err := f.inbox.DismissInboxItem(f.ctx, &reliantv1.DismissInboxItemRequest{ItemIds: []string{first[0].ItemId}})
 	require.NoError(t, err)
 	assert.Empty(t, f.list(t, nil).Items)
 

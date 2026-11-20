@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -20,21 +19,21 @@ import (
 // already stored for the provider is the same account: created is false and nothing is duplicated.
 func (s *Service) AddProviderAPIKey(
 	ctx context.Context,
-	req *connect.Request[pb.AddProviderAPIKeyRequest],
-) (*connect.Response[pb.AddProviderAPIKeyResponse], error) {
+	req *pb.AddProviderAPIKeyRequest,
+) (*pb.AddProviderAPIKeyResponse, error) {
 	userID, err := callerID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	provider := strings.TrimSpace(req.Msg.GetProvider())
-	apiKey := strings.TrimSpace(req.Msg.GetApiKey())
+	provider := strings.TrimSpace(req.GetProvider())
+	apiKey := strings.TrimSpace(req.GetApiKey())
 	if !apiKeyProviders[provider] {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("provider " + provider + " does not take an API key"))
 	}
 	if apiKey == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("api_key is required"))
 	}
-	label := strings.TrimSpace(req.Msg.GetLabel())
+	label := strings.TrimSpace(req.GetLabel())
 	if len([]rune(label)) > maxLabelRunes {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("label is too long"))
 	}
@@ -76,5 +75,5 @@ func (s *Service) AddProviderAPIKey(
 	if !created && label == "" {
 		activity.Skip(ctx) // the key was already stored and nothing was relabelled
 	}
-	return connect.NewResponse(&pb.AddProviderAPIKeyResponse{Account: proto(acct, limits, time.Now()), Created: created}), nil
+	return &pb.AddProviderAPIKeyResponse{Account: proto(acct, limits, time.Now()), Created: created}, nil
 }

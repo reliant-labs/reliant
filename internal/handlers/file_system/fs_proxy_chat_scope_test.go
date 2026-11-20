@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +56,7 @@ func TestFileSystemProxy_ChatOnlyScopeReadsTheChatsWorkspaceOnItsMachine(t *test
 
 	router := &machineRecordingRouter{}
 	svc := newProxy(t, router, repo)
-	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, ChatId: &chatID, Path: "/"}))
+	_, err := svc.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID, ChatId: &chatID, Path: "/"})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{machineA + " fs.get_tree"}, router.sent, "the workspace's machine, not the chat's stale pin")
@@ -101,7 +100,7 @@ func TestFileSystemProxy_DefaultResolutionIsPinnedToTheMachineThePathCameFrom(t 
 
 	router := &shiftingDefaultRouter{resolves: resolved, delivers: other}
 	svc := newProxy(t, router, repo)
-	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"}))
+	_, err := svc.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"})
 	require.NoError(t, err)
 
 	assert.Equal(t, []string{resolved + " fs.get_tree"}, router.sent, "pinned to the machine whose path the request carries")

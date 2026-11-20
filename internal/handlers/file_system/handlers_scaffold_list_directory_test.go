@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -29,23 +29,23 @@ func TestListDirectory_Generated(t *testing.T) {
 
 	svc := file_system.NewTestFileSystem(t, file_system.WithFileSystemDeps(file_system.Deps{Router: &homeListingRouter{}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListDirectoryRequest, pb.ListDirectoryResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListDirectoryRequest, pb.ListDirectoryResponse]{
 		{
 			Name:    "anonymous caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.ListDirectoryRequest{}),
+			Req:     &pb.ListDirectoryRequest{},
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name: "an empty path lists the directory the daemon resolved",
-			Req:  connect.NewRequest(&pb.ListDirectoryRequest{}),
+			Req:  &pb.ListDirectoryRequest{},
 			Ctx:  file_system.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListDirectoryResponse]) {
-				assert.Equal(t, "/home/u", resp.Msg.Path)
-				require.Len(t, resp.Msg.Entries, 2)
-				assert.Equal(t, "/home/u/src", resp.Msg.Entries[0].Path)
-				assert.True(t, resp.Msg.Entries[0].IsDirectory)
-				assert.Equal(t, "/home/u/.env", resp.Msg.Entries[1].Path)
-				assert.True(t, resp.Msg.Entries[1].IsHidden)
+			Check: func(t *testing.T, resp *pb.ListDirectoryResponse) {
+				assert.Equal(t, "/home/u", resp.Path)
+				require.Len(t, resp.Entries, 2)
+				assert.Equal(t, "/home/u/src", resp.Entries[0].Path)
+				assert.True(t, resp.Entries[0].IsDirectory)
+				assert.Equal(t, "/home/u/.env", resp.Entries[1].Path)
+				assert.True(t, resp.Entries[1].IsHidden)
 			},
 		},
 	}, svc.ListDirectory)

@@ -6,8 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -22,16 +20,16 @@ import (
 // This signals the running workflow to update its inputs (e.g., mode, temperature)
 func (s *Service) UpdateWorkflowParams(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateWorkflowParamsRequest],
-) (*connect.Response[reliantv1.UpdateWorkflowParamsResponse], error) {
+	req *reliantv1.UpdateWorkflowParamsRequest,
+) (*reliantv1.UpdateWorkflowParamsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -47,14 +45,14 @@ func (s *Service) UpdateWorkflowParams(
 		return nil, svcerr.FailedPrecondition("no active workflow for chat")
 	}
 
-	if err := launch.ValidateWorkflowParamStructure(req.Msg.Params); err != nil {
+	if err := launch.ValidateWorkflowParamStructure(req.Params); err != nil {
 		return nil, err
 	}
 
 	// If targeting a specific thread, verify there is a run of it for the
 	// params to apply to.
-	if req.Msg.ThreadId != nil && *req.Msg.ThreadId != "" {
-		if err := s.threadAcceptsParamUpdate(ctx, chat, *req.Msg.ThreadId); err != nil {
+	if req.ThreadId != nil && *req.ThreadId != "" {
+		if err := s.threadAcceptsParamUpdate(ctx, chat, *req.ThreadId); err != nil {
 			return nil, err
 		}
 	}
@@ -63,16 +61,16 @@ func (s *Service) UpdateWorkflowParams(
 	if chat.WorkflowName != nil {
 		workflowName = *chat.WorkflowName
 	}
-	threadScoped := req.Msg.ThreadId != nil && *req.Msg.ThreadId != ""
+	threadScoped := req.ThreadId != nil && *req.ThreadId != ""
 
 	// The update is exactly the keys the client sent. A key it did not send is
 	// unchanged to the run: the old expansion to the full preset+default set
 	// reset a live run's model to the preset's tier on a Mode toggle, and
 	// overwrote a sub-agent's model, tools and skills with the root's preset.
-	params := req.Msg.Params
+	params := req.Params
 	validationChat := chat
 	if threadScoped {
-		wf, err := s.deps.Repo.GetWorkflowByThread(ctx, chat.ID, *req.Msg.ThreadId)
+		wf, err := s.deps.Repo.GetWorkflowByThread(ctx, chat.ID, *req.ThreadId)
 		if err != nil || wf == nil {
 			return nil, svcerr.FailedPrecondition("The thread's workflow is unavailable. Try again when it resumes.")
 		}
@@ -83,7 +81,7 @@ func (s *Service) UpdateWorkflowParams(
 		threadChat.ID = ""
 		threadChat.SelectedPresets = nil
 		validationChat = &threadChat
-		params, err = s.resolveThreadResetParams(ctx, userID, chat, workflowName, workflowID, *req.Msg.ThreadId, params)
+		params, err = s.resolveThreadResetParams(ctx, userID, chat, workflowName, workflowID, *req.ThreadId, params)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +98,7 @@ func (s *Service) UpdateWorkflowParams(
 		// Required thread inputs may come from node args, not schema defaults.
 		// Validate the actual thread plus the delta whenever it can answer.
 		var current map[string]interface{}
-		response, queryErr := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, workflowID, "get_thread_inputs", *req.Msg.ThreadId)
+		response, queryErr := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, workflowID, "get_thread_inputs", *req.ThreadId)
 		if queryErr == nil && response.Get(&current) == nil && current != nil {
 			for key, value := range stateUpdate {
 				current[key] = value
@@ -139,9 +137,9 @@ func (s *Service) UpdateWorkflowParams(
 		// A thread's params are that run's state, not the chat's choice: they
 		// are signalled and remembered by the run, never stored as the
 		// selection (which would hand the sub-agent's model to the next root run).
-		stateUpdate["__thread"] = *req.Msg.ThreadId
+		stateUpdate["__thread"] = *req.ThreadId
 		var resetKeys []string
-		for key, value := range req.Msg.Params {
+		for key, value := range req.Params {
 			if value.AsInterface() == nil {
 				resetKeys = append(resetKeys, key)
 			}
@@ -153,10 +151,10 @@ func (s *Service) UpdateWorkflowParams(
 		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err
 		}
-		return connect.NewResponse(&reliantv1.UpdateWorkflowParamsResponse{
+		return &reliantv1.UpdateWorkflowParamsResponse{
 			Success: true,
 			Message: "Workflow parameters updated",
-		}), nil
+		}, nil
 	}
 
 	// An edit of other params still holds an auto run to its org's mode
@@ -171,7 +169,7 @@ func (s *Service) UpdateWorkflowParams(
 	// provider that cannot serve it first, exactly as a send moves it, so what
 	// is stored is what runs.
 	live := s.rootRunIsLive(ctx, workflowID)
-	_, explicitModelPick := req.Msg.Params["model"]
+	_, explicitModelPick := req.Params["model"]
 	// The provider binding is decided here and nowhere else (see
 	// chat_provider_binding.go): a pick that names another provider than the
 	// root runs on switches the chat to it, a local pick unbinds it, and any
@@ -209,7 +207,7 @@ func (s *Service) UpdateWorkflowParams(
 	if explicitModelPick {
 		bindingPatch = &binding
 	}
-	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion(), bindingPatch)
+	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Params, stateUpdate, moves, req.GetExpectedVersion(), bindingPatch)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record the chat's selection"))
 	}
@@ -230,7 +228,7 @@ func (s *Service) UpdateWorkflowParams(
 				news = append(news, sub)
 			}
 		}
-		s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, workflowID, news)
+		s.postModelFallbackNotices(ctx, req.ChatId, workflowID, workflowID, news)
 		modelChanged := false
 		if newModel, ok := stateUpdate["model"]; ok {
 			modelChanged = s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{"model": newModel})
@@ -251,14 +249,14 @@ func (s *Service) UpdateWorkflowParams(
 	}
 
 	logging.DebugContext(ctx, "Updated workflow params",
-		"chatID", req.Msg.ChatId,
+		"chatID", req.ChatId,
 		"workflowID", workflowID,
 		"live", live,
 		"paramCount", len(stateUpdate))
 
-	return connect.NewResponse(&reliantv1.UpdateWorkflowParamsResponse{
+	return &reliantv1.UpdateWorkflowParamsResponse{
 		Success:   true,
 		Message:   "Workflow parameters updated",
 		Selection: selectionToProto(sel),
-	}), nil
+	}, nil
 }

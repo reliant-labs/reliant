@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -22,16 +22,16 @@ func TestOpenOAuthHelper_Generated(t *testing.T) {
 	// The generated harness leaves the optional Router nil.
 	svc := daemon.NewTestDaemon(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.OpenOAuthHelperRequest, pb.OpenOAuthHelperResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.OpenOAuthHelperRequest, pb.OpenOAuthHelperResponse]{
 		{
 			Name:    "a caller is required",
-			Req:     connect.NewRequest(&pb.OpenOAuthHelperRequest{WebOrigin: "https://app"}),
+			Req:     &pb.OpenOAuthHelperRequest{WebOrigin: "https://app"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "no daemon router is unavailable",
-			Req:     connect.NewRequest(&pb.OpenOAuthHelperRequest{WebOrigin: "https://app"}),
+			Req:     &pb.OpenOAuthHelperRequest{WebOrigin: "https://app"},
 			Ctx:     daemon.AuthedContext(t),
 			WantErr: connect.CodeUnavailable,
 		},

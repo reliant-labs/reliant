@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
@@ -173,10 +173,10 @@ func (s *Service) Name() string {
 	return "chat"
 }
 
-// Register registers the service handlers with the HTTP mux.
-func (s *Service) Register(mux *http.ServeMux, opts ...connect.HandlerOption) {
-	path, handler := reliantv1connect.NewChatServiceHandler(s, opts...)
-	mux.Handle(path, handler)
+// RegisterV2 registers the service's handlers on server, the connect-go v2
+// Server its mount's interceptor chain belongs to (mountkit.MuxV2).
+func (s *Service) RegisterV2(server *connect.Server) {
+	reliantv1connect.RegisterChatServiceHandler(server, s)
 }
 
 // RegisterHTTP registers plain HTTP handlers (callbacks, REST endpoints)

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -78,26 +77,26 @@ func TestListMessages_ScrollbackReachesTheBeginning(t *testing.T) {
 		if beforeSeq != nil {
 			req.BeforeSeq = beforeSeq
 		}
-		resp, err := svc.ListMessages(ctx, connect.NewRequest(req))
+		resp, err := svc.ListMessages(ctx, req)
 		require.NoError(t, err)
 		pages++
 		require.Less(t, pages, 10, "scroll-back did not terminate within a reasonable number of pages")
 
-		require.EqualValues(t, totalMessages, resp.Msg.Total, "Total must always be the true chat-wide count")
+		require.EqualValues(t, totalMessages, resp.Total, "Total must always be the true chat-wide count")
 
-		if len(resp.Msg.Messages) == 0 {
-			require.False(t, resp.Msg.HasMore, "an empty page must report hasMore=false")
+		if len(resp.Messages) == 0 {
+			require.False(t, resp.HasMore, "an empty page must report hasMore=false")
 			break
 		}
 
-		for _, m := range resp.Msg.Messages {
+		for _, m := range resp.Messages {
 			seenIDs = append([]string{m.Id}, seenIDs...) // prepend: pages arrive newest-first
 		}
 
-		if !resp.Msg.HasMore {
+		if !resp.HasMore {
 			break
 		}
-		oldest := resp.Msg.OldestSeq
+		oldest := resp.OldestSeq
 		beforeSeq = &oldest
 	}
 
@@ -168,14 +167,14 @@ func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 
 	svc := &Service{deps: Deps{Repo: repo}}
 	recent := int32(10)
-	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{
 		ChatId: chatID, Recent: &recent,
-	}))
+	})
 	require.NoError(t, err)
 
-	require.EqualValues(t, 6, resp.Msg.Total, "total is the chat-wide count, spawn messages included")
-	gotIDs := make([]string, len(resp.Msg.Messages))
-	for i, m := range resp.Msg.Messages {
+	require.EqualValues(t, 6, resp.Total, "total is the chat-wide count, spawn messages included")
+	gotIDs := make([]string, len(resp.Messages))
+	for i, m := range resp.Messages {
 		gotIDs[i] = m.Id
 	}
 	require.Equal(t, []string{main1, node1, main2, node2}, gotIDs,
@@ -183,16 +182,16 @@ func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
 
 	// A page below a cursor takes the siblings inside its own range only.
 	before := int64(4)
-	older, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	older, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{
 		ChatId: chatID, Recent: &recent, BeforeSeq: &before,
-	}))
+	})
 	require.NoError(t, err)
-	olderIDs := make([]string, len(older.Msg.Messages))
-	for i, m := range older.Msg.Messages {
+	olderIDs := make([]string, len(older.Messages))
+	for i, m := range older.Messages {
 		olderIDs[i] = m.Id
 	}
 	require.Equal(t, []string{main1, node1}, olderIDs)
-	require.False(t, older.Msg.HasMore)
+	require.False(t, older.HasMore)
 }
 
 // siblingChat seeds a chat with a main thread and one inline node thread, and
@@ -240,17 +239,17 @@ func scrollBack(t *testing.T, svc *Service, ctx context.Context, chatID string, 
 	var seen []string
 	for pages := 0; ; pages++ {
 		require.Less(t, pages, 20, "scroll-back did not terminate")
-		resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: chatID, Recent: &pageSize, BeforeSeq: beforeSeq}))
+		resp, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{ChatId: chatID, Recent: &pageSize, BeforeSeq: beforeSeq})
 		require.NoError(t, err)
-		page := make([]string, 0, len(resp.Msg.Messages))
-		for _, m := range resp.Msg.Messages {
+		page := make([]string, 0, len(resp.Messages))
+		for _, m := range resp.Messages {
 			page = append(page, m.Id)
 		}
 		seen = append(page, seen...)
-		if !resp.Msg.HasMore || len(page) == 0 {
+		if !resp.HasMore || len(page) == 0 {
 			return seen
 		}
-		oldest := resp.Msg.OldestSeq
+		oldest := resp.OldestSeq
 		beforeSeq = &oldest
 	}
 }
@@ -280,9 +279,9 @@ func TestListMessages_Bounded_EmptyMainThreadPagesSiblings(t *testing.T) {
 	}
 	svc := &Service{deps: Deps{Repo: repo}}
 	recent := int32(3)
-	first, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: chatID, Recent: &recent}))
+	first, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{ChatId: chatID, Recent: &recent})
 	require.NoError(t, err)
-	require.Len(t, first.Msg.Messages, 3, "one page of siblings, not all of them")
-	require.True(t, first.Msg.HasMore)
+	require.Len(t, first.Messages, 3, "one page of siblings, not all of them")
+	require.True(t, first.HasMore)
 	require.Equal(t, want, scrollBack(t, svc, ctx, chatID, 3))
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -15,16 +14,16 @@ import (
 // UpdateChatState changes chat state (idle/archived)
 func (s *Service) UpdateChatState(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateChatStateRequest],
-) (*connect.Response[reliantv1.UpdateChatStateResponse], error) {
+	req *reliantv1.UpdateChatStateRequest,
+) (*reliantv1.UpdateChatStateResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
+	if req.ChatId == "" {
 		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Validate state value
-	newState := db.ChatState(req.Msg.State)
+	newState := db.ChatState(req.State)
 	switch newState {
 	case db.ChatStateIdle, db.ChatStateArchived:
 		// Valid user-initiated transitions
@@ -33,7 +32,7 @@ func (s *Service) UpdateChatState(
 	}
 
 	// Get chat to verify ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -56,15 +55,15 @@ func (s *Service) UpdateChatState(
 	if newState == db.ChatStateArchived {
 		err = s.archiveChat(ctx, chat, reason)
 	} else {
-		err = s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, newState, reason)
+		err = s.deps.Repo.UpdateChatState(ctx, req.ChatId, newState, reason)
 	}
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat state"))
 	}
 
-	return connect.NewResponse(&reliantv1.UpdateChatStateResponse{
+	return &reliantv1.UpdateChatStateResponse{
 		State:         newState,
 		PreviousState: previousState,
 		Message:       fmt.Sprintf("Chat state updated to %v", newState),
-	}), nil
+	}, nil
 }

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,6 +28,9 @@ func (r *failingCommandRouter) SendDaemonCommand(context.Context, string, string
 }
 
 // Each machine state the router reports, as it reports it.
+// errNoDaemonForUser is what daemonRequestError wraps for nats.ErrNoResponders.
+var errNoDaemonForUser = svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)
+
 var machineStates = []struct {
 	name     string
 	err      error
@@ -46,7 +49,7 @@ var machineStates = []struct {
 	{
 		// As daemonRequestError builds it for nats.ErrNoResponders.
 		name:     "no NATS responder for the machine",
-		err:      connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
+		err:      connect.NewError(connect.CodeUnavailable, errNoDaemonForUser.Error()).WithCause(errNoDaemonForUser),
 		wantCode: connect.CodeUnavailable,
 	},
 }
@@ -56,13 +59,13 @@ func TestTerminalProxy_MachineStatesKeepTheirCode(t *testing.T) {
 	for _, state := range machineStates {
 		t.Run(state.name, func(t *testing.T) {
 			svc := NewTestTerminal(t, WithTerminalDeps(Deps{Router: &failingCommandRouter{err: state.err}}))
-			_, err := svc.ListSessions(AuthedContext(t), connect.NewRequest(&reliantv1.ListTerminalSessionsRequest{}))
+			_, err := svc.ListSessions(AuthedContext(t), &reliantv1.ListTerminalSessionsRequest{})
 			require.Error(t, err)
-			assert.Equal(t, state.wantCode, svcerr.Code(err))
+			assert.Equal(t, state.wantCode, svcerr.CodeV2(err))
 
-			_, err = svc.CloseSession(AuthedContext(t), connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{SessionId: "s1"}))
+			_, err = svc.CloseSession(AuthedContext(t), &reliantv1.CloseTerminalSessionRequest{SessionId: "s1"})
 			require.Error(t, err)
-			assert.Equal(t, state.wantCode, svcerr.Code(err))
+			assert.Equal(t, state.wantCode, svcerr.CodeV2(err))
 		})
 	}
 }

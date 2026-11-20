@@ -7,67 +7,138 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ConnectionServiceName is the fully-qualified name of the ConnectionService service.
 	ConnectionServiceName = "reliant.v1.ConnectionService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ConnectionServiceListIntegrationsProcedure is the fully-qualified name of the ConnectionService's
+	// ConnectionServiceListIntegrationsProcedure is the procedure name of the ConnectionService's
 	// ListIntegrations RPC.
 	ConnectionServiceListIntegrationsProcedure = "/reliant.v1.ConnectionService/ListIntegrations"
-	// ConnectionServiceListConnectionsProcedure is the fully-qualified name of the ConnectionService's
+	// ConnectionServiceListConnectionsProcedure is the procedure name of the ConnectionService's
 	// ListConnections RPC.
 	ConnectionServiceListConnectionsProcedure = "/reliant.v1.ConnectionService/ListConnections"
-	// ConnectionServiceGetConnectionProcedure is the fully-qualified name of the ConnectionService's
+	// ConnectionServiceGetConnectionProcedure is the procedure name of the ConnectionService's
 	// GetConnection RPC.
 	ConnectionServiceGetConnectionProcedure = "/reliant.v1.ConnectionService/GetConnection"
-	// ConnectionServiceCreateApiKeyConnectionProcedure is the fully-qualified name of the
-	// ConnectionService's CreateApiKeyConnection RPC.
+	// ConnectionServiceCreateApiKeyConnectionProcedure is the procedure name of the ConnectionService's
+	// CreateApiKeyConnection RPC.
 	ConnectionServiceCreateApiKeyConnectionProcedure = "/reliant.v1.ConnectionService/CreateApiKeyConnection"
-	// ConnectionServiceStartOAuthProcedure is the fully-qualified name of the ConnectionService's
-	// StartOAuth RPC.
+	// ConnectionServiceStartOAuthProcedure is the procedure name of the ConnectionService's StartOAuth
+	// RPC.
 	ConnectionServiceStartOAuthProcedure = "/reliant.v1.ConnectionService/StartOAuth"
-	// ConnectionServiceCompleteOAuthProcedure is the fully-qualified name of the ConnectionService's
+	// ConnectionServiceCompleteOAuthProcedure is the procedure name of the ConnectionService's
 	// CompleteOAuth RPC.
 	ConnectionServiceCompleteOAuthProcedure = "/reliant.v1.ConnectionService/CompleteOAuth"
-	// ConnectionServiceTestConnectionProcedure is the fully-qualified name of the ConnectionService's
+	// ConnectionServiceTestConnectionProcedure is the procedure name of the ConnectionService's
 	// TestConnection RPC.
 	ConnectionServiceTestConnectionProcedure = "/reliant.v1.ConnectionService/TestConnection"
-	// ConnectionServiceRenameConnectionProcedure is the fully-qualified name of the ConnectionService's
+	// ConnectionServiceRenameConnectionProcedure is the procedure name of the ConnectionService's
 	// RenameConnection RPC.
 	ConnectionServiceRenameConnectionProcedure = "/reliant.v1.ConnectionService/RenameConnection"
-	// ConnectionServiceSetDefaultConnectionProcedure is the fully-qualified name of the
-	// ConnectionService's SetDefaultConnection RPC.
+	// ConnectionServiceSetDefaultConnectionProcedure is the procedure name of the ConnectionService's
+	// SetDefaultConnection RPC.
 	ConnectionServiceSetDefaultConnectionProcedure = "/reliant.v1.ConnectionService/SetDefaultConnection"
-	// ConnectionServiceDeleteConnectionProcedure is the fully-qualified name of the ConnectionService's
+	// ConnectionServiceDeleteConnectionProcedure is the procedure name of the ConnectionService's
 	// DeleteConnection RPC.
 	ConnectionServiceDeleteConnectionProcedure = "/reliant.v1.ConnectionService/DeleteConnection"
-	// ConnectionServiceListConnectionEventsProcedure is the fully-qualified name of the
-	// ConnectionService's ListConnectionEvents RPC.
+	// ConnectionServiceListConnectionEventsProcedure is the procedure name of the ConnectionService's
+	// ListConnectionEvents RPC.
 	ConnectionServiceListConnectionEventsProcedure = "/reliant.v1.ConnectionService/ListConnectionEvents"
+)
+
+var (
+	connectionServiceListIntegrationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("ListIntegrations"),
+			Procedure:  ConnectionServiceListIntegrationsProcedure,
+		}
+	})
+	connectionServiceListConnectionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("ListConnections"),
+			Procedure:  ConnectionServiceListConnectionsProcedure,
+		}
+	})
+	connectionServiceGetConnectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("GetConnection"),
+			Procedure:  ConnectionServiceGetConnectionProcedure,
+		}
+	})
+	connectionServiceCreateApiKeyConnectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("CreateApiKeyConnection"),
+			Procedure:  ConnectionServiceCreateApiKeyConnectionProcedure,
+		}
+	})
+	connectionServiceStartOAuthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("StartOAuth"),
+			Procedure:  ConnectionServiceStartOAuthProcedure,
+		}
+	})
+	connectionServiceCompleteOAuthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("CompleteOAuth"),
+			Procedure:  ConnectionServiceCompleteOAuthProcedure,
+		}
+	})
+	connectionServiceTestConnectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("TestConnection"),
+			Procedure:  ConnectionServiceTestConnectionProcedure,
+		}
+	})
+	connectionServiceRenameConnectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("RenameConnection"),
+			Procedure:  ConnectionServiceRenameConnectionProcedure,
+		}
+	})
+	connectionServiceSetDefaultConnectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("SetDefaultConnection"),
+			Procedure:  ConnectionServiceSetDefaultConnectionProcedure,
+		}
+	})
+	connectionServiceDeleteConnectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("DeleteConnection"),
+			Procedure:  ConnectionServiceDeleteConnectionProcedure,
+		}
+	})
+	connectionServiceListConnectionEventsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods().ByName("ListConnectionEvents"),
+			Procedure:  ConnectionServiceListConnectionEventsProcedure,
+		}
+	})
 )
 
 // ConnectionServiceClient is a client for the reliant.v1.ConnectionService service.
@@ -75,189 +146,45 @@ type ConnectionServiceClient interface {
 	// ListIntegrations lists what a connection can be made to. An OAuth
 	// integration whose deployment has no client credentials is listed with
 	// available = false rather than hidden, so the UI can say why.
-	ListIntegrations(context.Context, *connect.Request[v1.ListIntegrationsRequest]) (*connect.Response[v1.ListIntegrationsResponse], error)
+	ListIntegrations(context.Context, *v1.ListIntegrationsRequest) (*v1.ListIntegrationsResponse, error)
 	// ListConnections returns the caller's connections. Metadata only.
 	// forge:custom — the caller's connections from connections.Service, metadata only
-	ListConnections(context.Context, *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error)
+	ListConnections(context.Context, *v1.ListConnectionsRequest) (*v1.ListConnectionsResponse, error)
 	// GetConnection returns one connection's metadata.
 	// forge:custom — one of the caller's connections from connections.Service, metadata only, NotFound otherwise
-	GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.GetConnectionResponse], error)
+	GetConnection(context.Context, *v1.GetConnectionRequest) (*v1.GetConnectionResponse, error)
 	// CreateApiKeyConnection saves a pasted API key or basic credential.
-	CreateApiKeyConnection(context.Context, *connect.Request[v1.CreateApiKeyConnectionRequest]) (*connect.Response[v1.CreateApiKeyConnectionResponse], error)
+	CreateApiKeyConnection(context.Context, *v1.CreateApiKeyConnectionRequest) (*v1.CreateApiKeyConnectionResponse, error)
 	// StartOAuth begins an authorization-code flow bound to the caller and
 	// returns the provider URL to send the user to. The provider redirects to
 	// this server's /integrations/oauth/{provider}/callback, which relays the
 	// code back to the client: a web app's /connections/oauth/callback route on
 	// the request's Origin (which must be one this deployment serves), or a
 	// desktop app's loopback_redirect.
-	StartOAuth(context.Context, *connect.Request[v1.StartOAuthRequest]) (*connect.Response[v1.StartOAuthResponse], error)
+	StartOAuth(context.Context, *v1.StartOAuthRequest) (*v1.StartOAuthResponse, error)
 	// CompleteOAuth finishes a flow with the code and state the callback
 	// relayed. Only the user who started the flow can finish it.
-	CompleteOAuth(context.Context, *connect.Request[v1.CompleteOAuthRequest]) (*connect.Response[v1.CompleteOAuthResponse], error)
+	CompleteOAuth(context.Context, *v1.CompleteOAuthRequest) (*v1.CompleteOAuthResponse, error)
 	// TestConnection runs the integration's probe against the live credential
 	// and records the account label it identifies.
-	TestConnection(context.Context, *connect.Request[v1.TestConnectionRequest]) (*connect.Response[v1.TestConnectionResponse], error)
-	RenameConnection(context.Context, *connect.Request[v1.RenameConnectionRequest]) (*connect.Response[v1.RenameConnectionResponse], error)
+	TestConnection(context.Context, *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error)
+	RenameConnection(context.Context, *v1.RenameConnectionRequest) (*v1.RenameConnectionResponse, error)
 	// SetDefaultConnection makes this the connection used when a workflow names
 	// only the integration.
-	SetDefaultConnection(context.Context, *connect.Request[v1.SetDefaultConnectionRequest]) (*connect.Response[v1.SetDefaultConnectionResponse], error)
+	SetDefaultConnection(context.Context, *v1.SetDefaultConnectionRequest) (*v1.SetDefaultConnectionResponse, error)
 	// DeleteConnection revokes at the provider where an API exists (best
 	// effort), then soft-deletes the row and destroys its ciphertext.
 	// forge:custom — revokes at the provider, then soft-deletes the row and destroys its ciphertext
-	DeleteConnection(context.Context, *connect.Request[v1.DeleteConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error)
+	DeleteConnection(context.Context, *v1.DeleteConnectionRequest) (*v1.DeleteConnectionResponse, error)
 	// ListConnectionEvents is the audit view, newest first.
 	// forge:custom — the caller's audit trail of one connection, served by connections.Service
-	ListConnectionEvents(context.Context, *connect.Request[v1.ListConnectionEventsRequest]) (*connect.Response[v1.ListConnectionEventsResponse], error)
+	ListConnectionEvents(context.Context, *v1.ListConnectionEventsRequest) (*v1.ListConnectionEventsResponse, error)
 }
 
-// NewConnectionServiceClient constructs a client for the reliant.v1.ConnectionService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewConnectionServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ConnectionServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	connectionServiceMethods := v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods()
-	return &connectionServiceClient{
-		listIntegrations: connect.NewClient[v1.ListIntegrationsRequest, v1.ListIntegrationsResponse](
-			httpClient,
-			baseURL+ConnectionServiceListIntegrationsProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("ListIntegrations")),
-			connect.WithClientOptions(opts...),
-		),
-		listConnections: connect.NewClient[v1.ListConnectionsRequest, v1.ListConnectionsResponse](
-			httpClient,
-			baseURL+ConnectionServiceListConnectionsProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("ListConnections")),
-			connect.WithClientOptions(opts...),
-		),
-		getConnection: connect.NewClient[v1.GetConnectionRequest, v1.GetConnectionResponse](
-			httpClient,
-			baseURL+ConnectionServiceGetConnectionProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("GetConnection")),
-			connect.WithClientOptions(opts...),
-		),
-		createApiKeyConnection: connect.NewClient[v1.CreateApiKeyConnectionRequest, v1.CreateApiKeyConnectionResponse](
-			httpClient,
-			baseURL+ConnectionServiceCreateApiKeyConnectionProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("CreateApiKeyConnection")),
-			connect.WithClientOptions(opts...),
-		),
-		startOAuth: connect.NewClient[v1.StartOAuthRequest, v1.StartOAuthResponse](
-			httpClient,
-			baseURL+ConnectionServiceStartOAuthProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("StartOAuth")),
-			connect.WithClientOptions(opts...),
-		),
-		completeOAuth: connect.NewClient[v1.CompleteOAuthRequest, v1.CompleteOAuthResponse](
-			httpClient,
-			baseURL+ConnectionServiceCompleteOAuthProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("CompleteOAuth")),
-			connect.WithClientOptions(opts...),
-		),
-		testConnection: connect.NewClient[v1.TestConnectionRequest, v1.TestConnectionResponse](
-			httpClient,
-			baseURL+ConnectionServiceTestConnectionProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("TestConnection")),
-			connect.WithClientOptions(opts...),
-		),
-		renameConnection: connect.NewClient[v1.RenameConnectionRequest, v1.RenameConnectionResponse](
-			httpClient,
-			baseURL+ConnectionServiceRenameConnectionProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("RenameConnection")),
-			connect.WithClientOptions(opts...),
-		),
-		setDefaultConnection: connect.NewClient[v1.SetDefaultConnectionRequest, v1.SetDefaultConnectionResponse](
-			httpClient,
-			baseURL+ConnectionServiceSetDefaultConnectionProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("SetDefaultConnection")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteConnection: connect.NewClient[v1.DeleteConnectionRequest, v1.DeleteConnectionResponse](
-			httpClient,
-			baseURL+ConnectionServiceDeleteConnectionProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("DeleteConnection")),
-			connect.WithClientOptions(opts...),
-		),
-		listConnectionEvents: connect.NewClient[v1.ListConnectionEventsRequest, v1.ListConnectionEventsResponse](
-			httpClient,
-			baseURL+ConnectionServiceListConnectionEventsProcedure,
-			connect.WithSchema(connectionServiceMethods.ByName("ListConnectionEvents")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// connectionServiceClient implements ConnectionServiceClient.
-type connectionServiceClient struct {
-	listIntegrations       *connect.Client[v1.ListIntegrationsRequest, v1.ListIntegrationsResponse]
-	listConnections        *connect.Client[v1.ListConnectionsRequest, v1.ListConnectionsResponse]
-	getConnection          *connect.Client[v1.GetConnectionRequest, v1.GetConnectionResponse]
-	createApiKeyConnection *connect.Client[v1.CreateApiKeyConnectionRequest, v1.CreateApiKeyConnectionResponse]
-	startOAuth             *connect.Client[v1.StartOAuthRequest, v1.StartOAuthResponse]
-	completeOAuth          *connect.Client[v1.CompleteOAuthRequest, v1.CompleteOAuthResponse]
-	testConnection         *connect.Client[v1.TestConnectionRequest, v1.TestConnectionResponse]
-	renameConnection       *connect.Client[v1.RenameConnectionRequest, v1.RenameConnectionResponse]
-	setDefaultConnection   *connect.Client[v1.SetDefaultConnectionRequest, v1.SetDefaultConnectionResponse]
-	deleteConnection       *connect.Client[v1.DeleteConnectionRequest, v1.DeleteConnectionResponse]
-	listConnectionEvents   *connect.Client[v1.ListConnectionEventsRequest, v1.ListConnectionEventsResponse]
-}
-
-// ListIntegrations calls reliant.v1.ConnectionService.ListIntegrations.
-func (c *connectionServiceClient) ListIntegrations(ctx context.Context, req *connect.Request[v1.ListIntegrationsRequest]) (*connect.Response[v1.ListIntegrationsResponse], error) {
-	return c.listIntegrations.CallUnary(ctx, req)
-}
-
-// ListConnections calls reliant.v1.ConnectionService.ListConnections.
-func (c *connectionServiceClient) ListConnections(ctx context.Context, req *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error) {
-	return c.listConnections.CallUnary(ctx, req)
-}
-
-// GetConnection calls reliant.v1.ConnectionService.GetConnection.
-func (c *connectionServiceClient) GetConnection(ctx context.Context, req *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.GetConnectionResponse], error) {
-	return c.getConnection.CallUnary(ctx, req)
-}
-
-// CreateApiKeyConnection calls reliant.v1.ConnectionService.CreateApiKeyConnection.
-func (c *connectionServiceClient) CreateApiKeyConnection(ctx context.Context, req *connect.Request[v1.CreateApiKeyConnectionRequest]) (*connect.Response[v1.CreateApiKeyConnectionResponse], error) {
-	return c.createApiKeyConnection.CallUnary(ctx, req)
-}
-
-// StartOAuth calls reliant.v1.ConnectionService.StartOAuth.
-func (c *connectionServiceClient) StartOAuth(ctx context.Context, req *connect.Request[v1.StartOAuthRequest]) (*connect.Response[v1.StartOAuthResponse], error) {
-	return c.startOAuth.CallUnary(ctx, req)
-}
-
-// CompleteOAuth calls reliant.v1.ConnectionService.CompleteOAuth.
-func (c *connectionServiceClient) CompleteOAuth(ctx context.Context, req *connect.Request[v1.CompleteOAuthRequest]) (*connect.Response[v1.CompleteOAuthResponse], error) {
-	return c.completeOAuth.CallUnary(ctx, req)
-}
-
-// TestConnection calls reliant.v1.ConnectionService.TestConnection.
-func (c *connectionServiceClient) TestConnection(ctx context.Context, req *connect.Request[v1.TestConnectionRequest]) (*connect.Response[v1.TestConnectionResponse], error) {
-	return c.testConnection.CallUnary(ctx, req)
-}
-
-// RenameConnection calls reliant.v1.ConnectionService.RenameConnection.
-func (c *connectionServiceClient) RenameConnection(ctx context.Context, req *connect.Request[v1.RenameConnectionRequest]) (*connect.Response[v1.RenameConnectionResponse], error) {
-	return c.renameConnection.CallUnary(ctx, req)
-}
-
-// SetDefaultConnection calls reliant.v1.ConnectionService.SetDefaultConnection.
-func (c *connectionServiceClient) SetDefaultConnection(ctx context.Context, req *connect.Request[v1.SetDefaultConnectionRequest]) (*connect.Response[v1.SetDefaultConnectionResponse], error) {
-	return c.setDefaultConnection.CallUnary(ctx, req)
-}
-
-// DeleteConnection calls reliant.v1.ConnectionService.DeleteConnection.
-func (c *connectionServiceClient) DeleteConnection(ctx context.Context, req *connect.Request[v1.DeleteConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error) {
-	return c.deleteConnection.CallUnary(ctx, req)
-}
-
-// ListConnectionEvents calls reliant.v1.ConnectionService.ListConnectionEvents.
-func (c *connectionServiceClient) ListConnectionEvents(ctx context.Context, req *connect.Request[v1.ListConnectionEventsRequest]) (*connect.Response[v1.ListConnectionEventsResponse], error) {
-	return c.listConnectionEvents.CallUnary(ctx, req)
+// NewConnectionServiceClient constructs a client for the reliant.v1.ConnectionService service.
+// Multiple service clients may share a single connect.Client.
+func NewConnectionServiceClient(client *connect.Client) ConnectionServiceClient {
+	return &connectionServiceClient{client: client}
 }
 
 // ConnectionServiceHandler is an implementation of the reliant.v1.ConnectionService service.
@@ -265,187 +192,329 @@ type ConnectionServiceHandler interface {
 	// ListIntegrations lists what a connection can be made to. An OAuth
 	// integration whose deployment has no client credentials is listed with
 	// available = false rather than hidden, so the UI can say why.
-	ListIntegrations(context.Context, *connect.Request[v1.ListIntegrationsRequest]) (*connect.Response[v1.ListIntegrationsResponse], error)
+	ListIntegrations(context.Context, *v1.ListIntegrationsRequest) (*v1.ListIntegrationsResponse, error)
 	// ListConnections returns the caller's connections. Metadata only.
 	// forge:custom — the caller's connections from connections.Service, metadata only
-	ListConnections(context.Context, *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error)
+	ListConnections(context.Context, *v1.ListConnectionsRequest) (*v1.ListConnectionsResponse, error)
 	// GetConnection returns one connection's metadata.
 	// forge:custom — one of the caller's connections from connections.Service, metadata only, NotFound otherwise
-	GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.GetConnectionResponse], error)
+	GetConnection(context.Context, *v1.GetConnectionRequest) (*v1.GetConnectionResponse, error)
 	// CreateApiKeyConnection saves a pasted API key or basic credential.
-	CreateApiKeyConnection(context.Context, *connect.Request[v1.CreateApiKeyConnectionRequest]) (*connect.Response[v1.CreateApiKeyConnectionResponse], error)
+	CreateApiKeyConnection(context.Context, *v1.CreateApiKeyConnectionRequest) (*v1.CreateApiKeyConnectionResponse, error)
 	// StartOAuth begins an authorization-code flow bound to the caller and
 	// returns the provider URL to send the user to. The provider redirects to
 	// this server's /integrations/oauth/{provider}/callback, which relays the
 	// code back to the client: a web app's /connections/oauth/callback route on
 	// the request's Origin (which must be one this deployment serves), or a
 	// desktop app's loopback_redirect.
-	StartOAuth(context.Context, *connect.Request[v1.StartOAuthRequest]) (*connect.Response[v1.StartOAuthResponse], error)
+	StartOAuth(context.Context, *v1.StartOAuthRequest) (*v1.StartOAuthResponse, error)
 	// CompleteOAuth finishes a flow with the code and state the callback
 	// relayed. Only the user who started the flow can finish it.
-	CompleteOAuth(context.Context, *connect.Request[v1.CompleteOAuthRequest]) (*connect.Response[v1.CompleteOAuthResponse], error)
+	CompleteOAuth(context.Context, *v1.CompleteOAuthRequest) (*v1.CompleteOAuthResponse, error)
 	// TestConnection runs the integration's probe against the live credential
 	// and records the account label it identifies.
-	TestConnection(context.Context, *connect.Request[v1.TestConnectionRequest]) (*connect.Response[v1.TestConnectionResponse], error)
-	RenameConnection(context.Context, *connect.Request[v1.RenameConnectionRequest]) (*connect.Response[v1.RenameConnectionResponse], error)
+	TestConnection(context.Context, *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error)
+	RenameConnection(context.Context, *v1.RenameConnectionRequest) (*v1.RenameConnectionResponse, error)
 	// SetDefaultConnection makes this the connection used when a workflow names
 	// only the integration.
-	SetDefaultConnection(context.Context, *connect.Request[v1.SetDefaultConnectionRequest]) (*connect.Response[v1.SetDefaultConnectionResponse], error)
+	SetDefaultConnection(context.Context, *v1.SetDefaultConnectionRequest) (*v1.SetDefaultConnectionResponse, error)
 	// DeleteConnection revokes at the provider where an API exists (best
 	// effort), then soft-deletes the row and destroys its ciphertext.
 	// forge:custom — revokes at the provider, then soft-deletes the row and destroys its ciphertext
-	DeleteConnection(context.Context, *connect.Request[v1.DeleteConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error)
+	DeleteConnection(context.Context, *v1.DeleteConnectionRequest) (*v1.DeleteConnectionResponse, error)
 	// ListConnectionEvents is the audit view, newest first.
 	// forge:custom — the caller's audit trail of one connection, served by connections.Service
-	ListConnectionEvents(context.Context, *connect.Request[v1.ListConnectionEventsRequest]) (*connect.Response[v1.ListConnectionEventsResponse], error)
+	ListConnectionEvents(context.Context, *v1.ListConnectionEventsRequest) (*v1.ListConnectionEventsResponse, error)
 }
 
-// NewConnectionServiceHandler builds an HTTP handler from the service implementation. It returns
-// the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewConnectionServiceHandler(svc ConnectionServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	connectionServiceMethods := v1.File_reliant_v1_connection_proto.Services().ByName("ConnectionService").Methods()
-	connectionServiceListIntegrationsHandler := connect.NewUnaryHandler(
-		ConnectionServiceListIntegrationsProcedure,
-		svc.ListIntegrations,
-		connect.WithSchema(connectionServiceMethods.ByName("ListIntegrations")),
-		connect.WithHandlerOptions(opts...),
+// RegisterConnectionServiceHandler registers svc as the reliant.v1.ConnectionService implementation
+// on server.
+func RegisterConnectionServiceHandler(server *connect.Server, svc ConnectionServiceHandler) {
+	adapter := connectionServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: connectionServiceListIntegrationsSpec(), Handler: adapter.listIntegrations},
+		connect.Method{Spec: connectionServiceListConnectionsSpec(), Handler: adapter.listConnections},
+		connect.Method{Spec: connectionServiceGetConnectionSpec(), Handler: adapter.getConnection},
+		connect.Method{Spec: connectionServiceCreateApiKeyConnectionSpec(), Handler: adapter.createApiKeyConnection},
+		connect.Method{Spec: connectionServiceStartOAuthSpec(), Handler: adapter.startOAuth},
+		connect.Method{Spec: connectionServiceCompleteOAuthSpec(), Handler: adapter.completeOAuth},
+		connect.Method{Spec: connectionServiceTestConnectionSpec(), Handler: adapter.testConnection},
+		connect.Method{Spec: connectionServiceRenameConnectionSpec(), Handler: adapter.renameConnection},
+		connect.Method{Spec: connectionServiceSetDefaultConnectionSpec(), Handler: adapter.setDefaultConnection},
+		connect.Method{Spec: connectionServiceDeleteConnectionSpec(), Handler: adapter.deleteConnection},
+		connect.Method{Spec: connectionServiceListConnectionEventsSpec(), Handler: adapter.listConnectionEvents},
 	)
-	connectionServiceListConnectionsHandler := connect.NewUnaryHandler(
-		ConnectionServiceListConnectionsProcedure,
-		svc.ListConnections,
-		connect.WithSchema(connectionServiceMethods.ByName("ListConnections")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceGetConnectionHandler := connect.NewUnaryHandler(
-		ConnectionServiceGetConnectionProcedure,
-		svc.GetConnection,
-		connect.WithSchema(connectionServiceMethods.ByName("GetConnection")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceCreateApiKeyConnectionHandler := connect.NewUnaryHandler(
-		ConnectionServiceCreateApiKeyConnectionProcedure,
-		svc.CreateApiKeyConnection,
-		connect.WithSchema(connectionServiceMethods.ByName("CreateApiKeyConnection")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceStartOAuthHandler := connect.NewUnaryHandler(
-		ConnectionServiceStartOAuthProcedure,
-		svc.StartOAuth,
-		connect.WithSchema(connectionServiceMethods.ByName("StartOAuth")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceCompleteOAuthHandler := connect.NewUnaryHandler(
-		ConnectionServiceCompleteOAuthProcedure,
-		svc.CompleteOAuth,
-		connect.WithSchema(connectionServiceMethods.ByName("CompleteOAuth")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceTestConnectionHandler := connect.NewUnaryHandler(
-		ConnectionServiceTestConnectionProcedure,
-		svc.TestConnection,
-		connect.WithSchema(connectionServiceMethods.ByName("TestConnection")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceRenameConnectionHandler := connect.NewUnaryHandler(
-		ConnectionServiceRenameConnectionProcedure,
-		svc.RenameConnection,
-		connect.WithSchema(connectionServiceMethods.ByName("RenameConnection")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceSetDefaultConnectionHandler := connect.NewUnaryHandler(
-		ConnectionServiceSetDefaultConnectionProcedure,
-		svc.SetDefaultConnection,
-		connect.WithSchema(connectionServiceMethods.ByName("SetDefaultConnection")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceDeleteConnectionHandler := connect.NewUnaryHandler(
-		ConnectionServiceDeleteConnectionProcedure,
-		svc.DeleteConnection,
-		connect.WithSchema(connectionServiceMethods.ByName("DeleteConnection")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectionServiceListConnectionEventsHandler := connect.NewUnaryHandler(
-		ConnectionServiceListConnectionEventsProcedure,
-		svc.ListConnectionEvents,
-		connect.WithSchema(connectionServiceMethods.ByName("ListConnectionEvents")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.ConnectionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ConnectionServiceListIntegrationsProcedure:
-			connectionServiceListIntegrationsHandler.ServeHTTP(w, r)
-		case ConnectionServiceListConnectionsProcedure:
-			connectionServiceListConnectionsHandler.ServeHTTP(w, r)
-		case ConnectionServiceGetConnectionProcedure:
-			connectionServiceGetConnectionHandler.ServeHTTP(w, r)
-		case ConnectionServiceCreateApiKeyConnectionProcedure:
-			connectionServiceCreateApiKeyConnectionHandler.ServeHTTP(w, r)
-		case ConnectionServiceStartOAuthProcedure:
-			connectionServiceStartOAuthHandler.ServeHTTP(w, r)
-		case ConnectionServiceCompleteOAuthProcedure:
-			connectionServiceCompleteOAuthHandler.ServeHTTP(w, r)
-		case ConnectionServiceTestConnectionProcedure:
-			connectionServiceTestConnectionHandler.ServeHTTP(w, r)
-		case ConnectionServiceRenameConnectionProcedure:
-			connectionServiceRenameConnectionHandler.ServeHTTP(w, r)
-		case ConnectionServiceSetDefaultConnectionProcedure:
-			connectionServiceSetDefaultConnectionHandler.ServeHTTP(w, r)
-		case ConnectionServiceDeleteConnectionProcedure:
-			connectionServiceDeleteConnectionHandler.ServeHTTP(w, r)
-		case ConnectionServiceListConnectionEventsProcedure:
-			connectionServiceListConnectionEventsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedConnectionServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedConnectionServiceHandler struct{}
 
-func (UnimplementedConnectionServiceHandler) ListIntegrations(context.Context, *connect.Request[v1.ListIntegrationsRequest]) (*connect.Response[v1.ListIntegrationsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.ListIntegrations is not implemented"))
+func (UnimplementedConnectionServiceHandler) ListIntegrations(context.Context, *v1.ListIntegrationsRequest) (*v1.ListIntegrationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.ListIntegrations is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) ListConnections(context.Context, *connect.Request[v1.ListConnectionsRequest]) (*connect.Response[v1.ListConnectionsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.ListConnections is not implemented"))
+func (UnimplementedConnectionServiceHandler) ListConnections(context.Context, *v1.ListConnectionsRequest) (*v1.ListConnectionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.ListConnections is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.GetConnectionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.GetConnection is not implemented"))
+func (UnimplementedConnectionServiceHandler) GetConnection(context.Context, *v1.GetConnectionRequest) (*v1.GetConnectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.GetConnection is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) CreateApiKeyConnection(context.Context, *connect.Request[v1.CreateApiKeyConnectionRequest]) (*connect.Response[v1.CreateApiKeyConnectionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.CreateApiKeyConnection is not implemented"))
+func (UnimplementedConnectionServiceHandler) CreateApiKeyConnection(context.Context, *v1.CreateApiKeyConnectionRequest) (*v1.CreateApiKeyConnectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.CreateApiKeyConnection is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) StartOAuth(context.Context, *connect.Request[v1.StartOAuthRequest]) (*connect.Response[v1.StartOAuthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.StartOAuth is not implemented"))
+func (UnimplementedConnectionServiceHandler) StartOAuth(context.Context, *v1.StartOAuthRequest) (*v1.StartOAuthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.StartOAuth is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) CompleteOAuth(context.Context, *connect.Request[v1.CompleteOAuthRequest]) (*connect.Response[v1.CompleteOAuthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.CompleteOAuth is not implemented"))
+func (UnimplementedConnectionServiceHandler) CompleteOAuth(context.Context, *v1.CompleteOAuthRequest) (*v1.CompleteOAuthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.CompleteOAuth is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) TestConnection(context.Context, *connect.Request[v1.TestConnectionRequest]) (*connect.Response[v1.TestConnectionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.TestConnection is not implemented"))
+func (UnimplementedConnectionServiceHandler) TestConnection(context.Context, *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.TestConnection is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) RenameConnection(context.Context, *connect.Request[v1.RenameConnectionRequest]) (*connect.Response[v1.RenameConnectionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.RenameConnection is not implemented"))
+func (UnimplementedConnectionServiceHandler) RenameConnection(context.Context, *v1.RenameConnectionRequest) (*v1.RenameConnectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.RenameConnection is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) SetDefaultConnection(context.Context, *connect.Request[v1.SetDefaultConnectionRequest]) (*connect.Response[v1.SetDefaultConnectionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.SetDefaultConnection is not implemented"))
+func (UnimplementedConnectionServiceHandler) SetDefaultConnection(context.Context, *v1.SetDefaultConnectionRequest) (*v1.SetDefaultConnectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.SetDefaultConnection is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) DeleteConnection(context.Context, *connect.Request[v1.DeleteConnectionRequest]) (*connect.Response[v1.DeleteConnectionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.DeleteConnection is not implemented"))
+func (UnimplementedConnectionServiceHandler) DeleteConnection(context.Context, *v1.DeleteConnectionRequest) (*v1.DeleteConnectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.DeleteConnection is not implemented")
 }
 
-func (UnimplementedConnectionServiceHandler) ListConnectionEvents(context.Context, *connect.Request[v1.ListConnectionEventsRequest]) (*connect.Response[v1.ListConnectionEventsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectionService.ListConnectionEvents is not implemented"))
+func (UnimplementedConnectionServiceHandler) ListConnectionEvents(context.Context, *v1.ListConnectionEventsRequest) (*v1.ListConnectionEventsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectionService.ListConnectionEvents is not implemented")
+}
+
+type connectionServiceClient struct {
+	client *connect.Client
+}
+
+func (c *connectionServiceClient) ListIntegrations(ctx context.Context, req *v1.ListIntegrationsRequest) (*v1.ListIntegrationsResponse, error) {
+	var res v1.ListIntegrationsResponse
+	if err := c.client.CallUnary(ctx, connectionServiceListIntegrationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) ListConnections(ctx context.Context, req *v1.ListConnectionsRequest) (*v1.ListConnectionsResponse, error) {
+	var res v1.ListConnectionsResponse
+	if err := c.client.CallUnary(ctx, connectionServiceListConnectionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) GetConnection(ctx context.Context, req *v1.GetConnectionRequest) (*v1.GetConnectionResponse, error) {
+	var res v1.GetConnectionResponse
+	if err := c.client.CallUnary(ctx, connectionServiceGetConnectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) CreateApiKeyConnection(ctx context.Context, req *v1.CreateApiKeyConnectionRequest) (*v1.CreateApiKeyConnectionResponse, error) {
+	var res v1.CreateApiKeyConnectionResponse
+	if err := c.client.CallUnary(ctx, connectionServiceCreateApiKeyConnectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) StartOAuth(ctx context.Context, req *v1.StartOAuthRequest) (*v1.StartOAuthResponse, error) {
+	var res v1.StartOAuthResponse
+	if err := c.client.CallUnary(ctx, connectionServiceStartOAuthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) CompleteOAuth(ctx context.Context, req *v1.CompleteOAuthRequest) (*v1.CompleteOAuthResponse, error) {
+	var res v1.CompleteOAuthResponse
+	if err := c.client.CallUnary(ctx, connectionServiceCompleteOAuthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) TestConnection(ctx context.Context, req *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error) {
+	var res v1.TestConnectionResponse
+	if err := c.client.CallUnary(ctx, connectionServiceTestConnectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) RenameConnection(ctx context.Context, req *v1.RenameConnectionRequest) (*v1.RenameConnectionResponse, error) {
+	var res v1.RenameConnectionResponse
+	if err := c.client.CallUnary(ctx, connectionServiceRenameConnectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) SetDefaultConnection(ctx context.Context, req *v1.SetDefaultConnectionRequest) (*v1.SetDefaultConnectionResponse, error) {
+	var res v1.SetDefaultConnectionResponse
+	if err := c.client.CallUnary(ctx, connectionServiceSetDefaultConnectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) DeleteConnection(ctx context.Context, req *v1.DeleteConnectionRequest) (*v1.DeleteConnectionResponse, error) {
+	var res v1.DeleteConnectionResponse
+	if err := c.client.CallUnary(ctx, connectionServiceDeleteConnectionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) ListConnectionEvents(ctx context.Context, req *v1.ListConnectionEventsRequest) (*v1.ListConnectionEventsResponse, error) {
+	var res v1.ListConnectionEventsResponse
+	if err := c.client.CallUnary(ctx, connectionServiceListConnectionEventsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type connectionServiceHandler struct{ svc ConnectionServiceHandler }
+
+func (h connectionServiceHandler) listIntegrations(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListIntegrationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListIntegrations(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) listConnections(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListConnectionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListConnections(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) getConnection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetConnectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetConnection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) createApiKeyConnection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateApiKeyConnectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateApiKeyConnection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) startOAuth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartOAuthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartOAuth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) completeOAuth(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteOAuthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteOAuth(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) testConnection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TestConnectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TestConnection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) renameConnection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RenameConnectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RenameConnection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) setDefaultConnection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.SetDefaultConnectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.SetDefaultConnection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) deleteConnection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteConnectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteConnection(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) listConnectionEvents(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListConnectionEventsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListConnectionEvents(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -27,23 +27,23 @@ func TestListModelEndpoints_Generated(t *testing.T) {
 			ListModelEndpointsFunc: func(context.Context, string) ([]*db.ModelEndpoint, error) { return nil, nil },
 		},
 	}), model_endpoint.WithPlaceholderDeps())
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListModelEndpointsRequest, pb.ListModelEndpointsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListModelEndpointsRequest, pb.ListModelEndpointsResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
-			Req:     connect.NewRequest(&pb.ListModelEndpointsRequest{}),
+			Req:     &pb.ListModelEndpointsRequest{},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name: "a caller with no endpoints gets an empty list",
-			Req:  connect.NewRequest(&pb.ListModelEndpointsRequest{}),
+			Req:  &pb.ListModelEndpointsRequest{},
 			Ctx:  model_endpoint.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListModelEndpointsResponse]) {
-				if n := len(resp.Msg.GetEndpoints()); n != 0 {
+			Check: func(t *testing.T, resp *pb.ListModelEndpointsResponse) {
+				if n := len(resp.GetEndpoints()); n != 0 {
 					t.Fatalf("ListModelEndpoints returned %d endpoints, want 0", n)
 				}
 				// No credential store is wired, so the form must not offer a key field.
-				if resp.Msg.GetCredentialsAvailable() {
+				if resp.GetCredentialsAvailable() {
 					t.Fatal("CredentialsAvailable = true with no credential store, want false")
 				}
 			},
@@ -61,11 +61,11 @@ func TestListModelEndpoints_ReportsCredentialStore(t *testing.T) {
 		},
 		Credentials: &model_endpoint.StubCredentials{},
 	}), model_endpoint.WithPlaceholderDeps())
-	resp, err := svc.ListModelEndpoints(model_endpoint.AuthedContext(t), connect.NewRequest(&pb.ListModelEndpointsRequest{}))
+	resp, err := svc.ListModelEndpoints(model_endpoint.AuthedContext(t), &pb.ListModelEndpointsRequest{})
 	if err != nil {
 		t.Fatalf("ListModelEndpoints: %v", err)
 	}
-	if !resp.Msg.GetCredentialsAvailable() {
+	if !resp.GetCredentialsAvailable() {
 		t.Fatal("CredentialsAvailable = false with a credential store wired, want true")
 	}
 }

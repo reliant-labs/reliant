@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -51,13 +50,13 @@ func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
 		Repo:   repo,
 	})
 	require.NoError(t, err)
-	resp, err := svc.GetMessage(ctx, connect.NewRequest(&reliantv1.GetMessageRequest{
+	resp, err := svc.GetMessage(ctx, &reliantv1.GetMessageRequest{
 		MessageId: f.MessageID,
-	}))
+	})
 	require.NoError(t, err)
 
-	require.Len(t, resp.Msg.Message.ContentBlocks, 1)
-	block := resp.Msg.Message.ContentBlocks[0]
+	require.Len(t, resp.Message.ContentBlocks, 1)
+	block := resp.Message.ContentBlocks[0]
 	require.NotNil(t, block.ToolCallStatus, "durable status must be projected onto the tool_call block")
 	assert.Equal(t, reliantv1.ToolCallStatus_TOOL_CALL_STATUS_EXECUTING, *block.ToolCallStatus)
 }
@@ -86,13 +85,13 @@ func TestListMessages_PopulatesDurableToolCallStatus(t *testing.T) {
 	}))
 
 	svc := &Service{deps: Deps{Repo: repo}}
-	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{
 		ChatId: f.ChatID,
-	}))
+	})
 	require.NoError(t, err)
 
 	var block *reliantv1.ContentBlock
-	for _, msg := range resp.Msg.Messages {
+	for _, msg := range resp.Messages {
 		for _, b := range msg.ContentBlocks {
 			if b.ToolCallId != nil && *b.ToolCallId == f.ToolCallID {
 				block = b

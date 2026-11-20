@@ -41,7 +41,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -71,26 +71,26 @@ func TestSetDefaultDaemon_Generated(t *testing.T) {
 	}
 	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SetDefaultDaemonRequest, pb.SetDefaultDaemonResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.SetDefaultDaemonRequest, pb.SetDefaultDaemonResponse]{
 		{
 			Name:    "unauthenticated caller is rejected",
-			Req:     connect.NewRequest(&pb.SetDefaultDaemonRequest{DaemonId: "mine"}),
+			Req:     &pb.SetDefaultDaemonRequest{DaemonId: "mine"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name: "sets the caller's default",
-			Req:  connect.NewRequest(&pb.SetDefaultDaemonRequest{DaemonId: "mine"}),
+			Req:  &pb.SetDefaultDaemonRequest{DaemonId: "mine"},
 			Ctx:  daemon_registry.AuthedContext(t),
 		},
 		{
 			Name: "an empty id clears it",
-			Req:  connect.NewRequest(&pb.SetDefaultDaemonRequest{}),
+			Req:  &pb.SetDefaultDaemonRequest{},
 			Ctx:  daemon_registry.AuthedContext(t),
 		},
 		{
 			Name:    "another user's machine is not found",
-			Req:     connect.NewRequest(&pb.SetDefaultDaemonRequest{DaemonId: "theirs"}),
+			Req:     &pb.SetDefaultDaemonRequest{DaemonId: "theirs"},
 			Ctx:     daemon_registry.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

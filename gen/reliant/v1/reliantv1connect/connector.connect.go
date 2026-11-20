@@ -7,58 +7,108 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ConnectorServiceName is the fully-qualified name of the ConnectorService service.
 	ConnectorServiceName = "reliant.v1.ConnectorService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ConnectorServiceCreateConnectorProcedure is the fully-qualified name of the ConnectorService's
+	// ConnectorServiceCreateConnectorProcedure is the procedure name of the ConnectorService's
 	// CreateConnector RPC.
 	ConnectorServiceCreateConnectorProcedure = "/reliant.v1.ConnectorService/CreateConnector"
-	// ConnectorServiceListConnectorsProcedure is the fully-qualified name of the ConnectorService's
+	// ConnectorServiceListConnectorsProcedure is the procedure name of the ConnectorService's
 	// ListConnectors RPC.
 	ConnectorServiceListConnectorsProcedure = "/reliant.v1.ConnectorService/ListConnectors"
-	// ConnectorServiceRevokeConnectorProcedure is the fully-qualified name of the ConnectorService's
+	// ConnectorServiceRevokeConnectorProcedure is the procedure name of the ConnectorService's
 	// RevokeConnector RPC.
 	ConnectorServiceRevokeConnectorProcedure = "/reliant.v1.ConnectorService/RevokeConnector"
-	// ConnectorServiceListConnectorActivityProcedure is the fully-qualified name of the
-	// ConnectorService's ListConnectorActivity RPC.
+	// ConnectorServiceListConnectorActivityProcedure is the procedure name of the ConnectorService's
+	// ListConnectorActivity RPC.
 	ConnectorServiceListConnectorActivityProcedure = "/reliant.v1.ConnectorService/ListConnectorActivity"
-	// ConnectorServiceListAvailableToolsProcedure is the fully-qualified name of the ConnectorService's
+	// ConnectorServiceListAvailableToolsProcedure is the procedure name of the ConnectorService's
 	// ListAvailableTools RPC.
 	ConnectorServiceListAvailableToolsProcedure = "/reliant.v1.ConnectorService/ListAvailableTools"
-	// ConnectorServiceAuthorizeClientProcedure is the fully-qualified name of the ConnectorService's
+	// ConnectorServiceAuthorizeClientProcedure is the procedure name of the ConnectorService's
 	// AuthorizeClient RPC.
 	ConnectorServiceAuthorizeClientProcedure = "/reliant.v1.ConnectorService/AuthorizeClient"
-	// ConnectorServiceListAuthorizedClientsProcedure is the fully-qualified name of the
-	// ConnectorService's ListAuthorizedClients RPC.
+	// ConnectorServiceListAuthorizedClientsProcedure is the procedure name of the ConnectorService's
+	// ListAuthorizedClients RPC.
 	ConnectorServiceListAuthorizedClientsProcedure = "/reliant.v1.ConnectorService/ListAuthorizedClients"
-	// ConnectorServiceRevokeClientAuthorizationProcedure is the fully-qualified name of the
+	// ConnectorServiceRevokeClientAuthorizationProcedure is the procedure name of the
 	// ConnectorService's RevokeClientAuthorization RPC.
 	ConnectorServiceRevokeClientAuthorizationProcedure = "/reliant.v1.ConnectorService/RevokeClientAuthorization"
+)
+
+var (
+	connectorServiceCreateConnectorSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods().ByName("CreateConnector"),
+			Procedure:  ConnectorServiceCreateConnectorProcedure,
+		}
+	})
+	connectorServiceListConnectorsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods().ByName("ListConnectors"),
+			Procedure:  ConnectorServiceListConnectorsProcedure,
+		}
+	})
+	connectorServiceRevokeConnectorSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods().ByName("RevokeConnector"),
+			Procedure:  ConnectorServiceRevokeConnectorProcedure,
+		}
+	})
+	connectorServiceListConnectorActivitySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods().ByName("ListConnectorActivity"),
+			Procedure:  ConnectorServiceListConnectorActivityProcedure,
+		}
+	})
+	connectorServiceListAvailableToolsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods().ByName("ListAvailableTools"),
+			Procedure:  ConnectorServiceListAvailableToolsProcedure,
+		}
+	})
+	connectorServiceAuthorizeClientSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods().ByName("AuthorizeClient"),
+			Procedure:  ConnectorServiceAuthorizeClientProcedure,
+		}
+	})
+	connectorServiceListAuthorizedClientsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods().ByName("ListAuthorizedClients"),
+			Procedure:  ConnectorServiceListAuthorizedClientsProcedure,
+		}
+	})
+	connectorServiceRevokeClientAuthorizationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods().ByName("RevokeClientAuthorization"),
+			Procedure:  ConnectorServiceRevokeClientAuthorizationProcedure,
+		}
+	})
 )
 
 // ConnectorServiceClient is a client for the reliant.v1.ConnectorService service.
@@ -66,20 +116,20 @@ type ConnectorServiceClient interface {
 	// CreateConnector mints a connector credential bound to one daemon.
 	// Returns the raw credential exactly once — it is stored only as a hash and
 	// is unrecoverable afterward.
-	CreateConnector(context.Context, *connect.Request[v1.CreateConnectorRequest]) (*connect.Response[v1.CreateConnectorResponse], error)
+	CreateConnector(context.Context, *v1.CreateConnectorRequest) (*v1.CreateConnectorResponse, error)
 	// ListConnectors returns the caller's connectors, including revoked ones so
 	// the UI can show history. Credentials are never returned.
-	ListConnectors(context.Context, *connect.Request[v1.ListConnectorsRequest]) (*connect.Response[v1.ListConnectorsResponse], error)
+	ListConnectors(context.Context, *v1.ListConnectorsRequest) (*v1.ListConnectorsResponse, error)
 	// RevokeConnector marks a connector revoked. It stops working on its very
 	// next request; sessions are not allowed to outlive revocation.
-	RevokeConnector(context.Context, *connect.Request[v1.RevokeConnectorRequest]) (*connect.Response[v1.RevokeConnectorResponse], error)
+	RevokeConnector(context.Context, *v1.RevokeConnectorRequest) (*v1.RevokeConnectorResponse, error)
 	// ListConnectorActivity returns the audit log — what connectors actually
 	// did, including refused attempts. A burst of denials is the signal that a
 	// connector has been talked into trying something it should not.
-	ListConnectorActivity(context.Context, *connect.Request[v1.ListConnectorActivityRequest]) (*connect.Response[v1.ListConnectorActivityResponse], error)
+	ListConnectorActivity(context.Context, *v1.ListConnectorActivityRequest) (*v1.ListConnectorActivityResponse, error)
 	// ListAvailableTools returns the tool catalog a connector can be granted,
 	// so the UI does not hardcode a list that drifts from the server's.
-	ListAvailableTools(context.Context, *connect.Request[v1.ListAvailableToolsRequest]) (*connect.Response[v1.ListAvailableToolsResponse], error)
+	ListAvailableTools(context.Context, *v1.ListAvailableToolsRequest) (*v1.ListAvailableToolsResponse, error)
 	// AuthorizeClient records which connector an OAuth client may act through.
 	//
 	// This is the consent decision. An OAuth token identifies a user, not a
@@ -90,127 +140,19 @@ type ConnectorServiceClient interface {
 	// Passing an existing connector_id binds to it. Passing new_connector
 	// creates one first, so consent and connector creation are a single step
 	// rather than a detour through settings.
-	AuthorizeClient(context.Context, *connect.Request[v1.AuthorizeClientRequest]) (*connect.Response[v1.AuthorizeClientResponse], error)
+	AuthorizeClient(context.Context, *v1.AuthorizeClientRequest) (*v1.AuthorizeClientResponse, error)
 	// ListAuthorizedClients returns the applications acting through the caller's
 	// connectors, so a user can see what is connected.
-	ListAuthorizedClients(context.Context, *connect.Request[v1.ListAuthorizedClientsRequest]) (*connect.Response[v1.ListAuthorizedClientsResponse], error)
+	ListAuthorizedClients(context.Context, *v1.ListAuthorizedClientsRequest) (*v1.ListAuthorizedClientsResponse, error)
 	// RevokeClientAuthorization disconnects one application. The connector
 	// survives, since it may serve several applications.
-	RevokeClientAuthorization(context.Context, *connect.Request[v1.RevokeClientAuthorizationRequest]) (*connect.Response[v1.RevokeClientAuthorizationResponse], error)
+	RevokeClientAuthorization(context.Context, *v1.RevokeClientAuthorizationRequest) (*v1.RevokeClientAuthorizationResponse, error)
 }
 
-// NewConnectorServiceClient constructs a client for the reliant.v1.ConnectorService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewConnectorServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ConnectorServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	connectorServiceMethods := v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods()
-	return &connectorServiceClient{
-		createConnector: connect.NewClient[v1.CreateConnectorRequest, v1.CreateConnectorResponse](
-			httpClient,
-			baseURL+ConnectorServiceCreateConnectorProcedure,
-			connect.WithSchema(connectorServiceMethods.ByName("CreateConnector")),
-			connect.WithClientOptions(opts...),
-		),
-		listConnectors: connect.NewClient[v1.ListConnectorsRequest, v1.ListConnectorsResponse](
-			httpClient,
-			baseURL+ConnectorServiceListConnectorsProcedure,
-			connect.WithSchema(connectorServiceMethods.ByName("ListConnectors")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeConnector: connect.NewClient[v1.RevokeConnectorRequest, v1.RevokeConnectorResponse](
-			httpClient,
-			baseURL+ConnectorServiceRevokeConnectorProcedure,
-			connect.WithSchema(connectorServiceMethods.ByName("RevokeConnector")),
-			connect.WithClientOptions(opts...),
-		),
-		listConnectorActivity: connect.NewClient[v1.ListConnectorActivityRequest, v1.ListConnectorActivityResponse](
-			httpClient,
-			baseURL+ConnectorServiceListConnectorActivityProcedure,
-			connect.WithSchema(connectorServiceMethods.ByName("ListConnectorActivity")),
-			connect.WithClientOptions(opts...),
-		),
-		listAvailableTools: connect.NewClient[v1.ListAvailableToolsRequest, v1.ListAvailableToolsResponse](
-			httpClient,
-			baseURL+ConnectorServiceListAvailableToolsProcedure,
-			connect.WithSchema(connectorServiceMethods.ByName("ListAvailableTools")),
-			connect.WithClientOptions(opts...),
-		),
-		authorizeClient: connect.NewClient[v1.AuthorizeClientRequest, v1.AuthorizeClientResponse](
-			httpClient,
-			baseURL+ConnectorServiceAuthorizeClientProcedure,
-			connect.WithSchema(connectorServiceMethods.ByName("AuthorizeClient")),
-			connect.WithClientOptions(opts...),
-		),
-		listAuthorizedClients: connect.NewClient[v1.ListAuthorizedClientsRequest, v1.ListAuthorizedClientsResponse](
-			httpClient,
-			baseURL+ConnectorServiceListAuthorizedClientsProcedure,
-			connect.WithSchema(connectorServiceMethods.ByName("ListAuthorizedClients")),
-			connect.WithClientOptions(opts...),
-		),
-		revokeClientAuthorization: connect.NewClient[v1.RevokeClientAuthorizationRequest, v1.RevokeClientAuthorizationResponse](
-			httpClient,
-			baseURL+ConnectorServiceRevokeClientAuthorizationProcedure,
-			connect.WithSchema(connectorServiceMethods.ByName("RevokeClientAuthorization")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// connectorServiceClient implements ConnectorServiceClient.
-type connectorServiceClient struct {
-	createConnector           *connect.Client[v1.CreateConnectorRequest, v1.CreateConnectorResponse]
-	listConnectors            *connect.Client[v1.ListConnectorsRequest, v1.ListConnectorsResponse]
-	revokeConnector           *connect.Client[v1.RevokeConnectorRequest, v1.RevokeConnectorResponse]
-	listConnectorActivity     *connect.Client[v1.ListConnectorActivityRequest, v1.ListConnectorActivityResponse]
-	listAvailableTools        *connect.Client[v1.ListAvailableToolsRequest, v1.ListAvailableToolsResponse]
-	authorizeClient           *connect.Client[v1.AuthorizeClientRequest, v1.AuthorizeClientResponse]
-	listAuthorizedClients     *connect.Client[v1.ListAuthorizedClientsRequest, v1.ListAuthorizedClientsResponse]
-	revokeClientAuthorization *connect.Client[v1.RevokeClientAuthorizationRequest, v1.RevokeClientAuthorizationResponse]
-}
-
-// CreateConnector calls reliant.v1.ConnectorService.CreateConnector.
-func (c *connectorServiceClient) CreateConnector(ctx context.Context, req *connect.Request[v1.CreateConnectorRequest]) (*connect.Response[v1.CreateConnectorResponse], error) {
-	return c.createConnector.CallUnary(ctx, req)
-}
-
-// ListConnectors calls reliant.v1.ConnectorService.ListConnectors.
-func (c *connectorServiceClient) ListConnectors(ctx context.Context, req *connect.Request[v1.ListConnectorsRequest]) (*connect.Response[v1.ListConnectorsResponse], error) {
-	return c.listConnectors.CallUnary(ctx, req)
-}
-
-// RevokeConnector calls reliant.v1.ConnectorService.RevokeConnector.
-func (c *connectorServiceClient) RevokeConnector(ctx context.Context, req *connect.Request[v1.RevokeConnectorRequest]) (*connect.Response[v1.RevokeConnectorResponse], error) {
-	return c.revokeConnector.CallUnary(ctx, req)
-}
-
-// ListConnectorActivity calls reliant.v1.ConnectorService.ListConnectorActivity.
-func (c *connectorServiceClient) ListConnectorActivity(ctx context.Context, req *connect.Request[v1.ListConnectorActivityRequest]) (*connect.Response[v1.ListConnectorActivityResponse], error) {
-	return c.listConnectorActivity.CallUnary(ctx, req)
-}
-
-// ListAvailableTools calls reliant.v1.ConnectorService.ListAvailableTools.
-func (c *connectorServiceClient) ListAvailableTools(ctx context.Context, req *connect.Request[v1.ListAvailableToolsRequest]) (*connect.Response[v1.ListAvailableToolsResponse], error) {
-	return c.listAvailableTools.CallUnary(ctx, req)
-}
-
-// AuthorizeClient calls reliant.v1.ConnectorService.AuthorizeClient.
-func (c *connectorServiceClient) AuthorizeClient(ctx context.Context, req *connect.Request[v1.AuthorizeClientRequest]) (*connect.Response[v1.AuthorizeClientResponse], error) {
-	return c.authorizeClient.CallUnary(ctx, req)
-}
-
-// ListAuthorizedClients calls reliant.v1.ConnectorService.ListAuthorizedClients.
-func (c *connectorServiceClient) ListAuthorizedClients(ctx context.Context, req *connect.Request[v1.ListAuthorizedClientsRequest]) (*connect.Response[v1.ListAuthorizedClientsResponse], error) {
-	return c.listAuthorizedClients.CallUnary(ctx, req)
-}
-
-// RevokeClientAuthorization calls reliant.v1.ConnectorService.RevokeClientAuthorization.
-func (c *connectorServiceClient) RevokeClientAuthorization(ctx context.Context, req *connect.Request[v1.RevokeClientAuthorizationRequest]) (*connect.Response[v1.RevokeClientAuthorizationResponse], error) {
-	return c.revokeClientAuthorization.CallUnary(ctx, req)
+// NewConnectorServiceClient constructs a client for the reliant.v1.ConnectorService service.
+// Multiple service clients may share a single connect.Client.
+func NewConnectorServiceClient(client *connect.Client) ConnectorServiceClient {
+	return &connectorServiceClient{client: client}
 }
 
 // ConnectorServiceHandler is an implementation of the reliant.v1.ConnectorService service.
@@ -218,20 +160,20 @@ type ConnectorServiceHandler interface {
 	// CreateConnector mints a connector credential bound to one daemon.
 	// Returns the raw credential exactly once — it is stored only as a hash and
 	// is unrecoverable afterward.
-	CreateConnector(context.Context, *connect.Request[v1.CreateConnectorRequest]) (*connect.Response[v1.CreateConnectorResponse], error)
+	CreateConnector(context.Context, *v1.CreateConnectorRequest) (*v1.CreateConnectorResponse, error)
 	// ListConnectors returns the caller's connectors, including revoked ones so
 	// the UI can show history. Credentials are never returned.
-	ListConnectors(context.Context, *connect.Request[v1.ListConnectorsRequest]) (*connect.Response[v1.ListConnectorsResponse], error)
+	ListConnectors(context.Context, *v1.ListConnectorsRequest) (*v1.ListConnectorsResponse, error)
 	// RevokeConnector marks a connector revoked. It stops working on its very
 	// next request; sessions are not allowed to outlive revocation.
-	RevokeConnector(context.Context, *connect.Request[v1.RevokeConnectorRequest]) (*connect.Response[v1.RevokeConnectorResponse], error)
+	RevokeConnector(context.Context, *v1.RevokeConnectorRequest) (*v1.RevokeConnectorResponse, error)
 	// ListConnectorActivity returns the audit log — what connectors actually
 	// did, including refused attempts. A burst of denials is the signal that a
 	// connector has been talked into trying something it should not.
-	ListConnectorActivity(context.Context, *connect.Request[v1.ListConnectorActivityRequest]) (*connect.Response[v1.ListConnectorActivityResponse], error)
+	ListConnectorActivity(context.Context, *v1.ListConnectorActivityRequest) (*v1.ListConnectorActivityResponse, error)
 	// ListAvailableTools returns the tool catalog a connector can be granted,
 	// so the UI does not hardcode a list that drifts from the server's.
-	ListAvailableTools(context.Context, *connect.Request[v1.ListAvailableToolsRequest]) (*connect.Response[v1.ListAvailableToolsResponse], error)
+	ListAvailableTools(context.Context, *v1.ListAvailableToolsRequest) (*v1.ListAvailableToolsResponse, error)
 	// AuthorizeClient records which connector an OAuth client may act through.
 	//
 	// This is the consent decision. An OAuth token identifies a user, not a
@@ -242,125 +184,228 @@ type ConnectorServiceHandler interface {
 	// Passing an existing connector_id binds to it. Passing new_connector
 	// creates one first, so consent and connector creation are a single step
 	// rather than a detour through settings.
-	AuthorizeClient(context.Context, *connect.Request[v1.AuthorizeClientRequest]) (*connect.Response[v1.AuthorizeClientResponse], error)
+	AuthorizeClient(context.Context, *v1.AuthorizeClientRequest) (*v1.AuthorizeClientResponse, error)
 	// ListAuthorizedClients returns the applications acting through the caller's
 	// connectors, so a user can see what is connected.
-	ListAuthorizedClients(context.Context, *connect.Request[v1.ListAuthorizedClientsRequest]) (*connect.Response[v1.ListAuthorizedClientsResponse], error)
+	ListAuthorizedClients(context.Context, *v1.ListAuthorizedClientsRequest) (*v1.ListAuthorizedClientsResponse, error)
 	// RevokeClientAuthorization disconnects one application. The connector
 	// survives, since it may serve several applications.
-	RevokeClientAuthorization(context.Context, *connect.Request[v1.RevokeClientAuthorizationRequest]) (*connect.Response[v1.RevokeClientAuthorizationResponse], error)
+	RevokeClientAuthorization(context.Context, *v1.RevokeClientAuthorizationRequest) (*v1.RevokeClientAuthorizationResponse, error)
 }
 
-// NewConnectorServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewConnectorServiceHandler(svc ConnectorServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	connectorServiceMethods := v1.File_reliant_v1_connector_proto.Services().ByName("ConnectorService").Methods()
-	connectorServiceCreateConnectorHandler := connect.NewUnaryHandler(
-		ConnectorServiceCreateConnectorProcedure,
-		svc.CreateConnector,
-		connect.WithSchema(connectorServiceMethods.ByName("CreateConnector")),
-		connect.WithHandlerOptions(opts...),
+// RegisterConnectorServiceHandler registers svc as the reliant.v1.ConnectorService implementation
+// on server.
+func RegisterConnectorServiceHandler(server *connect.Server, svc ConnectorServiceHandler) {
+	adapter := connectorServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: connectorServiceCreateConnectorSpec(), Handler: adapter.createConnector},
+		connect.Method{Spec: connectorServiceListConnectorsSpec(), Handler: adapter.listConnectors},
+		connect.Method{Spec: connectorServiceRevokeConnectorSpec(), Handler: adapter.revokeConnector},
+		connect.Method{Spec: connectorServiceListConnectorActivitySpec(), Handler: adapter.listConnectorActivity},
+		connect.Method{Spec: connectorServiceListAvailableToolsSpec(), Handler: adapter.listAvailableTools},
+		connect.Method{Spec: connectorServiceAuthorizeClientSpec(), Handler: adapter.authorizeClient},
+		connect.Method{Spec: connectorServiceListAuthorizedClientsSpec(), Handler: adapter.listAuthorizedClients},
+		connect.Method{Spec: connectorServiceRevokeClientAuthorizationSpec(), Handler: adapter.revokeClientAuthorization},
 	)
-	connectorServiceListConnectorsHandler := connect.NewUnaryHandler(
-		ConnectorServiceListConnectorsProcedure,
-		svc.ListConnectors,
-		connect.WithSchema(connectorServiceMethods.ByName("ListConnectors")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectorServiceRevokeConnectorHandler := connect.NewUnaryHandler(
-		ConnectorServiceRevokeConnectorProcedure,
-		svc.RevokeConnector,
-		connect.WithSchema(connectorServiceMethods.ByName("RevokeConnector")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectorServiceListConnectorActivityHandler := connect.NewUnaryHandler(
-		ConnectorServiceListConnectorActivityProcedure,
-		svc.ListConnectorActivity,
-		connect.WithSchema(connectorServiceMethods.ByName("ListConnectorActivity")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectorServiceListAvailableToolsHandler := connect.NewUnaryHandler(
-		ConnectorServiceListAvailableToolsProcedure,
-		svc.ListAvailableTools,
-		connect.WithSchema(connectorServiceMethods.ByName("ListAvailableTools")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectorServiceAuthorizeClientHandler := connect.NewUnaryHandler(
-		ConnectorServiceAuthorizeClientProcedure,
-		svc.AuthorizeClient,
-		connect.WithSchema(connectorServiceMethods.ByName("AuthorizeClient")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectorServiceListAuthorizedClientsHandler := connect.NewUnaryHandler(
-		ConnectorServiceListAuthorizedClientsProcedure,
-		svc.ListAuthorizedClients,
-		connect.WithSchema(connectorServiceMethods.ByName("ListAuthorizedClients")),
-		connect.WithHandlerOptions(opts...),
-	)
-	connectorServiceRevokeClientAuthorizationHandler := connect.NewUnaryHandler(
-		ConnectorServiceRevokeClientAuthorizationProcedure,
-		svc.RevokeClientAuthorization,
-		connect.WithSchema(connectorServiceMethods.ByName("RevokeClientAuthorization")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.ConnectorService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ConnectorServiceCreateConnectorProcedure:
-			connectorServiceCreateConnectorHandler.ServeHTTP(w, r)
-		case ConnectorServiceListConnectorsProcedure:
-			connectorServiceListConnectorsHandler.ServeHTTP(w, r)
-		case ConnectorServiceRevokeConnectorProcedure:
-			connectorServiceRevokeConnectorHandler.ServeHTTP(w, r)
-		case ConnectorServiceListConnectorActivityProcedure:
-			connectorServiceListConnectorActivityHandler.ServeHTTP(w, r)
-		case ConnectorServiceListAvailableToolsProcedure:
-			connectorServiceListAvailableToolsHandler.ServeHTTP(w, r)
-		case ConnectorServiceAuthorizeClientProcedure:
-			connectorServiceAuthorizeClientHandler.ServeHTTP(w, r)
-		case ConnectorServiceListAuthorizedClientsProcedure:
-			connectorServiceListAuthorizedClientsHandler.ServeHTTP(w, r)
-		case ConnectorServiceRevokeClientAuthorizationProcedure:
-			connectorServiceRevokeClientAuthorizationHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedConnectorServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedConnectorServiceHandler struct{}
 
-func (UnimplementedConnectorServiceHandler) CreateConnector(context.Context, *connect.Request[v1.CreateConnectorRequest]) (*connect.Response[v1.CreateConnectorResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectorService.CreateConnector is not implemented"))
+func (UnimplementedConnectorServiceHandler) CreateConnector(context.Context, *v1.CreateConnectorRequest) (*v1.CreateConnectorResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectorService.CreateConnector is not implemented")
 }
 
-func (UnimplementedConnectorServiceHandler) ListConnectors(context.Context, *connect.Request[v1.ListConnectorsRequest]) (*connect.Response[v1.ListConnectorsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectorService.ListConnectors is not implemented"))
+func (UnimplementedConnectorServiceHandler) ListConnectors(context.Context, *v1.ListConnectorsRequest) (*v1.ListConnectorsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectorService.ListConnectors is not implemented")
 }
 
-func (UnimplementedConnectorServiceHandler) RevokeConnector(context.Context, *connect.Request[v1.RevokeConnectorRequest]) (*connect.Response[v1.RevokeConnectorResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectorService.RevokeConnector is not implemented"))
+func (UnimplementedConnectorServiceHandler) RevokeConnector(context.Context, *v1.RevokeConnectorRequest) (*v1.RevokeConnectorResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectorService.RevokeConnector is not implemented")
 }
 
-func (UnimplementedConnectorServiceHandler) ListConnectorActivity(context.Context, *connect.Request[v1.ListConnectorActivityRequest]) (*connect.Response[v1.ListConnectorActivityResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectorService.ListConnectorActivity is not implemented"))
+func (UnimplementedConnectorServiceHandler) ListConnectorActivity(context.Context, *v1.ListConnectorActivityRequest) (*v1.ListConnectorActivityResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectorService.ListConnectorActivity is not implemented")
 }
 
-func (UnimplementedConnectorServiceHandler) ListAvailableTools(context.Context, *connect.Request[v1.ListAvailableToolsRequest]) (*connect.Response[v1.ListAvailableToolsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectorService.ListAvailableTools is not implemented"))
+func (UnimplementedConnectorServiceHandler) ListAvailableTools(context.Context, *v1.ListAvailableToolsRequest) (*v1.ListAvailableToolsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectorService.ListAvailableTools is not implemented")
 }
 
-func (UnimplementedConnectorServiceHandler) AuthorizeClient(context.Context, *connect.Request[v1.AuthorizeClientRequest]) (*connect.Response[v1.AuthorizeClientResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectorService.AuthorizeClient is not implemented"))
+func (UnimplementedConnectorServiceHandler) AuthorizeClient(context.Context, *v1.AuthorizeClientRequest) (*v1.AuthorizeClientResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectorService.AuthorizeClient is not implemented")
 }
 
-func (UnimplementedConnectorServiceHandler) ListAuthorizedClients(context.Context, *connect.Request[v1.ListAuthorizedClientsRequest]) (*connect.Response[v1.ListAuthorizedClientsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectorService.ListAuthorizedClients is not implemented"))
+func (UnimplementedConnectorServiceHandler) ListAuthorizedClients(context.Context, *v1.ListAuthorizedClientsRequest) (*v1.ListAuthorizedClientsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectorService.ListAuthorizedClients is not implemented")
 }
 
-func (UnimplementedConnectorServiceHandler) RevokeClientAuthorization(context.Context, *connect.Request[v1.RevokeClientAuthorizationRequest]) (*connect.Response[v1.RevokeClientAuthorizationResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ConnectorService.RevokeClientAuthorization is not implemented"))
+func (UnimplementedConnectorServiceHandler) RevokeClientAuthorization(context.Context, *v1.RevokeClientAuthorizationRequest) (*v1.RevokeClientAuthorizationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ConnectorService.RevokeClientAuthorization is not implemented")
+}
+
+type connectorServiceClient struct {
+	client *connect.Client
+}
+
+func (c *connectorServiceClient) CreateConnector(ctx context.Context, req *v1.CreateConnectorRequest) (*v1.CreateConnectorResponse, error) {
+	var res v1.CreateConnectorResponse
+	if err := c.client.CallUnary(ctx, connectorServiceCreateConnectorSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectorServiceClient) ListConnectors(ctx context.Context, req *v1.ListConnectorsRequest) (*v1.ListConnectorsResponse, error) {
+	var res v1.ListConnectorsResponse
+	if err := c.client.CallUnary(ctx, connectorServiceListConnectorsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectorServiceClient) RevokeConnector(ctx context.Context, req *v1.RevokeConnectorRequest) (*v1.RevokeConnectorResponse, error) {
+	var res v1.RevokeConnectorResponse
+	if err := c.client.CallUnary(ctx, connectorServiceRevokeConnectorSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectorServiceClient) ListConnectorActivity(ctx context.Context, req *v1.ListConnectorActivityRequest) (*v1.ListConnectorActivityResponse, error) {
+	var res v1.ListConnectorActivityResponse
+	if err := c.client.CallUnary(ctx, connectorServiceListConnectorActivitySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectorServiceClient) ListAvailableTools(ctx context.Context, req *v1.ListAvailableToolsRequest) (*v1.ListAvailableToolsResponse, error) {
+	var res v1.ListAvailableToolsResponse
+	if err := c.client.CallUnary(ctx, connectorServiceListAvailableToolsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectorServiceClient) AuthorizeClient(ctx context.Context, req *v1.AuthorizeClientRequest) (*v1.AuthorizeClientResponse, error) {
+	var res v1.AuthorizeClientResponse
+	if err := c.client.CallUnary(ctx, connectorServiceAuthorizeClientSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectorServiceClient) ListAuthorizedClients(ctx context.Context, req *v1.ListAuthorizedClientsRequest) (*v1.ListAuthorizedClientsResponse, error) {
+	var res v1.ListAuthorizedClientsResponse
+	if err := c.client.CallUnary(ctx, connectorServiceListAuthorizedClientsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectorServiceClient) RevokeClientAuthorization(ctx context.Context, req *v1.RevokeClientAuthorizationRequest) (*v1.RevokeClientAuthorizationResponse, error) {
+	var res v1.RevokeClientAuthorizationResponse
+	if err := c.client.CallUnary(ctx, connectorServiceRevokeClientAuthorizationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type connectorServiceHandler struct{ svc ConnectorServiceHandler }
+
+func (h connectorServiceHandler) createConnector(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateConnectorRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateConnector(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectorServiceHandler) listConnectors(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListConnectorsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListConnectors(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectorServiceHandler) revokeConnector(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeConnectorRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeConnector(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectorServiceHandler) listConnectorActivity(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListConnectorActivityRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListConnectorActivity(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectorServiceHandler) listAvailableTools(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAvailableToolsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAvailableTools(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectorServiceHandler) authorizeClient(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AuthorizeClientRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AuthorizeClient(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectorServiceHandler) listAuthorizedClients(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAuthorizedClientsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAuthorizedClients(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectorServiceHandler) revokeClientAuthorization(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeClientAuthorizationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeClientAuthorization(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

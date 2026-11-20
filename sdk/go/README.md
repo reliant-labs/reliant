@@ -92,10 +92,10 @@ errors are `ErrScopeMissing` (`Error.Scopes` names the scope) and
 already resolved is `ErrApprovalNotPending`.
 
 For an rpc this package does not wrap, build a generated client from the
-authenticated HTTP client:
+SDK's authenticated connect-go v2 client:
 
 ```go
-runs := reliantv1connect.NewRunServiceClient(c.HTTPClient(), c.BaseURL())
+runs := reliantv1connect.NewRunServiceClient(c.RPCClient())
 ```
 
 ## Versioning
@@ -104,7 +104,7 @@ Additive within `reliant.v1`. The public protos are generated into `gen/` from
 the repository's `proto/` (`buf.gen.sdk-go.yaml`, run by `forge generate`), so
 the SDK cannot drift from the server it ships with.
 
-The module depends only on connect, protobuf and protovalidate: not on forge. The
+The module depends only on connect (connect-go v2, `connectrpc.com/connect/v2`), protobuf and protovalidate: not on forge. The
 public protos carry `forge.v1` options, and `scripts/sdk-go-gen.sh` drops the
 `forgepb` import protoc-gen-go would add for them. The options stay in the
 descriptors, undecoded; a program that links forge itself decodes them as usual.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -25,32 +25,32 @@ func TestPullProjectOnDaemon_Generated(t *testing.T) {
 	svc := newService(t, store, answering("git.pull", `{"branch":"main","path":"/clone"}`,
 		`{"success":true,"output":"Already up to date."}`))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.PullProjectOnDaemonRequest, pb.PullProjectOnDaemonResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.PullProjectOnDaemonRequest, pb.PullProjectOnDaemonResponse]{
 		{
 			Name:    "project_id and daemon_id are required",
-			Req:     connect.NewRequest(&pb.PullProjectOnDaemonRequest{ProjectId: "p-1"}),
+			Req:     &pb.PullProjectOnDaemonRequest{ProjectId: "p-1"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.PullProjectOnDaemonRequest{ProjectId: "p-2", DaemonId: "d-1"}),
+			Req:     &pb.PullProjectOnDaemonRequest{ProjectId: "p-2", DaemonId: "d-1"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "a daemon without a clone of the project is not found",
-			Req:     connect.NewRequest(&pb.PullProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-2"}),
+			Req:     &pb.PullProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-2"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the clone is pulled on its branch and its clone time refreshed",
-			Req:  connect.NewRequest(&pb.PullProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}),
+			Req:  &pb.PullProjectOnDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.PullProjectOnDaemonResponse]) {
-				if resp.Msg.GetOutput() != "Already up to date." || refreshed != 1 {
-					t.Fatalf("output = %q, refreshed %d times, want git's output and one refresh", resp.Msg.GetOutput(), refreshed)
+			Check: func(t *testing.T, resp *pb.PullProjectOnDaemonResponse) {
+				if resp.GetOutput() != "Already up to date." || refreshed != 1 {
+					t.Fatalf("output = %q, refreshed %d times, want git's output and one refresh", resp.GetOutput(), refreshed)
 				}
 			},
 		},

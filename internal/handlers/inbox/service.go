@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"golang.org/x/sync/singleflight"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -89,10 +89,10 @@ func (s *Service) Name() string {
 	return "inbox"
 }
 
-// Register registers the service handlers with the HTTP mux.
-func (s *Service) Register(mux *http.ServeMux, opts ...connect.HandlerOption) {
-	path, handler := reliantv1connect.NewInboxServiceHandler(s, opts...)
-	mux.Handle(path, handler)
+// RegisterV2 registers the service's handlers on server, the connect-go v2
+// Server its mount's interceptor chain belongs to (mountkit.MuxV2).
+func (s *Service) RegisterV2(server *connect.Server) {
+	reliantv1connect.RegisterInboxServiceHandler(server, s)
 }
 
 // RegisterHTTP registers plain HTTP handlers (callbacks, REST endpoints)

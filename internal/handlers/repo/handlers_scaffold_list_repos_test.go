@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -35,29 +35,29 @@ func TestListRepos_Generated(t *testing.T) {
 	}
 	svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListReposRequest, pb.ListReposResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListReposRequest, pb.ListReposResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.ListReposRequest{ProjectId: "p-2"}),
+			Req:     &pb.ListReposRequest{ProjectId: "p-2"},
 			Ctx:     repo.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the project's repos are listed",
-			Req:  connect.NewRequest(&pb.ListReposRequest{ProjectId: "p-1"}),
+			Req:  &pb.ListReposRequest{ProjectId: "p-1"},
 			Ctx:  repo.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListReposResponse]) {
-				if got := resp.Msg.GetRepos(); len(got) != 2 || got[0].GetId() != "r-1" || got[0].GetProjectId() != "p-1" {
+			Check: func(t *testing.T, resp *pb.ListReposResponse) {
+				if got := resp.GetRepos(); len(got) != 2 || got[0].GetId() != "r-1" || got[0].GetProjectId() != "p-1" {
 					t.Fatalf("repos = %v, want r-1 and r-2 in p-1", got)
 				}
 			},
 		},
 		{
 			Name: "each repo carries its forge apps, and says whether they are known",
-			Req:  connect.NewRequest(&pb.ListReposRequest{ProjectId: "p-1"}),
+			Req:  &pb.ListReposRequest{ProjectId: "p-1"},
 			Ctx:  repo.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListReposResponse]) {
-				got := resp.Msg.GetRepos()
+			Check: func(t *testing.T, resp *pb.ListReposResponse) {
+				got := resp.GetRepos()
 				apps := got[0].GetForgeApps()
 				if len(apps) != 2 || apps[0].GetName() != "svc" || apps[0].GetSubpath() != "" ||
 					apps[1].GetName() != "svc-site" || apps[1].GetSubpath() != "frontends/site" {

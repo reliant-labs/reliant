@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -42,26 +42,26 @@ func TestPresetService_GetDefaultPresetsBatch_MatchesSingleRPC(t *testing.T) {
 		"Proposer": "researcher",
 	})
 
-	batchResp, err := service.GetDefaultPresetsBatch(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetsBatchRequest{
+	batchResp, err := service.GetDefaultPresetsBatch(ctx, &reliantv1.GetDefaultPresetsBatchRequest{
 		ProjectId:     projectID,
 		WorkflowNames: workflows,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetDefaultPresetsBatch failed: %v", err)
 	}
 
 	for _, workflowName := range workflows {
-		singleResp, err := service.GetDefaultPreset(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetRequest{
+		singleResp, err := service.GetDefaultPreset(ctx, &reliantv1.GetDefaultPresetRequest{
 			ProjectId:    projectID,
 			WorkflowName: workflowName,
-		}))
+		})
 		if err != nil {
 			t.Fatalf("GetDefaultPreset(%s) failed: %v", workflowName, err)
 		}
 
-		want := singleResp.Msg.Presets
+		want := singleResp.Presets
 		var got map[string]string
-		if entry, ok := batchResp.Msg.PresetsByWorkflow[workflowName]; ok {
+		if entry, ok := batchResp.PresetsByWorkflow[workflowName]; ok {
 			got = entry.Presets
 		}
 
@@ -94,15 +94,15 @@ func TestPresetService_GetDefaultPresetsBatch_AppliesUserOverrides(t *testing.T)
 		"": "my-override",
 	})
 
-	resp, err := service.GetDefaultPresetsBatch(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetsBatchRequest{
+	resp, err := service.GetDefaultPresetsBatch(ctx, &reliantv1.GetDefaultPresetsBatchRequest{
 		ProjectId:     projectID,
 		WorkflowNames: []string{workflowName},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetDefaultPresetsBatch failed: %v", err)
 	}
 
-	entry, ok := resp.Msg.PresetsByWorkflow[workflowName]
+	entry, ok := resp.PresetsByWorkflow[workflowName]
 	if !ok {
 		t.Fatalf("workflow %q missing from batch response", workflowName)
 	}
@@ -117,16 +117,16 @@ func TestPresetService_GetDefaultPresetsBatch_UnknownWorkflowIsOmittedNotAnError
 	service, _, userID, projectID := setupTestPresetService(t)
 	ctx := createTestContext(userID)
 
-	resp, err := service.GetDefaultPresetsBatch(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetsBatchRequest{
+	resp, err := service.GetDefaultPresetsBatch(ctx, &reliantv1.GetDefaultPresetsBatchRequest{
 		ProjectId:     projectID,
 		WorkflowNames: []string{"builtin://does-not-exist"},
-	}))
+	})
 	// Graceful degradation matches GetDefaultPreset: one bad name in a batch
 	// must not fail the whole request for every other workflow on screen.
 	if err != nil {
 		t.Fatalf("expected graceful handling of unknown workflow, got error: %v", err)
 	}
-	if _, ok := resp.Msg.PresetsByWorkflow["builtin://does-not-exist"]; ok {
+	if _, ok := resp.PresetsByWorkflow["builtin://does-not-exist"]; ok {
 		t.Error("unknown workflow should be omitted from the response")
 	}
 }
@@ -138,15 +138,15 @@ func TestPresetService_GetDefaultPresetsBatch_DeduplicatesWorkflowNames(t *testi
 	const workflowName = "builtin://get-it-right"
 	setUserDefaultPresets(t, service, userID, workflowName, map[string]string{"": "general"})
 
-	resp, err := service.GetDefaultPresetsBatch(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetsBatchRequest{
+	resp, err := service.GetDefaultPresetsBatch(ctx, &reliantv1.GetDefaultPresetsBatchRequest{
 		ProjectId:     projectID,
 		WorkflowNames: []string{workflowName, workflowName, workflowName},
-	}))
+	})
 	if err != nil {
 		t.Fatalf("GetDefaultPresetsBatch failed: %v", err)
 	}
-	if len(resp.Msg.PresetsByWorkflow) != 1 {
-		t.Errorf("expected 1 entry for a repeated name, got %d", len(resp.Msg.PresetsByWorkflow))
+	if len(resp.PresetsByWorkflow) != 1 {
+		t.Errorf("expected 1 entry for a repeated name, got %d", len(resp.PresetsByWorkflow))
 	}
 }
 
@@ -154,14 +154,14 @@ func TestPresetService_GetDefaultPresetsBatch_RequiresProjectID(t *testing.T) {
 	service, _, userID, _ := setupTestPresetService(t)
 	ctx := createTestContext(userID)
 
-	_, err := service.GetDefaultPresetsBatch(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetsBatchRequest{
+	_, err := service.GetDefaultPresetsBatch(ctx, &reliantv1.GetDefaultPresetsBatchRequest{
 		WorkflowNames: []string{"builtin://get-it-right"},
-	}))
+	})
 	if err == nil {
 		t.Fatal("expected an error when project_id is missing")
 	}
-	if svcerr.Code(err) != connect.CodeInvalidArgument {
-		t.Errorf("expected InvalidArgument, got %v", svcerr.Code(err))
+	if svcerr.CodeV2(err) != connect.CodeInvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", svcerr.CodeV2(err))
 	}
 }
 
@@ -178,18 +178,18 @@ func TestPresetService_SetDefaultPreset_RoundTrip(t *testing.T) {
 		if group != "" {
 			req.GroupName = &group
 		}
-		_, err := service.SetDefaultPreset(ctx, connect.NewRequest(req))
+		_, err := service.SetDefaultPreset(ctx, req)
 		return err
 	}
 	get := func() map[string]string {
 		t.Helper()
-		resp, err := service.GetDefaultPreset(ctx, connect.NewRequest(&reliantv1.GetDefaultPresetRequest{
+		resp, err := service.GetDefaultPreset(ctx, &reliantv1.GetDefaultPresetRequest{
 			ProjectId: projectID, WorkflowName: workflowName,
-		}))
+		})
 		if err != nil {
 			t.Fatalf("GetDefaultPreset: %v", err)
 		}
-		return resp.Msg.GetPresets()
+		return resp.GetPresets()
 	}
 
 	if err := set(ctx, "", "general"); err != nil {
@@ -210,7 +210,7 @@ func TestPresetService_SetDefaultPreset_RoundTrip(t *testing.T) {
 	}
 
 	err := set(createTestContext("someone-else"), "", "general")
-	if svcerr.Code(err) != connect.CodeNotFound {
+	if svcerr.CodeV2(err) != connect.CodeNotFound {
 		t.Fatalf("another user's project: got %v, want NotFound", err)
 	}
 }

@@ -12,8 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/klauspost/compress/gzip"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -31,8 +34,13 @@ var snapshotLike = strings.Repeat(`{"update_type":"thread","entity_id":"thread:0
 // stream was still open.
 func streamServer(t *testing.T, release <-chan struct{}) *httptest.Server {
 	t.Helper()
-	handler := connect.NewServerStreamHandler(streamTestProcedure,
-		func(ctx context.Context, _ *connect.Request[wrapperspb.StringValue], stream *connect.ServerStream[wrapperspb.StringValue]) error {
+	server := connect.NewServer(svcerr.InterceptorV2())
+	server.Register(connect.Method{
+		Spec: connect.Spec{StreamType: connect.StreamTypeServer, Procedure: streamTestProcedure},
+		Handler: func(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+			if err := stream.Receive(&wrapperspb.StringValue{}); err != nil {
+				return err
+			}
 			if err := stream.Send(wrapperspb.String(snapshotLike)); err != nil {
 				return err
 			}
@@ -42,7 +50,10 @@ func streamServer(t *testing.T, release <-chan struct{}) *httptest.Server {
 				return ctx.Err()
 			}
 			return stream.Send(wrapperspb.String("second"))
-		})
+		},
+	})
+	handler := http.NewServeMux()
+	mountkit.MountV2(handler, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(compressBrowserStreams(handler))
 	t.Cleanup(srv.Close)
 	return srv
@@ -171,10 +182,18 @@ func TestCompressBrowserStreams_LeavesEnvelopeCompressionToConnect(t *testing.T)
 // wrote it.
 func TestCompressBrowserStreams_LeavesUnaryToConnect(t *testing.T) {
 	t.Parallel()
-	handler := connect.NewUnaryHandler("/test.v1.StreamService/Unary",
-		func(context.Context, *connect.Request[wrapperspb.StringValue]) (*connect.Response[wrapperspb.StringValue], error) {
-			return connect.NewResponse(wrapperspb.String(snapshotLike)), nil
-		})
+	server := connect.NewServer(svcerr.InterceptorV2())
+	server.Register(connect.Method{
+		Spec: connect.Spec{StreamType: connect.StreamTypeUnary, Procedure: "/test.v1.StreamService/Unary"},
+		Handler: func(_ context.Context, _ connect.Spec, stream connect.ServerStream) error {
+			if err := stream.Receive(&wrapperspb.StringValue{}); err != nil {
+				return err
+			}
+			return stream.Send(wrapperspb.String(snapshotLike))
+		},
+	})
+	handler := http.NewServeMux()
+	mountkit.MountV2(handler, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(compressBrowserStreams(handler))
 	t.Cleanup(srv.Close)
 

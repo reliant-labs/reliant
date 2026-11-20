@@ -19,7 +19,7 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -177,15 +177,15 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	a, b := setup(alice), setup(bob)
 	create := func(o owner, name string, src *reliantv1.IntegrationSource) *reliantv1.Trigger {
 		t.Helper()
-		resp, err := svc.CreateTrigger(o.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+		resp, err := svc.CreateTrigger(o.ctx, &reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 			Name: name, ProjectId: o.project, DaemonId: o.daemon, Workflow: "builtin://agent",
 			Message: "Triage it.", Params: mockModelTriggerParams(t),
 			Source:         &reliantv1.TriggerDefinition_Integration{Integration: src},
 			ActingIdentity: reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER,
-		}}))
+		}})
 		require.NoError(t, err)
-		assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, resp.Msg.GetTrigger().GetActingIdentity())
-		return resp.Msg.GetTrigger()
+		assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, resp.GetTrigger().GetActingIdentity())
+		return resp.GetTrigger()
 	}
 
 	aliceIssues := create(a, "alice issues", &reliantv1.IntegrationSource{Integration: "github", Events: []string{"issues.opened"}})
@@ -272,12 +272,12 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 
 	// A user whose GitHub is not connected cannot activate a GitHub trigger.
 	carol := setup(uuid.NewString())
-	_, err = svc.CreateTrigger(carol.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
+	_, err = svc.CreateTrigger(carol.ctx, &reliantv1.CreateTriggerRequest{Trigger: &reliantv1.TriggerDefinition{
 		Name: "carol", ProjectId: carol.project, DaemonId: carol.daemon, Workflow: "builtin://agent", Message: "x",
 		Source:         &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{Integration: "github", Events: []string{"push"}}},
 		ActingIdentity: reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER,
-	}}))
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), fmt.Sprint(err))
+	}})
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), fmt.Sprint(err))
 	assert.ErrorIs(t, err, ghaccess.ErrNotConnected, "refuse missing GitHub access, not missing App infrastructure")
 }
 

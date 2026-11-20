@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -23,23 +23,23 @@ func TestIsError(t *testing.T) {
 		},
 		{
 			name: "connect CodeUnavailable with exact daemon-offline message",
-			err:  connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user")),
+			err:  connect.Errorf(connect.CodeUnavailable, "no daemon connected for user"),
 			want: true,
 		},
 		{
 			name: "connect CodeUnavailable with unrelated message",
-			err:  connect.NewError(connect.CodeUnavailable, fmt.Errorf("backend reconnecting")),
+			err:  connect.Errorf(connect.CodeUnavailable, "backend reconnecting"),
 			want: false,
 		},
 		{
 			name: "connect CodeInternal even with daemon substring is rejected",
-			err:  connect.NewError(connect.CodeInternal, fmt.Errorf("no daemon connected for user")),
+			err:  connect.Errorf(connect.CodeInternal, "no daemon connected for user"),
 			want: false,
 		},
 		{
 			name: "fmt.Errorf wrapping a connect daemon-offline error",
 			err: fmt.Errorf("checking daemon status: %w",
-				connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))),
+				connect.Errorf(connect.CodeUnavailable, "no daemon connected for user")),
 			want: true,
 		},
 		{

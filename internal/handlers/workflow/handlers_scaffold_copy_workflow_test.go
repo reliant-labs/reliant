@@ -3,7 +3,7 @@ package workflow_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -17,22 +17,22 @@ func TestCopyWorkflow_Generated(t *testing.T) {
 
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: draftsRepo()}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CopyWorkflowRequest, pb.CopyWorkflowResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.CopyWorkflowRequest, pb.CopyWorkflowResponse]{
 		{
 			Name:    "a project is required",
-			Req:     connect.NewRequest(&pb.CopyWorkflowRequest{SourceSlug: "builtin://agent"}),
+			Req:     &pb.CopyWorkflowRequest{SourceSlug: "builtin://agent"},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a source is required",
-			Req:     connect.NewRequest(&pb.CopyWorkflowRequest{ProjectId: "p-1"}),
+			Req:     &pb.CopyWorkflowRequest{ProjectId: "p-1"},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.CopyWorkflowRequest{ProjectId: "p-2", SourceSlug: "deploy"}),
+			Req:     &pb.CopyWorkflowRequest{ProjectId: "p-2", SourceSlug: "deploy"},
 			Ctx:     workflow.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

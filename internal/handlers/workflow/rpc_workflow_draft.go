@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -27,19 +26,19 @@ import (
 // SetWorkflowVisibility updates the visibility status of a workflow (hidden/visible)
 func (s *Service) SetWorkflowVisibility(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SetWorkflowVisibilityRequest],
-) (*connect.Response[reliantv1.SetWorkflowVisibilityResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.SetWorkflowVisibilityRequest,
+) (*reliantv1.SetWorkflowVisibilityResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if req.Msg.Slug == "" {
+	if req.Slug == "" {
 		return nil, svcerr.InvalidArgument("slug is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
 
 	// Get the workflow draft by slug
-	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
+	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Slug)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 	}
@@ -48,7 +47,7 @@ func (s *Service) SetWorkflowVisibility(
 	}
 
 	// Update hidden status
-	updatedDraft, err := s.deps.Repo.SetWorkflowDraftHidden(ctx, draft.ID, req.Msg.IsHidden)
+	updatedDraft, err := s.deps.Repo.SetWorkflowDraftHidden(ctx, draft.ID, req.IsHidden)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow visibility"))
 	}
@@ -58,46 +57,47 @@ func (s *Service) SetWorkflowVisibility(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse stored workflow"))
 	}
 
-	return connect.NewResponse(&reliantv1.SetWorkflowVisibilityResponse{
+	return &reliantv1.SetWorkflowVisibilityResponse{
 		Success:  true,
-		Message:  fmt.Sprintf("Workflow visibility updated to hidden=%v", req.Msg.IsHidden),
+		Message:  fmt.Sprintf("Workflow visibility updated to hidden=%v", req.IsHidden),
 		Workflow: item,
-	}), nil
+	}, nil
 }
 
 // CopyWorkflow creates a copy of an existing workflow with a new unique name
 func (s *Service) CopyWorkflow(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CopyWorkflowRequest],
-) (*connect.Response[reliantv1.CopyWorkflowResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.CopyWorkflowRequest,
+) (*reliantv1.CopyWorkflowResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if req.Msg.SourceSlug == "" {
+	if req.SourceSlug == "" {
 		return nil, svcerr.InvalidArgument("source_slug is required")
 	}
 
-	// Load the source workflow (checks builtin, project, and user workflows)
-	getReq := connect.NewRequest(&reliantv1.GetWorkflowRequest{
-		ProjectId:  req.Msg.ProjectId,
-		Name:       req.Msg.SourceSlug,
-		WorktreeId: req.Msg.WorktreeId,
-	})
-	getReq.Header().Set("Authorization", req.Header().Get("Authorization"))
+	// Load the source workflow (checks builtin, project, and user workflows).
+	// GetWorkflow and SaveWorkflow run on this call's ctx, so they see its
+	// request headers (the caller's Authorization) as this handler does.
+	getReq := &reliantv1.GetWorkflowRequest{
+		ProjectId:  req.ProjectId,
+		Name:       req.SourceSlug,
+		WorktreeId: req.WorktreeId,
+	}
 	getResp, err := s.GetWorkflow(ctx, getReq)
 	if err != nil {
 		return nil, err // Error already formatted
 	}
 
-	sourceWf := getResp.Msg.Workflow
+	sourceWf := getResp.Workflow
 	if sourceWf == nil {
 		return nil, svcerr.NotFound("source workflow")
 	}
 
 	// Generate new name with unique suffix
 	var newName string
-	if req.Msg.NewName != nil && *req.Msg.NewName != "" {
-		newName = *req.Msg.NewName
+	if req.NewName != nil && *req.NewName != "" {
+		newName = *req.NewName
 	} else {
 		// Auto-generate name with random suffix
 		newName = sourceWf.Name + "-" + uuid.New().String()[:6]
@@ -108,34 +108,33 @@ func (s *Service) CopyWorkflow(
 	copyWf.Name = newName
 
 	// Save the copy using SaveWorkflow
-	saveReq := connect.NewRequest(&reliantv1.SaveWorkflowRequest{
-		ProjectId: req.Msg.ProjectId,
+	saveReq := &reliantv1.SaveWorkflowRequest{
+		ProjectId: req.ProjectId,
 		Workflow:  copyWf,
-	})
-	saveReq.Header().Set("Authorization", req.Header().Get("Authorization"))
+	}
 	saveResp, err := s.SaveWorkflow(ctx, saveReq)
 	if err != nil {
 		return nil, err
 	}
 
 	// Track the fork origin in the database
-	if saveResp.Msg.Id != "" {
+	if saveResp.Id != "" {
 		// Record where this workflow was forked from
-		forkedFrom := fmt.Sprintf("%s:%s", getResp.Msg.Source, req.Msg.SourceSlug)
-		_, err := s.deps.Repo.UpdateWorkflowForkedFrom(ctx, saveResp.Msg.Id, forkedFrom)
+		forkedFrom := fmt.Sprintf("%s:%s", getResp.Source, req.SourceSlug)
+		_, err := s.deps.Repo.UpdateWorkflowForkedFrom(ctx, saveResp.Id, forkedFrom)
 		if err != nil {
 			logging.WarnContext(ctx, "Failed to set forked_from on copied workflow", "error", err)
 			// Don't fail the copy operation for this
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.CopyWorkflowResponse{
+	return &reliantv1.CopyWorkflowResponse{
 		Success:  true,
 		Message:  fmt.Sprintf("Workflow copied successfully as '%s'", newName),
-		Workflow: saveResp.Msg.Workflow,
-		Slug:     saveResp.Msg.Slug,
-		Id:       saveResp.Msg.Id,
-	}), nil
+		Workflow: saveResp.Workflow,
+		Slug:     saveResp.Slug,
+		Id:       saveResp.Id,
+	}, nil
 }
 
 // CreateWorkflowDraft creates a new draft for the workflow builder: blank, or
@@ -143,26 +142,26 @@ func (s *Service) CopyWorkflow(
 // called once per "Create" in the New workflow dialog, never on page load.
 func (s *Service) CreateWorkflowDraft(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateWorkflowDraftRequest],
-) (*connect.Response[reliantv1.CreateWorkflowDraftResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.CreateWorkflowDraftRequest,
+) (*reliantv1.CreateWorkflowDraftResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
 
 	draftID := uuid.New().String()
-	slug, title, err := s.uniqueNewWorkflowSlug(ctx, userID, req.Msg.ProjectId, req.Msg.GetTitle())
+	slug, title, err := s.uniqueNewWorkflowSlug(ctx, userID, req.ProjectId, req.GetTitle())
 	if err != nil {
 		return nil, err
 	}
 	name := slug // `name:` is the workflow's identity, and its slug
 
-	definitionYAML, err := newWorkflowDefinition(name, title, req.Msg.GetTemplate())
+	definitionYAML, err := newWorkflowDefinition(name, title, req.GetTemplate())
 	if err != nil {
 		return nil, err
 	}
@@ -170,14 +169,14 @@ func (s *Service) CreateWorkflowDraft(
 
 	// A new workflow is a draft unless the caller asks for complete, which
 	// is gated like any other transition to complete.
-	status := resolveDraftStatus(req.Msg.GetStatus(), nil)
+	status := resolveDraftStatus(req.GetStatus(), nil)
 	if status == db.WorkflowDraftStatusComplete {
 		if check := s.validateWorkflowDefinition(ctx, userID, []byte(definition)); !check.valid() {
 			return nil, svcerr.FailedPrecondition(completeRejectedMessage(check))
 		}
 	}
 
-	orgID, err := s.actingOrg(ctx, userID, req.Msg.GetOrgId())
+	orgID, err := s.actingOrg(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -204,16 +203,16 @@ func (s *Service) CreateWorkflowDraft(
 	analyticsClient.TrackWorkflowDraftCreated(analytics.WorkflowDraftCreatedMetrics{
 		WorkflowSlug: slug,
 		WorkflowName: name,
-		ProjectID:    req.Msg.ProjectId,
+		ProjectID:    req.ProjectId,
 	})
 
-	return connect.NewResponse(&reliantv1.CreateWorkflowDraftResponse{
+	return &reliantv1.CreateWorkflowDraftResponse{
 		DraftId: draftID,
 		Slug:    slug,
 		Name:    name,
 		Status:  draftStatusToProto(status),
 		Title:   title,
-	}), nil
+	}, nil
 }
 
 // untitledWorkflowTitle is a new workflow's title when the caller gave none.
@@ -320,16 +319,16 @@ func newWorkflowDefinition(name, title, template string) ([]byte, error) {
 // that are invalid along the way.
 func (s *Service) SetWorkflowStatus(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SetWorkflowStatusRequest],
-) (*connect.Response[reliantv1.SetWorkflowStatusResponse], error) {
-	if req.Msg.ProjectId == "" {
+	req *reliantv1.SetWorkflowStatusRequest,
+) (*reliantv1.SetWorkflowStatusResponse, error) {
+	if req.ProjectId == "" {
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
-	if req.Msg.DraftId == "" {
+	if req.DraftId == "" {
 		return nil, svcerr.InvalidArgument("draft_id is required")
 	}
 	var target db.WorkflowDraftStatus
-	switch req.Msg.Status {
+	switch req.Status {
 	case reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE:
 		target = db.WorkflowDraftStatusComplete
 	case reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT:
@@ -339,34 +338,34 @@ func (s *Service) SetWorkflowStatus(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	if err := s.projectBelongsToUser(ctx, req.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	draft, err := s.deps.Repo.GetWorkflowDraft(ctx, req.Msg.DraftId)
+	draft, err := s.deps.Repo.GetWorkflowDraft(ctx, req.DraftId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 	}
 	if !authz.CanWriteWorkflow(ctx, userID, draft) {
 		return nil, svcerr.NotFound("workflow")
 	}
-	if req.Msg.ExpectedVersion != nil && draft.Version != *req.Msg.ExpectedVersion {
+	if req.ExpectedVersion != nil && draft.Version != *req.ExpectedVersion {
 		return nil, svcerr.WithReason(svcerr.Aborted(fmt.Sprintf(
 			"workflow was modified since you last loaded it (expected version: %d, current version: %d) - please reload and retry",
-			*req.Msg.ExpectedVersion, draft.Version)), errreason.StaleRevision)
+			*req.ExpectedVersion, draft.Version)), errreason.StaleRevision)
 	}
 
 	check := s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition))
 	if target == db.WorkflowDraftStatusComplete && !check.valid() {
 		activity.Skip(ctx) // refused: the status did not change
-		return connect.NewResponse(&reliantv1.SetWorkflowStatusResponse{
+		return &reliantv1.SetWorkflowStatusResponse{
 			Success:          false,
 			Message:          "Not marked complete: fix the validation errors first — " + check.summary(),
 			Status:           draftStatusToProto(draft.Status),
 			ValidationErrors: check.protoErrors(true),
 			Version:          draft.Version,
 			Slug:             draft.Slug,
-		}), nil
+		}, nil
 	}
 
 	updated := draft
@@ -384,12 +383,12 @@ func (s *Service) SetWorkflowStatus(
 	if target == db.WorkflowDraftStatusDraft {
 		message = "Workflow moved to draft — it will not run until it is marked complete again"
 	}
-	return connect.NewResponse(&reliantv1.SetWorkflowStatusResponse{
+	return &reliantv1.SetWorkflowStatusResponse{
 		Success:          true,
 		Message:          message,
 		Status:           draftStatusToProto(updated.Status),
 		ValidationErrors: check.protoErrors(true),
 		Version:          updated.Version,
 		Slug:             updated.Slug,
-	}), nil
+	}, nil
 }

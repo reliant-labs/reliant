@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,14 +17,14 @@ import (
 // separate, broader action.
 func (s *Service) RevokeClientAuthorization(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RevokeClientAuthorizationRequest],
-) (*connect.Response[reliantv1.RevokeClientAuthorizationResponse], error) {
+	req *reliantv1.RevokeClientAuthorizationRequest,
+) (*reliantv1.RevokeClientAuthorizationResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
 
-	clientID := strings.TrimSpace(req.Msg.GetClientId())
+	clientID := strings.TrimSpace(req.GetClientId())
 	if clientID == "" {
 		return nil, svcerr.InvalidArgument("client id is required")
 	}
@@ -38,5 +36,5 @@ func (s *Service) RevokeClientAuthorization(
 	if !revoked {
 		activity.Skip(ctx) // no such authorization: nothing changed
 	}
-	return connect.NewResponse(&reliantv1.RevokeClientAuthorizationResponse{Revoked: revoked}), nil
+	return &reliantv1.RevokeClientAuthorizationResponse{Revoked: revoked}, nil
 }

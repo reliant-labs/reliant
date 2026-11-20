@@ -2,11 +2,10 @@ package org_provider_account_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -205,11 +204,11 @@ type call struct {
 	adminOnly bool
 }
 
-func res[T any](r *connect.Response[T], err error) (proto.Message, error) {
+func res[T any](r *T, err error) (proto.Message, error) {
 	if err != nil {
 		return nil, err
 	}
-	return any(r.Msg).(proto.Message), nil
+	return any(r).(proto.Message), nil
 }
 
 // calls is every rpc of the service with a request an admin's call succeeds on, in an order in
@@ -217,57 +216,56 @@ func res[T any](r *connect.Response[T], err error) (proto.Message, error) {
 // TestEveryRPCIsInTheMatrix keeps it complete.
 var calls = []call{
 	{name: "ListOrgProviderAccounts", run: func(ctx context.Context, s *org_provider_account.Service, _ fixture) (proto.Message, error) {
-		return res(s.ListOrgProviderAccounts(ctx, connect.NewRequest(&pb.ListOrgProviderAccountsRequest{OrgId: org})))
+		return res(s.ListOrgProviderAccounts(ctx, &pb.ListOrgProviderAccountsRequest{OrgId: org}))
 	}},
 	{name: "AddOrgProviderAPIKey", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, _ fixture) (proto.Message, error) {
-		return res(s.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{
+		return res(s.AddOrgProviderAPIKey(ctx, &pb.AddOrgProviderAPIKeyRequest{
 			OrgId: org, Provider: "openai", ApiKey: "sk-openai-org-added-key-g7h8", Label: "Acme OpenAI",
 			Access: pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED,
-		})))
+		}))
 	}},
 	{name: "RotateOrgProviderAPIKey", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, f fixture) (proto.Message, error) {
-		return res(s.RotateOrgProviderAPIKey(ctx, connect.NewRequest(&pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey})))
+		return res(s.RotateOrgProviderAPIKey(ctx, &pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey}))
 	}},
 	{name: "UpdateOrgProviderAccount", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, f fixture) (proto.Message, error) {
 		paused, access := true, pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_ADMINS
-		return res(s.UpdateOrgProviderAccount(ctx, connect.NewRequest(&pb.UpdateOrgProviderAccountRequest{
+		return res(s.UpdateOrgProviderAccount(ctx, &pb.UpdateOrgProviderAccountRequest{
 			OrgId: org, AccountId: f.account, Paused: &paused, Access: &access,
-		})))
+		}))
 	}},
 	{name: "ReorderOrgProviderAccounts", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, f fixture) (proto.Message, error) {
-		return res(s.ReorderOrgProviderAccounts(ctx, connect.NewRequest(&pb.ReorderOrgProviderAccountsRequest{
+		return res(s.ReorderOrgProviderAccounts(ctx, &pb.ReorderOrgProviderAccountsRequest{
 			OrgId: org, Provider: "anthropic", AccountIds: []string{f.second, f.account},
-		})))
+		}))
 	}},
 	{name: "SetOrgProviderAccountGrants", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, f fixture) (proto.Message, error) {
-		return res(s.SetOrgProviderAccountGrants(ctx, connect.NewRequest(&pb.SetOrgProviderAccountGrantsRequest{
+		return res(s.SetOrgProviderAccountGrants(ctx, &pb.SetOrgProviderAccountGrantsRequest{
 			OrgId: org, AccountId: f.account, UserIds: []string{memberID},
-		})))
+		}))
 	}},
 	{name: "DeleteOrgProviderAccount", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, f fixture) (proto.Message, error) {
-		return res(s.DeleteOrgProviderAccount(ctx, connect.NewRequest(&pb.DeleteOrgProviderAccountRequest{OrgId: org, AccountId: f.second})))
+		return res(s.DeleteOrgProviderAccount(ctx, &pb.DeleteOrgProviderAccountRequest{OrgId: org, AccountId: f.second}))
 	}},
 	{name: "ListOrgProviderWorkspaces", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, _ fixture) (proto.Message, error) {
-		return res(s.ListOrgProviderWorkspaces(ctx, connect.NewRequest(&pb.ListOrgProviderWorkspacesRequest{OrgId: org})))
+		return res(s.ListOrgProviderWorkspaces(ctx, &pb.ListOrgProviderWorkspacesRequest{OrgId: org}))
 	}},
 	{name: "BindOrgProviderWorkspace", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, f fixture) (proto.Message, error) {
-		return res(s.BindOrgProviderWorkspace(ctx, connect.NewRequest(&pb.BindOrgProviderWorkspaceRequest{OrgId: org, AccountId: f.ownTeam})))
+		return res(s.BindOrgProviderWorkspace(ctx, &pb.BindOrgProviderWorkspaceRequest{OrgId: org, AccountId: f.ownTeam}))
 	}},
 	{name: "ReleaseOrgProviderSeat", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, f fixture) (proto.Message, error) {
-		return res(s.ReleaseOrgProviderSeat(ctx, connect.NewRequest(&pb.ReleaseOrgProviderSeatRequest{OrgId: org, AccountId: f.seat})))
+		return res(s.ReleaseOrgProviderSeat(ctx, &pb.ReleaseOrgProviderSeatRequest{OrgId: org, AccountId: f.seat}))
 	}},
 	{name: "UnbindOrgProviderWorkspace", adminOnly: true, run: func(ctx context.Context, s *org_provider_account.Service, _ fixture) (proto.Message, error) {
-		return res(s.UnbindOrgProviderWorkspace(ctx, connect.NewRequest(&pb.UnbindOrgProviderWorkspaceRequest{OrgId: org, Provider: "claude", ExternalOrgId: "ws-1"})))
+		return res(s.UnbindOrgProviderWorkspace(ctx, &pb.UnbindOrgProviderWorkspaceRequest{OrgId: org, Provider: "claude", ExternalOrgId: "ws-1"}))
 	}},
 }
 
 func requireRefused(t *testing.T, err error, code connect.Code, reason string, msgAndArgs ...any) {
 	t.Helper()
-	var ce *connect.Error
-	require.True(t, errors.As(err, &ce), "want a connect error, got %v", err)
-	require.Equal(t, code, ce.Code(), msgAndArgs...)
+	require.Error(t, err, msgAndArgs...)
+	require.Equal(t, code, svcerr.CodeV2(err), msgAndArgs...)
 	if reason != "" {
-		require.Equal(t, reason, ce.Meta().Get(svcerr.ReasonHeader), msgAndArgs...)
+		require.Equal(t, reason, svcerr.MetaOf(err).Get(svcerr.ReasonHeader), msgAndArgs...)
 	}
 }
 
@@ -325,11 +323,11 @@ func TestAnOwnerAdministers(t *testing.T) {
 	t.Parallel()
 	e := newEnv(t, true)
 	f := e.seed()
-	resp, err := e.svc.UpdateOrgProviderAccount(e.person("olga"), connect.NewRequest(&pb.UpdateOrgProviderAccountRequest{
+	resp, err := e.svc.UpdateOrgProviderAccount(e.person("olga"), &pb.UpdateOrgProviderAccountRequest{
 		OrgId: org, AccountId: f.account, Label: proto.String("Acme main"),
-	}))
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "Acme main", resp.Msg.Account.Account.Label)
+	assert.Equal(t, "Acme main", resp.Account.Account.Label)
 }
 
 // TestEveryRPCIsInTheMatrix keeps calls complete: a new rpc must say who may call it.
@@ -465,13 +463,13 @@ func TestAddValidatesAndAnAdminSeesTheHint(t *testing.T) {
 	e := newEnv(t, true)
 	ctx := e.person(adminID)
 	add := func(key string) (*pb.AddOrgProviderAPIKeyResponse, error) {
-		r, err := e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{
+		r, err := e.svc.AddOrgProviderAPIKey(ctx, &pb.AddOrgProviderAPIKeyRequest{
 			OrgId: org, Provider: "anthropic", ApiKey: key, Label: "Acme prod",
-		}))
+		})
 		if err != nil {
 			return nil, err
 		}
-		return r.Msg, nil
+		return r, nil
 	}
 
 	e.reject = true
@@ -510,7 +508,7 @@ func TestAddValidatesAndAnAdminSeesTheHint(t *testing.T) {
 		{OrgId: "", Provider: "anthropic", ApiKey: orgKey, Label: "x"},
 		{OrgId: org, Provider: "anthropic", ApiKey: orgKey, Label: "x", Access: pb.OrgProviderAccountAccess(99)},
 	} {
-		_, err := e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(bad))
+		_, err := e.svc.AddOrgProviderAPIKey(ctx, bad)
 		requireRefused(t, err, connect.CodeInvalidArgument, "", "%v", bad)
 	}
 }
@@ -522,18 +520,18 @@ func TestRotateKeepsTheAccount(t *testing.T) {
 	e := newEnv(t, false) // never gated
 	f := e.seed()
 	ctx := e.person(adminID)
-	_, err := e.svc.SetOrgProviderAccountGrants(ctx, connect.NewRequest(&pb.SetOrgProviderAccountGrantsRequest{
+	_, err := e.svc.SetOrgProviderAccountGrants(ctx, &pb.SetOrgProviderAccountGrantsRequest{
 		OrgId: org, AccountId: f.account, UserIds: []string{memberID},
-	}))
+	})
 	require.NoError(t, err)
 
 	e.reject = true
-	_, err = e.svc.RotateOrgProviderAPIKey(ctx, connect.NewRequest(&pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey}))
+	_, err = e.svc.RotateOrgProviderAPIKey(ctx, &pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey})
 	requireRefused(t, err, connect.CodeInvalidArgument, "")
 	e.reject = false
-	got, err := e.svc.RotateOrgProviderAPIKey(ctx, connect.NewRequest(&pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey}))
+	got, err := e.svc.RotateOrgProviderAPIKey(ctx, &pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey})
 	require.NoError(t, err)
-	a := got.Msg.Account
+	a := got.Account
 	assert.Equal(t, f.account, a.Account.Id)
 	assert.Equal(t, "Acme prod", a.Account.Label)
 	assert.Equal(t, "…"+core.KeyHint(newKey), a.Account.GetMaskedKey())
@@ -544,13 +542,13 @@ func TestRotateKeepsTheAccount(t *testing.T) {
 	assert.Equal(t, newKey, opened.Secrets.Secret)
 
 	// The second account's key is not a new key for the first.
-	_, err = e.svc.RotateOrgProviderAPIKey(ctx, connect.NewRequest(&pb.RotateOrgProviderAPIKeyRequest{
+	_, err = e.svc.RotateOrgProviderAPIKey(ctx, &pb.RotateOrgProviderAPIKeyRequest{
 		OrgId: org, AccountId: f.account, ApiKey: "sk-ant-org-second-key-e5f6",
-	}))
+	})
 	requireRefused(t, err, connect.CodeAlreadyExists, "")
 	// Another org's admin reaches nothing of this org: an id from elsewhere is NotFound.
 	e.roles.set("org-2", adminID, orgs.RoleAdmin)
-	_, err = e.svc.RotateOrgProviderAPIKey(ctx, connect.NewRequest(&pb.RotateOrgProviderAPIKeyRequest{OrgId: "org-2", AccountId: f.account, ApiKey: newKey}))
+	_, err = e.svc.RotateOrgProviderAPIKey(ctx, &pb.RotateOrgProviderAPIKeyRequest{OrgId: "org-2", AccountId: f.account, ApiKey: newKey})
 	requireRefused(t, err, connect.CodeNotFound, "")
 }
 
@@ -573,10 +571,10 @@ func TestOnlyAddingIsGated(t *testing.T) {
 		}
 	}
 	assert.NotContains(t, e.keysSeen, "sk-openai-org-added-key-g7h8", "a refused add never reaches the provider")
-	list, err := e.svc.ListOrgProviderAccounts(ctx, connect.NewRequest(&pb.ListOrgProviderAccountsRequest{OrgId: org}))
+	list, err := e.svc.ListOrgProviderAccounts(ctx, &pb.ListOrgProviderAccountsRequest{OrgId: org})
 	require.NoError(t, err)
-	assert.False(t, list.Msg.AddingEnabled)
-	assert.True(t, list.Msg.CallerIsAdmin)
+	assert.False(t, list.AddingEnabled)
+	assert.True(t, list.CallerIsAdmin)
 }
 
 // A workspace is bound only from the caller's own sign-in on a team plan; another person's
@@ -587,11 +585,11 @@ func TestBindOnlyFromTheCallersOwnTeamPlanAccount(t *testing.T) {
 	f := e.seed()
 	ctx := e.person(adminID)
 	bind := func(accountID string) (*pb.BindOrgProviderWorkspaceResponse, error) {
-		r, err := e.svc.BindOrgProviderWorkspace(ctx, connect.NewRequest(&pb.BindOrgProviderWorkspaceRequest{OrgId: org, AccountId: accountID}))
+		r, err := e.svc.BindOrgProviderWorkspace(ctx, &pb.BindOrgProviderWorkspaceRequest{OrgId: org, AccountId: accountID})
 		if err != nil {
 			return nil, err
 		}
-		return r.Msg, nil
+		return r, nil
 	}
 
 	_, err := bind(f.seat) // the member's own Team sign-in: not the admin's
@@ -627,20 +625,20 @@ func TestBindOnlyFromTheCallersOwnTeamPlanAccount(t *testing.T) {
 	// Another org's admin, in the same workspace, cannot make it pay for theirs.
 	e.roles.set("org-2", "zed", orgs.RoleAdmin)
 	theirs := e.claudeSignIn("zed", "ws-new", "enterprise")
-	_, err = e.svc.BindOrgProviderWorkspace(e.person("zed"), connect.NewRequest(&pb.BindOrgProviderWorkspaceRequest{OrgId: "org-2", AccountId: theirs}))
+	_, err = e.svc.BindOrgProviderWorkspace(e.person("zed"), &pb.BindOrgProviderWorkspaceRequest{OrgId: "org-2", AccountId: theirs})
 	requireRefused(t, err, connect.CodeAlreadyExists, "")
 
-	list, err := e.svc.ListOrgProviderWorkspaces(ctx, connect.NewRequest(&pb.ListOrgProviderWorkspacesRequest{OrgId: org}))
+	list, err := e.svc.ListOrgProviderWorkspaces(ctx, &pb.ListOrgProviderWorkspacesRequest{OrgId: org})
 	require.NoError(t, err)
 	var ids []string
-	for _, w := range list.Msg.Workspaces {
+	for _, w := range list.Workspaces {
 		ids = append(ids, w.ExternalOrgId)
 	}
 	assert.ElementsMatch(t, []string{"ws-1", "ws-new"}, ids)
-	require.Len(t, list.Msg.Seats, 1)
-	assert.Equal(t, f.seat, list.Msg.Seats[0].AccountId)
-	assert.Equal(t, memberID, list.Msg.Seats[0].UserId)
-	assert.Equal(t, "ws-1", list.Msg.Seats[0].GetExternalOrgId())
+	require.Len(t, list.Seats, 1)
+	assert.Equal(t, f.seat, list.Seats[0].AccountId)
+	assert.Equal(t, memberID, list.Seats[0].UserId)
+	assert.Equal(t, "ws-1", list.Seats[0].GetExternalOrgId())
 }
 
 func withoutBindMeta(w core.OrgProviderWorkspace) core.OrgProviderWorkspace {
@@ -654,12 +652,12 @@ func TestBindNeedsTheSeatsGate(t *testing.T) {
 	e := newEnvWith(t, &configv1.OrgsConfig{ProviderAccountsEnabled: true})
 	f := e.seed()
 	ctx := e.person(adminID)
-	_, err := e.svc.BindOrgProviderWorkspace(ctx, connect.NewRequest(&pb.BindOrgProviderWorkspaceRequest{OrgId: org, AccountId: f.ownTeam}))
+	_, err := e.svc.BindOrgProviderWorkspace(ctx, &pb.BindOrgProviderWorkspaceRequest{OrgId: org, AccountId: f.ownTeam})
 	requireRefused(t, err, connect.CodeFailedPrecondition, org_provider_account.ReasonProviderSeatsDisabled)
 	assert.Zero(t, e.seats.CallCount("MatchWorkspace"))
-	_, err = e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{
+	_, err = e.svc.AddOrgProviderAPIKey(ctx, &pb.AddOrgProviderAPIKeyRequest{
 		OrgId: org, Provider: "openai", Label: "Ops", ApiKey: "sk-openai-org-seats-gate-0001", Access: pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_MEMBERS,
-	}))
+	})
 	require.NoError(t, err, "org keys need only provider_accounts_enabled")
 }
 
@@ -669,20 +667,20 @@ func TestGrantsNameLiveMembersOnly(t *testing.T) {
 	e := newEnv(t, true)
 	f := e.seed()
 	ctx := e.person(adminID)
-	_, err := e.svc.SetOrgProviderAccountGrants(ctx, connect.NewRequest(&pb.SetOrgProviderAccountGrantsRequest{
+	_, err := e.svc.SetOrgProviderAccountGrants(ctx, &pb.SetOrgProviderAccountGrantsRequest{
 		OrgId: org, AccountId: f.account, UserIds: []string{memberID, strayID},
-	}))
+	})
 	requireRefused(t, err, connect.CodeInvalidArgument, "")
 	grants, err := e.repo.ListOrgAccountGrants(context.Background(), org)
 	require.NoError(t, err)
 	assert.Empty(t, grants)
 
-	got, err := e.svc.SetOrgProviderAccountGrants(ctx, connect.NewRequest(&pb.SetOrgProviderAccountGrantsRequest{
+	got, err := e.svc.SetOrgProviderAccountGrants(ctx, &pb.SetOrgProviderAccountGrantsRequest{
 		OrgId: org, AccountId: f.account, UserIds: []string{memberID, " " + memberID + " ", "olga"},
-	}))
+	})
 	require.NoError(t, err)
 	var users []string
-	for _, g := range got.Msg.Account.Grants {
+	for _, g := range got.Account.Grants {
 		users = append(users, g.UserId)
 		assert.Equal(t, adminID, g.GrantedByUserId)
 	}
@@ -704,17 +702,17 @@ func TestOrgAccountChangesWakeTheOrgsBlockedChats(t *testing.T) {
 	name := "renamed"
 	widen := pb.OrgProviderAccountAccess_ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED
 
-	_, err := e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{OrgId: org, Provider: "anthropic", ApiKey: "sk-ant-org-third-key-g7h8", Label: "third"}))
+	_, err := e.svc.AddOrgProviderAPIKey(ctx, &pb.AddOrgProviderAPIKeyRequest{OrgId: org, Provider: "anthropic", ApiKey: "sk-ant-org-third-key-g7h8", Label: "third"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{org}, e.woken.take(), "a key added")
-	_, err = e.svc.AddOrgProviderAPIKey(ctx, connect.NewRequest(&pb.AddOrgProviderAPIKeyRequest{OrgId: org, Provider: "anthropic", ApiKey: "sk-ant-org-third-key-g7h8", Label: "third"}))
+	_, err = e.svc.AddOrgProviderAPIKey(ctx, &pb.AddOrgProviderAPIKeyRequest{OrgId: org, Provider: "anthropic", ApiKey: "sk-ant-org-third-key-g7h8", Label: "third"})
 	require.NoError(t, err)
 	assert.Empty(t, e.woken.take(), "a key the org already holds adds nothing")
 
 	update := func(m *pb.UpdateOrgProviderAccountRequest) {
 		t.Helper()
 		m.OrgId, m.AccountId = org, f.account
-		_, err := e.svc.UpdateOrgProviderAccount(ctx, connect.NewRequest(m))
+		_, err := e.svc.UpdateOrgProviderAccount(ctx, m)
 		require.NoError(t, err)
 	}
 	update(&pb.UpdateOrgProviderAccountRequest{Paused: &paused})
@@ -725,14 +723,14 @@ func TestOrgAccountChangesWakeTheOrgsBlockedChats(t *testing.T) {
 	update(&pb.UpdateOrgProviderAccountRequest{Access: &widen})
 	assert.Equal(t, []string{org}, e.woken.take(), "its access changed")
 
-	_, err = e.svc.SetOrgProviderAccountGrants(ctx, connect.NewRequest(&pb.SetOrgProviderAccountGrantsRequest{OrgId: org, AccountId: f.account}))
+	_, err = e.svc.SetOrgProviderAccountGrants(ctx, &pb.SetOrgProviderAccountGrantsRequest{OrgId: org, AccountId: f.account})
 	require.NoError(t, err)
 	assert.Empty(t, e.woken.take(), "granted to nobody")
-	_, err = e.svc.SetOrgProviderAccountGrants(ctx, connect.NewRequest(&pb.SetOrgProviderAccountGrantsRequest{OrgId: org, AccountId: f.account, UserIds: []string{memberID}}))
+	_, err = e.svc.SetOrgProviderAccountGrants(ctx, &pb.SetOrgProviderAccountGrantsRequest{OrgId: org, AccountId: f.account, UserIds: []string{memberID}})
 	require.NoError(t, err)
 	assert.Equal(t, []string{org}, e.woken.take(), "granted to a member")
 
-	_, err = e.svc.RotateOrgProviderAPIKey(ctx, connect.NewRequest(&pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey}))
+	_, err = e.svc.RotateOrgProviderAPIKey(ctx, &pb.RotateOrgProviderAPIKeyRequest{OrgId: org, AccountId: f.account, ApiKey: newKey})
 	require.NoError(t, err)
 	assert.Equal(t, []string{org}, e.woken.take(), "its key replaced")
 }

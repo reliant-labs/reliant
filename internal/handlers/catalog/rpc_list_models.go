@@ -4,8 +4,6 @@ import (
 	"context"
 	"sort"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -19,10 +17,10 @@ import (
 // Each model is returned once per available driver, allowing users to choose which API to use
 func (s *Service) ListModels(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListModelsRequest],
-) (*connect.Response[reliantv1.ListModelsResponse], error) {
+	req *reliantv1.ListModelsRequest,
+) (*reliantv1.ListModelsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	scope, err := s.pickerScope(ctx, userID, req.Msg.GetOrgId())
+	scope, err := s.pickerScope(ctx, userID, req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +131,7 @@ func (s *Service) ListModels(
 		Total:  int32(len(modelList)),
 		Tiers:  tierResolutions(registry, configuredProviderIDs(availableDrivers), s.loadTagPrefs(ctx, userID), s.loadProviderPreference(ctx, userID), localModels),
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // pickerLocalModels is the caller's local models a chat of scope may run on:

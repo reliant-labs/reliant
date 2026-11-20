@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -25,12 +23,12 @@ func TestInfo_Generated(t *testing.T) {
 	}
 	build := version.Get()
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.InfoRequest, pb.InfoResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.InfoRequest, pb.InfoResponse]{
 		{
 			Name: "build info and worktree",
-			Req:  connect.NewRequest(&pb.InfoRequest{}),
-			Check: func(t *testing.T, resp *connect.Response[pb.InfoResponse]) {
-				got := resp.Msg
+			Req:  &pb.InfoRequest{},
+			Check: func(t *testing.T, resp *pb.InfoResponse) {
+				got := resp
 				if got.Version != build.Version || got.Commit != build.Commit || got.Date != build.Date || got.Branch != build.Branch {
 					t.Fatalf("Info build = %+v, want %+v", got, build)
 				}

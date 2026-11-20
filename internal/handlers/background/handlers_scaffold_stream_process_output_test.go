@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -41,11 +41,12 @@ func TestStreamProcessOutput_Generated(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			_, client := background.NewTestBackgroundServer(t, tc.opts...)
-			stream, err := client.StreamProcessOutput(context.Background(), connect.NewRequest(tc.req))
+			stream, err := client.StreamProcessOutput(context.Background(), tc.req)
 			require.NoError(t, err)
 			defer stream.Close()
-			assert.False(t, stream.Receive(), "no event before the request is accepted")
-			assert.Equal(t, tc.want, svcerr.Code(stream.Err()))
+			event, err := stream.Receive()
+			assert.Nil(t, event, "no event before the request is accepted")
+			assert.Equal(t, tc.want, svcerr.CodeV2(err))
 		})
 	}
 }

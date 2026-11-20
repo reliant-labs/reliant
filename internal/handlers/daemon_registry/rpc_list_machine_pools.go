@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -17,8 +16,8 @@ import (
 // now.
 func (s *Service) ListMachinePools(
 	ctx context.Context,
-	req *connect.Request[pb.ListMachinePoolsRequest],
-) (*connect.Response[pb.ListMachinePoolsResponse], error) {
+	req *pb.ListMachinePoolsRequest,
+) (*pb.ListMachinePoolsResponse, error) {
 	_ = req
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
@@ -36,7 +35,7 @@ func (s *Service) ListMachinePools(
 		}
 		resp.Pools = append(resp.Pools, out)
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
 // poolToProto renders a pool with its members. Members are read with no

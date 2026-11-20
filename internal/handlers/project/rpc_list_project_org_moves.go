@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -19,12 +18,12 @@ import (
 // own moves.
 func (s *Service) ListProjectOrgMoves(
 	ctx context.Context,
-	req *connect.Request[pb.ListProjectOrgMovesRequest],
-) (*connect.Response[pb.ListProjectOrgMovesResponse], error) {
+	req *pb.ListProjectOrgMovesRequest,
+) (*pb.ListProjectOrgMovesResponse, error) {
 	userID := auth.MustGetUserID(ctx)
-	limit, offset := int(req.Msg.GetLimit()), int(req.Msg.GetOffset())
+	limit, offset := int(req.GetLimit()), int(req.GetOffset())
 	f := core.ProjectOrgMoveFilters{UserID: userID, Limit: limit, Offset: offset}
-	if org := req.Msg.GetOrgId(); org != "" {
+	if org := req.GetOrgId(); org != "" {
 		if err := authz.RequireOrgAdmin(ctx, userID, org); err != nil {
 			return nil, orgLedgerRefusal(ctx, err)
 		}
@@ -41,7 +40,7 @@ func (s *Service) ListProjectOrgMoves(
 	for _, m := range moves {
 		out.Moves = append(out.Moves, projectOrgMoveProto(m))
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 func orgLedgerRefusal(ctx context.Context, err error) error {

@@ -12,7 +12,6 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -135,9 +134,9 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 		if mutate != nil {
 			mutate(def)
 		}
-		resp, err := svc.CreateTrigger(authCtx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: def}))
+		resp, err := svc.CreateTrigger(authCtx, &reliantv1.CreateTriggerRequest{Trigger: def})
 		require.NoError(t, err)
-		return resp.Msg.GetTrigger()
+		return resp.GetTrigger()
 	}
 	launchedParams := func(ev *core.TriggerEvent) map[string]any {
 		start, _ := ev.Payload["start"].(map[string]any)
@@ -149,7 +148,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	sched := activate("my nightly", "nightly", nil)
 	assert.Equal(t, []string{"0 9 * * *"}, sched.GetSchedule().GetCron())
 	require.NotNil(t, sched.GetNextFireAt(), "a declared schedule converges a real Temporal schedule")
-	_, err := svc.FireTrigger(authCtx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: sched.GetId()}))
+	_, err := svc.FireTrigger(authCtx, &reliantv1.FireTriggerRequest{Id: sched.GetId()})
 	require.NoError(t, err)
 	firedSched := waitForLaunched(t, repo, userID, sched.GetId())
 	params := launchedParams(firedSched)
@@ -197,9 +196,9 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	renamed := strings.Replace(activatedWorkflowYAML, "- name: new-issue", "- name: issue-opened", 1)
 	require.NoError(t, repo.UpdateWorkflowDraftDefinition(ctx, draft.ID, "triage", "triage", renamed, db.WorkflowDraftStatusComplete))
 
-	list, err := svc.ListTriggers(authCtx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
+	list, err := svc.ListTriggers(authCtx, &reliantv1.ListTriggersRequest{})
 	require.NoError(t, err)
-	for _, tr := range list.Msg.GetTriggers() {
+	for _, tr := range list.GetTriggers() {
 		if tr.GetId() == issue.GetId() {
 			assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_BROKEN, tr.GetHealth().GetStatus())
 			assert.Contains(t, tr.GetHealth().GetLastFailureDetail(), "issue-opened")

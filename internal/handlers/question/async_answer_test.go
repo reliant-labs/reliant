@@ -3,12 +3,11 @@ package question
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,33 +53,33 @@ type recordingMessenger struct {
 	mainErr error
 }
 
-func (m *recordingMessenger) SendAgentMessage(ctx context.Context, req *connect.Request[reliantv1.SendAgentMessageRequest]) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+func (m *recordingMessenger) SendAgentMessage(ctx context.Context, req *reliantv1.SendAgentMessageRequest) (*reliantv1.SendAgentMessageResponse, error) {
 	m.mu.Lock()
-	m.agentSends = append(m.agentSends, req.Msg)
+	m.agentSends = append(m.agentSends, req)
 	m.yielded = append(m.yielded, threadwake.YieldsQuestions(ctx))
 	m.llmOnly = append(m.llmOnly, db.LLMOnlyDelivery(ctx))
 	reply := m.agentReply
 	m.mu.Unlock()
 	if reply == nil {
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: true, Message: "Queued for delivery."}), nil
+		return &reliantv1.SendAgentMessageResponse{Success: true, Message: "Queued for delivery."}, nil
 	}
-	resp, err := reply(req.Msg)
+	resp, err := reply(req)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }
 
-func (m *recordingMessenger) SendMessage(ctx context.Context, req *connect.Request[reliantv1.SendMessageRequest]) (*connect.Response[reliantv1.SendMessageResponse], error) {
+func (m *recordingMessenger) SendMessage(ctx context.Context, req *reliantv1.SendMessageRequest) (*reliantv1.SendMessageResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.mainSends = append(m.mainSends, req.Msg)
+	m.mainSends = append(m.mainSends, req)
 	m.yielded = append(m.yielded, threadwake.YieldsQuestions(ctx))
 	m.llmOnly = append(m.llmOnly, db.LLMOnlyDelivery(ctx))
 	if m.mainErr != nil {
 		return nil, m.mainErr
 	}
-	return connect.NewResponse(&reliantv1.SendMessageResponse{ChatId: req.Msg.ChatId, Status: "processing"}), nil
+	return &reliantv1.SendMessageResponse{ChatId: req.ChatId, Status: "processing"}, nil
 }
 
 // noSignals fails the test if anything signals a workflow.
@@ -130,9 +129,9 @@ func (f *asyncAnswerFixture) askAsync(t *testing.T, id, thread string) {
 
 func (f *asyncAnswerFixture) answer(t *testing.T, id, responseData string) error {
 	t.Helper()
-	_, err := f.svc.ResolveQuestion(AuthedContext(t), connect.NewRequest(&reliantv1.ResolveQuestionRequest{
+	_, err := f.svc.ResolveQuestion(AuthedContext(t), &reliantv1.ResolveQuestionRequest{
 		QuestionId: id, Action: "reply", ResponseData: &responseData,
-	}))
+	})
 	return err
 }
 
@@ -227,12 +226,12 @@ func TestResolveAsyncQuestion_FailedDeliveryKeepsTheQuestionPending(t *testing.T
 	f.messages.agentReply = func(*reliantv1.SendAgentMessageRequest) (*reliantv1.SendAgentMessageResponse, error) {
 		return &reliantv1.SendAgentMessageResponse{Success: false, Message: "This chat is paused and its run could not be resumed"}, nil
 	}
-	f.messages.mainErr = connect.NewError(connect.CodeFailedPrecondition, errors.New("the run cannot be resumed"))
+	f.messages.mainErr = connect.NewError(connect.CodeFailedPrecondition, "the run cannot be resumed")
 
 	err := f.answer(t, "q-refused", sqliteAnswer)
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Equal(t, db.QuestionStatusPending, f.status(t, "q-refused").Status, "still answerable")
 
 	// Answered again once the chat can take it: delivered and resolved.
@@ -262,22 +261,22 @@ func TestListAsyncQuestions(t *testing.T) {
 		StepID: "agent_loop", Status: db.QuestionStatusPending, CreatedAt: time.Now().UTC(),
 	}))
 
-	resp, err := f.svc.ListAsyncQuestions(AuthedContext(t), connect.NewRequest(&reliantv1.ListAsyncQuestionsRequest{ChatId: f.chatID}))
+	resp, err := f.svc.ListAsyncQuestions(AuthedContext(t), &reliantv1.ListAsyncQuestionsRequest{ChatId: f.chatID})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Questions, 1)
-	got := resp.Msg.Questions[0]
+	require.Len(t, resp.Questions, 1)
+	got := resp.Questions[0]
 	assert.Equal(t, "q-async", got.QuestionId)
 	assert.True(t, got.Async)
 	assert.Equal(t, "call-q-async", got.ToolCallId)
 	assert.Equal(t, f.spawnID, got.ThreadId)
 
-	pending, err := f.svc.ListPendingQuestions(AuthedContext(t), connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &f.chatID}))
+	pending, err := f.svc.ListPendingQuestions(AuthedContext(t), &reliantv1.ListPendingQuestionsRequest{ChatId: &f.chatID})
 	require.NoError(t, err)
-	require.Len(t, pending.Msg.Questions, 1, "the composer's list holds only the blocking question")
-	assert.Equal(t, "q-blocking", pending.Msg.Questions[0].QuestionId)
+	require.Len(t, pending.Questions, 1, "the composer's list holds only the blocking question")
+	assert.Equal(t, "q-blocking", pending.Questions[0].QuestionId)
 
-	_, err = f.svc.ListAsyncQuestions(AuthedContext(t), connect.NewRequest(&reliantv1.ListAsyncQuestionsRequest{ChatId: uuid.NewString()}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "not the caller's chat")
+	_, err = f.svc.ListAsyncQuestions(AuthedContext(t), &reliantv1.ListAsyncQuestionsRequest{ChatId: uuid.NewString()})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "not the caller's chat")
 }
 
 func TestFormatAsyncAnswer(t *testing.T) {

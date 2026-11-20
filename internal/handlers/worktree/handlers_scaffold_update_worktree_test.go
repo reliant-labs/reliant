@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -27,29 +27,29 @@ func TestUpdateWorktree_Generated(t *testing.T) {
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store}))
 	renamed := "renamed"
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdateWorktreeRequest, pb.UpdateWorktreeResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.UpdateWorktreeRequest, pb.UpdateWorktreeResponse]{
 		{
 			Name:    "a missing worktree_id is invalid",
-			Req:     connect.NewRequest(&pb.UpdateWorktreeRequest{Name: &renamed}),
+			Req:     &pb.UpdateWorktreeRequest{Name: &renamed},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "another user's worktree is not found",
-			Req:     connect.NewRequest(&pb.UpdateWorktreeRequest{WorktreeId: otherWorktreeID, Name: &renamed}),
+			Req:     &pb.UpdateWorktreeRequest{WorktreeId: otherWorktreeID, Name: &renamed},
 			Ctx:     worktree.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "a partial update changes only the fields it names",
-			Req:  connect.NewRequest(&pb.UpdateWorktreeRequest{WorktreeId: ownWorktreeID, Name: &renamed}),
+			Req:  &pb.UpdateWorktreeRequest{WorktreeId: ownWorktreeID, Name: &renamed},
 			Ctx:  worktree.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.UpdateWorktreeResponse]) {
+			Check: func(t *testing.T, resp *pb.UpdateWorktreeResponse) {
 				require.NotNil(t, written, "the update must be stored")
 				assert.Equal(t, "renamed", written.Name)
 				assert.Equal(t, "main", written.BaseBranch)
-				assert.Equal(t, "renamed", resp.Msg.GetWorktree().GetName())
-				assert.Equal(t, "feature", resp.Msg.GetWorktree().GetBranch())
+				assert.Equal(t, "renamed", resp.GetWorktree().GetName())
+				assert.Equal(t, "feature", resp.GetWorktree().GetBranch())
 			},
 		},
 	}, svc.UpdateWorktree)

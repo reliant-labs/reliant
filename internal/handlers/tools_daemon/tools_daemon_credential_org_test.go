@@ -2,24 +2,15 @@ package tools_daemon
 
 import (
 	"context"
-	"crypto/tls"
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
-	"github.com/reliant-labs/forge/pkg/serverkit"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -78,26 +69,18 @@ func connectInOrg(t *testing.T, credentialOrg string) string {
 
 	daemonAuth, err := interceptors.NewDaemonAuthInterceptor(orgIntrospector{userID: "u-1", orgID: credentialOrg})
 	require.NoError(t, err)
-	routes := http.NewServeMux()
-	svc.Register(routes, connect.WithInterceptors(svcerr.Interceptor(), daemonAuth))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(serverkit.NewStreams().Install(routes), &http2.Server{}))
-	srv.Start()
-	t.Cleanup(srv.Close)
-
-	cl := &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, network, addr)
-		},
-	}}
+	client := daemonServer(t, svc, true, nil, daemonAuth.Intercept)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	t.Cleanup(cancel)
-	stream := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC()).ConnectDaemon(ctx)
 	credential, err := fat.Mint()
 	require.NoError(t, err)
-	stream.RequestHeader().Set("Authorization", "Bearer "+credential.Plaintext)
-	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+credential.Plaintext)
+	stream, err := client.ConnectDaemon(ctx)
+	if err != nil {
+		return ""
+	}
+	t.Cleanup(func() { _ = stream.CloseSend(); _ = stream.Close() })
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: &reliantv1.DaemonRegister{
 			DaemonId: "laptop-1", Hostname: "h", Platform: "linux", DaemonType: "local",

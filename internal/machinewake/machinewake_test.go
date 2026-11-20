@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,17 +46,17 @@ func TestMachineWakingReasonOnTheWire(t *testing.T) {
 		fmt.Errorf("resolving: %w", toolexec.ErrDaemonSuspended))
 	require.True(t, IsWaking(err))
 
-	ce := wirecheck.RoundTrip(t, svcerr.WithCause(svcerr.Internal("failed to get git status"), err))
-	assert.Empty(t, ce.Meta().Get(svcerr.ReasonHeader), "a cause's reason is never the client's: the interceptor is what answers")
+	_, meta := wirecheck.RoundTripMeta(t, svcerr.WithCause(svcerr.Internal("failed to get git status"), err))
+	assert.Empty(t, meta.Get(svcerr.ReasonHeader), "a cause's reason is never the client's: the interceptor is what answers")
 
 	var waking *wakingError
 	require.ErrorAs(t, err, &waking)
 
 	// Returned as-is, the reason is daemon_waking and the message is the one
 	// the unwrapped error always published (the machine state underneath).
-	ce = wirecheck.RoundTrip(t, err)
-	assert.Equal(t, errreason.DaemonWaking, ce.Meta().Get(svcerr.ReasonHeader))
-	assert.Equal(t, svcerr.ToConnect(waking).Message(), ce.Message())
+	ce, meta := wirecheck.RoundTripMeta(t, err)
+	assert.Equal(t, errreason.DaemonWaking, meta.Get(svcerr.ReasonHeader))
+	assert.Equal(t, svcerr.ToConnectV2(waking).Message(), ce.Message())
 
 	wirecheck.Assert(t, waking.connectError(), wirecheck.Want{
 		Code:    connect.CodeUnavailable,

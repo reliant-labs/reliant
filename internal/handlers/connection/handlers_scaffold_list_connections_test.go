@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -28,16 +28,16 @@ func TestListConnections_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListConnectionsRequest, pb.ListConnectionsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListConnectionsRequest, pb.ListConnectionsResponse]{
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.ListConnectionsRequest{IntegrationId: ptr.Of("nope")}),
+			Req:     &pb.ListConnectionsRequest{IntegrationId: ptr.Of("nope")},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "an unknown integration is invalid",
-			Req:     connect.NewRequest(&pb.ListConnectionsRequest{IntegrationId: ptr.Of("nope")}),
+			Req:     &pb.ListConnectionsRequest{IntegrationId: ptr.Of("nope")},
 			Ctx:     connection.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

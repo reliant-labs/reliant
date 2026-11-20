@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -41,13 +41,13 @@ func listAllWorktrees(t *testing.T, svc *worktree.Service, limit int32) (ids []s
 		if token != "" {
 			req.PageToken = &token
 		}
-		resp, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(req))
+		resp, err := svc.ListWorktrees(worktree.AuthedContext(t), req)
 		require.NoError(t, err)
 		pages++
-		for _, w := range resp.Msg.Worktrees {
+		for _, w := range resp.Worktrees {
 			ids = append(ids, w.Id)
 		}
-		token = resp.Msg.NextPageToken
+		token = resp.NextPageToken
 		if token == "" {
 			return ids, pages
 		}
@@ -75,10 +75,10 @@ func TestListWorktrees_ExactPageBoundaryHasNoTrailingToken(t *testing.T) {
 
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: pagedWorktreeRepo(t, 100)}))
 
-	resp, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID}))
+	resp, err := svc.ListWorktrees(worktree.AuthedContext(t), &reliantv1.ListWorktreesRequest{ProjectId: ownProjectID})
 	require.NoError(t, err)
-	assert.Len(t, resp.Msg.Worktrees, 100)
-	assert.Empty(t, resp.Msg.NextPageToken)
+	assert.Len(t, resp.Worktrees, 100)
+	assert.Empty(t, resp.NextPageToken)
 }
 
 func TestListWorktrees_RejectsMalformedPageToken(t *testing.T) {
@@ -87,7 +87,7 @@ func TestListWorktrees_RejectsMalformedPageToken(t *testing.T) {
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: pagedWorktreeRepo(t, 5)}))
 
 	bad := "not-a-token!"
-	_, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID, PageToken: &bad}))
+	_, err := svc.ListWorktrees(worktree.AuthedContext(t), &reliantv1.ListWorktreesRequest{ProjectId: ownProjectID, PageToken: &bad})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }

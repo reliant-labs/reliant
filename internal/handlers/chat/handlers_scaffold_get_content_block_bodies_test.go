@@ -40,7 +40,7 @@ package chat_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -60,16 +60,16 @@ func TestGetContentBlockBodies_Generated(t *testing.T) {
 	// with chat.WithChatDeps(...), or per-row via Case.Setup.
 	svc := chat.NewTestChat(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetContentBlockBodiesRequest, pb.GetContentBlockBodiesResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetContentBlockBodiesRequest, pb.GetContentBlockBodiesResponse]{
 		{
 			Name:    "chat_id_required",
-			Req:     connect.NewRequest(&pb.GetContentBlockBodiesRequest{BlockIds: []string{"b1"}}),
+			Req:     &pb.GetContentBlockBodiesRequest{BlockIds: []string{"b1"}},
 			Ctx:     chat.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "more_than_100_ids",
-			Req:     connect.NewRequest(&pb.GetContentBlockBodiesRequest{ChatId: "c1", BlockIds: make([]string, 101)}),
+			Req:     &pb.GetContentBlockBodiesRequest{ChatId: "c1", BlockIds: make([]string, 101)},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

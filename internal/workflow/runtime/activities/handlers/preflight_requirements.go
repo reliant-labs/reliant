@@ -109,7 +109,7 @@ func (a *PreflightRequirementsActivity) Execute(ctx context.Context, input Prefl
 			if err := resolveRunCheckout(ctx, a.repo, a.router, &execCtx); err != nil {
 				report := requirements.Report{Problems: []requirements.Problem{{
 					Kind: "project", Name: execCtx.ProjectName,
-					Problem: svcerr.ToConnect(err).Message(),
+					Problem: svcerr.ToConnectV2(err).Message(),
 					Fix:     "switch the chat to a machine that has the project, or clone it onto this one",
 				}}}
 				return PreflightRequirementsOutput{Problems: report.Problems},

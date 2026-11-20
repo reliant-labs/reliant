@@ -30,10 +30,14 @@ import (
 
 	userconfig "github.com/reliant-labs/reliant/internal/config"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -48,6 +52,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -83,14 +88,15 @@ func e2eStartNATS(t *testing.T) *nats.Conn {
 // session JWT; that layer is not under test here).
 func e2eAPI(t *testing.T, repo *db.Repo, router toolexec.DaemonRouter) (reliantv1connect.DaemonRegistryServiceClient, reliantv1connect.CatalogServiceClient) {
 	t.Helper()
-	asUser := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if uid := req.Header().Get(e2eTestUserHdr); uid != "" {
+	asUser := func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			if uid := serverkit.CallInfoV2(ctx).RequestHeader().Get(e2eTestUserHdr); uid != "" {
 				ctx = context.WithValue(ctx, auth.UserIDContextKey, uid)
 			}
-			return next(ctx, req)
+			return next(ctx, spec, stream)
 		}
-	}))
+	}
+	server := connect.NewServer(asUser, svcerr.InterceptorV2())
 	mux := http.NewServeMux()
 	registry, err := daemon_registry.New(daemon_registry.Deps{
 		Logger: slog.Default(),
@@ -99,26 +105,26 @@ func e2eAPI(t *testing.T, repo *db.Repo, router toolexec.DaemonRouter) (reliantv
 		Router: router,
 	})
 	require.NoError(t, err)
-	p1, h1 := reliantv1connect.NewDaemonRegistryServiceHandler(registry, asUser)
-	mux.Handle(p1, h1)
+	reliantv1connect.RegisterDaemonRegistryServiceHandler(server, registry)
 	catalogService, err := catalog.New(catalog.Deps{
 		Logger:      slog.Default(),
 		Config:      &typedconfig.Config{},
 		LocalModels: local.NewRepoDirectory(repo),
 	})
 	require.NoError(t, err)
-	p2, h2 := reliantv1connect.NewCatalogServiceHandler(catalogService, asUser)
-	mux.Handle(p2, h2)
+	reliantv1connect.RegisterCatalogServiceHandler(server, catalogService)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return reliantv1connect.NewDaemonRegistryServiceClient(http.DefaultClient, srv.URL),
-		reliantv1connect.NewCatalogServiceClient(http.DefaultClient, srv.URL)
+	return reliantv1connect.NewDaemonRegistryServiceClient(rpcclient.New(http.DefaultClient, srv.URL, nil)),
+		reliantv1connect.NewCatalogServiceClient(rpcclient.New(http.DefaultClient, srv.URL, nil))
 }
 
-func asUser[T any](userID string, msg *T) *connect.Request[T] {
-	r := connect.NewRequest(msg)
-	r.Header().Set(e2eTestUserHdr, userID)
-	return r
+// asUser is a client context sending userID as the caller (e2eTestUserHdr).
+func asUser(userID string) context.Context {
+	ctx, info := connect.NewClientContext(context.Background())
+	info.RequestHeader().Set(e2eTestUserHdr, userID)
+	return ctx
 }
 
 func e2eHTTPJSON(t *testing.T, method, url string, into any) {
@@ -214,11 +220,11 @@ func TestLocalModelE2E(t *testing.T) {
 
 	t.Run("a_inventory_arrives_and_is_stored", func(t *testing.T) {
 		require.Eventually(t, func() bool {
-			ds, err := registry.ListDaemons(context.Background(), asUser(e2eUserA, &reliantv1.ListDaemonsRequest{}))
-			if err != nil || len(ds.Msg.GetDaemons()) == 0 {
+			ds, err := registry.ListDaemons(asUser(e2eUserA), &reliantv1.ListDaemonsRequest{})
+			if err != nil || len(ds.GetDaemons()) == 0 {
 				return false
 			}
-			d := ds.Msg.GetDaemons()[0]
+			d := ds.GetDaemons()[0]
 			if d.GetLocalModels() == nil || findModel(d.GetLocalModels(), e2eChatModel) == nil {
 				return false
 			}
@@ -232,9 +238,9 @@ func TestLocalModelE2E(t *testing.T) {
 		require.Contains(t, stored, daemonID)
 		t.Logf("daemons.local_models[%s] = %.400s", daemonID, stored[daemonID])
 
-		got, err := registry.GetDaemon(context.Background(), asUser(e2eUserA, &reliantv1.GetDaemonRequest{DaemonId: daemonID}))
+		got, err := registry.GetDaemon(asUser(e2eUserA), &reliantv1.GetDaemonRequest{DaemonId: daemonID})
 		require.NoError(t, err)
-		qwen := findModel(got.Msg.GetDaemon().GetLocalModels(), e2eChatModel)
+		qwen := findModel(got.GetDaemon().GetLocalModels(), e2eChatModel)
 		require.NotNil(t, qwen, "GetDaemon must carry qwen3")
 		assert.True(t, qwen.GetSupportsChat())
 		assert.True(t, qwen.GetSupportsTools())
@@ -242,7 +248,7 @@ func TestLocalModelE2E(t *testing.T) {
 		assert.Greater(t, qwen.GetContextWindow(), int64(0))
 		t.Logf("qwen3: %v", qwen)
 
-		embed := findModel(got.Msg.GetDaemon().GetLocalModels(), e2eEmbedModel)
+		embed := findModel(got.GetDaemon().GetLocalModels(), e2eEmbedModel)
 		require.NotNil(t, embed, "embedding model should be listed in the inventory (just not as chat)")
 		assert.False(t, embed.GetSupportsChat(), "nomic-embed-text must not be chat-capable")
 		t.Logf("nomic-embed-text: %v", embed)
@@ -253,10 +259,10 @@ func TestLocalModelE2E(t *testing.T) {
 
 	var endpointID string
 	t.Run("b_catalog_lists_local_model", func(t *testing.T) {
-		resp, err := catalog.ListModels(context.Background(), asUser(e2eUserA, &reliantv1.ListModelsRequest{}))
+		resp, err := catalog.ListModels(asUser(e2eUserA), &reliantv1.ListModelsRequest{})
 		require.NoError(t, err)
 		var found *reliantv1.ModelInfo
-		for _, m := range resp.Msg.GetModels() {
+		for _, m := range resp.GetModels() {
 			if m.GetId() == e2eChatModel+"@local" {
 				found = m
 			}
@@ -349,9 +355,9 @@ func TestLocalModelE2E(t *testing.T) {
 		before := inv.GetProbedAt()
 		// forge:lint-disable-next-line forge-test-fixed-sleep: moves the real clock past probed_at's 1s resolution, a lower bound load can only lengthen; the daemon's clock cannot be injected in this e2e
 		time.Sleep(1100 * time.Millisecond) // probed_at has 1s resolution
-		resp, err := registry.RefreshLocalModels(context.Background(), asUser(e2eUserA, &reliantv1.RefreshLocalModelsRequest{DaemonId: daemonID}))
+		resp, err := registry.RefreshLocalModels(asUser(e2eUserA), &reliantv1.RefreshLocalModelsRequest{DaemonId: daemonID})
 		require.NoError(t, err)
-		got := resp.Msg.GetLocalModels()
+		got := resp.GetLocalModels()
 		require.NotNil(t, got)
 		assert.NotNil(t, findModel(got, e2eChatModel))
 		t.Logf("probed_at before=%s after=%s", before, got.GetProbedAt())
@@ -360,55 +366,55 @@ func TestLocalModelE2E(t *testing.T) {
 
 	t.Run("f_set_endpoints_writes_config", func(t *testing.T) {
 		const url = "http://127.0.0.1:11434/v1"
-		resp, err := registry.SetLocalModelEndpoints(context.Background(), asUser(e2eUserA,
-			&reliantv1.SetLocalModelEndpointsRequest{DaemonId: daemonID, BaseUrls: []string{url}}))
+		resp, err := registry.SetLocalModelEndpoints(asUser(e2eUserA),
+			&reliantv1.SetLocalModelEndpointsRequest{DaemonId: daemonID, BaseUrls: []string{url}})
 		require.NoError(t, err)
 		cfg, err := os.ReadFile(filepath.Join(cfgDir, "config.yaml"))
 		require.NoError(t, err, "config.yaml must be written under RELIANT_USER_CONFIG_DIR")
 		t.Logf("config.yaml:\n%s", cfg)
 		assert.Contains(t, string(cfg), url)
 		var configured bool
-		for _, ep := range resp.Msg.GetLocalModels().GetEndpoints() {
+		for _, ep := range resp.GetLocalModels().GetEndpoints() {
 			t.Logf("after set: endpoint id=%s source=%s url=%s models=%d err=%q", ep.GetId(), ep.GetSource(), ep.GetBaseUrl(), len(ep.GetModels()), ep.GetError())
 			configured = configured || ep.GetSource() == "configured"
 		}
 		assert.True(t, configured, "returned inventory must include a configured endpoint")
 
-		resp, err = registry.SetLocalModelEndpoints(context.Background(), asUser(e2eUserA,
-			&reliantv1.SetLocalModelEndpointsRequest{DaemonId: daemonID, BaseUrls: []string{}}))
+		resp, err = registry.SetLocalModelEndpoints(asUser(e2eUserA),
+			&reliantv1.SetLocalModelEndpointsRequest{DaemonId: daemonID, BaseUrls: []string{}})
 		require.NoError(t, err)
 		cfg, err = os.ReadFile(filepath.Join(cfgDir, "config.yaml"))
 		require.NoError(t, err)
 		t.Logf("config.yaml after clear:\n%s", cfg)
 		assert.NotContains(t, string(cfg), url)
-		for _, ep := range resp.Msg.GetLocalModels().GetEndpoints() {
+		for _, ep := range resp.GetLocalModels().GetEndpoints() {
 			assert.NotEqual(t, "configured", ep.GetSource(), "cleared: no configured endpoint may remain (%s)", ep.GetId())
 		}
 		// auto-detect still finds Ollama
-		assert.NotNil(t, findModel(resp.Msg.GetLocalModels(), e2eChatModel))
+		assert.NotNil(t, findModel(resp.GetLocalModels(), e2eChatModel))
 	})
 
 	t.Run("h_isolation_second_user", func(t *testing.T) {
 		// B has a credential and no daemon.
-		ds, err := registry.ListDaemons(context.Background(), asUser(e2eUserB, &reliantv1.ListDaemonsRequest{}))
+		ds, err := registry.ListDaemons(asUser(e2eUserB), &reliantv1.ListDaemonsRequest{})
 		require.NoError(t, err)
-		assert.Empty(t, ds.Msg.GetDaemons(), "B must not see A's daemons")
+		assert.Empty(t, ds.GetDaemons(), "B must not see A's daemons")
 
-		_, err = registry.GetDaemon(context.Background(), asUser(e2eUserB, &reliantv1.GetDaemonRequest{DaemonId: daemonID}))
+		_, err = registry.GetDaemon(asUser(e2eUserB), &reliantv1.GetDaemonRequest{DaemonId: daemonID})
 		require.Error(t, err)
 		t.Logf("B GetDaemon(A's): %v", err)
 
-		_, err = registry.RefreshLocalModels(context.Background(), asUser(e2eUserB, &reliantv1.RefreshLocalModelsRequest{DaemonId: daemonID}))
+		_, err = registry.RefreshLocalModels(asUser(e2eUserB), &reliantv1.RefreshLocalModelsRequest{DaemonId: daemonID})
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
-		_, err = registry.SetLocalModelEndpoints(context.Background(), asUser(e2eUserB,
-			&reliantv1.SetLocalModelEndpointsRequest{DaemonId: daemonID, BaseUrls: []string{"http://evil.invalid/v1"}}))
+		_, err = registry.SetLocalModelEndpoints(asUser(e2eUserB),
+			&reliantv1.SetLocalModelEndpointsRequest{DaemonId: daemonID, BaseUrls: []string{"http://evil.invalid/v1"}})
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
-		resp, err := catalog.ListModels(context.Background(), asUser(e2eUserB, &reliantv1.ListModelsRequest{}))
+		resp, err := catalog.ListModels(asUser(e2eUserB), &reliantv1.ListModelsRequest{})
 		require.NoError(t, err)
-		for _, m := range resp.Msg.GetModels() {
+		for _, m := range resp.GetModels() {
 			assert.Nil(t, m.GetLocal(), "B's catalog must have no local models, saw %s", m.GetId())
 		}
 
@@ -457,11 +463,11 @@ func TestLocalModelE2E(t *testing.T) {
 			t.Fatal("daemon runtime did not stop")
 		}
 		require.Eventually(t, func() bool {
-			resp, err := catalog.ListModels(context.Background(), asUser(e2eUserA, &reliantv1.ListModelsRequest{}))
+			resp, err := catalog.ListModels(asUser(e2eUserA), &reliantv1.ListModelsRequest{})
 			if err != nil {
 				return false
 			}
-			for _, m := range resp.Msg.GetModels() {
+			for _, m := range resp.GetModels() {
 				if m.GetId() == e2eChatModel+"@local" {
 					t.Logf("catalog after disconnect: online=%v machine=%q", m.GetLocal().GetOnline(), m.GetLocal().GetMachineName())
 					return !m.GetLocal().GetOnline()

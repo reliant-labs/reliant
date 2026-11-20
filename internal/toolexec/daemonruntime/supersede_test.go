@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +20,7 @@ import (
 // survives a reword and fails on a rewire.
 func TestSupersededDaemonDoesNotReconnect(t *testing.T) {
 	superseded := connect.NewError(connect.CodeAborted,
-		errors.New("daemon identity claimed by another daemon process"))
+		"daemon identity claimed by another daemon process")
 
 	require.True(t, isFatalError(superseded),
 		"a superseded daemon that reconnects re-enters the eviction loop it was just removed from")
@@ -36,9 +36,9 @@ func TestSupersededDaemonDoesNotReconnect(t *testing.T) {
 func TestOrdinaryStreamLossStillReconnects(t *testing.T) {
 	for name, err := range map[string]error{
 		"eof":         errors.New("daemon stream receive: unknown: EOF"),
-		"unavailable": connect.NewError(connect.CodeUnavailable, errors.New("connection refused")),
-		"internal":    connect.NewError(connect.CodeInternal, errors.New("boom")),
-		"canceled":    connect.NewError(connect.CodeCanceled, errors.New("canceled")),
+		"unavailable": connect.NewError(connect.CodeUnavailable, "connection refused"),
+		"internal":    connect.NewError(connect.CodeInternal, "boom"),
+		"canceled":    connect.NewError(connect.CodeCanceled, "canceled"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			require.False(t, isFatalError(err))
@@ -61,7 +61,7 @@ func TestOrdinaryStreamLossStillReconnects(t *testing.T) {
 // rollout finishes), so the daemon has to still be trying when that happens.
 func TestUnauthenticatedReconnects(t *testing.T) {
 	unauth := connect.NewError(connect.CodeUnauthenticated,
-		errors.New("invalid daemon auth token: invalid token"))
+		"invalid daemon auth token: invalid token")
 
 	require.False(t, isFatalError(unauth),
 		"a daemon that stops on Unauthenticated cannot recover when its PAT is re-minted — "+
@@ -78,7 +78,7 @@ func TestUnauthenticatedReconnects(t *testing.T) {
 // daemon), PermissionDenied means they were accepted and the answer was still
 // no (redialing cannot change it).
 func TestPermissionDeniedStillTerminal(t *testing.T) {
-	denied := connect.NewError(connect.CodePermissionDenied, errors.New("not allowed"))
+	denied := connect.NewError(connect.CodePermissionDenied, "not allowed")
 	require.True(t, isFatalError(denied))
 	require.True(t, isFatalError(fmt.Errorf("daemon stream receive: %w", denied)))
 }

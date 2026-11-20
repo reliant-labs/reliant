@@ -11,7 +11,8 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
@@ -25,7 +26,7 @@ func TestContentBlockBodiesBatchesAndAsksAgainForTheDeferred(t *testing.T) {
 		asked = append(asked, r.GetBlockIds())
 		mu.Unlock()
 		if r.GetChatId() != "s-1" || !r.GetFull() {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat %q full %v", r.GetChatId(), r.GetFull()))
+			return nil, connect.Errorf(connect.CodeInvalidArgument, "chat %q full %v", r.GetChatId(), r.GetFull())
 		}
 		// A byte budget that fits two bodies: the rest of the batch is deferred.
 		resp := &reliantv1.GetContentBlockBodiesResponse{}
@@ -117,9 +118,9 @@ func TestGetChatUpdatesCarriesToolBodies(t *testing.T) {
 		return &reliantv1.GetChatUpdatesResponse{}, nil
 	}}
 	c, _ := f.start(t)
-	chat := reliantv1connect.NewChatServiceClient(c.HTTPClient(), c.BaseURL())
+	chat := reliantv1connect.NewChatServiceClient(connect.NewClient(connecthttp.NewTransport(c.HTTPClient(), c.BaseURL(), connecthttp.WithReadMaxBytes(0))))
 	mode := ToolBodiesStub
-	if _, err := chat.GetChatUpdates(context.Background(), connect.NewRequest(&reliantv1.GetChatUpdatesRequest{ChatId: "s-1", ToolBodies: &mode})); err != nil {
+	if _, err := chat.GetChatUpdates(context.Background(), &reliantv1.GetChatUpdatesRequest{ChatId: "s-1", ToolBodies: &mode}); err != nil {
 		t.Fatal(err)
 	}
 	if got != ToolBodiesStub {

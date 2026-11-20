@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -116,21 +114,21 @@ const stoppedAgentRunStartedReceipt = "Queued. This agent had stopped on an erro
 // it has no next turn of its own to drain the row at. So unlike a live
 // agent's, a doorbell that cannot be rung on a run that is still open is not
 // a late delivery but none — the row is withdrawn rather than promised.
-func (s *Service) resumeStoppedAgent(ctx context.Context, userID string, chat *db.Chat, threadID, messageID string, r stoppedAgentResumability) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+func (s *Service) resumeStoppedAgent(ctx context.Context, userID string, chat *db.Chat, threadID, messageID string, r stoppedAgentResumability) (*reliantv1.SendAgentMessageResponse, error) {
 	if err := s.notifyThreadWake(ctx, chat, threadID, threadwake.ReasonMailbox); err == nil {
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+		return &reliantv1.SendAgentMessageResponse{
 			Success: true,
 			Message: stoppedAgentResumeReceipt,
-		}), nil
+		}, nil
 	}
 	if s.chatRunClosed(ctx, chat) {
 		return s.startRunResumingStoppedAgent(ctx, userID, chat, threadID, messageID)
 	}
 	s.withdrawQueuedAgentMessage(ctx, chat, messageID)
-	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+	return &reliantv1.SendAgentMessageResponse{
 		Success: false,
 		Message: "This agent stopped on an error, and its run could not be reached to resume it. Try sending again in a moment.",
-	}), nil
+	}, nil
 }
 
 // chatRunClosed reports whether Temporal has no open execution for the chat's
@@ -178,12 +176,12 @@ func (s *Service) withdrawQueuedAgentMessage(ctx context.Context, chat *db.Chat,
 //
 // Under the run-control lock, like every start of a chat's run: a send that
 // started the run meanwhile is rung instead of replaced.
-func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID string, chat *db.Chat, threadID, messageID string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
-	refuse := func(cause error, message string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID string, chat *db.Chat, threadID, messageID string) (*reliantv1.SendAgentMessageResponse, error) {
+	refuse := func(cause error, message string) (*reliantv1.SendAgentMessageResponse, error) {
 		logging.WarnContext(ctx, "Could not start a run to resume a stopped sub-agent; withdrawing the message queued to it",
 			"error", cause, "chatID", chat.ID, "threadID", threadID, "messageID", messageID)
 		s.withdrawQueuedAgentMessage(ctx, chat, messageID)
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: false, Message: message}), nil
+		return &reliantv1.SendAgentMessageResponse{Success: false, Message: message}, nil
 	}
 	const tryAgain = "This agent stopped on an error, and the chat's run could not be started to resume it. Try sending again in a moment."
 	if s.runs == nil || s.deps.Temporal == nil {
@@ -198,10 +196,10 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		if err := s.notifyThreadWake(ctx, chat, threadID, threadwake.ReasonMailbox); err != nil {
 			return refuse(err, tryAgain)
 		}
-		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+		return &reliantv1.SendAgentMessageResponse{
 			Success: true,
 			Message: stoppedAgentResumeReceipt,
-		}), nil
+		}, nil
 	}
 
 	stopped, err := v2.StoppedSpawnFromDurableState(ctx, s.deps.Repo, chat.ID, threadID)
@@ -295,8 +293,8 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 	logging.InfoContext(ctx, "Started the chat's run to resume a sub-agent that stopped on an error, for a message sent to it",
 		"chatID", chat.ID, "workflowID", workflowID, "runID", run.GetRunID(),
 		"threadID", threadID, "toolCallID", stopped.ToolCallID)
-	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+	return &reliantv1.SendAgentMessageResponse{
 		Success: true,
 		Message: stoppedAgentRunStartedReceipt,
-	}), nil
+	}, nil
 }

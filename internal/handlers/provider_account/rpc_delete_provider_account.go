@@ -3,7 +3,6 @@ package provider_account
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -14,16 +13,16 @@ import (
 // threads that were assigned to it move to another account at their next turn.
 func (s *Service) DeleteProviderAccount(
 	ctx context.Context,
-	req *connect.Request[pb.DeleteProviderAccountRequest],
-) (*connect.Response[pb.DeleteProviderAccountResponse], error) {
+	req *pb.DeleteProviderAccountRequest,
+) (*pb.DeleteProviderAccountResponse, error) {
 	userID, err := callerID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if req.Msg.GetAccountId() == "" {
+	if req.GetAccountId() == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("account_id is required"))
 	}
-	acct, err := s.find(ctx, userID, req.Msg.GetAccountId())
+	acct, err := s.find(ctx, userID, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
@@ -38,5 +37,5 @@ func (s *Service) DeleteProviderAccount(
 	analytics.ForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
 		Provider: acct.Provider, Action: "disconnected", AuthMethod: method,
 	})
-	return connect.NewResponse(&pb.DeleteProviderAccountResponse{}), nil
+	return &pb.DeleteProviderAccountResponse{}, nil
 }

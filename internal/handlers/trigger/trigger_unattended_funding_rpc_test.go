@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -67,9 +67,9 @@ func TestTriggerUnattendedFunding_CreateReadUpdate(t *testing.T) {
 	// A trigger stored before the stamp reads ANY.
 	_, err := e.repo.ORM().Bun().NewRaw(`UPDATE triggers SET unattended_funding = NULL WHERE id = ?`, unknown.ID).Exec(context.Background())
 	require.NoError(t, err)
-	got, err := e.svc.GetTrigger(e.creatorCtx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: unknown.ID}))
+	got, err := e.svc.GetTrigger(e.creatorCtx, &reliantv1.GetTriggerRequest{Id: unknown.ID})
 	require.NoError(t, err)
-	assert.Equal(t, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY, got.Msg.GetTrigger().GetUnattendedFunding())
+	assert.Equal(t, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY, got.GetTrigger().GetUnattendedFunding())
 
 	update := func(id string, f reliantv1.UnattendedFunding) error {
 		name := e.row(t, id).Name
@@ -78,7 +78,7 @@ func TestTriggerUnattendedFunding_CreateReadUpdate(t *testing.T) {
 			d.ProjectId = e.acmeProject
 			d.UnattendedFunding = f
 		})
-		_, err := e.svc.UpdateTrigger(e.creatorCtx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: id, Trigger: def}))
+		_, err := e.svc.UpdateTrigger(e.creatorCtx, &reliantv1.UpdateTriggerRequest{Id: id, Trigger: def})
 		return err
 	}
 	members.members, members.known = 2, true
@@ -89,8 +89,8 @@ func TestTriggerUnattendedFunding_CreateReadUpdate(t *testing.T) {
 
 	err = update(team.ID, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 	assert.Equal(t, core.UnattendedFundingOrgOnly, stampOf(t, e, team.ID), "a refused loosening writes nothing")
 
 	require.NoError(t, update(solo.ID, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ORG_ONLY))
@@ -139,13 +139,13 @@ func TestEnableWorkflow_AFundingOnlyChangeIsNotANoOp(t *testing.T) {
 
 			enable := func(f reliantv1.UnattendedFunding) *reliantv1.WorkflowTriggerResult {
 				t.Helper()
-				resp, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(&reliantv1.EnableWorkflowRequest{
+				resp, err := env.svc.EnableWorkflow(env.ctx, &reliantv1.EnableWorkflowRequest{
 					Workflow: "nightly", ProjectId: project, DaemonId: env.daemonID, Message: "Run the nightly job.",
 					UnattendedFunding: f,
-				}))
+				})
 				require.NoError(t, err)
-				require.Len(t, resp.Msg.GetResults(), 1)
-				return resp.Msg.GetResults()[0]
+				require.Len(t, resp.GetResults(), 1)
+				return resp.GetResults()[0]
 			}
 			row := func(id string) *core.Trigger {
 				t.Helper()
@@ -158,7 +158,7 @@ func TestEnableWorkflow_AFundingOnlyChangeIsNotANoOp(t *testing.T) {
 				if !paused {
 					return
 				}
-				_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
+				_, err := env.svc.SetTriggerEnabled(env.ctx, &reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false})
 				require.NoError(t, err)
 			}
 

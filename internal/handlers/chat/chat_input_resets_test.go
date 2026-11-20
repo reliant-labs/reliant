@@ -58,7 +58,7 @@ func TestThreadResetUsesThreadBaselineNotRootPreset(t *testing.T) {
 	}
 	service.deps.Temporal = queryClient
 	req := updateParams(fx.chatID, paramsOf(t, map[string]any{"mode": nil}))
-	req.Msg.ThreadId = &childID
+	req.ThreadId = &childID
 	_, err = service.UpdateWorkflowParams(ctx, req)
 	require.NoError(t, err)
 	require.Len(t, queryClient.queries, 2)
@@ -105,8 +105,8 @@ func TestModeResetStoresDeletionAndSignalsOnlyConcreteMode(t *testing.T) {
 			setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": "plan", "model": map[string]any{"id": sonnetOnClaude}, "skills": []any{"test"}})
 			response, err := service.UpdateWorkflowParams(ctx, updateParams(fx.chatID, paramsOf(t, map[string]any{"mode": nil})))
 			require.NoError(t, err)
-			require.NotNil(t, response.Msg.Selection)
-			stored := response.Msg.Selection.Params.AsMap()
+			require.NotNil(t, response.Selection)
+			stored := response.Selection.Params.AsMap()
 			assert.NotContains(t, stored, "mode")
 			assert.Equal(t, sonnetOnClaude, modelID(t, stored["model"]))
 			assert.Equal(t, []any{"test"}, stored["skills"])
@@ -196,7 +196,7 @@ func TestThreadResetWithoutBaselineFailsWithoutMutation(t *testing.T) {
 	ctx, fx, repo, temporal, service := selectionFixture(t, db.Active())
 	before := setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": "plan"})
 	req := updateParams(fx.chatID, paramsOf(t, map[string]any{"mode": nil}))
-	req.Msg.ThreadId = &fx.rootThreadID
+	req.ThreadId = &fx.rootThreadID
 	_, err := service.UpdateWorkflowParams(ctx, req)
 	require.Error(t, err)
 	assert.Empty(t, temporal.signals)

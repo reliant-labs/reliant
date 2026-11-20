@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +49,7 @@ func TestGetProjectWithUserCheck_RefusalsCarryWhy(t *testing.T) {
 			_, err := repo.GetProjectWithUserCheck(tc.ctx, project.ID, tc.caller)
 			require.Error(t, err)
 			assert.ErrorIs(t, err, core.ErrProjectNotFound)
-			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+			assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 			if tc.cause != nil {
 				assert.ErrorIs(t, err, tc.cause)
 			}

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -152,18 +152,18 @@ func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T)
 		ID: "wire-approval", ChatID: "wire-needs-approval", ApprovalType: 1, Status: 1, CreatedAt: time.Now().UTC(),
 	}))
 
-	getResp, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: quiet.chatID}))
+	getResp, err := service.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: quiet.chatID})
 	require.NoError(t, err)
-	require.NotNil(t, getResp.Msg.Chat.LaunchKind)
-	assert.Equal(t, "schedule", *getResp.Msg.Chat.LaunchKind)
-	require.NotNil(t, getResp.Msg.Chat.TriggerId)
-	assert.Equal(t, triggerID, *getResp.Msg.Chat.TriggerId)
-	assert.Equal(t, reliantv1.ChatOrigin_CHAT_ORIGIN_AUTOMATION, getResp.Msg.Chat.GetOrigin())
+	require.NotNil(t, getResp.Chat.LaunchKind)
+	assert.Equal(t, "schedule", *getResp.Chat.LaunchKind)
+	require.NotNil(t, getResp.Chat.TriggerId)
+	assert.Equal(t, triggerID, *getResp.Chat.TriggerId)
+	assert.Equal(t, reliantv1.ChatOrigin_CHAT_ORIGIN_AUTOMATION, getResp.Chat.GetOrigin())
 
-	resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+	resp, err := service.ListChats(ctx, &reliantv1.ListChatsRequest{ProjectId: projectID})
 	require.NoError(t, err)
 	filtered := map[string]bool{}
-	for _, c := range resp.Msg.Chats {
+	for _, c := range resp.Chats {
 		filtered[c.Id] = true
 	}
 	assert.False(t, filtered[quiet.chatID], "a quiet scheduled chat is hidden")
@@ -211,7 +211,7 @@ func TestSendMessage_AdoptedScheduleChatStartsAttendedRootRun(t *testing.T) {
 			service := &Service{deps: Deps{Repo: repo, Temporal: temporal}, runs: runs.NewService(repo, temporal, nil)}
 
 			if adopt {
-				_, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
+				_, err := service.AdoptChat(ctx, &reliantv1.AdoptChatRequest{ChatId: fx.chatID})
 				require.NoError(t, err)
 			}
 			_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "carry on"))
@@ -234,30 +234,30 @@ func TestAdoptChat_OwnerScopedIdempotentAndExposedOnTheWire(t *testing.T) {
 	service := &Service{deps: Deps{Repo: repo}}
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
-	_, err := service.AdoptChat(otherCtx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
+	_, err := service.AdoptChat(otherCtx, &reliantv1.AdoptChatRequest{ChatId: fx.chatID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-	_, err = service.UnadoptChat(otherCtx, connect.NewRequest(&reliantv1.UnadoptChatRequest{ChatId: fx.chatID}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-	_, err = service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+	_, err = service.UnadoptChat(otherCtx, &reliantv1.UnadoptChatRequest{ChatId: fx.chatID})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+	_, err = service.AdoptChat(ctx, &reliantv1.AdoptChatRequest{})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 
-	first, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
+	first, err := service.AdoptChat(ctx, &reliantv1.AdoptChatRequest{ChatId: fx.chatID})
 	require.NoError(t, err)
-	require.NotNil(t, first.Msg.Chat.AdoptedAt, "adopted_at is on the Chat proto")
-	assert.Equal(t, "schedule", first.Msg.Chat.GetLaunchKind(), "adoption never rewrites origin")
+	require.NotNil(t, first.Chat.AdoptedAt, "adopted_at is on the Chat proto")
+	assert.Equal(t, "schedule", first.Chat.GetLaunchKind(), "adoption never rewrites origin")
 
-	second, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
+	second, err := service.AdoptChat(ctx, &reliantv1.AdoptChatRequest{ChatId: fx.chatID})
 	require.NoError(t, err)
-	assert.Equal(t, first.Msg.Chat.GetAdoptedAt(), second.Msg.Chat.GetAdoptedAt())
+	assert.Equal(t, first.Chat.GetAdoptedAt(), second.Chat.GetAdoptedAt())
 
 	list := func() map[string]bool {
-		resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{
+		resp, err := service.ListChats(ctx, &reliantv1.ListChatsRequest{
 			ProjectId: mustChatProject(t, ctx, repo, fx.chatID),
-		}))
+		})
 		require.NoError(t, err)
 		ids := map[string]bool{}
-		for _, c := range resp.Msg.Chats {
+		for _, c := range resp.Chats {
 			ids[c.Id] = true
 		}
 		return ids
@@ -265,9 +265,9 @@ func TestAdoptChat_OwnerScopedIdempotentAndExposedOnTheWire(t *testing.T) {
 	assert.True(t, list()[fx.chatID], "an adopted automation chat is in the sidebar list")
 
 	for i := 0; i < 2; i++ {
-		un, err := service.UnadoptChat(ctx, connect.NewRequest(&reliantv1.UnadoptChatRequest{ChatId: fx.chatID}))
+		un, err := service.UnadoptChat(ctx, &reliantv1.UnadoptChatRequest{ChatId: fx.chatID})
 		require.NoError(t, err)
-		assert.Nil(t, un.Msg.Chat.AdoptedAt)
+		assert.Nil(t, un.Chat.AdoptedAt)
 	}
 	assert.False(t, list()[fx.chatID])
 }

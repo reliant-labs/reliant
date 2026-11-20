@@ -7,8 +7,11 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/reliant-labs/forge/pkg/activity"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	workflow "github.com/reliant-labs/reliant/internal/handlers/workflow"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
@@ -34,7 +38,7 @@ func activityClient(t *testing.T, svc reliantv1connect.WorkflowServiceHandler) (
 		mu     sync.Mutex
 		events []activity.Event
 	)
-	ic, err := activity.Interceptor(activity.Deps{
+	ic, err := activity.InterceptorV2(activity.Deps{
 		Principal: testPrincipal{},
 		Writer: activity.WriterFunc(func(_ context.Context, ev activity.Event) error {
 			mu.Lock()
@@ -44,16 +48,18 @@ func activityClient(t *testing.T, svc reliantv1connect.WorkflowServiceHandler) (
 		}),
 	})
 	require.NoError(t, err)
-	authed := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			return next(auth.WithUser(ctx, "test-user", "user", "test@example.com"), req)
+	authed := connect.ServerInterceptor(func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			return next(auth.WithUser(ctx, "test-user", "user", "test@example.com"), spec, stream)
 		}
 	})
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewWorkflowServiceHandler(svc, connect.WithInterceptors(authed, ic)))
+	server := connect.NewServer(svcerr.InterceptorV2(), authed, ic)
+	reliantv1connect.RegisterWorkflowServiceHandler(server, svc)
+	mountkit.MountV2(mux, server, connecthttp.WithReadMaxBytes(0))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return reliantv1connect.NewWorkflowServiceClient(srv.Client(), srv.URL), func() []activity.Event {
+	return reliantv1connect.NewWorkflowServiceClient(rpcclient.New(srv.Client(), srv.URL, nil)), func() []activity.Event {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]activity.Event(nil), events...)
@@ -69,9 +75,9 @@ func TestDeleteWorkflow_RecordsADeleteEventForTheSlug(t *testing.T) {
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store, Automations: &retirer{}}))
 	client, events := activityClient(t, svc)
 
-	resp, err := client.DeleteWorkflow(context.Background(), connect.NewRequest(&pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: "pr-review"}))
+	resp, err := client.DeleteWorkflow(context.Background(), &pb.DeleteWorkflowRequest{ProjectId: "p-1", Name: "pr-review"})
 	require.NoError(t, err)
-	assert.Equal(t, slug, resp.Msg.GetSlug())
+	assert.Equal(t, slug, resp.GetSlug())
 
 	got := events()
 	require.Len(t, got, 1)
@@ -90,11 +96,11 @@ func TestImportWorkflow_ConflictRecordsNoEvent(t *testing.T) {
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
 	client, events := activityClient(t, svc)
 
-	resp, err := client.ImportWorkflow(context.Background(), connect.NewRequest(&pb.ImportWorkflowRequest{
+	resp, err := client.ImportWorkflow(context.Background(), &pb.ImportWorkflowRequest{
 		ProjectId:   "p-1",
 		YamlContent: []byte("name: pr-review\nentry: [a]\nnodes:\n  - id: a\n    type: call_llm\n"),
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.GetConflict(), resp.Msg.GetMessage())
+	require.True(t, resp.GetConflict(), resp.GetMessage())
 	assert.Empty(t, events(), "a refused import must not be recorded as one")
 }

@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/errreason"
@@ -49,7 +49,7 @@ func Unreachable(err error) bool {
 	if toolexec.IsDaemonPending(err) {
 		return true
 	}
-	return svcerr.Code(err) == connect.CodeUnavailable &&
+	return svcerr.CodeV2(err) == connect.CodeUnavailable &&
 		strings.Contains(err.Error(), "no daemon connected")
 }
 
@@ -114,7 +114,7 @@ func machineCode(err error) (connect.Code, bool) {
 // does to err — it becomes the cause, and a cause's reason is not the
 // client's (forge svcerr) — so it is re-stamped on the result explicitly.
 func machineReason(code connect.Code, err error) string {
-	if reason := svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader); reason != "" {
+	if reason := svcerr.MetaOf(err).Get(svcerr.ReasonHeader); reason != "" {
 		return reason
 	}
 	if code == connect.CodeUnavailable {
@@ -163,7 +163,7 @@ func MachineState(doing string, err error) (error, bool) {
 	if !ok {
 		return nil, false
 	}
-	msg := prefixed(doing, svcerr.ToConnect(err).Message())
+	msg := prefixed(doing, svcerr.ToConnectV2(err).Message())
 	var kind error
 	switch code {
 	case connect.CodeUnavailable:
@@ -280,9 +280,12 @@ func MachineStateConnectError(doing string, err error) (*connect.Error, bool) {
 	if doing != "" {
 		err = fmt.Errorf("%s: %w", doing, err)
 	}
-	cerr := connect.NewError(code, err)
+	cerr := connect.NewError(code, err.Error()).WithCause(err)
 	if reason != "" {
-		cerr.Meta().Set(svcerr.ReasonHeader, reason)
+		// A v2 *connect.Error carries no metadata of its own: ToConnectV2
+		// keeps the reason in the error's cause, where svcerr.InterceptorV2
+		// reads it back onto the response, as v1 sent cerr.Meta().
+		cerr = svcerr.ToConnectV2(svcerr.WithReason(cerr, reason))
 	}
 	return cerr, true
 }
@@ -291,7 +294,7 @@ func MachineStateConnectError(doing string, err error) (*connect.Error, bool) {
 // (see Outdated), with err's whole text as the message. Deprecated: use
 // Outdated.
 func OutdatedConnectError(err error) *connect.Error {
-	return connect.NewError(connect.CodeFailedPrecondition, err)
+	return connect.NewError(connect.CodeFailedPrecondition, err.Error()).WithCause(err)
 }
 
 // DispatchConnectError converts a SendDaemonCommand failure of commandType
@@ -305,9 +308,9 @@ func DispatchConnectError(commandType string, err error) *connect.Error {
 		return cerr
 	}
 	if pathMissing(err) {
-		return connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("daemon command %s: %w", commandType, err))
+		wrapped := fmt.Errorf("daemon command %s: %w", commandType, err)
+		return connect.NewError(connect.CodeNotFound, wrapped.Error()).WithCause(wrapped)
 	}
-	return connect.NewError(connect.CodeUnavailable,
-		fmt.Errorf("daemon command %s failed: %w", commandType, err))
+	wrapped := fmt.Errorf("daemon command %s failed: %w", commandType, err)
+	return connect.NewError(connect.CodeUnavailable, wrapped.Error()).WithCause(wrapped)
 }

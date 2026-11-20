@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -34,8 +34,8 @@ func (workflowOrgSource) ResolveOrgMembership(_ context.Context, _, orgID string
 func requireOrgRefusal(t *testing.T, err error, reason string) {
 	t.Helper()
 	require.Error(t, err)
-	assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "error: %v", err)
-	assert.Equal(t, reason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader), "error: %v", err)
+	assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "error: %v", err)
+	assert.Equal(t, reason, svcerr.MetaOf(err).Get(svcerr.ReasonHeader), "error: %v", err)
 }
 
 // A saved workflow is created in the org its request acts in, verified
@@ -61,19 +61,19 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: home, ActingUserID: userID})
 
 	create := func(ctx context.Context, title string, org *string) (*reliantv1.CreateWorkflowDraftResponse, error) {
-		resp, err := svc.CreateWorkflowDraft(ctx, connect.NewRequest(&reliantv1.CreateWorkflowDraftRequest{
+		resp, err := svc.CreateWorkflowDraft(ctx, &reliantv1.CreateWorkflowDraftRequest{
 			ProjectId: projectID, Title: title, OrgId: org,
-		}))
+		})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg, nil
+		return resp, nil
 	}
 	save := func(ctx context.Context, name string, org *string) error {
-		_, err := svc.SaveWorkflow(ctx, connect.NewRequest(&reliantv1.SaveWorkflowRequest{
+		_, err := svc.SaveWorkflow(ctx, &reliantv1.SaveWorkflowRequest{
 			ProjectId: projectID, OrgId: org,
 			Workflow: mustParse(t, "name: "+name+"\nentry: [echo]\nnodes:\n  - id: echo\n    type: run\n    command: \"echo hi\"\n"),
-		}))
+		})
 		return err
 	}
 
@@ -104,10 +104,10 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 	includeDrafts := true // the saved workflows here are drafts
 	listed := func(org *string) []string {
 		t.Helper()
-		resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, OrgId: org, IncludeHidden: &includeDrafts}))
+		resp, err := svc.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{ProjectId: projectID, OrgId: org, IncludeHidden: &includeDrafts})
 		require.NoError(t, err)
 		var slugs []string
-		for _, w := range resp.Msg.Workflows {
+		for _, w := range resp.Workflows {
 			if _, ok := orgOf[w.Filename]; ok && w.Source == "user" {
 				slugs = append(slugs, w.Filename)
 			}
@@ -117,6 +117,6 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 	assert.ElementsMatch(t, []string{"acme-flow"}, listed(&acme))
 	assert.ElementsMatch(t, []string{"home-flow", "machine-flow"}, listed(&home))
 	assert.ElementsMatch(t, []string{"acme-flow", "home-flow", "machine-flow"}, listed(nil))
-	_, err = svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, OrgId: &globex}))
+	_, err = svc.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{ProjectId: projectID, OrgId: &globex})
 	requireOrgRefusal(t, err, orgs.ReasonNotOrgMember)
 }

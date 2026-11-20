@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -14,17 +13,17 @@ import (
 // exactly that provider's accounts.
 func (s *Service) ReorderProviderAccounts(
 	ctx context.Context,
-	req *connect.Request[pb.ReorderProviderAccountsRequest],
-) (*connect.Response[pb.ReorderProviderAccountsResponse], error) {
+	req *pb.ReorderProviderAccountsRequest,
+) (*pb.ReorderProviderAccountsResponse, error) {
 	userID, err := callerID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	provider := req.Msg.GetProvider()
+	provider := req.GetProvider()
 	if provider == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("provider is required"))
 	}
-	if err := s.deps.Store.ReorderProviderAccounts(ctx, userID, provider, req.Msg.GetAccountIds()); err != nil {
+	if err := s.deps.Store.ReorderProviderAccounts(ctx, userID, provider, req.GetAccountIds()); err != nil {
 		return nil, wrapAccountErr(err)
 	}
 	s.afterChange(ctx, userID, provider)
@@ -36,7 +35,7 @@ func (s *Service) ReorderProviderAccounts(
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
-	return connect.NewResponse(&pb.ReorderProviderAccountsResponse{
+	return &pb.ReorderProviderAccountsResponse{
 		Accounts: protoAll(accounts, limits, provider, time.Now()),
-	}), nil
+	}, nil
 }

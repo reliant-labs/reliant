@@ -16,9 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/golang-jwt/jwt/v5"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -152,31 +153,15 @@ func newScopeHarness(t *testing.T) *scopeHarness {
 	}).SignedString(key)
 	require.NoError(t, err)
 
+	server := connect.NewServer(interceptor.Intercept, svcerr.InterceptorV2())
+	reliantv1connect.RegisterRunServiceHandler(server, reliantv1connect.UnimplementedRunServiceHandler{})
+	reliantv1connect.RegisterTriggerServiceHandler(server, reliantv1connect.UnimplementedTriggerServiceHandler{})
+	reliantv1connect.RegisterChatServiceHandler(server, reliantv1connect.UnimplementedChatServiceHandler{})
+	reliantv1connect.RegisterInboxServiceHandler(server, reliantv1connect.UnimplementedInboxServiceHandler{})
+	reliantv1connect.RegisterQuestionServiceHandler(server, reliantv1connect.UnimplementedQuestionServiceHandler{})
+	reliantv1connect.RegisterApprovalServiceHandler(server, reliantv1connect.UnimplementedApprovalServiceHandler{})
 	mux := http.NewServeMux()
-	opts := connect.WithInterceptors(interceptor)
-	for _, mount := range []func() (string, http.Handler){
-		func() (string, http.Handler) {
-			return reliantv1connect.NewRunServiceHandler(reliantv1connect.UnimplementedRunServiceHandler{}, opts)
-		},
-		func() (string, http.Handler) {
-			return reliantv1connect.NewTriggerServiceHandler(reliantv1connect.UnimplementedTriggerServiceHandler{}, opts)
-		},
-		func() (string, http.Handler) {
-			return reliantv1connect.NewChatServiceHandler(reliantv1connect.UnimplementedChatServiceHandler{}, opts)
-		},
-		func() (string, http.Handler) {
-			return reliantv1connect.NewInboxServiceHandler(reliantv1connect.UnimplementedInboxServiceHandler{}, opts)
-		},
-		func() (string, http.Handler) {
-			return reliantv1connect.NewQuestionServiceHandler(reliantv1connect.UnimplementedQuestionServiceHandler{}, opts)
-		},
-		func() (string, http.Handler) {
-			return reliantv1connect.NewApprovalServiceHandler(reliantv1connect.UnimplementedApprovalServiceHandler{}, opts)
-		},
-	} {
-		path, h := mount()
-		mux.Handle(path, h)
-	}
+	mountkit.MountV2(mux, server)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return &scopeHarness{interceptor: interceptor, url: srv.URL, authority: authority, session: session}

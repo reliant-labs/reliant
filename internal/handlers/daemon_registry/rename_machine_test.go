@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -34,10 +34,10 @@ func TestRenameMachine(t *testing.T) {
 			mu.Lock()
 			defer mu.Unlock()
 			if jwt != "session-jwt" {
-				return connect.NewError(connect.CodeUnauthenticated, errors.New("missing owner in context"))
+				return connect.NewError(connect.CodeUnauthenticated, "missing owner in context")
 			}
 			if name == "cicd" {
-				return connect.NewError(connect.CodeAlreadyExists, errors.New(`a machine named "cicd" already exists; choose another name`))
+				return connect.NewError(connect.CodeAlreadyExists, `a machine named "cicd" already exists; choose another name`)
 			}
 			cpCalls = append(cpCalls, daemonID+"="+name)
 			return nil
@@ -60,10 +60,10 @@ func TestRenameMachine(t *testing.T) {
 	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo, Names: names}))
 	noCP := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{Repo: repo}))
 
-	req := func(id, name string) *connect.Request[pb.RenameMachineRequest] {
-		return connect.NewRequest(&pb.RenameMachineRequest{DaemonId: id, Name: name})
+	req := func(id, name string) *pb.RenameMachineRequest {
+		return &pb.RenameMachineRequest{DaemonId: id, Name: name}
 	}
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.RenameMachineRequest, pb.RenameMachineResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.RenameMachineRequest, pb.RenameMachineResponse]{
 		{Name: "unauthenticated", Req: req("d-1", "big-box"), Ctx: context.Background(), WantErr: connect.CodeUnauthenticated},
 		{Name: "no daemon id", Req: req("", "big-box"), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeInvalidArgument},
 		{Name: "uppercase refused", Req: req("d-1", "Big-Box"), Ctx: daemon_registry.AuthedContext(t), WantErr: connect.CodeInvalidArgument},
@@ -74,8 +74,8 @@ func TestRenameMachine(t *testing.T) {
 			Name: "renamed at the control plane, then on the registry row",
 			Req:  req("d-1", " big-box "),
 			Ctx:  daemon_registry.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.RenameMachineResponse]) {
-				if got := resp.Msg.GetDaemon(); got.GetName() != "big-box" || got.GetDaemonId() != "d-1" {
+			Check: func(t *testing.T, resp *pb.RenameMachineResponse) {
+				if got := resp.GetDaemon(); got.GetName() != "big-box" || got.GetDaemonId() != "d-1" {
 					t.Fatalf("response daemon = %s/%q, want d-1/big-box", got.GetDaemonId(), got.GetName())
 				}
 			},

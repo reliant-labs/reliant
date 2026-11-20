@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -19,21 +19,21 @@ func TestGetProjectChanges_Generated(t *testing.T) {
 
 	routed := newService(t, ownedProjectRepo(t), answering("project.git_changes", `{"path":"/work"}`,
 		`{"branch":"main","files":[{"path":"a.go","status":"modified"},{"path":"b.go","status":"untracked","is_new":true}],"total_files":2}`))
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetProjectChangesRequest, pb.GetProjectChangesResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetProjectChangesRequest, pb.GetProjectChangesResponse]{
 		{
 			Name:    "a project the caller does not own is not found",
-			Req:     connect.NewRequest(&pb.GetProjectChangesRequest{ProjectId: "p-2"}),
+			Req:     &pb.GetProjectChangesRequest{ProjectId: "p-2"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the daemon's changes are returned with their status",
-			Req:  connect.NewRequest(&pb.GetProjectChangesRequest{ProjectId: "p-1"}),
+			Req:  &pb.GetProjectChangesRequest{ProjectId: "p-1"},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.GetProjectChangesResponse]) {
-				files := resp.Msg.GetFiles()
-				if resp.Msg.GetBranch() != "main" || resp.Msg.GetTotalFiles() != 2 || len(files) != 2 {
-					t.Fatalf("changes = %v, want two files on main", resp.Msg)
+			Check: func(t *testing.T, resp *pb.GetProjectChangesResponse) {
+				files := resp.GetFiles()
+				if resp.GetBranch() != "main" || resp.GetTotalFiles() != 2 || len(files) != 2 {
+					t.Fatalf("changes = %v, want two files on main", resp)
 				}
 				if files[0].GetStatus() != pb.FileChangeStatus_FILE_CHANGE_STATUS_MODIFIED ||
 					files[1].GetStatus() != pb.FileChangeStatus_FILE_CHANGE_STATUS_UNTRACKED || !files[1].GetIsNew() {
@@ -53,10 +53,10 @@ func TestGetProjectChanges_Generated(t *testing.T) {
 		}, nil
 	}
 	ambiguous := newService(t, multi, nil)
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetProjectChangesRequest, pb.GetProjectChangesResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.GetProjectChangesRequest, pb.GetProjectChangesResponse]{
 		{
 			Name:    "a multi-repo project needs a repo_id",
-			Req:     connect.NewRequest(&pb.GetProjectChangesRequest{ProjectId: "p-1"}),
+			Req:     &pb.GetProjectChangesRequest{ProjectId: "p-1"},
 			Ctx:     project.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},

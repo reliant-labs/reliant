@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -41,9 +40,9 @@ func TestRedactedThinkingCiphertextNeverReachesAClient(t *testing.T) {
 
 	t.Run("ListMessages sends the block blank in every mode", func(t *testing.T) {
 		for _, mode := range []*reliantv1.ToolBodyMode{nil, reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL.Enum(), reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum()} {
-			resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: mode}))
+			resp, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{ChatId: f.ChatID, ToolBodies: mode})
 			require.NoError(t, err)
-			block := blocksByID(resp.Msg.Messages)[sealedID]
+			block := blocksByID(resp.Messages)[sealedID]
 			require.NotNil(t, block, "the block is still listed, mode %v", mode)
 			assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING, block.GetType())
 			assert.EqualValues(t, position, block.GetIndex())
@@ -51,7 +50,7 @@ func TestRedactedThinkingCiphertextNeverReachesAClient(t *testing.T) {
 			assert.Empty(t, block.GetContent(), "mode %v", mode)
 			assert.Nil(t, block.BodyElided, "nothing to fetch, mode %v", mode)
 			assert.Nil(t, block.BodySize, "mode %v", mode)
-			wire, err := json.Marshal(resp.Msg)
+			wire, err := json.Marshal(resp)
 			require.NoError(t, err)
 			assert.NotContains(t, string(wire), ciphertext, "mode %v", mode)
 		}
@@ -59,13 +58,13 @@ func TestRedactedThinkingCiphertextNeverReachesAClient(t *testing.T) {
 
 	t.Run("GetContentBlockBodies sends it blank, even with full", func(t *testing.T) {
 		for _, full := range []*bool{nil, ptr.Of(true)} {
-			resp, err := svc.GetContentBlockBodies(ctx, connect.NewRequest(&reliantv1.GetContentBlockBodiesRequest{
+			resp, err := svc.GetContentBlockBodies(ctx, &reliantv1.GetContentBlockBodiesRequest{
 				ChatId: f.ChatID, BlockIds: []string{sealedID}, Full: full,
-			}))
+			})
 			require.NoError(t, err)
-			require.Len(t, resp.Msg.Bodies, 1)
-			require.NotNil(t, resp.Msg.Bodies[0].Content)
-			assert.Empty(t, resp.Msg.Bodies[0].GetContent())
+			require.Len(t, resp.Bodies, 1)
+			require.NotNil(t, resp.Bodies[0].Content)
+			assert.Empty(t, resp.Bodies[0].GetContent())
 		}
 	})
 
@@ -82,10 +81,10 @@ func TestRedactedThinkingCiphertextNeverReachesAClient(t *testing.T) {
 		require.NoError(t, repo.CreateChatUpdate(ctx, f.ChatID, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,
 			f.AssistantMessageID, string(old)))
 
-		resp, err := svc.GetChatUpdates(ctx, connect.NewRequest(&reliantv1.GetChatUpdatesRequest{ChatId: f.ChatID}))
+		resp, err := svc.GetChatUpdates(ctx, &reliantv1.GetChatUpdatesRequest{ChatId: f.ChatID})
 		require.NoError(t, err)
 		seen := 0
-		for _, u := range resp.Msg.Updates {
+		for _, u := range resp.Updates {
 			assert.NotContains(t, u.Data, ciphertext)
 			if strings.Contains(u.Data, sealedID) {
 				seen++

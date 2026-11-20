@@ -3,14 +3,18 @@ package grpc
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // The daemon-gateway ends every daemon stream it holds with
@@ -23,19 +27,28 @@ import (
 // written, at INFO, with expected=true — and never reported.
 func TestDrainingStreamIsAnExpectedOutcomeNotAFailure(t *testing.T) {
 	lines := installProcessLogging(t)
-	draining := connect.NewError(connect.CodeUnavailable, svcerr.Draining(
-		"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica"))
+	cause := svcerr.Draining("gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica")
+	draining := connect.NewError(connect.CodeUnavailable, cause.Error()).WithCause(cause)
 	api := newFailingAPI(t, map[string]error{
 		watchFilesProcedure:  draining,
 		sendMessageProcedure: daemonFault("2aab1465-0d3c-4b8e-9b1e-5f0c1d2e3f40"),
 	})
 
-	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, api.url+watchFilesProcedure)
-	stream, err := client.CallServerStream(context.Background(), connect.NewRequest(&emptypb.Empty{}))
+	stream, err := rpcclient.New(http.DefaultClient, api.url, nil).CallServerStream(context.Background(),
+		connect.Spec{StreamType: connect.StreamTypeServer, Procedure: watchFilesProcedure}, &emptypb.Empty{})
 	require.NoError(t, err)
-	for stream.Receive() {
+	var streamErr error
+	for {
+		err := stream.Receive(&emptypb.Empty{})
+		if err != nil {
+			streamErr = err
+			break
+		}
 	}
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(stream.Err()),
+	if errors.Is(streamErr, io.EOF) {
+		streamErr = nil
+	}
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(streamErr),
 		"the client still receives Unavailable: that is its reconnect signal")
 	require.NoError(t, stream.Close())
 

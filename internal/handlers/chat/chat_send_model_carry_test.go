@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -115,12 +114,12 @@ func carryFixture(t *testing.T, dbStatus db.WorkflowStatus, temporalStatus enums
 	return ctx, fx, repo, temporal, service
 }
 
-func sendContinue(chatID string, params map[string]*structpb.Value) *connect.Request[reliantv1.SendMessageRequest] {
-	return connect.NewRequest(&reliantv1.SendMessageRequest{
+func sendContinue(chatID string, params map[string]*structpb.Value) *reliantv1.SendMessageRequest {
+	return &reliantv1.SendMessageRequest{
 		ChatId:         chatID,
 		Messages:       []*reliantv1.InputMessage{{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: "continue"}},
 		WorkflowParams: params,
-	})
+	}
 }
 
 // modelUpdateBeforeResume returns the model id the run was sent in an input

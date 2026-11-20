@@ -6,10 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -74,7 +73,7 @@ func TestUnattendedFundingFor(t *testing.T) {
 			switch {
 			case tc.refused:
 				require.Error(t, err)
-				assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+				assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 			case tc.countErr != nil:
 				require.Error(t, err)
 				assert.Empty(t, got)
@@ -147,7 +146,7 @@ func TestUnattendedFundingFor_PolicyMayAllowLoosening(t *testing.T) {
 			setPlatform(t, tc.platform)
 			_, err := loosen(tc.doc)
 			require.Error(t, err)
-			assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+			assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 		})
 	}
 
@@ -156,7 +155,7 @@ func TestUnattendedFundingFor_PolicyMayAllowLoosening(t *testing.T) {
 		ctx := orgpolicy.WithResolver(context.Background(), orgpolicy.New(downPolicy{}))
 		_, err := s.unattendedFundingFor(ctx, "owner", &org, reliantv1.UnattendedFunding_UNATTENDED_FUNDING_ANY, existing)
 		require.Error(t, err)
-		assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+		assert.Equal(t, ReasonOrgOnlyAutomation, svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 	})
 }
 

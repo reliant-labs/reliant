@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,17 +17,17 @@ import (
 // agent credential: accepting makes runs execute as them.
 func (s *Service) AcceptTriggerOffer(
 	ctx context.Context,
-	req *connect.Request[pb.AcceptTriggerOfferRequest],
-) (*connect.Response[pb.AcceptTriggerOfferResponse], error) {
+	req *pb.AcceptTriggerOfferRequest,
+) (*pb.AcceptTriggerOfferResponse, error) {
 	if err := auth.RequirePerson(ctx, "accept an automation"); err != nil {
 		return nil, err
 	}
 	callerID := auth.MustGetUserID(ctx)
-	offer, err := s.ownOffer(ctx, callerID, req.Msg.GetOfferId())
+	offer, err := s.ownOffer(ctx, callerID, req.GetOfferId())
 	if err != nil {
 		return nil, err
 	}
-	if req.Msg.Rebinding == nil {
+	if req.Rebinding == nil {
 		return nil, svcerr.InvalidArgument("rebinding is required: accepting an automation means choosing your own project, machine and connections for it")
 	}
 	t, err := s.deps.Repo.GetTrigger(ctx, offer.TriggerID)
@@ -42,11 +41,11 @@ func (s *Service) AcceptTriggerOffer(
 	if !live {
 		return nil, notLive(offer)
 	}
-	adopted, err := s.deps.Triggers.AdoptAs(ctx, t, callerID, req.Msg.Rebinding, offer.ID)
+	adopted, err := s.deps.Triggers.AdoptAs(ctx, t, callerID, req.Rebinding, offer.ID)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(adopted), nil
+	return adopted, nil
 }
 
 // ownOffer loads offer id for its offeree. Anyone else's, like a missing

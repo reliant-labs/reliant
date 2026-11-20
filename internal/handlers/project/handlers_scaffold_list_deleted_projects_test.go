@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -34,13 +32,13 @@ func TestListDeletedProjects_Generated(t *testing.T) {
 	}
 	svc := newService(t, store, nil)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListDeletedProjectsRequest, pb.ListDeletedProjectsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListDeletedProjectsRequest, pb.ListDeletedProjectsResponse]{
 		{
 			Name: "lists the caller's restorable projects with their purge date, and nothing they may not restore",
-			Req:  connect.NewRequest(&pb.ListDeletedProjectsRequest{}),
+			Req:  &pb.ListDeletedProjectsRequest{},
 			Ctx:  project.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListDeletedProjectsResponse]) {
-				got := resp.Msg.GetProjects()
+			Check: func(t *testing.T, resp *pb.ListDeletedProjectsResponse) {
+				got := resp.GetProjects()
 				if len(got) != 1 || got[0].GetId() != "p-1" {
 					t.Fatalf("projects = %v, want only p-1", got)
 				}

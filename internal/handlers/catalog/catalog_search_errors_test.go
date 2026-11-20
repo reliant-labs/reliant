@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,10 +35,10 @@ func TestCatalogSearchErrorCodes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			search := &StubSearch{GetFunc: func(context.Context, string, string) (*catalogindex.Entry, bool, error) { return nil, false, c.err }}
 			svc := NewTestCatalog(t, WithCatalogDeps(Deps{Search: search}))
-			_, err := svc.GetCatalogEntry(asUser("alice"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "acme.thing"}))
+			_, err := svc.GetCatalogEntry(asUser("alice"), &reliantv1.GetCatalogEntryRequest{Ref: "acme.thing"})
 			require.Error(t, err)
-			assert.Equal(t, c.code, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, c.code, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.NotContains(t, msg, "secret")
 			if c.msg != "" {
 				assert.Equal(t, c.msg, msg)
@@ -53,8 +53,8 @@ func TestCatalogErrorsOnTheWire(t *testing.T) {
 		return nil, catalogindex.ErrInvalidPageToken
 	}}
 	_, client := NewTestCatalogServer(t, WithCatalogDeps(Deps{Search: search}))
-	_, err := client.SearchCatalog(context.Background(), connect.NewRequest(&reliantv1.SearchCatalogRequest{PageToken: "x"}))
+	_, err := client.SearchCatalog(context.Background(), &reliantv1.SearchCatalogRequest{PageToken: "x"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-	assert.Equal(t, "invalid page token", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
+	assert.Equal(t, "invalid page token", svcerr.ToConnectV2(err).Message())
 }

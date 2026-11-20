@@ -11,7 +11,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -117,7 +117,7 @@ func TestHandleIncomingEndsImmediatelyWhenSuperseded(t *testing.T) {
 	select {
 	case err := <-errCh:
 		require.Error(t, err, "a superseded stream must not end with a bare nil/EOF")
-		require.Equal(t, connect.CodeAborted, svcerr.Code(err),
+		require.Equal(t, connect.CodeAborted, svcerr.CodeV2(err),
 			"the daemon distinguishes supersession from a network drop by this code")
 	case <-time.After(30 * time.Second):
 		t.Fatal("handleIncoming stayed parked in Receive after the connection was superseded")
@@ -155,7 +155,7 @@ func TestSupersedeIncumbentRecordsAbortedReason(t *testing.T) {
 	conn := newTestConn("user-1", uuid.NewString(), newParkedStream())
 	svc.supersedeIncumbent(conn)
 
-	require.Equal(t, connect.CodeAborted, svcerr.Code(conn.closedReason()))
+	require.Equal(t, connect.CodeAborted, svcerr.CodeV2(conn.closedReason()))
 }
 
 // The connection that holds the pending-response entry must be the connection

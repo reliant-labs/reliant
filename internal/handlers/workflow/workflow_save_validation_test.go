@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -105,13 +104,13 @@ func assertHasNodeOrderingError(t *testing.T, errs []*reliantv1.ValidationError)
 
 func saveWorkflow(t *testing.T, ctx context.Context, svc *Service, projectID, src string, status reliantv1.WorkflowDraftStatus) *reliantv1.SaveWorkflowResponse {
 	t.Helper()
-	resp, err := svc.SaveWorkflow(ctx, connect.NewRequest(&reliantv1.SaveWorkflowRequest{
+	resp, err := svc.SaveWorkflow(ctx, &reliantv1.SaveWorkflowRequest{
 		ProjectId: projectID,
 		Workflow:  mustParse(t, src),
 		Status:    status,
-	}))
+	})
 	require.NoError(t, err)
-	return resp.Msg
+	return resp
 }
 
 // An invalid workflow saved as a draft (the default intent) is STORED, with
@@ -238,13 +237,13 @@ func TestSetWorkflowStatus_MarkCompleteIsGatedByValidation(t *testing.T) {
 	require.True(t, saved.Success, saved.Message)
 
 	markComplete := func() *reliantv1.SetWorkflowStatusResponse {
-		resp, err := svc.SetWorkflowStatus(ctx, connect.NewRequest(&reliantv1.SetWorkflowStatusRequest{
+		resp, err := svc.SetWorkflowStatus(ctx, &reliantv1.SetWorkflowStatusRequest{
 			ProjectId: projectID,
 			DraftId:   saved.Id,
 			Status:    reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
-		}))
+		})
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 
 	rejected := markComplete()
@@ -266,14 +265,14 @@ func TestSetWorkflowStatus_MarkCompleteIsGatedByValidation(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, usable, "a complete workflow is runnable")
 
-	back, err := svc.SetWorkflowStatus(ctx, connect.NewRequest(&reliantv1.SetWorkflowStatusRequest{
+	back, err := svc.SetWorkflowStatus(ctx, &reliantv1.SetWorkflowStatusRequest{
 		ProjectId: projectID,
 		DraftId:   saved.Id,
 		Status:    reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
-	}))
+	})
 	require.NoError(t, err)
-	assert.True(t, back.Msg.Success)
-	assert.Equal(t, reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT, back.Msg.Status)
+	assert.True(t, back.Success)
+	assert.Equal(t, reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT, back.Status)
 }
 
 // ImportWorkflow follows the same rules: an invalid import is stored as a
@@ -281,25 +280,25 @@ func TestSetWorkflowStatus_MarkCompleteIsGatedByValidation(t *testing.T) {
 func TestImportWorkflow_InvalidDraftStoredCompleteRejected(t *testing.T) {
 	ctx, repo, svc, projectID := saveTestSetup(t)
 
-	rejected, err := svc.ImportWorkflow(ctx, connect.NewRequest(&reliantv1.ImportWorkflowRequest{
+	rejected, err := svc.ImportWorkflow(ctx, &reliantv1.ImportWorkflowRequest{
 		ProjectId:   projectID,
 		YamlContent: []byte(routerSkipWorkflow),
 		Status:      reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
-	}))
+	})
 	require.NoError(t, err)
-	assert.False(t, rejected.Msg.Success)
+	assert.False(t, rejected.Success)
 	stored, err := repo.GetWorkflowDraftBySlug(ctx, "test-user", "save-router-skip")
 	require.NoError(t, err)
 	assert.Nil(t, stored)
 
-	imported, err := svc.ImportWorkflow(ctx, connect.NewRequest(&reliantv1.ImportWorkflowRequest{
+	imported, err := svc.ImportWorkflow(ctx, &reliantv1.ImportWorkflowRequest{
 		ProjectId:   projectID,
 		YamlContent: []byte(routerSkipWorkflow),
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, imported.Msg.Success, imported.Msg.Message)
-	assert.Equal(t, reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT, imported.Msg.Status)
-	assertHasNodeOrderingError(t, imported.Msg.ValidationErrors)
+	require.True(t, imported.Success, imported.Message)
+	assert.Equal(t, reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT, imported.Status)
+	assertHasNodeOrderingError(t, imported.ValidationErrors)
 }
 
 // ListWorkflows: the default (chat-safe) listing offers only complete,
@@ -322,17 +321,17 @@ func TestListWorkflows_StatusAndComputedValidity(t *testing.T) {
 	validDraft := strings.Replace(validLifecycleWorkflow, "name: save-router-skip", "name: valid-draft", 1)
 	create("valid-draft", validDraft, db.WorkflowDraftStatusDraft)
 
-	def, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID}))
+	def, err := svc.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{ProjectId: projectID})
 	require.NoError(t, err)
-	for _, wf := range def.Msg.Workflows {
+	for _, wf := range def.Workflows {
 		assert.NotEqual(t, "save-router-skip", wf.Filename, "a workflow that fails validation now must not be offered for chats")
 		assert.NotEqual(t, "valid-draft", wf.Filename, "a draft must not be offered where a runnable workflow is required")
 	}
 
-	all, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: projectID, IncludeHidden: proto.Bool(true)}))
+	all, err := svc.ListWorkflows(ctx, &reliantv1.ListWorkflowsRequest{ProjectId: projectID, IncludeHidden: proto.Bool(true)})
 	require.NoError(t, err)
 	listed := map[string]*reliantv1.WorkflowListItem{}
-	for _, wf := range all.Msg.Workflows {
+	for _, wf := range all.Workflows {
 		listed[wf.Filename] = wf
 	}
 	stale := listed["save-router-skip"]

@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -40,13 +40,13 @@ func TestGetWorkflowNodeExecutions_TheRunsNewestEventPerNode(t *testing.T) {
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeWorkflowStatus, "run-1", `{"status":"completed"}`))
 
 	service := &Service{deps: Deps{Repo: repo}}
-	resp, err := service.GetWorkflowNodeExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowNodeExecutionsRequest{
+	resp, err := service.GetWorkflowNodeExecutions(ctx, &reliantv1.GetWorkflowNodeExecutionsRequest{
 		ChatId: chatID, WorkflowId: "run-1",
-	}))
+	})
 	require.NoError(t, err)
 
 	var got []string
-	for _, u := range resp.Msg.GetUpdates() {
+	for _, u := range resp.GetUpdates() {
 		require.Equal(t, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION.String(), u.GetUpdateType())
 		got = append(got, u.GetEntityId()+" "+u.GetData())
 	}
@@ -56,8 +56,8 @@ func TestGetWorkflowNodeExecutions_TheRunsNewestEventPerNode(t *testing.T) {
 	}, got)
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
-	_, err = service.GetWorkflowNodeExecutions(otherCtx, connect.NewRequest(&reliantv1.GetWorkflowNodeExecutionsRequest{
+	_, err = service.GetWorkflowNodeExecutions(otherCtx, &reliantv1.GetWorkflowNodeExecutionsRequest{
 		ChatId: chatID, WorkflowId: "run-1",
-	}))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	})
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }

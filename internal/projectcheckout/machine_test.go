@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -61,8 +61,8 @@ func TestOn_NotThereNamesTheMachinesThatHaveItAndHowToRecover(t *testing.T) {
 	f := fleet{rows: []*core.ProjectDaemon{installed("laptop", "/Users/creator/cp")}}
 	_, err := On(context.Background(), f, "u", withRemote, "cloud", "keep working in this chat")
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.ToConnect(err).Code())
-	msg := svcerr.ToConnect(err).Message()
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.ToConnectV2(err).Code())
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.Contains(t, msg, `"cp" isn't checked out on "Cloud box"`)
 	assert.Contains(t, msg, `switch to "Sean's Mac", which has it`)
 	assert.Contains(t, msg, `clone it onto "Cloud box"`)
@@ -130,7 +130,7 @@ func TestOn_AnotherAccountsMachineIsNeverNamed(t *testing.T) {
 	f := fleet{rows: []*core.ProjectDaemon{installed("laptop", "/Users/creator/cp")}, owner: map[string]string{"cloud": "someone-else"}}
 	_, err := On(context.Background(), f, "u", withRemote, "cloud", "keep working in this chat")
 	require.Error(t, err)
-	msg := svcerr.ToConnect(err).Message()
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.NotContains(t, msg, "Cloud box", "another account's machine name leaked")
 	assert.Contains(t, msg, `"cp" isn't checked out on machine cloud`)
 	assert.Contains(t, msg, `switch to "Sean's Mac", which has it`, "the user's own machines are still named")
@@ -141,7 +141,7 @@ func TestOn_CloningSaysWaitNotClone(t *testing.T) {
 	f := fleet{rows: []*core.ProjectDaemon{{DaemonID: "cloud", Path: "/home/workspace/projects/cp", InstallState: core.ProjectInstallInstalling}}}
 	_, err := On(context.Background(), f, "u", withRemote, "cloud", "keep working")
 	require.Error(t, err)
-	msg := svcerr.ToConnect(err).Message()
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.Contains(t, msg, `still being cloned onto "Cloud box"`)
 	assert.NotContains(t, msg, "clone it onto")
 	assert.Equal(t, reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING, detailOf(t, err).State)
@@ -155,7 +155,7 @@ func TestOn_AnotherUsersMachineIsNeitherAnswerNorSuggestion(t *testing.T) {
 	}
 	_, err := On(context.Background(), f, "u", mac, "cloud", "keep working")
 	require.Error(t, err)
-	msg := svcerr.ToConnect(err).Message()
+	msg := svcerr.ToConnectV2(err).Message()
 	assert.NotContains(t, msg, "switch to")
 	assert.Contains(t, msg, "connect the machine that holds its folder", "a plain folder with no remote cannot be cloned")
 }

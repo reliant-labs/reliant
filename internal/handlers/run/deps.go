@@ -6,8 +6,6 @@ package run
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -43,10 +41,10 @@ type Repository interface {
 // Chat is the slice of the chat service a run is controlled through. The
 // chat service implements it; run never imports it.
 type Chat interface {
-	StartChat(ctx context.Context, req *connect.Request[pb.StartChatRequest]) (*connect.Response[pb.StartChatResponse], error)
-	SendMessage(ctx context.Context, req *connect.Request[pb.SendMessageRequest]) (*connect.Response[pb.SendMessageResponse], error)
-	PauseChat(ctx context.Context, req *connect.Request[pb.PauseChatRequest]) (*connect.Response[pb.PauseChatResponse], error)
-	ResumeChat(ctx context.Context, req *connect.Request[pb.ResumeChatRequest]) (*connect.Response[pb.ResumeChatResponse], error)
-	TerminateChat(ctx context.Context, req *connect.Request[pb.TerminateChatRequest]) (*connect.Response[pb.TerminateChatResponse], error)
-	InterruptThread(ctx context.Context, req *connect.Request[pb.InterruptThreadRequest]) (*connect.Response[pb.InterruptThreadResponse], error)
+	StartChat(ctx context.Context, req *pb.StartChatRequest) (*pb.StartChatResponse, error)
+	SendMessage(ctx context.Context, req *pb.SendMessageRequest) (*pb.SendMessageResponse, error)
+	PauseChat(ctx context.Context, req *pb.PauseChatRequest) (*pb.PauseChatResponse, error)
+	ResumeChat(ctx context.Context, req *pb.ResumeChatRequest) (*pb.ResumeChatResponse, error)
+	TerminateChat(ctx context.Context, req *pb.TerminateChatRequest) (*pb.TerminateChatResponse, error)
+	InterruptThread(ctx context.Context, req *pb.InterruptThreadRequest) (*pb.InterruptThreadResponse, error)
 }

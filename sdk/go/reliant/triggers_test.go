@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
@@ -39,7 +39,7 @@ func TestTriggersGetFallsBackToNameAndNeverGuessesBetweenProjects(t *testing.T) 
 	}
 	f := &fake{
 		getTrigger: func(*reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error) {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("no such trigger"))
+			return nil, connect.NewError(connect.CodeNotFound, "no such trigger")
 		},
 		listTriggers: func(*reliantv1.ListTriggersRequest) (*reliantv1.ListTriggersResponse, error) {
 			return &reliantv1.ListTriggersResponse{Triggers: list}, nil
@@ -67,7 +67,7 @@ func TestTriggersGetFallsBackToNameAndNeverGuessesBetweenProjects(t *testing.T) 
 
 func TestTriggersGetDoesNotMaskAnAuthFailureAsAMissingTrigger(t *testing.T) {
 	f := &fake{getTrigger: func(*reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("bad token"))
+		return nil, connect.NewError(connect.CodeUnauthenticated, "bad token")
 	}}
 	c, _ := f.start(t)
 	_, err := c.Triggers.Get(context.Background(), "x")
@@ -83,7 +83,7 @@ func TestTriggersFireResolvesNameAndReturnsTheFiringID(t *testing.T) {
 	var fired string
 	f := &fake{
 		getTrigger: func(*reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error) {
-			return nil, connect.NewError(connect.CodeNotFound, nil)
+			return nil, connect.NewError(connect.CodeNotFound, "")
 		},
 		listTriggers: func(*reliantv1.ListTriggersRequest) (*reliantv1.ListTriggersResponse, error) {
 			return &reliantv1.ListTriggersResponse{Triggers: []*reliantv1.Trigger{{Id: "t-9", Name: "nightly"}}}, nil

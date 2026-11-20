@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,7 +55,7 @@ func TestFileSystemProxy_ChatlessTreeIsReadOnAMachineThatHasIt(t *testing.T) {
 
 			router := &placingRouter{def: mac}
 			svc := newProxy(t, router, repo)
-			_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"}))
+			_, err := svc.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"})
 			require.NoError(t, err)
 			assert.Equal(t, []string{tc.want + " fs.get_tree"}, router.sent)
 		})
@@ -78,10 +78,10 @@ func TestFileSystemProxy_AChatPinnedToAMachineWithoutTheCheckoutIsRefused(t *tes
 
 	router := &placingRouter{def: mac}
 	svc := newProxy(t, router, repo)
-	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, ChatId: &chatID, Path: "/"}))
+	_, err := svc.GetFileTree(ctx, &reliantv1.GetFileTreeRequest{ProjectId: projectID, ChatId: &chatID, Path: "/"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Contains(t, svcerr.ToConnect(err).Message(), "switch to")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Contains(t, svcerr.ToConnectV2(err).Message(), "switch to")
 	assert.Empty(t, router.sent, "a machine without the checkout is never sent a path")
 
 	d := checkoutMissingDetail(t, err)
@@ -95,9 +95,9 @@ func TestFileSystemProxy_AChatPinnedToAMachineWithoutTheCheckoutIsRefused(t *tes
 func TestFileSystemProxy_MissingRootListsTheOtherMachinesThatHaveIt(t *testing.T) {
 	repo, projectID, _ := seedFSProxyProjectOn(t, "2aab1465", "cicd")
 	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
-	_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID}))
+	_, err := svc.GetFileTree(fsProxyContext(), &reliantv1.GetFileTreeRequest{ProjectId: projectID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
 	d := checkoutMissingDetail(t, err)
 	other := map[string]string{"2aab1465": "cicd", "cicd": "2aab1465"}[d.GetDaemonId()]
@@ -149,10 +149,10 @@ func TestFileSystemProxy_ChatlessRequestForAProjectTheCallerMayNotUseIsNotFound(
 
 			router := &placingRouter{def: mac}
 			svc := newProxy(t, router, repo)
-			_, err := svc.GetFileTree(tc.ctx(fsProxyContext()), connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"}))
+			_, err := svc.GetFileTree(tc.ctx(fsProxyContext()), &reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "/"})
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-			cerr := svcerr.ToConnect(err)
+			assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+			cerr := svcerr.ToConnectV2(err)
 			assert.Empty(t, cerr.Details(), "no detail for a project the caller may not use")
 			msg := cerr.Message()
 			assert.NotContains(t, msg, "secret-project")

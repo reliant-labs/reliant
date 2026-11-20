@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -84,10 +84,10 @@ func seedThreadScopedChat(t *testing.T, repo *db.Repo, ctx context.Context, main
 	return f
 }
 
-func listThreadMessagesReq(chatID, threadID string) *connect.Request[reliantv1.ListMessagesRequest] {
-	return connect.NewRequest(&reliantv1.ListMessagesRequest{
+func listThreadMessagesReq(chatID, threadID string) *reliantv1.ListMessagesRequest {
+	return &reliantv1.ListMessagesRequest{
 		ChatId: chatID, ThreadId: &threadID,
-	})
+	}
 }
 
 // TestListMessages_ThreadScoped_ReturnsOnlyThatThread is the core guarantee:
@@ -106,13 +106,13 @@ func TestListMessages_ThreadScoped_ReturnsOnlyThatThread(t *testing.T) {
 	resp, err := svc.ListMessages(ctx, listThreadMessagesReq(f.chatID, f.spawnThread))
 	require.NoError(t, err)
 
-	gotIDs := make([]string, len(resp.Msg.Messages))
-	for i, m := range resp.Msg.Messages {
+	gotIDs := make([]string, len(resp.Messages))
+	for i, m := range resp.Messages {
 		gotIDs[i] = m.Id
 	}
 	require.ElementsMatch(t, f.spawnMsgIDs, gotIDs,
 		"a thread-scoped read must return exactly that thread's messages")
-	require.EqualValues(t, len(f.spawnMsgIDs), resp.Msg.Total)
+	require.EqualValues(t, len(f.spawnMsgIDs), resp.Total)
 }
 
 // TestListMessages_ThreadScoped_UnaffectedByMainThreadVolume is the bug this
@@ -135,9 +135,9 @@ func TestListMessages_ThreadScoped_UnaffectedByMainThreadVolume(t *testing.T) {
 
 	resp, err := svc.ListMessages(ctx, listThreadMessagesReq(f.chatID, f.spawnThread))
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Messages, 250,
+	require.Len(t, resp.Messages, 250,
 		"every message of the requested thread must be returned regardless of the chat's shape")
-	require.False(t, resp.Msg.HasMore, "an unbounded thread read has nothing older")
+	require.False(t, resp.HasMore, "an unbounded thread read has nothing older")
 }
 
 // TestListMessages_ThreadScoped_Bounded checks the cursor form: `recent`
@@ -153,16 +153,16 @@ func TestListMessages_ThreadScoped_Bounded(t *testing.T) {
 	svc := &Service{deps: Deps{Repo: repo}}
 
 	recent := int32(4)
-	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	resp, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{
 		ChatId: f.chatID, ThreadId: &f.spawnThread, Recent: &recent,
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Messages, 4, "recent bounds a thread-scoped page")
-	require.True(t, resp.Msg.HasMore, "6 older messages remain on this thread")
-	require.EqualValues(t, 10, resp.Msg.Total, "total counts the whole thread, not the page")
+	require.Len(t, resp.Messages, 4, "recent bounds a thread-scoped page")
+	require.True(t, resp.HasMore, "6 older messages remain on this thread")
+	require.EqualValues(t, 10, resp.Total, "total counts the whole thread, not the page")
 
 	// The page must be the NEWEST 4 of the thread.
-	require.Equal(t, f.spawnMsgIDs[len(f.spawnMsgIDs)-4:], idsOf(resp.Msg.Messages))
+	require.Equal(t, f.spawnMsgIDs[len(f.spawnMsgIDs)-4:], idsOf(resp.Messages))
 }
 
 // TestListMessages_ThreadScoped_UnknownThread proves an unresolvable thread is
@@ -180,7 +180,7 @@ func TestListMessages_ThreadScoped_UnknownThread(t *testing.T) {
 
 	_, err := svc.ListMessages(ctx, listThreadMessagesReq(f.chatID, uuid.New().String()))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }
 
 // TestListMessages_ThreadScoped_ThreadFromAnotherChat proves the thread must
@@ -198,7 +198,7 @@ func TestListMessages_ThreadScoped_ThreadFromAnotherChat(t *testing.T) {
 
 	_, err := svc.ListMessages(ctx, listThreadMessagesReq(a.chatID, b.spawnThread))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }
 
 // TestListMessages_ThreadIDUnset_MatchesChatWideBehavior pins the additive
@@ -218,19 +218,19 @@ func TestListMessages_ThreadIDUnset_MatchesChatWideBehavior(t *testing.T) {
 	svc := &Service{deps: Deps{Repo: repo}}
 
 	recent := int32(50)
-	page, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	page, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{
 		ChatId: f.chatID, Recent: &recent,
-	}))
+	})
 	require.NoError(t, err)
-	require.ElementsMatch(t, f.mainMsgIDs, idsOf(page.Msg.Messages),
+	require.ElementsMatch(t, f.mainMsgIDs, idsOf(page.Messages),
 		"a page is the main transcript: spawn-thread messages stay out, as in the snapshot")
-	require.EqualValues(t, len(f.mainMsgIDs)+len(f.spawnMsgIDs), page.Msg.Total,
+	require.EqualValues(t, len(f.mainMsgIDs)+len(f.spawnMsgIDs), page.Total,
 		"total stays the chat-wide count, as in the snapshot")
 
-	all, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.chatID}))
+	all, err := svc.ListMessages(ctx, &reliantv1.ListMessagesRequest{ChatId: f.chatID})
 	require.NoError(t, err)
 	want := append(append([]string{}, f.mainMsgIDs...), f.spawnMsgIDs...)
-	require.ElementsMatch(t, want, idsOf(all.Msg.Messages),
+	require.ElementsMatch(t, want, idsOf(all.Messages),
 		"omitting thread_id and recent still returns the whole chat")
 }
 

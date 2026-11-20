@@ -6,14 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/credentials"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -177,12 +177,12 @@ type TokenControlPlane struct {
 // or reliant:api. What it can do with that is bounded by the attenuation rule,
 // not by which session it is.
 func (s *Service) ExchangeToken(
-	ctx context.Context, req *connect.Request[reliantv1.ExchangeTokenRequest],
-) (*connect.Response[reliantv1.ExchangeTokenResponse], error) {
+	ctx context.Context, req *reliantv1.ExchangeTokenRequest,
+) (*reliantv1.ExchangeTokenResponse, error) {
 	// Re-read the calling token AUTHORITATIVELY: a cached answer can serve a
 	// just-revoked token for a while, and minting from a revoked credential
 	// is exactly the moment that must not happen.
-	subject, err := s.sessionCredential(ctx, req.Header())
+	subject, err := s.sessionCredential(ctx, serverkit.CallInfoV2(ctx).RequestHeader())
 	if err != nil {
 		return nil, err
 	}
@@ -192,13 +192,13 @@ func (s *Service) ExchangeToken(
 			svcerr.FailedPrecondition("this server has no control plane, so it issues no control-plane credentials"),
 			errreason.NoControlPlaneCredential)
 	}
-	audience := strings.TrimSpace(req.Msg.GetAudience())
+	audience := strings.TrimSpace(req.GetAudience())
 	if !sameControlPlane(audience, s.deps.ControlPlane.Issuer) {
 		return nil, svcerr.FailedPrecondition(fmt.Sprintf(
 			"tokens from this server are valid at %s, not %q; nothing was minted",
 			strings.TrimRight(s.deps.ControlPlane.Issuer, "/"), audience))
 	}
-	requested, err := requestedExchangeScopes(req.Msg.GetScopes())
+	requested, err := requestedExchangeScopes(req.GetScopes())
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (s *Service) ExchangeToken(
 	// scopes to the person's grants IN that org, so naming an org is never a
 	// way to hold more than the person does there; and the scopes are still
 	// capped by what the calling session holds, so it cannot widen either.
-	targetOrg := strings.TrimSpace(req.Msg.GetOrgId())
+	targetOrg := strings.TrimSpace(req.GetOrgId())
 	if targetOrg == "" {
 		targetOrg = subject.OrgID
 	}
@@ -300,13 +300,13 @@ func (s *Service) ExchangeToken(
 	if minted.ExpiresAt != nil {
 		out.ExpiresAt = formatTime(minted.ExpiresAt)
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // sessionCredential authenticates the request's bearer against the authority,
 // uncached, and requires it to be a Reliant session credential: live, acting
 // as a person, carrying daemon:connect or reliant:api.
-func (s *Service) sessionCredential(ctx context.Context, header http.Header) (*fat.Principal, error) {
+func (s *Service) sessionCredential(ctx context.Context, header *connect.Header) (*fat.Principal, error) {
 	bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
 	bearer = strings.TrimSpace(bearer)
 	if !ok || !auth.IsAccessTokenFormat(bearer) {

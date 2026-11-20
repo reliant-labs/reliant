@@ -9,7 +9,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/structpb"
 
@@ -106,13 +105,13 @@ itself, with a step that messages you.`,
 				return err
 			}
 			req := f.enableRequest(choices)
-			resp, err := newTriggerServiceClient(conn).EnableWorkflow(cmd.Context(), connect.NewRequest(req))
+			resp, err := newTriggerServiceClient(conn).EnableWorkflow(cmd.Context(), req)
 			if err != nil {
 				return conn.annotate(fmt.Errorf("enabling workflow %q: %w", f.workflow, err))
 			}
-			printWorkflowTriggerResults(cmd.OutOrStdout(), resp.Msg.GetResults())
-			if !resp.Msg.GetEnabled() {
-				return activateFailure(f.workflow, resp.Msg.GetResults())
+			printWorkflowTriggerResults(cmd.OutOrStdout(), resp.GetResults())
+			if !resp.GetEnabled() {
+				return activateFailure(f.workflow, resp.GetResults())
 			}
 			return nil
 		},
@@ -159,21 +158,21 @@ pause. Resume with activate; remove one activation with delete.`,
 			if projectID != "" {
 				req.ProjectId = &projectID
 			}
-			resp, err := newTriggerServiceClient(conn).DisableWorkflow(cmd.Context(), connect.NewRequest(req))
+			resp, err := newTriggerServiceClient(conn).DisableWorkflow(cmd.Context(), req)
 			if err != nil {
 				return conn.annotate(fmt.Errorf("disabling workflow %q: %w", workflow, err))
 			}
 			out := cmd.OutOrStdout()
-			for _, t := range resp.Msg.GetPaused() {
+			for _, t := range resp.GetPaused() {
 				fmt.Fprintf(out, "paused  %s (%s)\n", t.GetName(), t.GetId())
 			}
-			for _, fail := range resp.Msg.GetFailed() {
+			for _, fail := range resp.GetFailed() {
 				fmt.Fprintf(out, "FAILED  %s (%s): %s\n", fail.GetName(), fail.GetTriggerId(), fail.GetMessage())
 			}
-			if len(resp.Msg.GetFailed()) > 0 {
-				return fmt.Errorf("%d activation(s) of %q could not be paused", len(resp.Msg.GetFailed()), workflow)
+			if len(resp.GetFailed()) > 0 {
+				return fmt.Errorf("%d activation(s) of %q could not be paused", len(resp.GetFailed()), workflow)
 			}
-			if len(resp.Msg.GetPaused()) == 0 {
+			if len(resp.GetPaused()) == 0 {
 				fmt.Fprintf(out, "No enabled activations of %q.\n", workflow)
 			}
 			return nil

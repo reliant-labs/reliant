@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -15,8 +13,8 @@ import (
 // connectors.
 func (s *Service) ListAuthorizedClients(
 	ctx context.Context,
-	_ *connect.Request[reliantv1.ListAuthorizedClientsRequest],
-) (*connect.Response[reliantv1.ListAuthorizedClientsResponse], error) {
+	_ *reliantv1.ListAuthorizedClientsRequest,
+) (*reliantv1.ListAuthorizedClientsResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
@@ -46,5 +44,5 @@ func (s *Service) ListAuthorizedClients(
 			AuthorizedAt:  b.CreatedAt.UTC().Format(time.RFC3339),
 		})
 	}
-	return connect.NewResponse(&reliantv1.ListAuthorizedClientsResponse{Clients: out}), nil
+	return &reliantv1.ListAuthorizedClientsResponse{Clients: out}, nil
 }

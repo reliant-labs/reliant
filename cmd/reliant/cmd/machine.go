@@ -11,7 +11,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/oauth2"
 	"github.com/spf13/cobra"
 
@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/machinepool"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 )
 
 // `reliant machine` manages the user's own machines exactly as Settings ->
@@ -127,7 +128,7 @@ func machineClient(ctx context.Context, cmd *cobra.Command) (controlplanev1conne
 	if issuer == "" {
 		return nil, fmt.Errorf("%s names no control plane; machines are managed only on hosted Reliant", conn.ServerURL)
 	}
-	return controlplanev1connect.NewDaemonServiceClient(conn.httpClient(), issuer), nil
+	return controlplanev1connect.NewDaemonServiceClient(rpcclient.New(conn.httpClient(), issuer, nil)), nil
 }
 
 // explainMachineErr turns the control plane's refusal of a login without
@@ -141,12 +142,12 @@ func explainMachineErr(err error) error {
 
 // resolveMachine finds one of the user's machines by id or name.
 func resolveMachine(ctx context.Context, client controlplanev1connect.DaemonServiceClient, ref string) (*controlplanev1.Daemon, error) {
-	resp, err := client.ListDaemons(ctx, connect.NewRequest(&daemonv1.ListDaemonsRequest{}))
+	resp, err := client.ListDaemons(ctx, &daemonv1.ListDaemonsRequest{})
 	if err != nil {
 		return nil, explainMachineErr(err)
 	}
 	var byName []*controlplanev1.Daemon
-	for _, d := range resp.Msg.GetDaemons() {
+	for _, d := range resp.GetDaemons() {
 		if d.GetId() == ref {
 			return d, nil
 		}
@@ -202,11 +203,11 @@ func newMachineListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.ListDaemons(cmd.Context(), connect.NewRequest(&daemonv1.ListDaemonsRequest{}))
+			resp, err := client.ListDaemons(cmd.Context(), &daemonv1.ListDaemonsRequest{})
 			if err != nil {
 				return explainMachineErr(err)
 			}
-			return printMachines(cmd.OutOrStdout(), resp.Msg.GetDaemons())
+			return printMachines(cmd.OutOrStdout(), resp.GetDaemons())
 		},
 	}
 }
@@ -240,7 +241,7 @@ func newMachineStartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if _, err := client.ResumeDaemon(cmd.Context(), connect.NewRequest(&daemonv1.ResumeDaemonRequest{DaemonId: d.GetId()})); err != nil {
+			if _, err := client.ResumeDaemon(cmd.Context(), &daemonv1.ResumeDaemonRequest{DaemonId: d.GetId()}); err != nil {
 				if connect.CodeOf(err) == connect.CodeFailedPrecondition {
 					return fmt.Errorf("machine %s is not suspended: %w", d.GetName(), err)
 				}
@@ -267,7 +268,7 @@ func newMachineStopCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if _, err := client.SuspendDaemon(cmd.Context(), connect.NewRequest(&daemonv1.SuspendDaemonRequest{DaemonId: d.GetId()})); err != nil {
+			if _, err := client.SuspendDaemon(cmd.Context(), &daemonv1.SuspendDaemonRequest{DaemonId: d.GetId()}); err != nil {
 				return explainMachineErr(err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Stopping %s (%s).\n", d.GetName(), d.GetId())
@@ -298,7 +299,7 @@ downsize keeps the larger disk.`,
 			if err != nil {
 				return err
 			}
-			if _, err := client.ResizeDaemon(cmd.Context(), connect.NewRequest(&daemonv1.ResizeDaemonRequest{DaemonId: d.GetId(), Size: size})); err != nil {
+			if _, err := client.ResizeDaemon(cmd.Context(), &daemonv1.ResizeDaemonRequest{DaemonId: d.GetId(), Size: size}); err != nil {
 				if connect.CodeOf(err) == connect.CodeFailedPrecondition {
 					return fmt.Errorf("%w\n  hint: stop it first: reliant machine stop %s", err, d.GetName())
 				}
@@ -331,7 +332,7 @@ a letter or digit, and no two of your machines share one.`,
 			if err != nil {
 				return err
 			}
-			if _, err := client.UpdateDaemon(cmd.Context(), connect.NewRequest(&daemonv1.UpdateDaemonRequest{DaemonId: d.GetId(), NewName: newName})); err != nil {
+			if _, err := client.UpdateDaemon(cmd.Context(), &daemonv1.UpdateDaemonRequest{DaemonId: d.GetId(), NewName: newName}); err != nil {
 				return explainMachineErr(err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Renamed %s to %s (%s).\n", d.GetName(), newName, d.GetId())
@@ -370,12 +371,12 @@ func machineDisplayName(d *reliantv1.DaemonInfo) string {
 // resolveRegistryMachine finds one of the user's machines in the registry by
 // id, else by name (a machine with no name by hostname).
 func resolveRegistryMachine(ctx context.Context, client reliantv1connect.DaemonRegistryServiceClient, ref string) (*reliantv1.DaemonInfo, error) {
-	resp, err := client.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	resp, err := client.ListDaemons(ctx, &reliantv1.ListDaemonsRequest{})
 	if err != nil {
 		return nil, explainRegistryErr(err)
 	}
 	var byName []*reliantv1.DaemonInfo
-	for _, d := range resp.Msg.GetDaemons() {
+	for _, d := range resp.GetDaemons() {
 		if d.GetDaemonId() == ref {
 			return d, nil
 		}
@@ -478,14 +479,14 @@ k=v' merges them in on every connect.`,
 			if err := machinepool.ValidateLabels(next, "labels"); err != nil {
 				return err
 			}
-			resp, err := client.SetMachineLabels(cmd.Context(), connect.NewRequest(&reliantv1.SetMachineLabelsRequest{
+			resp, err := client.SetMachineLabels(cmd.Context(), &reliantv1.SetMachineLabelsRequest{
 				DaemonId: d.GetDaemonId(), Labels: next,
-			}))
+			})
 			if err != nil {
 				return explainRegistryErr(err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s (%s) labels: %s\n", machineDisplayName(d), d.GetDaemonId(),
-				formatLabels(resp.Msg.GetDaemon().GetLabels()))
+				formatLabels(resp.GetDaemon().GetLabels()))
 			return err
 		},
 	}
@@ -521,11 +522,11 @@ func newMachinePoolListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := client.ListMachinePools(cmd.Context(), connect.NewRequest(&reliantv1.ListMachinePoolsRequest{}))
+			resp, err := client.ListMachinePools(cmd.Context(), &reliantv1.ListMachinePoolsRequest{})
 			if err != nil {
 				return explainRegistryErr(err)
 			}
-			return printMachinePools(cmd.OutOrStdout(), resp.Msg.GetPools())
+			return printMachinePools(cmd.OutOrStdout(), resp.GetPools())
 		},
 	}
 }
@@ -622,11 +623,11 @@ before it sleeps (1m-4h; default 10m).
 			// PutMachinePool replaces the whole definition, so start from the
 			// stored one: a flag not passed keeps its value.
 			spec := &reliantv1.MachinePoolSpec{Name: name}
-			existing, err := client.ListMachinePools(cmd.Context(), connect.NewRequest(&reliantv1.ListMachinePoolsRequest{}))
+			existing, err := client.ListMachinePools(cmd.Context(), &reliantv1.ListMachinePoolsRequest{})
 			if err != nil {
 				return explainRegistryErr(err)
 			}
-			for _, p := range existing.Msg.GetPools() {
+			for _, p := range existing.GetPools() {
 				if p.GetSpec().GetName() == name {
 					spec = p.GetSpec()
 				}
@@ -650,11 +651,11 @@ before it sleeps (1m-4h; default 10m).
 			if flags.Changed("member-idle-timeout") {
 				spec.MemberIdleTimeout = strings.TrimSpace(idleTimeout)
 			}
-			resp, err := client.PutMachinePool(cmd.Context(), connect.NewRequest(&reliantv1.PutMachinePoolRequest{Pool: spec}))
+			resp, err := client.PutMachinePool(cmd.Context(), &reliantv1.PutMachinePoolRequest{Pool: spec})
 			if err != nil {
 				return explainRegistryErr(err)
 			}
-			return printMachinePools(cmd.OutOrStdout(), []*reliantv1.MachinePool{resp.Msg.GetPool()})
+			return printMachinePools(cmd.OutOrStdout(), []*reliantv1.MachinePool{resp.GetPool()})
 		},
 	}
 	cmd.Flags().Var(selector, "selector", "Labels a member must carry, key=value (repeatable, or comma-separated; default pool=<name>)")
@@ -682,7 +683,7 @@ first.`,
 				return err
 			}
 			name := strings.TrimSpace(args[0])
-			if _, err := client.DeleteMachinePool(cmd.Context(), connect.NewRequest(&reliantv1.DeleteMachinePoolRequest{Name: name})); err != nil {
+			if _, err := client.DeleteMachinePool(cmd.Context(), &reliantv1.DeleteMachinePoolRequest{Name: name}); err != nil {
 				return explainRegistryErr(err)
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Deleted machine pool %s.\n", name)

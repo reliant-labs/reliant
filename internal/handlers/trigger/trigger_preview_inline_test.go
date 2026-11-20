@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -32,21 +32,21 @@ func TestInlineEventPreviewIsOwnedReadOnlyAndWorksWhilePaused(t *testing.T) {
 	require.NoError(t, err)
 	id := "mine"
 	req := &reliantv1.PreviewReplayRequest{TriggerId: &id, Replay: &reliantv1.ReplayEvent{Payload: payload, OccurredAt: "2026-10-27T12:00:00Z"}}
-	result, err := svc.PreviewReplay(ctx, connect.NewRequest(req))
+	result, err := svc.PreviewReplay(ctx, req)
 	require.NoError(t, err)
-	require.Contains(t, result.Msg.Prompt, "Review delivery.")
-	require.Contains(t, result.Msg.Prompt, `"ref":"release"`)
-	require.Contains(t, result.Msg.Prompt, "<trigger_event")
+	require.Contains(t, result.Prompt, "Review delivery.")
+	require.Contains(t, result.Prompt, `"ref":"release"`)
+	require.Contains(t, result.Prompt, "<trigger_event")
 	req.Replay.OccurredAt = "invalid-secret-marker"
-	_, err = svc.PreviewReplay(ctx, connect.NewRequest(req))
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = svc.PreviewReplay(ctx, req)
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	require.NotContains(t, err.Error(), "invalid-secret-marker")
 	req.Replay.OccurredAt = ""
 	req.Replay.Payload, err = structpb.NewStruct(map[string]any{"body": strings.Repeat("x", 65*1024)})
 	require.NoError(t, err)
-	_, err = svc.PreviewReplay(ctx, connect.NewRequest(req))
-	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err = svc.PreviewReplay(ctx, req)
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	id = "foreign"
-	_, err = svc.PreviewReplay(ctx, connect.NewRequest(req))
-	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	_, err = svc.PreviewReplay(ctx, req)
+	require.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }

@@ -6,7 +6,6 @@ import (
 	"sort"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -49,10 +48,10 @@ func TestListWorktreeRecoveries_LeavesOutAnOrgTheCallerMayNotRead(t *testing.T) 
 	svc := NewTestWorktree(t, WithWorktreeDeps(Deps{Repo: repo}))
 	ids := func(ctx context.Context) []string {
 		t.Helper()
-		resp, err := svc.ListWorktreeRecoveries(ctx, connect.NewRequest(&reliantv1.ListWorktreeRecoveriesRequest{}))
+		resp, err := svc.ListWorktreeRecoveries(ctx, &reliantv1.ListWorktreeRecoveriesRequest{})
 		require.NoError(t, err)
 		var out []string
-		for _, r := range resp.Msg.GetRecoveries() {
+		for _, r := range resp.GetRecoveries() {
 			out = append(out, r.GetId())
 		}
 		sort.Strings(out)

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -22,16 +22,16 @@ func TestGetPrivacySettings_Generated(t *testing.T) {
 			require.Equal(t, "test-user", userID)
 			return false, true, nil
 		}
-		resp, err := newSettingsService(t, repo).GetPrivacySettings(settings.AuthedContext(t), connect.NewRequest(&pb.GetPrivacySettingsRequest{}))
+		resp, err := newSettingsService(t, repo).GetPrivacySettings(settings.AuthedContext(t), &pb.GetPrivacySettingsRequest{})
 		require.NoError(t, err)
-		require.False(t, resp.Msg.GetAnalyticsEnabled())
-		require.True(t, resp.Msg.GetCrashReportingEnabled())
+		require.False(t, resp.GetAnalyticsEnabled())
+		require.True(t, resp.GetCrashReportingEnabled())
 	})
 
 	t.Run("a failed read is internal", func(t *testing.T) {
 		repo := memorySettings{}.repo()
 		repo.GetPrivacySettingsFunc = func(context.Context, string) (bool, bool, error) { return false, false, errors.New("db down") }
-		_, err := newSettingsService(t, repo).GetPrivacySettings(settings.AuthedContext(t), connect.NewRequest(&pb.GetPrivacySettingsRequest{}))
-		require.Equal(t, connect.CodeInternal, svcerr.Code(err))
+		_, err := newSettingsService(t, repo).GetPrivacySettings(settings.AuthedContext(t), &pb.GetPrivacySettingsRequest{})
+		require.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 	})
 }

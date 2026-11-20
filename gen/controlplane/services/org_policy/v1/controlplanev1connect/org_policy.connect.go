@@ -25,49 +25,78 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/org_policy/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// OrgPolicyServiceName is the fully-qualified name of the OrgPolicyService service.
 	OrgPolicyServiceName = "controlplane.v1.OrgPolicyService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// OrgPolicyServiceGetOrgPolicyProcedure is the fully-qualified name of the OrgPolicyService's
+	// OrgPolicyServiceGetOrgPolicyProcedure is the procedure name of the OrgPolicyService's
 	// GetOrgPolicy RPC.
 	OrgPolicyServiceGetOrgPolicyProcedure = "/controlplane.v1.OrgPolicyService/GetOrgPolicy"
-	// OrgPolicyServiceUpdateOrgPolicyProcedure is the fully-qualified name of the OrgPolicyService's
+	// OrgPolicyServiceUpdateOrgPolicyProcedure is the procedure name of the OrgPolicyService's
 	// UpdateOrgPolicy RPC.
 	OrgPolicyServiceUpdateOrgPolicyProcedure = "/controlplane.v1.OrgPolicyService/UpdateOrgPolicy"
-	// OrgPolicyServicePreviewOrgPolicyProcedure is the fully-qualified name of the OrgPolicyService's
+	// OrgPolicyServicePreviewOrgPolicyProcedure is the procedure name of the OrgPolicyService's
 	// PreviewOrgPolicy RPC.
 	OrgPolicyServicePreviewOrgPolicyProcedure = "/controlplane.v1.OrgPolicyService/PreviewOrgPolicy"
-	// OrgPolicyServiceGetMyPolicyUsageProcedure is the fully-qualified name of the OrgPolicyService's
+	// OrgPolicyServiceGetMyPolicyUsageProcedure is the procedure name of the OrgPolicyService's
 	// GetMyPolicyUsage RPC.
 	OrgPolicyServiceGetMyPolicyUsageProcedure = "/controlplane.v1.OrgPolicyService/GetMyPolicyUsage"
-	// OrgPolicyServiceListOrgPolicyDenialsProcedure is the fully-qualified name of the
-	// OrgPolicyService's ListOrgPolicyDenials RPC.
+	// OrgPolicyServiceListOrgPolicyDenialsProcedure is the procedure name of the OrgPolicyService's
+	// ListOrgPolicyDenials RPC.
 	OrgPolicyServiceListOrgPolicyDenialsProcedure = "/controlplane.v1.OrgPolicyService/ListOrgPolicyDenials"
+)
+
+var (
+	orgPolicyServiceGetOrgPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_org_policy_v1_org_policy_proto.Services().ByName("OrgPolicyService").Methods().ByName("GetOrgPolicy"),
+			Procedure:  OrgPolicyServiceGetOrgPolicyProcedure,
+		}
+	})
+	orgPolicyServiceUpdateOrgPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_org_policy_v1_org_policy_proto.Services().ByName("OrgPolicyService").Methods().ByName("UpdateOrgPolicy"),
+			Procedure:  OrgPolicyServiceUpdateOrgPolicyProcedure,
+		}
+	})
+	orgPolicyServicePreviewOrgPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_org_policy_v1_org_policy_proto.Services().ByName("OrgPolicyService").Methods().ByName("PreviewOrgPolicy"),
+			Procedure:  OrgPolicyServicePreviewOrgPolicyProcedure,
+		}
+	})
+	orgPolicyServiceGetMyPolicyUsageSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_org_policy_v1_org_policy_proto.Services().ByName("OrgPolicyService").Methods().ByName("GetMyPolicyUsage"),
+			Procedure:  OrgPolicyServiceGetMyPolicyUsageProcedure,
+		}
+	})
+	orgPolicyServiceListOrgPolicyDenialsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_org_policy_v1_org_policy_proto.Services().ByName("OrgPolicyService").Methods().ByName("ListOrgPolicyDenials"),
+			Procedure:  OrgPolicyServiceListOrgPolicyDenialsProcedure,
+		}
+	})
 )
 
 // OrgPolicyServiceClient is a client for the controlplane.v1.OrgPolicyService service.
@@ -77,7 +106,7 @@ type OrgPolicyServiceClient interface {
 	// is an answer, never NotFound. Any member may read it.
 	//
 	// forge:custom — the document of one org, not the CRUD of a table.
-	GetOrgPolicy(context.Context, *connect.Request[v1.GetOrgPolicyRequest]) (*connect.Response[v1.GetOrgPolicyResponse], error)
+	GetOrgPolicy(context.Context, *v1.GetOrgPolicyRequest) (*v1.GetOrgPolicyResponse, error)
 	// UpdateOrgPolicy replaces the org's whole policy document. Admin or owner.
 	//
 	// Optimistic concurrency: expected_version must equal the stored version
@@ -94,20 +123,20 @@ type OrgPolicyServiceClient interface {
 	//
 	// forge:custom — a versioned whole-document write with its history, not
 	// the CRUD of a table.
-	UpdateOrgPolicy(context.Context, *connect.Request[v1.UpdateOrgPolicyRequest]) (*connect.Response[v1.UpdateOrgPolicyResponse], error)
+	UpdateOrgPolicy(context.Context, *v1.UpdateOrgPolicyRequest) (*v1.UpdateOrgPolicyResponse, error)
 	// PreviewOrgPolicy says what UpdateOrgPolicy would do with a document,
 	// changing nothing: what validation refuses, which fields change, and what
 	// the edit would affect. Admin or owner. A document validation refuses is
 	// an answer here (violations), not an error, so an editor can show every
 	// problem at once.
-	PreviewOrgPolicy(context.Context, *connect.Request[v1.PreviewOrgPolicyRequest]) (*connect.Response[v1.PreviewOrgPolicyResponse], error)
+	PreviewOrgPolicy(context.Context, *v1.PreviewOrgPolicyRequest) (*v1.PreviewOrgPolicyResponse, error)
 	// GetMyPolicyUsage returns the caller's own LLM spend in the org against
 	// the spend caps that bind them this period (§6), and the org's spend
 	// against the org cap as that cap counts it. Any member: a cap no one can
 	// see is a cap no one can comply with.
 	//
 	// forge:custom — the caller's usage, not the CRUD of a table.
-	GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error)
+	GetMyPolicyUsage(context.Context, *v1.GetMyPolicyUsageRequest) (*v1.GetMyPolicyUsageResponse, error)
 	// ListOrgPolicyDenials returns what the org's policies refused, and what
 	// rules in audit mode would have refused, per UTC day (§3.4): "blocked 31
 	// calls this week by the model policy, 9 would have been blocked by the
@@ -116,85 +145,13 @@ type OrgPolicyServiceClient interface {
 	// effort; the metric org_policy_denials_total is the exact count).
 	//
 	// forge:custom — an aggregate read, not the CRUD of a table.
-	ListOrgPolicyDenials(context.Context, *connect.Request[v1.ListOrgPolicyDenialsRequest]) (*connect.Response[v1.ListOrgPolicyDenialsResponse], error)
+	ListOrgPolicyDenials(context.Context, *v1.ListOrgPolicyDenialsRequest) (*v1.ListOrgPolicyDenialsResponse, error)
 }
 
 // NewOrgPolicyServiceClient constructs a client for the controlplane.v1.OrgPolicyService service.
-// By default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped
-// responses, and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewOrgPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) OrgPolicyServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	orgPolicyServiceMethods := v1.File_services_org_policy_v1_org_policy_proto.Services().ByName("OrgPolicyService").Methods()
-	return &orgPolicyServiceClient{
-		getOrgPolicy: connect.NewClient[v1.GetOrgPolicyRequest, v1.GetOrgPolicyResponse](
-			httpClient,
-			baseURL+OrgPolicyServiceGetOrgPolicyProcedure,
-			connect.WithSchema(orgPolicyServiceMethods.ByName("GetOrgPolicy")),
-			connect.WithClientOptions(opts...),
-		),
-		updateOrgPolicy: connect.NewClient[v1.UpdateOrgPolicyRequest, v1.UpdateOrgPolicyResponse](
-			httpClient,
-			baseURL+OrgPolicyServiceUpdateOrgPolicyProcedure,
-			connect.WithSchema(orgPolicyServiceMethods.ByName("UpdateOrgPolicy")),
-			connect.WithClientOptions(opts...),
-		),
-		previewOrgPolicy: connect.NewClient[v1.PreviewOrgPolicyRequest, v1.PreviewOrgPolicyResponse](
-			httpClient,
-			baseURL+OrgPolicyServicePreviewOrgPolicyProcedure,
-			connect.WithSchema(orgPolicyServiceMethods.ByName("PreviewOrgPolicy")),
-			connect.WithClientOptions(opts...),
-		),
-		getMyPolicyUsage: connect.NewClient[v1.GetMyPolicyUsageRequest, v1.GetMyPolicyUsageResponse](
-			httpClient,
-			baseURL+OrgPolicyServiceGetMyPolicyUsageProcedure,
-			connect.WithSchema(orgPolicyServiceMethods.ByName("GetMyPolicyUsage")),
-			connect.WithClientOptions(opts...),
-		),
-		listOrgPolicyDenials: connect.NewClient[v1.ListOrgPolicyDenialsRequest, v1.ListOrgPolicyDenialsResponse](
-			httpClient,
-			baseURL+OrgPolicyServiceListOrgPolicyDenialsProcedure,
-			connect.WithSchema(orgPolicyServiceMethods.ByName("ListOrgPolicyDenials")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// orgPolicyServiceClient implements OrgPolicyServiceClient.
-type orgPolicyServiceClient struct {
-	getOrgPolicy         *connect.Client[v1.GetOrgPolicyRequest, v1.GetOrgPolicyResponse]
-	updateOrgPolicy      *connect.Client[v1.UpdateOrgPolicyRequest, v1.UpdateOrgPolicyResponse]
-	previewOrgPolicy     *connect.Client[v1.PreviewOrgPolicyRequest, v1.PreviewOrgPolicyResponse]
-	getMyPolicyUsage     *connect.Client[v1.GetMyPolicyUsageRequest, v1.GetMyPolicyUsageResponse]
-	listOrgPolicyDenials *connect.Client[v1.ListOrgPolicyDenialsRequest, v1.ListOrgPolicyDenialsResponse]
-}
-
-// GetOrgPolicy calls controlplane.v1.OrgPolicyService.GetOrgPolicy.
-func (c *orgPolicyServiceClient) GetOrgPolicy(ctx context.Context, req *connect.Request[v1.GetOrgPolicyRequest]) (*connect.Response[v1.GetOrgPolicyResponse], error) {
-	return c.getOrgPolicy.CallUnary(ctx, req)
-}
-
-// UpdateOrgPolicy calls controlplane.v1.OrgPolicyService.UpdateOrgPolicy.
-func (c *orgPolicyServiceClient) UpdateOrgPolicy(ctx context.Context, req *connect.Request[v1.UpdateOrgPolicyRequest]) (*connect.Response[v1.UpdateOrgPolicyResponse], error) {
-	return c.updateOrgPolicy.CallUnary(ctx, req)
-}
-
-// PreviewOrgPolicy calls controlplane.v1.OrgPolicyService.PreviewOrgPolicy.
-func (c *orgPolicyServiceClient) PreviewOrgPolicy(ctx context.Context, req *connect.Request[v1.PreviewOrgPolicyRequest]) (*connect.Response[v1.PreviewOrgPolicyResponse], error) {
-	return c.previewOrgPolicy.CallUnary(ctx, req)
-}
-
-// GetMyPolicyUsage calls controlplane.v1.OrgPolicyService.GetMyPolicyUsage.
-func (c *orgPolicyServiceClient) GetMyPolicyUsage(ctx context.Context, req *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error) {
-	return c.getMyPolicyUsage.CallUnary(ctx, req)
-}
-
-// ListOrgPolicyDenials calls controlplane.v1.OrgPolicyService.ListOrgPolicyDenials.
-func (c *orgPolicyServiceClient) ListOrgPolicyDenials(ctx context.Context, req *connect.Request[v1.ListOrgPolicyDenialsRequest]) (*connect.Response[v1.ListOrgPolicyDenialsResponse], error) {
-	return c.listOrgPolicyDenials.CallUnary(ctx, req)
+// Multiple service clients may share a single connect.Client.
+func NewOrgPolicyServiceClient(client *connect.Client) OrgPolicyServiceClient {
+	return &orgPolicyServiceClient{client: client}
 }
 
 // OrgPolicyServiceHandler is an implementation of the controlplane.v1.OrgPolicyService service.
@@ -204,7 +161,7 @@ type OrgPolicyServiceHandler interface {
 	// is an answer, never NotFound. Any member may read it.
 	//
 	// forge:custom — the document of one org, not the CRUD of a table.
-	GetOrgPolicy(context.Context, *connect.Request[v1.GetOrgPolicyRequest]) (*connect.Response[v1.GetOrgPolicyResponse], error)
+	GetOrgPolicy(context.Context, *v1.GetOrgPolicyRequest) (*v1.GetOrgPolicyResponse, error)
 	// UpdateOrgPolicy replaces the org's whole policy document. Admin or owner.
 	//
 	// Optimistic concurrency: expected_version must equal the stored version
@@ -221,20 +178,20 @@ type OrgPolicyServiceHandler interface {
 	//
 	// forge:custom — a versioned whole-document write with its history, not
 	// the CRUD of a table.
-	UpdateOrgPolicy(context.Context, *connect.Request[v1.UpdateOrgPolicyRequest]) (*connect.Response[v1.UpdateOrgPolicyResponse], error)
+	UpdateOrgPolicy(context.Context, *v1.UpdateOrgPolicyRequest) (*v1.UpdateOrgPolicyResponse, error)
 	// PreviewOrgPolicy says what UpdateOrgPolicy would do with a document,
 	// changing nothing: what validation refuses, which fields change, and what
 	// the edit would affect. Admin or owner. A document validation refuses is
 	// an answer here (violations), not an error, so an editor can show every
 	// problem at once.
-	PreviewOrgPolicy(context.Context, *connect.Request[v1.PreviewOrgPolicyRequest]) (*connect.Response[v1.PreviewOrgPolicyResponse], error)
+	PreviewOrgPolicy(context.Context, *v1.PreviewOrgPolicyRequest) (*v1.PreviewOrgPolicyResponse, error)
 	// GetMyPolicyUsage returns the caller's own LLM spend in the org against
 	// the spend caps that bind them this period (§6), and the org's spend
 	// against the org cap as that cap counts it. Any member: a cap no one can
 	// see is a cap no one can comply with.
 	//
 	// forge:custom — the caller's usage, not the CRUD of a table.
-	GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error)
+	GetMyPolicyUsage(context.Context, *v1.GetMyPolicyUsageRequest) (*v1.GetMyPolicyUsageResponse, error)
 	// ListOrgPolicyDenials returns what the org's policies refused, and what
 	// rules in audit mode would have refused, per UTC day (§3.4): "blocked 31
 	// calls this week by the model policy, 9 would have been blocked by the
@@ -243,83 +200,147 @@ type OrgPolicyServiceHandler interface {
 	// effort; the metric org_policy_denials_total is the exact count).
 	//
 	// forge:custom — an aggregate read, not the CRUD of a table.
-	ListOrgPolicyDenials(context.Context, *connect.Request[v1.ListOrgPolicyDenialsRequest]) (*connect.Response[v1.ListOrgPolicyDenialsResponse], error)
+	ListOrgPolicyDenials(context.Context, *v1.ListOrgPolicyDenialsRequest) (*v1.ListOrgPolicyDenialsResponse, error)
 }
 
-// NewOrgPolicyServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewOrgPolicyServiceHandler(svc OrgPolicyServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	orgPolicyServiceMethods := v1.File_services_org_policy_v1_org_policy_proto.Services().ByName("OrgPolicyService").Methods()
-	orgPolicyServiceGetOrgPolicyHandler := connect.NewUnaryHandler(
-		OrgPolicyServiceGetOrgPolicyProcedure,
-		svc.GetOrgPolicy,
-		connect.WithSchema(orgPolicyServiceMethods.ByName("GetOrgPolicy")),
-		connect.WithHandlerOptions(opts...),
+// RegisterOrgPolicyServiceHandler registers svc as the controlplane.v1.OrgPolicyService
+// implementation on server.
+func RegisterOrgPolicyServiceHandler(server *connect.Server, svc OrgPolicyServiceHandler) {
+	adapter := orgPolicyServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: orgPolicyServiceGetOrgPolicySpec(), Handler: adapter.getOrgPolicy},
+		connect.Method{Spec: orgPolicyServiceUpdateOrgPolicySpec(), Handler: adapter.updateOrgPolicy},
+		connect.Method{Spec: orgPolicyServicePreviewOrgPolicySpec(), Handler: adapter.previewOrgPolicy},
+		connect.Method{Spec: orgPolicyServiceGetMyPolicyUsageSpec(), Handler: adapter.getMyPolicyUsage},
+		connect.Method{Spec: orgPolicyServiceListOrgPolicyDenialsSpec(), Handler: adapter.listOrgPolicyDenials},
 	)
-	orgPolicyServiceUpdateOrgPolicyHandler := connect.NewUnaryHandler(
-		OrgPolicyServiceUpdateOrgPolicyProcedure,
-		svc.UpdateOrgPolicy,
-		connect.WithSchema(orgPolicyServiceMethods.ByName("UpdateOrgPolicy")),
-		connect.WithHandlerOptions(opts...),
-	)
-	orgPolicyServicePreviewOrgPolicyHandler := connect.NewUnaryHandler(
-		OrgPolicyServicePreviewOrgPolicyProcedure,
-		svc.PreviewOrgPolicy,
-		connect.WithSchema(orgPolicyServiceMethods.ByName("PreviewOrgPolicy")),
-		connect.WithHandlerOptions(opts...),
-	)
-	orgPolicyServiceGetMyPolicyUsageHandler := connect.NewUnaryHandler(
-		OrgPolicyServiceGetMyPolicyUsageProcedure,
-		svc.GetMyPolicyUsage,
-		connect.WithSchema(orgPolicyServiceMethods.ByName("GetMyPolicyUsage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	orgPolicyServiceListOrgPolicyDenialsHandler := connect.NewUnaryHandler(
-		OrgPolicyServiceListOrgPolicyDenialsProcedure,
-		svc.ListOrgPolicyDenials,
-		connect.WithSchema(orgPolicyServiceMethods.ByName("ListOrgPolicyDenials")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.OrgPolicyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case OrgPolicyServiceGetOrgPolicyProcedure:
-			orgPolicyServiceGetOrgPolicyHandler.ServeHTTP(w, r)
-		case OrgPolicyServiceUpdateOrgPolicyProcedure:
-			orgPolicyServiceUpdateOrgPolicyHandler.ServeHTTP(w, r)
-		case OrgPolicyServicePreviewOrgPolicyProcedure:
-			orgPolicyServicePreviewOrgPolicyHandler.ServeHTTP(w, r)
-		case OrgPolicyServiceGetMyPolicyUsageProcedure:
-			orgPolicyServiceGetMyPolicyUsageHandler.ServeHTTP(w, r)
-		case OrgPolicyServiceListOrgPolicyDenialsProcedure:
-			orgPolicyServiceListOrgPolicyDenialsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedOrgPolicyServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedOrgPolicyServiceHandler struct{}
 
-func (UnimplementedOrgPolicyServiceHandler) GetOrgPolicy(context.Context, *connect.Request[v1.GetOrgPolicyRequest]) (*connect.Response[v1.GetOrgPolicyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.GetOrgPolicy is not implemented"))
+func (UnimplementedOrgPolicyServiceHandler) GetOrgPolicy(context.Context, *v1.GetOrgPolicyRequest) (*v1.GetOrgPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrgPolicyService.GetOrgPolicy is not implemented")
 }
 
-func (UnimplementedOrgPolicyServiceHandler) UpdateOrgPolicy(context.Context, *connect.Request[v1.UpdateOrgPolicyRequest]) (*connect.Response[v1.UpdateOrgPolicyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.UpdateOrgPolicy is not implemented"))
+func (UnimplementedOrgPolicyServiceHandler) UpdateOrgPolicy(context.Context, *v1.UpdateOrgPolicyRequest) (*v1.UpdateOrgPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrgPolicyService.UpdateOrgPolicy is not implemented")
 }
 
-func (UnimplementedOrgPolicyServiceHandler) PreviewOrgPolicy(context.Context, *connect.Request[v1.PreviewOrgPolicyRequest]) (*connect.Response[v1.PreviewOrgPolicyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.PreviewOrgPolicy is not implemented"))
+func (UnimplementedOrgPolicyServiceHandler) PreviewOrgPolicy(context.Context, *v1.PreviewOrgPolicyRequest) (*v1.PreviewOrgPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrgPolicyService.PreviewOrgPolicy is not implemented")
 }
 
-func (UnimplementedOrgPolicyServiceHandler) GetMyPolicyUsage(context.Context, *connect.Request[v1.GetMyPolicyUsageRequest]) (*connect.Response[v1.GetMyPolicyUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.GetMyPolicyUsage is not implemented"))
+func (UnimplementedOrgPolicyServiceHandler) GetMyPolicyUsage(context.Context, *v1.GetMyPolicyUsageRequest) (*v1.GetMyPolicyUsageResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrgPolicyService.GetMyPolicyUsage is not implemented")
 }
 
-func (UnimplementedOrgPolicyServiceHandler) ListOrgPolicyDenials(context.Context, *connect.Request[v1.ListOrgPolicyDenialsRequest]) (*connect.Response[v1.ListOrgPolicyDenialsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.OrgPolicyService.ListOrgPolicyDenials is not implemented"))
+func (UnimplementedOrgPolicyServiceHandler) ListOrgPolicyDenials(context.Context, *v1.ListOrgPolicyDenialsRequest) (*v1.ListOrgPolicyDenialsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.OrgPolicyService.ListOrgPolicyDenials is not implemented")
+}
+
+type orgPolicyServiceClient struct {
+	client *connect.Client
+}
+
+func (c *orgPolicyServiceClient) GetOrgPolicy(ctx context.Context, req *v1.GetOrgPolicyRequest) (*v1.GetOrgPolicyResponse, error) {
+	var res v1.GetOrgPolicyResponse
+	if err := c.client.CallUnary(ctx, orgPolicyServiceGetOrgPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *orgPolicyServiceClient) UpdateOrgPolicy(ctx context.Context, req *v1.UpdateOrgPolicyRequest) (*v1.UpdateOrgPolicyResponse, error) {
+	var res v1.UpdateOrgPolicyResponse
+	if err := c.client.CallUnary(ctx, orgPolicyServiceUpdateOrgPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *orgPolicyServiceClient) PreviewOrgPolicy(ctx context.Context, req *v1.PreviewOrgPolicyRequest) (*v1.PreviewOrgPolicyResponse, error) {
+	var res v1.PreviewOrgPolicyResponse
+	if err := c.client.CallUnary(ctx, orgPolicyServicePreviewOrgPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *orgPolicyServiceClient) GetMyPolicyUsage(ctx context.Context, req *v1.GetMyPolicyUsageRequest) (*v1.GetMyPolicyUsageResponse, error) {
+	var res v1.GetMyPolicyUsageResponse
+	if err := c.client.CallUnary(ctx, orgPolicyServiceGetMyPolicyUsageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *orgPolicyServiceClient) ListOrgPolicyDenials(ctx context.Context, req *v1.ListOrgPolicyDenialsRequest) (*v1.ListOrgPolicyDenialsResponse, error) {
+	var res v1.ListOrgPolicyDenialsResponse
+	if err := c.client.CallUnary(ctx, orgPolicyServiceListOrgPolicyDenialsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type orgPolicyServiceHandler struct{ svc OrgPolicyServiceHandler }
+
+func (h orgPolicyServiceHandler) getOrgPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetOrgPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetOrgPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h orgPolicyServiceHandler) updateOrgPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateOrgPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateOrgPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h orgPolicyServiceHandler) previewOrgPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PreviewOrgPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PreviewOrgPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h orgPolicyServiceHandler) getMyPolicyUsage(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetMyPolicyUsageRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetMyPolicyUsage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h orgPolicyServiceHandler) listOrgPolicyDenials(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOrgPolicyDenialsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOrgPolicyDenials(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

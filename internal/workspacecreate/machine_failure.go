@@ -5,7 +5,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -41,8 +41,8 @@ func machineFailure(doing string, err error) (error, bool) {
 	case errors.As(err, &dropped) && dropped.ConnectionInterrupted():
 		kind := svcerr.Unavailable(doing + ": your machine's connection dropped before it answered; try again")
 		return machineFailureError{svcerr.WithCause(kind, err)}, true
-	case svcerr.Code(err) == connect.CodeDeadlineExceeded:
-		kind := svcerr.DeadlineExceeded(doing + ": " + svcerr.ToConnect(err).Message())
+	case svcerr.CodeV2(err) == connect.CodeDeadlineExceeded:
+		kind := svcerr.DeadlineExceeded(doing + ": " + svcerr.ToConnectV2(err).Message())
 		return machineFailureError{svcerr.WithCause(kind, err)}, true
 	}
 	return err, false

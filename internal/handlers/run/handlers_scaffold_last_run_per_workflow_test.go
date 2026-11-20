@@ -4,8 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -27,13 +25,13 @@ func TestLastRunPerWorkflow_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.LastRunPerWorkflowRequest, pb.LastRunPerWorkflowResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.LastRunPerWorkflowRequest, pb.LastRunPerWorkflowResponse]{
 		{
 			Name: "no runs answers an empty list",
-			Req:  connect.NewRequest(&pb.LastRunPerWorkflowRequest{}),
+			Req:  &pb.LastRunPerWorkflowRequest{},
 			Ctx:  run.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.LastRunPerWorkflowResponse]) {
-				if got := len(resp.Msg.GetRuns()); got != 0 {
+			Check: func(t *testing.T, resp *pb.LastRunPerWorkflowResponse) {
+				if got := len(resp.GetRuns()); got != 0 {
 					t.Fatalf("runs = %d, want 0", got)
 				}
 			},

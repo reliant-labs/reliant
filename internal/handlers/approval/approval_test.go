@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -150,11 +150,11 @@ func TestApprovalService_Approve_SignalsApproval(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 
-	resp, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{
+	resp, err := service.Approve(approvalTestCtx(), &reliantv1.ApproveRequest{
 		RequestId: approvalID,
-	}))
+	})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Success)
+	assert.True(t, resp.Success)
 
 	// Verify signal was sent
 	assert.Equal(t, 1, mockClient.signalCalls, "Expected exactly 1 signal call")
@@ -184,12 +184,12 @@ func TestApprovalService_Deny_SignalsDenial(t *testing.T) {
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 
 	denialReason := "Not ready for production"
-	resp, err := service.Deny(approvalTestCtx(), connect.NewRequest(&reliantv1.DenyRequest{
+	resp, err := service.Deny(approvalTestCtx(), &reliantv1.DenyRequest{
 		RequestId:    approvalID,
 		DenialReason: &denialReason,
-	}))
+	})
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.Success)
+	assert.True(t, resp.Success)
 
 	// Verify signal was sent (denial signals the workflow, does not cancel it)
 	assert.Equal(t, 1, mockClient.signalCalls, "Expected exactly 1 signal call")
@@ -218,12 +218,12 @@ func TestApprovalService_Approve_AlreadyProcessed(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED))
 
-	_, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{
+	_, err := service.Approve(approvalTestCtx(), &reliantv1.ApproveRequest{
 		RequestId: approvalID,
-	}))
+	})
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 }
 
 // TestApprovalService_Deny_AlreadyProcessed returns FailedPrecondition for
@@ -234,36 +234,36 @@ func TestApprovalService_Deny_AlreadyProcessed(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED))
 
-	_, err := service.Deny(approvalTestCtx(), connect.NewRequest(&reliantv1.DenyRequest{
+	_, err := service.Deny(approvalTestCtx(), &reliantv1.DenyRequest{
 		RequestId: approvalID,
-	}))
+	})
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 }
 
 // TestApprovalService_Approve_NotFound returns NotFound for unknown approval IDs.
 func TestApprovalService_Approve_NotFound(t *testing.T) {
 	service, _ := setupTestApprovalService(t)
 
-	_, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{
+	_, err := service.Approve(approvalTestCtx(), &reliantv1.ApproveRequest{
 		RequestId: "nonexistent-approval-id",
-	}))
+	})
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 }
 
 // TestApprovalService_Approve_MissingRequestID returns InvalidArgument when request_id is empty.
 func TestApprovalService_Approve_MissingRequestID(t *testing.T) {
 	service, _ := setupTestApprovalService(t)
 
-	_, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{
+	_, err := service.Approve(approvalTestCtx(), &reliantv1.ApproveRequest{
 		RequestId: "",
-	}))
+	})
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 }
 
 // createRetiredToolApproval creates a pending approval as the removed
@@ -307,11 +307,11 @@ func testDenyAnsweredByItsRun(t *testing.T, create func(t *testing.T, repo *db.R
 
 	for name, deny := range map[string]func(*Service, string) error{
 		"Deny": func(s *Service, id string) error {
-			_, err := s.Deny(ctx, connect.NewRequest(&reliantv1.DenyRequest{RequestId: id}))
+			_, err := s.Deny(ctx, &reliantv1.DenyRequest{RequestId: id})
 			return err
 		},
 		"BatchDeny": func(s *Service, id string) error {
-			_, err := s.BatchDeny(ctx, connect.NewRequest(&reliantv1.BatchDenyRequest{RequestIds: []string{id}}))
+			_, err := s.BatchDeny(ctx, &reliantv1.BatchDenyRequest{RequestIds: []string{id}})
 			return err
 		},
 	} {
@@ -371,12 +371,12 @@ func TestApprovalService_BatchApproveSkipsDecided(t *testing.T) {
 	b := createBatchedApproval(t, repo, chatID, workflowID, "batch-1", pending)
 	c := createBatchedApproval(t, repo, chatID, workflowID, "batch-1", pending)
 
-	_, err := service.Deny(approvalTestCtx(), connect.NewRequest(&reliantv1.DenyRequest{RequestId: b}))
+	_, err := service.Deny(approvalTestCtx(), &reliantv1.DenyRequest{RequestId: b})
 	require.NoError(t, err)
-	resp, err := service.BatchApprove(approvalTestCtx(), connect.NewRequest(&reliantv1.BatchApproveRequest{RequestIds: []string{a, b, c}}))
+	resp, err := service.BatchApprove(approvalTestCtx(), &reliantv1.BatchApproveRequest{RequestIds: []string{a, b, c}})
 	require.NoError(t, err)
-	assert.Equal(t, int32(2), resp.Msg.Approved)
-	assert.Equal(t, chatID, resp.Msg.ChatId)
+	assert.Equal(t, int32(2), resp.Approved)
+	assert.Equal(t, chatID, resp.ChatId)
 	assert.Equal(t, 3, mockClient.signalCalls, "one denial, then two approvals")
 
 	for id, want := range map[string]reliantv1.ApprovalStatus{a: reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED, b: reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED, c: reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED} {
@@ -385,9 +385,9 @@ func TestApprovalService_BatchApproveSkipsDecided(t *testing.T) {
 		assert.Equal(t, int32(want), got.Status, id)
 	}
 
-	_, err = service.BatchDeny(approvalTestCtx(), connect.NewRequest(&reliantv1.BatchDenyRequest{RequestIds: []string{a, b, c}}))
+	_, err = service.BatchDeny(approvalTestCtx(), &reliantv1.BatchDenyRequest{RequestIds: []string{a, b, c}})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 }
 
 // The chat's list carries each approval's batch.
@@ -396,11 +396,11 @@ func TestApprovalService_ListCarriesBatch(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	createBatchedApproval(t, repo, chatID, workflowID, "batch-1", int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 	createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
-	resp, err := service.ListApprovalsByChat(approvalTestCtx(), connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{ChatId: chatID}))
+	resp, err := service.ListApprovalsByChat(approvalTestCtx(), &reliantv1.ListApprovalsByChatRequest{ChatId: chatID})
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Approvals, 2)
+	require.Len(t, resp.Approvals, 2)
 	batches := map[string]bool{}
-	for _, a := range resp.Msg.Approvals {
+	for _, a := range resp.Approvals {
 		batches[a.GetBatchId()] = true
 	}
 	assert.Equal(t, map[string]bool{"batch-1": true, "": true}, batches)

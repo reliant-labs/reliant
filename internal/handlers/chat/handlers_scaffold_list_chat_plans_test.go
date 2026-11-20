@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -26,34 +26,34 @@ func TestListChatPlans_Generated(t *testing.T) {
 	}
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListChatPlansRequest, pb.ListChatPlansResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListChatPlansRequest, pb.ListChatPlansResponse]{
 		{
 			Name:    "chat_id is required",
-			Req:     connect.NewRequest(&pb.ListChatPlansRequest{}),
+			Req:     &pb.ListChatPlansRequest{},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown chat is not found",
-			Req:     connect.NewRequest(&pb.ListChatPlansRequest{ChatId: missingChatID}),
+			Req:     &pb.ListChatPlansRequest{ChatId: missingChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's chat is not found",
-			Req:     connect.NewRequest(&pb.ListChatPlansRequest{ChatId: otherChatID}),
+			Req:     &pb.ListChatPlansRequest{ChatId: otherChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the caller's chat lists its plans",
-			Req:  connect.NewRequest(&pb.ListChatPlansRequest{ChatId: ownChatID}),
+			Req:  &pb.ListChatPlansRequest{ChatId: ownChatID},
 			Ctx:  chat.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.ListChatPlansResponse]) {
-				require.Len(t, resp.Msg.GetPlans(), 1)
-				require.Equal(t, "plan-1", resp.Msg.GetPlans()[0].GetId())
-				require.Equal(t, ownChatID, resp.Msg.GetPlans()[0].GetChatId())
-				require.Equal(t, int32(1), resp.Msg.GetTotal())
+			Check: func(t *testing.T, resp *pb.ListChatPlansResponse) {
+				require.Len(t, resp.GetPlans(), 1)
+				require.Equal(t, "plan-1", resp.GetPlans()[0].GetId())
+				require.Equal(t, ownChatID, resp.GetPlans()[0].GetChatId())
+				require.Equal(t, int32(1), resp.GetTotal())
 			},
 		},
 	}, svc.ListChatPlans)

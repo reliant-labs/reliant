@@ -3,23 +3,16 @@ package tools_daemon
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"errors"
-	"net"
-	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
-	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -316,7 +309,7 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 	default:
 		t.Fatal("reaping must close the connection so its stream handler ends and the daemon redials")
 	}
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(silent.closedReason()),
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(silent.closedReason()),
 		"the stream must end with a status the daemon treats as retryable, not a bare EOF")
 	var released []string
 	for _, call := range repo.Calls("ReleaseDaemonAttachment") {
@@ -356,39 +349,22 @@ func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
 // dialDaemon registers daemonID as userID on svc over a real ConnectDaemon
 // stream and returns it once the gateway has acknowledged the registration.
 // The stream stays open until the test closes it or ends.
-func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream {
 	t.Helper()
 	return dialDaemonAs(t, svc, userID, &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID[:8], Platform: "linux", DaemonType: "local"})
 }
 
 // dialDaemonAs is dialDaemon with the registration the test chooses.
-func dialDaemonAs(t *testing.T, svc *Service, userID string, reg *reliantv1.DaemonRegister) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialDaemonAs(t *testing.T, svc *Service, userID string, reg *reliantv1.DaemonRegister) reliantv1connect.ToolsDaemonServiceConnectDaemonClientStream {
 	t.Helper()
-	routes := http.NewServeMux()
-	svc.Register(routes) // the production mount
-	// Streams.Install is the listener's edge: the abortable request body
-	// ConnectDaemon needs (serverkit.AbortReceive).
-	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get("X-Test-User"))
-		routes.ServeHTTP(w, r.WithContext(ctx))
-	}))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.Start()
-	t.Cleanup(srv.Close)
-
-	cl := &http.Client{Transport: &http2.Transport{
-		AllowHTTP: true,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, network, addr)
-		},
-	}}
+	// The production mount behind the listener's edge: the abortable request
+	// body ConnectDaemon needs (serverkit.AbortReceive).
+	client := daemonServer(t, svc, true, withTestUser)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	client := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC())
-	stream := client.ConnectDaemon(ctx)
-	stream.RequestHeader().Set("X-Test-User", userID)
-	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
+	stream, err := client.ConnectDaemon(asTestUser(ctx, userID))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = stream.CloseSend(); _ = stream.Close() })
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
 		Register: reg,
 	}}))
@@ -402,9 +378,9 @@ func dialDaemonAs(t *testing.T, svc *Service, userID string, reg *reliantv1.Daem
 func registryStatus(t *testing.T, registry *daemon_registry.Service, userID, daemonID string) reliantv1.DaemonStatus {
 	t.Helper()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	resp, err := registry.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	resp, err := registry.ListDaemons(ctx, &reliantv1.ListDaemonsRequest{})
 	require.NoError(t, err)
-	for _, d := range resp.Msg.GetDaemons() {
+	for _, d := range resp.GetDaemons() {
 		if d.GetDaemonId() == daemonID {
 			return d.GetStatus()
 		}
@@ -483,7 +459,7 @@ func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) 
 	// The daemon goes away for real: reported without waiting out a lease.
 	// The wait must be too short for a lease to expire, or it proves nothing.
 	require.Less(t, leaseSettle, daemon_registry.AttachmentStaleThreshold/2)
-	require.NoError(t, stream.CloseRequest())
+	require.NoError(t, stream.CloseSend())
 	require.Eventually(t, func() bool {
 		return registryStatus(t, registry, userID, daemonID) == reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
 	}, leaseSettle, 20*time.Millisecond, "a real disconnect must still release the (re-created) lease at once")
@@ -523,12 +499,12 @@ func TestRegistryReportsUnavailableRatherThanDisconnectedWhenLivenessCannotBeRea
 	registry := newDaemonRegistry(t, livenessDownRepo{daemon: daemon}, nil)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "u-1")
 
-	resp, err := registry.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	resp, err := registry.ListDaemons(ctx, &reliantv1.ListDaemonsRequest{})
 	if err == nil {
-		t.Fatalf("ListDaemons answered %v for a daemon whose liveness it could not read", resp.Msg.GetDaemons()[0].GetStatus())
+		t.Fatalf("ListDaemons answered %v for a daemon whose liveness it could not read", resp.GetDaemons()[0].GetStatus())
 	}
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 
-	_, err = registry.GetDaemon(ctx, connect.NewRequest(&reliantv1.GetDaemonRequest{DaemonId: daemon.ID}))
-	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	_, err = registry.GetDaemon(ctx, &reliantv1.GetDaemonRequest{DaemonId: daemon.ID})
+	require.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 }

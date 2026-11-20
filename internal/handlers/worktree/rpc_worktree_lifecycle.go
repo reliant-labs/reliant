@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -28,31 +27,31 @@ import (
 // UpdateWorktree updates a worktree
 func (s *Service) UpdateWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UpdateWorktreeRequest],
-) (*connect.Response[reliantv1.UpdateWorktreeResponse], error) {
+	req *reliantv1.UpdateWorktreeRequest,
+) (*reliantv1.UpdateWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 
-	if req.Msg.Name != nil {
-		worktree.Name = *req.Msg.Name
+	if req.Name != nil {
+		worktree.Name = *req.Name
 	}
-	if req.Msg.Status != nil {
-		worktree.Status = int32(*req.Msg.Status)
+	if req.Status != nil {
+		worktree.Status = int32(*req.Status)
 	}
-	if req.Msg.BaseBranch != nil {
-		worktree.BaseBranch = *req.Msg.BaseBranch
+	if req.BaseBranch != nil {
+		worktree.BaseBranch = *req.BaseBranch
 	}
 	now := time.Now().UTC()
 	worktree.UpdatedAt = now
@@ -62,27 +61,27 @@ func (s *Service) UpdateWorktree(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update worktree"))
 	}
 
-	return connect.NewResponse(&reliantv1.UpdateWorktreeResponse{
+	return &reliantv1.UpdateWorktreeResponse{
 		Worktree: worktreeToProto(worktree),
-	}), nil
+	}, nil
 }
 
 // DeleteWorktree deletes or archives a worktree based on its current state
 func (s *Service) DeleteWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteWorktreeRequest],
-) (*connect.Response[reliantv1.DeleteWorktreeResponse], error) {
+	req *reliantv1.DeleteWorktreeRequest,
+) (*reliantv1.DeleteWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -103,7 +102,7 @@ func (s *Service) DeleteWorktree(
 	// when it is provably safe and otherwise holds it for the user to clean up
 	// knowingly. A permanent delete and a branch delete still reach the machine
 	// from here, so wake an asleep one first; the client retries.
-	if (req.Msg.DeleteGitBranch || isPermanentDelete) && project != nil {
+	if (req.DeleteGitBranch || isPermanentDelete) && project != nil {
 		if err := s.wakeIfAsleep(ctx, userID, machinewake.Target{DaemonID: daemonplacement.WorktreeOwner(worktree)}, worktree.Path); err != nil {
 			return nil, err
 		}
@@ -134,26 +133,26 @@ func (s *Service) DeleteWorktree(
 			}
 		}
 		deletedBranch := false
-		if req.Msg.DeleteGitBranch && worktree.Branch != "" {
+		if req.DeleteGitBranch && worktree.Branch != "" {
 			if checkout := s.ownerCheckout(ctx, userID, project, worktree); checkout != "" {
 				deletedBranch = s.cleanupWorktreeBranch(ctx, userID, daemonplacement.WorktreeOwner(worktree), checkout, worktree.Branch)
 			}
 		}
-		if err := s.deps.Repo.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
+		if err := s.deps.Repo.DeleteWorktree(ctx, req.WorktreeId); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to permanently delete worktree"))
 		}
 
-		return connect.NewResponse(&reliantv1.DeleteWorktreeResponse{
+		return &reliantv1.DeleteWorktreeResponse{
 			Message:           "Worktree permanently deleted",
 			DeletedBranch:     deletedBranch,
 			IsPermanentDelete: true,
-		}), nil
+		}, nil
 	}
 
-	s.storeCleanupMetadata(ctx, req.Msg.WorktreeId, req.Msg.DeleteGitBranch)
+	s.storeCleanupMetadata(ctx, req.WorktreeId, req.DeleteGitBranch)
 
 	// Archive the worktree
-	if err := s.deps.Repo.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+	if err := s.deps.Repo.ArchiveWorktree(ctx, req.WorktreeId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to archive worktree"))
 	}
 
@@ -161,28 +160,28 @@ func (s *Service) DeleteWorktree(
 	s.archiveWorktreeChats(ctx, userID, worktree)
 	s.settleArchived(ctx, userID, worktree, s.ownerCheckout(ctx, userID, project, worktree))
 
-	return connect.NewResponse(&reliantv1.DeleteWorktreeResponse{
+	return &reliantv1.DeleteWorktreeResponse{
 		Message:           "Worktree and associated chats archived successfully",
 		IsPermanentDelete: false,
-	}), nil
+	}, nil
 }
 
 // ArchiveWorktree archives a worktree (dedicated endpoint)
 func (s *Service) ArchiveWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ArchiveWorktreeRequest],
-) (*connect.Response[reliantv1.ArchiveWorktreeResponse], error) {
+	req *reliantv1.ArchiveWorktreeRequest,
+) (*reliantv1.ArchiveWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -203,10 +202,10 @@ func (s *Service) ArchiveWorktree(
 	// The branch is checked out in the directory until the machine removes it,
 	// and git refuses to delete a checked-out branch, so deletion is requested
 	// here and carried out after the machine reports the directory removed.
-	s.storeCleanupMetadata(ctx, req.Msg.WorktreeId, req.Msg.DeleteGitBranch)
+	s.storeCleanupMetadata(ctx, req.WorktreeId, req.DeleteGitBranch)
 
 	// Archive the worktree
-	if err := s.deps.Repo.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+	if err := s.deps.Repo.ArchiveWorktree(ctx, req.WorktreeId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to archive worktree"))
 	}
 
@@ -214,27 +213,27 @@ func (s *Service) ArchiveWorktree(
 	s.archiveWorktreeChats(ctx, userID, worktree)
 	s.settleArchived(ctx, userID, worktree, s.ownerCheckout(ctx, userID, project, worktree))
 
-	return connect.NewResponse(&reliantv1.ArchiveWorktreeResponse{
+	return &reliantv1.ArchiveWorktreeResponse{
 		Message: "Worktree and associated chats archived successfully",
-	}), nil
+	}, nil
 }
 
 // UnarchiveWorktree restores an archived worktree
 func (s *Service) UnarchiveWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.UnarchiveWorktreeRequest],
-) (*connect.Response[reliantv1.UnarchiveWorktreeResponse], error) {
+	req *reliantv1.UnarchiveWorktreeRequest,
+) (*reliantv1.UnarchiveWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -269,7 +268,7 @@ func (s *Service) UnarchiveWorktree(
 		return nil, svcerr.FailedPrecondition("this workspace's files were removed; restore it with recreate")
 	}
 
-	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.WorktreeId); err != nil {
 		if errors.Is(err, core.ErrWorktreeNameTaken) {
 			return nil, svcerr.FailedPrecondition(fmt.Sprintf(
 				"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
@@ -284,9 +283,9 @@ func (s *Service) UnarchiveWorktree(
 	if m := worktree.CleanupMetadata; m != nil && m.StrippedBytes > 0 {
 		msg += "; rebuildable files (node_modules, build output, tool caches) were removed while it was archived, so run its install/generate step before building"
 	}
-	return connect.NewResponse(&reliantv1.UnarchiveWorktreeResponse{
+	return &reliantv1.UnarchiveWorktreeResponse{
 		Message: msg,
-	}), nil
+	}, nil
 }
 
 // =============================================================================
@@ -397,20 +396,20 @@ func (s *Service) unarchiveWorktreeChats(ctx context.Context, userID string, wor
 // user's way out of a chat stuck on "working directory does not exist".
 func (s *Service) RecreateWorktree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.RecreateWorktreeRequest],
-) (*connect.Response[reliantv1.RecreateWorktreeResponse], error) {
+	req *reliantv1.RecreateWorktreeRequest,
+) (*reliantv1.RecreateWorktreeResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.WorktreeId == "" {
+	if req.WorktreeId == "" {
 		return nil, svcerr.InvalidArgument("worktree_id is required")
 	}
 
 	// Check permission
-	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+	if err := s.worktreeBelongsToUser(ctx, req.WorktreeId, userID); err != nil {
 		return nil, err
 	}
 
-	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
+	worktree, err := s.deps.Repo.GetWorktree(ctx, req.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
@@ -516,12 +515,12 @@ func (s *Service) RecreateWorktree(
 	if len(keep.SnapshotRefs) == 0 {
 		keep = nil
 	}
-	if err := s.deps.Repo.UpdateWorktreeCleanupMetadata(ctx, req.Msg.WorktreeId, keep); err != nil {
+	if err := s.deps.Repo.UpdateWorktreeCleanupMetadata(ctx, req.WorktreeId, keep); err != nil {
 		logging.WarnContext(ctx, "Failed to update cleanup metadata", "error", err)
 	}
 
 	// Unarchive the worktree
-	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.WorktreeId); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to unarchive worktree"))
 	}
 
@@ -543,7 +542,7 @@ func (s *Service) RecreateWorktree(
 		out.SnapshotWarning = fmt.Sprintf("Your work is saved at %s but could not be applied (%s).", strings.Join(savedRefs, ", "), strings.Join(recreateResp.SnapshotFailed, ", "))
 		out.SnapshotRefs = savedRefs
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // repairActiveWorktree asks the machine that owns an active worktree to
@@ -555,7 +554,7 @@ func (s *Service) RecreateWorktree(
 // It never moves the chat: a repair that is not possible is reported with the
 // machine's reason, and where the chat runs instead is the user's call ("Move
 // to main checkout", which is UpdateChat).
-func (s *Service) repairActiveWorktree(ctx context.Context, userID string, worktree *db.Worktree, project *db.Project) (*connect.Response[reliantv1.RecreateWorktreeResponse], error) {
+func (s *Service) repairActiveWorktree(ctx context.Context, userID string, worktree *db.Worktree, project *db.Project) (*reliantv1.RecreateWorktreeResponse, error) {
 	if worktree.IsMain {
 		return nil, svcerr.FailedPrecondition("the project's main checkout is not a workspace reliant can recreate")
 	}
@@ -596,5 +595,5 @@ func (s *Service) repairActiveWorktree(ctx context.Context, userID string, workt
 		return nil, svcerr.FailedPrecondition(fmt.Sprintf("could not recreate the workspace: %s", resp.Detail))
 	}
 	s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
-	return connect.NewResponse(out), nil
+	return out, nil
 }

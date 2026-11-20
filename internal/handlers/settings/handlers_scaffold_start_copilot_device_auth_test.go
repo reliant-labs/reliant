@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -23,6 +23,6 @@ func TestStartCopilotDeviceAuth_Generated(t *testing.T) {
 	ctx, cancel := context.WithCancel(settings.AuthedContext(t))
 	cancel()
 
-	_, err := svc.StartCopilotDeviceAuth(ctx, connect.NewRequest(&pb.StartCopilotDeviceAuthRequest{}))
-	require.Equal(t, connect.CodeCanceled, svcerr.Code(err))
+	_, err := svc.StartCopilotDeviceAuth(ctx, &pb.StartCopilotDeviceAuthRequest{})
+	require.Equal(t, connect.CodeCanceled, svcerr.CodeV2(err))
 }

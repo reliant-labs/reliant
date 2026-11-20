@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"testing"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -56,13 +55,13 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 	// The user queues into a live agent. This must succeed -- the agent
 	// really is running, which is precisely why no enqueue-time check can
 	// close this race.
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
 		Message:  "queued while you were still running",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
@@ -125,13 +124,13 @@ func TestThreadStatus_ResolvesMailboxOnEveryTerminalPath(t *testing.T) {
 
 			ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 			service := &Service{deps: Deps{Repo: repo}}
-			resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+			resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 				ChatId:   fx.chatID,
 				ThreadId: fx.childThreadID,
 				Message:  "queued just before the loop ended",
-			}))
+			})
 			require.NoError(t, err)
-			require.True(t, resp.Msg.Success)
+			require.True(t, resp.Success)
 
 			threadStatus := handlers.NewThreadStatusActivity(repo)
 			suite := &temporaltest.WorkflowTestSuite{}
@@ -169,13 +168,13 @@ func TestThreadStatus_LeavesQueueAloneWhileThreadRuns(t *testing.T) {
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	service := &Service{deps: Deps{Repo: repo}}
-	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+	resp, err := service.SendAgentMessage(ctx, &reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
 		ThreadId: fx.childThreadID,
 		Message:  "this one is still on its way",
-	}))
+	})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	threadStatus := handlers.NewThreadStatusActivity(repo)
 	suite := &temporaltest.WorkflowTestSuite{}

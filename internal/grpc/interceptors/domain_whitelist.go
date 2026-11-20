@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -55,30 +55,19 @@ func (i *DomainWhitelistInterceptor) checkDomain(ctx context.Context) error {
 		logging.WarnContext(ctx, "[Domain Whitelist] Rejected email domain",
 			"domain", domain,
 		)
-		return svcerr.ToConnect(svcerr.PermissionDenied(fmt.Sprintf("email domain %q is not allowed in this environment", domain)))
+		return svcerr.ToConnectV2(svcerr.PermissionDenied(fmt.Sprintf("email domain %q is not allowed in this environment", domain)))
 	}
 
 	return nil
 }
 
-func (i *DomainWhitelistInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+// Intercept is the whitelist as a connect.ServerInterceptor, for unary and
+// streaming RPCs alike. A refusal goes out through svcerr.RejectV2.
+func (i *DomainWhitelistInterceptor) Intercept(next connect.ServerFunc) connect.ServerFunc {
+	return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
 		if err := i.checkDomain(ctx); err != nil {
-			return nil, err
+			return svcerr.RejectV2(ctx, err)
 		}
-		return next(ctx, req)
-	}
-}
-
-func (i *DomainWhitelistInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (i *DomainWhitelistInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if err := i.checkDomain(ctx); err != nil {
-			return err
-		}
-		return next(ctx, conn)
+		return next(ctx, spec, stream)
 	}
 }

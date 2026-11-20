@@ -7,7 +7,6 @@ import (
 	"context"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
@@ -61,18 +60,18 @@ func (r *RunsClient) Start(ctx context.Context, req StartRun) (*Run, error) {
 	if req.Message != "" {
 		msgs = append([]Message{UserMessage(req.Message)}, msgs...)
 	}
-	resp, err := r.runs.StartRun(ctx, connect.NewRequest(&reliantv1.StartRunRequest{
+	resp, err := r.runs.StartRun(ctx, &reliantv1.StartRunRequest{
 		Workflow:  req.Workflow,
 		Inputs:    inputs,
 		SessionId: req.SessionID,
 		Messages:  toInputMessages(msgs),
 		Presets:   req.Presets,
 		Mode:      req.Mode,
-	}))
+	})
 	if err != nil {
 		return nil, r.c.wrap(op, err)
 	}
-	return resp.Msg.GetRun(), nil
+	return resp.GetRun(), nil
 }
 
 // Get returns one run's current state.
@@ -88,22 +87,22 @@ type RunNode = reliantv1.RunNodeExecution
 // Nodes returns a run's recorded node attempts, newest first, including nested
 // workflows. truncated is true when older attempts were left out.
 func (r *RunsClient) Nodes(ctx context.Context, runID string) (nodes []*RunNode, truncated bool, err error) {
-	resp, err := r.runs.GetRun(ctx, connect.NewRequest(&reliantv1.GetRunRequest{RunId: runID}))
+	resp, err := r.runs.GetRun(ctx, &reliantv1.GetRunRequest{RunId: runID})
 	if err != nil {
 		return nil, false, r.c.wrap("runs.nodes", err)
 	}
-	return resp.Msg.GetNodes(), resp.Msg.GetNodesTruncated(), nil
+	return resp.GetNodes(), resp.GetNodesTruncated(), nil
 }
 
 func (r *RunsClient) get(ctx context.Context, op, runID string) (*Run, *reliantv1.GetRunResponse, error) {
 	if runID == "" {
 		return nil, nil, r.c.fail(op, ErrInvalidArgument, "run id is required")
 	}
-	resp, err := r.runs.GetRun(ctx, connect.NewRequest(&reliantv1.GetRunRequest{RunId: runID}))
+	resp, err := r.runs.GetRun(ctx, &reliantv1.GetRunRequest{RunId: runID})
 	if err != nil {
 		return nil, nil, r.c.wrap(op, err)
 	}
-	return resp.Msg.GetRun(), resp.Msg, nil
+	return resp.GetRun(), resp, nil
 }
 
 // ListRuns filters a run list. With neither SessionID nor ParentID it is the
@@ -170,11 +169,11 @@ func (r *RunsClient) List(ctx context.Context, f ListRuns) *Iter[*Run] {
 		if token != "" {
 			req.PageToken = &token
 		}
-		resp, err := r.runs.ListRuns(ctx, connect.NewRequest(req))
+		resp, err := r.runs.ListRuns(ctx, req)
 		if err != nil {
 			return nil, "", r.c.wrap("runs.list", err)
 		}
-		return resp.Msg.GetRuns(), resp.Msg.GetNextPageToken(), nil
+		return resp.GetRuns(), resp.GetNextPageToken(), nil
 	})
 }
 
@@ -186,11 +185,11 @@ func (r *RunsClient) LastPerWorkflow(ctx context.Context, projectID string, work
 	if projectID != "" {
 		req.ProjectId = &projectID
 	}
-	resp, err := r.runs.LastRunPerWorkflow(ctx, connect.NewRequest(req))
+	resp, err := r.runs.LastRunPerWorkflow(ctx, req)
 	if err != nil {
 		return nil, r.c.wrap("runs.lastPerWorkflow", err)
 	}
-	return resp.Msg.GetRuns(), nil
+	return resp.GetRuns(), nil
 }
 
 // Signal delivers messages into a run that is already going. It never starts
@@ -201,13 +200,13 @@ func (r *RunsClient) Signal(ctx context.Context, runID, thread string, msgs ...M
 	if len(msgs) == 0 {
 		return false, r.c.fail(op, ErrInvalidArgument, "at least one message is required")
 	}
-	resp, err := r.runs.SignalRun(ctx, connect.NewRequest(&reliantv1.SignalRunRequest{
+	resp, err := r.runs.SignalRun(ctx, &reliantv1.SignalRunRequest{
 		RunId: runID, Thread: thread, Messages: toInputMessages(msgs),
-	}))
+	})
 	if err != nil {
 		return false, r.c.wrap(op, err)
 	}
-	return resp.Msg.GetDelivered(), nil
+	return resp.GetDelivered(), nil
 }
 
 // Cancel hard-stops a run. It is terminal by intent: the position is dropped,
@@ -228,14 +227,14 @@ type ActionResult struct {
 // A call the server declined is still an error ([ErrNotApplied]).
 func (r *RunsClient) CancelWithResult(ctx context.Context, runID string) (ActionResult, error) {
 	const op = "runs.cancel"
-	resp, err := r.runs.CancelRun(ctx, connect.NewRequest(&reliantv1.CancelRunRequest{RunId: runID}))
+	resp, err := r.runs.CancelRun(ctx, &reliantv1.CancelRunRequest{RunId: runID})
 	if err != nil {
 		return ActionResult{}, r.c.wrap(op, err)
 	}
-	if err := r.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+	if err := r.c.applied(op, resp.GetSuccess(), resp.GetMessage()); err != nil {
 		return ActionResult{}, err
 	}
-	return ActionResult{Message: resp.Msg.GetMessage()}, nil
+	return ActionResult{Message: resp.GetMessage()}, nil
 }
 
 // Pause parks a run: it stays live and resumable. Pausing a run that already
@@ -253,14 +252,14 @@ func (r *RunsClient) Pause(ctx context.Context, runID string) error {
 // Beta: see [RunsClient.Pause].
 func (r *RunsClient) PauseWithResult(ctx context.Context, runID string) (ActionResult, error) {
 	const op = "runs.pause"
-	resp, err := r.runs.PauseRun(ctx, connect.NewRequest(&reliantv1.PauseRunRequest{RunId: runID}))
+	resp, err := r.runs.PauseRun(ctx, &reliantv1.PauseRunRequest{RunId: runID})
 	if err != nil {
 		return ActionResult{}, r.c.wrap(op, err)
 	}
-	if err := r.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+	if err := r.c.applied(op, resp.GetSuccess(), resp.GetMessage()); err != nil {
 		return ActionResult{}, err
 	}
-	return ActionResult{Message: resp.Msg.GetMessage()}, nil
+	return ActionResult{Message: resp.GetMessage()}, nil
 }
 
 // Resume continues a paused run from its recorded position. It returns the run
@@ -273,14 +272,14 @@ func (r *RunsClient) PauseWithResult(ctx context.Context, runID string) (ActionR
 // Beta: see [RunsClient.Pause].
 func (r *RunsClient) Resume(ctx context.Context, runID string) (*Run, error) {
 	const op = "runs.resume"
-	resp, err := r.runs.ResumeRun(ctx, connect.NewRequest(&reliantv1.ResumeRunRequest{RunId: runID}))
+	resp, err := r.runs.ResumeRun(ctx, &reliantv1.ResumeRunRequest{RunId: runID})
 	if err != nil {
 		return nil, r.c.wrap(op, err)
 	}
-	if err := r.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+	if err := r.c.applied(op, resp.GetSuccess(), resp.GetMessage()); err != nil {
 		return nil, err
 	}
-	return resp.Msg.GetRun(), nil
+	return resp.GetRun(), nil
 }
 
 // ResumeResult is how a resume ended.
@@ -308,14 +307,14 @@ type ResumeResult struct {
 // Beta: see [RunsClient.Pause].
 func (r *RunsClient) ResumeWithResult(ctx context.Context, runID string) (ResumeResult, error) {
 	const op = "runs.resume"
-	resp, err := r.runs.ResumeRun(ctx, connect.NewRequest(&reliantv1.ResumeRunRequest{RunId: runID}))
+	resp, err := r.runs.ResumeRun(ctx, &reliantv1.ResumeRunRequest{RunId: runID})
 	if err != nil {
 		return ResumeResult{}, r.c.wrap(op, err)
 	}
-	if !resp.Msg.GetSuccess() {
-		return ResumeResult{Message: resp.Msg.GetMessage(), Declined: true}, nil
+	if !resp.GetSuccess() {
+		return ResumeResult{Message: resp.GetMessage(), Declined: true}, nil
 	}
-	return ResumeResult{Run: resp.Msg.GetRun(), Message: resp.Msg.GetMessage()}, nil
+	return ResumeResult{Run: resp.GetRun(), Message: resp.GetMessage()}, nil
 }
 
 // InterruptResult says what an interrupt stopped.
@@ -336,13 +335,13 @@ type InterruptResult struct {
 //
 // Beta: see [RunsClient.Pause].
 func (r *RunsClient) Interrupt(ctx context.Context, runID, thread string) (*InterruptResult, error) {
-	resp, err := r.runs.InterruptRun(ctx, connect.NewRequest(&reliantv1.InterruptRunRequest{RunId: runID, Thread: thread}))
+	resp, err := r.runs.InterruptRun(ctx, &reliantv1.InterruptRunRequest{RunId: runID, Thread: thread})
 	if err != nil {
 		return nil, r.c.wrap("runs.interrupt", err)
 	}
 	return &InterruptResult{
-		CancelledToolCalls:     int(resp.Msg.GetCancelledToolCalls()),
-		UndeliverableToolCalls: resp.Msg.GetUndeliverableToolCalls(),
+		CancelledToolCalls:     int(resp.GetCancelledToolCalls()),
+		UndeliverableToolCalls: resp.GetUndeliverableToolCalls(),
 	}, nil
 }
 

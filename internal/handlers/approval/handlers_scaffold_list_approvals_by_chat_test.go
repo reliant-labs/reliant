@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -31,28 +31,28 @@ func TestListApprovalsByChat_Generated(t *testing.T) {
 		},
 	}}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListApprovalsByChatRequest, pb.ListApprovalsByChatResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListApprovalsByChatRequest, pb.ListApprovalsByChatResponse]{
 		{
 			Name:    "chat_id is required",
-			Req:     connect.NewRequest(&pb.ListApprovalsByChatRequest{}),
+			Req:     &pb.ListApprovalsByChatRequest{},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "a caller without a user is unauthenticated",
-			Req:     connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}),
+			Req:     &pb.ListApprovalsByChatRequest{ChatId: "chat-1"},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "an unknown chat is not found",
-			Req:     connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-2"}),
+			Req:     &pb.ListApprovalsByChatRequest{ChatId: "chat-2"},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's chat is not found",
-			Req:     connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}),
+			Req:     &pb.ListApprovalsByChatRequest{ChatId: "chat-1"},
 			Ctx:     approval.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},

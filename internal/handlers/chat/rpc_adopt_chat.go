@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -12,11 +11,11 @@ import (
 // reads as not found, the same as any other owner-scoped chat RPC.
 func (s *Service) AdoptChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.AdoptChatRequest],
-) (*connect.Response[reliantv1.AdoptChatResponse], error) {
-	chat, err := s.setChatAdopted(ctx, req.Msg.GetChatId(), true)
+	req *reliantv1.AdoptChatRequest,
+) (*reliantv1.AdoptChatResponse, error) {
+	chat, err := s.setChatAdopted(ctx, req.GetChatId(), true)
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&reliantv1.AdoptChatResponse{Chat: chatToProto(chat)}), nil
+	return &reliantv1.AdoptChatResponse{Chat: chatToProto(chat)}, nil
 }

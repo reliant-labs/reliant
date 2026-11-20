@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -20,9 +20,9 @@ func TestUpdateShortcuts_Generated(t *testing.T) {
 	t.Run("the first write creates the shortcuts setting", func(t *testing.T) {
 		stored := memorySettings{}
 		svc := newSettingsService(t, stored.repo())
-		resp, err := svc.UpdateShortcuts(settings.AuthedContext(t), connect.NewRequest(&pb.UpdateShortcutsRequest{Shortcuts: `{"newChat":"mod+n"}`}))
+		resp, err := svc.UpdateShortcuts(settings.AuthedContext(t), &pb.UpdateShortcutsRequest{Shortcuts: `{"newChat":"mod+n"}`})
 		require.NoError(t, err)
-		require.True(t, resp.Msg.GetSuccess())
+		require.True(t, resp.GetSuccess())
 		require.Equal(t, `{"newChat":"mod+n"}`, stored["shortcuts"].Value)
 	})
 
@@ -32,7 +32,7 @@ func TestUpdateShortcuts_Generated(t *testing.T) {
 			return nil, errors.New("db down")
 		}
 		svc := newSettingsService(t, repo)
-		_, err := svc.UpdateShortcuts(settings.AuthedContext(t), connect.NewRequest(&pb.UpdateShortcutsRequest{Shortcuts: "{}"}))
-		require.Equal(t, connect.CodeInternal, svcerr.Code(err))
+		_, err := svc.UpdateShortcuts(settings.AuthedContext(t), &pb.UpdateShortcutsRequest{Shortcuts: "{}"})
+		require.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
 	})
 }

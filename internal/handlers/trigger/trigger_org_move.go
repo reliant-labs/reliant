@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -77,7 +77,7 @@ func (s *Service) ResumeAfterOrgMove(ctx context.Context, t *core.Trigger) (resu
 // own state (setup unfinished, access not granted), which only its owner can
 // fix, so it is the why; anything else is an outage to retry.
 func ownerFixes(err error, doing string) (bool, string, error) {
-	if svcerr.Code(err) == connect.CodeFailedPrecondition {
+	if svcerr.CodeV2(err) == connect.CodeFailedPrecondition {
 		return false, err.Error(), nil
 	}
 	return false, "", fmt.Errorf("%s: %w", doing, err)

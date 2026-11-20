@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -52,8 +52,8 @@ func TestListPendingQuestionsRejectsUnknownChat(t *testing.T) {
 
 	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
 
-	get := func(ctx context.Context, id string) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
-		return svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &id}))
+	get := func(ctx context.Context, id string) (*reliantv1.ListPendingQuestionsResponse, error) {
+		return svc.ListPendingQuestions(ctx, &reliantv1.ListPendingQuestionsRequest{ChatId: &id})
 	}
 
 	t.Run("short id prefix of a real chat is not found", func(t *testing.T) {
@@ -61,20 +61,20 @@ func TestListPendingQuestionsRejectsUnknownChat(t *testing.T) {
 		// prefix, and it was pasted into `workflow questions`.
 		_, err := get(ctx, chatID[:8])
 		require.Error(t, err, "a short id must not be answered as if it were a chat with no gate")
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("unknown id is not found", func(t *testing.T) {
 		_, err := get(ctx, uuid.NewString())
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("another user's chat is not found", func(t *testing.T) {
 		otherCtx := AuthedContext(t, testkit.WithUserID("other-user"))
 		_, err := get(otherCtx, chatID)
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 	})
 
 	t.Run("real chat with no gate answers empty", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestListPendingQuestionsRejectsUnknownChat(t *testing.T) {
 		// a false negative for a false positive.
 		resp, err := get(ctx, chatID)
 		require.NoError(t, err)
-		assert.Empty(t, resp.Msg.GetQuestions())
+		assert.Empty(t, resp.GetQuestions())
 	})
 }
 
@@ -128,10 +128,10 @@ func TestListPendingQuestionsReturnsEveryThreadsQuestion(t *testing.T) {
 	ask(qB, spawnB, db.QuestionStatusPending, now.Add(-time.Minute))
 
 	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
-	resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &chatID}))
+	resp, err := svc.ListPendingQuestions(ctx, &reliantv1.ListPendingQuestionsRequest{ChatId: &chatID})
 	require.NoError(t, err)
 
-	got := resp.Msg.GetQuestions()
+	got := resp.GetQuestions()
 	require.Len(t, got, 2, "both threads' pending questions, and not the resolved one")
 	assert.Equal(t, qA, got[0].GetQuestionId(), "oldest first: spawn A's question must not be hidden behind B's newer one")
 	assert.Equal(t, spawnA, got[0].GetThreadId())
@@ -181,10 +181,10 @@ func TestListPendingQuestionsChatIDIsAFilter(t *testing.T) {
 	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
 	ids := func(req *reliantv1.ListPendingQuestionsRequest) []string {
 		t.Helper()
-		resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(req))
+		resp, err := svc.ListPendingQuestions(ctx, req)
 		require.NoError(t, err)
 		var out []string
-		for _, q := range resp.Msg.GetQuestions() {
+		for _, q := range resp.GetQuestions() {
 			out = append(out, q.GetQuestionId())
 		}
 		return out
@@ -196,7 +196,7 @@ func TestListPendingQuestionsChatIDIsAFilter(t *testing.T) {
 		"set: only that chat's")
 
 	empty := ""
-	_, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &empty}))
+	_, err := svc.ListPendingQuestions(ctx, &reliantv1.ListPendingQuestionsRequest{ChatId: &empty})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an empty string is not 'unset'")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "an empty string is not 'unset'")
 }

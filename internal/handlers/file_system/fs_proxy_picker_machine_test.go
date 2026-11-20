@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +32,7 @@ func (r *pickerRouter) SendDaemonCommand(_ context.Context, _, commandType strin
 func (r *pickerRouter) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, commandType string, _ []byte, _ int32) ([]byte, error) {
 	r.reached = append(r.reached, daemonID)
 	if r.offline[daemonID] {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("no daemon connected"))
+		return nil, connect.NewError(connect.CodeUnavailable, "no daemon connected")
 	}
 	return pickerAnswer(commandType)
 }
@@ -61,15 +61,15 @@ func TestListDirectory_BrowsesTheNamedMachineElseTheDefault(t *testing.T) {
 	router := &pickerRouter{}
 	svc := newProxy(t, router, pickerMachines())
 
-	resp, err := svc.ListDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListDirectoryRequest{}))
+	resp, err := svc.ListDirectory(fsProxyContext(), &reliantv1.ListDirectoryRequest{})
 	require.NoError(t, err)
-	assert.Equal(t, "/home/me/src", resp.Msg.Entries[0].Path)
-	assert.Nil(t, resp.Msg.DaemonId, "the default machine is echoed as no machine")
+	assert.Equal(t, "/home/me/src", resp.Entries[0].Path)
+	assert.Nil(t, resp.DaemonId, "the default machine is echoed as no machine")
 
 	machine := "mine"
-	resp, err = svc.ListDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListDirectoryRequest{DaemonId: &machine}))
+	resp, err = svc.ListDirectory(fsProxyContext(), &reliantv1.ListDirectoryRequest{DaemonId: &machine})
 	require.NoError(t, err)
-	assert.Equal(t, "mine", resp.Msg.GetDaemonId(), "the listed machine is echoed, so a client can tell an older server ignored it")
+	assert.Equal(t, "mine", resp.GetDaemonId(), "the listed machine is echoed, so a client can tell an older server ignored it")
 
 	assert.Equal(t, []string{"", "mine"}, router.reached, "no daemon_id is the default machine, as before; a named one is pinned")
 }
@@ -79,15 +79,15 @@ func TestListDirectory_RefusesAnotherUsersMachineAndReportsAnOfflineOne(t *testi
 	svc := newProxy(t, router, pickerMachines())
 
 	theirs := "theirs"
-	_, err := svc.ListDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListDirectoryRequest{DaemonId: &theirs}))
+	_, err := svc.ListDirectory(fsProxyContext(), &reliantv1.ListDirectoryRequest{DaemonId: &theirs})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.ToConnect(err).Code())
+	assert.Equal(t, connect.CodeNotFound, svcerr.ToConnectV2(err).Code())
 	assert.Empty(t, router.reached, "another user's machine is never sent a command")
 
 	asleep := "asleep"
-	_, err = svc.ListDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListDirectoryRequest{DaemonId: &asleep}))
+	_, err = svc.ListDirectory(fsProxyContext(), &reliantv1.ListDirectoryRequest{DaemonId: &asleep})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, svcerr.ToConnect(err).Code())
+	assert.Equal(t, connect.CodeUnavailable, svcerr.ToConnectV2(err).Code())
 	assert.Contains(t, err.Error(), "no daemon connected")
 }
 
@@ -96,17 +96,17 @@ func TestCreateDirectory_MakesTheFolderOnTheNamedMachine(t *testing.T) {
 	svc := newProxy(t, router, pickerMachines())
 
 	machine := "mine"
-	created, err := svc.CreateDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.CreateDirectoryRequest{
+	created, err := svc.CreateDirectory(fsProxyContext(), &reliantv1.CreateDirectoryRequest{
 		Path: "/home/me/new", DaemonId: &machine,
-	}))
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "mine", created.Msg.GetDaemonId())
+	assert.Equal(t, "mine", created.GetDaemonId())
 	assert.Equal(t, []string{"mine"}, router.reached)
 
 	theirs := "theirs"
-	_, err = svc.CreateDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.CreateDirectoryRequest{
+	_, err = svc.CreateDirectory(fsProxyContext(), &reliantv1.CreateDirectoryRequest{
 		Path: "/home/me/new", DaemonId: &theirs,
-	}))
+	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.ToConnect(err).Code())
+	assert.Equal(t, connect.CodeNotFound, svcerr.ToConnectV2(err).Code())
 }

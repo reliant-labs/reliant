@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -86,22 +86,22 @@ func TestALookupOfAnEndedRequestIsNotUnavailable(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if got := svcerr.Code(LookupFailed(tc.ctx, "could not verify the organization; try again", tc.err)); got != tc.want {
+			if got := svcerr.CodeV2(LookupFailed(tc.ctx, "could not verify the organization; try again", tc.err)); got != tc.want {
 				t.Fatalf("LookupFailed code = %v, want %v", got, tc.want)
 			}
 		})
 	}
 	// Through the resolver: the source's failure under a cancelled request.
 	r, _ := newResolver(&fakeSource{err: fmt.Errorf("post: %w", context.Canceled)})
-	if _, err := r.Named(cancelled, "alice", "acme"); svcerr.Code(err) != connect.CodeCanceled {
-		t.Fatalf("Named on a cancelled request = %v (%v), want Canceled", svcerr.Code(err), err)
+	if _, err := r.Named(cancelled, "alice", "acme"); svcerr.CodeV2(err) != connect.CodeCanceled {
+		t.Fatalf("Named on a cancelled request = %v (%v), want Canceled", svcerr.CodeV2(err), err)
 	}
-	if _, err := r.ListScope(expired, "alice", "acme", nil); svcerr.Code(err) != connect.CodeDeadlineExceeded {
-		t.Fatalf("ListScope past its deadline = %v (%v), want DeadlineExceeded", svcerr.Code(err), err)
+	if _, err := r.ListScope(expired, "alice", "acme", nil); svcerr.CodeV2(err) != connect.CodeDeadlineExceeded {
+		t.Fatalf("ListScope past its deadline = %v (%v), want DeadlineExceeded", svcerr.CodeV2(err), err)
 	}
 	r, _ = newResolver(&fakeSource{err: outage})
-	if _, err := r.Named(context.Background(), "alice", "acme"); svcerr.Code(err) != connect.CodeUnavailable {
-		t.Fatalf("Named during an outage = %v (%v), want Unavailable", svcerr.Code(err), err)
+	if _, err := r.Named(context.Background(), "alice", "acme"); svcerr.CodeV2(err) != connect.CodeUnavailable {
+		t.Fatalf("Named during an outage = %v (%v), want Unavailable", svcerr.CodeV2(err), err)
 	}
 }
 
@@ -142,8 +142,8 @@ func TestNamed(t *testing.T) {
 			r, _ := newResolver(tc.src)
 			got, err := r.Named(ctx, "alice", tc.requested)
 			if tc.code != 0 {
-				if svcerr.Code(err) != tc.code {
-					t.Fatalf("err %v (code %v), want %v", err, svcerr.Code(err), tc.code)
+				if svcerr.CodeV2(err) != tc.code {
+					t.Fatalf("err %v (code %v), want %v", err, svcerr.CodeV2(err), tc.code)
 				}
 				if tc.reason != "" && reasonOf(err) != tc.reason {
 					t.Fatalf("reason %q, want %q", reasonOf(err), tc.reason)
@@ -165,7 +165,7 @@ func TestNamedMachineCredentialActsInItsOrg(t *testing.T) {
 	r, _ := newResolver(src)
 	ctx := auth.WithMachineToken(context.Background(), &fat.Principal{OrgID: "acme", ActingUserID: "alice"})
 	_, err := r.Named(ctx, "alice", "home")
-	if svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
+	if svcerr.CodeV2(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
 		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
 	}
 	if src.calls != 0 {
@@ -183,7 +183,7 @@ func TestNamedMachineCredentialActsInItsOrg(t *testing.T) {
 	left := newFake()
 	delete(left.members["alice"], "acme")
 	r, _ = newResolver(left)
-	if _, err := r.Named(ctx, "alice", ""); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonNotOrgMember {
+	if _, err := r.Named(ctx, "alice", ""); svcerr.CodeV2(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonNotOrgMember {
 		t.Fatalf("a credential whose user left its org: %v, want PermissionDenied %s", err, ReasonNotOrgMember)
 	}
 }
@@ -200,7 +200,7 @@ func TestActingOrgDefaultsAndNeverFailsOnTheDefault(t *testing.T) {
 	if got, err := down.ActingOrg(ctx, "alice", ""); got != "" || err != nil {
 		t.Fatalf("outage: %q, %v; want no org and no error", got, err)
 	}
-	if _, err := down.ActingOrg(ctx, "alice", "acme"); svcerr.Code(err) != connect.CodeUnavailable {
+	if _, err := down.ActingOrg(ctx, "alice", "acme"); svcerr.CodeV2(err) != connect.CodeUnavailable {
 		t.Fatalf("outage with a named org: %v, want Unavailable", err)
 	}
 }
@@ -278,11 +278,11 @@ func TestListScope(t *testing.T) {
 	}
 
 	_, err = r.ListScope(ctx, "alice", "globex", stamp)
-	if svcerr.Code(err) != connect.CodePermissionDenied {
+	if svcerr.CodeV2(err) != connect.CodePermissionDenied {
 		t.Fatalf("not a member: %v, want PermissionDenied", err)
 	}
 	down, _ := newResolver(&fakeSource{err: errors.New("down")})
-	if _, err := down.ListScope(ctx, "alice", "home", stamp); svcerr.Code(err) != connect.CodeUnavailable {
+	if _, err := down.ListScope(ctx, "alice", "home", stamp); svcerr.CodeV2(err) != connect.CodeUnavailable {
 		t.Fatalf("outage: %v, want Unavailable (fail closed)", err)
 	}
 }
@@ -313,11 +313,7 @@ func TestListScopeRetriesAFailedStamp(t *testing.T) {
 
 // reasonOf is the x-forge-error-reason err carries on the wire.
 func reasonOf(err error) string {
-	var ce *connect.Error
-	if !errors.As(svcerr.Wrap(err), &ce) {
-		return ""
-	}
-	return ce.Meta().Get(svcerr.ReasonHeader)
+	return svcerr.MetaOf(svcerr.ToConnectV2(err)).Get(svcerr.ReasonHeader)
 }
 
 // A machine credential lists only its own org, named or not: omitting org_id
@@ -333,7 +329,7 @@ func TestListScopeMachineCredentialIsItsOrg(t *testing.T) {
 	if scope, err := r.ListScope(ctx, "alice", "", nil); err != nil || scope == nil || scope.OrgID != "home" || !scope.IncludeUnassigned {
 		t.Fatalf("a credential of the default org: %+v, %v; want home with unassigned rows", scope, err)
 	}
-	if _, err := r.ListScope(ctx, "alice", "acme", nil); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
+	if _, err := r.ListScope(ctx, "alice", "acme", nil); svcerr.CodeV2(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonOrgMismatch {
 		t.Fatalf("another org: %v, want PermissionDenied %s", err, ReasonOrgMismatch)
 	}
 
@@ -344,7 +340,7 @@ func TestListScopeMachineCredentialIsItsOrg(t *testing.T) {
 	r, _ = newResolver(left)
 	ctx = auth.WithMachineToken(context.Background(), &fat.Principal{OrgID: "acme", ActingUserID: "alice"})
 	for _, named := range []string{"", "acme"} {
-		if _, err := r.ListScope(ctx, "alice", named, nil); svcerr.Code(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonNotOrgMember {
+		if _, err := r.ListScope(ctx, "alice", named, nil); svcerr.CodeV2(err) != connect.CodePermissionDenied || reasonOf(err) != ReasonNotOrgMember {
 			t.Fatalf("a credential whose user left its org, org_id %q: %v, want PermissionDenied %s", named, err, ReasonNotOrgMember)
 		}
 	}
@@ -369,7 +365,7 @@ func TestInProject(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := InProject(tc.project, tc.named, tc.def)
 			if tc.refused {
-				if svcerr.Code(err) != connect.CodeFailedPrecondition {
+				if svcerr.CodeV2(err) != connect.CodeFailedPrecondition {
 					t.Fatalf("err = %v, want FailedPrecondition", err)
 				}
 				return

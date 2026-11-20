@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -46,10 +46,10 @@ func TestMCPStoreErrorCodes(t *testing.T) {
 				repo.GetProjectMCPConfigsJSONFunc = func(context.Context, string) (*string, error) { return nil, tc.configErr }
 			}
 			svc := newService(t, repo, nil)
-			_, err := svc.ListServers(mcp.AuthedContext(t), connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: "p-1"}))
+			_, err := svc.ListServers(mcp.AuthedContext(t), &reliantv1.ListServersRequest{ProjectId: "p-1"})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err))
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.code, svcerr.CodeV2(err))
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.NotContains(t, msg, "secret")
 			if tc.msg != "" {
 				assert.Equal(t, tc.msg, msg)
@@ -98,12 +98,12 @@ func TestMCPConfigWriteFailuresKeepTheDaemonsWords(t *testing.T) {
 				return []byte(`{"servers":[]}`), nil
 			})
 			svc := newService(t, ownedProjectRepo(t, stored), router)
-			_, err := svc.SetServerEnabled(mcp.AuthedContext(t), connect.NewRequest(&reliantv1.SetServerEnabledRequest{
+			_, err := svc.SetServerEnabled(mcp.AuthedContext(t), &reliantv1.SetServerEnabledRequest{
 				ProjectId: "p-1", Name: "toggle-server", Enabled: false,
-			}))
+			})
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err), "%v", err)
-			msg := svcerr.ToConnect(err).Message()
+			assert.Equal(t, tc.code, svcerr.CodeV2(err), "%v", err)
+			msg := svcerr.ToConnectV2(err).Message()
 			assert.NotContains(t, msg, "secret", "transport text stays server-side")
 			if tc.msg != "" {
 				assert.Equal(t, tc.msg, msg)
@@ -119,16 +119,16 @@ func TestMCPErrorsOnTheWire(t *testing.T) {
 
 	repo := ownedProjectRepo(t, `{}`)
 	_, client := mcp.NewTestMCPServer(t, mcp.WithMCPDeps(mcp.Deps{Repo: repo}))
-	_, err := client.ListServers(context.Background(), connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: "p-2"}))
+	_, err := client.ListServers(context.Background(), &reliantv1.ListServersRequest{ProjectId: "p-2"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
-	assert.Equal(t, "project not found", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
+	assert.Equal(t, "project not found", svcerr.ToConnectV2(err).Message())
 
 	repo.GetProjectMCPConfigsJSONFunc = func(context.Context, string) (*string, error) {
 		return nil, errors.New("dsn=postgres://u:secret@h")
 	}
-	_, err = client.ListServers(context.Background(), connect.NewRequest(&reliantv1.ListServersRequest{ProjectId: "p-1"}))
+	_, err = client.ListServers(context.Background(), &reliantv1.ListServersRequest{ProjectId: "p-1"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
-	assert.Equal(t, "failed to read MCP configuration", svcerr.ToConnect(err).Message())
+	assert.Equal(t, connect.CodeInternal, svcerr.CodeV2(err))
+	assert.Equal(t, "failed to read MCP configuration", svcerr.ToConnectV2(err).Message())
 }

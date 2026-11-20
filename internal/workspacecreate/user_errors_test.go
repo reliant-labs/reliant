@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -105,13 +105,13 @@ func TestFinish_DiagnosedCheckoutFailuresAreUserErrors(t *testing.T) {
 
 			assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err), "a caller's mistake is a user error: %v", err)
 			assert.False(t, errclass.IsServerError(err), "must not be reported as a server fault")
-			assert.Equal(t, tc.wantCode, svcerr.Code(err))
+			assert.Equal(t, tc.wantCode, svcerr.CodeV2(err))
 			for _, want := range tc.wantMsg {
 				assert.Contains(t, err.Error(), want)
 			}
 			// What a client reads is that sentence, not a redacted
 			// "internal server error".
-			wire := svcerr.ToConnect(err)
+			wire := svcerr.ToConnectV2(err)
 			assert.Equal(t, tc.wantCode, wire.Code())
 			assert.Equal(t, err.Error(), wire.Message())
 
@@ -250,7 +250,7 @@ func TestInsert_RefusalsAreUserErrors(t *testing.T) {
 		req.Branch = "bad..name"
 		_, err := Insert(context.Background(), st, nil, req)
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
 		assert.Contains(t, err.Error(), "bad..name")
 		assert.Empty(t, st.rows, "no row for a create that cannot work")

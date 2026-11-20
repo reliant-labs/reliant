@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,14 +26,14 @@ func openOrgFeed(t *testing.T, client reliantv1connect.StreamingServiceClient, u
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := client.StreamOrgUpdates(ctx, as(userID, msg))
+	stream, err := client.StreamOrgUpdates(as(ctx, userID), msg)
 	require.NoError(t, err)
-	events := receiveAll(t, stream)
+	events, streamErr := receiveAll(t, stream)
 	var replayed []*reliantv1.OrgUpdate
 	for {
 		ev, open := <-events
 		if !open {
-			t.Fatalf("the org feed ended before caught_up: %v", stream.Err())
+			t.Fatalf("the org feed ended before caught_up: %v", streamErr())
 		}
 		replayed = append(replayed, ev.GetUpdates().GetUpdates()...)
 		if c := ev.GetCaughtUp(); c != nil {
@@ -159,22 +159,22 @@ func TestStreamOrgUpdates_RefusesNonMembersAndAgents(t *testing.T) {
 	f, client := newOrgFeedService(t)
 	org := viewertest.OrgID
 
-	refused := func(req *connect.Request[reliantv1.StreamOrgUpdatesRequest]) connect.Code {
+	refused := func(caller func(context.Context) context.Context) connect.Code {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		t.Cleanup(cancel)
-		stream, err := client.StreamOrgUpdates(ctx, req)
+		stream, err := client.StreamOrgUpdates(caller(ctx), &reliantv1.StreamOrgUpdatesRequest{OrgId: &org})
 		require.NoError(t, err)
-		for ev := range receiveAll(t, stream) {
+		events, streamErr := receiveAll(t, stream)
+		for ev := range events {
 			t.Fatalf("a refused caller was sent %v", ev)
 		}
-		return connect.CodeOf(stream.Err())
+		return connect.CodeOf(streamErr())
 	}
 	assert.Contains(t, []connect.Code{connect.CodeNotFound, connect.CodePermissionDenied},
-		refused(as(f.OutsiderID, &reliantv1.StreamOrgUpdatesRequest{OrgId: &org})), "an outsider naming the org")
+		refused(func(ctx context.Context) context.Context { return as(ctx, f.OutsiderID) }), "an outsider naming the org")
 
-	agent := as(f.ViewerID, &reliantv1.StreamOrgUpdatesRequest{OrgId: &org})
-	agent.Header().Set(testCredentialHeader, "access-token")
-	assert.Equal(t, connect.CodePermissionDenied, refused(agent), "an agent's CLI login")
+	assert.Equal(t, connect.CodePermissionDenied,
+		refused(func(ctx context.Context) context.Context { return asAgent(ctx, f.ViewerID) }), "an agent's CLI login")
 }
 
 // flippableFeedMembership answers as the fixture's resolver until flipped,
@@ -225,9 +225,9 @@ func TestStreamOrgUpdates_EndsWhenMembershipIsNotConfirmed(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			t.Cleanup(cancel)
-			stream, err := client.StreamOrgUpdates(ctx, as(f.ViewerID, &reliantv1.StreamOrgUpdatesRequest{}))
+			stream, err := client.StreamOrgUpdates(as(ctx, f.ViewerID), &reliantv1.StreamOrgUpdatesRequest{})
 			require.NoError(t, err)
-			events := receiveAll(t, stream)
+			events, streamErr := receiveAll(t, stream)
 			nextEvent(t, events, "caught_up", func(ev *reliantv1.OrgStreamEvent) bool { return ev.GetCaughtUp() != nil })
 
 			m.flipped.Store(true)
@@ -242,7 +242,7 @@ func TestStreamOrgUpdates_EndsWhenMembershipIsNotConfirmed(t *testing.T) {
 					t.Fatalf("a row was sent after the membership was not confirmed: %v", ev)
 				}
 			}
-			require.Equal(t, tc.code, connect.CodeOf(stream.Err()), "%v", stream.Err())
+			require.Equal(t, tc.code, connect.CodeOf(streamErr()), "%v", streamErr())
 		})
 	}
 }
@@ -258,10 +258,11 @@ func TestStreamOrgUpdates_OpenRefusesUnconfirmedMembership(t *testing.T) {
 	client := sharedStreams(t, svc, f.Membership)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
-	stream, err := client.StreamOrgUpdates(ctx, as(f.ViewerID, &reliantv1.StreamOrgUpdatesRequest{}))
+	stream, err := client.StreamOrgUpdates(as(ctx, f.ViewerID), &reliantv1.StreamOrgUpdatesRequest{})
 	require.NoError(t, err)
-	for ev := range receiveAll(t, stream) {
+	events, streamErr := receiveAll(t, stream)
+	for ev := range events {
 		t.Fatalf("an unconfirmed member was sent %v", ev)
 	}
-	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(stream.Err()))
+	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(streamErr()))
 }

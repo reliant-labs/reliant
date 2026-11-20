@@ -7,79 +7,145 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// ForgeServiceName is the fully-qualified name of the ForgeService service.
 	ForgeServiceName = "reliant.v1.ForgeService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ForgeServiceGetTopologyProcedure is the fully-qualified name of the ForgeService's GetTopology
-	// RPC.
+	// ForgeServiceGetTopologyProcedure is the procedure name of the ForgeService's GetTopology RPC.
 	ForgeServiceGetTopologyProcedure = "/reliant.v1.ForgeService/GetTopology"
-	// ForgeServiceVerifyEnvProcedure is the fully-qualified name of the ForgeService's VerifyEnv RPC.
+	// ForgeServiceVerifyEnvProcedure is the procedure name of the ForgeService's VerifyEnv RPC.
 	ForgeServiceVerifyEnvProcedure = "/reliant.v1.ForgeService/VerifyEnv"
-	// ForgeServiceListSecretsProcedure is the fully-qualified name of the ForgeService's ListSecrets
-	// RPC.
+	// ForgeServiceListSecretsProcedure is the procedure name of the ForgeService's ListSecrets RPC.
 	ForgeServiceListSecretsProcedure = "/reliant.v1.ForgeService/ListSecrets"
-	// ForgeServiceGetEnvStatusProcedure is the fully-qualified name of the ForgeService's GetEnvStatus
-	// RPC.
+	// ForgeServiceGetEnvStatusProcedure is the procedure name of the ForgeService's GetEnvStatus RPC.
 	ForgeServiceGetEnvStatusProcedure = "/reliant.v1.ForgeService/GetEnvStatus"
-	// ForgeServiceGetEnvShapeProcedure is the fully-qualified name of the ForgeService's GetEnvShape
-	// RPC.
+	// ForgeServiceGetEnvShapeProcedure is the procedure name of the ForgeService's GetEnvShape RPC.
 	ForgeServiceGetEnvShapeProcedure = "/reliant.v1.ForgeService/GetEnvShape"
-	// ForgeServicePlanPromoteProcedure is the fully-qualified name of the ForgeService's PlanPromote
-	// RPC.
+	// ForgeServicePlanPromoteProcedure is the procedure name of the ForgeService's PlanPromote RPC.
 	ForgeServicePlanPromoteProcedure = "/reliant.v1.ForgeService/PlanPromote"
-	// ForgeServiceApplyPromoteProcedure is the fully-qualified name of the ForgeService's ApplyPromote
-	// RPC.
+	// ForgeServiceApplyPromoteProcedure is the procedure name of the ForgeService's ApplyPromote RPC.
 	ForgeServiceApplyPromoteProcedure = "/reliant.v1.ForgeService/ApplyPromote"
-	// ForgeServicePlanDeployProcedure is the fully-qualified name of the ForgeService's PlanDeploy RPC.
+	// ForgeServicePlanDeployProcedure is the procedure name of the ForgeService's PlanDeploy RPC.
 	ForgeServicePlanDeployProcedure = "/reliant.v1.ForgeService/PlanDeploy"
-	// ForgeServiceStartDeployPlanProcedure is the fully-qualified name of the ForgeService's
-	// StartDeployPlan RPC.
-	ForgeServiceStartDeployPlanProcedure = "/reliant.v1.ForgeService/StartDeployPlan"
-	// ForgeServiceStartDeployProcedure is the fully-qualified name of the ForgeService's StartDeploy
+	// ForgeServiceStartDeployPlanProcedure is the procedure name of the ForgeService's StartDeployPlan
 	// RPC.
+	ForgeServiceStartDeployPlanProcedure = "/reliant.v1.ForgeService/StartDeployPlan"
+	// ForgeServiceStartDeployProcedure is the procedure name of the ForgeService's StartDeploy RPC.
 	ForgeServiceStartDeployProcedure = "/reliant.v1.ForgeService/StartDeploy"
-	// ForgeServiceGetDeployStatusProcedure is the fully-qualified name of the ForgeService's
-	// GetDeployStatus RPC.
+	// ForgeServiceGetDeployStatusProcedure is the procedure name of the ForgeService's GetDeployStatus
+	// RPC.
 	ForgeServiceGetDeployStatusProcedure = "/reliant.v1.ForgeService/GetDeployStatus"
+)
+
+var (
+	forgeServiceGetTopologySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("GetTopology"),
+			Procedure:  ForgeServiceGetTopologyProcedure,
+		}
+	})
+	forgeServiceVerifyEnvSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("VerifyEnv"),
+			Procedure:  ForgeServiceVerifyEnvProcedure,
+		}
+	})
+	forgeServiceListSecretsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("ListSecrets"),
+			Procedure:  ForgeServiceListSecretsProcedure,
+		}
+	})
+	forgeServiceGetEnvStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("GetEnvStatus"),
+			Procedure:  ForgeServiceGetEnvStatusProcedure,
+		}
+	})
+	forgeServiceGetEnvShapeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("GetEnvShape"),
+			Procedure:  ForgeServiceGetEnvShapeProcedure,
+		}
+	})
+	forgeServicePlanPromoteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("PlanPromote"),
+			Procedure:        ForgeServicePlanPromoteProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	forgeServiceApplyPromoteSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("ApplyPromote"),
+			Procedure:  ForgeServiceApplyPromoteProcedure,
+		}
+	})
+	forgeServicePlanDeploySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("PlanDeploy"),
+			Procedure:        ForgeServicePlanDeployProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	forgeServiceStartDeployPlanSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("StartDeployPlan"),
+			Procedure:  ForgeServiceStartDeployPlanProcedure,
+		}
+	})
+	forgeServiceStartDeploySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("StartDeploy"),
+			Procedure:  ForgeServiceStartDeployProcedure,
+		}
+	})
+	forgeServiceGetDeployStatusSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods().ByName("GetDeployStatus"),
+			Procedure:  ForgeServiceGetDeployStatusProcedure,
+		}
+	})
 )
 
 // ForgeServiceClient is a client for the reliant.v1.ForgeService service.
 type ForgeServiceClient interface {
 	// GetTopology returns the whole release/environment topology. Set verify to
 	// reconcile each environment against its live cluster.
-	GetTopology(context.Context, *connect.Request[v1.GetForgeTopologyRequest]) (*connect.Response[v1.GetForgeTopologyResponse], error)
+	GetTopology(context.Context, *v1.GetForgeTopologyRequest) (*v1.GetForgeTopologyResponse, error)
 	// VerifyEnv reconciles one environment against its live cluster.
-	VerifyEnv(context.Context, *connect.Request[v1.VerifyForgeEnvRequest]) (*connect.Response[v1.VerifyForgeEnvResponse], error)
+	VerifyEnv(context.Context, *v1.VerifyForgeEnvRequest) (*v1.VerifyForgeEnvResponse, error)
 	// ListSecrets returns declared/present/inert secrets for an environment.
 	// The report carries NAMES and BOOLEANS only, never a secret value.
-	ListSecrets(context.Context, *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error)
+	ListSecrets(context.Context, *v1.ListForgeSecretsRequest) (*v1.ListForgeSecretsResponse, error)
 	// GetEnvStatus returns runtime checks for an environment.
-	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
+	GetEnvStatus(context.Context, *v1.GetForgeEnvStatusRequest) (*v1.GetForgeEnvStatusResponse, error)
 	// GetEnvShape projects ONE environment's render into the declaration the
 	// control plane records for it — `forge env shape <env> --json`.
 	//
@@ -95,7 +161,7 @@ type ForgeServiceClient interface {
 	// records. That identity is what stops a Register from writing a
 	// declaration that disagrees with the next build's, on an env whose kind is
 	// immutable.
-	GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error)
+	GetEnvShape(context.Context, *v1.GetForgeEnvShapeRequest) (*v1.GetForgeEnvShapeResponse, error)
 	// PlanPromote previews binding an environment to a release. READ-ONLY: it
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
 	// entire change set and stops before forge's only write. Safe, idempotent,
@@ -104,7 +170,7 @@ type ForgeServiceClient interface {
 	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
 	// verb, so without it forge generates a mutation hook for it.
 	// TestForgeService_NoSideEffectsRPCsOnlyRead holds the handler to that.
-	PlanPromote(context.Context, *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error)
+	PlanPromote(context.Context, *v1.PlanForgePromoteRequest) (*v1.PlanForgePromoteResponse, error)
 	// ApplyPromote WRITES the binding.
 	//
 	// A SEPARATE METHOD, not a flag on PlanPromote, and that is the whole safety
@@ -118,7 +184,7 @@ type ForgeServiceClient interface {
 	// The request carries a confirmation token (see PromoteForgeEnvRequest). The
 	// server re-plans and REFUSES if the binding no longer matches what the
 	// caller last saw.
-	ApplyPromote(context.Context, *connect.Request[v1.PromoteForgeEnvRequest]) (*connect.Response[v1.PromoteForgeEnvResponse], error)
+	ApplyPromote(context.Context, *v1.PromoteForgeEnvRequest) (*v1.PromoteForgeEnvResponse, error)
 	// PlanDeploy previews deploying an environment. READ-ONLY: it runs
 	// `forge env deploy <env> --dry-run --json`, which renders the env, evaluates
 	// the declared-cluster guard and runs the preflight against the live target,
@@ -127,7 +193,7 @@ type ForgeServiceClient interface {
 	// which images and which resources before asking them to approve it.
 	//
 	// NO_SIDE_EFFECTS, for the same reason as PlanPromote.
-	PlanDeploy(context.Context, *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error)
+	PlanDeploy(context.Context, *v1.PlanForgeDeployRequest) (*v1.PlanForgeDeployResponse, error)
 	// StartDeployPlan begins the APPROVABLE plan as a background job, and returns
 	// a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
 	//
@@ -144,7 +210,7 @@ type ForgeServiceClient interface {
 	//
 	// What comes back is the plan plus its digest. Show the plan, let a human
 	// approve THAT, and send the digest to StartDeploy.
-	StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error)
+	StartDeployPlan(context.Context, *v1.StartForgeDeployPlanRequest) (*v1.StartForgeDeployResponse, error)
 	// StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
 	// and returns a handle immediately. Poll it with GetDeployStatus.
 	//
@@ -163,180 +229,34 @@ type ForgeServiceClient interface {
 	// The request carries a confirmation token (see StartForgeDeployRequest). The
 	// server re-plans and REFUSES if the declared cluster or the bound release is
 	// no longer what the caller saw.
-	StartDeploy(context.Context, *connect.Request[v1.StartForgeDeployRequest]) (*connect.Response[v1.StartForgeDeployResponse], error)
+	StartDeploy(context.Context, *v1.StartForgeDeployRequest) (*v1.StartForgeDeployResponse, error)
 	// GetDeployStatus polls a running or finished deploy by handle.
 	//
 	// Read job_status and the report TOGETHER: job_status answers "did the
 	// invocation reach a determinate outcome", and the report answers "did the
 	// deploy work". COMPLETED means forge ran and produced a report — never that
 	// the deploy succeeded.
-	GetDeployStatus(context.Context, *connect.Request[v1.GetForgeDeployStatusRequest]) (*connect.Response[v1.GetForgeDeployStatusResponse], error)
+	GetDeployStatus(context.Context, *v1.GetForgeDeployStatusRequest) (*v1.GetForgeDeployStatusResponse, error)
 }
 
-// NewForgeServiceClient constructs a client for the reliant.v1.ForgeService service. By default, it
-// uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
-// uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
-// connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewForgeServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ForgeServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	forgeServiceMethods := v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods()
-	return &forgeServiceClient{
-		getTopology: connect.NewClient[v1.GetForgeTopologyRequest, v1.GetForgeTopologyResponse](
-			httpClient,
-			baseURL+ForgeServiceGetTopologyProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("GetTopology")),
-			connect.WithClientOptions(opts...),
-		),
-		verifyEnv: connect.NewClient[v1.VerifyForgeEnvRequest, v1.VerifyForgeEnvResponse](
-			httpClient,
-			baseURL+ForgeServiceVerifyEnvProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("VerifyEnv")),
-			connect.WithClientOptions(opts...),
-		),
-		listSecrets: connect.NewClient[v1.ListForgeSecretsRequest, v1.ListForgeSecretsResponse](
-			httpClient,
-			baseURL+ForgeServiceListSecretsProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("ListSecrets")),
-			connect.WithClientOptions(opts...),
-		),
-		getEnvStatus: connect.NewClient[v1.GetForgeEnvStatusRequest, v1.GetForgeEnvStatusResponse](
-			httpClient,
-			baseURL+ForgeServiceGetEnvStatusProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("GetEnvStatus")),
-			connect.WithClientOptions(opts...),
-		),
-		getEnvShape: connect.NewClient[v1.GetForgeEnvShapeRequest, v1.GetForgeEnvShapeResponse](
-			httpClient,
-			baseURL+ForgeServiceGetEnvShapeProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("GetEnvShape")),
-			connect.WithClientOptions(opts...),
-		),
-		planPromote: connect.NewClient[v1.PlanForgePromoteRequest, v1.PlanForgePromoteResponse](
-			httpClient,
-			baseURL+ForgeServicePlanPromoteProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("PlanPromote")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		applyPromote: connect.NewClient[v1.PromoteForgeEnvRequest, v1.PromoteForgeEnvResponse](
-			httpClient,
-			baseURL+ForgeServiceApplyPromoteProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("ApplyPromote")),
-			connect.WithClientOptions(opts...),
-		),
-		planDeploy: connect.NewClient[v1.PlanForgeDeployRequest, v1.PlanForgeDeployResponse](
-			httpClient,
-			baseURL+ForgeServicePlanDeployProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("PlanDeploy")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		startDeployPlan: connect.NewClient[v1.StartForgeDeployPlanRequest, v1.StartForgeDeployResponse](
-			httpClient,
-			baseURL+ForgeServiceStartDeployPlanProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("StartDeployPlan")),
-			connect.WithClientOptions(opts...),
-		),
-		startDeploy: connect.NewClient[v1.StartForgeDeployRequest, v1.StartForgeDeployResponse](
-			httpClient,
-			baseURL+ForgeServiceStartDeployProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("StartDeploy")),
-			connect.WithClientOptions(opts...),
-		),
-		getDeployStatus: connect.NewClient[v1.GetForgeDeployStatusRequest, v1.GetForgeDeployStatusResponse](
-			httpClient,
-			baseURL+ForgeServiceGetDeployStatusProcedure,
-			connect.WithSchema(forgeServiceMethods.ByName("GetDeployStatus")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// forgeServiceClient implements ForgeServiceClient.
-type forgeServiceClient struct {
-	getTopology     *connect.Client[v1.GetForgeTopologyRequest, v1.GetForgeTopologyResponse]
-	verifyEnv       *connect.Client[v1.VerifyForgeEnvRequest, v1.VerifyForgeEnvResponse]
-	listSecrets     *connect.Client[v1.ListForgeSecretsRequest, v1.ListForgeSecretsResponse]
-	getEnvStatus    *connect.Client[v1.GetForgeEnvStatusRequest, v1.GetForgeEnvStatusResponse]
-	getEnvShape     *connect.Client[v1.GetForgeEnvShapeRequest, v1.GetForgeEnvShapeResponse]
-	planPromote     *connect.Client[v1.PlanForgePromoteRequest, v1.PlanForgePromoteResponse]
-	applyPromote    *connect.Client[v1.PromoteForgeEnvRequest, v1.PromoteForgeEnvResponse]
-	planDeploy      *connect.Client[v1.PlanForgeDeployRequest, v1.PlanForgeDeployResponse]
-	startDeployPlan *connect.Client[v1.StartForgeDeployPlanRequest, v1.StartForgeDeployResponse]
-	startDeploy     *connect.Client[v1.StartForgeDeployRequest, v1.StartForgeDeployResponse]
-	getDeployStatus *connect.Client[v1.GetForgeDeployStatusRequest, v1.GetForgeDeployStatusResponse]
-}
-
-// GetTopology calls reliant.v1.ForgeService.GetTopology.
-func (c *forgeServiceClient) GetTopology(ctx context.Context, req *connect.Request[v1.GetForgeTopologyRequest]) (*connect.Response[v1.GetForgeTopologyResponse], error) {
-	return c.getTopology.CallUnary(ctx, req)
-}
-
-// VerifyEnv calls reliant.v1.ForgeService.VerifyEnv.
-func (c *forgeServiceClient) VerifyEnv(ctx context.Context, req *connect.Request[v1.VerifyForgeEnvRequest]) (*connect.Response[v1.VerifyForgeEnvResponse], error) {
-	return c.verifyEnv.CallUnary(ctx, req)
-}
-
-// ListSecrets calls reliant.v1.ForgeService.ListSecrets.
-func (c *forgeServiceClient) ListSecrets(ctx context.Context, req *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error) {
-	return c.listSecrets.CallUnary(ctx, req)
-}
-
-// GetEnvStatus calls reliant.v1.ForgeService.GetEnvStatus.
-func (c *forgeServiceClient) GetEnvStatus(ctx context.Context, req *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error) {
-	return c.getEnvStatus.CallUnary(ctx, req)
-}
-
-// GetEnvShape calls reliant.v1.ForgeService.GetEnvShape.
-func (c *forgeServiceClient) GetEnvShape(ctx context.Context, req *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error) {
-	return c.getEnvShape.CallUnary(ctx, req)
-}
-
-// PlanPromote calls reliant.v1.ForgeService.PlanPromote.
-func (c *forgeServiceClient) PlanPromote(ctx context.Context, req *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error) {
-	return c.planPromote.CallUnary(ctx, req)
-}
-
-// ApplyPromote calls reliant.v1.ForgeService.ApplyPromote.
-func (c *forgeServiceClient) ApplyPromote(ctx context.Context, req *connect.Request[v1.PromoteForgeEnvRequest]) (*connect.Response[v1.PromoteForgeEnvResponse], error) {
-	return c.applyPromote.CallUnary(ctx, req)
-}
-
-// PlanDeploy calls reliant.v1.ForgeService.PlanDeploy.
-func (c *forgeServiceClient) PlanDeploy(ctx context.Context, req *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error) {
-	return c.planDeploy.CallUnary(ctx, req)
-}
-
-// StartDeployPlan calls reliant.v1.ForgeService.StartDeployPlan.
-func (c *forgeServiceClient) StartDeployPlan(ctx context.Context, req *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {
-	return c.startDeployPlan.CallUnary(ctx, req)
-}
-
-// StartDeploy calls reliant.v1.ForgeService.StartDeploy.
-func (c *forgeServiceClient) StartDeploy(ctx context.Context, req *connect.Request[v1.StartForgeDeployRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {
-	return c.startDeploy.CallUnary(ctx, req)
-}
-
-// GetDeployStatus calls reliant.v1.ForgeService.GetDeployStatus.
-func (c *forgeServiceClient) GetDeployStatus(ctx context.Context, req *connect.Request[v1.GetForgeDeployStatusRequest]) (*connect.Response[v1.GetForgeDeployStatusResponse], error) {
-	return c.getDeployStatus.CallUnary(ctx, req)
+// NewForgeServiceClient constructs a client for the reliant.v1.ForgeService service. Multiple
+// service clients may share a single connect.Client.
+func NewForgeServiceClient(client *connect.Client) ForgeServiceClient {
+	return &forgeServiceClient{client: client}
 }
 
 // ForgeServiceHandler is an implementation of the reliant.v1.ForgeService service.
 type ForgeServiceHandler interface {
 	// GetTopology returns the whole release/environment topology. Set verify to
 	// reconcile each environment against its live cluster.
-	GetTopology(context.Context, *connect.Request[v1.GetForgeTopologyRequest]) (*connect.Response[v1.GetForgeTopologyResponse], error)
+	GetTopology(context.Context, *v1.GetForgeTopologyRequest) (*v1.GetForgeTopologyResponse, error)
 	// VerifyEnv reconciles one environment against its live cluster.
-	VerifyEnv(context.Context, *connect.Request[v1.VerifyForgeEnvRequest]) (*connect.Response[v1.VerifyForgeEnvResponse], error)
+	VerifyEnv(context.Context, *v1.VerifyForgeEnvRequest) (*v1.VerifyForgeEnvResponse, error)
 	// ListSecrets returns declared/present/inert secrets for an environment.
 	// The report carries NAMES and BOOLEANS only, never a secret value.
-	ListSecrets(context.Context, *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error)
+	ListSecrets(context.Context, *v1.ListForgeSecretsRequest) (*v1.ListForgeSecretsResponse, error)
 	// GetEnvStatus returns runtime checks for an environment.
-	GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error)
+	GetEnvStatus(context.Context, *v1.GetForgeEnvStatusRequest) (*v1.GetForgeEnvStatusResponse, error)
 	// GetEnvShape projects ONE environment's render into the declaration the
 	// control plane records for it — `forge env shape <env> --json`.
 	//
@@ -352,7 +272,7 @@ type ForgeServiceHandler interface {
 	// records. That identity is what stops a Register from writing a
 	// declaration that disagrees with the next build's, on an env whose kind is
 	// immutable.
-	GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error)
+	GetEnvShape(context.Context, *v1.GetForgeEnvShapeRequest) (*v1.GetForgeEnvShapeResponse, error)
 	// PlanPromote previews binding an environment to a release. READ-ONLY: it
 	// runs `forge env promote <release> --to <env> --plan`, which computes the
 	// entire change set and stops before forge's only write. Safe, idempotent,
@@ -361,7 +281,7 @@ type ForgeServiceHandler interface {
 	// It only reads, and says so with NO_SIDE_EFFECTS: its name is not a read
 	// verb, so without it forge generates a mutation hook for it.
 	// TestForgeService_NoSideEffectsRPCsOnlyRead holds the handler to that.
-	PlanPromote(context.Context, *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error)
+	PlanPromote(context.Context, *v1.PlanForgePromoteRequest) (*v1.PlanForgePromoteResponse, error)
 	// ApplyPromote WRITES the binding.
 	//
 	// A SEPARATE METHOD, not a flag on PlanPromote, and that is the whole safety
@@ -375,7 +295,7 @@ type ForgeServiceHandler interface {
 	// The request carries a confirmation token (see PromoteForgeEnvRequest). The
 	// server re-plans and REFUSES if the binding no longer matches what the
 	// caller last saw.
-	ApplyPromote(context.Context, *connect.Request[v1.PromoteForgeEnvRequest]) (*connect.Response[v1.PromoteForgeEnvResponse], error)
+	ApplyPromote(context.Context, *v1.PromoteForgeEnvRequest) (*v1.PromoteForgeEnvResponse, error)
 	// PlanDeploy previews deploying an environment. READ-ONLY: it runs
 	// `forge env deploy <env> --dry-run --json`, which renders the env, evaluates
 	// the declared-cluster guard and runs the preflight against the live target,
@@ -384,7 +304,7 @@ type ForgeServiceHandler interface {
 	// which images and which resources before asking them to approve it.
 	//
 	// NO_SIDE_EFFECTS, for the same reason as PlanPromote.
-	PlanDeploy(context.Context, *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error)
+	PlanDeploy(context.Context, *v1.PlanForgeDeployRequest) (*v1.PlanForgeDeployResponse, error)
 	// StartDeployPlan begins the APPROVABLE plan as a background job, and returns
 	// a handle immediately. Poll it with GetDeployStatus, exactly as for a deploy.
 	//
@@ -401,7 +321,7 @@ type ForgeServiceHandler interface {
 	//
 	// What comes back is the plan plus its digest. Show the plan, let a human
 	// approve THAT, and send the digest to StartDeploy.
-	StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error)
+	StartDeployPlan(context.Context, *v1.StartForgeDeployPlanRequest) (*v1.StartForgeDeployResponse, error)
 	// StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
 	// and returns a handle immediately. Poll it with GetDeployStatus.
 	//
@@ -420,164 +340,304 @@ type ForgeServiceHandler interface {
 	// The request carries a confirmation token (see StartForgeDeployRequest). The
 	// server re-plans and REFUSES if the declared cluster or the bound release is
 	// no longer what the caller saw.
-	StartDeploy(context.Context, *connect.Request[v1.StartForgeDeployRequest]) (*connect.Response[v1.StartForgeDeployResponse], error)
+	StartDeploy(context.Context, *v1.StartForgeDeployRequest) (*v1.StartForgeDeployResponse, error)
 	// GetDeployStatus polls a running or finished deploy by handle.
 	//
 	// Read job_status and the report TOGETHER: job_status answers "did the
 	// invocation reach a determinate outcome", and the report answers "did the
 	// deploy work". COMPLETED means forge ran and produced a report — never that
 	// the deploy succeeded.
-	GetDeployStatus(context.Context, *connect.Request[v1.GetForgeDeployStatusRequest]) (*connect.Response[v1.GetForgeDeployStatusResponse], error)
+	GetDeployStatus(context.Context, *v1.GetForgeDeployStatusRequest) (*v1.GetForgeDeployStatusResponse, error)
 }
 
-// NewForgeServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewForgeServiceHandler(svc ForgeServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	forgeServiceMethods := v1.File_reliant_v1_forge_proto.Services().ByName("ForgeService").Methods()
-	forgeServiceGetTopologyHandler := connect.NewUnaryHandler(
-		ForgeServiceGetTopologyProcedure,
-		svc.GetTopology,
-		connect.WithSchema(forgeServiceMethods.ByName("GetTopology")),
-		connect.WithHandlerOptions(opts...),
+// RegisterForgeServiceHandler registers svc as the reliant.v1.ForgeService implementation on
+// server.
+func RegisterForgeServiceHandler(server *connect.Server, svc ForgeServiceHandler) {
+	adapter := forgeServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: forgeServiceGetTopologySpec(), Handler: adapter.getTopology},
+		connect.Method{Spec: forgeServiceVerifyEnvSpec(), Handler: adapter.verifyEnv},
+		connect.Method{Spec: forgeServiceListSecretsSpec(), Handler: adapter.listSecrets},
+		connect.Method{Spec: forgeServiceGetEnvStatusSpec(), Handler: adapter.getEnvStatus},
+		connect.Method{Spec: forgeServiceGetEnvShapeSpec(), Handler: adapter.getEnvShape},
+		connect.Method{Spec: forgeServicePlanPromoteSpec(), Handler: adapter.planPromote},
+		connect.Method{Spec: forgeServiceApplyPromoteSpec(), Handler: adapter.applyPromote},
+		connect.Method{Spec: forgeServicePlanDeploySpec(), Handler: adapter.planDeploy},
+		connect.Method{Spec: forgeServiceStartDeployPlanSpec(), Handler: adapter.startDeployPlan},
+		connect.Method{Spec: forgeServiceStartDeploySpec(), Handler: adapter.startDeploy},
+		connect.Method{Spec: forgeServiceGetDeployStatusSpec(), Handler: adapter.getDeployStatus},
 	)
-	forgeServiceVerifyEnvHandler := connect.NewUnaryHandler(
-		ForgeServiceVerifyEnvProcedure,
-		svc.VerifyEnv,
-		connect.WithSchema(forgeServiceMethods.ByName("VerifyEnv")),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServiceListSecretsHandler := connect.NewUnaryHandler(
-		ForgeServiceListSecretsProcedure,
-		svc.ListSecrets,
-		connect.WithSchema(forgeServiceMethods.ByName("ListSecrets")),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServiceGetEnvStatusHandler := connect.NewUnaryHandler(
-		ForgeServiceGetEnvStatusProcedure,
-		svc.GetEnvStatus,
-		connect.WithSchema(forgeServiceMethods.ByName("GetEnvStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServiceGetEnvShapeHandler := connect.NewUnaryHandler(
-		ForgeServiceGetEnvShapeProcedure,
-		svc.GetEnvShape,
-		connect.WithSchema(forgeServiceMethods.ByName("GetEnvShape")),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServicePlanPromoteHandler := connect.NewUnaryHandler(
-		ForgeServicePlanPromoteProcedure,
-		svc.PlanPromote,
-		connect.WithSchema(forgeServiceMethods.ByName("PlanPromote")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServiceApplyPromoteHandler := connect.NewUnaryHandler(
-		ForgeServiceApplyPromoteProcedure,
-		svc.ApplyPromote,
-		connect.WithSchema(forgeServiceMethods.ByName("ApplyPromote")),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServicePlanDeployHandler := connect.NewUnaryHandler(
-		ForgeServicePlanDeployProcedure,
-		svc.PlanDeploy,
-		connect.WithSchema(forgeServiceMethods.ByName("PlanDeploy")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServiceStartDeployPlanHandler := connect.NewUnaryHandler(
-		ForgeServiceStartDeployPlanProcedure,
-		svc.StartDeployPlan,
-		connect.WithSchema(forgeServiceMethods.ByName("StartDeployPlan")),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServiceStartDeployHandler := connect.NewUnaryHandler(
-		ForgeServiceStartDeployProcedure,
-		svc.StartDeploy,
-		connect.WithSchema(forgeServiceMethods.ByName("StartDeploy")),
-		connect.WithHandlerOptions(opts...),
-	)
-	forgeServiceGetDeployStatusHandler := connect.NewUnaryHandler(
-		ForgeServiceGetDeployStatusProcedure,
-		svc.GetDeployStatus,
-		connect.WithSchema(forgeServiceMethods.ByName("GetDeployStatus")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.ForgeService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case ForgeServiceGetTopologyProcedure:
-			forgeServiceGetTopologyHandler.ServeHTTP(w, r)
-		case ForgeServiceVerifyEnvProcedure:
-			forgeServiceVerifyEnvHandler.ServeHTTP(w, r)
-		case ForgeServiceListSecretsProcedure:
-			forgeServiceListSecretsHandler.ServeHTTP(w, r)
-		case ForgeServiceGetEnvStatusProcedure:
-			forgeServiceGetEnvStatusHandler.ServeHTTP(w, r)
-		case ForgeServiceGetEnvShapeProcedure:
-			forgeServiceGetEnvShapeHandler.ServeHTTP(w, r)
-		case ForgeServicePlanPromoteProcedure:
-			forgeServicePlanPromoteHandler.ServeHTTP(w, r)
-		case ForgeServiceApplyPromoteProcedure:
-			forgeServiceApplyPromoteHandler.ServeHTTP(w, r)
-		case ForgeServicePlanDeployProcedure:
-			forgeServicePlanDeployHandler.ServeHTTP(w, r)
-		case ForgeServiceStartDeployPlanProcedure:
-			forgeServiceStartDeployPlanHandler.ServeHTTP(w, r)
-		case ForgeServiceStartDeployProcedure:
-			forgeServiceStartDeployHandler.ServeHTTP(w, r)
-		case ForgeServiceGetDeployStatusProcedure:
-			forgeServiceGetDeployStatusHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedForgeServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedForgeServiceHandler struct{}
 
-func (UnimplementedForgeServiceHandler) GetTopology(context.Context, *connect.Request[v1.GetForgeTopologyRequest]) (*connect.Response[v1.GetForgeTopologyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetTopology is not implemented"))
+func (UnimplementedForgeServiceHandler) GetTopology(context.Context, *v1.GetForgeTopologyRequest) (*v1.GetForgeTopologyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.GetTopology is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) VerifyEnv(context.Context, *connect.Request[v1.VerifyForgeEnvRequest]) (*connect.Response[v1.VerifyForgeEnvResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.VerifyEnv is not implemented"))
+func (UnimplementedForgeServiceHandler) VerifyEnv(context.Context, *v1.VerifyForgeEnvRequest) (*v1.VerifyForgeEnvResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.VerifyEnv is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) ListSecrets(context.Context, *connect.Request[v1.ListForgeSecretsRequest]) (*connect.Response[v1.ListForgeSecretsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.ListSecrets is not implemented"))
+func (UnimplementedForgeServiceHandler) ListSecrets(context.Context, *v1.ListForgeSecretsRequest) (*v1.ListForgeSecretsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.ListSecrets is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) GetEnvStatus(context.Context, *connect.Request[v1.GetForgeEnvStatusRequest]) (*connect.Response[v1.GetForgeEnvStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetEnvStatus is not implemented"))
+func (UnimplementedForgeServiceHandler) GetEnvStatus(context.Context, *v1.GetForgeEnvStatusRequest) (*v1.GetForgeEnvStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.GetEnvStatus is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) GetEnvShape(context.Context, *connect.Request[v1.GetForgeEnvShapeRequest]) (*connect.Response[v1.GetForgeEnvShapeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetEnvShape is not implemented"))
+func (UnimplementedForgeServiceHandler) GetEnvShape(context.Context, *v1.GetForgeEnvShapeRequest) (*v1.GetForgeEnvShapeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.GetEnvShape is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) PlanPromote(context.Context, *connect.Request[v1.PlanForgePromoteRequest]) (*connect.Response[v1.PlanForgePromoteResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.PlanPromote is not implemented"))
+func (UnimplementedForgeServiceHandler) PlanPromote(context.Context, *v1.PlanForgePromoteRequest) (*v1.PlanForgePromoteResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.PlanPromote is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) ApplyPromote(context.Context, *connect.Request[v1.PromoteForgeEnvRequest]) (*connect.Response[v1.PromoteForgeEnvResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.ApplyPromote is not implemented"))
+func (UnimplementedForgeServiceHandler) ApplyPromote(context.Context, *v1.PromoteForgeEnvRequest) (*v1.PromoteForgeEnvResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.ApplyPromote is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) PlanDeploy(context.Context, *connect.Request[v1.PlanForgeDeployRequest]) (*connect.Response[v1.PlanForgeDeployResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.PlanDeploy is not implemented"))
+func (UnimplementedForgeServiceHandler) PlanDeploy(context.Context, *v1.PlanForgeDeployRequest) (*v1.PlanForgeDeployResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.PlanDeploy is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) StartDeployPlan(context.Context, *connect.Request[v1.StartForgeDeployPlanRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.StartDeployPlan is not implemented"))
+func (UnimplementedForgeServiceHandler) StartDeployPlan(context.Context, *v1.StartForgeDeployPlanRequest) (*v1.StartForgeDeployResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.StartDeployPlan is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) StartDeploy(context.Context, *connect.Request[v1.StartForgeDeployRequest]) (*connect.Response[v1.StartForgeDeployResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.StartDeploy is not implemented"))
+func (UnimplementedForgeServiceHandler) StartDeploy(context.Context, *v1.StartForgeDeployRequest) (*v1.StartForgeDeployResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.StartDeploy is not implemented")
 }
 
-func (UnimplementedForgeServiceHandler) GetDeployStatus(context.Context, *connect.Request[v1.GetForgeDeployStatusRequest]) (*connect.Response[v1.GetForgeDeployStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ForgeService.GetDeployStatus is not implemented"))
+func (UnimplementedForgeServiceHandler) GetDeployStatus(context.Context, *v1.GetForgeDeployStatusRequest) (*v1.GetForgeDeployStatusResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.ForgeService.GetDeployStatus is not implemented")
+}
+
+type forgeServiceClient struct {
+	client *connect.Client
+}
+
+func (c *forgeServiceClient) GetTopology(ctx context.Context, req *v1.GetForgeTopologyRequest) (*v1.GetForgeTopologyResponse, error) {
+	var res v1.GetForgeTopologyResponse
+	if err := c.client.CallUnary(ctx, forgeServiceGetTopologySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) VerifyEnv(ctx context.Context, req *v1.VerifyForgeEnvRequest) (*v1.VerifyForgeEnvResponse, error) {
+	var res v1.VerifyForgeEnvResponse
+	if err := c.client.CallUnary(ctx, forgeServiceVerifyEnvSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) ListSecrets(ctx context.Context, req *v1.ListForgeSecretsRequest) (*v1.ListForgeSecretsResponse, error) {
+	var res v1.ListForgeSecretsResponse
+	if err := c.client.CallUnary(ctx, forgeServiceListSecretsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) GetEnvStatus(ctx context.Context, req *v1.GetForgeEnvStatusRequest) (*v1.GetForgeEnvStatusResponse, error) {
+	var res v1.GetForgeEnvStatusResponse
+	if err := c.client.CallUnary(ctx, forgeServiceGetEnvStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) GetEnvShape(ctx context.Context, req *v1.GetForgeEnvShapeRequest) (*v1.GetForgeEnvShapeResponse, error) {
+	var res v1.GetForgeEnvShapeResponse
+	if err := c.client.CallUnary(ctx, forgeServiceGetEnvShapeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) PlanPromote(ctx context.Context, req *v1.PlanForgePromoteRequest) (*v1.PlanForgePromoteResponse, error) {
+	var res v1.PlanForgePromoteResponse
+	if err := c.client.CallUnary(ctx, forgeServicePlanPromoteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) ApplyPromote(ctx context.Context, req *v1.PromoteForgeEnvRequest) (*v1.PromoteForgeEnvResponse, error) {
+	var res v1.PromoteForgeEnvResponse
+	if err := c.client.CallUnary(ctx, forgeServiceApplyPromoteSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) PlanDeploy(ctx context.Context, req *v1.PlanForgeDeployRequest) (*v1.PlanForgeDeployResponse, error) {
+	var res v1.PlanForgeDeployResponse
+	if err := c.client.CallUnary(ctx, forgeServicePlanDeploySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) StartDeployPlan(ctx context.Context, req *v1.StartForgeDeployPlanRequest) (*v1.StartForgeDeployResponse, error) {
+	var res v1.StartForgeDeployResponse
+	if err := c.client.CallUnary(ctx, forgeServiceStartDeployPlanSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) StartDeploy(ctx context.Context, req *v1.StartForgeDeployRequest) (*v1.StartForgeDeployResponse, error) {
+	var res v1.StartForgeDeployResponse
+	if err := c.client.CallUnary(ctx, forgeServiceStartDeploySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *forgeServiceClient) GetDeployStatus(ctx context.Context, req *v1.GetForgeDeployStatusRequest) (*v1.GetForgeDeployStatusResponse, error) {
+	var res v1.GetForgeDeployStatusResponse
+	if err := c.client.CallUnary(ctx, forgeServiceGetDeployStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type forgeServiceHandler struct{ svc ForgeServiceHandler }
+
+func (h forgeServiceHandler) getTopology(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetForgeTopologyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetTopology(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) verifyEnv(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.VerifyForgeEnvRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.VerifyEnv(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) listSecrets(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListForgeSecretsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSecrets(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) getEnvStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetForgeEnvStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetEnvStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) getEnvShape(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetForgeEnvShapeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetEnvShape(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) planPromote(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PlanForgePromoteRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PlanPromote(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) applyPromote(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PromoteForgeEnvRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ApplyPromote(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) planDeploy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PlanForgeDeployRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PlanDeploy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) startDeployPlan(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartForgeDeployPlanRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartDeployPlan(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) startDeploy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartForgeDeployRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartDeploy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h forgeServiceHandler) getDeployStatus(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetForgeDeployStatusRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetDeployStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

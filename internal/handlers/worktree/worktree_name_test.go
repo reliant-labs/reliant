@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -17,10 +17,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-func createNamed(ctx context.Context, svc *Service, projectID, name, branch string, force bool) (*connect.Response[reliantv1.CreateWorktreeResponse], error) {
-	return svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+func createNamed(ctx context.Context, svc *Service, projectID, name, branch string, force bool) (*reliantv1.CreateWorktreeResponse, error) {
+	return svc.CreateWorktree(ctx, &reliantv1.CreateWorktreeRequest{
 		ProjectId: projectID, Name: name, Branch: branch, Force: force,
-	}))
+	})
 }
 
 func TestCreateWorktree_NameRule(t *testing.T) {
@@ -34,25 +34,25 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 
 	first, err := createNamed(ctx, svc, projectID, "feat", "feat-1", false)
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, first.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, repo, first.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	// A live row holds the name: AlreadyExists, not a raw constraint error.
 	_, err = createNamed(ctx, svc, projectID, "feat", "feat-2", false)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "already exists")
 
 	// Archiving releases it; the old branch stays off limits, force or not.
-	require.NoError(t, repo.ArchiveWorktree(ctx, first.Msg.Worktree.Id))
+	require.NoError(t, repo.ArchiveWorktree(ctx, first.Worktree.Id))
 	for _, force := range []bool{false, true} {
 		_, err = createNamed(ctx, svc, projectID, "feat", "feat-1", force)
 		require.Error(t, err, "force=%v", force)
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 		assert.Contains(t, err.Error(), "pass a different branch")
 	}
 	second, err := createNamed(ctx, svc, projectID, "feat", "feat-2", false)
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, second.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, repo, second.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 }
 
 func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
@@ -67,22 +67,22 @@ func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
 
 	old, err := createNamed(ctx, svc, projectID, "feat", "feat-1", false)
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, old.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
-	require.NoError(t, repo.ArchiveWorktree(ctx, old.Msg.Worktree.Id))
+	awaitWorktreeStatus(t, repo, old.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	require.NoError(t, repo.ArchiveWorktree(ctx, old.Worktree.Id))
 	taker, err := createNamed(ctx, svc, projectID, "feat", "feat-2", false)
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, taker.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, repo, taker.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
-	_, err = svc.UnarchiveWorktree(ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: old.Msg.Worktree.Id}))
+	_, err = svc.UnarchiveWorktree(ctx, &reliantv1.UnarchiveWorktreeRequest{WorktreeId: old.Worktree.Id})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Contains(t, err.Error(), "another worktree in this project now uses that name")
 	assert.Contains(t, err.Error(), "archive or rename")
 
-	got, err := repo.GetWorktree(ctx, old.Msg.Worktree.Id)
+	got, err := repo.GetWorktree(ctx, old.Worktree.Id)
 	require.NoError(t, err)
 	assert.NotNil(t, got.DeletedAt, "still archived")
 
 	// The store guard backs the pre-check: a raw unarchive reports the typed error.
-	require.Error(t, repo.UnarchiveWorktree(ctx, old.Msg.Worktree.Id))
+	require.Error(t, repo.UnarchiveWorktree(ctx, old.Worktree.Id))
 }

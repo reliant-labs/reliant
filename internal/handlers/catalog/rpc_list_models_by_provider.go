@@ -3,8 +3,6 @@ package catalog
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
@@ -12,9 +10,9 @@ import (
 // ListModelsByProvider returns all models for a specific provider
 func (s *Service) ListModelsByProvider(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListModelsByProviderRequest],
-) (*connect.Response[reliantv1.ListModelsByProviderResponse], error) {
-	provider := req.Msg.Provider
+	req *reliantv1.ListModelsByProviderRequest,
+) (*reliantv1.ListModelsByProviderResponse, error) {
+	provider := req.Provider
 
 	// Get all models for the provider from the registry
 	registry := models.MustGetRegistry()
@@ -47,5 +45,5 @@ func (s *Service) ListModelsByProvider(
 	resp := &reliantv1.ListModelsByProviderResponse{
 		Models: modelInfos,
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

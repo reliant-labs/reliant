@@ -3,7 +3,6 @@ package org_provider_account
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -14,9 +13,9 @@ import (
 // pays for. An owner or admin only: the seats name members' sign-ins.
 func (s *Service) ListOrgProviderWorkspaces(
 	ctx context.Context,
-	req *connect.Request[pb.ListOrgProviderWorkspacesRequest],
-) (*connect.Response[pb.ListOrgProviderWorkspacesResponse], error) {
-	orgID, err := requireOrgID(req.Msg.GetOrgId())
+	req *pb.ListOrgProviderWorkspacesRequest,
+) (*pb.ListOrgProviderWorkspacesResponse, error) {
+	orgID, err := requireOrgID(req.GetOrgId())
 	if err != nil {
 		return nil, err
 	}
@@ -45,5 +44,5 @@ func (s *Service) ListOrgProviderWorkspaces(
 			ExternalOrgId: optional(core.ProviderWorkspaceID(a)),
 		})
 	}
-	return connect.NewResponse(out), nil
+	return out, nil
 }

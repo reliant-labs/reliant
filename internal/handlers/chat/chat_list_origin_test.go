@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -66,26 +65,26 @@ func TestChatListSurfacesKeyOnOrigin(t *testing.T) {
 	}
 
 	listed := map[string]bool{}
-	resp, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{ProjectId: projectID}))
+	resp, err := service.ListChats(ctx, &reliantv1.ListChatsRequest{ProjectId: projectID})
 	require.NoError(t, err)
-	for _, c := range resp.Msg.Chats {
+	for _, c := range resp.Chats {
 		listed[c.Id] = true
 	}
-	allProjects, err := service.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{}))
+	allProjects, err := service.ListChats(ctx, &reliantv1.ListChatsRequest{})
 	require.NoError(t, err)
-	assert.Len(t, allProjects.Msg.Chats, len(resp.Msg.Chats), "the all-projects list applies the same policy")
+	assert.Len(t, allProjects.Chats, len(resp.Chats), "the all-projects list applies the same policy")
 
 	found := map[string]bool{}
-	search, err := service.SearchChats(ctx, connect.NewRequest(&reliantv1.SearchChatsRequest{Query: "needle"}))
+	search, err := service.SearchChats(ctx, &reliantv1.SearchChatsRequest{Query: "needle"})
 	require.NoError(t, err)
-	for _, c := range search.Msg.Chats {
+	for _, c := range search.Chats {
 		found[c.Id] = true
 	}
 
 	archived := map[string]bool{}
-	arch, err := service.ListArchivedChats(ctx, connect.NewRequest(&reliantv1.ListArchivedChatsRequest{}))
+	arch, err := service.ListArchivedChats(ctx, &reliantv1.ListArchivedChatsRequest{})
 	require.NoError(t, err)
-	for _, c := range arch.Msg.Chats {
+	for _, c := range arch.Chats {
 		archived[c.Chat.Id] = true
 	}
 
@@ -104,8 +103,8 @@ func TestChatListSurfacesKeyOnOrigin(t *testing.T) {
 		assert.False(t, listed[name+"-archived"], "ListChats never lists an archived chat")
 
 		// Out of the list, still reachable by link, carrying its origin.
-		got, err := service.GetChat(ctx, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: name}))
+		got, err := service.GetChat(ctx, &reliantv1.GetChatRequest{ChatId: name})
 		require.NoError(t, err, name)
-		assert.Equal(t, origin, got.Msg.Chat.GetOrigin(), name)
+		assert.Equal(t, origin, got.Chat.GetOrigin(), name)
 	}
 }

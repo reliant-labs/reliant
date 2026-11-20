@@ -13,7 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	forgeconfig "github.com/reliant-labs/forge/pkg/config"
 	"github.com/spf13/cobra"
 

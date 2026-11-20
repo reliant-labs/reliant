@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -147,7 +147,7 @@ func TestBindOrgGitHubApp_Refusals(t *testing.T) {
 			before := string(tc.trigger.Config)
 			err := svc.bindOrgGitHubApp(ctx, "alice", namingConnection(tc.conn), tc.trigger)
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err), "error: %v", err)
+			assert.Equal(t, tc.code, svcerr.CodeV2(err), "error: %v", err)
 			assert.Equal(t, before, string(tc.trigger.Config), "a refusal binds nothing")
 		})
 	}
@@ -166,8 +166,8 @@ func TestBindOrgGitHubApp_RefusedWhileTheRolloutGateIsOff(t *testing.T) {
 
 	err := svc.bindOrgGitHubApp(ctx, "alice", namingConnection("controlplane:github-app:4242"), tr)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
-	assert.Equal(t, ReasonOrgInstallationTriggersDisabled, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
+	assert.Equal(t, ReasonOrgInstallationTriggersDisabled, svcerr.MetaOf(err).Get(svcerr.ReasonHeader))
 	assert.Equal(t, before, string(tr.Config), "nothing is bound")
 	assert.Zero(t, apps.CallCount("ListOrgGitHubInstallations"))
 }

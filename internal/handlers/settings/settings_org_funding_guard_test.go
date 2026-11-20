@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,21 +38,21 @@ func TestOrgFundingSettingIsPersonOnly(t *testing.T) {
 	}
 	writes := map[string]func(ctx context.Context) error{
 		"CreateSetting": func(ctx context.Context) error {
-			_, err := svc.CreateSetting(ctx, connect.NewRequest(&reliantv1.CreateSettingRequest{Key: orgfunding.SettingKey, Value: usePersonal}))
+			_, err := svc.CreateSetting(ctx, &reliantv1.CreateSettingRequest{Key: orgfunding.SettingKey, Value: usePersonal})
 			return err
 		},
 		"UpdateSetting": func(ctx context.Context) error {
-			_, err := svc.UpdateSetting(ctx, connect.NewRequest(&reliantv1.UpdateSettingRequest{Key: orgfunding.SettingKey, Value: &usePersonal}))
+			_, err := svc.UpdateSetting(ctx, &reliantv1.UpdateSettingRequest{Key: orgfunding.SettingKey, Value: &usePersonal})
 			return err
 		},
 		"BatchUpsertSettings": func(ctx context.Context) error {
-			_, err := svc.BatchUpsertSettings(ctx, connect.NewRequest(&reliantv1.BatchUpsertSettingsRequest{
+			_, err := svc.BatchUpsertSettings(ctx, &reliantv1.BatchUpsertSettingsRequest{
 				Settings: []*reliantv1.SettingWrite{{Key: "ui.theme", Value: "dark"}, {Key: orgfunding.SettingKey, Value: usePersonal}},
-			}))
+			})
 			return err
 		},
 		"DeleteSetting": func(ctx context.Context) error {
-			_, err := svc.DeleteSetting(ctx, connect.NewRequest(&reliantv1.DeleteSettingRequest{Key: orgfunding.SettingKey}))
+			_, err := svc.DeleteSetting(ctx, &reliantv1.DeleteSettingRequest{Key: orgfunding.SettingKey})
 			return err
 		},
 	}
@@ -75,6 +74,6 @@ func TestOrgFundingSettingIsPersonOnly(t *testing.T) {
 	assert.Empty(t, stored())
 
 	// Any other key is as free-form as before.
-	_, err = svc.CreateSetting(as(auth.CredentialAccessToken), connect.NewRequest(&reliantv1.CreateSettingRequest{Key: "ui.theme", Value: "dark"}))
+	_, err = svc.CreateSetting(as(auth.CredentialAccessToken), &reliantv1.CreateSettingRequest{Key: "ui.theme", Value: "dark"})
 	require.NoError(t, err)
 }

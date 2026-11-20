@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -82,11 +83,11 @@ func (e *env) record(c call) {
 
 func (e *env) get(user string, req *pb.GetLLMUsageRequest) (*pb.GetLLMUsageResponse, error) {
 	e.t.Helper()
-	resp, err := e.svc.GetLLMUsage(as(user), connect.NewRequest(req))
+	resp, err := e.svc.GetLLMUsage(as(user), req)
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 func (e *env) mustGet(user string, req *pb.GetLLMUsageRequest) *pb.GetLLMUsageResponse {
@@ -138,9 +139,9 @@ func TestGetLLMUsage_NeedsAnAuthenticatedUser(t *testing.T) {
 		"no user":    context.Background(),
 		"empty user": auth.WithUser(context.Background(), "", "authenticated", ""),
 	} {
-		_, err := e.svc.GetLLMUsage(ctx, connect.NewRequest(&pb.GetLLMUsageRequest{StartDate: "2026-10-01", EndDate: "2026-10-02"}))
+		_, err := e.svc.GetLLMUsage(ctx, &pb.GetLLMUsageRequest{StartDate: "2026-10-01", EndDate: "2026-10-02"})
 		require.Error(t, err, name)
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), name)
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err), name)
 	}
 }
 
@@ -153,9 +154,9 @@ func TestGetLLMUsage_MachineCredentialActsForItsOwner(t *testing.T) {
 	e.record(call{user: "bob", at: day(28), in: 7000, out: 10})
 
 	ctx := auth.WithMachineToken(as("alice"), &fat.Principal{ActingUserID: "alice"})
-	resp, err := e.svc.GetLLMUsage(ctx, connect.NewRequest(&pb.GetLLMUsageRequest{StartDate: "2026-10-01", EndDate: "2026-10-30"}))
+	resp, err := e.svc.GetLLMUsage(ctx, &pb.GetLLMUsageRequest{StartDate: "2026-10-01", EndDate: "2026-10-30"})
 	require.NoError(t, err)
-	assert.EqualValues(t, 100, resp.Msg.Totals.InputTokens, "the owner's usage only")
+	assert.EqualValues(t, 100, resp.Totals.InputTokens, "the owner's usage only")
 }
 
 func TestGetLLMUsage_GroupsAndAverages(t *testing.T) {
@@ -241,7 +242,7 @@ func TestGetLLMUsage_Filters(t *testing.T) {
 	r = base()
 	r.AuthMode = ptr(pb.LLMAuthMode_LLM_AUTH_MODE_UNSPECIFIED)
 	_, err := e.get("u", r)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "an explicit unspecified auth mode is not a filter")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "an explicit unspecified auth mode is not a filter")
 }
 
 func TestGetLLMUsage_RangeBounds(t *testing.T) {
@@ -288,11 +289,11 @@ func TestGetLLMUsage_RejectsBadRanges(t *testing.T) {
 			continue
 		}
 		require.Error(t, err, c.name)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), c.name)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), c.name)
 	}
 
 	_, err := e.get("u", &pb.GetLLMUsageRequest{StartDate: "2026-10-01", EndDate: "2026-10-02", GroupBy: pb.LLMUsageGroupBy(99)})
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "unknown group_by")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "unknown group_by")
 }
 
 // Per-call rows live 90 days; the rollup is kept. A range reaching past the
@@ -339,10 +340,10 @@ func TestGetLLMUsage_DetailBoundaryAtMidnight(t *testing.T) {
 	t.Cleanup(cleanup)
 	at := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
 	svc := usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{Store: repo, Now: func() time.Time { return at }}))
-	resp, err := svc.GetLLMUsage(as("u"), connect.NewRequest(&pb.GetLLMUsageRequest{StartDate: "2026-08-01", EndDate: "2026-08-01"}))
+	resp, err := svc.GetLLMUsage(as("u"), &pb.GetLLMUsageRequest{StartDate: "2026-08-01", EndDate: "2026-08-01"})
 	require.NoError(t, err)
-	assert.Equal(t, "2026-08-01", resp.Msg.DetailAvailableFrom)
-	assert.Equal(t, pb.LLMUsageCompleteness_LLM_USAGE_COMPLETENESS_COMPLETE, resp.Msg.Completeness)
+	assert.Equal(t, "2026-08-01", resp.DetailAvailableFrom)
+	assert.Equal(t, pb.LLMUsageCompleteness_LLM_USAGE_COMPLETENESS_COMPLETE, resp.Completeness)
 }
 
 func TestGetLLMUsage_PurposeSplitsChatFromBackgroundRequests(t *testing.T) {
@@ -384,7 +385,7 @@ func TestGetLLMUsage_PurposeSplitsChatFromBackgroundRequests(t *testing.T) {
 		r := base()
 		r.Purpose = ptr(pb.LLMPurpose_LLM_PURPOSE_UNSPECIFIED)
 		_, err := e.get("u", r)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	})
 	t.Run("no purpose filter counts them all", func(t *testing.T) {
 		assert.EqualValues(t, 5, e.mustGet("u", base()).Totals.Calls)

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -143,8 +143,8 @@ func TestProvisionFailuresAreWhatThePersonEnablingIsTold(t *testing.T) {
 			rec.upsertErr = c.err
 			err := a.Provision(context.Background(), alertingTrigger("t1", true, time.Time{}))
 			require.Error(t, err)
-			assert.Equal(t, c.code, svcerr.Code(err))
-			assert.Equal(t, c.msg, svcerr.ToConnect(err).Message())
+			assert.Equal(t, c.code, svcerr.CodeV2(err))
+			assert.Equal(t, c.msg, svcerr.ToConnectV2(err).Message())
 			assert.ErrorIs(t, err, c.err, "the cause stays reachable for the server")
 		})
 	}

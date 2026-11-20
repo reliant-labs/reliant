@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -267,30 +267,31 @@ func as(userID string, m authz.Membership) context.Context {
 func (e *takeoverEnv) as(userID string) context.Context { return as(userID, e.members) }
 
 func reason(err error) string {
-	return svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader)
+	r, _ := svcerr.ReasonOf(err)
+	return r
 }
 
 func (e *takeoverEnv) list(ctx context.Context) (*pb.ListOrphanedAutomationsResponse, error) {
 	org := acme
-	resp, err := e.svc.ListOrphanedAutomations(ctx, connect.NewRequest(&pb.ListOrphanedAutomationsRequest{OrgId: &org}))
+	resp, err := e.svc.ListOrphanedAutomations(ctx, &pb.ListOrphanedAutomationsRequest{OrgId: &org})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 func (e *takeoverEnv) offer(t *testing.T, triggerID, to string) *pb.TriggerOffer {
 	t.Helper()
-	resp, err := e.svc.AdoptTrigger(e.as(ada), connect.NewRequest(&pb.AdoptTriggerRequest{TriggerId: triggerID, NewOwnerUserId: to}))
+	resp, err := e.svc.AdoptTrigger(e.as(ada), &pb.AdoptTriggerRequest{TriggerId: triggerID, NewOwnerUserId: to})
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.GetOffer())
-	return resp.Msg.GetOffer()
+	require.NotNil(t, resp.GetOffer())
+	return resp.GetOffer()
 }
 
 func (e *takeoverEnv) accept(ctx context.Context, offerID string) error {
-	_, err := e.svc.AcceptTriggerOffer(ctx, connect.NewRequest(&pb.AcceptTriggerOfferRequest{
+	_, err := e.svc.AcceptTriggerOffer(ctx, &pb.AcceptTriggerOfferRequest{
 		OfferId: offerID, Rebinding: &pb.TriggerRebinding{ProjectId: "p", DaemonId: "d"},
-	}))
+	})
 	return err
 }
 
@@ -325,7 +326,7 @@ func TestTakeoverNeedsAFreshOrgAdminWhoIsAPerson(t *testing.T) {
 				return
 			}
 			require.Error(t, err)
-			assert.Equal(t, tc.code, svcerr.Code(err), "error: %v", err)
+			assert.Equal(t, tc.code, svcerr.CodeV2(err), "error: %v", err)
 			if tc.reason != "" {
 				assert.Equal(t, tc.reason, reason(err))
 			}
@@ -370,7 +371,7 @@ func TestListOrphanedAutomations_OnlyOrphansAndOnlyToAdmins(t *testing.T) {
 
 	for _, who := range []string{bob, liv, cora, olga} {
 		_, err := e.list(e.as(who))
-		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "%s sees no orphans", who)
+		assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "%s sees no orphans", who)
 	}
 }
 
@@ -381,12 +382,12 @@ func TestAdminCannotAdoptOntoAnotherMemberWithoutTheirAccept(t *testing.T) {
 	e := setupTakeover(t)
 
 	// The admin may not choose the member's project or machine for them.
-	_, err := e.svc.AdoptTrigger(e.as(ada), connect.NewRequest(&pb.AdoptTriggerRequest{
+	_, err := e.svc.AdoptTrigger(e.as(ada), &pb.AdoptTriggerRequest{
 		TriggerId: "orphan", NewOwnerUserId: bob, Rebinding: &pb.TriggerRebinding{ProjectId: "bobs"},
-	}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	// Nor offer it to someone outside the org.
-	_, err = e.svc.AdoptTrigger(e.as(ada), connect.NewRequest(&pb.AdoptTriggerRequest{TriggerId: "orphan", NewOwnerUserId: olga}))
+	_, err = e.svc.AdoptTrigger(e.as(ada), &pb.AdoptTriggerRequest{TriggerId: "orphan", NewOwnerUserId: olga})
 	assert.Equal(t, ReasonOffereeNotMember, reason(err))
 
 	offer := e.offer(t, "orphan", bob)
@@ -398,18 +399,18 @@ func TestAdminCannotAdoptOntoAnotherMemberWithoutTheirAccept(t *testing.T) {
 
 	// Visible only to its offeree (and admins): another member cannot accept
 	// or even see it.
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(e.accept(e.as(carol), offer.GetId())))
-	carolsOffers, err := e.svc.ListTriggerOffers(e.as(carol), connect.NewRequest(&pb.ListTriggerOffersRequest{}))
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(e.accept(e.as(carol), offer.GetId())))
+	carolsOffers, err := e.svc.ListTriggerOffers(e.as(carol), &pb.ListTriggerOffersRequest{})
 	require.NoError(t, err)
-	assert.Empty(t, carolsOffers.Msg.GetOffers())
-	_, err = e.svc.RevokeTriggerOffer(e.as(carol), connect.NewRequest(&pb.RevokeTriggerOfferRequest{OfferId: offer.GetId()}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Empty(t, carolsOffers.GetOffers())
+	_, err = e.svc.RevokeTriggerOffer(e.as(carol), &pb.RevokeTriggerOfferRequest{OfferId: offer.GetId()})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err))
 
-	bobsOffers, err := e.svc.ListTriggerOffers(e.as(bob), connect.NewRequest(&pb.ListTriggerOffersRequest{}))
+	bobsOffers, err := e.svc.ListTriggerOffers(e.as(bob), &pb.ListTriggerOffersRequest{})
 	require.NoError(t, err)
-	require.Len(t, bobsOffers.Msg.GetOffers(), 1)
-	assert.Equal(t, []string{"api_token"}, bobsOffers.Msg.GetOffers()[0].GetParamNames())
-	assert.Equal(t, "nightly (definition)", bobsOffers.Msg.GetOffers()[0].GetTrigger().GetName())
+	require.Len(t, bobsOffers.GetOffers(), 1)
+	assert.Equal(t, []string{"api_token"}, bobsOffers.GetOffers()[0].GetParamNames())
+	assert.Equal(t, "nightly (definition)", bobsOffers.GetOffers()[0].GetTrigger().GetName())
 
 	// A machine or agent credential of the offeree cannot accept.
 	machine := authz.WithMembership(auth.WithCredential(
@@ -426,14 +427,14 @@ func TestAdminCannotAdoptOntoAnotherMemberWithoutTheirAccept(t *testing.T) {
 func TestAdminAdoptsToThemselves(t *testing.T) {
 	t.Parallel()
 	e := setupTakeover(t)
-	_, err := e.svc.AdoptTrigger(e.as(ada), connect.NewRequest(&pb.AdoptTriggerRequest{TriggerId: "orphan"}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "adopting means supplying a rebinding")
+	_, err := e.svc.AdoptTrigger(e.as(ada), &pb.AdoptTriggerRequest{TriggerId: "orphan"})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err), "adopting means supplying a rebinding")
 
-	resp, err := e.svc.AdoptTrigger(e.as(ada), connect.NewRequest(&pb.AdoptTriggerRequest{
+	resp, err := e.svc.AdoptTrigger(e.as(ada), &pb.AdoptTriggerRequest{
 		TriggerId: "orphan", Rebinding: &pb.TriggerRebinding{ProjectId: "adas", DaemonId: "d"},
-	}))
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "orphan", resp.Msg.GetTrigger().GetId())
+	assert.Equal(t, "orphan", resp.GetTrigger().GetId())
 	assert.Equal(t, []adoption{{"orphan", ada, ""}}, e.triggers.calls())
 }
 
@@ -442,14 +443,14 @@ func TestAdminAdoptsToThemselves(t *testing.T) {
 func TestAdoptTrigger_OnlyOrphans(t *testing.T) {
 	t.Parallel()
 	e := setupTakeover(t)
-	_, err := e.svc.AdoptTrigger(e.as(ada), connect.NewRequest(&pb.AdoptTriggerRequest{
+	_, err := e.svc.AdoptTrigger(e.as(ada), &pb.AdoptTriggerRequest{
 		TriggerId: "livs", Rebinding: &pb.TriggerRebinding{ProjectId: "adas"},
-	}))
+	})
 	assert.Equal(t, ReasonNotOrphaned, reason(err))
 
-	_, err = e.svc.AdoptTrigger(e.as(olga), connect.NewRequest(&pb.AdoptTriggerRequest{TriggerId: "orphan"}))
-	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "an outsider cannot tell the trigger exists")
-	_, err = e.svc.AdoptTrigger(e.as(bob), connect.NewRequest(&pb.AdoptTriggerRequest{TriggerId: "orphan"}))
+	_, err = e.svc.AdoptTrigger(e.as(olga), &pb.AdoptTriggerRequest{TriggerId: "orphan"})
+	assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "an outsider cannot tell the trigger exists")
+	_, err = e.svc.AdoptTrigger(e.as(bob), &pb.AdoptTriggerRequest{TriggerId: "orphan"})
 	assert.Equal(t, orgtakeover.ReasonOrgAdminRequired, reason(err))
 	assert.Empty(t, e.triggers.calls())
 }
@@ -461,9 +462,9 @@ func TestOfferExpiresAfterSevenDays(t *testing.T) {
 	offer := e.offer(t, "orphan", bob)
 
 	e.now = e.now.Add(OfferTTL - time.Minute)
-	listed, err := e.svc.ListTriggerOffers(e.as(bob), connect.NewRequest(&pb.ListTriggerOffersRequest{}))
+	listed, err := e.svc.ListTriggerOffers(e.as(bob), &pb.ListTriggerOffersRequest{})
 	require.NoError(t, err)
-	assert.Len(t, listed.Msg.GetOffers(), 1, "still live a minute before it expires")
+	assert.Len(t, listed.GetOffers(), 1, "still live a minute before it expires")
 
 	e.now = e.now.Add(time.Minute)
 	err = e.accept(e.as(bob), offer.GetId())
@@ -493,9 +494,9 @@ func TestOfferIsRevokedOnDeparture(t *testing.T) {
 			offer := e.offer(t, "orphan", bob)
 			tc.change(e)
 
-			listed, err := e.svc.ListTriggerOffers(e.as(bob), connect.NewRequest(&pb.ListTriggerOffersRequest{}))
+			listed, err := e.svc.ListTriggerOffers(e.as(bob), &pb.ListTriggerOffersRequest{})
 			require.NoError(t, err)
-			assert.Empty(t, listed.Msg.GetOffers())
+			assert.Empty(t, listed.GetOffers())
 			got := e.repo.offer(offer.GetId())
 			assert.Equal(t, core.TriggerOfferRevoked, got.Status)
 			assert.Equal(t, tc.reason, got.StatusReason)
@@ -515,14 +516,14 @@ func TestOffersSupersedeDeclineAndWithdraw(t *testing.T) {
 	assert.Equal(t, core.TriggerOfferRevokedSuperseded, e.repo.offer(first.GetId()).StatusReason)
 	assert.Equal(t, ReasonOfferNotLive, reason(e.accept(e.as(bob), first.GetId())))
 
-	declined, err := e.svc.RevokeTriggerOffer(e.as(carol), connect.NewRequest(&pb.RevokeTriggerOfferRequest{OfferId: second.GetId()}))
+	declined, err := e.svc.RevokeTriggerOffer(e.as(carol), &pb.RevokeTriggerOfferRequest{OfferId: second.GetId()})
 	require.NoError(t, err)
-	assert.Equal(t, core.TriggerOfferRevokedDeclined, declined.Msg.GetOffer().GetStatusReason())
+	assert.Equal(t, core.TriggerOfferRevokedDeclined, declined.GetOffer().GetStatusReason())
 
 	third := e.offer(t, "orphan", bob)
-	withdrawn, err := e.svc.RevokeTriggerOffer(e.as(ada), connect.NewRequest(&pb.RevokeTriggerOfferRequest{OfferId: third.GetId()}))
+	withdrawn, err := e.svc.RevokeTriggerOffer(e.as(ada), &pb.RevokeTriggerOfferRequest{OfferId: third.GetId()})
 	require.NoError(t, err)
-	assert.Equal(t, core.TriggerOfferRevokedWithdrawn, withdrawn.Msg.GetOffer().GetStatusReason())
+	assert.Equal(t, core.TriggerOfferRevokedWithdrawn, withdrawn.GetOffer().GetStatusReason())
 	assert.Equal(t, ReasonOfferNotLive, reason(e.accept(e.as(bob), third.GetId())))
 	assert.Empty(t, e.triggers.calls())
 }

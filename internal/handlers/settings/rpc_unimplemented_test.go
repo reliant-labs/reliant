@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -23,37 +23,37 @@ func TestNeverImplementedRPCsAnswerUnimplemented(t *testing.T) {
 
 	for name, call := range map[string]func(context.Context) error{
 		"TrackOnboardingEvent": func(ctx context.Context) error {
-			_, err := svc.TrackOnboardingEvent(ctx, connect.NewRequest(&pb.TrackOnboardingEventRequest{}))
+			_, err := svc.TrackOnboardingEvent(ctx, &pb.TrackOnboardingEventRequest{})
 			return err
 		},
 		"InstallSkill": func(ctx context.Context) error {
-			_, err := svc.InstallSkill(ctx, connect.NewRequest(&pb.InstallSkillRequest{}))
+			_, err := svc.InstallSkill(ctx, &pb.InstallSkillRequest{})
 			return err
 		},
 		"ListInstalledSkills": func(ctx context.Context) error {
-			_, err := svc.ListInstalledSkills(ctx, connect.NewRequest(&pb.ListInstalledSkillsRequest{}))
+			_, err := svc.ListInstalledSkills(ctx, &pb.ListInstalledSkillsRequest{})
 			return err
 		},
 		"GetInstalledSkillDefinition": func(ctx context.Context) error {
-			_, err := svc.GetInstalledSkillDefinition(ctx, connect.NewRequest(&pb.GetInstalledSkillDefinitionRequest{}))
+			_, err := svc.GetInstalledSkillDefinition(ctx, &pb.GetInstalledSkillDefinitionRequest{})
 			return err
 		},
 		"SetSkillEnabled": func(ctx context.Context) error {
-			_, err := svc.SetSkillEnabled(ctx, connect.NewRequest(&pb.SetSkillEnabledRequest{}))
+			_, err := svc.SetSkillEnabled(ctx, &pb.SetSkillEnabledRequest{})
 			return err
 		},
 		"ListRecommendedSkills": func(ctx context.Context) error {
-			_, err := svc.ListRecommendedSkills(ctx, connect.NewRequest(&pb.ListRecommendedSkillsRequest{}))
+			_, err := svc.ListRecommendedSkills(ctx, &pb.ListRecommendedSkillsRequest{})
 			return err
 		},
 		"DeleteGlobalSkill": func(ctx context.Context) error {
-			_, err := svc.DeleteGlobalSkill(ctx, connect.NewRequest(&pb.DeleteGlobalSkillRequest{}))
+			_, err := svc.DeleteGlobalSkill(ctx, &pb.DeleteGlobalSkillRequest{})
 			return err
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := call(ctx)
-			require.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
+			require.Equal(t, connect.CodeUnimplemented, svcerr.CodeV2(err))
 			require.ErrorContains(t, err, "reliant.v1.SettingsService."+name+" is not implemented")
 		})
 	}

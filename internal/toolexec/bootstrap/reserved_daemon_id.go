@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -28,7 +28,7 @@ const reservedDaemonIDMessage = "daemon id is reserved for its daemon-bound cred
 // NewReservedDaemonIDError is the gateway's refusal of an unbound credential
 // asserting a daemon id reserved for daemon-bound credentials.
 func NewReservedDaemonIDError() *connect.Error {
-	return svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied(reservedDaemonIDMessage), ReservedDaemonIDReason))
+	return svcerr.ToConnectV2(svcerr.WithReason(svcerr.PermissionDenied(reservedDaemonIDMessage), ReservedDaemonIDReason))
 }
 
 // IsReservedDaemonIDError reports whether err, or anything it wraps, is the
@@ -36,8 +36,8 @@ func NewReservedDaemonIDError() *connect.Error {
 // credentials: the *connect.Error a daemon receives over the wire, or the same
 // refusal still in process.
 func IsReservedDaemonIDError(err error) bool {
-	if err == nil || svcerr.Code(err) != connect.CodePermissionDenied {
+	if err == nil || svcerr.CodeV2(err) != connect.CodePermissionDenied {
 		return false
 	}
-	return svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader) == ReservedDaemonIDReason
+	return svcerr.MetaOf(err).Get(svcerr.ReasonHeader) == ReservedDaemonIDReason
 }

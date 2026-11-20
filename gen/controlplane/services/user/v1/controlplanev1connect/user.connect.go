@@ -11,59 +11,86 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// UserServiceName is the fully-qualified name of the UserService service.
 	UserServiceName = "controlplane.v1.UserService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// UserServiceGetCurrentUserProcedure is the fully-qualified name of the UserService's
-	// GetCurrentUser RPC.
+	// UserServiceGetCurrentUserProcedure is the procedure name of the UserService's GetCurrentUser RPC.
 	UserServiceGetCurrentUserProcedure = "/controlplane.v1.UserService/GetCurrentUser"
-	// UserServiceUpdateProfileProcedure is the fully-qualified name of the UserService's UpdateProfile
-	// RPC.
+	// UserServiceUpdateProfileProcedure is the procedure name of the UserService's UpdateProfile RPC.
 	UserServiceUpdateProfileProcedure = "/controlplane.v1.UserService/UpdateProfile"
-	// UserServiceCompleteOnboardingProcedure is the fully-qualified name of the UserService's
+	// UserServiceCompleteOnboardingProcedure is the procedure name of the UserService's
 	// CompleteOnboarding RPC.
 	UserServiceCompleteOnboardingProcedure = "/controlplane.v1.UserService/CompleteOnboarding"
-	// UserServicePreviewAccountDeletionProcedure is the fully-qualified name of the UserService's
+	// UserServicePreviewAccountDeletionProcedure is the procedure name of the UserService's
 	// PreviewAccountDeletion RPC.
 	UserServicePreviewAccountDeletionProcedure = "/controlplane.v1.UserService/PreviewAccountDeletion"
-	// UserServiceDeleteCurrentUserAccountProcedure is the fully-qualified name of the UserService's
+	// UserServiceDeleteCurrentUserAccountProcedure is the procedure name of the UserService's
 	// DeleteCurrentUserAccount RPC.
 	UserServiceDeleteCurrentUserAccountProcedure = "/controlplane.v1.UserService/DeleteCurrentUserAccount"
 )
 
+var (
+	userServiceGetCurrentUserSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_user_v1_user_proto.Services().ByName("UserService").Methods().ByName("GetCurrentUser"),
+			Procedure:  UserServiceGetCurrentUserProcedure,
+		}
+	})
+	userServiceUpdateProfileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_user_v1_user_proto.Services().ByName("UserService").Methods().ByName("UpdateProfile"),
+			Procedure:  UserServiceUpdateProfileProcedure,
+		}
+	})
+	userServiceCompleteOnboardingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_user_v1_user_proto.Services().ByName("UserService").Methods().ByName("CompleteOnboarding"),
+			Procedure:  UserServiceCompleteOnboardingProcedure,
+		}
+	})
+	userServicePreviewAccountDeletionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_user_v1_user_proto.Services().ByName("UserService").Methods().ByName("PreviewAccountDeletion"),
+			Procedure:  UserServicePreviewAccountDeletionProcedure,
+		}
+	})
+	userServiceDeleteCurrentUserAccountSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_user_v1_user_proto.Services().ByName("UserService").Methods().ByName("DeleteCurrentUserAccount"),
+			Procedure:  UserServiceDeleteCurrentUserAccountProcedure,
+		}
+	})
+)
+
 // UserServiceClient is a client for the controlplane.v1.UserService service.
 type UserServiceClient interface {
-	GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error)
-	UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error)
-	CompleteOnboarding(context.Context, *connect.Request[v1.CompleteOnboardingRequest]) (*connect.Response[v1.CompleteOnboardingResponse], error)
+	GetCurrentUser(context.Context, *v1.GetCurrentUserRequest) (*v1.GetCurrentUserResponse, error)
+	UpdateProfile(context.Context, *v1.UpdateProfileRequest) (*v1.UpdateProfileResponse, error)
+	CompleteOnboarding(context.Context, *v1.CompleteOnboardingRequest) (*v1.CompleteOnboardingResponse, error)
 	// PreviewAccountDeletion reports whether the caller's control-plane account
 	// can be deleted, and what they must resolve first if not. Changes nothing.
-	PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error)
+	PreviewAccountDeletion(context.Context, *v1.PreviewAccountDeletionRequest) (*v1.PreviewAccountDeletionResponse, error)
 	// DeleteCurrentUserAccount tombstones the caller's control-plane account:
 	// it settles the prepaid wallet (paid credit refunded to the card that paid
 	// for it, promotional credit forfeited), cancels the free compute plan,
@@ -82,95 +109,23 @@ type UserServiceClient interface {
 	// UNAVAILABLE means a refund's outcome could not be confirmed with Stripe:
 	// nothing else was deleted, and retrying is safe (it replays the same
 	// refund rather than issuing another).
-	DeleteCurrentUserAccount(context.Context, *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error)
+	DeleteCurrentUserAccount(context.Context, *v1.DeleteCurrentUserAccountRequest) (*v1.DeleteCurrentUserAccountResponse, error)
 }
 
-// NewUserServiceClient constructs a client for the controlplane.v1.UserService service. By default,
-// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
-// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
-// or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) UserServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	userServiceMethods := v1.File_services_user_v1_user_proto.Services().ByName("UserService").Methods()
-	return &userServiceClient{
-		getCurrentUser: connect.NewClient[v1.GetCurrentUserRequest, v1.GetCurrentUserResponse](
-			httpClient,
-			baseURL+UserServiceGetCurrentUserProcedure,
-			connect.WithSchema(userServiceMethods.ByName("GetCurrentUser")),
-			connect.WithClientOptions(opts...),
-		),
-		updateProfile: connect.NewClient[v1.UpdateProfileRequest, v1.UpdateProfileResponse](
-			httpClient,
-			baseURL+UserServiceUpdateProfileProcedure,
-			connect.WithSchema(userServiceMethods.ByName("UpdateProfile")),
-			connect.WithClientOptions(opts...),
-		),
-		completeOnboarding: connect.NewClient[v1.CompleteOnboardingRequest, v1.CompleteOnboardingResponse](
-			httpClient,
-			baseURL+UserServiceCompleteOnboardingProcedure,
-			connect.WithSchema(userServiceMethods.ByName("CompleteOnboarding")),
-			connect.WithClientOptions(opts...),
-		),
-		previewAccountDeletion: connect.NewClient[v1.PreviewAccountDeletionRequest, v1.PreviewAccountDeletionResponse](
-			httpClient,
-			baseURL+UserServicePreviewAccountDeletionProcedure,
-			connect.WithSchema(userServiceMethods.ByName("PreviewAccountDeletion")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteCurrentUserAccount: connect.NewClient[v1.DeleteCurrentUserAccountRequest, v1.DeleteCurrentUserAccountResponse](
-			httpClient,
-			baseURL+UserServiceDeleteCurrentUserAccountProcedure,
-			connect.WithSchema(userServiceMethods.ByName("DeleteCurrentUserAccount")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// userServiceClient implements UserServiceClient.
-type userServiceClient struct {
-	getCurrentUser           *connect.Client[v1.GetCurrentUserRequest, v1.GetCurrentUserResponse]
-	updateProfile            *connect.Client[v1.UpdateProfileRequest, v1.UpdateProfileResponse]
-	completeOnboarding       *connect.Client[v1.CompleteOnboardingRequest, v1.CompleteOnboardingResponse]
-	previewAccountDeletion   *connect.Client[v1.PreviewAccountDeletionRequest, v1.PreviewAccountDeletionResponse]
-	deleteCurrentUserAccount *connect.Client[v1.DeleteCurrentUserAccountRequest, v1.DeleteCurrentUserAccountResponse]
-}
-
-// GetCurrentUser calls controlplane.v1.UserService.GetCurrentUser.
-func (c *userServiceClient) GetCurrentUser(ctx context.Context, req *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error) {
-	return c.getCurrentUser.CallUnary(ctx, req)
-}
-
-// UpdateProfile calls controlplane.v1.UserService.UpdateProfile.
-func (c *userServiceClient) UpdateProfile(ctx context.Context, req *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error) {
-	return c.updateProfile.CallUnary(ctx, req)
-}
-
-// CompleteOnboarding calls controlplane.v1.UserService.CompleteOnboarding.
-func (c *userServiceClient) CompleteOnboarding(ctx context.Context, req *connect.Request[v1.CompleteOnboardingRequest]) (*connect.Response[v1.CompleteOnboardingResponse], error) {
-	return c.completeOnboarding.CallUnary(ctx, req)
-}
-
-// PreviewAccountDeletion calls controlplane.v1.UserService.PreviewAccountDeletion.
-func (c *userServiceClient) PreviewAccountDeletion(ctx context.Context, req *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error) {
-	return c.previewAccountDeletion.CallUnary(ctx, req)
-}
-
-// DeleteCurrentUserAccount calls controlplane.v1.UserService.DeleteCurrentUserAccount.
-func (c *userServiceClient) DeleteCurrentUserAccount(ctx context.Context, req *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error) {
-	return c.deleteCurrentUserAccount.CallUnary(ctx, req)
+// NewUserServiceClient constructs a client for the controlplane.v1.UserService service. Multiple
+// service clients may share a single connect.Client.
+func NewUserServiceClient(client *connect.Client) UserServiceClient {
+	return &userServiceClient{client: client}
 }
 
 // UserServiceHandler is an implementation of the controlplane.v1.UserService service.
 type UserServiceHandler interface {
-	GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error)
-	UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error)
-	CompleteOnboarding(context.Context, *connect.Request[v1.CompleteOnboardingRequest]) (*connect.Response[v1.CompleteOnboardingResponse], error)
+	GetCurrentUser(context.Context, *v1.GetCurrentUserRequest) (*v1.GetCurrentUserResponse, error)
+	UpdateProfile(context.Context, *v1.UpdateProfileRequest) (*v1.UpdateProfileResponse, error)
+	CompleteOnboarding(context.Context, *v1.CompleteOnboardingRequest) (*v1.CompleteOnboardingResponse, error)
 	// PreviewAccountDeletion reports whether the caller's control-plane account
 	// can be deleted, and what they must resolve first if not. Changes nothing.
-	PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error)
+	PreviewAccountDeletion(context.Context, *v1.PreviewAccountDeletionRequest) (*v1.PreviewAccountDeletionResponse, error)
 	// DeleteCurrentUserAccount tombstones the caller's control-plane account:
 	// it settles the prepaid wallet (paid credit refunded to the card that paid
 	// for it, promotional credit forfeited), cancels the free compute plan,
@@ -189,83 +144,147 @@ type UserServiceHandler interface {
 	// UNAVAILABLE means a refund's outcome could not be confirmed with Stripe:
 	// nothing else was deleted, and retrying is safe (it replays the same
 	// refund rather than issuing another).
-	DeleteCurrentUserAccount(context.Context, *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error)
+	DeleteCurrentUserAccount(context.Context, *v1.DeleteCurrentUserAccountRequest) (*v1.DeleteCurrentUserAccountResponse, error)
 }
 
-// NewUserServiceHandler builds an HTTP handler from the service implementation. It returns the path
-// on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	userServiceMethods := v1.File_services_user_v1_user_proto.Services().ByName("UserService").Methods()
-	userServiceGetCurrentUserHandler := connect.NewUnaryHandler(
-		UserServiceGetCurrentUserProcedure,
-		svc.GetCurrentUser,
-		connect.WithSchema(userServiceMethods.ByName("GetCurrentUser")),
-		connect.WithHandlerOptions(opts...),
+// RegisterUserServiceHandler registers svc as the controlplane.v1.UserService implementation on
+// server.
+func RegisterUserServiceHandler(server *connect.Server, svc UserServiceHandler) {
+	adapter := userServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: userServiceGetCurrentUserSpec(), Handler: adapter.getCurrentUser},
+		connect.Method{Spec: userServiceUpdateProfileSpec(), Handler: adapter.updateProfile},
+		connect.Method{Spec: userServiceCompleteOnboardingSpec(), Handler: adapter.completeOnboarding},
+		connect.Method{Spec: userServicePreviewAccountDeletionSpec(), Handler: adapter.previewAccountDeletion},
+		connect.Method{Spec: userServiceDeleteCurrentUserAccountSpec(), Handler: adapter.deleteCurrentUserAccount},
 	)
-	userServiceUpdateProfileHandler := connect.NewUnaryHandler(
-		UserServiceUpdateProfileProcedure,
-		svc.UpdateProfile,
-		connect.WithSchema(userServiceMethods.ByName("UpdateProfile")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceCompleteOnboardingHandler := connect.NewUnaryHandler(
-		UserServiceCompleteOnboardingProcedure,
-		svc.CompleteOnboarding,
-		connect.WithSchema(userServiceMethods.ByName("CompleteOnboarding")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServicePreviewAccountDeletionHandler := connect.NewUnaryHandler(
-		UserServicePreviewAccountDeletionProcedure,
-		svc.PreviewAccountDeletion,
-		connect.WithSchema(userServiceMethods.ByName("PreviewAccountDeletion")),
-		connect.WithHandlerOptions(opts...),
-	)
-	userServiceDeleteCurrentUserAccountHandler := connect.NewUnaryHandler(
-		UserServiceDeleteCurrentUserAccountProcedure,
-		svc.DeleteCurrentUserAccount,
-		connect.WithSchema(userServiceMethods.ByName("DeleteCurrentUserAccount")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.UserService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case UserServiceGetCurrentUserProcedure:
-			userServiceGetCurrentUserHandler.ServeHTTP(w, r)
-		case UserServiceUpdateProfileProcedure:
-			userServiceUpdateProfileHandler.ServeHTTP(w, r)
-		case UserServiceCompleteOnboardingProcedure:
-			userServiceCompleteOnboardingHandler.ServeHTTP(w, r)
-		case UserServicePreviewAccountDeletionProcedure:
-			userServicePreviewAccountDeletionHandler.ServeHTTP(w, r)
-		case UserServiceDeleteCurrentUserAccountProcedure:
-			userServiceDeleteCurrentUserAccountHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedUserServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedUserServiceHandler struct{}
 
-func (UnimplementedUserServiceHandler) GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.UserService.GetCurrentUser is not implemented"))
+func (UnimplementedUserServiceHandler) GetCurrentUser(context.Context, *v1.GetCurrentUserRequest) (*v1.GetCurrentUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.UserService.GetCurrentUser is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) UpdateProfile(context.Context, *connect.Request[v1.UpdateProfileRequest]) (*connect.Response[v1.UpdateProfileResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.UserService.UpdateProfile is not implemented"))
+func (UnimplementedUserServiceHandler) UpdateProfile(context.Context, *v1.UpdateProfileRequest) (*v1.UpdateProfileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.UserService.UpdateProfile is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) CompleteOnboarding(context.Context, *connect.Request[v1.CompleteOnboardingRequest]) (*connect.Response[v1.CompleteOnboardingResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.UserService.CompleteOnboarding is not implemented"))
+func (UnimplementedUserServiceHandler) CompleteOnboarding(context.Context, *v1.CompleteOnboardingRequest) (*v1.CompleteOnboardingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.UserService.CompleteOnboarding is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.UserService.PreviewAccountDeletion is not implemented"))
+func (UnimplementedUserServiceHandler) PreviewAccountDeletion(context.Context, *v1.PreviewAccountDeletionRequest) (*v1.PreviewAccountDeletionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.UserService.PreviewAccountDeletion is not implemented")
 }
 
-func (UnimplementedUserServiceHandler) DeleteCurrentUserAccount(context.Context, *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.UserService.DeleteCurrentUserAccount is not implemented"))
+func (UnimplementedUserServiceHandler) DeleteCurrentUserAccount(context.Context, *v1.DeleteCurrentUserAccountRequest) (*v1.DeleteCurrentUserAccountResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.UserService.DeleteCurrentUserAccount is not implemented")
+}
+
+type userServiceClient struct {
+	client *connect.Client
+}
+
+func (c *userServiceClient) GetCurrentUser(ctx context.Context, req *v1.GetCurrentUserRequest) (*v1.GetCurrentUserResponse, error) {
+	var res v1.GetCurrentUserResponse
+	if err := c.client.CallUnary(ctx, userServiceGetCurrentUserSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) UpdateProfile(ctx context.Context, req *v1.UpdateProfileRequest) (*v1.UpdateProfileResponse, error) {
+	var res v1.UpdateProfileResponse
+	if err := c.client.CallUnary(ctx, userServiceUpdateProfileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) CompleteOnboarding(ctx context.Context, req *v1.CompleteOnboardingRequest) (*v1.CompleteOnboardingResponse, error) {
+	var res v1.CompleteOnboardingResponse
+	if err := c.client.CallUnary(ctx, userServiceCompleteOnboardingSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) PreviewAccountDeletion(ctx context.Context, req *v1.PreviewAccountDeletionRequest) (*v1.PreviewAccountDeletionResponse, error) {
+	var res v1.PreviewAccountDeletionResponse
+	if err := c.client.CallUnary(ctx, userServicePreviewAccountDeletionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *userServiceClient) DeleteCurrentUserAccount(ctx context.Context, req *v1.DeleteCurrentUserAccountRequest) (*v1.DeleteCurrentUserAccountResponse, error) {
+	var res v1.DeleteCurrentUserAccountResponse
+	if err := c.client.CallUnary(ctx, userServiceDeleteCurrentUserAccountSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type userServiceHandler struct{ svc UserServiceHandler }
+
+func (h userServiceHandler) getCurrentUser(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCurrentUserRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCurrentUser(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) updateProfile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateProfileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateProfile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) completeOnboarding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CompleteOnboardingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CompleteOnboarding(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) previewAccountDeletion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.PreviewAccountDeletionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.PreviewAccountDeletion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h userServiceHandler) deleteCurrentUserAccount(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteCurrentUserAccountRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteCurrentUserAccount(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

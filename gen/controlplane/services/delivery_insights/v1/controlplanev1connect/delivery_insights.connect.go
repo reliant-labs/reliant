@@ -5,40 +5,48 @@
 package controlplanev1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/controlplane/services/delivery_insights/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// DeliveryInsightsServiceName is the fully-qualified name of the DeliveryInsightsService service.
 	DeliveryInsightsServiceName = "controlplane.v1.DeliveryInsightsService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DeliveryInsightsServiceListReleasesProcedure is the fully-qualified name of the
+	// DeliveryInsightsServiceListReleasesProcedure is the procedure name of the
 	// DeliveryInsightsService's ListReleases RPC.
 	DeliveryInsightsServiceListReleasesProcedure = "/controlplane.v1.DeliveryInsightsService/ListReleases"
-	// DeliveryInsightsServiceGetDoraMetricsProcedure is the fully-qualified name of the
+	// DeliveryInsightsServiceGetDoraMetricsProcedure is the procedure name of the
 	// DeliveryInsightsService's GetDoraMetrics RPC.
 	DeliveryInsightsServiceGetDoraMetricsProcedure = "/controlplane.v1.DeliveryInsightsService/GetDoraMetrics"
+)
+
+var (
+	deliveryInsightsServiceListReleasesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_delivery_insights_v1_delivery_insights_proto.Services().ByName("DeliveryInsightsService").Methods().ByName("ListReleases"),
+			Procedure:  DeliveryInsightsServiceListReleasesProcedure,
+		}
+	})
+	deliveryInsightsServiceGetDoraMetricsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_services_delivery_insights_v1_delivery_insights_proto.Services().ByName("DeliveryInsightsService").Methods().ByName("GetDoraMetrics"),
+			Procedure:  DeliveryInsightsServiceGetDoraMetricsProcedure,
+		}
+	})
 )
 
 // DeliveryInsightsServiceClient is a client for the controlplane.v1.DeliveryInsightsService
@@ -49,53 +57,18 @@ type DeliveryInsightsServiceClient interface {
 	// source commit, promoted_at and promoted_by. It exists to draw deploy markers
 	// on charts. When more than `limit` promotions match, the NEWEST `limit` are
 	// returned and `truncated` is set.
-	ListReleases(context.Context, *connect.Request[v1.ListReleasesRequest]) (*connect.Response[v1.ListReleasesResponse], error)
+	ListReleases(context.Context, *v1.ListReleasesRequest) (*v1.ListReleasesResponse, error)
 	// GetDoraMetrics returns the four DORA metrics over scope.time_range (the
 	// window; default the last 30 days when unset, max 366 days). Every value comes
 	// with the definition string that produced it.
-	GetDoraMetrics(context.Context, *connect.Request[v1.GetDoraMetricsRequest]) (*connect.Response[v1.GetDoraMetricsResponse], error)
+	GetDoraMetrics(context.Context, *v1.GetDoraMetricsRequest) (*v1.GetDoraMetricsResponse, error)
 }
 
 // NewDeliveryInsightsServiceClient constructs a client for the
-// controlplane.v1.DeliveryInsightsService service. By default, it uses the Connect protocol with
-// the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To use
-// the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewDeliveryInsightsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DeliveryInsightsServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	deliveryInsightsServiceMethods := v1.File_services_delivery_insights_v1_delivery_insights_proto.Services().ByName("DeliveryInsightsService").Methods()
-	return &deliveryInsightsServiceClient{
-		listReleases: connect.NewClient[v1.ListReleasesRequest, v1.ListReleasesResponse](
-			httpClient,
-			baseURL+DeliveryInsightsServiceListReleasesProcedure,
-			connect.WithSchema(deliveryInsightsServiceMethods.ByName("ListReleases")),
-			connect.WithClientOptions(opts...),
-		),
-		getDoraMetrics: connect.NewClient[v1.GetDoraMetricsRequest, v1.GetDoraMetricsResponse](
-			httpClient,
-			baseURL+DeliveryInsightsServiceGetDoraMetricsProcedure,
-			connect.WithSchema(deliveryInsightsServiceMethods.ByName("GetDoraMetrics")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// deliveryInsightsServiceClient implements DeliveryInsightsServiceClient.
-type deliveryInsightsServiceClient struct {
-	listReleases   *connect.Client[v1.ListReleasesRequest, v1.ListReleasesResponse]
-	getDoraMetrics *connect.Client[v1.GetDoraMetricsRequest, v1.GetDoraMetricsResponse]
-}
-
-// ListReleases calls controlplane.v1.DeliveryInsightsService.ListReleases.
-func (c *deliveryInsightsServiceClient) ListReleases(ctx context.Context, req *connect.Request[v1.ListReleasesRequest]) (*connect.Response[v1.ListReleasesResponse], error) {
-	return c.listReleases.CallUnary(ctx, req)
-}
-
-// GetDoraMetrics calls controlplane.v1.DeliveryInsightsService.GetDoraMetrics.
-func (c *deliveryInsightsServiceClient) GetDoraMetrics(ctx context.Context, req *connect.Request[v1.GetDoraMetricsRequest]) (*connect.Response[v1.GetDoraMetricsResponse], error) {
-	return c.getDoraMetrics.CallUnary(ctx, req)
+// controlplane.v1.DeliveryInsightsService service. Multiple service clients may share a single
+// connect.Client.
+func NewDeliveryInsightsServiceClient(client *connect.Client) DeliveryInsightsServiceClient {
+	return &deliveryInsightsServiceClient{client: client}
 }
 
 // DeliveryInsightsServiceHandler is an implementation of the
@@ -106,51 +79,78 @@ type DeliveryInsightsServiceHandler interface {
 	// source commit, promoted_at and promoted_by. It exists to draw deploy markers
 	// on charts. When more than `limit` promotions match, the NEWEST `limit` are
 	// returned and `truncated` is set.
-	ListReleases(context.Context, *connect.Request[v1.ListReleasesRequest]) (*connect.Response[v1.ListReleasesResponse], error)
+	ListReleases(context.Context, *v1.ListReleasesRequest) (*v1.ListReleasesResponse, error)
 	// GetDoraMetrics returns the four DORA metrics over scope.time_range (the
 	// window; default the last 30 days when unset, max 366 days). Every value comes
 	// with the definition string that produced it.
-	GetDoraMetrics(context.Context, *connect.Request[v1.GetDoraMetricsRequest]) (*connect.Response[v1.GetDoraMetricsResponse], error)
+	GetDoraMetrics(context.Context, *v1.GetDoraMetricsRequest) (*v1.GetDoraMetricsResponse, error)
 }
 
-// NewDeliveryInsightsServiceHandler builds an HTTP handler from the service implementation. It
-// returns the path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewDeliveryInsightsServiceHandler(svc DeliveryInsightsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	deliveryInsightsServiceMethods := v1.File_services_delivery_insights_v1_delivery_insights_proto.Services().ByName("DeliveryInsightsService").Methods()
-	deliveryInsightsServiceListReleasesHandler := connect.NewUnaryHandler(
-		DeliveryInsightsServiceListReleasesProcedure,
-		svc.ListReleases,
-		connect.WithSchema(deliveryInsightsServiceMethods.ByName("ListReleases")),
-		connect.WithHandlerOptions(opts...),
+// RegisterDeliveryInsightsServiceHandler registers svc as the
+// controlplane.v1.DeliveryInsightsService implementation on server.
+func RegisterDeliveryInsightsServiceHandler(server *connect.Server, svc DeliveryInsightsServiceHandler) {
+	adapter := deliveryInsightsServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: deliveryInsightsServiceListReleasesSpec(), Handler: adapter.listReleases},
+		connect.Method{Spec: deliveryInsightsServiceGetDoraMetricsSpec(), Handler: adapter.getDoraMetrics},
 	)
-	deliveryInsightsServiceGetDoraMetricsHandler := connect.NewUnaryHandler(
-		DeliveryInsightsServiceGetDoraMetricsProcedure,
-		svc.GetDoraMetrics,
-		connect.WithSchema(deliveryInsightsServiceMethods.ByName("GetDoraMetrics")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/controlplane.v1.DeliveryInsightsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case DeliveryInsightsServiceListReleasesProcedure:
-			deliveryInsightsServiceListReleasesHandler.ServeHTTP(w, r)
-		case DeliveryInsightsServiceGetDoraMetricsProcedure:
-			deliveryInsightsServiceGetDoraMetricsHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedDeliveryInsightsServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDeliveryInsightsServiceHandler struct{}
 
-func (UnimplementedDeliveryInsightsServiceHandler) ListReleases(context.Context, *connect.Request[v1.ListReleasesRequest]) (*connect.Response[v1.ListReleasesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeliveryInsightsService.ListReleases is not implemented"))
+func (UnimplementedDeliveryInsightsServiceHandler) ListReleases(context.Context, *v1.ListReleasesRequest) (*v1.ListReleasesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DeliveryInsightsService.ListReleases is not implemented")
 }
 
-func (UnimplementedDeliveryInsightsServiceHandler) GetDoraMetrics(context.Context, *connect.Request[v1.GetDoraMetricsRequest]) (*connect.Response[v1.GetDoraMetricsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeliveryInsightsService.GetDoraMetrics is not implemented"))
+func (UnimplementedDeliveryInsightsServiceHandler) GetDoraMetrics(context.Context, *v1.GetDoraMetricsRequest) (*v1.GetDoraMetricsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "controlplane.v1.DeliveryInsightsService.GetDoraMetrics is not implemented")
+}
+
+type deliveryInsightsServiceClient struct {
+	client *connect.Client
+}
+
+func (c *deliveryInsightsServiceClient) ListReleases(ctx context.Context, req *v1.ListReleasesRequest) (*v1.ListReleasesResponse, error) {
+	var res v1.ListReleasesResponse
+	if err := c.client.CallUnary(ctx, deliveryInsightsServiceListReleasesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *deliveryInsightsServiceClient) GetDoraMetrics(ctx context.Context, req *v1.GetDoraMetricsRequest) (*v1.GetDoraMetricsResponse, error) {
+	var res v1.GetDoraMetricsResponse
+	if err := c.client.CallUnary(ctx, deliveryInsightsServiceGetDoraMetricsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type deliveryInsightsServiceHandler struct {
+	svc DeliveryInsightsServiceHandler
+}
+
+func (h deliveryInsightsServiceHandler) listReleases(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListReleasesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListReleases(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h deliveryInsightsServiceHandler) getDoraMetrics(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetDoraMetricsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetDoraMetrics(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

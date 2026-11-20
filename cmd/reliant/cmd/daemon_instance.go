@@ -9,7 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 	"github.com/spf13/cobra"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
@@ -18,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemoninstance"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/rpcclient"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 )
@@ -223,12 +225,12 @@ func whoAmI(ctx context.Context, gateway daemonGateway, token string) (string, e
 	}
 	ctx, cancel := context.WithTimeout(ctx, daemonWhoAmITimeout)
 	defer cancel()
-	client := reliantv1connect.NewToolsDaemonServiceClient(httpClient, baseURL, connect.WithGRPC())
-	resp, err := client.WhoAmI(ctx, connect.NewRequest(&reliantv1.WhoAmIRequest{}))
+	client := reliantv1connect.NewToolsDaemonServiceClient(rpcclient.New(httpClient, baseURL, []connecthttp.Option{connecthttp.WithGRPC()}))
+	resp, err := client.WhoAmI(ctx, &reliantv1.WhoAmIRequest{})
 	if err != nil {
 		return "", err
 	}
-	owner := strings.TrimSpace(resp.Msg.GetUserId())
+	owner := strings.TrimSpace(resp.GetUserId())
 	if owner == "" {
 		return "", fmt.Errorf("the gateway named no account for this token")
 	}

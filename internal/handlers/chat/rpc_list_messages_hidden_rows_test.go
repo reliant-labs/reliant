@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -84,9 +83,9 @@ func TestListMessages_ScrollBackPagesCountOnlyTranscriptRows(t *testing.T) {
 		if beforeSeq > 0 {
 			req.BeforeSeq = &beforeSeq
 		}
-		resp, err := svc.ListMessages(ctx, connect.NewRequest(req))
+		resp, err := svc.ListMessages(ctx, req)
 		require.NoError(t, err)
-		return resp.Msg
+		return resp
 	}
 	ids := func(resp *reliantv1.ListMessagesResponse) []string {
 		out := make([]string, len(resp.Messages))

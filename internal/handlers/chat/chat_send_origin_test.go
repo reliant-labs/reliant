@@ -3,8 +3,6 @@ package chat
 import (
 	"testing"
 
-	"connectrpc.com/connect"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -34,7 +32,7 @@ func TestSendMessage_QueuedUnderAnOriginIsTheSendersMessage(t *testing.T) {
 	resp, err := lateMessageService(repo, &closingRunTemporalClient{}).SendMessage(ctx,
 		sendMessageRequest(t, target.chatID, "[pr-fix] Your PR is stuck"))
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Queued)
+	require.True(t, resp.Queued)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, target.rootThreadID)
 	require.NoError(t, err)
@@ -44,12 +42,12 @@ func TestSendMessage_QueuedUnderAnOriginIsTheSendersMessage(t *testing.T) {
 	assert.Equal(t, "PR stuck", queued[0].Subject)
 	assert.Nil(t, queued[0].DisplayStyle)
 
-	listed, err := lateMessageService(repo, &closingRunTemporalClient{}).ListQueuedAgentMessages(ctx, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
+	listed, err := lateMessageService(repo, &closingRunTemporalClient{}).ListQueuedAgentMessages(ctx, &reliantv1.ListQueuedAgentMessagesRequest{
 		ChatId: target.chatID, ThreadId: target.rootThreadID,
-	}))
+	})
 	require.NoError(t, err)
-	require.Len(t, listed.Msg.Messages, 1)
-	assert.Equal(t, core.AgentMessageKindRunMessage, listed.Msg.Messages[0].SenderKind,
+	require.Len(t, listed.Messages, 1)
+	assert.Equal(t, core.AgentMessageKindRunMessage, listed.Messages[0].SenderKind,
 		"the pending strip shows only the human's own queued messages, so it leaves this one out")
 }
 
@@ -66,7 +64,7 @@ func TestSendMessage_QueuedLLMOnlyIsHiddenAndOffTheStrip(t *testing.T) {
 	resp, err := lateMessageService(repo, &closingRunTemporalClient{}).SendMessage(db.WithLLMOnlyDelivery(ctx),
 		sendMessageRequest(t, fx.chatID, "Answer to the question you asked without waiting"))
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Queued)
+	require.True(t, resp.Queued)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
@@ -74,9 +72,9 @@ func TestSendMessage_QueuedLLMOnlyIsHiddenAndOffTheStrip(t *testing.T) {
 	require.NotNil(t, queued[0].DisplayStyle)
 	assert.Equal(t, int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN), *queued[0].DisplayStyle)
 
-	listed, err := lateMessageService(repo, &closingRunTemporalClient{}).ListQueuedAgentMessages(ctx, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
+	listed, err := lateMessageService(repo, &closingRunTemporalClient{}).ListQueuedAgentMessages(ctx, &reliantv1.ListQueuedAgentMessagesRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID,
-	}))
+	})
 	require.NoError(t, err)
-	assert.Empty(t, listed.Msg.Messages)
+	assert.Empty(t, listed.Messages)
 }

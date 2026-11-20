@@ -7,334 +7,372 @@
 package reliantv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// SystemServiceName is the fully-qualified name of the SystemService service.
 	SystemServiceName = "reliant.v1.SystemService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// SystemServiceHealthProcedure is the fully-qualified name of the SystemService's Health RPC.
+	// SystemServiceHealthProcedure is the procedure name of the SystemService's Health RPC.
 	SystemServiceHealthProcedure = "/reliant.v1.SystemService/Health"
-	// SystemServiceReadyProcedure is the fully-qualified name of the SystemService's Ready RPC.
+	// SystemServiceReadyProcedure is the procedure name of the SystemService's Ready RPC.
 	SystemServiceReadyProcedure = "/reliant.v1.SystemService/Ready"
-	// SystemServiceInfoProcedure is the fully-qualified name of the SystemService's Info RPC.
+	// SystemServiceInfoProcedure is the procedure name of the SystemService's Info RPC.
 	SystemServiceInfoProcedure = "/reliant.v1.SystemService/Info"
-	// SystemServiceVersionProcedure is the fully-qualified name of the SystemService's Version RPC.
+	// SystemServiceVersionProcedure is the procedure name of the SystemService's Version RPC.
 	SystemServiceVersionProcedure = "/reliant.v1.SystemService/Version"
-	// SystemServiceStartOAuthSignInProcedure is the fully-qualified name of the SystemService's
+	// SystemServiceStartOAuthSignInProcedure is the procedure name of the SystemService's
 	// StartOAuthSignIn RPC.
 	SystemServiceStartOAuthSignInProcedure = "/reliant.v1.SystemService/StartOAuthSignIn"
-	// SystemServiceDevAuthLoadProcedure is the fully-qualified name of the SystemService's DevAuthLoad
-	// RPC.
+	// SystemServiceDevAuthLoadProcedure is the procedure name of the SystemService's DevAuthLoad RPC.
 	SystemServiceDevAuthLoadProcedure = "/reliant.v1.SystemService/DevAuthLoad"
-	// SystemServiceDevAuthSaveProcedure is the fully-qualified name of the SystemService's DevAuthSave
-	// RPC.
+	// SystemServiceDevAuthSaveProcedure is the procedure name of the SystemService's DevAuthSave RPC.
 	SystemServiceDevAuthSaveProcedure = "/reliant.v1.SystemService/DevAuthSave"
-	// SystemServiceDevAuthClearProcedure is the fully-qualified name of the SystemService's
-	// DevAuthClear RPC.
+	// SystemServiceDevAuthClearProcedure is the procedure name of the SystemService's DevAuthClear RPC.
 	SystemServiceDevAuthClearProcedure = "/reliant.v1.SystemService/DevAuthClear"
+)
+
+var (
+	systemServiceHealthSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods().ByName("Health"),
+			Procedure:        SystemServiceHealthProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	systemServiceReadySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods().ByName("Ready"),
+			Procedure:        SystemServiceReadyProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	systemServiceInfoSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods().ByName("Info"),
+			Procedure:        SystemServiceInfoProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	systemServiceVersionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods().ByName("Version"),
+			Procedure:        SystemServiceVersionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	systemServiceStartOAuthSignInSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods().ByName("StartOAuthSignIn"),
+			Procedure:  SystemServiceStartOAuthSignInProcedure,
+		}
+	})
+	systemServiceDevAuthLoadSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods().ByName("DevAuthLoad"),
+			Procedure:  SystemServiceDevAuthLoadProcedure,
+		}
+	})
+	systemServiceDevAuthSaveSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods().ByName("DevAuthSave"),
+			Procedure:  SystemServiceDevAuthSaveProcedure,
+		}
+	})
+	systemServiceDevAuthClearSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods().ByName("DevAuthClear"),
+			Procedure:  SystemServiceDevAuthClearProcedure,
+		}
+	})
 )
 
 // SystemServiceClient is a client for the reliant.v1.SystemService service.
 type SystemServiceClient interface {
 	// Health returns the health status of the service
-	Health(context.Context, *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error)
+	Health(context.Context, *v1.HealthRequest) (*v1.HealthResponse, error)
 	// Ready returns the readiness status of the service
-	Ready(context.Context, *connect.Request[v1.ReadyRequest]) (*connect.Response[v1.ReadyResponse], error)
+	Ready(context.Context, *v1.ReadyRequest) (*v1.ReadyResponse, error)
 	// Info returns general API information including version, build info, and worktree
-	Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error)
+	Info(context.Context, *v1.InfoRequest) (*v1.InfoResponse, error)
 	// Version returns detailed version information
-	Version(context.Context, *connect.Request[v1.VersionRequest]) (*connect.Response[v1.VersionResponse], error)
+	Version(context.Context, *v1.VersionRequest) (*v1.VersionResponse, error)
 	// StartOAuthSignIn completes the Electron-local OAuth sign-in flow
 	// by opening the provider in the system browser, waiting for the localhost
 	// callback, exchanging the PKCE code, and returning Supabase session tokens.
-	StartOAuthSignIn(context.Context, *connect.Request[v1.StartOAuthSignInRequest]) (*connect.Response[v1.StartOAuthSignInResponse], error)
+	StartOAuthSignIn(context.Context, *v1.StartOAuthSignInRequest) (*v1.StartOAuthSignInResponse, error)
 	// DevAuthLoad loads the global auth session (development only).
 	// Browser dev mode calls the DevAuth rpcs before a JWT exists.
-	DevAuthLoad(context.Context, *connect.Request[v1.DevAuthLoadRequest]) (*connect.Response[v1.DevAuthLoadResponse], error)
+	DevAuthLoad(context.Context, *v1.DevAuthLoadRequest) (*v1.DevAuthLoadResponse, error)
 	// DevAuthSave saves the global auth session (development only)
-	DevAuthSave(context.Context, *connect.Request[v1.DevAuthSaveRequest]) (*connect.Response[v1.DevAuthSaveResponse], error)
+	DevAuthSave(context.Context, *v1.DevAuthSaveRequest) (*v1.DevAuthSaveResponse, error)
 	// DevAuthClear clears the global auth session (development only)
-	DevAuthClear(context.Context, *connect.Request[v1.DevAuthClearRequest]) (*connect.Response[v1.DevAuthClearResponse], error)
+	DevAuthClear(context.Context, *v1.DevAuthClearRequest) (*v1.DevAuthClearResponse, error)
 }
 
-// NewSystemServiceClient constructs a client for the reliant.v1.SystemService service. By default,
-// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
-// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
-// or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) SystemServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	systemServiceMethods := v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods()
-	return &systemServiceClient{
-		health: connect.NewClient[v1.HealthRequest, v1.HealthResponse](
-			httpClient,
-			baseURL+SystemServiceHealthProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("Health")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		ready: connect.NewClient[v1.ReadyRequest, v1.ReadyResponse](
-			httpClient,
-			baseURL+SystemServiceReadyProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("Ready")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		info: connect.NewClient[v1.InfoRequest, v1.InfoResponse](
-			httpClient,
-			baseURL+SystemServiceInfoProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("Info")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		version: connect.NewClient[v1.VersionRequest, v1.VersionResponse](
-			httpClient,
-			baseURL+SystemServiceVersionProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("Version")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		startOAuthSignIn: connect.NewClient[v1.StartOAuthSignInRequest, v1.StartOAuthSignInResponse](
-			httpClient,
-			baseURL+SystemServiceStartOAuthSignInProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("StartOAuthSignIn")),
-			connect.WithClientOptions(opts...),
-		),
-		devAuthLoad: connect.NewClient[v1.DevAuthLoadRequest, v1.DevAuthLoadResponse](
-			httpClient,
-			baseURL+SystemServiceDevAuthLoadProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("DevAuthLoad")),
-			connect.WithClientOptions(opts...),
-		),
-		devAuthSave: connect.NewClient[v1.DevAuthSaveRequest, v1.DevAuthSaveResponse](
-			httpClient,
-			baseURL+SystemServiceDevAuthSaveProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("DevAuthSave")),
-			connect.WithClientOptions(opts...),
-		),
-		devAuthClear: connect.NewClient[v1.DevAuthClearRequest, v1.DevAuthClearResponse](
-			httpClient,
-			baseURL+SystemServiceDevAuthClearProcedure,
-			connect.WithSchema(systemServiceMethods.ByName("DevAuthClear")),
-			connect.WithClientOptions(opts...),
-		),
-	}
-}
-
-// systemServiceClient implements SystemServiceClient.
-type systemServiceClient struct {
-	health           *connect.Client[v1.HealthRequest, v1.HealthResponse]
-	ready            *connect.Client[v1.ReadyRequest, v1.ReadyResponse]
-	info             *connect.Client[v1.InfoRequest, v1.InfoResponse]
-	version          *connect.Client[v1.VersionRequest, v1.VersionResponse]
-	startOAuthSignIn *connect.Client[v1.StartOAuthSignInRequest, v1.StartOAuthSignInResponse]
-	devAuthLoad      *connect.Client[v1.DevAuthLoadRequest, v1.DevAuthLoadResponse]
-	devAuthSave      *connect.Client[v1.DevAuthSaveRequest, v1.DevAuthSaveResponse]
-	devAuthClear     *connect.Client[v1.DevAuthClearRequest, v1.DevAuthClearResponse]
-}
-
-// Health calls reliant.v1.SystemService.Health.
-func (c *systemServiceClient) Health(ctx context.Context, req *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error) {
-	return c.health.CallUnary(ctx, req)
-}
-
-// Ready calls reliant.v1.SystemService.Ready.
-func (c *systemServiceClient) Ready(ctx context.Context, req *connect.Request[v1.ReadyRequest]) (*connect.Response[v1.ReadyResponse], error) {
-	return c.ready.CallUnary(ctx, req)
-}
-
-// Info calls reliant.v1.SystemService.Info.
-func (c *systemServiceClient) Info(ctx context.Context, req *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error) {
-	return c.info.CallUnary(ctx, req)
-}
-
-// Version calls reliant.v1.SystemService.Version.
-func (c *systemServiceClient) Version(ctx context.Context, req *connect.Request[v1.VersionRequest]) (*connect.Response[v1.VersionResponse], error) {
-	return c.version.CallUnary(ctx, req)
-}
-
-// StartOAuthSignIn calls reliant.v1.SystemService.StartOAuthSignIn.
-func (c *systemServiceClient) StartOAuthSignIn(ctx context.Context, req *connect.Request[v1.StartOAuthSignInRequest]) (*connect.Response[v1.StartOAuthSignInResponse], error) {
-	return c.startOAuthSignIn.CallUnary(ctx, req)
-}
-
-// DevAuthLoad calls reliant.v1.SystemService.DevAuthLoad.
-func (c *systemServiceClient) DevAuthLoad(ctx context.Context, req *connect.Request[v1.DevAuthLoadRequest]) (*connect.Response[v1.DevAuthLoadResponse], error) {
-	return c.devAuthLoad.CallUnary(ctx, req)
-}
-
-// DevAuthSave calls reliant.v1.SystemService.DevAuthSave.
-func (c *systemServiceClient) DevAuthSave(ctx context.Context, req *connect.Request[v1.DevAuthSaveRequest]) (*connect.Response[v1.DevAuthSaveResponse], error) {
-	return c.devAuthSave.CallUnary(ctx, req)
-}
-
-// DevAuthClear calls reliant.v1.SystemService.DevAuthClear.
-func (c *systemServiceClient) DevAuthClear(ctx context.Context, req *connect.Request[v1.DevAuthClearRequest]) (*connect.Response[v1.DevAuthClearResponse], error) {
-	return c.devAuthClear.CallUnary(ctx, req)
+// NewSystemServiceClient constructs a client for the reliant.v1.SystemService service. Multiple
+// service clients may share a single connect.Client.
+func NewSystemServiceClient(client *connect.Client) SystemServiceClient {
+	return &systemServiceClient{client: client}
 }
 
 // SystemServiceHandler is an implementation of the reliant.v1.SystemService service.
 type SystemServiceHandler interface {
 	// Health returns the health status of the service
-	Health(context.Context, *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error)
+	Health(context.Context, *v1.HealthRequest) (*v1.HealthResponse, error)
 	// Ready returns the readiness status of the service
-	Ready(context.Context, *connect.Request[v1.ReadyRequest]) (*connect.Response[v1.ReadyResponse], error)
+	Ready(context.Context, *v1.ReadyRequest) (*v1.ReadyResponse, error)
 	// Info returns general API information including version, build info, and worktree
-	Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error)
+	Info(context.Context, *v1.InfoRequest) (*v1.InfoResponse, error)
 	// Version returns detailed version information
-	Version(context.Context, *connect.Request[v1.VersionRequest]) (*connect.Response[v1.VersionResponse], error)
+	Version(context.Context, *v1.VersionRequest) (*v1.VersionResponse, error)
 	// StartOAuthSignIn completes the Electron-local OAuth sign-in flow
 	// by opening the provider in the system browser, waiting for the localhost
 	// callback, exchanging the PKCE code, and returning Supabase session tokens.
-	StartOAuthSignIn(context.Context, *connect.Request[v1.StartOAuthSignInRequest]) (*connect.Response[v1.StartOAuthSignInResponse], error)
+	StartOAuthSignIn(context.Context, *v1.StartOAuthSignInRequest) (*v1.StartOAuthSignInResponse, error)
 	// DevAuthLoad loads the global auth session (development only).
 	// Browser dev mode calls the DevAuth rpcs before a JWT exists.
-	DevAuthLoad(context.Context, *connect.Request[v1.DevAuthLoadRequest]) (*connect.Response[v1.DevAuthLoadResponse], error)
+	DevAuthLoad(context.Context, *v1.DevAuthLoadRequest) (*v1.DevAuthLoadResponse, error)
 	// DevAuthSave saves the global auth session (development only)
-	DevAuthSave(context.Context, *connect.Request[v1.DevAuthSaveRequest]) (*connect.Response[v1.DevAuthSaveResponse], error)
+	DevAuthSave(context.Context, *v1.DevAuthSaveRequest) (*v1.DevAuthSaveResponse, error)
 	// DevAuthClear clears the global auth session (development only)
-	DevAuthClear(context.Context, *connect.Request[v1.DevAuthClearRequest]) (*connect.Response[v1.DevAuthClearResponse], error)
+	DevAuthClear(context.Context, *v1.DevAuthClearRequest) (*v1.DevAuthClearResponse, error)
 }
 
-// NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	systemServiceMethods := v1.File_reliant_v1_system_proto.Services().ByName("SystemService").Methods()
-	systemServiceHealthHandler := connect.NewUnaryHandler(
-		SystemServiceHealthProcedure,
-		svc.Health,
-		connect.WithSchema(systemServiceMethods.ByName("Health")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
+// RegisterSystemServiceHandler registers svc as the reliant.v1.SystemService implementation on
+// server.
+func RegisterSystemServiceHandler(server *connect.Server, svc SystemServiceHandler) {
+	adapter := systemServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: systemServiceHealthSpec(), Handler: adapter.health},
+		connect.Method{Spec: systemServiceReadySpec(), Handler: adapter.ready},
+		connect.Method{Spec: systemServiceInfoSpec(), Handler: adapter.info},
+		connect.Method{Spec: systemServiceVersionSpec(), Handler: adapter.version},
+		connect.Method{Spec: systemServiceStartOAuthSignInSpec(), Handler: adapter.startOAuthSignIn},
+		connect.Method{Spec: systemServiceDevAuthLoadSpec(), Handler: adapter.devAuthLoad},
+		connect.Method{Spec: systemServiceDevAuthSaveSpec(), Handler: adapter.devAuthSave},
+		connect.Method{Spec: systemServiceDevAuthClearSpec(), Handler: adapter.devAuthClear},
 	)
-	systemServiceReadyHandler := connect.NewUnaryHandler(
-		SystemServiceReadyProcedure,
-		svc.Ready,
-		connect.WithSchema(systemServiceMethods.ByName("Ready")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceInfoHandler := connect.NewUnaryHandler(
-		SystemServiceInfoProcedure,
-		svc.Info,
-		connect.WithSchema(systemServiceMethods.ByName("Info")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceVersionHandler := connect.NewUnaryHandler(
-		SystemServiceVersionProcedure,
-		svc.Version,
-		connect.WithSchema(systemServiceMethods.ByName("Version")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceStartOAuthSignInHandler := connect.NewUnaryHandler(
-		SystemServiceStartOAuthSignInProcedure,
-		svc.StartOAuthSignIn,
-		connect.WithSchema(systemServiceMethods.ByName("StartOAuthSignIn")),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceDevAuthLoadHandler := connect.NewUnaryHandler(
-		SystemServiceDevAuthLoadProcedure,
-		svc.DevAuthLoad,
-		connect.WithSchema(systemServiceMethods.ByName("DevAuthLoad")),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceDevAuthSaveHandler := connect.NewUnaryHandler(
-		SystemServiceDevAuthSaveProcedure,
-		svc.DevAuthSave,
-		connect.WithSchema(systemServiceMethods.ByName("DevAuthSave")),
-		connect.WithHandlerOptions(opts...),
-	)
-	systemServiceDevAuthClearHandler := connect.NewUnaryHandler(
-		SystemServiceDevAuthClearProcedure,
-		svc.DevAuthClear,
-		connect.WithSchema(systemServiceMethods.ByName("DevAuthClear")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/reliant.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case SystemServiceHealthProcedure:
-			systemServiceHealthHandler.ServeHTTP(w, r)
-		case SystemServiceReadyProcedure:
-			systemServiceReadyHandler.ServeHTTP(w, r)
-		case SystemServiceInfoProcedure:
-			systemServiceInfoHandler.ServeHTTP(w, r)
-		case SystemServiceVersionProcedure:
-			systemServiceVersionHandler.ServeHTTP(w, r)
-		case SystemServiceStartOAuthSignInProcedure:
-			systemServiceStartOAuthSignInHandler.ServeHTTP(w, r)
-		case SystemServiceDevAuthLoadProcedure:
-			systemServiceDevAuthLoadHandler.ServeHTTP(w, r)
-		case SystemServiceDevAuthSaveProcedure:
-			systemServiceDevAuthSaveHandler.ServeHTTP(w, r)
-		case SystemServiceDevAuthClearProcedure:
-			systemServiceDevAuthClearHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
 }
 
 // UnimplementedSystemServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSystemServiceHandler struct{}
 
-func (UnimplementedSystemServiceHandler) Health(context.Context, *connect.Request[v1.HealthRequest]) (*connect.Response[v1.HealthResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SystemService.Health is not implemented"))
+func (UnimplementedSystemServiceHandler) Health(context.Context, *v1.HealthRequest) (*v1.HealthResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SystemService.Health is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) Ready(context.Context, *connect.Request[v1.ReadyRequest]) (*connect.Response[v1.ReadyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SystemService.Ready is not implemented"))
+func (UnimplementedSystemServiceHandler) Ready(context.Context, *v1.ReadyRequest) (*v1.ReadyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SystemService.Ready is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) Info(context.Context, *connect.Request[v1.InfoRequest]) (*connect.Response[v1.InfoResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SystemService.Info is not implemented"))
+func (UnimplementedSystemServiceHandler) Info(context.Context, *v1.InfoRequest) (*v1.InfoResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SystemService.Info is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) Version(context.Context, *connect.Request[v1.VersionRequest]) (*connect.Response[v1.VersionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SystemService.Version is not implemented"))
+func (UnimplementedSystemServiceHandler) Version(context.Context, *v1.VersionRequest) (*v1.VersionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SystemService.Version is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) StartOAuthSignIn(context.Context, *connect.Request[v1.StartOAuthSignInRequest]) (*connect.Response[v1.StartOAuthSignInResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SystemService.StartOAuthSignIn is not implemented"))
+func (UnimplementedSystemServiceHandler) StartOAuthSignIn(context.Context, *v1.StartOAuthSignInRequest) (*v1.StartOAuthSignInResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SystemService.StartOAuthSignIn is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) DevAuthLoad(context.Context, *connect.Request[v1.DevAuthLoadRequest]) (*connect.Response[v1.DevAuthLoadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SystemService.DevAuthLoad is not implemented"))
+func (UnimplementedSystemServiceHandler) DevAuthLoad(context.Context, *v1.DevAuthLoadRequest) (*v1.DevAuthLoadResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SystemService.DevAuthLoad is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) DevAuthSave(context.Context, *connect.Request[v1.DevAuthSaveRequest]) (*connect.Response[v1.DevAuthSaveResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SystemService.DevAuthSave is not implemented"))
+func (UnimplementedSystemServiceHandler) DevAuthSave(context.Context, *v1.DevAuthSaveRequest) (*v1.DevAuthSaveResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SystemService.DevAuthSave is not implemented")
 }
 
-func (UnimplementedSystemServiceHandler) DevAuthClear(context.Context, *connect.Request[v1.DevAuthClearRequest]) (*connect.Response[v1.DevAuthClearResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SystemService.DevAuthClear is not implemented"))
+func (UnimplementedSystemServiceHandler) DevAuthClear(context.Context, *v1.DevAuthClearRequest) (*v1.DevAuthClearResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "reliant.v1.SystemService.DevAuthClear is not implemented")
+}
+
+type systemServiceClient struct {
+	client *connect.Client
+}
+
+func (c *systemServiceClient) Health(ctx context.Context, req *v1.HealthRequest) (*v1.HealthResponse, error) {
+	var res v1.HealthResponse
+	if err := c.client.CallUnary(ctx, systemServiceHealthSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) Ready(ctx context.Context, req *v1.ReadyRequest) (*v1.ReadyResponse, error) {
+	var res v1.ReadyResponse
+	if err := c.client.CallUnary(ctx, systemServiceReadySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) Info(ctx context.Context, req *v1.InfoRequest) (*v1.InfoResponse, error) {
+	var res v1.InfoResponse
+	if err := c.client.CallUnary(ctx, systemServiceInfoSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) Version(ctx context.Context, req *v1.VersionRequest) (*v1.VersionResponse, error) {
+	var res v1.VersionResponse
+	if err := c.client.CallUnary(ctx, systemServiceVersionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) StartOAuthSignIn(ctx context.Context, req *v1.StartOAuthSignInRequest) (*v1.StartOAuthSignInResponse, error) {
+	var res v1.StartOAuthSignInResponse
+	if err := c.client.CallUnary(ctx, systemServiceStartOAuthSignInSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) DevAuthLoad(ctx context.Context, req *v1.DevAuthLoadRequest) (*v1.DevAuthLoadResponse, error) {
+	var res v1.DevAuthLoadResponse
+	if err := c.client.CallUnary(ctx, systemServiceDevAuthLoadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) DevAuthSave(ctx context.Context, req *v1.DevAuthSaveRequest) (*v1.DevAuthSaveResponse, error) {
+	var res v1.DevAuthSaveResponse
+	if err := c.client.CallUnary(ctx, systemServiceDevAuthSaveSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *systemServiceClient) DevAuthClear(ctx context.Context, req *v1.DevAuthClearRequest) (*v1.DevAuthClearResponse, error) {
+	var res v1.DevAuthClearResponse
+	if err := c.client.CallUnary(ctx, systemServiceDevAuthClearSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+type systemServiceHandler struct{ svc SystemServiceHandler }
+
+func (h systemServiceHandler) health(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.HealthRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Health(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) ready(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReadyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Ready(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) info(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.InfoRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Info(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) version(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.VersionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.Version(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) startOAuthSignIn(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.StartOAuthSignInRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.StartOAuthSignIn(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) devAuthLoad(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DevAuthLoadRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DevAuthLoad(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) devAuthSave(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DevAuthSaveRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DevAuthSave(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h systemServiceHandler) devAuthClear(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DevAuthClearRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DevAuthClear(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }

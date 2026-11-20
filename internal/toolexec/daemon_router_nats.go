@@ -14,7 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe/natsotel"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -820,7 +820,7 @@ func (r *NATSDaemonRouter) resume(ctx context.Context, userID string, selector *
 		return false, err
 	}
 	if err := r.resumer.ResumeDaemon(ctx, token, daemonID); err != nil {
-		if svcerr.Code(err) == connect.CodeFailedPrecondition {
+		if svcerr.CodeV2(err) == connect.CodeFailedPrecondition {
 			logging.InfoContext(ctx, "[DaemonRouter] control plane does not hold the daemon as suspended; treating it as awake",
 				"user_id", userID, "daemon_id", daemonID, "error", err)
 			return false, nil
@@ -1076,7 +1076,7 @@ func daemonRequestError(op string, err error) error {
 		// Returned as a *connect.Error, which some paths hand to the client
 		// without svcerr.ToConnect reading the chain; ToConnect puts the
 		// reason on it.
-		return svcerr.ToConnect(errDaemonNotConnected)
+		return svcerr.ToConnectV2(errDaemonNotConnected)
 	}
 	if errors.Is(err, nats.ErrTimeout) {
 		return fmt.Errorf("%s via NATS failed: %w: %w", op, ErrDaemonTimeout, err)

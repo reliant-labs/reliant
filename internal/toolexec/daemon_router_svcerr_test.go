@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 
@@ -30,10 +30,10 @@ func TestMachineStateSentinelsAreClassified(t *testing.T) {
 		{"no responder", errDaemonNotConnected, connect.CodeUnavailable, "no daemon connected for user"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.code, svcerr.Code(tc.err))
+			assert.Equal(t, tc.code, svcerr.CodeV2(tc.err))
 			assert.Equal(t, svcerr.ClassUser, svcerr.Classify(tc.err))
 			assert.Equal(t, tc.text, tc.err.Error(), "the sentinel's text is unchanged")
-			wrapped := svcerr.ToConnect(fmt.Errorf("rpc failed: %w", tc.err))
+			wrapped := svcerr.ToConnectV2(fmt.Errorf("rpc failed: %w", tc.err))
 			assert.Equal(t, tc.code, wrapped.Code())
 			assert.Equal(t, tc.text, wrapped.Message(), "svcerr publishes the sentinel's text, not the wrapper's")
 		})
@@ -105,7 +105,7 @@ func TestRoutableDaemonID_ClientText(t *testing.T) {
 			assert.Equal(t, tc.text, err.Error())
 			assert.True(t, errors.Is(err, tc.state))
 			// As a handler returns it: wrapped in plumbing, through svcerr.
-			got := svcerr.ToConnect(fmt.Errorf("resolving daemon for command: %w", err))
+			got := svcerr.ToConnectV2(fmt.Errorf("resolving daemon for command: %w", err))
 			assert.Equal(t, tc.code, got.Code())
 			assert.Equal(t, tc.text, got.Message())
 			for _, m := range tc.marker {

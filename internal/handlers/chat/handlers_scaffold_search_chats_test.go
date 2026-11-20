@@ -3,7 +3,6 @@ package chat_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -18,22 +17,22 @@ func TestSearchChats_Generated(t *testing.T) {
 	// The stubbed Repo fails closed: an empty query must answer without it.
 	svc := chat.NewTestChat(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.SearchChatsRequest, pb.SearchChatsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.SearchChatsRequest, pb.SearchChatsResponse]{
 		{
 			Name: "an empty query matches nothing across all projects",
-			Req:  connect.NewRequest(&pb.SearchChatsRequest{}),
+			Req:  &pb.SearchChatsRequest{},
 			Ctx:  chat.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.SearchChatsResponse]) {
-				require.Empty(t, resp.Msg.GetChats())
+			Check: func(t *testing.T, resp *pb.SearchChatsResponse) {
+				require.Empty(t, resp.GetChats())
 			},
 		},
 		{
 			Name: "an empty query matches nothing",
-			Req:  connect.NewRequest(&pb.SearchChatsRequest{ProjectId: "project-1"}),
+			Req:  &pb.SearchChatsRequest{ProjectId: "project-1"},
 			Ctx:  chat.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.SearchChatsResponse]) {
-				require.Empty(t, resp.Msg.GetChats())
-				require.Zero(t, resp.Msg.GetTotal())
+			Check: func(t *testing.T, resp *pb.SearchChatsResponse) {
+				require.Empty(t, resp.GetChats())
+				require.Zero(t, resp.GetTotal())
 			},
 		},
 	}, svc.SearchChats)

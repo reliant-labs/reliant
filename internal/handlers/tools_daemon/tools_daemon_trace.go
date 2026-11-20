@@ -14,7 +14,6 @@ package tools_daemon
 import (
 	"context"
 	"net"
-	"net/http"
 	"strings"
 	"time"
 
@@ -75,10 +74,16 @@ type daemonNetwork struct {
 	city        string
 }
 
+// headerReader is what daemonNetworkOf reads a header from: a
+// connect.Header (the server's CallInfo) or an http.Header.
+type headerReader interface {
+	Get(key string) string
+}
+
 // daemonNetworkOf reads an inbound stream's origin from its request headers
 // and transport peer. X-Forwarded-For is client-supplied in its leftmost hops,
 // so the address is for attribution in traces, never for a security decision.
-func daemonNetworkOf(header http.Header, peerAddr string) daemonNetwork {
+func daemonNetworkOf(header headerReader, peerAddr string) daemonNetwork {
 	n := daemonNetwork{peerAddress: hostOnly(peerAddr)}
 	if xff := header.Get("X-Forwarded-For"); xff != "" {
 		first, _, _ := strings.Cut(xff, ",")
@@ -100,7 +105,7 @@ func daemonNetworkOf(header http.Header, peerAddr string) daemonNetwork {
 
 // geoHeader returns a geo header's value, or "" for an absent one or for the
 // load balancer's own placeholders when it could not resolve the client.
-func geoHeader(header http.Header, name string) string {
+func geoHeader(header headerReader, name string) string {
 	v := strings.TrimSpace(header.Get(name))
 	switch strings.ToLower(v) {
 	case "", "unknown", "zz":

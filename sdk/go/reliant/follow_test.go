@@ -7,15 +7,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
@@ -402,7 +402,7 @@ func TestFollowLogReceivesPollDiagnosticsAndNilIsSilent(t *testing.T) {
 		inner := f.getChatUpdates
 		f.getChatUpdates = func(r *reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error) {
 			if polls.Add(1) <= 2 {
-				return nil, connect.NewError(connect.CodeUnavailable, errors.New("blip"))
+				return nil, connect.NewError(connect.CodeUnavailable, "blip")
 			}
 			return inner(r)
 		}
@@ -456,9 +456,7 @@ func TestFollowResumesFromTheCompactionWatermark(t *testing.T) {
 	f.getChatUpdates = func(r *reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error) {
 		if r.GetSinceSeq() < through {
 			refused.Add(1)
-			cerr := connect.NewError(connect.CodeOutOfRange, errors.New("chat updates through sequence 3 were compacted"))
-			cerr.Meta().Set(chatCompactedThroughHeader, fmt.Sprint(through))
-			return nil, cerr
+			return nil, withMeta(connect.NewError(connect.CodeOutOfRange, "chat updates through sequence 3 were compacted"), chatCompactedThroughHeader, fmt.Sprint(through))
 		}
 		return inner(r)
 	}
@@ -486,11 +484,10 @@ func TestFollowResumesFromTheCompactionWatermark(t *testing.T) {
 
 // Any other OutOfRange (no watermark header) is an ordinary failed poll.
 func TestHistoryCompactedThroughNeedsTheWatermark(t *testing.T) {
-	if _, ok := historyCompactedThrough(connect.NewError(connect.CodeOutOfRange, errors.New("x"))); ok {
+	if _, ok := historyCompactedThrough(connect.NewError(connect.CodeOutOfRange, "x")); ok {
 		t.Fatal("an OutOfRange without the header read as compaction")
 	}
-	cerr := connect.NewError(connect.CodeUnavailable, errors.New("x"))
-	cerr.Meta().Set(chatCompactedThroughHeader, "5")
+	cerr := &metaError{err: connect.NewError(connect.CodeUnavailable, "x"), meta: http.Header{chatCompactedThroughHeader: {"5"}}}
 	if _, ok := historyCompactedThrough(cerr); ok {
 		t.Fatal("a non-OutOfRange error read as compaction")
 	}

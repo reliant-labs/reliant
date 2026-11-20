@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,11 +23,11 @@ func TestUpdateChatProviderPolicy_FundingIsPersonOnly(t *testing.T) {
 	ctx, fx, _, _, service := selectionFixture(t, db.Completed())
 	as := func(c auth.Credential) context.Context { return auth.WithCredential(ctx, c) }
 	update := func(ctx context.Context, p *reliantv1.ProviderPolicy) (*reliantv1.ProviderPolicy, error) {
-		resp, err := service.UpdateChatProviderPolicy(ctx, connect.NewRequest(&reliantv1.UpdateChatProviderPolicyRequest{ChatId: fx.chatID, ProviderPolicy: p}))
+		resp, err := service.UpdateChatProviderPolicy(ctx, &reliantv1.UpdateChatProviderPolicyRequest{ChatId: fx.chatID, ProviderPolicy: p})
 		if err != nil {
 			return nil, err
 		}
-		return resp.Msg.Selection.GetProviderPolicy(), nil
+		return resp.Selection.GetProviderPolicy(), nil
 	}
 	software := []auth.Credential{auth.CredentialAccessToken, auth.CredentialOAuthClient, auth.CredentialUnknown}
 

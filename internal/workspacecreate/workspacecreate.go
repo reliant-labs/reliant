@@ -410,7 +410,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		case svcerr.IsUserError(reason):
 			wt.FailureReason = reason.Error()
 		case away:
-			wt.FailureReason = svcerr.ToConnect(reason).Message()
+			wt.FailureReason = svcerr.ToConnectV2(reason).Message()
 		}
 		// A FAILED row must carry NO path: filepreview.ResolveBasePath returns an
 		// existing row's path as-is, so a path to directories just deleted

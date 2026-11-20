@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -33,15 +32,15 @@ var readOnlyForgeCommands = map[string]string{
 func TestForgeService_NoSideEffectsRPCsOnlyRead(t *testing.T) {
 	calls := map[string]func(*Service) error{
 		"PlanPromote": func(s *Service) error {
-			_, err := s.PlanPromote(authedCtx(), connect.NewRequest(&reliantv1.PlanForgePromoteRequest{
+			_, err := s.PlanPromote(authedCtx(), &reliantv1.PlanForgePromoteRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15",
-			}))
+			})
 			return err
 		},
 		"PlanDeploy": func(s *Service) error {
-			_, err := s.PlanDeploy(authedCtx(), connect.NewRequest(&reliantv1.PlanForgeDeployRequest{
+			_, err := s.PlanDeploy(authedCtx(), &reliantv1.PlanForgeDeployRequest{
 				ProjectId: "p", Env: "prod",
-			}))
+			})
 			return err
 		},
 	}

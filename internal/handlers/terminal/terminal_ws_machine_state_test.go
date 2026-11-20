@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
@@ -68,7 +68,7 @@ func freshTerminalMachineStateLog(t *testing.T) {
 func TestTerminalWS_MachineNotReadyIsLoggedOnceBelowErrorWithContext(t *testing.T) {
 	logs := captureLogs(t)
 	freshTerminalMachineStateLog(t)
-	router := &terminalCreateRouter{createErr: connect.NewError(connect.CodeUnavailable, errors.New("no daemon connected for user"))}
+	router := &terminalCreateRouter{createErr: connect.NewError(connect.CodeUnavailable, "no daemon connected for user")}
 
 	for i := 0; i < 3; i++ {
 		first := dialTerminalWSForProject(t, router, "proj-1")

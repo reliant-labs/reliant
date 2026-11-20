@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -70,9 +69,9 @@ func TestCancelToolCall_DeliversCancelToDaemonAndSucceeds(t *testing.T) {
 	router := &toolexectest.Recorder{}
 	svc := NewTestToolCall(t, WithToolCallDeps(Deps{Repo: repo, Router: router}))
 
-	resp, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{ToolCallId: toolCallID}))
+	resp, err := svc.CancelToolCall(ctx, &reliantv1.CancelToolCallRequest{ToolCallId: toolCallID})
 	require.NoError(t, err)
-	require.True(t, resp.Msg.Success)
+	require.True(t, resp.Success)
 
 	require.Len(t, router.CancelCalls, 1)
 	require.Equal(t, toolCallID, router.CancelCalls[0].RequestID)

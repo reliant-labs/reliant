@@ -4,7 +4,6 @@ package message
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -19,9 +18,9 @@ import (
 // GetMessage retrieves a single message by ID with its content blocks
 func (s *Service) GetMessage(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetMessageRequest],
-) (*connect.Response[reliantv1.GetMessageResponse], error) {
-	messageID := req.Msg.MessageId
+	req *reliantv1.GetMessageRequest,
+) (*reliantv1.GetMessageResponse, error) {
+	messageID := req.MessageId
 	if messageID == "" {
 		return nil, svcerr.InvalidArgument("message_id is required")
 	}
@@ -103,7 +102,7 @@ func (s *Service) GetMessage(
 	// the caller has not said which thread it is reading as. Statuses are
 	// reported exactly as persisted; the branch-aware reinterpretation belongs
 	// to ListMessages, which knows the thread being displayed.
-	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
+	toolBodies := messageproto.ResolveToolBodyMode(req.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessage := messageproto.FromDB(msg, blocks, attachments, &messageproto.Options{
 		ToolCallStatusByCallID: toolCallStatusByCallID,
 		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Repo, []*db.Message{msg}),
@@ -120,7 +119,7 @@ func (s *Service) GetMessage(
 	sent.AddMessages(protoMessage)
 	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
-	return connect.NewResponse(&reliantv1.GetMessageResponse{
+	return &reliantv1.GetMessageResponse{
 		Message: protoMessage,
-	}), nil
+	}, nil
 }

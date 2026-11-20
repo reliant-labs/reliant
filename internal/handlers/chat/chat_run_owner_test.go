@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -62,7 +61,7 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 		runs:    runs.NewService(repo, temporal, nil),
 	}
 
-	resp, err := service.StartChat(ctx, connect.NewRequest(&reliantv1.StartChatRequest{
+	resp, err := service.StartChat(ctx, &reliantv1.StartChatRequest{
 		ProjectId: projectID,
 		Workflow:  "builtin://agent",
 		Messages: []*reliantv1.InputMessage{{
@@ -72,11 +71,11 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 		WorkflowParams: map[string]*structpb.Value{
 			"model": mustStructValue(t, map[string]interface{}{"id": "mock"}),
 		},
-	}))
+	})
 	require.NoError(t, err)
 
 	// The root run's id is the chat's id.
-	requireRunOwner(t, repo, resp.Msg.GetChat().GetId(), "test-user")
+	requireRunOwner(t, repo, resp.GetChat().GetId(), "test-user")
 }
 
 func TestChatService_BranchChat_RootRunCarriesOwner(t *testing.T) {
@@ -95,11 +94,11 @@ func TestChatService_BranchChat_RootRunCarriesOwner(t *testing.T) {
 		},
 		threads: threads.NewService(repo),
 	}
-	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+	resp, err := service.BranchChat(ctx, &reliantv1.BranchChatRequest{
 		ChatId:    sourceChatID,
 		MessageId: msgID,
-	}))
+	})
 	require.NoError(t, err)
 
-	requireRunOwner(t, repo, resp.Msg.GetChat().GetId(), "test-user")
+	requireRunOwner(t, repo, resp.GetChat().GetId(), "test-user")
 }

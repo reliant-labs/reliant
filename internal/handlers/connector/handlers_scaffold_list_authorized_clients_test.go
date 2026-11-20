@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -20,10 +20,10 @@ func TestListAuthorizedClients_Generated(t *testing.T) {
 
 	svc := connector.NewTestConnector(t)
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListAuthorizedClientsRequest, pb.ListAuthorizedClientsResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.ListAuthorizedClientsRequest, pb.ListAuthorizedClientsResponse]{
 		{
 			Name:    "no caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.ListAuthorizedClientsRequest{}),
+			Req:     &pb.ListAuthorizedClientsRequest{},
 			Ctx:     context.Background(),
 			WantErr: connect.CodeUnauthenticated,
 		},

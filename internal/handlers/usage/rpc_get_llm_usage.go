@@ -6,7 +6,6 @@ import (
 	"sort"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -25,13 +24,13 @@ const dateLayout = "2006-01-02"
 // owner); nothing on the request names another.
 func (s *Service) GetLLMUsage(
 	ctx context.Context,
-	req *connect.Request[pb.GetLLMUsageRequest],
-) (*connect.Response[pb.GetLLMUsageResponse], error) {
+	req *pb.GetLLMUsageRequest,
+) (*pb.GetLLMUsageResponse, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
 		return nil, svcerr.Wrap(svcerr.Unauthenticated("user ID not found in context"))
 	}
-	msg := req.Msg
+	msg := req
 
 	start, end, err := parseRange(msg.GetStartDate(), msg.GetEndDate())
 	if err != nil {
@@ -114,7 +113,7 @@ func (s *Service) GetLLMUsage(
 		}
 	}
 
-	return connect.NewResponse(&pb.GetLLMUsageResponse{
+	return &pb.GetLLMUsageResponse{
 		GroupBy:             groupBy,
 		Buckets:             buckets,
 		Totals:              totals,
@@ -122,7 +121,7 @@ func (s *Service) GetLLMUsage(
 		AsOf:                now.Format(time.RFC3339),
 		DetailAvailableFrom: detailFrom.Format(dateLayout),
 		Note:                note,
-	}), nil
+	}, nil
 }
 
 // detailAvailableFrom is the first UTC day whose per-call rows are all still

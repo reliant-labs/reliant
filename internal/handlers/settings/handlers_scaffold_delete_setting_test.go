@@ -3,7 +3,7 @@ package settings_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
@@ -20,25 +20,25 @@ func TestDeleteSetting_Generated(t *testing.T) {
 	}
 	svc := newSettingsService(t, stored.repo())
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteSettingRequest, pb.DeleteSettingResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.DeleteSettingRequest, pb.DeleteSettingResponse]{
 		{
 			Name:    "key is required",
-			Req:     connect.NewRequest(&pb.DeleteSettingRequest{}),
+			Req:     &pb.DeleteSettingRequest{},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "an unset key is not found",
-			Req:     connect.NewRequest(&pb.DeleteSettingRequest{Key: "unset"}),
+			Req:     &pb.DeleteSettingRequest{Key: "unset"},
 			Ctx:     settings.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the stored key is deleted",
-			Req:  connect.NewRequest(&pb.DeleteSettingRequest{Key: "theme"}),
+			Req:  &pb.DeleteSettingRequest{Key: "theme"},
 			Ctx:  settings.AuthedContext(t),
-			Check: func(t *testing.T, resp *connect.Response[pb.DeleteSettingResponse]) {
-				require.True(t, resp.Msg.GetSuccess())
+			Check: func(t *testing.T, resp *pb.DeleteSettingResponse) {
+				require.True(t, resp.GetSuccess())
 				require.NotContains(t, stored, "theme")
 			},
 		},

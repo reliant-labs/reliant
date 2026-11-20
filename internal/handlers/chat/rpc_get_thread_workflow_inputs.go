@@ -3,7 +3,6 @@ package chat
 import (
 	"context"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -21,16 +20,16 @@ import (
 // and falls back to empty inputs for completed workflows.
 func (s *Service) GetThreadWorkflowInputs(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetThreadWorkflowInputsRequest],
-) (*connect.Response[reliantv1.GetThreadWorkflowInputsResponse], error) {
+	req *reliantv1.GetThreadWorkflowInputsRequest,
+) (*reliantv1.GetThreadWorkflowInputsResponse, error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" || req.Msg.ThreadId == "" {
+	if req.ChatId == "" || req.ThreadId == "" {
 		return nil, svcerr.InvalidArgument("chat_id and thread_id are required")
 	}
 
 	// Verify chat ownership
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+	chat, err := s.deps.Repo.GetChat(ctx, req.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -39,7 +38,7 @@ func (s *Service) GetThreadWorkflowInputs(
 	}
 
 	// Look up the workflow record for this thread
-	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, req.Msg.ChatId, req.Msg.ThreadId)
+	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, req.ChatId, req.ThreadId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get the thread's workflow"))
 	}
@@ -51,7 +50,7 @@ func (s *Service) GetThreadWorkflowInputs(
 	// A sub-agent that stopped on an error is not running, but its params
 	// still matter: they are what it resumes with, and the run that will
 	// resume it holds them.
-	resumable := !isRunning && s.canResumeStoppedAgent(ctx, chat, req.Msg.ThreadId)
+	resumable := !isRunning && s.canResumeStoppedAgent(ctx, chat, req.ThreadId)
 
 	// Resolve to root workflow ID for Temporal queries.
 	// Child workflows are inline goroutines with synthetic DB IDs that Temporal doesn't know.
@@ -63,7 +62,7 @@ func (s *Service) GetThreadWorkflowInputs(
 	inputsMap := make(map[string]*structpb.Value)
 	if (isRunning || resumable) && rootWorkflowID != "" {
 		// Use get_thread_inputs query which returns the thread's subInputs map
-		queryResp, err := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, rootWorkflowID, "get_thread_inputs", req.Msg.ThreadId)
+		queryResp, err := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, rootWorkflowID, "get_thread_inputs", req.ThreadId)
 		if err == nil {
 			var currentInputs map[string]interface{}
 			if err := queryResp.Get(&currentInputs); err == nil {
@@ -79,14 +78,14 @@ func (s *Service) GetThreadWorkflowInputs(
 				}
 			}
 		} else {
-			logging.DebugContext(ctx, "Failed to query thread inputs", "error", err, "rootWorkflowID", rootWorkflowID, "thread", req.Msg.ThreadId)
+			logging.DebugContext(ctx, "Failed to query thread inputs", "error", err, "rootWorkflowID", rootWorkflowID, "thread", req.ThreadId)
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetThreadWorkflowInputsResponse{
+	return &reliantv1.GetThreadWorkflowInputsResponse{
 		WorkflowName: wf.WorkflowName,
 		Inputs:       inputsMap,
 		IsRunning:    isRunning,
 		Resumable:    resumable,
-	}), nil
+	}, nil
 }

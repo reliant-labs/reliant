@@ -6,10 +6,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/tdd"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -36,14 +37,15 @@ func TestGetChatUpdates_BelowTheCompactionWatermarkIsRefused(t *testing.T) {
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
 	for _, since := range []int64{0, 3, 49} {
-		resp, err := svc.GetChatUpdates(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: since}))
+		resp, err := svc.GetChatUpdates(chat.AuthedContext(t), &pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: since})
 		require.Error(t, err, "since_seq %d is below the watermark", since)
 		require.Nil(t, resp)
 		require.True(t, svcerr.IsOutOfRange(err), "since_seq %d: %v", since, err)
-		cerr := svcerr.ToConnect(err)
+		cerr := svcerr.ToConnectV2(err)
 		require.Equal(t, connect.CodeOutOfRange, cerr.Code())
-		require.Equal(t, "50", cerr.Meta().Get(chat.ChatCompactedThroughHeader))
-		require.Equal(t, chat.ChatHistoryCompactedReason, cerr.Meta().Get(svcerr.ReasonHeader))
+		meta := svcerr.MetaOf(err)
+		require.Equal(t, "50", meta.Get(chat.ChatCompactedThroughHeader))
+		require.Equal(t, chat.ChatHistoryCompactedReason, meta.Get(svcerr.ReasonHeader))
 	}
 }
 
@@ -60,10 +62,11 @@ func TestGetChatUpdates_AtTheCompactionWatermarkReplays(t *testing.T) {
 	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return 50, nil }
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
-	resp, err := svc.GetChatUpdates(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 50}))
+	info := &connect.CallInfo{}
+	resp, err := tdd.CallV2(chat.AuthedContext(t), svc.GetChatUpdates, &pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 50}, info)
 	require.NoError(t, err)
-	require.Equal(t, "50", resp.Header().Get(chat.ChatCompactedThroughHeader))
-	require.Len(t, resp.Msg.GetUpdates(), 1)
+	require.Equal(t, "50", info.ResponseHeader().Get(chat.ChatCompactedThroughHeader))
+	require.Len(t, resp.GetUpdates(), 1)
 }
 
 // Compaction racing the poll: the watermark is read after the updates, so a
@@ -81,9 +84,9 @@ func TestGetChatUpdates_WatermarkIsReadAfterTheUpdates(t *testing.T) {
 	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return compacted.Load(), nil }
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
-	_, err := svc.GetChatUpdates(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 10}))
+	_, err := svc.GetChatUpdates(chat.AuthedContext(t), &pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 10})
 	require.True(t, svcerr.IsOutOfRange(err), "%v", err)
-	require.Equal(t, "60", svcerr.ToConnect(err).Meta().Get(chat.ChatCompactedThroughHeader))
+	require.Equal(t, "60", svcerr.MetaOf(err).Get(chat.ChatCompactedThroughHeader))
 }
 
 // An unreadable watermark fails the poll: the poller keeps its cursor and
@@ -96,6 +99,6 @@ func TestGetChatUpdates_UnreadableWatermarkFailsThePoll(t *testing.T) {
 	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return 0, errors.New("db down") }
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 
-	_, err := svc.GetChatUpdates(chat.AuthedContext(t), connect.NewRequest(&pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 10}))
+	_, err := svc.GetChatUpdates(chat.AuthedContext(t), &pb.GetChatUpdatesRequest{ChatId: ownChatID, SinceSeq: 10})
 	require.Error(t, err)
 }

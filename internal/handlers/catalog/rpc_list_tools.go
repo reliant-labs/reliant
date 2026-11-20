@@ -3,8 +3,6 @@ package catalog
 import (
 	"context"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
@@ -12,8 +10,8 @@ import (
 // ListTools returns all available tools
 func (s *Service) ListTools(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListToolsRequest],
-) (*connect.Response[reliantv1.ListToolsResponse], error) {
+	req *reliantv1.ListToolsRequest,
+) (*reliantv1.ListToolsResponse, error) {
 	// Get all available tools from the tools registry
 	toolRegistry := tools.GetToolRegistry()
 
@@ -67,5 +65,5 @@ func (s *Service) ListTools(
 		Tools: toolList,
 		Total: int32(len(toolList)),
 	}
-	return connect.NewResponse(resp), nil
+	return resp, nil
 }

@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -460,26 +459,26 @@ func fsProxyDaemonError(commandType string, err error) error {
 // GetFileTree returns the file tree structure for a project.
 func (s *Service) GetFileTree(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetFileTreeRequest],
-) (*connect.Response[reliantv1.GetFileTreeResponse], error) {
+	req *reliantv1.GetFileTreeRequest,
+) (*reliantv1.GetFileTreeResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolve(req.Path)
 	if err != nil {
 		return nil, err
 	}
 
 	cmdReq := map[string]any{
 		"path":        resolvedPath,
-		"show_hidden": req.Msg.ShowHidden,
-		"depth":       req.Msg.Depth,
+		"show_hidden": req.ShowHidden,
+		"depth":       req.Depth,
 	}
 
 	var cmdResp struct {
@@ -488,7 +487,7 @@ func (s *Service) GetFileTree(
 		NodeCount int               `json:"node_count"`
 	}
 	if err := s.sendCommand(ctx, userID, scope.target, "fs.get_tree", cmdReq, &cmdResp, 30000); err != nil {
-		if missing := s.checkoutMissingError(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, scope, resolvedPath, err); missing != nil {
+		if missing := s.checkoutMissingError(ctx, userID, req.ProjectId, req.WorktreeId, scope, resolvedPath, err); missing != nil {
 			return nil, missing
 		}
 		return nil, err
@@ -512,11 +511,11 @@ func (s *Service) GetFileTree(
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetFileTreeResponse{
+	return &reliantv1.GetFileTreeResponse{
 		Files:     files,
 		Truncated: cmdResp.Truncated,
 		NodeCount: int32(cmdResp.NodeCount),
-	}), nil
+	}, nil
 }
 
 // prefixFileNodePaths rebases a node subtree's paths onto prefix, so daemon
@@ -571,18 +570,18 @@ func convertFsProxyNode(n *fsProxyFileNode) *reliantv1.FileNode {
 // GetFileContent returns the content of a specific file.
 func (s *Service) GetFileContent(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetFileContentRequest],
-) (*connect.Response[reliantv1.GetFileContentResponse], error) {
+	req *reliantv1.GetFileContentRequest,
+) (*reliantv1.GetFileContentResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Msg.Path)
+	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -606,33 +605,33 @@ func (s *Service) GetFileContent(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.GetFileContentResponse{
+	return &reliantv1.GetFileContentResponse{
 		Content: cmdResp.Content,
-	}), nil
+	}, nil
 }
 
 // SaveFileContent saves content to a specific file.
 func (s *Service) SaveFileContent(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SaveFileContentRequest],
-) (*connect.Response[reliantv1.SaveFileContentResponse], error) {
+	req *reliantv1.SaveFileContentRequest,
+) (*reliantv1.SaveFileContentResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolve(req.Path)
 	if err != nil {
 		return nil, err
 	}
 
 	cmdReq := map[string]any{
 		"path":    resolvedPath,
-		"content": req.Msg.Content,
+		"content": req.Content,
 	}
 
 	var cmdResp struct {
@@ -644,26 +643,26 @@ func (s *Service) SaveFileContent(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.SaveFileContentResponse{
+	return &reliantv1.SaveFileContentResponse{
 		Message: "File saved successfully",
-	}), nil
+	}, nil
 }
 
 // GetFileMetadata returns metadata for a file or directory.
 func (s *Service) GetFileMetadata(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetFileMetadataRequest],
-) (*connect.Response[reliantv1.GetFileMetadataResponse], error) {
+	req *reliantv1.GetFileMetadataRequest,
+) (*reliantv1.GetFileMetadataResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Msg.Path)
+	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -690,7 +689,7 @@ func (s *Service) GetFileMetadata(
 	}
 
 	if !cmdResp.Exists {
-		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("path not found: %s", req.Msg.Path))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("path not found: %s", req.Path))
 	}
 
 	nodeType := reliantv1.FileNodeType_FILE_NODE_TYPE_FILE
@@ -698,43 +697,43 @@ func (s *Service) GetFileMetadata(
 		nodeType = reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY
 	}
 
-	return connect.NewResponse(&reliantv1.GetFileMetadataResponse{
+	return &reliantv1.GetFileMetadataResponse{
 		Metadata: &reliantv1.FileMetadata{
-			Name:        baseName(req.Msg.Path),
-			Path:        req.Msg.Path,
+			Name:        baseName(req.Path),
+			Path:        req.Path,
 			Size:        cmdResp.Size,
 			Modified:    cmdResp.ModTime.Format(time.RFC3339),
 			Type:        nodeType,
 			Permissions: cmdResp.Mode,
 		},
-	}), nil
+	}, nil
 }
 
 // GetFilePreviewInfo returns preview metadata for a file.
 func (s *Service) GetFilePreviewInfo(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetFilePreviewInfoRequest],
-) (*connect.Response[reliantv1.GetFilePreviewInfoResponse], error) {
+	req *reliantv1.GetFilePreviewInfoRequest,
+) (*reliantv1.GetFilePreviewInfoResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Msg.Path)
-	if err != nil {
-		return nil, err
-	}
-
-	info, err := s.previewInfo(ctx, userID, scope, resolvedPath, req.Msg.Path)
+	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Path)
 	if err != nil {
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.GetFilePreviewInfoResponse{
+	info, err := s.previewInfo(ctx, userID, scope, resolvedPath, req.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	return &reliantv1.GetFilePreviewInfoResponse{
 		Info: &reliantv1.FilePreviewInfo{
 			Name:       info.Name,
 			Path:       info.Path,
@@ -745,7 +744,7 @@ func (s *Service) GetFilePreviewInfo(
 			IsBinary:   info.IsBinary,
 			IsEditable: info.IsEditable,
 		},
-	}), nil
+	}, nil
 }
 
 // fsProxyPreviewInfo mirrors the daemon's fs.preview_info response: the file's
@@ -810,29 +809,29 @@ const filePreviewTimeoutMs int32 = 60_000
 // passed down, so the daemon refuses an oversized file before reading it.
 func (s *Service) GetFilePreview(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetFilePreviewRequest],
-) (*connect.Response[reliantv1.GetFilePreviewResponse], error) {
+	req *reliantv1.GetFilePreviewRequest,
+) (*reliantv1.GetFilePreviewResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(req.Msg.Path) == "" {
+	if strings.TrimSpace(req.Path) == "" {
 		return nil, svcerr.InvalidArgument("path is required")
 	}
 
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Msg.Path)
+	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Path)
 	if err != nil {
 		return nil, err
 	}
 
-	info, err := s.previewInfo(ctx, userID, scope, resolvedPath, req.Msg.Path)
+	info, err := s.previewInfo(ctx, userID, scope, resolvedPath, req.Path)
 	if err != nil {
 		if strings.Contains(err.Error(), "file not found") {
-			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("file not found: %s", req.Msg.Path))
+			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("file not found: %s", req.Path))
 		}
 		return nil, err
 	}
@@ -865,12 +864,12 @@ func (s *Service) GetFilePreview(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("decode preview bytes"))
 	}
 
-	return connect.NewResponse(&reliantv1.GetFilePreviewResponse{
+	return &reliantv1.GetFilePreviewResponse{
 		Content:     content,
 		ContentType: info.MIMEType,
 		Filename:    info.Name,
 		Size:        int64(len(content)),
-	}), nil
+	}, nil
 }
 
 // filePreviewTooLarge is the refusal for a file over maxFilePreviewBytes.
@@ -882,23 +881,23 @@ func filePreviewTooLarge(size int64) error {
 // CreateFileOrFolder creates a new file or folder.
 func (s *Service) CreateFileOrFolder(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateFileOrFolderRequest],
-) (*connect.Response[reliantv1.CreateFileOrFolderResponse], error) {
+	req *reliantv1.CreateFileOrFolderRequest,
+) (*reliantv1.CreateFileOrFolderResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolve(req.Path)
 	if err != nil {
 		return nil, err
 	}
 
-	isFolder := req.Msg.Type == reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY
+	isFolder := req.Type == reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY
 
 	if isFolder {
 		cmdReq := map[string]any{
@@ -911,7 +910,7 @@ func (s *Service) CreateFileOrFolder(
 	} else {
 		cmdReq := map[string]any{
 			"path":    resolvedPath,
-			"content": req.Msg.Content,
+			"content": req.Content,
 		}
 		var cmdResp struct {
 			Created      bool   `json:"created"`
@@ -927,27 +926,27 @@ func (s *Service) CreateFileOrFolder(
 	if isFolder {
 		action = "Folder"
 	}
-	return connect.NewResponse(&reliantv1.CreateFileOrFolderResponse{
+	return &reliantv1.CreateFileOrFolderResponse{
 		Message: action + " created successfully",
-		Path:    req.Msg.Path,
-	}), nil
+		Path:    req.Path,
+	}, nil
 }
 
 // DeleteFileOrFolder deletes a file or folder.
 func (s *Service) DeleteFileOrFolder(
 	ctx context.Context,
-	req *connect.Request[reliantv1.DeleteFileOrFolderRequest],
-) (*connect.Response[reliantv1.DeleteFileOrFolderResponse], error) {
+	req *reliantv1.DeleteFileOrFolderRequest,
+) (*reliantv1.DeleteFileOrFolderResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolve(req.Msg.Path)
+	resolvedPath, err := scope.resolve(req.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -961,16 +960,16 @@ func (s *Service) DeleteFileOrFolder(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.DeleteFileOrFolderResponse{
+	return &reliantv1.DeleteFileOrFolderResponse{
 		Message: "Deleted successfully",
-	}), nil
+	}, nil
 }
 
 // CopyFile copies a file to a new location.
 func (s *Service) CopyFile(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CopyFileRequest],
-) (*connect.Response[reliantv1.CopyFileResponse], error) {
+	req *reliantv1.CopyFileRequest,
+) (*reliantv1.CopyFileResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
@@ -979,15 +978,15 @@ func (s *Service) CopyFile(
 	// Both endpoints are confined, not merely joined: filepath.Join(base,
 	// "../../etc/passwd") cleans into an escape, so a copy could previously
 	// read from or write to any path on the daemon.
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	sourcePath, err := scope.resolve(req.Msg.SourcePath)
+	sourcePath, err := scope.resolve(req.SourcePath)
 	if err != nil {
 		return nil, err
 	}
-	destPath, err := scope.resolve(req.Msg.DestinationPath)
+	destPath, err := scope.resolve(req.DestinationPath)
 	if err != nil {
 		return nil, err
 	}
@@ -1005,27 +1004,27 @@ func (s *Service) CopyFile(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.CopyFileResponse{
+	return &reliantv1.CopyFileResponse{
 		Message:     cmdResp.Message,
 		Destination: cmdResp.Destination,
-	}), nil
+	}, nil
 }
 
 // SearchFiles searches for text within files in the workspace.
 func (s *Service) SearchFiles(
 	ctx context.Context,
-	req *connect.Request[reliantv1.SearchFilesRequest],
-) (*connect.Response[reliantv1.SearchFilesResponse], error) {
+	req *reliantv1.SearchFilesRequest,
+) (*reliantv1.SearchFilesResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	searchPath := ""
-	if req.Msg.Path != nil {
-		searchPath = *req.Msg.Path
+	if req.Path != nil {
+		searchPath = *req.Path
 	}
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
@@ -1041,22 +1040,22 @@ func (s *Service) SearchFiles(
 		// directory instead of the workspace.
 		"base_dir": resolvedPath,
 	}
-	if req.Msg.FilePattern != nil {
-		opts["file_glob"] = *req.Msg.FilePattern
+	if req.FilePattern != nil {
+		opts["file_glob"] = *req.FilePattern
 	}
-	if req.Msg.CaseSensitive != nil && !*req.Msg.CaseSensitive {
+	if req.CaseSensitive != nil && !*req.CaseSensitive {
 		opts["case_insensitive"] = true
 	}
-	if req.Msg.MaxResults != nil {
-		opts["max_results"] = *req.Msg.MaxResults
+	if req.MaxResults != nil {
+		opts["max_results"] = *req.MaxResults
 	}
-	if req.Msg.ContextLines != nil {
-		opts["context_before"] = *req.Msg.ContextLines
-		opts["context_after"] = *req.Msg.ContextLines
+	if req.ContextLines != nil {
+		opts["context_before"] = *req.ContextLines
+		opts["context_after"] = *req.ContextLines
 	}
 
 	cmdReq := map[string]any{
-		"pattern": req.Msg.Query,
+		"pattern": req.Query,
 		"opts":    opts,
 	}
 
@@ -1092,11 +1091,11 @@ func (s *Service) SearchFiles(
 		results = append(results, sr)
 	}
 
-	return connect.NewResponse(&reliantv1.SearchFilesResponse{
+	return &reliantv1.SearchFilesResponse{
 		Results:      results,
 		TotalMatches: totalMatches,
 		Truncated:    cmdResp.Truncated,
-	}), nil
+	}, nil
 }
 
 // daemonSearchMatch mirrors daemon.SearchMatch for JSON deserialization.
@@ -1110,8 +1109,8 @@ type daemonSearchMatch struct {
 // ReplaceInFiles replaces text in files across the workspace.
 func (s *Service) ReplaceInFiles(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ReplaceInFilesRequest],
-) (*connect.Response[reliantv1.ReplaceInFilesResponse], error) {
+	req *reliantv1.ReplaceInFilesRequest,
+) (*reliantv1.ReplaceInFilesResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
@@ -1120,7 +1119,7 @@ func (s *Service) ReplaceInFiles(
 	// base_dir is the only thing bounding this walk. Omitting it (which an
 	// empty base used to do) leaves the daemon to fall back to its own working
 	// directory and rewrite files across the whole machine.
-	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.ProjectId, req.WorktreeId, req.ChatId)
 	if err != nil {
 		return nil, err
 	}
@@ -1128,16 +1127,16 @@ func (s *Service) ReplaceInFiles(
 	opts := map[string]any{
 		"base_dir": scope.basePath,
 	}
-	if req.Msg.FilePattern != nil {
-		opts["file_glob"] = *req.Msg.FilePattern
+	if req.FilePattern != nil {
+		opts["file_glob"] = *req.FilePattern
 	}
-	if req.Msg.CaseSensitive != nil && !*req.Msg.CaseSensitive {
+	if req.CaseSensitive != nil && !*req.CaseSensitive {
 		opts["ignore_case"] = true
 	}
 
 	cmdReq := map[string]any{
-		"pattern":     req.Msg.SearchText,
-		"replacement": req.Msg.ReplaceText,
+		"pattern":     req.SearchText,
+		"replacement": req.ReplaceText,
 		"opts":        opts,
 	}
 
@@ -1163,11 +1162,11 @@ func (s *Service) ReplaceInFiles(
 		totalReplacements += int32(c.Replacements)
 	}
 
-	return connect.NewResponse(&reliantv1.ReplaceInFilesResponse{
+	return &reliantv1.ReplaceInFilesResponse{
 		Results:           results,
 		TotalReplacements: totalReplacements,
 		FilesModified:     int32(cmdResp.FilesChanged),
-	}), nil
+	}, nil
 }
 
 // viewerKindFromString maps the daemon's viewer_kind string to the proto enum.
@@ -1193,14 +1192,14 @@ func viewerKindFromString(kind string) reliantv1.FileViewerKind {
 // ListDirectory lists entries in an arbitrary filesystem directory.
 func (s *Service) ListDirectory(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ListDirectoryRequest],
-) (*connect.Response[reliantv1.ListDirectoryResponse], error) {
+	req *reliantv1.ListDirectoryRequest,
+) (*reliantv1.ListDirectoryResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	path := req.Msg.GetPath()
+	path := req.GetPath()
 
 	cmdReq := map[string]any{
 		"path": path,
@@ -1213,7 +1212,7 @@ func (s *Service) ListDirectory(
 	}
 	// No workspace to follow: the project picker browses the machine it
 	// names, else the default machine.
-	target, err := s.pickerMachine(ctx, userID, req.Msg.GetDaemonId())
+	target, err := s.pickerMachine(ctx, userID, req.GetDaemonId())
 	if err != nil {
 		return nil, err
 	}
@@ -1241,11 +1240,11 @@ func (s *Service) ListDirectory(
 		})
 	}
 
-	return connect.NewResponse(&reliantv1.ListDirectoryResponse{
+	return &reliantv1.ListDirectoryResponse{
 		Path:     resolvedPath,
 		Entries:  entries,
 		DaemonId: pickerEcho(target),
-	}), nil
+	}, nil
 }
 
 // CreateDirectory creates a new directory at an arbitrary absolute path by
@@ -1254,14 +1253,14 @@ func (s *Service) ListDirectory(
 // the path is an absolute filesystem path on the daemon (not project-scoped).
 func (s *Service) CreateDirectory(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CreateDirectoryRequest],
-) (*connect.Response[reliantv1.CreateDirectoryResponse], error) {
+	req *reliantv1.CreateDirectoryRequest,
+) (*reliantv1.CreateDirectoryResponse, error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	path := req.Msg.Path
+	path := req.Path
 	if path == "" {
 		return nil, svcerr.InvalidArgument("path is required")
 	}
@@ -1275,7 +1274,7 @@ func (s *Service) CreateDirectory(
 	cmdReq := map[string]any{
 		"path": path,
 	}
-	target, err := s.pickerMachine(ctx, userID, req.Msg.GetDaemonId())
+	target, err := s.pickerMachine(ctx, userID, req.GetDaemonId())
 	if err != nil {
 		return nil, err
 	}
@@ -1284,10 +1283,10 @@ func (s *Service) CreateDirectory(
 		return nil, err
 	}
 
-	return connect.NewResponse(&reliantv1.CreateDirectoryResponse{
+	return &reliantv1.CreateDirectoryResponse{
 		Path:     path,
 		DaemonId: pickerEcho(target),
-	}), nil
+	}, nil
 }
 
 // pickerMachine is the machine the project picker's ListDirectory and

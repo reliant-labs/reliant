@@ -3,7 +3,7 @@ package chat_test
 import (
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -16,28 +16,28 @@ func TestMarkUnreadChat_Generated(t *testing.T) {
 
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: newChatRepo()}))
 
-	tdd.RunRPCCases(t, []tdd.RPCCase[pb.MarkUnreadChatRequest, pb.MarkUnreadChatResponse]{
+	tdd.RunRPCCasesV2(t, []tdd.RPCCaseV2[pb.MarkUnreadChatRequest, pb.MarkUnreadChatResponse]{
 		{
 			Name:    "chat_id is required",
-			Req:     connect.NewRequest(&pb.MarkUnreadChatRequest{}),
+			Req:     &pb.MarkUnreadChatRequest{},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown chat is not found",
-			Req:     connect.NewRequest(&pb.MarkUnreadChatRequest{ChatId: missingChatID}),
+			Req:     &pb.MarkUnreadChatRequest{ChatId: missingChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "another user's chat is not found",
-			Req:     connect.NewRequest(&pb.MarkUnreadChatRequest{ChatId: otherChatID}),
+			Req:     &pb.MarkUnreadChatRequest{ChatId: otherChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name:    "an archived chat cannot be marked unread",
-			Req:     connect.NewRequest(&pb.MarkUnreadChatRequest{ChatId: archivedChatID}),
+			Req:     &pb.MarkUnreadChatRequest{ChatId: archivedChatID},
 			Ctx:     chat.AuthedContext(t),
 			WantErr: connect.CodeFailedPrecondition,
 		},

@@ -7,13 +7,13 @@ import (
 	"sort"
 	"time"
 
-	"connectrpc.com/connect"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -86,8 +86,8 @@ const (
 // stream.
 func (s *Service) StreamUserUpdates(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StreamUserUpdatesRequest],
-	stream *connect.ServerStream[reliantv1.UserStreamEvent],
+	req *reliantv1.StreamUserUpdatesRequest,
+	stream reliantv1connect.StreamingServiceStreamUserUpdatesServerStream,
 ) error {
 	// Note: Authentication is handled by the WrapStreamingHandler interceptor
 	userID, ok := auth.GetUserIDFromContext(ctx)
@@ -95,8 +95,8 @@ func (s *Service) StreamUserUpdates(
 		return svcerr.ErrUnauthenticated
 	}
 
-	sinceSeq := req.Msg.SinceSeq
-	filter := userUpdateFilter{projectID: req.Msg.GetProjectId(), orgs: newOrgGate(s.deps.Repo, userID, s.unassignedOrgRecheck)}
+	sinceSeq := req.SinceSeq
+	filter := userUpdateFilter{projectID: req.GetProjectId(), orgs: newOrgGate(s.deps.Repo, userID, s.unassignedOrgRecheck)}
 
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
@@ -204,7 +204,7 @@ func (s *Service) StreamUserUpdates(
 }
 
 // sendHeartbeat sends a heartbeat on the user stream
-func (s *Service) sendHeartbeat(stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendHeartbeat(stream reliantv1connect.StreamingServiceStreamUserUpdatesServerStream) error {
 	event := &reliantv1.UserStreamEvent{
 		Event: &reliantv1.UserStreamEvent_Heartbeat{
 			Heartbeat: &reliantv1.Heartbeat{
@@ -257,7 +257,7 @@ func (s *Service) userUpdateToProto(update db.UserUpdate) *reliantv1.UserUpdateD
 // UpdateHub. latestSeq is the subscription's user cursor after it — for an
 // ephemeral update, the cursor as it already stood, since nothing persisted
 // was delivered.
-func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, stream reliantv1connect.StreamingServiceStreamUserUpdatesServerStream) error {
 	protoUpdate := s.userUpdateToProto(update)
 	event := &reliantv1.UserStreamEvent{
 		Event: &reliantv1.UserStreamEvent_Updates{
@@ -1084,7 +1084,7 @@ func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.
 // the last one, with no updates — its only content is the cursor, and without
 // it a client whose project saw nothing new would resume from a stale cursor
 // and re-read the same rows on every reconnect.
-func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, filter userUpdateFilter, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *Service) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, filter userUpdateFilter, stream reliantv1connect.StreamingServiceStreamUserUpdatesServerStream) error {
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {

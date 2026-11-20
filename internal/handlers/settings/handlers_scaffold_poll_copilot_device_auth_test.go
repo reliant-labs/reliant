@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -18,8 +18,8 @@ func TestPollCopilotDeviceAuth_Generated(t *testing.T) {
 	svc := newSettingsService(t, memorySettings{}.repo())
 
 	t.Run("device_code is required", func(t *testing.T) {
-		_, err := svc.PollCopilotDeviceAuth(settings.AuthedContext(t), connect.NewRequest(&pb.PollCopilotDeviceAuthRequest{DeviceCode: " "}))
-		require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		_, err := svc.PollCopilotDeviceAuth(settings.AuthedContext(t), &pb.PollCopilotDeviceAuthRequest{DeviceCode: " "})
+		require.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	})
 
 	// A poll that fails for any reason but GitHub's own pending, expired and
@@ -29,9 +29,9 @@ func TestPollCopilotDeviceAuth_Generated(t *testing.T) {
 	t.Run("a failed poll answers STATUS_ERROR", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(settings.AuthedContext(t))
 		cancel()
-		resp, err := svc.PollCopilotDeviceAuth(ctx, connect.NewRequest(&pb.PollCopilotDeviceAuthRequest{DeviceCode: "dc-1"}))
+		resp, err := svc.PollCopilotDeviceAuth(ctx, &pb.PollCopilotDeviceAuthRequest{DeviceCode: "dc-1"})
 		require.NoError(t, err)
-		require.Equal(t, pb.PollCopilotDeviceAuthResponse_STATUS_ERROR, resp.Msg.GetStatus())
-		require.NotEmpty(t, resp.Msg.GetErrorMessage())
+		require.Equal(t, pb.PollCopilotDeviceAuthResponse_STATUS_ERROR, resp.GetStatus())
+		require.NotEmpty(t, resp.GetErrorMessage())
 	})
 }

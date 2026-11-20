@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -44,9 +43,9 @@ const previewAction = "preview an organization's policy"
 // it enforces. Only counts leave: no chat, member or provider is named.
 func (s *Service) GetPolicyImpact(
 	ctx context.Context,
-	req *connect.Request[pb.GetPolicyImpactRequest],
-) (*connect.Response[pb.GetPolicyImpactResponse], error) {
-	orgID := strings.TrimSpace(req.Msg.GetOrgId())
+	req *pb.GetPolicyImpactRequest,
+) (*pb.GetPolicyImpactResponse, error) {
+	orgID := strings.TrimSpace(req.GetOrgId())
 	if orgID == "" {
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("org_id is required"))
 	}
@@ -58,7 +57,7 @@ func (s *Service) GetPolicyImpact(
 		return nil, svcerr.Wrap(err)
 	}
 	doc := &controlplanev1.OrgPolicy{}
-	if raw := strings.TrimSpace(req.Msg.GetPolicyJson()); raw != "" {
+	if raw := strings.TrimSpace(req.GetPolicyJson()); raw != "" {
 		if err := (protojson.UnmarshalOptions{}).Unmarshal([]byte(raw), doc); err != nil {
 			return nil, svcerr.Wrap(svcerr.WithReason(svcerr.InvalidArgument("policy_json is not an organization policy document: "+err.Error()), ReasonPolicyInvalid))
 		}
@@ -112,7 +111,7 @@ func (s *Service) GetPolicyImpact(
 		out.Reasons = append(out.Reasons, r)
 	}
 	sort.Slice(out.Reasons, func(i, j int) bool { return out.Reasons[i].Reason < out.Reasons[j].Reason })
-	return connect.NewResponse(out), nil
+	return out, nil
 }
 
 // unattended is whether chatID's next call has nobody behind it, by the rule

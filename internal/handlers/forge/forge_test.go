@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -176,20 +176,20 @@ func TestForgeService_GetTopology_PassesReportThroughVerbatim(t *testing.T) {
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, true, true, 0, report)}
 
 	resp, err := newForgeTestService(router).GetTopology(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1", OrgId: ptrOrg("org-b")}))
+		&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1", OrgId: ptrOrg("org-b")})
 	require.NoError(t, err)
 
 	assert.Equal(t, "forge.topology", router.lastCommandType)
-	assert.JSONEq(t, report, resp.Msg.ReportJson,
+	assert.JSONEq(t, report, resp.ReportJson,
 		"forge's document must cross this layer unmodified")
-	assert.True(t, resp.Msg.Meta.IsForgeProject)
-	assert.True(t, resp.Msg.Meta.Supported)
-	assert.Equal(t, "v0.1.15", resp.Msg.Meta.ForgeVersion)
+	assert.True(t, resp.Meta.IsForgeProject)
+	assert.True(t, resp.Meta.Supported)
+	assert.Equal(t, "v0.1.15", resp.Meta.ForgeVersion)
 
 	// No verify requested: no cluster was read, so reachability is
 	// "not applicable" — claiming OK would imply an observation nobody made.
 	assert.Equal(t, reliantv1.ForgeReachability_FORGE_REACHABILITY_UNSPECIFIED,
-		resp.Msg.Meta.Reachability)
+		resp.Meta.Reachability)
 
 	// The daemon-side path is what gets sent, and verify stays off by default.
 	var sent struct {
@@ -212,7 +212,7 @@ func TestForgeService_Timeouts_ArePerCommand(t *testing.T) {
 	t.Run("topology ledger-only is short", func(t *testing.T) {
 		r := &forgeTestRouter{reply: ok(t)}
 		_, err := svc(r).GetTopology(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "p"}))
+			&reliantv1.GetForgeTopologyRequest{ProjectId: "p"})
 		require.NoError(t, err)
 		assert.EqualValues(t, forgeTopologyTimeoutMs, r.lastTimeoutMs)
 	})
@@ -220,7 +220,7 @@ func TestForgeService_Timeouts_ArePerCommand(t *testing.T) {
 	t.Run("topology with verify reads clusters and gets the long budget", func(t *testing.T) {
 		r := &forgeTestRouter{reply: ok(t)}
 		_, err := svc(r).GetTopology(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "p", Verify: true}))
+			&reliantv1.GetForgeTopologyRequest{ProjectId: "p", Verify: true})
 		require.NoError(t, err)
 		assert.EqualValues(t, forgeTopologyVerifyTimeoutMs, r.lastTimeoutMs)
 		assert.Greater(t, forgeTopologyVerifyTimeoutMs, forgeTopologyTimeoutMs,
@@ -230,7 +230,7 @@ func TestForgeService_Timeouts_ArePerCommand(t *testing.T) {
 	t.Run("env_verify exceeds forge's own 60s default", func(t *testing.T) {
 		r := &forgeTestRouter{reply: ok(t)}
 		_, err := svc(r).VerifyEnv(authedCtx(),
-			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"})
 		require.NoError(t, err)
 		assert.EqualValues(t, forgeEnvVerifyTimeoutMs, r.lastTimeoutMs)
 		assert.Greater(t, forgeEnvVerifyTimeoutMs, 60_000,
@@ -258,14 +258,14 @@ func TestForgeService_ForgeExit2_IsUnreachableData_NotAnError(t *testing.T) {
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, true, true, 2, report)}
 
 	resp, err := newForgeTestService(router).VerifyEnv(authedCtx(),
-		connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+		&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"})
 
 	require.NoError(t, err, "an unreachable cluster is an answer, not an RPC failure")
 	assert.Equal(t, reliantv1.ForgeReachability_FORGE_REACHABILITY_UNREACHABLE,
-		resp.Msg.Meta.Reachability)
-	assert.EqualValues(t, 2, resp.Msg.Meta.ExitCode)
-	assert.NotEmpty(t, resp.Msg.Meta.UnreachableReason)
-	assert.JSONEq(t, report, resp.Msg.ReportJson)
+		resp.Meta.Reachability)
+	assert.EqualValues(t, 2, resp.Meta.ExitCode)
+	assert.NotEmpty(t, resp.Meta.UnreachableReason)
+	assert.JSONEq(t, report, resp.ReportJson)
 }
 
 // Exit 1 is DRIFT — state that WAS observed. It must not be downgraded to
@@ -275,12 +275,12 @@ func TestForgeService_ForgeExit1_IsDrift_ObservedNotUnreachable(t *testing.T) {
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, true, true, 1, `{"drift":true}`)}
 
 	resp, err := newForgeTestService(router).VerifyEnv(authedCtx(),
-		connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+		&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"})
 	require.NoError(t, err)
 
-	assert.EqualValues(t, 1, resp.Msg.Meta.ExitCode)
+	assert.EqualValues(t, 1, resp.Meta.ExitCode)
 	assert.Equal(t, reliantv1.ForgeReachability_FORGE_REACHABILITY_OK,
-		resp.Msg.Meta.Reachability,
+		resp.Meta.Reachability,
 		"drift is a conclusion about state that was read; it is not a reachability failure")
 }
 
@@ -296,15 +296,15 @@ func TestForgeService_DispatchTimeout_OnClusterRead_IsUnreachableNotError(t *tes
 	}
 
 	resp, err := newForgeTestService(router).VerifyEnv(authedCtx(),
-		connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+		&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"})
 
 	require.NoError(t, err, "a timed-out cluster read must be UNREACHABLE data, not a failed RPC")
 	require.NotNil(t, resp)
 	assert.Equal(t, reliantv1.ForgeReachability_FORGE_REACHABILITY_UNREACHABLE,
-		resp.Msg.Meta.Reachability)
-	assert.Contains(t, resp.Msg.Meta.UnreachableReason, "unknown")
-	assert.Empty(t, resp.Msg.ReportJson, "no report was produced")
-	assert.NotEmpty(t, resp.Msg.Meta.ForgeVersion,
+		resp.Meta.Reachability)
+	assert.Contains(t, resp.Meta.UnreachableReason, "unknown")
+	assert.Empty(t, resp.ReportJson, "no report was produced")
+	assert.NotEmpty(t, resp.Meta.ForgeVersion,
 		"the UI still needs a version even when the read timed out")
 }
 
@@ -316,20 +316,20 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 			replyErr: fmt.Errorf("daemon command forge.env_verify: forge project dir does not exist: /gone"),
 		}
 		_, err := newForgeTestService(router).VerifyEnv(authedCtx(),
-			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"})
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err),
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err),
 			"a deleted directory is a missing resource, not a retryable outage")
 	})
 
 	t.Run("dead daemon is Unavailable", func(t *testing.T) {
 		router := &forgeTestRouter{replyErr: fmt.Errorf("no daemon connected")}
 		_, err := newForgeTestService(router).VerifyEnv(authedCtx(),
-			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"})
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+		assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 	})
 
 	t.Run("a forge command failure is not laundered into unreachable", func(t *testing.T) {
@@ -339,19 +339,19 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 			replyErr: fmt.Errorf("daemon command forge.env_verify: forge command failed: exit 1: timeout reading config"),
 		}
 		_, err := newForgeTestService(router).VerifyEnv(authedCtx(),
-			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"})
 
 		require.Error(t, err, "a substantive forge failure must not be reported as 'cluster unknown'")
-		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	})
 
 	t.Run("timeout on a non-cluster command is a real error", func(t *testing.T) {
 		router := &forgeTestRouter{replyErr: fmt.Errorf("daemon command forge.secret_list: nats: timeout")}
 		_, err := newForgeTestService(router).ListSecrets(authedCtx(),
-			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"})
 
 		require.Error(t, err, "secret_list reads no cluster, so a timeout says nothing about reachability")
-		assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+		assert.Equal(t, connect.CodeUnavailable, svcerr.CodeV2(err))
 	})
 }
 
@@ -368,19 +368,19 @@ func TestForgeService_CommandTimedOut_IsATimeoutNotAFailure(t *testing.T) {
 	t.Run("on a cluster read it is UNREACHABLE data", func(t *testing.T) {
 		router := &forgeTestRouter{replyErr: errors.New(timedOut)}
 		resp, err := newForgeTestService(router).GetEnvStatus(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "prod"})
 
 		require.NoError(t, err)
-		assert.Equal(t, reliantv1.ForgeReachability_FORGE_REACHABILITY_UNREACHABLE, resp.Msg.Meta.Reachability)
+		assert.Equal(t, reliantv1.ForgeReachability_FORGE_REACHABILITY_UNREACHABLE, resp.Meta.Reachability)
 	})
 
 	t.Run("elsewhere it is DeadlineExceeded", func(t *testing.T) {
 		router := &forgeTestRouter{replyErr: errors.New(timedOut)}
 		_, err := newForgeTestService(router).ListSecrets(authedCtx(),
-			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"})
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err),
+		assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.CodeV2(err),
 			"a forge run that ran out of budget is neither an outage nor a project defect")
 	})
 }
@@ -400,35 +400,35 @@ func TestForgeService_CommandFailed_IsFailedPreconditionNotUnavailable(t *testin
 
 	calls := map[string]func(*Service) error{
 		"GetTopology": func(s *Service) error {
-			_, err := s.GetTopology(authedCtx(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "p"}))
+			_, err := s.GetTopology(authedCtx(), &reliantv1.GetForgeTopologyRequest{ProjectId: "p"})
 			return err
 		},
 		"VerifyEnv (cluster read)": func(s *Service) error {
-			_, err := s.VerifyEnv(authedCtx(), connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
+			_, err := s.VerifyEnv(authedCtx(), &reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"})
 			return err
 		},
 		"GetEnvStatus (cluster read)": func(s *Service) error {
-			_, err := s.GetEnvStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "prod"}))
+			_, err := s.GetEnvStatus(authedCtx(), &reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "prod"})
 			return err
 		},
 		"ListSecrets": func(s *Service) error {
-			_, err := s.ListSecrets(authedCtx(), connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
+			_, err := s.ListSecrets(authedCtx(), &reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"})
 			return err
 		},
 		"ApplyPromote (direct dispatch)": func(s *Service) error {
-			_, err := s.ApplyPromote(authedCtx(), connect.NewRequest(&reliantv1.PromoteForgeEnvRequest{
+			_, err := s.ApplyPromote(authedCtx(), &reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "staging", Release: "v1.5.15", ExpectedCurrentRelease: "v1.3.0",
-			}))
+			})
 			return err
 		},
 		"StartDeploy (direct dispatch)": func(s *Service) error {
-			_, err := s.StartDeploy(authedCtx(), connect.NewRequest(authorisedStart("prod", "gke_prod", "v1.5.15")))
+			_, err := s.StartDeploy(authedCtx(), authorisedStart("prod", "gke_prod", "v1.5.15"))
 			return err
 		},
 		"GetDeployStatus (direct dispatch)": func(s *Service) error {
-			_, err := s.GetDeployStatus(authedCtx(), connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{
+			_, err := s.GetDeployStatus(authedCtx(), &reliantv1.GetForgeDeployStatusRequest{
 				ProjectId: "p", Handle: "deploy-7f3a",
-			}))
+			})
 			return err
 		},
 	}
@@ -437,7 +437,7 @@ func TestForgeService_CommandFailed_IsFailedPreconditionNotUnavailable(t *testin
 		t.Run(name, func(t *testing.T) {
 			err := call(newForgeTestService(&forgeTestRouter{replyErr: fmt.Errorf("%s", daemonErr)}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err),
 				"forge ran and failed: retrying cannot help, and it is not a daemon outage")
 			// Forge's own diagnosis survives — it is the only thing that tells
 			// the user what to fix.
@@ -452,11 +452,11 @@ func TestForgeService_NotAForgeProject_IsSuccessNotError(t *testing.T) {
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, false, false, 0, "")}
 
 	resp, err := newForgeTestService(router).GetTopology(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "p"}))
+		&reliantv1.GetForgeTopologyRequest{ProjectId: "p"})
 
 	require.NoError(t, err, "an ordinary non-forge repository is not an error condition")
-	assert.False(t, resp.Msg.Meta.IsForgeProject)
-	assert.Empty(t, resp.Msg.ReportJson)
+	assert.False(t, resp.Meta.IsForgeProject)
+	assert.Empty(t, resp.ReportJson)
 }
 
 // An old forge surfaces as supported=false WITH a version, so the UI can say
@@ -474,13 +474,13 @@ func TestForgeService_Unsupported_IsSurfacedNotSwallowed(t *testing.T) {
 	require.NoError(t, err)
 
 	resp, err := newForgeTestService(&forgeTestRouter{reply: b}).GetTopology(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "p"}))
+		&reliantv1.GetForgeTopologyRequest{ProjectId: "p"})
 	require.NoError(t, err, "a version-capability miss is data, not an error")
 
-	assert.True(t, resp.Msg.Meta.IsForgeProject)
-	assert.False(t, resp.Msg.Meta.Supported)
-	assert.Equal(t, "v0.1.13", resp.Msg.Meta.ForgeVersion)
-	assert.Equal(t, "unknown flag: --json", resp.Msg.Meta.UnsupportedReason)
+	assert.True(t, resp.Meta.IsForgeProject)
+	assert.False(t, resp.Meta.Supported)
+	assert.Equal(t, "v0.1.13", resp.Meta.ForgeVersion)
+	assert.Equal(t, "unknown flag: --json", resp.Meta.UnsupportedReason)
 }
 
 // Request validation stays in this layer and is cheap: no daemon hop for a
@@ -489,30 +489,30 @@ func TestForgeService_Validation(t *testing.T) {
 	t.Run("env is required", func(t *testing.T) {
 		router := &forgeTestRouter{}
 		_, err := newForgeTestService(router).GetEnvStatus(authedCtx(),
-			connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "  "}))
+			&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "  "})
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 		assert.Empty(t, router.lastCommandType, "must not dispatch an invalid request")
 	})
 
 	t.Run("project_id is required", func(t *testing.T) {
 		router := &forgeTestRouter{}
 		_, err := newForgeTestService(router).ListSecrets(authedCtx(),
-			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "", Env: "prod"}))
+			&reliantv1.ListForgeSecretsRequest{ProjectId: "", Env: "prod"})
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 		assert.Empty(t, router.lastCommandType)
 	})
 
 	t.Run("unauthenticated is rejected", func(t *testing.T) {
 		router := &forgeTestRouter{}
 		_, err := newForgeTestService(router).ListSecrets(context.Background(),
-			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
+			&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"})
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.CodeV2(err))
 		assert.Empty(t, router.lastCommandType)
 	})
 }
@@ -596,22 +596,22 @@ func TestForgeService_ListSecrets_NeverEchoesReportBody(t *testing.T) {
 	}
 
 	resp, err := newForgeTestService(router).ListSecrets(authedCtx(),
-		connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
+		&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"})
 	require.NoError(t, err)
 
 	// Exit 1 here means "a declared secret has no value" — a verdict, returned
 	// as data rather than an error.
-	assert.EqualValues(t, 1, resp.Msg.Meta.ExitCode)
+	assert.EqualValues(t, 1, resp.Meta.ExitCode)
 	assert.Equal(t, "forge.secret_list", router.lastCommandType)
 
 	// Secret presence is not a cluster-workload read, so a timeout on this path
 	// is a genuine failure rather than a reachability verdict.
 	assert.Equal(t, reliantv1.ForgeReachability_FORGE_REACHABILITY_UNSPECIFIED,
-		resp.Msg.Meta.Reachability)
+		resp.Meta.Reachability)
 
 	// The body reaches the caller (that is the RPC's job) but never an error.
-	assert.NotContains(t, resp.Msg.Meta.UnreachableReason, canary)
-	assert.NotContains(t, resp.Msg.Meta.UnsupportedReason, canary)
+	assert.NotContains(t, resp.Meta.UnreachableReason, canary)
+	assert.NotContains(t, resp.Meta.UnsupportedReason, canary)
 }
 
 // A dispatch failure on the secret path carries no report-derived text.
@@ -620,15 +620,15 @@ func TestForgeService_ListSecrets_ErrorCarriesNoReportText(t *testing.T) {
 	router := &forgeTestRouter{replyErr: fmt.Errorf("forge command failed: exit 1")}
 
 	_, err := newForgeTestService(router).ListSecrets(authedCtx(),
-		connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
+		&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"})
 
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), canary)
 	// The re-mapped error is built from the daemon's (already stderr-withheld)
 	// text alone — re-classifying it must not widen what it carries.
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err))
 	assert.Equal(t, "daemon command forge.secret_list failed: forge command failed: exit 1",
-		svcerr.ToConnect(err).Message())
+		svcerr.ToConnectV2(err).Message())
 }
 
 // THE DAEMON SENDS AN OBJECT, NOT A STRING, and this pins that contract.

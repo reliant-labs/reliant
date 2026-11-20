@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -17,17 +15,17 @@ import (
 // ResolveQuestion resolves a pending question with the user's answer
 func (s *Service) ResolveQuestion(
 	ctx context.Context,
-	req *connect.Request[reliantv1.ResolveQuestionRequest],
-) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
-	if req.Msg.QuestionId == "" {
+	req *reliantv1.ResolveQuestionRequest,
+) (*reliantv1.ResolveQuestionResponse, error) {
+	if req.QuestionId == "" {
 		return nil, svcerr.InvalidArgument("question_id is required")
 	}
-	if req.Msg.Action == "" {
+	if req.Action == "" {
 		return nil, svcerr.InvalidArgument("action is required")
 	}
 
 	// Look up the question
-	question, err := s.deps.Repo.GetQuestionByID(ctx, req.Msg.QuestionId)
+	question, err := s.deps.Repo.GetQuestionByID(ctx, req.QuestionId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
 	}
@@ -58,13 +56,13 @@ func (s *Service) ResolveQuestion(
 	// Nothing waits on an async question: its answer is a message to the
 	// thread that asked.
 	if question.Async {
-		return s.resolveAsyncQuestion(ctx, chat, question, req.Msg.GetResponseData())
+		return s.resolveAsyncQuestion(ctx, chat, question, req.GetResponseData())
 	}
 
 	// Resolve the question in the database
 	var responseData *string
-	if req.Msg.ResponseData != nil && *req.Msg.ResponseData != "" {
-		responseData = req.Msg.ResponseData
+	if req.ResponseData != nil && *req.ResponseData != "" {
+		responseData = req.ResponseData
 	}
 
 	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, responseData); err != nil {
@@ -83,7 +81,7 @@ func (s *Service) ResolveQuestion(
 	}
 
 	// For "reply" action with response_data and ask_user metadata: save user message to thread
-	if req.Msg.Action == "reply" && responseData != nil && question.Metadata != nil {
+	if req.Action == "reply" && responseData != nil && question.Metadata != nil {
 		if isAskUserQuestion(question.Metadata) {
 			if err := s.saveUserReplyMessage(ctx, question, *responseData); err != nil {
 				logging.WarnContext(ctx, "[Question] Failed to save user reply message", "error", err, "questionID", question.ID)
@@ -97,9 +95,9 @@ func (s *Service) ResolveQuestion(
 		"response_data": stringPtrToString(responseData),
 	})
 
-	return connect.NewResponse(&reliantv1.ResolveQuestionResponse{
+	return &reliantv1.ResolveQuestionResponse{
 		Success: true,
-	}), nil
+	}, nil
 }
 
 // signalQuestion sends a signal to the workflow using PauseService.SignalWithRecovery

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -127,11 +127,11 @@ func as(m *orgs.Resolver, userID string, c auth.Credential, boundOrg string) con
 }
 
 func (f *deleteAuthFixture) delete(svc *Service, ctx context.Context, fromMachines bool) (*reliantv1.DeleteProjectResponse, error) {
-	resp, err := svc.DeleteProject(ctx, connect.NewRequest(&reliantv1.DeleteProjectRequest{ProjectId: f.project, RemoveFromMachines: fromMachines}))
+	resp, err := svc.DeleteProject(ctx, &reliantv1.DeleteProjectRequest{ProjectId: f.project, RemoveFromMachines: fromMachines})
 	if err != nil {
 		return nil, err
 	}
-	return resp.Msg, nil
+	return resp, nil
 }
 
 func (f *deleteAuthFixture) scheduled() bool {
@@ -158,9 +158,10 @@ func TestProjectDeleteAuthorityWhileTheOwnerIsAMember(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := f.delete(svc, c.ctx, false)
 			require.Error(t, err)
-			assert.Equal(t, c.wantCode, svcerr.Code(err), "error: %v", err)
+			assert.Equal(t, c.wantCode, svcerr.CodeV2(err), "error: %v", err)
 			if c.reason != "" {
-				assert.Equal(t, c.reason, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+				reason, _ := svcerr.ReasonOf(err)
+				assert.Equal(t, c.reason, reason)
 			}
 			assert.False(t, f.scheduled(), "nothing was scheduled")
 		})
@@ -176,20 +177,20 @@ func TestProjectDeleteAuthorityWhileTheOwnerIsAMember(t *testing.T) {
 		assert.Equal(t, []string{f.trigger}, f.schedules.synced(), "the paused trigger's schedule is converged")
 
 		owner := as(m, f.owner, auth.CredentialSession, "")
-		_, err = svc.GetProject(owner, connect.NewRequest(&reliantv1.GetProjectRequest{ProjectId: f.project}))
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "a scheduled project is hidden from its owner")
-		list, err := svc.ListProjects(owner, connect.NewRequest(&reliantv1.ListProjectsRequest{}))
+		_, err = svc.GetProject(owner, &reliantv1.GetProjectRequest{ProjectId: f.project})
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "a scheduled project is hidden from its owner")
+		list, err := svc.ListProjects(owner, &reliantv1.ListProjectsRequest{})
 		require.NoError(t, err)
-		assert.Empty(t, list.Msg.GetProjects())
-		deleted, err := svc.ListDeletedProjects(owner, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{}))
+		assert.Empty(t, list.GetProjects())
+		deleted, err := svc.ListDeletedProjects(owner, &reliantv1.ListDeletedProjectsRequest{})
 		require.NoError(t, err)
-		require.Len(t, deleted.Msg.GetProjects(), 1)
-		assert.NotEmpty(t, deleted.Msg.GetProjects()[0].GetPath(), "the owner sees their own path")
+		require.Len(t, deleted.GetProjects(), 1)
+		assert.NotEmpty(t, deleted.GetProjects()[0].GetPath(), "the owner sees their own path")
 
-		restored, err := svc.RestoreProject(owner, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+		restored, err := svc.RestoreProject(owner, &reliantv1.RestoreProjectRequest{ProjectId: f.project})
 		require.NoError(t, err)
-		assert.EqualValues(t, 1, restored.Msg.GetTriggersResumed())
-		assert.Nil(t, restored.Msg.GetProject().DeleteAfter)
+		assert.EqualValues(t, 1, restored.GetTriggersResumed())
+		assert.Nil(t, restored.GetProject().DeleteAfter)
 		assert.False(t, f.scheduled())
 		tr, err := f.repo.GetTrigger(context.Background(), f.trigger)
 		require.NoError(t, err)
@@ -217,7 +218,7 @@ func TestProjectDeleteAuthorityOnceTheOwnerLeft(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := f.delete(svc, c.ctx, c.machines)
 			require.Error(t, err)
-			assert.Equal(t, c.wantCode, svcerr.Code(err), "error: %v", err)
+			assert.Equal(t, c.wantCode, svcerr.CodeV2(err), "error: %v", err)
 			assert.False(t, f.scheduled())
 		})
 	}
@@ -230,23 +231,23 @@ func TestProjectDeleteAuthorityOnceTheOwnerLeft(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, f.admin, *p.DeletedBy)
 
-		deleted, err := svc.ListDeletedProjects(admin, connect.NewRequest(&reliantv1.ListDeletedProjectsRequest{}))
+		deleted, err := svc.ListDeletedProjects(admin, &reliantv1.ListDeletedProjectsRequest{})
 		require.NoError(t, err)
-		require.Len(t, deleted.Msg.GetProjects(), 1)
-		got := deleted.Msg.GetProjects()[0]
+		require.Len(t, deleted.GetProjects(), 1)
+		got := deleted.GetProjects()[0]
 		assert.Empty(t, got.GetPath(), "an admin is not shown the departed owner's path")
 		assert.Equal(t, f.admin, got.GetDeletedByUserId())
 
-		_, err = svc.PurgeProjectNow(admin, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
-		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "only the owner purges at once")
+		_, err = svc.PurgeProjectNow(admin, &reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"})
+		assert.Equal(t, connect.CodePermissionDenied, svcerr.CodeV2(err), "only the owner purges at once")
 
 		member := as(m, f.member, auth.CredentialSession, "")
-		_, err = svc.RestoreProject(member, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
-		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "a member may not restore it either")
+		_, err = svc.RestoreProject(member, &reliantv1.RestoreProjectRequest{ProjectId: f.project})
+		assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "a member may not restore it either")
 
-		restored, err := svc.RestoreProject(admin, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+		restored, err := svc.RestoreProject(admin, &reliantv1.RestoreProjectRequest{ProjectId: f.project})
 		require.NoError(t, err)
-		assert.EqualValues(t, 1, restored.Msg.GetTriggersResumed())
+		assert.EqualValues(t, 1, restored.GetTriggersResumed())
 		assert.False(t, f.scheduled())
 	})
 }
@@ -262,10 +263,11 @@ func TestCreateProjectAtADeletedProjectsPathSaysHowToFreeIt(t *testing.T) {
 	p, err := f.repo.GetProject(context.Background(), f.project)
 	require.NoError(t, err)
 
-	_, err = svc.CreateProject(owner, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "again", Path: p.Path}))
+	_, err = svc.CreateProject(owner, &reliantv1.CreateProjectRequest{Name: "again", Path: p.Path})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "error: %v", err)
-	assert.Equal(t, ReasonProjectScheduledForDeletion, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "error: %v", err)
+	reason, _ := svcerr.ReasonOf(err)
+	assert.Equal(t, ReasonProjectScheduledForDeletion, reason)
 	assert.Contains(t, err.Error(), "reliant project restore "+f.project)
 }
 
@@ -274,12 +276,12 @@ func TestPurgeProjectNowNeedsTheOwnerAndItsName(t *testing.T) {
 	svc, m := f.service()
 	owner := as(m, f.owner, auth.CredentialSession, "")
 
-	_, err := svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "wrong"}))
-	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	_, err := svc.PurgeProjectNow(owner, &reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "wrong"})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.CodeV2(err))
 	_, err = f.repo.GetProject(context.Background(), f.project)
 	require.NoError(t, err, "a wrong name deletes nothing")
 
-	_, err = svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
+	_, err = svc.PurgeProjectNow(owner, &reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"})
 	require.NoError(t, err)
 	svc.WaitForPurges()
 	_, err = f.repo.GetProject(context.Background(), f.project)
@@ -332,16 +334,16 @@ func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
 			svc := NewTestProject(t, WithProjectDeps(Deps{Repo: held, Orgs: m, Schedules: f.schedules, Now: clock}))
 			owner := as(m, f.owner, auth.CredentialSession, "")
 
-			_, err := svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
+			_, err := svc.PurgeProjectNow(owner, &reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"})
 			require.NoError(t, err, "the rpc answers while its batches are held")
 			<-held.started
 
 			p, err := f.repo.GetProject(context.Background(), f.project)
 			require.NoError(t, err, "the batches have not run")
 			require.NotNil(t, p.PurgeStartedAt, "the project is claimed")
-			_, err = svc.GetProject(owner, connect.NewRequest(&reliantv1.GetProjectRequest{ProjectId: f.project}))
-			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "a claimed project is hidden at once")
-			_, err = svc.RestoreProject(owner, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+			_, err = svc.GetProject(owner, &reliantv1.GetProjectRequest{ProjectId: f.project})
+			assert.Equal(t, connect.CodeNotFound, svcerr.CodeV2(err), "a claimed project is hidden at once")
+			_, err = svc.RestoreProject(owner, &reliantv1.RestoreProjectRequest{ProjectId: f.project})
 			assert.Error(t, err, "a claimed project can no longer be restored")
 			assert.True(t, f.scheduled(), "the refused restore changed nothing")
 			assert.Empty(t, f.schedules.synced(), "no schedule is converged before the batches finish")
@@ -408,7 +410,7 @@ func TestAnAdminsDeleteAndRestoreRefuseAProjectThatMovedOrg(t *testing.T) {
 
 	_, err := f.delete(moving, admin, false)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "error: %v", err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "error: %v", err)
 	assert.False(t, f.scheduled(), "the delete wrote nothing")
 
 	// Back in acme and deleted there; then a restore that a move overtakes.
@@ -419,8 +421,8 @@ func TestAnAdminsDeleteAndRestoreRefuseAProjectThatMovedOrg(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, f.scheduled())
 
-	_, err = moving.RestoreProject(admin, connect.NewRequest(&reliantv1.RestoreProjectRequest{ProjectId: f.project}))
+	_, err = moving.RestoreProject(admin, &reliantv1.RestoreProjectRequest{ProjectId: f.project})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "error: %v", err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.CodeV2(err), "error: %v", err)
 	assert.True(t, f.scheduled(), "the restore wrote nothing")
 }
