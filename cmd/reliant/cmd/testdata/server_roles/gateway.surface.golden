@@ -12,6 +12,8 @@ HEALTH_PORT kind=int32 flag="health-port" default="8080" required=false optional
 INTERNAL_SERVICE_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 LIVENESS_PATHS kind=string flag="" default="/health,/healthz" required=false optional=false sensitive=false allowed=[] aliases=[]
 LOG_FORMAT kind=string flag="log-format" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+MACHINE_STATS_LABEL kind=string flag="" default="monitor=platform" required=false optional=false sensitive=false allowed=[] aliases=[]
+MACHINE_STATS_ORGS kind=repeated string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 NATS_PASSWORD kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 NATS_URL kind=string flag="" default="" required=true optional=false sensitive=true allowed=[] aliases=[]
 NATS_USER kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
