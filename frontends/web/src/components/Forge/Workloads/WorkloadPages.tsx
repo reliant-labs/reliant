@@ -236,7 +236,14 @@ function ProjectOverviewPage() {
         chats={projectId ? <ProjectChats projectId={projectId} name={forgeProject} /> : undefined}
         summary={
           inShell
-            ? { services: href({ kind: "services" }), service: (name, envName) => href({ kind: "service", name }, env === ENV_ALL && envName ? { env: envName } : {}) }
+            ? {
+                services: href({ kind: "services" }),
+                service: (name, envName) => href({ kind: "service", name }, env === ENV_ALL && envName ? { env: envName } : {}),
+                // The database's home is Data (U6e: "data and storage got mixed up").
+                data: (envName) => href({ kind: "data" }, envName ? { env: envName } : {}),
+                analytics: href({ kind: "analytics" }),
+                events: href({ kind: "analytics", tab: "events" }),
+              }
             : undefined
         }
       />
