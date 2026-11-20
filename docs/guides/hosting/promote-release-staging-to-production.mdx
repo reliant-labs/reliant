@@ -5,8 +5,6 @@ description: "Move the exact release staging runs to production without a rebuil
 keywords: ["release promotion staging production", "promote staging to production", "deploy approval digest", "build once deploy many", "forge env deploy --from"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1 (project pin v1.6.1-0.20261115024114-0ab7c562e817) · L steps: none · H steps: run in Reliant Labs org sandbox (guides-sandbox-promote, a copy of the probe static site; envs staging + prod on Reliant hosting, both deleted with env delete --yes, URLs 404 after; project record and release images left in place): env build staging --release v2.7.3/v2.8.0/v2.9.0/v2.9.1, env build prod --release v2.8.1, env deploy staging <v> --yes, env deploy prod <v> --from staging --plan-only, --approve <digest>, a stale --approve (exit 3 plan_stale), --expect-current after a hotfix (exit 3 promotion_conflict), env releases list, curl at each stage; refused and reported: version-less --from on a hosted env (no digest, then plan_required; report 45286aaa), --release v1.0.0 and v1.4.0 (CutRelease 404, report 10a2ad1b) · not run: --from-promotion, source_moved, exit 7 (org has billing) */}
-
 By the end of this guide, production runs the release staging already runs: the same bytes, not a rebuild. You approve the exact plan you read, and a promotion that would overwrite a hotfix someone shipped while you waited is refused.
 
 This works because a forge release records the digest of every artifact once, and every promotion is a compare-and-set on the environment's ledger. [How release promotion works](/forge/deploy/releases-and-promotion) explains the model. This guide is the procedure.

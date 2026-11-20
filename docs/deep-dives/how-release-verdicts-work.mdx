@@ -5,8 +5,6 @@ description: "How Reliant turns spans, issues and alerts into a PASS, FAIL or IN
 keywords: ["release health check", "deployment verification", "post-deploy verification", "release regression detection", "canary analysis", "forge obs check", "RED metrics per RPC"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (scratch project pin); sources read at forge v1.8.0 (0e50dd7b9) and control-plane fd03c1338 (service.go also checked at origin/main ef6bb2551) · H steps: run in the Reliant Labs org sandbox (guides-sandbox-verdicts/prod, a Go API with managed Postgres and release_health window 5m, min_requests 20: env build/deploy v9.3.0, v9.4.0, v9.5.0; curl traffic loop; obs check prod --wait --json (v9.3.0 exit 2 no_request_telemetry, v9.4.0 exit 0 PASS), obs check prod --json (v9.5.0, a deliberate GetProduct error, exit 1 FAIL); obs status prod --json (ReleaseRegressed firing); env releases list prod; env delete prod --yes; torn down, project record and release images left, no delete verb) · L: obs check --help · sources: forge pkg/releasehealth/{releasehealth.go,attribution.go,baseline.go,signals.go,alert_baseline.go,issue_alerts.go}, pkg/obsquery/weight.go, internal/cli/obs_check.go, skills observability/release-health and observability/check; control-plane internal/releasehealth/{contract.go,judge.go,service.go}, internal/alerting/release_regressed.go, internal/deploystore/health_gate.go, internal/releaseprobeswitch/contract.go, docs/orm-release-health-verdicts.md */}
-
 **In short**
 
 - Your services report a span per RPC, your pages report browser errors and page loads, and the platform adds restarts and alerts. Errors are grouped into **issues**, each tied to the release it first appeared in.

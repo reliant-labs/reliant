@@ -5,8 +5,6 @@ description: "Call an API that needs a key from a Reliant workflow while no step
 keywords: ["secrets ai agents never see", "api key in ai workflow", "http request with secret", "forge secret allow", "http/request@1", "secret access list"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin; `secret allow` exists since forge v1.0.13) · S steps run in scratch (guides-scratch/webhook-http/guides-sandbox-webhook): validate, lint (0 warnings), scenario run (key_accepted, key_refused), the url-slot validation error · account steps: run in the Reliant Labs org (forge project guides-sandbox-webhook, hosted env staging, throwaway random value against https://httpbin.org/bearer): secret set, a run refused by the empty access list (cd957b2b), secret allow + access, a run that passed (c45f5eed; its recorded step input and output read through ChatService/ListStepExecutions: value absent, echo recorded as [secret]), secret deny + a refused run (7213f5e4), secret unset, env delete staging; all in the sandbox ledger · the legacy hosted HTTP-use grant (GrantHostedHTTPUse) has no CLI and is superseded by access lists (control-plane docs/hosted-http-use.md), so it is not covered · unverified: where the app's run view displays a step's input and output */}
-
 By the end of this guide a workflow calls an API with a bearer key, and the key is in no step input, run state, log, message or model context. The worker fetches the value for one step attempt and writes it only into the outgoing request header. [HTTP: secrets](/integrations/http#secrets) is the full rule set; this guide walks through one call.
 
 ## Before you begin

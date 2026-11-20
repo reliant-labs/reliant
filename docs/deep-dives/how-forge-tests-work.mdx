@@ -5,8 +5,6 @@ description: "How Forge tests a Go API against a real embedded Postgres with no 
 keywords: ["Go integration test postgres", "embedded postgres go test", "test without docker", "generated CRUD tests", "Go test cache", "mark slow tests", "testkit.Slow", "generated mocks Go"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin; every mechanism here ships in forge v1.0.0 or later) · L steps run in scratch (guides-scratch/how-forge-tests-work/shop, copied from add-table-crud-api-pages): task test:short twice (cached second run), a fresh Postgres 17 boot with DOCKER_HOST pointed at nothing, a test printing its server, data dir, database and template, testkit.Slow skipping under -short and running under task test, a git-exec test replaying a stale cached pass after an edit, lint --slow-tests, ci test-budget, ci verify-test-run · sources: forge pkg/pgtest/{pgtest.go,pool.go,template.go,version.go,bootlog.go}, pkg/testkit/{testkit.go,slow.go,lane_*.go,stub.go}, pkg/tdd/doc.go, internal/templates/service/handlers_crud_test.go.tmpl, internal/templates/mock_gen.go, the scaffolded Taskfile.yml, ci.yml and release.yml, `reliant forge skill load testing` (+ testing/unit, testing/flow, testing/integration, testing/e2e), `reliant forge ci gate|test-budget|verify-test-run --help`, `reliant forge lint --help` */}
-
 **In short**
 
 - Database tests run against a real Postgres that Forge downloads and boots on first use. Docker is not needed. One server per machine is shared by every test process, and each test gets a database of its own.

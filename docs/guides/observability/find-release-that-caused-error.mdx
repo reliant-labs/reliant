@@ -5,8 +5,6 @@ description: "Trace a production error to the release and commits that introduce
 keywords: ["error tracking release correlation", "which release introduced a bug", "suspect commits", "resolve in next release", "forge obs issue"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L/LD/S steps: none in this guide · H steps: run in the Reliant Labs org sandbox (guides-sandbox-culprit: hosted static site prod, releases v8.1.0 → v8.2.0 → v8.3.0, headless-browser page loads, obs issues / issues --since-release / issue / changes / issue resolve --in next / issues --status resolved, all real output (promoter email redacted to you@example.com); env deleted after, project record and release images remain, no delete verb), see the sandbox ledger and guides-scratch/find-release-that-caused-error · resolve-in-next semantics read from control-plane internal/issues/service.go (UpdateIssueStatus) · not shown: obs check on the release, which returned INCONCLUSIVE no_request_telemetry with no findings for a static-site release that opened an issue (report 20d6b6fd) */}
-
 By the end of this guide you will know which release introduced an error, which commits in that release are likely to blame, and you will have marked the issue resolved so that it reopens if the error comes back.
 
 This works because every hosted release is recorded with its commit range, and every error event carries the build that produced it. Forge can therefore join an error to the release it first appeared in, and your local git history narrows that release down to suspect commits ([how errors are grouped](/hosting/observability/dashboards-and-alerts#how-errors-are-grouped)).

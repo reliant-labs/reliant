@@ -5,8 +5,6 @@ description: "How forge generate projects your proto and SQL migrations into stu
 keywords: ["forge generate", "Go code generation from proto", "generate ORM from SQL migrations", "Connect RPC codegen", "codegen cache", "generated vs hand-written code"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin; in rc/v1.7.0-rc.5) · L steps run in scratch (guides-scratch/how-forge-generate-works/shop, copied from add-table-crud-api-pages): generate --dry-run, generate --timings, generate twice to "nothing to do", two concurrent generates (lock wait line), db migration new + proto field + generate + git status/diff, a broken migration (rollback output saved as guides-scratch/how-forge-generate-works/generate-failure.log), project shapes --grep, project audit --json, project scaffolded, generate --help / --help-dev · sources: forge docs/concepts.md §1–3; internal/cli/generate.go (help text, withGenerateLock, generateInSlot, rollback journal); internal/cli/generate_pipeline.go (GenStep); internal/cli/generate_cache.go (fixed-point fingerprint, known gaps); internal/cli/lockfile.go; internal/shadowdb/{shadowdb.go,applied.go}; the architecture skill (reliant forge skill load architecture); pinned-commit equivalents checked with git show 0ab7c562e817 */}
-
 **In short**
 
 - You write two inputs: proto files (the API) and SQL migrations (the schema). `forge generate` turns them into the Go and TypeScript stubs, the ORM, the CRUD wiring, React Query hooks, mocks, test helpers, the composition graph and the deploy config, in one ordered run.

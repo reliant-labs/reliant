@@ -5,8 +5,6 @@ description: "Control your Reliant cloud dev environment from a terminal: list m
 keywords: ["cloud dev environment AI agent", "reliant machine", "resize cloud machine", "suspend cloud machine", "reliant machine start stop", "daemon:manage"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · L steps run in scratch: yes (`reliant machine --help` and each verb's --help; `reliant machine list` with a forge credential, real "unauthenticated" error captured) · H steps: not run. The CLI has no `create` verb, so no sandbox machine could be made without the app and a paid compute plan, and this session's own machine must never be stopped · unverified: a successful list, stop, resize, start and rename. Their output lines are quoted from cmd/reliant/cmd/machine.go, not captured · sources: cmd/reliant/cmd/machine.go (refuseMachineFromAgentShell, explainMachineErr, output strings), control-plane/proto/services/daemon/v1/daemon.proto (ResizeDaemon, GrowDaemonDisk), internal/machinewake/contract.go */}
-
 By the end of this guide you can manage your Reliant cloud machines from a terminal: stop a machine so it stops using hours, change its size, start it again and rename it. `reliant machine` calls the same API as **Settings → Machines**, so a change in one shows up in the other.
 
 ## Before you begin

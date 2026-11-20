@@ -5,8 +5,6 @@ description: "Generate a Postgres table, five CRUD RPCs, typed React hooks and l
 keywords: ["generate CRUD API from SQL", "forge:entity", "Connect RPC CRUD", "Postgres soft delete", "list filters"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L steps run in scratch: yes (guides-scratch/add-table-crud-api-pages/shop: scaffold --dry-run, scaffold, go build, lint --quiet, shapes --grep, lint --conventions with a non-optional filter, task test:short) · H steps: none */}
-
 You will add a `reviews` table to a Forge project. One marked proto message produces the migration, the five CRUD RPCs and their handlers, the data access code, typed React hooks, and list, detail, create and edit pages. After that you own every file it wrote.
 
 Forge projects everything else from two inputs, the proto and the migrations; [Two sources of truth](/forge/concepts/two-sources-of-truth) explains the split.

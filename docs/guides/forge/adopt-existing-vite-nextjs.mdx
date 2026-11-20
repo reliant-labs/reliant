@@ -5,8 +5,6 @@ description: "Turn the Vite or Next.js app you already have into a Forge static 
 keywords: ["adopt existing vite app", "next.js static export", "forge project new --in-place", "browser console logs to file", "installDevLogging", "migrate static site"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin, embedded) · @reliantlabs/forge-web-runtime 0.13.20 · create-vite 9.3.4 (Vite 8.3.8), create-next-app (Next.js 16.4.6) · L/LD steps run in scratch: yes (guides-scratch/adopt-site: project new --in-place --kind site on both apps, --dry-run refusal, git status, lint --static-export with static-export-not-exported / static-export-next-image / static-export-dynamic-segment findings, npm run build incl. the cacheComponents failure, devlog receiver copied from fresh --kind site starters, env up dev, headless Chromium load, grep [browser:info] and [browser:error] in .forge/logs/dev/frontend_web.log, env down dev) · H steps: none in this guide (deploy is linked) */}
-
 You will take a Vite or Next.js app you already have and make it a Forge static site where it stands: dev, staging and prod environments declared beside your code, a check that the build is a static export, and the browser's console written to a file next to your other logs. None of your source files are moved or rewritten.
 
 Forge reads the framework from `package.json` and the build config, and writes only `forge.yaml` and `deploy/kcl/`. [Escape hatches](/forge/deploy/escape-hatches#adopt-an-app-that-already-exists) describes the same command from the reference side.

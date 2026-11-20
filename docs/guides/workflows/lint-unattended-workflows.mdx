@@ -5,8 +5,6 @@ description: "Find the steps in an AI agent workflow that hang, loop forever or 
 keywords: ["AI workflow lint", "reliant workflow lint", "unattended agent workflow", "workflow timeout", "unbounded loop", "max_running concurrency", "lint:allow"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · no forge needed · S steps run in scratch (guides-scratch/lint-workflows): lint and validate of before/ (4 errors, 8 warnings, exit 1), the same file without concurrency (noconc/: loop-unbounded and run-no-timeout as warnings), the fixed workflow with 2 scenarios (0 errors, 0 warnings), lint --json, and allow/ for permissions + lint:allow with and without a reason · no account steps */}
-
 A workflow that a trigger starts runs with nobody watching. A command that waits for input, a loop with no exit or a failure that tells no one shows up hours later, if at all. `reliant workflow lint` reads the workflow file and flags those steps before the first firing. This guide lints a nightly workflow with eight kinds of problem, then fixes each one.
 
 Lint is separate from validation. Validation asks whether a workflow can run. Lint asks whether it will still behave when nobody is watching it. [Workflow lint](/workflows/lint) describes every rule. This guide shows the ones an unattended workflow hits most.

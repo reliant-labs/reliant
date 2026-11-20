@@ -5,8 +5,6 @@ description: "Give Claude Code or Cursor Forge's lint, generate, skills and shap
 keywords: ["MCP server Go framework", "forge mcp", "Claude Code MCP", "Cursor mcp.json", "MCP server for coding agents", "npx @reliantlabs/forge mcp"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (embedded forge v1.6.1-0.20261115024114-0ab7c562e817) · npm @reliantlabs/forge 1.8.0 · L steps run in scratch: yes (guides-scratch/connect-mcp: reliant forge mcp --help; probe.py sends initialize + notifications/initialized + tools/list over stdio to both `reliant forge mcp` and `npx -y @reliantlabs/forge mcp` (16 tools each); call.py tools/call shapes against guide-probe/probe-api incl. the version-skew warning; benefits; unauthenticated POST to the hosted connector → 401 with resource_metadata) · H steps: none · unverified: the in-editor steps (claude mcp add, /mcp, Cursor's MCP settings; neither the Claude Code CLI nor Cursor is installed on the build box) and the hosted connector's OAuth sign-in · configs taken from forge internal/templates/project/skills/forge/connect/SKILL.md and `forge mcp --help` */}
-
 By the end of this guide, Claude Code or Cursor will list Forge's tools next to its own: lint, generate, the skill catalog, and `shapes`, which says where every RPC, table and handler is with its file and line. Use this when your agent works in an editor rather than a Reliant chat.
 
 `forge mcp` runs the same commands in process and answers over stdio, so a tool call and the CLI give the same result. In a Reliant chat you need none of this: the agent's shell already has `reliant forge`, signed in. [Why this helps an agent](/hosting/observability/agents) covers the wider design.

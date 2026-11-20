@@ -5,8 +5,6 @@ description: "Put production back on the last good release in one deploy, check 
 keywords: ["rollback deployment", "roll back a bad deploy", "redeploy previous release", "rollback floor", "forge env deploy"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1 (project pin v1.6.1-0.20261115024114-0ab7c562e817) · L steps: none · H steps: run in Reliant Labs org sandbox (guides-sandbox-promote/prod on Reliant hosting, deleted with env delete prod --yes, URL 404 after; project record and release images left in place): a bad v2.10.0 (App throws on load) deployed with env deploy prod v2.10.0 --yes, obs changes prod, env releases list prod, env floor check prod v2.9.1, env deploy prod v2.9.1 --note … --yes, curl, env status prod, env floor set prod --current --reason, a below-floor deploy of v2.8.1 (exit 1), env floor show · not run: the roll-forward fix release, --plan-only/--approve on the recovery (shown in promote-release-staging-to-production) */}
-
 When a release goes bad in production, you put the last good release back with an ordinary deploy. Forge has no `rollback` command and nothing rolls back automatically: you name the earlier release, the plan labels the move `BEHIND`, and rollback floors refuse any release too old to run on today's data.
 
 This guide recovers a hosted environment from a release that deployed cleanly but broke the page, then sets a floor. [Release gates](/forge/deploy/release-gates#what-there-is-not-automatic-rollback) explains why going back is a deploy, not an undo.

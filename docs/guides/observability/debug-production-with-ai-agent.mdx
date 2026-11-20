@@ -5,8 +5,6 @@ description: "Let an AI agent find why production fails: read errors, logs and t
 keywords: ["AI debugging production", "debug production with AI agent", "AI agent logs and traces", "forge obs", "MCP observability"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · LD steps run in scratch: yes (guides-scratch/debug-with-agent/shop: bug added to ListProducts, env up dev, curl, grep .forge/logs/dev, obs status/logs/traces/trace/issue/endpoints dev, env down dev) · H steps: run in Reliant Labs org sandbox (guides-sandbox-debug/prod: env build v4.4.0, env deploy, 30 failing calls, obs status/logs/traces/trace/issue --json/endpoints prod, fix release v4.4.1, endpoints after, env delete prod --yes; torn down) · run from a Reliant agent chat · unverified: hosted connector OAuth sign-in (endpoint probed: discovery 200, unauthenticated POST 401) · rate limits sourced from control-plane internal/obsread/service.go and internal/obsratelimit/obsratelimit.go */}
-
 An AI agent can find out why production is failing without you pasting logs into the chat. It asks the running system, follows one failing request from the error to the line of code, and hands you a fix to review. This guide ran that loop against a real bug in a hosted Forge app, from a Reliant agent chat.
 
 It works because every `forge obs` verb is a read-only query that returns a JSON document with an exit code and complete next commands, and every log line carries its trace ID. [Why this helps an agent](/hosting/observability/agents) explains the design.

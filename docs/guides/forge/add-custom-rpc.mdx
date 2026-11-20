@@ -5,8 +5,6 @@ description: "Declare a Connect RPC in proto, scaffold its Go handler, return er
 keywords: ["Connect RPC Go handler", "custom RPC", "forge scaffold rpc", "svcerr.Wrap", "React Query hooks from proto"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L/LD steps run in scratch: yes (guides-scratch/custom-rpc-worker/shop: proto edit, scaffold rpc, implement, generate, go build, lint --quiet (forgeconv-activity-declared finding, then 29 passed in 80s) + lint --conventions, project shapes, task test:short, env up dev + curl ArchiveProduct ok/not_found/invalid_argument, env down dev) · H steps: none */}
-
 You will add `ArchiveProduct` to the `catalog` service: an RPC that takes a product off sale without deleting it. Forge writes the handler stub, a test table and a typed React hook from the proto declaration. You write the body.
 
 Anything that is not plain create, read, update or delete is a custom RPC, and its logic is yours. [Adding a feature](/forge/adding-features#a-custom-rpc) summarizes the rules; this guide runs them end to end.

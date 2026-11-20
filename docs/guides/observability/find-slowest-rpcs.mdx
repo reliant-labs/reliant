@@ -5,8 +5,6 @@ description: "Rank every RPC by p95 latency with forge obs endpoints, open its s
 keywords: ["API latency p95 per endpoint", "slow API endpoints", "per-RPC latency", "find N+1 queries", "forge obs endpoints"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · LD steps run in scratch: yes (guides-scratch/perf/guides-sandbox-perf: GetCatalogReport with an N+1 loop, FingerprintCatalog hashing, env up dev, curl loop, obs endpoints dev --sort p95, obs traces dev --route --slow, obs trace dev, obs trace --explain, obs endpoints --explain, fix, endpoints + trace after, env down dev) · H steps: run in Reliant Labs org sandbox (guides-sandbox-perf/prod: env build v7.7.1, env deploy --yes, 7-minute curl loop, obs endpoints prod --sort p95, obs traces prod --route --slow, obs trace prod, obs endpoints prod --explain; env delete prod --yes, torn down) · the fix was verified locally, not redeployed */}
-
 Your API is slow and you want to know which call, and why. Every Go service Forge builds traces each RPC with no instrumentation code, so `forge obs endpoints` can rank all of them by p95 latency, and the slowest traces show where the time went. This guide finds an N+1 query this way, on a local stack and in production.
 
 The same verbs read `dev` (the stack `reliant forge env up dev` runs on your machine) and a hosted environment such as `prod`: the env's declaration picks the backend. [Querying with forge obs](/hosting/observability/forge-obs) covers every verb.

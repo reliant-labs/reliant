@@ -5,8 +5,6 @@ description: "Send traces, logs and metrics from an app in any language to Relia
 keywords: ["hosted OpenTelemetry backend", "OTLP endpoint", "OpenTelemetry ingest token", "monitoring without forge deploy", "forge obs init"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (built into reliant; no forge.yaml) · L steps run in scratch (guides-scratch/send-opentelemetry-from-any-app): obs init --help, obs tokens --help and each subcommand's --help · H steps: run in the Reliant Labs org sandbox from an agent shell: `obs init prod --project guides-sandbox-otel --service checkout-api --write-config` registered the env and wrote deploy/envs/prod.yaml, then the token mint was refused (person-only, HTTP 403); `obs status prod` and `obs tokens list prod` on the empty env ran; env deleted with `env delete prod --endpoint https://admin.reliantapi.com --yes` · unverified: the ingest token and the printed variables (shape read from forge internal/cli/obs_init.go writeObsInit/otelEnv; endpoint from the observability/monitoring-only skill), telemetry arriving, obs logs/traces on real data, tokens create/rotate/revoke (all need a person's sign-in) */}
-
 By the end of this guide, an app that Forge did not build and does not deploy sends its traces, logs and metrics to Reliant, and you can read them with `reliant forge obs`. It can be in any language, on any infrastructure: you add an OpenTelemetry SDK and a few environment variables.
 
 The variables are the standard OpenTelemetry ones, so there is no Reliant SDK to install. The token decides which organization and environment the data lands in.
