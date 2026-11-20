@@ -229,13 +229,14 @@ describe("Sidebar selected chat scroll", () => {
     const workspaceTitle = screen.getByText("feature/test");
     expect(workspaceTitle).toHaveAttribute("title", "feature/test");
 
-    // The workspace header's New chat and Archive: display:none until the
-    // header is hovered or focused, never a transparent box holding width.
+    // The section heading's New chat and Archive (and, on a project's first
+    // heading, New chat in the project): display:none until the heading is
+    // hovered or focused, never a transparent box holding width.
     const header = workspaceTitle.closest(".group\\/ws") as HTMLElement;
     const hoverOnly = Array.from(header.querySelectorAll("button")).filter(
       (b) => !b.contains(workspaceTitle) && b.querySelector(".lucide-plus, .lucide-archive"),
     );
-    expect(hoverOnly).toHaveLength(2);
+    expect(hoverOnly.length).toBeGreaterThanOrEqual(2);
     for (const button of hoverOnly) {
       expect(button.className).not.toMatch(/opacity-0/);
       const wrapper = button.parentElement!;

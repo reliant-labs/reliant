@@ -153,30 +153,28 @@ const chatIn = (region: HTMLElement) =>
   Array.from(region.querySelectorAll("[data-chat-id]")).map((row) => row.getAttribute("data-chat-id"));
 
 describe("Sidebar: which project a chat is in", () => {
-  it("heads every project's chats with its mark and name, and marks the open chat on its row, not its project", () => {
+  it("heads every project's chats with \"project · branch\", and marks the open chat on its row, not its project", () => {
     renderSidebar();
     const api = section("api");
     const web = section("web");
     expect(chatIn(api)).toEqual(["api-1", "api-2"]);
     expect(chatIn(web).sort()).toEqual(["web-branch", "web-main"]);
 
-    const apiHeader = screen.getByTestId("sidebar-project-header-p-api");
-    expect(within(apiHeader).getByTestId("project-mark")).toHaveTextContent("A");
-    expect(within(apiHeader).getByRole("button", { name: "api" })).toHaveAttribute("aria-expanded", "true");
+    // One small heading per workspace (U6d): the project, then the branch.
+    const apiHeading = screen.getByTestId("sidebar-project-header-p-api-heading");
+    expect(apiHeading).toHaveTextContent(/api\s*·\s*main/);
+    expect(within(apiHeading).getByRole("button", { expanded: true })).toBeInTheDocument();
     // Pinned while its chats scroll under it.
-    expect(apiHeader).toHaveClass("sticky");
-    // The open chat is in web: its row says so, and its project does not turn
-    // blue (a selection is not a link).
-    expect(within(screen.getByTestId("sidebar-project-header-p-web")).getByTestId("project-mark")).not.toHaveClass("text-primary-ink");
+    expect(apiHeading).toHaveClass("sticky");
     const open = within(section("web")).getAllByRole("button").find((b) => b.getAttribute("aria-current") === "true");
     expect(open?.closest("[data-chat-id]")).not.toBeNull();
   });
 
-  it("lists a main-only project's chats straight under the project, with no MAIN heading", () => {
+  it("lists every chat at the list's one left edge, under its heading (no deep indent)", () => {
     renderSidebar();
     const api = section("api");
-    expect(within(api).queryByText("main")).toBeNull();
-    expect(within(api).getByTestId("sidebar-workspace-chats")).toBeInTheDocument();
+    expect(within(api).getByText("main")).toBeInTheDocument();
+    for (const row of api.querySelectorAll("[data-chat-row]")) expect(row.className).toContain("pl-2");
   });
 
   it("keeps branch workspaces as labels under the project when it has them", () => {

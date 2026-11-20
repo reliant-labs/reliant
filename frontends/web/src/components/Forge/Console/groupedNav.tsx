@@ -79,7 +79,7 @@ export interface GroupedNavInput extends ConsoleNavInput {
 export type OpenNavItem = SidebarNavItem & { alwaysOpen?: boolean };
 
 /** The group each view sits in, for the breadcrumb ("Performance & issues › Errors"). */
-// The groups of the shell's nav variants (Layout/sidebar/navConfig, U6c), not this nav's own Issues / Performance / More tools.
+// The groups of the shell's nav (Layout/sidebar/navConfig/hybrid.ts, U6d), not this nav's own Issues / Performance / More tools.
 const GROUP_OF: Partial<Record<ObsNavView, string>> = {
   errors: "Performance & issues",
   alerts: "Performance & issues",
@@ -89,7 +89,7 @@ const GROUP_OF: Partial<Record<ObsNavView, string>> = {
   metrics: "Observability",
   profiles: "Observability",
   graph: "Observability",
-  sessions: "Observability",
+  sessions: "Performance & issues",
 };
 
 const isHubPage = (page: ConsolePage, hub: ProductAnalyticsHub | undefined) => !!hub && page.kind === "dashboard" && hub.keys.includes(page.key);
