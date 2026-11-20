@@ -297,10 +297,13 @@ func NewManager(role Role, opts ...ManagerOption) *Manager {
 // client inherits this process's environment (client.go), which only the
 // daemon's may be.
 func (m *Manager) newClient(name string, cfg config.MCPServer) (Client, error) {
-	if m.role != RoleDaemon && isStdioConfig(cfg) {
-		return nil, fmt.Errorf("MCP server %q: %w", name, ErrStdioOnServer)
+	if m.role != RoleDaemon {
+		if isStdioConfig(cfg) {
+			return nil, fmt.Errorf("MCP server %q: %w", name, ErrStdioOnServer)
+		}
+		return newClientWithEnvLookup(name, cfg, nil)
 	}
-	return NewClient(name, cfg, m.lookupEnv)
+	return newClientWithEnvLookup(name, cfg, m.lookupEnv)
 }
 
 // SetPendingServers stores servers for lazy initialization

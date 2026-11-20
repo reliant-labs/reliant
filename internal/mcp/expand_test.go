@@ -116,7 +116,7 @@ func TestClientInitialize_ResolvesHTTPReferencesFromDaemonEnvironment(t *testing
 			"Authorization": "Bearer ${RELIANT_TEST_MCP_TOKEN}",
 			"X-Extra":       "${EXTRA}",
 		},
-	}, os.LookupEnv)
+	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestClientInitialize_ResolvesStdioReferencesFromDaemonEnvironment(t *testin
 		Command: "${RELIANT_TEST_MCP_TOUCH}",
 		Args:    []string{"${RELIANT_TEST_MCP_DIR}/${NAME}"},
 		Env:     []string{"NAME=launched"},
-	}, os.LookupEnv)
+	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}

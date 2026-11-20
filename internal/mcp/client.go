@@ -50,17 +50,20 @@ type client struct {
 	preferredEnvelopeByTool map[string]string
 
 	// lookupEnv resolves the ${VAR} references in cfg at launch (expand.go).
-	// Never nil: NewClient substitutes resolveNoEnv for nil.
+	// Never nil: newClientWithEnvLookup substitutes resolveNoEnv for nil.
 	lookupEnv func(string) (string, bool)
 }
 
-// NewClient creates a new MCP client with the given configuration.
-//
-// lookupEnv is where the config's ${VAR} references are resolved at launch
-// (expand.go). Only a process running in the user's environment — the daemon —
-// may pass os.LookupEnv. nil resolves nothing: every reference takes its
-// ${VAR:-default}, or the empty string.
-func NewClient(name string, cfg config.MCPServer, lookupEnv func(string) (string, bool)) (Client, error) {
+// NewClient creates a standalone MCP client, resolving references from the
+// caller's environment as before. Use NewManager for role-scoped clients;
+// a server managing tenant configuration must not use this standalone path.
+func NewClient(name string, cfg config.MCPServer) (Client, error) {
+	return newClientWithEnvLookup(name, cfg, os.LookupEnv) //nolint:forbidigo // legacy standalone client runs in the caller's environment
+}
+
+// newClientWithEnvLookup resolves references with the supplied policy.
+// nil means no process lookup: each reference uses its default or is empty.
+func newClientWithEnvLookup(name string, cfg config.MCPServer, lookupEnv func(string) (string, bool)) (Client, error) {
 	if lookupEnv == nil {
 		lookupEnv = resolveNoEnv
 	}

@@ -16,9 +16,9 @@ import (
 // launch, by the daemon — the only process that runs in the user's
 // environment. The API server and the worker run in Reliant's, so a reference
 // resolved there would substitute a Reliant credential into the user's config.
-// The environment is therefore an explicit dependency (WithEnvLookup, the
-// lookupEnv argument of NewClient): only the daemon passes os.LookupEnv, and
-// a manager or client given none resolves nothing from its process.
+// For managed clients the environment is an explicit dependency
+// (WithEnvLookup): only a daemon-role manager can use that lookup. The legacy
+// standalone NewClient continues to resolve from the caller's environment.
 //
 // Syntax: ${VAR}, ${VAR:-default} (default when VAR is unset or empty) and
 // $VAR. A reference is looked up in the server's own env block first, so

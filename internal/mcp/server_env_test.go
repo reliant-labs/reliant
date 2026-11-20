@@ -74,7 +74,8 @@ func TestServerRoleManager_NeverResolvesReferencesFromProcessEnvironment(t *test
 	t.Setenv("RELIANT_TEST_SERVER_ENV_SENTINEL", serverEnvSentinel)
 	srv, requests := recordingMCPServer(t)
 
-	addServer(t, NewManager(RoleServer), remoteConfigReferencingSentinel(srv.URL))
+	// The role is authoritative even if a caller accidentally configures a lookup.
+	addServer(t, NewManager(RoleServer, WithEnvLookup(os.LookupEnv)), remoteConfigReferencingSentinel(srv.URL))
 
 	reqs := requests()
 	require.NotEmpty(t, reqs, "the client must have reached the remote server, or the assertions below prove nothing")
