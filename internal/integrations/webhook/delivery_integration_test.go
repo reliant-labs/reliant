@@ -103,11 +103,18 @@ func (f *receiptFixture) github(event, id string, body []byte) *httptest.Respons
 }
 
 func (f *receiptFixture) hook(prefer, key string) *httptest.ResponseRecorder {
-	r := httptest.NewRequest(http.MethodPost, "/hooks/plain?password=query-secret", strings.NewReader(`{"body":"same"}`))
+	return f.postHook(prefer, key, "", `{"body":"same"}`)
+}
+
+func (f *receiptFixture) postHook(prefer, key, proxyID, body string) *httptest.ResponseRecorder {
+	r := httptest.NewRequest(http.MethodPost, "/hooks/plain?password=query-secret", strings.NewReader(body))
 	r.Header.Set("Authorization", "Bearer "+hookToken)
 	r.Header.Set("Cookie", "session=cookie-secret")
 	r.Header.Set("Prefer", prefer)
 	r.Header.Set("Idempotency-Key", key)
+	if proxyID != "" {
+		r.Header.Set("X-Request-Id", proxyID)
+	}
 	w := httptest.NewRecorder()
 	f.mux.ServeHTTP(w, r)
 	return w
@@ -254,6 +261,64 @@ func TestDeliveryInboxReplaysAfterWritingTheEvent(t *testing.T) {
 	f.count(t, "SELECT count(*) FROM trigger_events", 1)
 	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox WHERE completed_at IS NOT NULL", 1)
 	assert.Len(t, f.starts.ids, 1)
+}
+
+func TestDeliveryInboxIgnoresProxyRequestIDsForDedupe(t *testing.T) {
+	f := newReceiptFixture(t)
+	f.trigger(t, "plain", core.TriggerKindWebhook, f.now, true)
+
+	const sameBody = `{"body":"same"}`
+	legacy := func(proxyID string) (reply struct {
+		EventID   string `json:"event_id"`
+		Duplicate bool   `json:"duplicate"`
+	}) {
+		t.Helper()
+		response := f.postHook("", "", proxyID, sameBody)
+		require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &reply))
+		require.NotEmpty(t, reply.EventID)
+		return reply
+	}
+	first, again := legacy("proxy-first"), legacy("proxy-retry")
+	assert.False(t, first.Duplicate)
+	assert.True(t, again.Duplicate)
+	assert.Equal(t, first.EventID, again.EventID)
+	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox", 2)
+	f.count(t, "SELECT count(*) FROM trigger_events", 1)
+
+	async := func(key, proxyID, body string) string {
+		t.Helper()
+		response := f.postHook("respond-async", key, proxyID, body)
+		require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+		assert.Equal(t, "respond-async", response.Header().Get("Preference-Applied"))
+		var reply map[string]string
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &reply))
+		assert.Equal(t, "pending", reply["status"])
+		assert.NotContains(t, reply, "event_id")
+		require.NotEmpty(t, reply["delivery_id"])
+		return reply["delivery_id"]
+	}
+	// Reusing the same proxy ID catches accidental use as the inbox key.
+	a, b := async("", "proxy-same", sameBody), async("", "proxy-same", sameBody)
+	require.NotEqual(t, a, b)
+	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox", 4)
+	f.drain(t, 2)
+	for _, id := range []string{a, b} {
+		event, err := f.Repo.GetTriggerEventByDedupe(t.Context(), core.TriggerEventKindWebhook, "plain:receipt:"+id)
+		require.NoError(t, err)
+		assert.Equal(t, 1, f.starts.ids[triggers.EventFireWorkflowID(event.ID)])
+	}
+	f.count(t, "SELECT count(*) FROM trigger_events", 3)
+
+	keyed := async("event-key", "proxy-keyed", `{"body":"first"}`)
+	assert.Equal(t, keyed, async("event-key", "proxy-keyed-retry", `{"body":"changed"}`))
+	f.count(t, "SELECT count(*) FROM trigger_delivery_inbox", 5)
+	f.drain(t, 1)
+	f.count(t, "SELECT count(*) FROM trigger_events", 4)
+	event, err := f.Repo.GetTriggerEventByDedupe(t.Context(), core.TriggerEventKindWebhook, "plain:key:event-key")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"body": "first"}, event.Payload["body"], "the retry cannot replace the original payload")
+	assert.Equal(t, 1, f.starts.ids[triggers.EventFireWorkflowID(event.ID)])
 }
 
 func TestDeliveryInboxLegacyResponseAndCallerRetry(t *testing.T) {

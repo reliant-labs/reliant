@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
+	"os"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -43,6 +46,8 @@ type activateFlags struct {
 	namePrefix   string
 	actingAs     string
 	notify       bool
+	// hmacSecretFiles are --hmac-secret-file entries, trigger=path.
+	hmacSecretFiles []string
 }
 
 // activateChoices is activateFlags resolved against the server: ids instead
@@ -56,6 +61,8 @@ type activateChoices struct {
 	presets     map[string]string
 	connections map[string]string
 	acting      reliantv1.ActingIdentity
+	// hmacSecrets are signing secrets by declared trigger name.
+	hmacSecrets map[string]string
 }
 
 func newTriggerActivateCmd() *cobra.Command {
@@ -77,6 +84,13 @@ brought to them.
 them) and leaves the workflow's other activations as they are. A named
 trigger that is already activated is brought to the flags, not duplicated.
 
+A webhook trigger's URL and token are printed when its activation is created,
+once: store the token in the sender then. ` + "`reliant trigger rotate`" + ` issues a new
+one. A webhook that declares hmac: needs the secret its sender signs with:
+--hmac-secret-file <trigger>=<file> reads it from a file ("-" for standard
+input), keeping it out of your shell history. It is stored sealed and never
+shown; pass it again to replace it.
+
 --notify is about successful runs only. With it, a run that completes
 successfully is marked unread, which raises a desktop notification, and stays
 out of the archive so the notification has a run to open. It never puts the
@@ -92,7 +106,11 @@ itself, with a step that messages you.`,
 
   # Just one of its declared triggers
   reliant trigger activate --workflow release --trigger merged --machine build-box \
-    --params-json '{"repos":["acme/api"],"promote_prod":false}'`,
+    --params-json '{"repos":["acme/api"],"promote_prod":false}'
+
+  # A signed webhook: the signing secret from a file
+  reliant trigger activate --workflow deploy-hooks --no-machine \
+    --hmac-secret-file signed=./signing-secret.txt`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			conn, err := resolveConnection(cmd)
 			if err != nil {
@@ -136,6 +154,7 @@ itself, with a step that messages you.`,
 	fl.StringVar(&f.namePrefix, "name-prefix", "", "Names new activations \"<prefix> · <trigger>\" (default: the workflow)")
 	fl.StringVar(&f.actingAs, "acting-as", "", "Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise)")
 	fl.BoolVar(&f.notify, "notify", false, "Desktop notification when a run succeeds; never an Inbox item (failures always notify)")
+	fl.StringArrayVar(&f.hmacSecretFiles, "hmac-secret-file", nil, "Signing secret of a webhook trigger that declares hmac:, as trigger=path (path - reads standard input); repeatable")
 	return cmd
 }
 
@@ -255,11 +274,64 @@ func (f *activateFlags) resolve(ctx context.Context, cmd *cobra.Command, conn *c
 	if c.acting, err = parseActingIdentity(f.actingAs); err != nil {
 		return nil, err
 	}
+	if c.hmacSecrets, err = readHMACSecretFiles(f.hmacSecretFiles, cmd.InOrStdin()); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
+// readHMACSecretFiles reads --hmac-secret-file entries into secrets by
+// trigger name. A secret is read from a file, never taken as a flag value,
+// so it stays out of shell history and the process list. One trailing line
+// ending is dropped: `echo secret > file` must not sign with "secret\n".
+func readHMACSecretFiles(entries []string, stdin io.Reader) (map[string]string, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(entries))
+	usedStdin := false
+	for _, entry := range entries {
+		trigger, path, found := strings.Cut(entry, "=")
+		trigger = strings.TrimSpace(trigger)
+		if !found || trigger == "" || path == "" {
+			return nil, fmt.Errorf("--hmac-secret-file %q must be trigger=path (path - reads standard input)", entry)
+		}
+		if _, dup := out[trigger]; dup {
+			return nil, fmt.Errorf("--hmac-secret-file names trigger %q twice", trigger)
+		}
+		var raw []byte
+		var err error
+		if path == "-" {
+			if usedStdin {
+				return nil, fmt.Errorf("--hmac-secret-file: only one secret can be read from standard input")
+			}
+			usedStdin = true
+			raw, err = io.ReadAll(stdin)
+		} else {
+			raw, err = os.ReadFile(path)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("--hmac-secret-file %s: reading the secret: %w", trigger, err)
+		}
+		secret := strings.TrimSuffix(strings.TrimSuffix(string(raw), "\n"), "\r")
+		if secret == "" {
+			return nil, fmt.Errorf("--hmac-secret-file %s: the secret is empty", trigger)
+		}
+		out[trigger] = secret
+	}
+	return out, nil
+}
+
 func (f *activateFlags) enableRequest(c *activateChoices) *reliantv1.EnableWorkflowRequest {
+	// A signing secret is per trigger, so it rides as that trigger's
+	// override; sorted so the request is the same for the same flags.
+	var overrides []*reliantv1.WorkflowTriggerOverride
+	for _, name := range slices.Sorted(maps.Keys(c.hmacSecrets)) {
+		secret := c.hmacSecrets[name]
+		overrides = append(overrides, &reliantv1.WorkflowTriggerOverride{Trigger: name, WebhookHmacSecret: &secret})
+	}
 	return &reliantv1.EnableWorkflowRequest{
+		Overrides:        overrides,
 		Workflow:         f.workflow,
 		ProjectId:        c.projectID,
 		WorktreeId:       c.worktreeID,
@@ -345,6 +417,40 @@ func printWorkflowTriggerResults(out io.Writer, results []*reliantv1.WorkflowTri
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", r.GetTrigger(), workflowOutcomeLabel(r.GetOutcome()), activation, orDash(r.GetMessage()))
 	}
 	_ = w.Flush()
+	for _, r := range results {
+		a := r.GetActivation()
+		switch {
+		case r.GetWebhook().GetToken() != "":
+			// The one time the server returns the token: a CLI that does
+			// not print it leaves the activation uncallable until a rotate.
+			printWebhookCredential(out, r.GetTrigger(), a.GetId(), a.GetWebhookUrl(), r.GetWebhook())
+		case a.GetWebhookManaged() && r.GetOutcome() == reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED:
+			fmt.Fprintf(out, "\nWebhook %s: Reliant delivers to it itself, so there is no URL or token to configure.\n", r.GetTrigger())
+		}
+	}
+	// The server's warnings carry the funding warning's message too, for a
+	// client that predates that field, so printing them covers both.
+	for _, r := range results {
+		for _, warning := range r.GetWarnings() {
+			fmt.Fprintf(out, "\nWarning (%s): %s\n", r.GetTrigger(), warning)
+		}
+	}
+}
+
+// printWebhookCredential prints a webhook trigger's token and the two ways to
+// call it with it. label names the trigger; bareURL is Trigger.webhook_url,
+// derived from the credential's URL when the server sent none.
+func printWebhookCredential(out io.Writer, label, triggerID, bareURL string, cred *reliantv1.WebhookCredential) {
+	token := cred.GetToken()
+	if bareURL == "" {
+		bareURL = strings.TrimSuffix(cred.GetUrl(), "/"+token)
+	}
+	fmt.Fprintf(out, "\nWebhook %s (the token is shown once; `reliant trigger rotate %s` issues a new one):\n", label, triggerID)
+	fmt.Fprintf(out, "  Token:    %s\n", token)
+	fmt.Fprintf(out, "  POST to:  %s with the header \"Authorization: Bearer <token>\"\n", bareURL)
+	if u := cred.GetUrl(); u != "" {
+		fmt.Fprintf(out, "  or to:    %s (for a sender that cannot set headers; keep it as secret as the token)\n", u)
+	}
 }
 
 func workflowOutcomeLabel(o reliantv1.WorkflowTriggerOutcome) string {

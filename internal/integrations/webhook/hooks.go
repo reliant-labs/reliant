@@ -71,7 +71,14 @@ func (h *HooksReceiver) Register(handle func(pattern string, handler http.Handle
 }
 
 // idempotencyHeaders name a sender-supplied event id, in preference order.
-var idempotencyHeaders = []string{"Idempotency-Key", "X-Idempotency-Key", "X-Request-Id", "X-Delivery-Id"}
+//
+// X-Request-Id is not one of them, though it once was. It names a request,
+// not an event: proxies set it on the way in (Envoy, in front of the hosted
+// service, replaces whatever the sender sent with a fresh id), so it was a
+// new key on every delivery, a sender's retry included, and the body-hash
+// fallback below never applied. A sender that names its events uses one of
+// these, or the trigger declares dedupe_key.
+var idempotencyHeaders = []string{"Idempotency-Key", "X-Idempotency-Key", "X-Delivery-Id"}
 
 // maxIdempotencyKey bounds a sender's key; a longer one is hashed.
 const maxIdempotencyKey = 200

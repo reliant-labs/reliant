@@ -12,6 +12,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
@@ -124,9 +126,18 @@ type listTasksStore interface {
 	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
 }
 
+// taskScopeStore is what scopeTaskForThread reads to place a task's plan
+// relative to the calling thread.
+type taskScopeStore interface {
+	GetPlan(ctx context.Context, id string) (*db.Plan, error)
+	GetThread(ctx context.Context, id string) (*db.Thread, error)
+}
+
 // updateTaskStore is update_task's store.
 type updateTaskStore interface {
 	planLookupStore
+	GetPlan(ctx context.Context, id string) (*db.Plan, error)
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
 	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
@@ -136,6 +147,7 @@ type updateTaskStore interface {
 
 // createSubtaskStore is create_subtask's store.
 type createSubtaskStore interface {
+	taskScopeStore
 	CreateTask(ctx context.Context, task *db.Task) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
