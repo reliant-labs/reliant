@@ -5,8 +5,9 @@ import { chatFixtures } from './chat'
 import { consoleFixtures } from './console'
 import { projectCatalogFixtures } from './projects'
 import { servicesFixtures } from './services'
+import { speedInsightsFixtures } from './speedInsights'
 import { u6cFixtures } from './u6c'
 import { overviewFixtures } from './overview'
 
 /** Every fixture, later tables winning on a shared key. */
-export const allFixtures: Fixtures = { ...baseFixtures, ...chatFixtures, ...consoleFixtures, ...billingFixtures, ...projectCatalogFixtures, ...servicesFixtures, ...u6cFixtures, ...overviewFixtures }
+export const allFixtures: Fixtures = { ...baseFixtures, ...chatFixtures, ...consoleFixtures, ...billingFixtures, ...projectCatalogFixtures, ...servicesFixtures, ...u6cFixtures, ...overviewFixtures, ...speedInsightsFixtures }

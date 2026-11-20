@@ -1,145 +1,128 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * SPEED INSIGHTS (U6c, owner round 5): /forge/p/:app/speed-insights — how
- * fast each page loads and responds for real visitors.
+ * SPEED INSIGHTS (U6e, owner: "Vercel's speed insights is nicer than ours"):
+ * /forge/p/:app/speed-insights — how fast each page loads and responds for
+ * real visitors, laid out after Vercel's:
  *
- * The data is already collected: forge's browser runtime
- * (@reliantlabs/forge-web-runtime, telemetry.ts) records web vitals as spans
- * of the `webvitals` tracer, one attribute per vital (`lcp`, `inp`, `cls`,
- * `ttfb`, `fcp`), each stamped with the page's `location.href`. One SQL
- * QueryPanel reads them, grouped by page path, at p75 (the threshold Google
- * judges each vital by):
+ *   Real Experience Score   one 0–100 number, coloured, and its chart over
+ *                           the window (or one vital's, picked by its card)
+ *   a card per vital        LCP, INP, CLS, FCP, TTFB at the chosen
+ *                           percentile, rated, with the good / needs
+ *                           improvement / poor split of every sample
+ *   routes                  each route's score and vitals, worst first
  *
- *   headline   the app's p75 of each vital over the window, rated
- *              good / needs improvement / poor by web.dev's thresholds
- *   pages      one row per page path: p75 of each vital and its sample count
+ * Every choice is the URL's: `?device=desktop|mobile` (default desktop),
+ * `?pct=p75|p90|p95|p99` (default p75), `?metric=score|lcp|…` (the chart),
+ * `?range=`. The data and the score's formula: speedInsightsModel.ts.
  *
- * With no samples: what the page will show and how to turn it on (the
- * runtime's telemetry, which a forge frontend scaffolds).
+ * With no samples on either device: what the page will show and how to turn
+ * it on (the runtime's telemetry, which a forge frontend scaffolds).
  */
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Gauge } from "lucide-react";
 
+import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
+import PageHeader from "@/components/forge-ui/page_header";
+import Status from "@/components/forge-ui/status";
 import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
 import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
-import Status, { type StatusTone } from "@/components/forge-ui/status";
 import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
 import { cn } from "@/lib/utils";
-import type { ObsScope, Panel, PanelResult } from "@/services/controlPlane/observability/types";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
 import { PAGE_SUBTITLES } from "../Console/groupedNav";
-import PageHeader from "@/components/forge-ui/page_header";
-import { VariableSelect } from "../Observability/Dashboards/parts";
+import { UPlotChart } from "../Observability/charts/UPlotChart";
+import { Segmented, VariableSelect } from "../Observability/Dashboards/parts";
 import { formatCount } from "../Observability/format";
 import { ObsError } from "../Observability/ObsStates";
+import {
+  chartMetricOf,
+  DEFAULT_DEVICE,
+  DEFAULT_PERCENTILE,
+  deviceOf,
+  distribution,
+  formatVital,
+  PERCENTILES,
+  percentileOf,
+  RATING_LABEL,
+  RATING_TONE,
+  rateScore,
+  rateVital,
+  realExperienceScore,
+  routesByScore,
+  SCORE_LABEL,
+  SCORE_WEIGHTS,
+  samplesOf,
+  speedPanel,
+  VITAL_INFO,
+  VITALS,
+  vitalsRows,
+  type ChartMetric,
+  type Device,
+  type Percentile,
+  type Rating,
+  type Vital,
+  type VitalsRow,
+} from "./speedInsightsModel";
 
 const DEFAULT_RANGE: RangePreset = "7d";
 
-export type Vital = "lcp" | "inp" | "cls" | "ttfb";
-export const VITALS: readonly Vital[] = ["lcp", "inp", "cls", "ttfb"];
+/** A rating's ink (text) and fill (bars, the score ring): semantic status tokens. */
+const INK: Record<Rating, string> = { good: "text-success-ink", ni: "text-warning-ink", poor: "text-danger-ink" };
+const FILL: Record<Rating, string> = { good: "bg-success", ni: "bg-warning", poor: "bg-danger" };
+const STROKE: Record<Rating, string> = { good: "stroke-success", ni: "stroke-warning", poor: "stroke-danger" };
+/** The chart's colour for the score and each vital (the dashboard palette). */
+const CHART_COLOR: Record<ChartMetric, string> = { score: "--chart-1", lcp: "--chart-2", inp: "--chart-3", cls: "--chart-4", fcp: "--chart-5", ttfb: "--chart-6" };
 
-/** web.dev's thresholds: good at or under the first, poor over the second. CLS is unitless; the rest milliseconds. */
-export const VITAL_INFO: Record<Vital, { label: string; about: string; good: number; poor: number; unit: "ms" | "score" }> = {
-  lcp: { label: "Largest Contentful Paint", about: "When the main content has loaded", good: 2500, poor: 4000, unit: "ms" },
-  inp: { label: "Interaction to Next Paint", about: "How quickly the page responds to a tap or click", good: 200, poor: 500, unit: "ms" },
-  cls: { label: "Cumulative Layout Shift", about: "How much the page jumps around as it loads", good: 0.1, poor: 0.25, unit: "score" },
-  ttfb: { label: "Time to First Byte", about: "How long the server takes to start answering", good: 800, poor: 1800, unit: "ms" },
-};
-
-export function rateVital(vital: Vital, value: number | null): { tone: StatusTone; label: string } | null {
-  if (value === null || !Number.isFinite(value)) return null;
-  const { good, poor } = VITAL_INFO[vital];
-  if (value <= good) return { tone: "success", label: "Good" };
-  if (value <= poor) return { tone: "warning", label: "Needs improvement" };
-  return { tone: "danger", label: "Poor" };
-}
-
-export function formatVital(vital: Vital, value: number | null): string {
-  if (value === null || !Number.isFinite(value)) return "—";
-  if (VITAL_INFO[vital].unit === "score") return value.toFixed(2);
-  return value >= 1000 ? `${(value / 1000).toFixed(2)} s` : `${Math.round(value)} ms`;
-}
-
-const p75 = (vital: Vital) => `quantileIf(0.75)(toFloat64OrZero(SpanAttributes['${vital}']), SpanAttributes['${vital}'] != '') AS ${vital}`;
-
-/** p75 of each vital per page path, from the runtime's `webvitals` spans; the scope's environments. */
-export const SPEED_INSIGHTS_PANEL: Panel = {
-  id: "speed-insights-pages",
-  title: "Web vitals by page",
-  kind: "sql",
-  signal: "",
-  series: [],
-  sql: [
-    "SELECT path(SpanAttributes['location.href']) AS page,",
-    `       ${VITALS.map(p75).join(",\n       ")},`,
-    "       count() AS samples",
-    "FROM otel_traces",
-    "WHERE ScopeName = 'webvitals'",
-    "  AND Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}",
-    "  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))",
-    "GROUP BY page",
-    "ORDER BY samples DESC",
-    "LIMIT 50",
-  ].join("\n"),
-};
-
-export interface VitalsRow {
-  page: string;
-  samples: number;
-  values: Record<Vital, number | null>;
-}
-
-/** The panel's rows: the page in its group, the numbers by column; a vital with no sample reads null. */
-export function vitalsRows(result: PanelResult | undefined): VitalsRow[] {
-  if (!result) return [];
-  const at = (name: string) => result.columns.indexOf(name);
-  return result.rows.map((row) => {
-    const num = (name: string) => {
-      const i = at(name);
-      const v = i >= 0 ? (row.values[i] ?? null) : null;
-      return v === null || v === 0 ? null : v;
-    };
-    return {
-      page: row.group.page ?? Object.values(row.group)[0] ?? "/",
-      samples: num("samples") ?? 0,
-      values: { lcp: num("lcp"), inp: num("inp"), cls: num("cls"), ttfb: num("ttfb") },
-    };
-  });
-}
-
-/** The app's figure for a vital: the pages' p75s weighted by their samples (an estimate; the per-page figures are exact). */
-export function overallVital(rows: readonly VitalsRow[], vital: Vital): number | null {
-  let weight = 0;
-  let sum = 0;
-  for (const row of rows) {
-    const v = row.values[vital];
-    if (v === null) continue;
-    weight += row.samples;
-    sum += v * row.samples;
-  }
-  return weight ? sum / weight : null;
+interface SpeedSearch {
+  range?: RangePreset;
+  pct?: string;
+  device?: string;
+  metric?: string;
 }
 
 export function SpeedInsightsPage() {
   const { forgeProject, env, roster } = useForgeConsole();
-  const search = useSearch({ strict: false }) as { range?: RangePreset };
+  const search = useSearch({ strict: false }) as SpeedSearch;
   const navigate = useNavigate();
   const range = search.range ?? DEFAULT_RANGE;
+  const pct = percentileOf(search.pct);
+  const device = deviceOf(search.device);
+  const metric = chartMetricOf(search.metric);
+  // One writer for every choice: the default is dropped from the URL, so the bare URL is the default view.
+  const set = (patch: Partial<Record<keyof SpeedSearch, string | undefined>>) =>
+    void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }), replace: true } as never);
+
   const org = useObservabilityOrg();
   const envId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
   const scope = useMemo<ObsScope | null>(() => (org.orgId ? { orgId: org.orgId, projectId: forgeProject, envIds: envId ? [envId] : [], filters: [] } : null), [org.orgId, forgeProject, envId]);
-  const query = usePanelQuery(scope, range, SPEED_INSIGHTS_PANEL, []);
-  const rows = useMemo(() => vitalsRows(query.data), [query.data]);
-  const samples = rows.reduce((acc, row) => acc + row.samples, 0);
+
+  const desktopPanel = useMemo(() => speedPanel("summary", "desktop", pct, range), [pct, range]);
+  const mobilePanel = useMemo(() => speedPanel("summary", "mobile", pct, range), [pct, range]);
+  const routesPanel = useMemo(() => speedPanel("routes", device, pct, range), [device, pct, range]);
+  const seriesPanel = useMemo(() => speedPanel("series", device, pct, range), [device, pct, range]);
+  // Both devices' summaries: the toggle says how much each has, and an empty
+  // device is told apart from an app that measured nothing at all.
+  const desktop = usePanelQuery(scope, range, desktopPanel, []);
+  const mobile = usePanelQuery(scope, range, mobilePanel, []);
+  const routes = usePanelQuery(scope, range, routesPanel, []);
+  const series = usePanelQuery(scope, range, seriesPanel, []);
+
+  const summaries: Record<Device, VitalsRow | undefined> = { desktop: vitalsRows(desktop.data)[0], mobile: vitalsRows(mobile.data)[0] };
+  const viewsOf = (d: Device) => summaries[d]?.views ?? 0;
+  const summary = summaries[device];
   const windowWords = RANGE_LABELS[range].toLowerCase();
+  const loading = desktop.isLoading || mobile.isLoading;
+  const failed = (desktop.error && !desktop.data) || (mobile.error && !mobile.data);
+  const nothingAtAll = !loading && !failed && viewsOf("desktop") === 0 && viewsOf("mobile") === 0 && !hasSamples(summaries.desktop) && !hasSamples(summaries.mobile);
 
   return (
     <Page testId="console-speed-insights">
@@ -148,89 +131,278 @@ export function SpeedInsightsPage() {
         className="mb-0"
         title="Speed insights"
         subtitle={PAGE_SUBTITLES["speed-insights"]}
-        meta={rows.length > 0 ? <span>{formatCount(samples)} page views measured · p75</span> : undefined}
         controls={
-          <VariableSelect
-            id="speed-insights-range"
-            label="time"
-            value={range}
-            options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
-            onChange={(value) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, range: value === DEFAULT_RANGE ? undefined : (value as RangePreset) }), replace: true } as never)}
-          />
+          <>
+            <Segmented<Device>
+              label="Device"
+              testId="speed-insights-device"
+              value={device}
+              options={[
+                { value: "desktop", label: viewsOf("desktop") ? `Desktop · ${formatCount(viewsOf("desktop"))}` : "Desktop" },
+                { value: "mobile", label: viewsOf("mobile") ? `Mobile · ${formatCount(viewsOf("mobile"))}` : "Mobile" },
+              ]}
+              onChange={(next) => set({ device: next === DEFAULT_DEVICE ? undefined : next })}
+            />
+            <Segmented<Percentile>
+              label="Percentile"
+              testId="speed-insights-percentile"
+              value={pct}
+              options={PERCENTILES.map((p) => ({ value: p, label: p.toUpperCase() }))}
+              onChange={(next) => set({ pct: next === DEFAULT_PERCENTILE ? undefined : next })}
+            />
+            <VariableSelect
+              id="speed-insights-range"
+              label="time"
+              value={range}
+              options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
+              onChange={(value) => set({ range: value === DEFAULT_RANGE ? undefined : value })}
+            />
+          </>
         }
       />
-      {query.isLoading ? (
+      {loading ? (
         <div className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Loading speed insights" />
-      ) : query.error && !query.data ? (
-        <ObsError error={query.error} subject={forgeProject} onRetry={() => void query.refetch()} retrying={query.isFetching} />
-      ) : rows.length === 0 ? (
+      ) : failed ? (
+        <ObsError
+          error={desktop.error ?? mobile.error}
+          subject={forgeProject}
+          onRetry={() => {
+            void desktop.refetch();
+            void mobile.refetch();
+          }}
+          retrying={desktop.isFetching || mobile.isFetching}
+        />
+      ) : nothingAtAll ? (
         <SpeedInsightsEmpty windowWords={windowWords} />
+      ) : !summary || !hasSamples(summary) ? (
+        <Card className="flex flex-wrap items-center justify-between gap-3" data-testid="speed-insights-device-empty">
+          <p className="text-ui text-ink-muted">
+            No {device} visit was measured in the {windowWords}. {device === "desktop" ? "Mobile" : "Desktop"} visits were.
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => set({ device: device === "desktop" ? "mobile" : undefined })}>
+            Show {device === "desktop" ? "mobile" : "desktop"}
+          </Button>
+        </Card>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="speed-insights-headline">
-            {VITALS.map((vital) => {
-              const value = overallVital(rows, vital);
-              const rating = rateVital(vital, value);
-              return (
-                <Card key={vital} padding="none" className="min-w-0 px-4 py-3" data-testid={`speed-insights-${vital}`}>
-                  <h3 className="text-ui font-medium text-ink-muted" title={VITAL_INFO[vital].label}>
-                    {vital.toUpperCase()}
-                  </h3>
-                  <div className="mt-0.5 text-2xl font-semibold tabular-nums text-ink">{formatVital(vital, value)}</div>
-                  <div className="mt-1 flex items-center gap-2 text-meta text-ink-muted">
-                    {rating ? <Status tone={rating.tone} label={rating.label} /> : <span>No samples</span>}
-                  </div>
-                  <p className="mt-2 text-meta text-ink-muted">{VITAL_INFO[vital].about}</p>
-                </Card>
-              );
-            })}
+          <ScoreCard summary={summary} device={device} pct={pct} metric={metric} windowWords={windowWords} series={vitalsRows(series.data)} seriesLoading={series.isLoading} onMetric={(next) => set({ metric: next === "score" ? undefined : next })} />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" data-testid="speed-insights-vitals">
+            {VITALS.map((vital) => (
+              <VitalCard key={vital} vital={vital} summary={summary} pct={pct} selected={metric === vital} onSelect={() => set({ metric: metric === vital ? undefined : vital })} />
+            ))}
           </div>
-          <section className="space-y-2">
-            <h2 className="text-section text-ink">By page</h2>
-            <div className="overflow-x-auto rounded-xl border border-border bg-surface" data-testid="speed-insights-pages">
-              <table className="w-full min-w-[44rem] border-collapse">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="h-9 px-3 text-left text-meta font-medium text-ink-muted">Page</th>
-                    {VITALS.map((vital) => (
-                      <th key={vital} className="h-9 px-3 text-right text-meta font-medium text-ink-muted" title={VITAL_INFO[vital].label}>
-                        {vital.toUpperCase()}
-                      </th>
-                    ))}
-                    <th className="h-9 px-3 text-right text-meta font-medium text-ink-muted">Views</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row) => (
-                    <tr key={row.page} className="border-b border-border-subtle last:border-b-0">
-                      <td className="h-11 max-w-0 truncate px-3 font-mono text-code text-ink">{row.page}</td>
-                      {VITALS.map((vital) => {
-                        const rating = rateVital(vital, row.values[vital]);
-                        return (
-                          <td
-                            key={vital}
-                            className={cn(
-                              "h-11 px-3 text-right text-ui tabular-nums",
-                              rating?.tone === "danger" ? "text-destructive" : rating?.tone === "warning" ? "text-warning-ink" : "text-ink"
-                            )}
-                          >
-                            {formatVital(vital, row.values[vital])}
-                          </td>
-                        );
-                      })}
-                      <td className="h-11 px-3 text-right text-ui tabular-nums text-ink-muted">{formatCount(row.samples)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="text-meta text-ink-muted">
-              p75 over the {windowWords}: three in four visits were at least this fast. Good / needs improvement / poor follow web.dev&apos;s thresholds.
-            </p>
-          </section>
+          <RoutesTable rows={vitalsRows(routes.data)} pct={pct} loading={routes.isLoading} failed={!!routes.error && !routes.data} />
+          <p className="text-meta text-ink-muted" data-testid="speed-insights-formula">
+            The Real Experience Score weights each vital&apos;s share of good samples (needs improvement counts half): LCP {SCORE_WEIGHTS.lcp}%, INP {SCORE_WEIGHTS.inp}%, CLS{" "}
+            {SCORE_WEIGHTS.cls}%, FCP {SCORE_WEIGHTS.fcp}%. TTFB is shown and not scored. Good / needs improvement / poor follow web.dev&apos;s thresholds; 90 and above is great.
+          </p>
         </>
       )}
     </Page>
+  );
+}
+
+function hasSamples(row: VitalsRow | undefined): boolean {
+  return !!row && VITALS.some((v) => samplesOf(row.vitals[v]) > 0);
+}
+
+/** The headline: the score, its rating, and the chart of it (or of the vital `metric` names). */
+function ScoreCard({
+  summary,
+  device,
+  pct,
+  metric,
+  windowWords,
+  series,
+  seriesLoading,
+  onMetric,
+}: {
+  summary: VitalsRow;
+  device: Device;
+  pct: Percentile;
+  metric: ChartMetric;
+  windowWords: string;
+  series: VitalsRow[];
+  seriesLoading: boolean;
+  onMetric: (metric: ChartMetric) => void;
+}) {
+  const score = realExperienceScore(summary.vitals);
+  const rating = rateScore(score);
+  const points = series.filter((row) => row.t !== null);
+  const values = points.map((row) => (metric === "score" ? realExperienceScore(row.vitals) : row.vitals[metric].value));
+  const chartLabel = metric === "score" ? "Real Experience Score" : `${VITAL_INFO[metric].short} at ${pct.toUpperCase()}`;
+  return (
+    <Card padding="none" className="grid min-w-0 gap-0 lg:grid-cols-[16rem_minmax(0,1fr)]" data-testid="speed-insights-score">
+      <div className="flex flex-col items-start gap-3 border-border px-5 py-4 max-lg:border-b lg:border-r">
+        <h2 className="text-ui font-medium text-ink-muted">Real Experience Score</h2>
+        <ScoreRing score={score} rating={rating} />
+        <div className="space-y-1 text-meta text-ink-muted">
+          {rating && <Status tone={RATING_TONE[rating]} label={SCORE_LABEL[rating]} />}
+          <p>
+            {formatCount(summary.views)} {device} page loads, {windowWords}
+          </p>
+        </div>
+      </div>
+      <div className="min-w-0 px-3 pb-3 pt-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2">
+          <h3 className="text-section text-ink">{chartLabel} over time</h3>
+          <Segmented<ChartMetric>
+            label="Chart"
+            testId="speed-insights-chart-metric"
+            value={metric}
+            options={[{ value: "score", label: "Score" }, ...VITALS.map((v) => ({ value: v, label: VITAL_INFO[v].short }))]}
+            onChange={onMetric}
+          />
+        </div>
+        <div className="pt-2" data-testid="speed-insights-chart">
+          {seriesLoading ? (
+            <div className="h-[200px] animate-pulse rounded-lg bg-ink/5 motion-reduce:animate-none" aria-label="Loading the chart" />
+          ) : points.length < 2 ? (
+            <p className="px-2 py-16 text-center text-meta text-ink-muted">Not enough measured visits in the {windowWords} to draw a trend.</p>
+          ) : (
+            <UPlotChart
+              height={200}
+              timestamps={points.map((row) => row.t as number)}
+              series={[{ label: chartLabel, values, color: CHART_COLOR[metric] }]}
+              unit={metric === "score" || metric === "cls" ? "" : "ms"}
+              label={`${chartLabel} over the ${windowWords}`}
+              area="fill"
+              legend={false}
+            />
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/** The score as a coloured ring, Vercel's gauge. */
+function ScoreRing({ score, rating }: { score: number | null; rating: Rating | null }) {
+  const r = 42;
+  const circumference = 2 * Math.PI * r;
+  const filled = score === null ? 0 : (score / 100) * circumference;
+  return (
+    <div className="relative size-28" role="img" aria-label={score === null ? "No score" : `Real Experience Score ${score} of 100`}>
+      <svg viewBox="0 0 100 100" className="size-full -rotate-90" aria-hidden="true">
+        <circle cx="50" cy="50" r={r} fill="none" strokeWidth="8" className="stroke-ink/10" />
+        {rating && <circle cx="50" cy="50" r={r} fill="none" strokeWidth="8" strokeLinecap="round" strokeDasharray={`${filled} ${circumference}`} className={STROKE[rating]} />}
+      </svg>
+      <span className={cn("absolute inset-0 flex items-center justify-center text-figure tabular-nums", rating ? INK[rating] : "text-ink-muted")} data-testid="speed-insights-score-value">
+        {score ?? "—"}
+      </span>
+    </div>
+  );
+}
+
+function VitalCard({ vital, summary, pct, selected, onSelect }: { vital: Vital; summary: VitalsRow; pct: Percentile; selected: boolean; onSelect: () => void }) {
+  const stat = summary.vitals[vital];
+  const rating = rateVital(vital, stat.value);
+  const split = distribution(stat);
+  const info = VITAL_INFO[vital];
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+      title={`${info.label}: chart it`}
+      className={cn(
+        "min-w-0 rounded-xl border bg-surface px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        selected ? "border-primary" : "border-border hover:border-ink/30"
+      )}
+      data-testid={`speed-insights-${vital}`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-ui font-medium text-ink" title={info.label}>
+          {info.short}
+        </span>
+        <span className="text-meta text-ink-muted">{pct.toUpperCase()}</span>
+      </div>
+      <div className={cn("mt-0.5 text-2xl font-semibold tabular-nums", rating ? INK[rating] : "text-ink-muted")}>{formatVital(vital, stat.value)}</div>
+      <div className="mt-0.5 text-meta text-ink-muted">{rating ? RATING_LABEL[rating] : "No samples"}</div>
+      <DistributionBar split={split} />
+      <p className="mt-2 text-meta text-ink-muted">{info.about}</p>
+    </button>
+  );
+}
+
+/** Good / needs improvement / poor, as one bar and three shares. */
+function DistributionBar({ split }: { split: Record<Rating, number> | null }) {
+  if (!split) return <div className="mt-3 h-1.5 rounded-full bg-ink/10" aria-hidden="true" />;
+  const pctText = (share: number) => `${Math.round(share * 100)}%`;
+  const ratings: Rating[] = ["good", "ni", "poor"];
+  return (
+    <div className="mt-3 space-y-1" data-testid="vital-distribution">
+      <div className="flex h-1.5 gap-px overflow-hidden rounded-full bg-ink/10" aria-hidden="true">
+        {ratings.map((r) => (split[r] > 0 ? <span key={r} className={FILL[r]} style={{ width: `${split[r] * 100}%` }} /> : null))}
+      </div>
+      <p className="flex justify-between gap-1 text-meta tabular-nums text-ink-muted" aria-label={ratings.map((r) => `${pctText(split[r])} ${RATING_LABEL[r].toLowerCase()}`).join(", ")}>
+        {ratings.map((r) => (
+          <span key={r} className={split[r] > 0 ? INK[r] : undefined}>
+            {pctText(split[r])}
+          </span>
+        ))}
+      </p>
+    </div>
+  );
+}
+
+function RoutesTable({ rows, pct, loading, failed }: { rows: VitalsRow[]; pct: Percentile; loading: boolean; failed: boolean }) {
+  const sorted = useMemo(() => routesByScore(rows), [rows]);
+  const TH = "h-9 px-3 text-meta font-medium text-ink-muted";
+  let body: ReactNode;
+  if (loading) body = <div className="h-40 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" />;
+  else if (failed) body = <p className="text-ui text-ink-muted">The routes could not be read right now.</p>;
+  else if (sorted.length === 0) body = <p className="text-ui text-ink-muted">No route was measured on this device.</p>;
+  else
+    body = (
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface" data-testid="speed-insights-routes">
+        <table className="w-full min-w-[48rem] border-collapse">
+          <thead>
+            <tr className="border-b border-border">
+              <th className={cn(TH, "text-left")}>Route</th>
+              <th className={cn(TH, "text-right")} aria-sort="ascending">
+                Score
+              </th>
+              {VITALS.map((vital) => (
+                <th key={vital} className={cn(TH, "text-right")} title={VITAL_INFO[vital].label}>
+                  {VITAL_INFO[vital].short}
+                </th>
+              ))}
+              <th className={cn(TH, "text-right")}>Page loads</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((row) => {
+              const rating = rateScore(row.score);
+              return (
+                <tr key={row.page} className="border-b border-border-subtle last:border-b-0" data-testid="speed-insights-route">
+                  <td className="h-11 max-w-0 truncate px-3 font-mono text-code text-ink">{row.page || "/"}</td>
+                  <td className="h-11 px-3 text-right">
+                    <span className={cn("inline-flex min-w-9 justify-center rounded-md px-1.5 py-0.5 text-ui font-semibold tabular-nums", rating ? INK[rating] : "text-ink-muted")}>{row.score ?? "—"}</span>
+                  </td>
+                  {VITALS.map((vital) => {
+                    const r = rateVital(vital, row.vitals[vital].value);
+                    return (
+                      <td key={vital} className={cn("h-11 px-3 text-right text-ui tabular-nums", r && r !== "good" ? INK[r] : "text-ink")}>
+                        {formatVital(vital, row.vitals[vital].value)}
+                      </td>
+                    );
+                  })}
+                  <td className="h-11 px-3 text-right text-ui tabular-nums text-ink-muted">{formatCount(row.views)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  return (
+    <section className="space-y-2" aria-labelledby="speed-insights-routes-title">
+      <h2 id="speed-insights-routes-title" className="text-section text-ink">
+        Routes <span className="ml-2 text-meta font-normal text-ink-muted">worst score first · vitals at {pct.toUpperCase()}</span>
+      </h2>
+      {body}
+    </section>
   );
 }
 
@@ -244,8 +416,8 @@ function SpeedInsightsEmpty({ windowWords }: { windowWords: string }) {
       learn="speed-insights"
     >
       <p>
-        Speed insights shows, for every page of your frontend, how fast it loads (LCP), how quickly it responds to a tap or click (INP), how much it shifts as it
-        loads (CLS) and how long the server takes to answer (TTFB), as real visitors experience them.
+        Speed insights scores how real visitors experience every page of your frontend: how fast it loads (LCP, FCP), how quickly it responds to a tap or click (INP),
+        how much it shifts as it loads (CLS) and how long the server takes to answer (TTFB), on desktop and on mobile.
       </p>
       <p>
         A forge frontend measures them already: the browser runtime (<code className="font-mono text-code">@reliantlabs/forge-web-runtime</code>) sends them with its
