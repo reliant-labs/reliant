@@ -14,10 +14,10 @@ Forge's errors are written to be acted on: most say what was expected, what was 
 | What did the browser log? | `grep '\[browser:error\]' .forge/logs/dev/*.log` |
 | Did the last deploy make things worse? | `forge obs check <env> --wait` (see [Querying with forge obs](/forge/observability/forge-obs)) |
 | Which RPCs does the binary actually serve? | `forge project introspect handlers` |
-| How do I call one by hand? | `forge api curl <service.Method>` prints a ready-to-run `curl` (add your own token for an authenticated RPC) |
+| How do I call one by hand? | `forge dev curl <service.Method>` prints a ready-to-run `curl` (add your own token for an authenticated RPC) |
 | What configuration does a workload get? | `forge env config dev --workload api` |
 | Which database is this project using? | `forge env config dev --json`, and read `DATABASE_URL` |
-| Is the project itself well-formed? | `forge doctor` |
+| Is the project itself well-formed? | `forge project doctor` |
 | What does a deployed environment run? | `forge env status <env>` |
 
 In development, the frontend forwards every `console` call, uncaught error and unhandled promise rejection to its dev server, so a crash that never calls `console` still lands in `.forge/logs/dev/frontend_<name>.log` with its stack.
@@ -40,7 +40,7 @@ Run `forge lint --quiet` to see only the failures, with the verdict on the last 
 - **More than one service in a proto file.** Split it: one service per file.
 - **A migration hazard.** `forge lint --migration-safety` names the statement (a `NOT NULL` column on a populated table, a volatile default) and the comment that opts out when you mean it.
 - **The frontend cannot be a static export.** `forge lint --static-export` names the dynamic route, server action or `cookies()` call, with the fix.
-- **A tool is missing.** Lint fails rather than skipping when `golangci-lint` or `buf` is unavailable; `forge tools install` installs the code generators.
+- **A tool is missing.** Lint fails rather than skipping when `golangci-lint` or `buf` is unavailable; `forge machine tools install` installs the code generators.
 
 ## `forge env up` does not come up
 
@@ -66,7 +66,7 @@ Run `forge lint --quiet` to see only the failures, with the verdict on the last 
 
 Other common causes:
 
-- **An unset secret.** A workload that declares a secret with no value cannot start. `forge secret list --env <env>` shows which are missing; set them with `forge secret set`.
+- **An unset secret.** A workload that declares a secret with no value cannot start. `forge env secret list --env <env>` shows which are missing; set them with `forge env secret set`.
 - **A workload hosting refuses.** Operators, cron-kind workloads, sidecars and volumes cannot run on shared hosting; the render names the workload and field. Bind it to a cluster you operate instead.
 - **A migration failed.** The deploy stops before any new pod serves and prints the command to read the migration's logs. Fix it with a new migration.
 - **"cannot authorize".** Your Reliant session lacks deploy permission. See [Forge sign-in](/forge/sign-in).
@@ -77,4 +77,4 @@ See [When nothing shows up](/forge/observability/where-it-goes#when-nothing-show
 
 ## Getting more detail
 
-`forge project audit` summarises the project's state, including drift between proto and schema and RPCs still returning `Unimplemented`. `forge debug start <service>` attaches the Delve debugger to a running service. Agents can load the `debug` skill, which covers forge's evidence sources in depth. If forge itself misbehaves, [send us feedback](/help/feedback) or report it on [GitHub](https://github.com/reliant-labs/forge/issues).
+`forge project audit` summarises the project's state, including drift between proto and schema and RPCs still returning `Unimplemented`. `forge dev debug start <service>` attaches the Delve debugger to a running service. Agents can load the `debug` skill, which covers forge's evidence sources in depth. If forge itself misbehaves, [send us feedback](/help/feedback) or report it on [GitHub](https://github.com/reliant-labs/forge/issues).

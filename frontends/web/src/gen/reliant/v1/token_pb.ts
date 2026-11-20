@@ -613,8 +613,8 @@ export const TokenService: GenService<{
   /**
    * ExchangeToken trades the CALLING access token for a short-lived one that
    * carries only control-plane authority — what forge presents to the control
-   * plane for `forge env deploy`, `forge secret`, `forge domain` and friends,
-   * so a user signed in to Reliant never runs `forge login` as well.
+   * plane for `forge env deploy`, `forge env secret`, `forge cloud domain` and friends,
+   * so a user signed in to Reliant never runs `forge cloud login` as well.
    *
    * ATTENUATION ONLY. The minted token's scopes are the requested ones that are
    * exchangeable (deploy:*, secret:*, domain:*) AND held by the calling token:
@@ -629,7 +629,7 @@ export const TokenService: GenService<{
    * nothing.
    *
    * Machine credential only — the exchange needs a credential to attenuate. A
-   * human session signs in with `forge login` or uses the web app.
+   * human session signs in with `forge cloud login` or uses the web app.
    *
    * auth_required: false means "not gated by the API's auth interceptor",
    * never "unauthenticated": the handler authenticates its own bearer, against

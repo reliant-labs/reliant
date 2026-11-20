@@ -156,7 +156,7 @@ return nil, svcerr.NotFound("order")            // "order not found"
 return nil, svcerr.InvalidArgument("id is required")
 ```
 
-`forge fix connect-errors` rewrites the fixed-message sites with the same code and message, leaving the ones that wrap an `err`, which are the ones that leak, as your worklist. Test and generated files are not linted.
+`forge lint fix connect-errors` rewrites the fixed-message sites with the same code and message, leaving the ones that wrap an `err`, which are the ones that leak, as your worklist. Test and generated files are not linted.
 
 ## Deps shape
 
@@ -202,7 +202,7 @@ An interface field that declares ten methods the package never calls is a concre
 type Deps struct{ Store otherpkg.Store }
 
 // fix
-forge fix narrow-deps internal/handlers/order
+forge lint fix narrow-deps internal/handlers/order
 // declares the 1-method interface the package uses, here, and retypes the field.
 // compose.go needs no change.
 ```

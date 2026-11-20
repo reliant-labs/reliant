@@ -399,7 +399,7 @@ Settings → Access Tokens in the app.`,
 			// Logging out of Reliant logs forge out of Reliant cloud: the
 			// short-lived tokens exchanged from this server's sessions are
 			// forgotten, so none outlives the sign-out on this machine. A
-			// credential the user created with `forge login` is forge's own
+			// credential the user created with `forge cloud login` is forge's own
 			// and is left alone.
 			if err := newForgeCredentialService(cmd, forgecred.Pin{}).ForgetServer(target.ServerURL); err != nil {
 				logging.Warn("could not clear cached forge tokens", "error", err)

@@ -28,7 +28,7 @@ This is Reliant's gateway, not a way to use your OpenAI or Anthropic account key
 The Forge `deploy/llm` skill documents that an unclaimed pod's gateway variables stay blank until the platform's in-cluster gateway route is enabled. Do not promise gateway access on an unclaimed deploy. If credentials or a base URL are missing, disable the LLM feature and show an unavailable message; do not crash at startup, silently fall back to a public provider, or retry indefinitely.
 </Warning>
 
-On a claimed environment, gateway calls use the environment's platform-issued key and the org's credit and limits. A third-party API key and third-party billing do not fund that gateway. Load the installed version's contract with `forge skill load deploy/llm`; verify the populated variables without printing their values and make an actual server-side request before reporting it works. This guide does not claim a live gateway inference test.
+On a claimed environment, gateway calls use the environment's platform-issued key and the org's credit and limits. A third-party API key and third-party billing do not fund that gateway. Load the installed version's contract with `forge agent skill load deploy/llm`; verify the populated variables without printing their values and make an actual server-side request before reporting it works. This guide does not claim a live gateway inference test.
 
 ## Recovery: claim first, then use a server-side provider key
 
@@ -36,10 +36,10 @@ This path does not depend on an unclaimed gateway route.
 
 1. Retrieve the private claim link with `forge env status prod --claimable`. Give it only to the owner: whoever opens it first owns the deploy. Do not paste it in an issue, PR, repository or public log.
 2. The owner opens that link and claims the deploy. Claiming lifts the backend egress restriction. A backend and managed Postgres need [paid app hosting](/forge/hosting#billing); free signup does not mean free ongoing backend compute. A static site alone cannot hold the key: add a backend under an account first.
-3. Sign in to the owning account with `forge login`. Use a funded provider API key with access to the model your app requests. Keep it in the [managed secret store](/forge/secrets), not git:
+3. Sign in to the owning account with `forge cloud login`. Use a funded provider API key with access to the model your app requests. Keep it in the [managed secret store](/forge/secrets), not git:
 
    ```bash
-   forge secret set --env prod OPENAI_API_KEY
+   forge env secret set --env prod OPENAI_API_KEY
    ```
 
    The command reads the value from stdin. Do not put it in shell arguments, command history or agent transcripts.

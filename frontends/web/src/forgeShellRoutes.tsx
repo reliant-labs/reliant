@@ -7,7 +7,7 @@
  *                                             screens as Reliant (forge-branded
  *                                             by AuthLayout); the session is
  *                                             this origin's own
- *   /oauth/cli, /oauth/consent                `forge login` and OAuth consent
+ *   /oauth/cli, /oauth/consent                `forge cloud login` and OAuth consent
  *   /claim                                    claim a no-signup deploy
  *                                             (components/Claim), landing in
  *                                             the app's console
@@ -151,7 +151,7 @@ export function buildForgeShellTree({
     component: OAuthConsent,
   })
 
-  // `forge login` on a CLI configured for this host. Unguarded: the page signs
+  // `forge cloud login` on a CLI configured for this host. Unguarded: the page signs
   // the user in itself and must keep the whole query string across that detour.
   const cliLoginRoute = createRoute({
     getParentRoute: () => rootRoute,

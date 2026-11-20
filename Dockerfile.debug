@@ -1,7 +1,7 @@
 # Dockerfile.debug — dlv-enabled variant of the Reliant image.
 #
 # Minimal hook for cross-repo debugging of the IN-CLUSTER daemon-gateway (and
-# the other reliant server roles) with `forge debug`. This is NOT a forge
+# the other reliant server roles) with `forge dev debug`. This is NOT a forge
 # adoption — it is a single self-contained debug image that wraps the same
 # `reliant` entrypoint in a headless Delve server.
 #
@@ -16,9 +16,9 @@
 #     docker run -p 2345:2345 -p 29190:29190 reliant:debug server gateway
 #
 #   In-cluster (daemon-gateway pod): deploy this image instead of the prod
-#   image, then port-forward the Delve port and point `forge debug` at it:
+#   image, then port-forward the Delve port and point `forge dev debug` at it:
 #     kubectl -n <ns> port-forward deploy/daemon-gateway 2345:2345
-#     # forge debug start --attach is for host PIDs; for a remote dlv server,
+#     # forge dev debug start --attach is for host PIDs; for a remote dlv server,
 #     # connect a debugger (dlv connect 127.0.0.1:2345 / IDE) to the
 #     # forwarded port. The Delve server runs --accept-multiclient so the
 #     # pod keeps serving while you attach/detach.

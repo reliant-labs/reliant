@@ -17,7 +17,7 @@ import (
 // The storage reaper routine: the daemon runs forge's own reaper on a schedule.
 //
 // Why the daemon does it. A cloud machine has no systemd timer or cron, so
-// `forge storage install` cannot register its daily job, and the only other
+// `forge machine storage install` cannot register its daily job, and the only other
 // trigger — the pass `forge env up` starts in the background — is rate-limited
 // to once a day and only fires after an `up`. Under agent load the shared Go
 // build cache grows ~40 GB an hour, so a daily trim cannot hold its budget and
@@ -25,11 +25,11 @@ import (
 // the budget in forge's storage policy (go_cache_gib), enforced by forge's
 // reaper. This file only decides WHEN to run it.
 //
-// What it runs: `<this binary> forge storage auto-gc --policy <path>` — the
+// What it runs: `<this binary> forge machine storage auto-gc --policy <path>` — the
 // bounded, non-disruptive pass (rotated logs, Go caches, dangling images,
 // builder cache, temp sweep, source cache). It never removes worktrees,
 // anonymous volumes or registry images, and never takes a registry offline;
-// those stay with an explicit `forge storage gc --apply`. forge owns every
+// those stay with an explicit `forge machine storage gc --apply`. forge owns every
 // protection and budget; nothing here widens its scope.
 //
 // When:
@@ -70,7 +70,7 @@ const (
 	// re-run in a loop.
 	DefaultReaperPressureInterval = 10 * time.Minute
 	MinReaperPressureInterval     = time.Minute
-	// DefaultGoCacheInterval is the Go-cache pass (`forge storage gocache`):
+	// DefaultGoCacheInterval is the Go-cache pass (`forge machine storage gocache`):
 	// under agent load ~25 GiB of the shared build cache crosses forge's 2h
 	// safety floor every hour, so an hourly trim leaves up to that much
 	// removable cache on the disk. Every 10 minutes it leaves ~4 GiB.
@@ -186,7 +186,7 @@ type reaperState struct {
 	// the schedule or a user's "clear caches" started it.
 	sem chan struct{}
 	run reaperRunner
-	// goCache runs the Go-cache pass (`forge storage gocache --apply`).
+	// goCache runs the Go-cache pass (`forge machine storage gocache --apply`).
 	goCache reaperRunner
 	// budget overrides reaperPassBudget (tests).
 	budget time.Duration
@@ -589,7 +589,7 @@ func logGoCacheTrims(ctx context.Context, trigger string, start time.Time, forge
 	}
 }
 
-// goCachePass runs `forge storage gocache --apply` once and logs the outcome.
+// goCachePass runs `forge machine storage gocache --apply` once and logs the outcome.
 // The caller holds the single-flight. Like reaperPass it never panics and never
 // returns an error: a failed trim is a WARN line, and the next one runs at
 // GoCacheInterval.

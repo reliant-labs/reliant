@@ -25,7 +25,7 @@ belongs in forge (see "Friction" below).
 
 forge's compatibility policy is what makes this cheap: within major 1 nothing
 public breaks, and a major's breaks ship playbooks and codemods that `forge
-project upgrade` surfaces and applies (`forge skill load migration-upgrade`,
+project upgrade` surfaces and applies (`forge agent skill load migration-upgrade`,
 "Compatibility policy").
 
 ## Where the steps for a release live: forge
@@ -35,9 +35,9 @@ embedded in `reliant forge`. Those are whatever version was installed, and they
 say so (`this forge is …, but forge.yaml pins …`).
 
 ```sh
-forge skill load migration-upgrade        # how forge upgrades work: phases, exit codes, window
+forge agent skill load migration-upgrade        # how forge upgrades work: phases, exit codes, window
 forge project upgrade list                # the playbooks THIS tree still needs, oldest first
-forge skill load migrations/<version>     # one playbook, by the path `list` prints
+forge agent skill load migrations/<version>     # one playbook, by the path `list` prints
 ```
 
 ## The procedure
@@ -128,7 +128,7 @@ assume it.
 A bump is also a test of forge's upgrade path. When forge gets something wrong
 (a codemod that misses a case, a playbook with a stale step, a lint false
 positive, a regenerated file that churns for no reason), fix it in forge, or file
-it with `reliant forge report-bug`. Then put the PR or bug link in the log row. A
+it with `reliant forge agent report-bug`. Then put the PR or bug link in the log row. A
 reliant-side workaround with no forge link is a defect that ships to every other
 project.
 

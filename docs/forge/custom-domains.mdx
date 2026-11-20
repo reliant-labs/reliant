@@ -9,7 +9,7 @@ By default a deployed project answers on a generated hostname like
 over HTTPS with a certificate Reliant obtains for you.
 
 You manage them in the Reliant app under **Apps → Domains**, or from a terminal
-with `forge domain` (below).
+with `forge cloud domain` (below).
 
 ## The two halves: a domain and a binding
 
@@ -151,18 +151,18 @@ From the domain's detail view:
 
 ## From the command line
 
-The same operations are `forge domain` commands. Each names an environment
+The same operations are `forge cloud domain` commands. Each names an environment
 with `--env`, which tells forge which control plane to talk to (and, for
 `bind`, where the target lives):
 
 ```bash
-forge domain add hounders.club --env prod          # claim it; prints the DNS records
-forge domain bind hounders.club --env prod --target web
-forge domain bind www.hounders.club --env prod --redirect-to hounders.club
-forge domain verify hounders.club --env prod       # same as Check DNS now
-forge domain show hounders.club --env prod         # state, binding and required records
-forge domain unbind hounders.club --env prod       # stop serving, keep the domain
-forge domain rm hounders.club --env prod           # remove it entirely
+forge cloud domain add hounders.club --env prod          # claim it; prints the DNS records
+forge cloud domain bind hounders.club --env prod --target web
+forge cloud domain bind www.hounders.club --env prod --redirect-to hounders.club
+forge cloud domain verify hounders.club --env prod       # same as Check DNS now
+forge cloud domain show hounders.club --env prod         # state, binding and required records
+forge cloud domain unbind hounders.club --env prod       # stop serving, keep the domain
+forge cloud domain rm hounders.club --env prod           # remove it entirely
 ```
 
 `--target` names a workload or frontend in that environment.

@@ -92,11 +92,11 @@ If a bad release takes the control plane itself down, `forge env deploy <env> --
 
 ## Where the ledger lives
 
-An environment's promotions are rows in an append-only ledger. Re-deploying the release an environment already runs appends nothing and still applies and waits, so a retried CI job is safe. The ledger's location is declared by the environment, not chosen by a flag: an environment that declares `forge.ControlPlane` records on that control plane (the default for hosted environments), and every other environment records in this machine's ledger, under `~/.forge/ledger` (`FORGE_LEDGER_HOME` moves it). `forge ledger where <env>` says which, and why. A script or test that must never touch a real control plane sets `FORGE_LEDGER=machine`, which keeps every forge it starts on the machine ledger.
+An environment's promotions are rows in an append-only ledger. Re-deploying the release an environment already runs appends nothing and still applies and waits, so a retried CI job is safe. The ledger's location is declared by the environment, not chosen by a flag: an environment that declares `forge.ControlPlane` records on that control plane (the default for hosted environments), and every other environment records in this machine's ledger, under `~/.forge/ledger` (`FORGE_LEDGER_HOME` moves it). `forge release ledger where <env>` says which, and why. A script or test that must never touch a real control plane sets `FORGE_LEDGER=machine`, which keeps every forge it starts on the machine ledger.
 
 ## Delivery: from a recorded release to a running cluster
 
-Recording a release does not ship it. A reconciler converges the destination to the recorded bundle. For a hosted environment, or a cluster you registered with `forge cluster connect`, that reconciler is Flux, run by Reliant. The path has two halves.
+Recording a release does not ship it. A reconciler converges the destination to the recorded bundle. For a hosted environment, or a cluster you registered with `forge cloud cluster connect`, that reconciler is Flux, run by Reliant. The path has two halves.
 
 ![Part one of the delivery path. forge env deploy builds and packs the bundle, pushes it to the registry, Reliant records the release and checks the bundle, and the bundle is signed with your organization's key.](/images/forge/deploy/delivery-build.svg)
 
@@ -167,4 +167,4 @@ Both need a version. A no-version deploy cuts a release covering every artifact,
 
 ## Related topics
 
-[Self-hosted delivery](/forge/deploy/self-hosted-delivery) covers delivering to your own cluster with Flux and no control plane. [Environments](/forge/deploy/environments) covers the declarations a release is cut from, and [Hosting on Reliant](/forge/hosting) what happens once a hosted deploy is queued on billing. Agents can run `forge skill load deploy/plan`, `deploy/delivery-policy` and `deploy/offline-ledger` for the full reference.
+[Self-hosted delivery](/forge/deploy/self-hosted-delivery) covers delivering to your own cluster with Flux and no control plane. [Environments](/forge/deploy/environments) covers the declarations a release is cut from, and [Hosting on Reliant](/forge/hosting) what happens once a hosted deploy is queued on billing. Agents can run `forge agent skill load deploy/plan`, `deploy/delivery-policy` and `deploy/offline-ledger` for the full reference.

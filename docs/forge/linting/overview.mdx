@@ -64,14 +64,14 @@ A lane that gates fails the run when it reports an error. An advisory lane repor
 | `--quiet`, `-q` | Prints a one-line summary per failing lane, its error findings, and the verdict as the last line. A clean run is one line. Safe to pipe through `tail`. Never pipe lint through `head`: the verdict is the last line. |
 | `--scope PATH` | Reports only findings under `PATH` (repeatable, project-relative). Go linters run on that path's packages only, which also makes a scoped run fast. Whole-project lanes (frontend lint, graph, component drift, config-reach) cannot be scoped; they are skipped and named in the verdict. Run an unscoped lint before you merge. |
 | `--json` | Findings as JSON, with the same exit code as text mode. Each finding carries `rule`, `severity`, `file`, `line`, `message` and `fix_hint`. A softened new-rule finding also carries a `grace` object. |
-| `--gate-json FILE` | Also writes the run as a gate document, for `forge gate record` or `forge env deploy --gate`. The human output and the exit code do not change. |
+| `--gate-json FILE` | Also writes the run as a gate document, for `forge release gate record` or `forge env deploy --gate`. The human output and the exit code do not change. |
 | `--strict` | Escalates advisory findings to errors, including a lane that could not run. |
 | `--skip-frontends` | Skips the whole frontend lane, for a backend-only gate that needs no Node toolchain. |
 | `--allow-skip LANE=REASON` | Accepts, by name and with a reason, that a gating lane may not run here. `lint.allow_skip` in `forge.yaml` is the project-level form. |
 | `--show-suppressed` | Lists every suppression the project declares, with file, line and stated reason. Runs no linter. |
 | `--fix`, `--check` | Apply fixes in place; or report only (the default). |
 
-A gating lane that could not run, such as a missing `golangci-lint` or a frontend with no `node_modules`, fails the run. A check that did not run is not a check that passed. `forge tools install golangci-lint buf` installs the missing tools.
+A gating lane that could not run, such as a missing `golangci-lint` or a frontend with no `node_modules`, fails the run. A check that did not run is not a check that passed. `forge machine tools install golangci-lint buf` installs the missing tools.
 
 <Note>
 `forge lint` runs under the forge version your `forge.yaml` pins in `forge_version`. If the binary on your path is a different version it says so and tells you how to run the pinned one with `go run github.com/reliant-labs/forge/cmd/forge@<pin> lint`. `--allow-version-skew` (or `FORGE_ALLOW_VERSION_SKEW=1`) proceeds anyway. Inside Reliant, `reliant forge` is the embedded forge, so use the `go run` form when your pin differs.
@@ -228,7 +228,7 @@ Some rules have their own in-file escape hatch, named in the rule's fix text and
 
 A person who writes a bad query usually feels it: the test fails, they read the error, they learn. An agent does not carry that memory to the next session, and it has no instinct that a `string` filter field is wrong or that `slog.Info` loses the trace. What it has is a loop: edit, run a command, read the result, edit again. Lint is the command in that loop whose output is built to be read by something that does not already know the rule.
 
-Every forge finding names the rule, the file and line, what is wrong, and the exact change to make, and many name a command that makes it (`forge lint --tracing --fix`, `forge fix connect-errors`, `forge fix narrow-deps`). That turns "the build is red" into one more turn of the loop instead of an investigation. A large share of the rules cover failures that give no signal at all. A misspelled `forge:` marker compiles and does nothing. A filter without `optional` runs and never filters. A migration numbered below the merged head applies nowhere and reports the schema current. A model reading its own diff will not find these, and tests rarely do, so a mechanical check has to.
+Every forge finding names the rule, the file and line, what is wrong, and the exact change to make, and many name a command that makes it (`forge lint --tracing --fix`, `forge lint fix connect-errors`, `forge lint fix narrow-deps`). That turns "the build is red" into one more turn of the loop instead of an investigation. A large share of the rules cover failures that give no signal at all. A misspelled `forge:` marker compiles and does nothing. A filter without `optional` runs and never filters. A migration numbered below the merged head applies nowhere and reports the schema current. A model reading its own diff will not find these, and tests rarely do, so a mechanical check has to.
 
 Two properties make this work for unattended agents. The check is deterministic, so the same tree gives the same answer. And it fails closed: a lane that cannot run fails the run instead of passing silently, and `--gate-json` records exactly what was proved. See [observability](/forge/observability) for the production half, where the same idea applies to a running system.
 

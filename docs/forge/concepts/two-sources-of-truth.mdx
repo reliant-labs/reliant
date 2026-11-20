@@ -186,7 +186,7 @@ COMMENT ON TABLE audit_events IS 'forge:no-entity';
 
 ### Customizing a CRUD RPC
 
-You do not edit or disown `handlers_crud_ops_gen.go` to change what a CRUD RPC does. The method in `handlers_crud.go` is yours: replace its delegation with real code, or take the generated op, change the one field you need, and keep delegating so the shared lifecycle in `forge/pkg/crud` keeps handling errors, pagination and update masks. Row scoping and permission checks go here too, since the delegation reads no caller. The `db/crud-overrides` skill (`forge skill load db/crud-overrides`) has the worked recipe.
+You do not edit or disown `handlers_crud_ops_gen.go` to change what a CRUD RPC does. The method in `handlers_crud.go` is yours: replace its delegation with real code, or take the generated op, change the one field you need, and keep delegating so the shared lifecycle in `forge/pkg/crud` keeps handling errors, pagination and update masks. Row scoping and permission checks go here too, since the delegation reads no caller. The `db/crud-overrides` skill (`forge agent skill load db/crud-overrides`) has the worked recipe.
 
 ## Which side holds which rule
 

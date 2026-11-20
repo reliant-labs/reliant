@@ -67,13 +67,13 @@ vars:
   GOTESTRACE: '-race'
   # SLOT runs the heavy lanes (`test`, `test:integration`, `coverage`, a full
   # `test:affected` lane, the docs check) inside one of this machine's
-  # host-wide heavy slots: `forge slot run` waits while N other heavy jobs
+  # host-wide heavy slots: `forge machine slot run` waits while N other heavy jobs
   # (builds, test lanes, codegen, lints — from any agent, worktree or
   # terminal) are running, because past a handful every one of them slows
   # down. N comes from the machine; set FORGE_HEAVY_SLOTS=<n> to change it or
   # =off to switch it off. Inside a slot already (a gate check, a parent
-  # `forge slot run`) it does not wait. Empty when forge is absent or predates
-  # `forge slot` (the probe fails), so these tasks still run without it;
+  # `forge machine slot run`) it does not wait. Empty when forge is absent or predates
+  # `forge machine slot` (the probe fails), so these tasks still run without it;
   # `task test SLOT=` skips the slot for one run. `test:short` takes no slot:
   # the scoped inner loop is not heavy and must not queue.
   #
@@ -83,7 +83,7 @@ vars:
   # `go run`. `scripts/forge.sh --machine` is FORGE_BIN, else forge on PATH or
   # in .tools/bin, else `reliant forge`.
   SLOT:
-    sh: 's=$(./scripts/forge.sh --machine --which 2>/dev/null) && $s slot status --class heavy >/dev/null 2>&1 && echo "$s slot run --class heavy --" || true'
+    sh: 's=$(./scripts/forge.sh --machine --which 2>/dev/null) && $s machine slot status --class heavy >/dev/null 2>&1 && echo "$s machine slot run --class heavy --" || true'
 
   # ── Code generation: local, pinned, reproducible ──────────────────────
   # Generated code is committed, and CI fails on any diff a regenerate makes.
