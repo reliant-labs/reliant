@@ -286,6 +286,7 @@
                 "pages": [
                   "deep-dives/how-workflows-run",
                   "deep-dives/sub-agents-and-threads",
+                  "deep-dives/how-automations-fire",
                   "deep-dives/agents-in-production"
                 ]
               },
