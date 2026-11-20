@@ -26,13 +26,21 @@ import "strings"
 //   - a line that starts with `<!--` (up to 3 spaces in) opens an HTML block,
 //     which interrupts a paragraph and ends at the line holding `-->`: its
 //     backticks are text, not code;
-//   - in a paragraph (lines up to a blank line, a fence or an HTML block), a
-//     run of N backticks opens a code span only when a later run of exactly N
-//     in the same paragraph closes it, newlines included; the span hides what
-//     it holds. A run with no closer is a literal backtick.
+//   - a paragraph (lines up to a blank line, a fence or an HTML block) is read
+//     left to right, once, as CommonMark's inline parser reads it. A backtick
+//     run of N the walk reaches opens a code span when a later run of exactly N
+//     in the paragraph closes it (newlines included); the span hides all it
+//     holds, other backtick runs included, and the walk resumes after its
+//     closer. A run with no closer is a literal backtick. A `<!--` the walk
+//     reaches opens an HTML comment through the first `-->` (`<!-->` and
+//     `<!--->` are whole comments), across lines: its backticks are text.
 //
-// Not modelled (each errs toward fewer markers): backslash-escaped backticks,
-// list and quote containers, and HTML comments that are not markers.
+// A marker is a whole HTML comment that matches the grammar; a comment that
+// does not (free text) hides any marker-like text inside it, as it does in
+// GitHub's rendering.
+//
+// Not modelled (each errs toward fewer markers): backslash-escaped backticks
+// and list and quote containers.
 //
 // The body is untrusted: every pass is linear in it, and each candidate marker
 // reads at most maxMarkerBytes.
@@ -69,13 +77,19 @@ func (s *markerScan) full() bool { return len(s.out) >= maxMarkers }
 
 func (s *markerScan) scan(body string) {
 	fence := ""            // the open code fence's run (```, ~~~~); "" outside one
-	html := false          // inside an HTML block that has not reached its `-->`
+	html := -1             // the open HTML block's start in body; -1 when none
 	para, paraEnd := -1, 0 // the open paragraph's byte range in body; para -1 when none
 	flush := func() {
 		if para >= 0 {
 			s.inline(body[para:paraEnd], true)
 			para = -1
 		}
+	}
+	// endHTML reads the HTML block that started at html once its line holding
+	// `-->` (ending at end) is reached, or the body ends.
+	endHTML := func(end int) {
+		s.inline(body[html:end], false)
+		html = -1
 	}
 	pos := 0
 	for raw := range strings.SplitSeq(body, "\n") {
@@ -91,9 +105,10 @@ func (s *markerScan) scan(body string) {
 			if closesFence(line, fence) {
 				fence = ""
 			}
-		case html:
-			s.inline(line, false)
-			html = !strings.Contains(line, "-->")
+		case html >= 0:
+			if strings.Contains(line, "-->") {
+				endHTML(start + len(raw))
+			}
 		case codeFence(line) != "":
 			flush()
 			fence = codeFence(line)
@@ -102,8 +117,10 @@ func (s *markerScan) scan(body string) {
 		case para < 0 && indentedCode(line):
 		case htmlCommentStart(line):
 			flush()
-			s.inline(line, false)
-			html = !strings.Contains(line, "-->")
+			html = start
+			if strings.Contains(line, "-->") {
+				endHTML(start + len(raw))
+			}
 		default:
 			if para < 0 {
 				para = start
@@ -112,6 +129,9 @@ func (s *markerScan) scan(body string) {
 		}
 	}
 	flush()
+	if html >= 0 {
+		endHTML(len(body))
+	}
 }
 
 // codeFence is the run of ` or ~ (three or more) a fence line starts with,
@@ -165,12 +185,13 @@ func htmlCommentStart(line string) bool {
 	return strings.HasPrefix(line[i:], "<!--")
 }
 
-// backtickRun is one run of backticks in a paragraph, and the index of the run
-// that would close a code span it opens (-1: none, the run is literal).
-type backtickRun struct{ pos, n, closer int }
+// backtickRun is one run of backticks in a paragraph, and next, the index of
+// the nearest later run of the same length (-1: none). next is where a code
+// span the run OPENS would close; the walk consults it only for a run it
+// reaches outside any span or comment, so a run inside a span is text.
+type backtickRun struct{ pos, n, next int }
 
-// backtickRuns is text's runs of backticks, each paired with the nearest later
-// run of the same length.
+// backtickRuns is text's runs of backticks, with their next.
 func backtickRuns(text string) []backtickRun {
 	var runs []backtickRun
 	for i := 0; i < len(text); {
@@ -182,21 +203,23 @@ func backtickRuns(text string) []backtickRun {
 		for j < len(text) && text[j] == '`' {
 			j++
 		}
-		runs = append(runs, backtickRun{pos: i, n: j - i, closer: -1})
+		runs = append(runs, backtickRun{pos: i, n: j - i, next: -1})
 		i = j
 	}
-	next := map[int]int{} // run length -> index of the nearest later run of it
+	later := map[int]int{} // run length -> index of the nearest later run of it
 	for k := len(runs) - 1; k >= 0; k-- {
-		if c, ok := next[runs[k].n]; ok {
-			runs[k].closer = c
+		if c, ok := later[runs[k].n]; ok {
+			runs[k].next = c
 		}
-		next[runs[k].n] = k
+		later[runs[k].n] = k
 	}
 	return runs
 }
 
-// inline appends the markers of text, a paragraph (spans: code spans hide
-// what they hold) or a line of an HTML block (spans false: backticks are text).
+// inline appends the markers of text, a paragraph (spans: backtick runs are
+// code-span delimiters) or an HTML block (spans false: backticks are text).
+// It is one left-to-right walk: a code span or an HTML comment it opens is
+// skipped whole, and the walk resumes after it.
 func (s *markerScan) inline(text string, spans bool) {
 	if !strings.Contains(text, "<!--") {
 		s.steps += len(text)
@@ -207,32 +230,58 @@ func (s *markerScan) inline(text string, spans bool) {
 		runs = backtickRuns(text)
 		s.steps += len(text)
 	}
-	r := 0 // the next run at or after i
+	unclosed := false // no `-->` follows: every later `<!--` is literal text
+	r := 0            // the first run at or after i
 	for i := 0; i < len(text) && !s.full(); {
 		s.steps++
-		for r < len(runs) && runs[r].pos < i { // runs inside a marker just read
+		for r < len(runs) && runs[r].pos < i { // runs inside a span or comment just skipped
 			r++
 		}
 		if r < len(runs) && runs[r].pos == i {
-			if c := runs[r].closer; c >= 0 { // a code span: skip to its closer's end
+			if c := runs[r].next; c >= 0 { // opens a code span: resume after its closer
 				i, r = runs[c].pos+runs[c].n, c+1
-			} else {
+			} else { // no closer: a literal backtick
 				i, r = i+runs[r].n, r+1
 			}
 			continue
 		}
-		if strings.HasPrefix(text[i:], "<!--") {
-			s.steps += min(len(text)-i, maxMarkerBytes)
-			if m, end := parseMarker(text[i:]); m != nil {
-				s.out = append(s.out, m)
-				i += end
-				continue
-			}
+		if !strings.HasPrefix(text[i:], "<!--") {
+			i++
+			continue
+		}
+		end := s.commentEnd(text, i, &unclosed)
+		if end < 0 { // never closed: literal text
 			i += len("<!--")
 			continue
 		}
-		i++
+		if m, n := parseMarker(text[i:]); m != nil && i+n == end {
+			s.out = append(s.out, m)
+		}
+		i = end
 	}
+}
+
+// commentEnd is the end of the HTML comment that starts at text[i:] ("<!--"),
+// or -1 when no `-->` closes it (and then none closes a later one: *unclosed
+// is set so the search is not repeated).
+func (s *markerScan) commentEnd(text string, i int, unclosed *bool) int {
+	switch {
+	case strings.HasPrefix(text[i:], "<!-->"):
+		return i + len("<!-->")
+	case strings.HasPrefix(text[i:], "<!--->"):
+		return i + len("<!--->")
+	case *unclosed:
+		return -1
+	}
+	from := i + len("<!--")
+	j := strings.Index(text[from:], "-->")
+	if j < 0 {
+		s.steps += len(text) - from
+		*unclosed = true
+		return -1
+	}
+	s.steps += j + len("-->")
+	return from + j + len("-->")
 }
 
 // parseMarker reads the marker s starts with (s starts with "<!--"): the
