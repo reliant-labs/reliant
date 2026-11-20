@@ -91,6 +91,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   <Card title="Call any API from a workflow without exposing the key" icon="workflow" href="/guides/workflows/call-api-without-exposing-key">
     Call an API that needs a key from a Reliant workflow while no step, model or log ever holds the value: store it, declare it, allow the workflow, and run it.
   </Card>
+  <Card title="Run a Reliant workflow from GitHub Actions" icon="workflow" href="/guides/workflows/run-workflow-from-github-actions">
+    Start a Reliant workflow from a GitHub Actions job, stream its progress into the job log, and fail the job when the run fails, using an API token secret.
+  </Card>
   <Card title="Run one workflow when another finishes or fails" icon="workflow" href="/guides/workflows/chain-workflows-on-finish">
     Chain Reliant workflows with a workflow_event trigger: start a follow-up run whenever another workflow's run fails, finishes or waits for a person.
   </Card>
@@ -303,6 +306,9 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   </Card>
   <Card title="Recover from a bad deploy by redeploying an earlier release" icon="cloud" href="/guides/hosting/recover-from-bad-deploy">
     Put production back on the last good release in one deploy, check that rollback floors allow it, and set a floor so nobody deploys behind a release again.
+  </Card>
+  <Card title="Deploy from GitHub Actions with an API token" icon="cloud" href="/guides/hosting/deploy-from-github-actions">
+    Ship every push to main from GitHub Actions: store a scoped deploy token, cut the release and print its plan in one job, then approve that exact plan in the next.
   </Card>
   <Card title="Restore a managed Postgres database to a point in time" icon="cloud" href="/guides/hosting/restore-postgres-point-in-time">
     Undo a bad delete on Reliant hosting: declare a new managed Postgres restored from backups to the moment before it, check the rows, and point your app at it.
