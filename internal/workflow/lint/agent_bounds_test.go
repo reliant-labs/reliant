@@ -2,6 +2,7 @@
 package lint
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -120,5 +121,38 @@ func TestLoopBound(t *testing.T) {
 		unconditional, optIn := loopBound(tc.while)
 		assert.Equal(t, tc.unconditional, unconditional, tc.while)
 		assert.Equal(t, tc.optIn, optIn, tc.while)
+	}
+}
+
+// A custom child whose opt-in bound defaults to a non-zero value is bounded
+// when its caller leaves the input unset: only a 0 (no limit) default is
+// reported (review B1).
+func TestSlotBoundedChildWithPositiveDefaultIsBounded(t *testing.T) {
+	child := func(def int) string {
+		return fmt.Sprintf(`
+name: worker
+inputs:
+  budget: {type: integer, default: %d}
+entry: [loop]
+nodes:
+- id: loop
+  type: loop
+  while: "inputs.budget == 0 || iter.iteration < inputs.budget"
+  inline:
+    entry: [step]
+    nodes:
+    - {id: step, type: save_message, args: {role: user, content: hi}}
+`, def)
+	}
+	for def, wantFinding := range map[int]bool{0: true, 25: false} {
+		wf := agentNodeWorkflow(t, true, "custom://worker", "")
+		load := func(string) (*reliantv1.Workflow, error) { return wfyaml.ParseWorkflow([]byte(child(def))) }
+		got := findingsOf(Check(Input{Workflow: wf, LoadRef: load}), RuleSlotUnboundedWait)
+		if wantFinding {
+			require.Len(t, got, 1, "default %d: %v", def, got)
+			assert.Contains(t, got[0].Message, "budget")
+			continue
+		}
+		assert.Empty(t, got, "default %d bounds the loop when the caller leaves it unset", def)
 	}
 }

@@ -158,7 +158,7 @@ func (c *checker) checkChildBounded(path string, node *reliantv1.Node) {
 					switch {
 					case unconditional:
 					case len(optIn) > 0:
-						if !setsAnyNonZero(caller, optIn) {
+						if !setsAnyNonZero(caller, optIn) && !defaultsAnyNonZero(child, optIn) {
 							c.addAt(SeverityWarning, RuleSlotUnboundedWait, path, fmt.Sprintf("the child's loop %s is bounded only by its %s input, which this node leaves at 0 (no limit), holding this workflow's max_running slot", where, strings.Join(optIn, "/")),
 								fmt.Sprintf("set args.%s to the budget this task needs", optIn[0]))
 						}
@@ -194,6 +194,19 @@ func loopBound(while string) (unconditional bool, optIn []string) {
 		return ""
 	})
 	return strings.Contains(rest, "iteration"), optIn
+}
+
+// defaultsAnyNonZero reports whether wf declares one of names with a non-zero
+// default: a caller that leaves it unset then runs the loop bounded by that
+// default, as builtin://agent's max_turns (default 0) is not.
+func defaultsAnyNonZero(wf *reliantv1.Workflow, names []string) bool {
+	for _, name := range names {
+		in := wf.GetInputs()[name]
+		if in.GetIntegerInput().GetDefault() != 0 || in.GetNumberInput().GetDefault() != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // setsAnyNonZero reports whether a workflow or loop node gives its child one of
