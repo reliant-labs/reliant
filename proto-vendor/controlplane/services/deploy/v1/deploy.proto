@@ -125,6 +125,15 @@ service DeployService {
   rpc ListEnvironments(ListDeployEnvironmentsRequest) returns (ListDeployEnvironmentsResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
+  // ListApps lists the org's apps — its hosted projects, one per forge.yaml
+  // `name` deployed in the org — with where each was cut and deployed from
+  // (docs/design/unified-shell-and-projects.md §8.1, §8.3). Read authority is
+  // ListEnvironments': deploy:read in the org. The reliant project id a source
+  // was reported with is never returned.
+  rpc ListApps(ListDeployAppsRequest) returns (ListDeployAppsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {auth_required: true};
+  }
   rpc UpdateEnvironment(UpdateDeployEnvironmentRequest) returns (UpdateDeployEnvironmentResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -170,6 +179,20 @@ service DeployService {
   // IRREVERSIBLE; nothing else ever deletes retained data.
   rpc DeleteRetainedDatabase(DeleteRetainedDatabaseRequest) returns (DeleteRetainedDatabaseResponse) {
     option (forge.v1.method) = {auth_required: true};
+  }
+  // GetManagedDatabase reports one managed database of an environment: its
+  // lifecycle phase, size, engine version, and its backups (the newest, the
+  // next scheduled run, the retention window and the recent history). MEMBER
+  // (deploy:read for a machine credential), like the other environment
+  // reads. The environment is addressed by (project, environment) inside the
+  // caller's org, so another org's database is NotFound, never readable.
+  // forge:custom
+  rpc GetManagedDatabase(GetManagedDatabaseRequest) returns (GetManagedDatabaseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "a status read: it changes nothing"}
+    };
   }
 
   // EnsureEnvironment makes an environment with this NAME exist in the
@@ -1032,6 +1055,18 @@ message GetDeployCapabilitiesResponse {
   // raise_floor_reason and DeployEnvironment.rollback_floors are live. forge
   // sends none of them to a server that does not say so.
   bool rollback_floors = 6;
+
+  // The vulnerability semantics this server implements (VulnerabilityService),
+  // named only once the behaviour behind each is live, never merely because
+  // the rpc exists:
+  //   "vuln-findings": RecordReleaseSBOM stores and scans an uploaded SBOM,
+  //   and the VulnerabilityService reads answer from those scans. forge's
+  //   plan says up front whether this control plane keeps findings.
+  //   "enforces-vuln-gate": Promote evaluates the release's recorded
+  //   vuln_gate policy against these findings inside the promotion
+  //   transaction (refusals vuln_gate_blocked, vuln_gate_unscanned), so forge
+  //   does not evaluate it itself for this environment.
+  repeated string vulnerability_features = 7;
 }
 
 message ResolveHostedProjectRequest {
@@ -1130,6 +1165,47 @@ message ListDeployEnvironmentsRequest {
 
 message ListDeployEnvironmentsResponse {
   repeated DeployEnvironment environments = 1;
+  // Where each app among `environments` was cut and deployed from: one entry
+  // per project that has recorded any source, with the two-repositories
+  // warning when it applies. The app read the Apps page makes until a
+  // dedicated app read exists.
+  repeated controlplane.v1.DeployAppCodeSources app_code_sources = 2;
+}
+
+message ListDeployAppsRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
+
+message ListDeployAppsResponse {
+  // Newest activity first (last_deployed_at, else created_at), then by name.
+  // An app an org move retired (docs/design/org-app-move.md §8.3) is not the
+  // org's any more and is not listed.
+  repeated DeployApp apps = 1;
+}
+
+// DeployApp is one app (a hosted project) of an org.
+message DeployApp {
+  // forge.yaml `name`: the app's immutable identity in its org.
+  string name = 1;
+  google.protobuf.Timestamp created_at = 2;
+  // The newest promotion to any of its live environments. Unset: never
+  // deployed, or every environment it was deployed to has been deleted.
+  google.protobuf.Timestamp last_deployed_at = 3;
+  // Its live environments' names, persistent first (prod, staging, then by
+  // name), then previews and local ones by name.
+  repeated string environments = 4;
+  // True when one of its live environments serves a static site (a frontend
+  // on hosted static hosting): the Projects page's Sites filter. Read from
+  // the stored topology — a live deployment of the static tier, the row the
+  // hosted converge writes for each site a promoted release declares and the
+  // one the static free tier counts — never from a live status call.
+  bool has_static_site = 5;
+  // Where it was cut and deployed from; unset when no source was recorded.
+  // Never carries a reliant_project_id.
+  controlplane.v1.DeployAppCodeSources code_sources = 6;
 }
 
 message UpdateDeployEnvironmentRequest {
@@ -1210,6 +1286,120 @@ message DeleteRetainedDatabaseRequest {
 }
 
 message DeleteRetainedDatabaseResponse {}
+
+message GetManagedDatabaseRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+  // The environment's project. "" is a project (the project-less
+  // environments), not a wildcard.
+  string project = 2 [(buf.validate.field).string.max_len = 128];
+  // The environment's name within the project.
+  string environment = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which managed database of the environment, by its declared name. Empty:
+  // the environment's only managed database; an environment with several
+  // must name one.
+  string database = 4 [(buf.validate.field).string.max_len = 128];
+}
+
+message GetManagedDatabaseResponse {
+  ManagedDatabase database = 1;
+}
+
+// ManagedDatabase is one hosted Postgres as its owner sees it: is it up, how
+// big is it, and what would a restore give back.
+//
+// UNSET IS NOT ZERO. A timestamp, size or version the platform has not
+// observed yet is left unset, never reported as a zero that reads like a
+// measurement.
+message ManagedDatabase {
+  // The database's declared name (forge.ManagedDatabase).
+  string name = 1;
+  string environment_id = 2;
+  // The deployment row that declares it.
+  string deployment_id = 3;
+
+  ManagedDatabasePhase phase = 4;
+  // Why the database is in its phase, when it is not READY. Empty when READY.
+  string message = 5;
+  // When the database first became ready (healthy, credential published).
+  // Unset until it has.
+  google.protobuf.Timestamp ready_at = 6;
+
+  // The size class: "single-instance" (one primary) or "high-availability"
+  // (a primary plus hot standbys). instances is the count it is derived from.
+  string tier = 7;
+  // The storage each instance's volume is provisioned with, in GiB. The
+  // cluster provisions instances × storage_gib_bound.
+  int32 storage_gib_bound = 8;
+  // The Postgres version the cluster reports running (e.g. "16"). Empty until
+  // observed.
+  string postgres_version = 9;
+
+  // The newest base backup, whatever its outcome. Unset when none has run.
+  ManagedDatabaseBackup last_backup = 10;
+  // When the schedule next takes a base backup. Unset when backups are not
+  // active for this database.
+  google.protobuf.Timestamp next_backup_at = 11;
+  // How long backups are kept, in days. 0 when backups are not active.
+  int32 backup_retention_days = 12;
+  // The recent base backups of this database's current incarnation, newest
+  // first. Empty when none has run yet.
+  repeated ManagedDatabaseBackup recent_backups = 13;
+
+  // Postgres instances: one primary plus (instances - 1) hot standbys.
+  int32 instances = 14;
+}
+
+// ManagedDatabasePhase is the database's lifecycle phase.
+enum ManagedDatabasePhase {
+  MANAGED_DATABASE_PHASE_UNSPECIFIED = 0;
+  // Declared, and the cluster is being created or is converging to a change.
+  MANAGED_DATABASE_PHASE_PROVISIONING = 1;
+  // Serving, with a published credential.
+  MANAGED_DATABASE_PHASE_READY = 2;
+  // Was ready and is not now; message says why.
+  MANAGED_DATABASE_PHASE_DEGRADED = 3;
+  // Cannot converge without a change; message says why.
+  MANAGED_DATABASE_PHASE_FAILED = 4;
+  // Being deleted.
+  MANAGED_DATABASE_PHASE_DELETING = 5;
+}
+
+// ManagedDatabaseBackup is one base backup.
+message ManagedDatabaseBackup {
+  // When it finished, or, while it runs, when it started.
+  google.protobuf.Timestamp at = 1;
+  ManagedDatabaseBackupStatus status = 2;
+  // The backup's size in bytes. 0 when not reported (a failed or running
+  // backup, or a backup tool that reports none).
+  int64 size_bytes = 3;
+  ManagedDatabaseBackupKind kind = 4;
+  // Why it failed, verbatim from the backup tool. Empty unless FAILED.
+  string error = 5;
+}
+
+enum ManagedDatabaseBackupStatus {
+  MANAGED_DATABASE_BACKUP_STATUS_UNSPECIFIED = 0;
+  MANAGED_DATABASE_BACKUP_STATUS_RUNNING = 1;
+  MANAGED_DATABASE_BACKUP_STATUS_COMPLETED = 2;
+  MANAGED_DATABASE_BACKUP_STATUS_FAILED = 3;
+}
+
+enum ManagedDatabaseBackupKind {
+  MANAGED_DATABASE_BACKUP_KIND_UNSPECIFIED = 0;
+  // Taken by the daily schedule.
+  MANAGED_DATABASE_BACKUP_KIND_SCHEDULED = 1;
+  // The first base backup of a new database (or its retry), taken as soon
+  // as the cluster is up rather than at the next scheduled run.
+  MANAGED_DATABASE_BACKUP_KIND_FIRST = 2;
+  // Taken on demand by an operator.
+  MANAGED_DATABASE_BACKUP_KIND_MANUAL = 3;
+}
 
 message EnsureDeployEnvironmentRequest {
   // The environment is addressed by (spec.project, spec.name) within the
@@ -1774,6 +1964,14 @@ message CutReleaseRequest {
   // artifact" rule above stands. In a snapshot_release document the same
   // flag is the document's own record_only field, which must agree.
   bool record_only = 13;
+
+  // Where this release was cut from (DeployCodeSource): recorded on the app,
+  // never part of the release's identity, so a retry from another checkout
+  // is still a retry. Allowed beside snapshot_release, which forge sends
+  // without it, as with migrations. Unset from a forge that predates it.
+  // Recorded only for a caller with deploy:write (a person: that grant, or
+  // admin where grants are not configured); otherwise silently not recorded.
+  controlplane.v1.DeployCodeSource code_source = 14;
 }
 
 // RecordReleaseMigrationsRequest records the migration manifest of a release
@@ -1807,6 +2005,11 @@ message CutReleaseResponse {
   // pipeline that cut a release it believed to be new, and learns it was not,
   // may legitimately want to say so in its summary.
   bool created = 2;
+
+  // Every source the release's app has been cut or deployed from, including
+  // this cut's code_source, and the two-repositories warning when there is
+  // one. Unset when the request carried no source or named no project.
+  controlplane.v1.DeployAppCodeSources code_sources = 3;
 }
 
 message CompareDeployReleasesRequest {
@@ -2127,8 +2330,9 @@ message ListDeployUsageRequest {
   optional string org_id = 7;
   // The caller renders costs_withheld, so the dollars may follow billing:read:
   // a caller without it gets every cost as 0 with costs_withheld set. Unset
-  // (every client that predates this field), every member gets the dollars as
-  // before and costs_withheld is never set.
+  // (a client that predates this field), a caller with billing:read gets the
+  // dollars and one without it is refused with PermissionDenied (update the
+  // client), never answered with zeros it would read as free usage.
   // forge:lint-disable-next-line forgeconv-list-filter-optional: an opt-in behaviour flag, not a list filter; unset = false is the backward-compatible default for older clients (owner decision 79d4908b), and `optional` would be a buf-breaking cardinality change.
   bool withhold_costs_without_billing_read = 8;
 }
@@ -2310,10 +2514,26 @@ message OpenDeployAttemptRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 10;
+  // The checkout this deploy runs from (DeployCodeSource), recorded on the
+  // app. On the open rather than on a report: it is fixed for the whole
+  // invocation and known when the attempt starts. Unset from a forge that
+  // predates it.
+  //
+  // OPTIONAL EVIDENCE UNDER A STRONGER GATE THAN THE OPEN. The open itself is
+  // unchanged (member, or deploy:read for a token); recording this needs
+  // deploy:write, and from a caller without it the field is silently not
+  // recorded. It is bound to the stored attempt: a retried open (the same
+  // id) records nothing new, and the app is the stored attempt's project.
+  // It never creates an app the org does not already have.
+  controlplane.v1.DeployCodeSource code_source = 11;
 }
 
 message OpenDeployAttemptResponse {
   DeployAttempt attempt = 1;
+  // Every source the app has been cut or deployed from, including this
+  // attempt's code_source, and the two-repositories warning when there is
+  // one. Unset when the request carried no source or named no project.
+  controlplane.v1.DeployAppCodeSources code_sources = 2;
 }
 
 message ReportDeployAttemptRequest {

@@ -57,6 +57,8 @@ const (
 	// DeployServiceListEnvironmentsProcedure is the fully-qualified name of the DeployService's
 	// ListEnvironments RPC.
 	DeployServiceListEnvironmentsProcedure = "/controlplane.v1.DeployService/ListEnvironments"
+	// DeployServiceListAppsProcedure is the fully-qualified name of the DeployService's ListApps RPC.
+	DeployServiceListAppsProcedure = "/controlplane.v1.DeployService/ListApps"
 	// DeployServiceUpdateEnvironmentProcedure is the fully-qualified name of the DeployService's
 	// UpdateEnvironment RPC.
 	DeployServiceUpdateEnvironmentProcedure = "/controlplane.v1.DeployService/UpdateEnvironment"
@@ -69,6 +71,9 @@ const (
 	// DeployServiceDeleteRetainedDatabaseProcedure is the fully-qualified name of the DeployService's
 	// DeleteRetainedDatabase RPC.
 	DeployServiceDeleteRetainedDatabaseProcedure = "/controlplane.v1.DeployService/DeleteRetainedDatabase"
+	// DeployServiceGetManagedDatabaseProcedure is the fully-qualified name of the DeployService's
+	// GetManagedDatabase RPC.
+	DeployServiceGetManagedDatabaseProcedure = "/controlplane.v1.DeployService/GetManagedDatabase"
 	// DeployServiceEnsureEnvironmentProcedure is the fully-qualified name of the DeployService's
 	// EnsureEnvironment RPC.
 	DeployServiceEnsureEnvironmentProcedure = "/controlplane.v1.DeployService/EnsureEnvironment"
@@ -212,6 +217,12 @@ type DeployServiceClient interface {
 	CreateEnvironment(context.Context, *connect.Request[v1.CreateDeployEnvironmentRequest]) (*connect.Response[v1.CreateDeployEnvironmentResponse], error)
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
 	ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error)
+	// ListApps lists the org's apps — its hosted projects, one per forge.yaml
+	// `name` deployed in the org — with where each was cut and deployed from
+	// (docs/design/unified-shell-and-projects.md §8.1, §8.3). Read authority is
+	// ListEnvironments': deploy:read in the org. The reliant project id a source
+	// was reported with is never returned.
+	ListApps(context.Context, *connect.Request[v1.ListDeployAppsRequest]) (*connect.Response[v1.ListDeployAppsResponse], error)
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error)
 	// DeleteEnvironment tears down the environment: its deployments, workloads,
 	// URLs, namespaces and (unless keep_data) its managed databases' data.
@@ -227,6 +238,14 @@ type DeployServiceClient interface {
 	// and (when it was the last in its namespace) the namespace. ADMIN.
 	// IRREVERSIBLE; nothing else ever deletes retained data.
 	DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error)
+	// GetManagedDatabase reports one managed database of an environment: its
+	// lifecycle phase, size, engine version, and its backups (the newest, the
+	// next scheduled run, the retention window and the recent history). MEMBER
+	// (deploy:read for a machine credential), like the other environment
+	// reads. The environment is addressed by (project, environment) inside the
+	// caller's org, so another org's database is NotFound, never readable.
+	// forge:custom
+	GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -688,6 +707,13 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ListEnvironments")),
 			connect.WithClientOptions(opts...),
 		),
+		listApps: connect.NewClient[v1.ListDeployAppsRequest, v1.ListDeployAppsResponse](
+			httpClient,
+			baseURL+DeployServiceListAppsProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListApps")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		updateEnvironment: connect.NewClient[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse](
 			httpClient,
 			baseURL+DeployServiceUpdateEnvironmentProcedure,
@@ -710,6 +736,13 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DeployServiceDeleteRetainedDatabaseProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("DeleteRetainedDatabase")),
+			connect.WithClientOptions(opts...),
+		),
+		getManagedDatabase: connect.NewClient[v1.GetManagedDatabaseRequest, v1.GetManagedDatabaseResponse](
+			httpClient,
+			baseURL+DeployServiceGetManagedDatabaseProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetManagedDatabase")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		ensureEnvironment: connect.NewClient[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse](
@@ -988,10 +1021,12 @@ type deployServiceClient struct {
 	createEnvironment       *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
 	getEnvironment          *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
 	listEnvironments        *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
+	listApps                *connect.Client[v1.ListDeployAppsRequest, v1.ListDeployAppsResponse]
 	updateEnvironment       *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
 	deleteEnvironment       *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
 	listRetainedDatabases   *connect.Client[v1.ListRetainedDatabasesRequest, v1.ListRetainedDatabasesResponse]
 	deleteRetainedDatabase  *connect.Client[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse]
+	getManagedDatabase      *connect.Client[v1.GetManagedDatabaseRequest, v1.GetManagedDatabaseResponse]
 	ensureEnvironment       *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
 	createDeployment        *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
 	getDeployment           *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
@@ -1073,6 +1108,11 @@ func (c *deployServiceClient) ListEnvironments(ctx context.Context, req *connect
 	return c.listEnvironments.CallUnary(ctx, req)
 }
 
+// ListApps calls controlplane.v1.DeployService.ListApps.
+func (c *deployServiceClient) ListApps(ctx context.Context, req *connect.Request[v1.ListDeployAppsRequest]) (*connect.Response[v1.ListDeployAppsResponse], error) {
+	return c.listApps.CallUnary(ctx, req)
+}
+
 // UpdateEnvironment calls controlplane.v1.DeployService.UpdateEnvironment.
 func (c *deployServiceClient) UpdateEnvironment(ctx context.Context, req *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error) {
 	return c.updateEnvironment.CallUnary(ctx, req)
@@ -1091,6 +1131,11 @@ func (c *deployServiceClient) ListRetainedDatabases(ctx context.Context, req *co
 // DeleteRetainedDatabase calls controlplane.v1.DeployService.DeleteRetainedDatabase.
 func (c *deployServiceClient) DeleteRetainedDatabase(ctx context.Context, req *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error) {
 	return c.deleteRetainedDatabase.CallUnary(ctx, req)
+}
+
+// GetManagedDatabase calls controlplane.v1.DeployService.GetManagedDatabase.
+func (c *deployServiceClient) GetManagedDatabase(ctx context.Context, req *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error) {
+	return c.getManagedDatabase.CallUnary(ctx, req)
 }
 
 // EnsureEnvironment calls controlplane.v1.DeployService.EnsureEnvironment.
@@ -1330,6 +1375,12 @@ type DeployServiceHandler interface {
 	CreateEnvironment(context.Context, *connect.Request[v1.CreateDeployEnvironmentRequest]) (*connect.Response[v1.CreateDeployEnvironmentResponse], error)
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
 	ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error)
+	// ListApps lists the org's apps — its hosted projects, one per forge.yaml
+	// `name` deployed in the org — with where each was cut and deployed from
+	// (docs/design/unified-shell-and-projects.md §8.1, §8.3). Read authority is
+	// ListEnvironments': deploy:read in the org. The reliant project id a source
+	// was reported with is never returned.
+	ListApps(context.Context, *connect.Request[v1.ListDeployAppsRequest]) (*connect.Response[v1.ListDeployAppsResponse], error)
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error)
 	// DeleteEnvironment tears down the environment: its deployments, workloads,
 	// URLs, namespaces and (unless keep_data) its managed databases' data.
@@ -1345,6 +1396,14 @@ type DeployServiceHandler interface {
 	// and (when it was the last in its namespace) the namespace. ADMIN.
 	// IRREVERSIBLE; nothing else ever deletes retained data.
 	DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error)
+	// GetManagedDatabase reports one managed database of an environment: its
+	// lifecycle phase, size, engine version, and its backups (the newest, the
+	// next scheduled run, the retention window and the recent history). MEMBER
+	// (deploy:read for a machine credential), like the other environment
+	// reads. The environment is addressed by (project, environment) inside the
+	// caller's org, so another org's database is NotFound, never readable.
+	// forge:custom
+	GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -1802,6 +1861,13 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("ListEnvironments")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceListAppsHandler := connect.NewUnaryHandler(
+		DeployServiceListAppsProcedure,
+		svc.ListApps,
+		connect.WithSchema(deployServiceMethods.ByName("ListApps")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceUpdateEnvironmentHandler := connect.NewUnaryHandler(
 		DeployServiceUpdateEnvironmentProcedure,
 		svc.UpdateEnvironment,
@@ -1824,6 +1890,13 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceDeleteRetainedDatabaseProcedure,
 		svc.DeleteRetainedDatabase,
 		connect.WithSchema(deployServiceMethods.ByName("DeleteRetainedDatabase")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetManagedDatabaseHandler := connect.NewUnaryHandler(
+		DeployServiceGetManagedDatabaseProcedure,
+		svc.GetManagedDatabase,
+		connect.WithSchema(deployServiceMethods.ByName("GetManagedDatabase")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceEnsureEnvironmentHandler := connect.NewUnaryHandler(
@@ -2106,6 +2179,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceListEnvironmentsProcedure:
 			deployServiceListEnvironmentsHandler.ServeHTTP(w, r)
+		case DeployServiceListAppsProcedure:
+			deployServiceListAppsHandler.ServeHTTP(w, r)
 		case DeployServiceUpdateEnvironmentProcedure:
 			deployServiceUpdateEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceDeleteEnvironmentProcedure:
@@ -2114,6 +2189,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceListRetainedDatabasesHandler.ServeHTTP(w, r)
 		case DeployServiceDeleteRetainedDatabaseProcedure:
 			deployServiceDeleteRetainedDatabaseHandler.ServeHTTP(w, r)
+		case DeployServiceGetManagedDatabaseProcedure:
+			deployServiceGetManagedDatabaseHandler.ServeHTTP(w, r)
 		case DeployServiceEnsureEnvironmentProcedure:
 			deployServiceEnsureEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceCreateDeploymentProcedure:
@@ -2239,6 +2316,10 @@ func (UnimplementedDeployServiceHandler) ListEnvironments(context.Context, *conn
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListEnvironments is not implemented"))
 }
 
+func (UnimplementedDeployServiceHandler) ListApps(context.Context, *connect.Request[v1.ListDeployAppsRequest]) (*connect.Response[v1.ListDeployAppsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListApps is not implemented"))
+}
+
 func (UnimplementedDeployServiceHandler) UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.UpdateEnvironment is not implemented"))
 }
@@ -2253,6 +2334,10 @@ func (UnimplementedDeployServiceHandler) ListRetainedDatabases(context.Context, 
 
 func (UnimplementedDeployServiceHandler) DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.DeleteRetainedDatabase is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetManagedDatabase(context.Context, *connect.Request[v1.GetManagedDatabaseRequest]) (*connect.Response[v1.GetManagedDatabaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetManagedDatabase is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) EnsureEnvironment(context.Context, *connect.Request[v1.EnsureDeployEnvironmentRequest]) (*connect.Response[v1.EnsureDeployEnvironmentResponse], error) {
