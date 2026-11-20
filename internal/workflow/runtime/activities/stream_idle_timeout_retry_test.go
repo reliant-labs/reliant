@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/responseswire"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
@@ -42,6 +43,34 @@ func TestStreamIdleTimeoutIsRetryable(t *testing.T) {
 				"classification must not lose the cause")
 			assert.Equal(t, ErrorCategoryNetwork, CategorizeError(err),
 				"an idle stream is a network fault and should be reported as one")
+		})
+	}
+}
+
+// TestStreamEndedEarlyIsRetryable is the same contract for a stream that
+// closed cleanly before its terminal event (a Responses stream with no
+// response.completed). The driver error is wrapped exactly as call_llm.go's
+// handleError reports it, around the error the Responses drivers send, so a
+// reworded driver message that hits a terminal pattern fails here.
+func TestStreamEndedEarlyIsRetryable(t *testing.T) {
+	driverErr := responseswire.ErrStreamEndedWithoutTerminalEvent
+
+	for name, err := range map[string]error{
+		"bare":    llm.ErrStreamEndedEarly,
+		"wrapped": fmt.Errorf("LLM streaming error: %w", driverErr),
+	} {
+		t.Run(name, func(t *testing.T) {
+			classified := ClassifyError(err)
+			require.Error(t, classified)
+
+			var appErr *temporal.ApplicationError
+			assert.NotErrorAs(t, classified, &appErr,
+				"a stream cut short must be retried, not turned into a non-retryable failure")
+			assert.False(t, IsTerminal(classified))
+			assert.ErrorIs(t, classified, llm.ErrStreamEndedEarly,
+				"classification must not lose the cause")
+			assert.Equal(t, ErrorCategoryNetwork, CategorizeError(err),
+				"a stream cut short is a network fault and should be reported as one")
 		})
 	}
 }

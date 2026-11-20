@@ -411,6 +411,24 @@ func StreamProgressTimeout() time.Duration {
 // Phrased to read as transient so the turn is retried, like its siblings.
 var ErrStreamFirstTokenTimeout = errors.New("llm stream first-token timeout: no output token before the first-token deadline")
 
+// ErrStreamEndedEarly matches a stream that closed cleanly — no transport
+// error — before the provider sent the event that terminates a response
+// (`response.completed` / `response.incomplete` / `response.failed` on the
+// Responses API).
+//
+// The guards above all fire on a stream that stays OPEN without progress. This
+// is the opposite fault: the stream ends, but too soon. A proxy or load
+// balancer that closes an HTTP/2 stream mid-response does exactly that, and
+// the SSE reader sees an orderly EOF. Treating that as a finished turn ended
+// the run as a success with half-streamed text, and dropped any tool call
+// whose arguments were still arriving. Codex CLI raises "stream closed before
+// response.completed" for the same condition and retries it with backoff
+// (codex-rs codex-api/src/sse/responses.rs); so do opencode and hermes.
+//
+// Phrased to read as transient ("network") so activities.autoClassify retries
+// the turn, like its siblings. Drivers wrap it with what was missing.
+var ErrStreamEndedEarly = errors.New("llm stream ended early: the provider closed the stream before its terminal event (a network or proxy cut the response short)")
+
 // DefaultStreamFirstTokenTimeout bounds how long a request may run before its
 // first output token.
 //
