@@ -98,8 +98,9 @@ func (r *contextOverflowRecovery) stream(ctx context.Context, driver llm.Driver,
 		defer close(out)
 		sent := history
 		for resend := 0; ; resend++ {
-			refusal, billed, delivered := relayUntilOverflow(ctx, driver.StreamResponse(ctx, r.systemPrompts, sent, r.tools), out)
-			if refusal == nil || !delivered {
+			relayed := relayUntilOverflow(ctx, driver.StreamResponse(ctx, r.systemPrompts, sent, r.tools), out)
+			refusal := relayed.refusal
+			if refusal == nil || !relayed.delivered {
 				return
 			}
 			next, targetTokens := r.shrink(resend, refusal, sent)
@@ -116,7 +117,7 @@ func (r *contextOverflowRecovery) stream(ctx context.Context, driver llm.Driver,
 				MaxAttempts: len(contextOverflowShrink) + 1,
 				StatusCode:  drivererrors.StatusFromText(refusal.Error()),
 				Reason:      contextOverflowRetryReason,
-				Usage:       billed,
+				Usage:       relayed.billed,
 			}}) {
 				return
 			}
@@ -138,22 +139,33 @@ func (r *contextOverflowRecovery) stream(ctx context.Context, driver llm.Driver,
 // after a context-window refusal.
 const contextOverflowRetryReason = "context_overflow"
 
+// relayOutcome is how one driver stream's relay ended.
+type relayOutcome struct {
+	// refusal is the context-window refusal that ended the stream before any
+	// output, or nil.
+	refusal error
+	// billed is the usage the provider reported for the refused request, if
+	// the driver sent any (llm.EndStreamWithError sends it after the error).
+	billed *llm.TokenUsage
+	// delivered is false when the consumer stopped receiving.
+	delivered bool
+}
+
 // relayUntilOverflow forwards in's events to out until in closes. A
 // context-window refusal that arrives before any output is not forwarded: it
-// is returned with the usage the provider billed for the refused request, if
-// the driver reported any (llm.EndStreamWithError sends it after the error).
-// delivered is false when the consumer stopped receiving.
-func relayUntilOverflow(ctx context.Context, in <-chan llm.DriverEvent, out chan<- llm.DriverEvent) (refusal error, billed *llm.TokenUsage, delivered bool) {
+// is returned instead (relayOutcome).
+func relayUntilOverflow(ctx context.Context, in <-chan llm.DriverEvent, out chan<- llm.DriverEvent) relayOutcome {
 	produced := false
 	for ev := range in {
 		if ev.Type == llm.EventError && !produced && drivererrors.IsContextOverflow(ev.Error) {
 			// A driver closes its stream right after its error.
+			var billed *llm.TokenUsage
 			for rest := range in {
 				if rest.Type == llm.EventComplete && rest.Response != nil {
 					billed = llm.FailedAttemptUsage(rest.Response.Usage)
 				}
 			}
-			return markedOverflow(ev.Error), billed, true
+			return relayOutcome{refusal: markedOverflow(ev.Error), billed: billed, delivered: true}
 		}
 		if ev.Type != llm.EventRetryWait && ev.Type != llm.EventWarning {
 			produced = true
@@ -164,10 +176,10 @@ func relayUntilOverflow(ctx context.Context, in <-chan llm.DriverEvent, out chan
 				for range in { //nolint:revive // draining
 				}
 			}()
-			return nil, nil, false
+			return relayOutcome{}
 		}
 	}
-	return nil, nil, true
+	return relayOutcome{delivered: true}
 }
 
 // markedOverflow gives a refusal recognised by its text (one that did not pass
