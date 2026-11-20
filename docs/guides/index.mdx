@@ -1,0 +1,242 @@
+---
+title: "Guides: build, ship and run with Reliant"
+sidebarTitle: "All guides"
+description: "Step-by-step guides for Reliant agents, workflows, machines, Forge, hosting and observability, plus How it works deep dives on the design behind them."
+keywords: ["reliant guides", "ai agent workflow tutorial", "forge tutorial", "deploy go app", "observability guide"]
+---
+
+Each task guide does one job, in steps you can run and a final step that checks the result. The **How it works** deep dives explain the design underneath: what happens, why it was built that way, and what it does not do. The guides are grouped by pillar, in the order most projects meet them.
+
+## Agents & workflows
+
+Put agents to work on your repository: run the built-in workflows, write your own, and start them from schedules, webhooks and GitHub events. The [workflows overview](/workflows/overview) is the reference.
+
+<CardGroup cols={2}>
+  <Card title="Autopilot" icon="git-pull-request" href="/guides/autopilot">
+    Five built-in workflows that review pull requests, work issues, answer review feedback and triage alerts. None merge.
+  </Card>
+  <Card title="Get It Right" icon="circle-check" href="/guides/get-it-right">
+    An implement, check and review loop for changes in a complex existing codebase.
+  </Card>
+  <Card title="Best of Three" icon="git-fork" href="/guides/best-of-three">
+    Three agents implement the same task in separate workspaces, and a reviewer picks or combines the best.
+  </Card>
+  <Card title="Create a Workflow" icon="wand-sparkles" href="/guides/create-a-workflow">
+    Describe what you want to automate, and Reliant scopes, builds and tests the workflow with you.
+  </Card>
+</CardGroup>
+
+{/* guides: agents-and-workflows — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Review every pull request with an AI agent" icon="workflow" href="/guides/workflows/review-pull-requests-with-ai">
+    Get an AI code review on every GitHub pull request: turn on Autopilot PR review for your repositories, then read, skip or re-run the review the bot posts.
+  </Card>
+  <Card title="Turn labelled GitHub issues into pull requests with AI" icon="workflow" href="/guides/workflows/github-issues-to-pull-requests">
+    Label a GitHub issue agent:ready and an AI agent writes a failing test and the fix, runs your checks and opens a pull request for a person to review and merge.
+  </Card>
+  <Card title="Turn production alerts into GitHub issues with an on-call agent" icon="workflow" href="/guides/workflows/production-alerts-to-github-issues">
+    Get one investigated GitHub issue per new production alert or error: turn on Autopilot on-call, which deduplicates, reads the code and writes up a likely cause.
+  </Card>
+  <Card title="Go from a production error to a reviewed fix" icon="workflow" href="/guides/workflows/production-error-to-fix">
+    Take a production error to a merged, deployed fix: an on-call agent files an investigated issue, you approve it, and an agent opens a pull request you review.
+  </Card>
+  <Card title="Write your first multi-agent workflow in YAML" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
+    Build a multi-agent coding workflow in YAML: a planner, an implementer and a reviewer that sends work back, checked locally, then run on your machine.
+  </Card>
+  <Card title="Loop an AI agent until your tests pass" icon="workflow" href="/guides/workflows/run-tests-until-they-pass">
+    Have an AI agent fix code, run your test command and try again until the tests pass, with a cap on attempts so a run that cannot succeed stops on its own.
+  </Card>
+  <Card title="Require human approval before an AI agent acts" icon="workflow" href="/guides/workflows/require-human-approval">
+    Pause an agent workflow until a person approves. Gate the change on an approval node, handle approve, deny and timeout, and ask questions mid-run.
+  </Card>
+  <Card title="Run an AI agent on a schedule with cron" icon="workflow" href="/guides/workflows/run-an-agent-on-a-schedule">
+    Run an AI agent on a cron schedule: create a schedule trigger with reliant trigger create, or declare one in a workflow, then check each firing and its run.
+  </Card>
+</CardGroup>
+
+**How it works**
+
+<CardGroup cols={2}>
+  <Card title="How Reliant workflows run: nodes, edges, CEL, durable execution" icon="book-open" href="/deep-dives/how-workflows-run">
+    How a Reliant workflow runs: nodes as steps, CEL edges that choose the next one, loops and joins, approvals that wait idle, and runs that survive restarts.
+  </Card>
+  <Card title="How sub-agents and threads isolate context" icon="book-open" href="/deep-dives/sub-agents-and-threads">
+    How Reliant sub-agents keep their own threads: two levels of nesting, concurrency caps, a shared plan, queued messages, and worktrees for parallel edits.
+  </Card>
+  <Card title="How AI agents operate production safely on Reliant" icon="book-open" href="/deep-dives/agents-in-production">
+    How Reliant lets AI agents investigate alerts, read production data and open fixes: read-only access, rate limits, an audit trail and a person at every gate.
+  </Card>
+</CardGroup>
+{/* /guides: agents-and-workflows */}
+
+## Machines & daemons
+
+Choose where agents run: your own computer, a server or a Reliant cloud machine, connected by a daemon. The [machines overview](/machines/overview) is the reference.
+
+{/* guides: machines-and-daemons — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Connect your computer to Reliant to run AI agents on it" icon="server" href="/guides/machines/connect-computer-as-machine">
+    Run AI agents in a repo on your own computer: start the Reliant daemon, approve its pairing code in the app, and check that its stream is connected.
+  </Card>
+  <Card title="Run the Reliant daemon headless on a server or Raspberry Pi" icon="server" href="/guides/machines/run-agents-on-your-own-server">
+    Turn a Linux server or 64-bit Raspberry Pi into an always-on machine for AI coding agents: connect it with an access token and keep it up with systemd.
+  </Card>
+  <Card title="Choose which machine runs each workflow step" icon="server" href="/guides/machines/pin-workflow-to-machine">
+    Send a whole workflow, or one step of it, to a machine you choose with daemon:, by name, by kind or by label, and check where each step actually ran.
+  </Card>
+  <Card title="Start, stop and resize cloud machines from the CLI" icon="server" href="/guides/machines/manage-cloud-machines-cli">
+    Control your Reliant cloud dev environment from a terminal: list machines, stop one to save hours, resize it while suspended, start it, and rename it.
+  </Card>
+  <Card title="Share a localhost URL from a dev server on your machine" icon="server" href="/guides/machines/share-dev-server-preview-url">
+    Turn a dev server on a Reliant cloud machine into a link: get its URL with reliant preview-url, open it yourself, then make the port public or token-only.
+  </Card>
+  <Card title="Run AI agent commands without access to your credentials" icon="server" href="/guides/machines/sandbox-agent-commands-credentials-none">
+    Sandbox an AI agent's shell: set credentials: none so commands that read untrusted issues or PRs can't reach your git, GitHub, SSH or cloud logins.
+  </Card>
+  <Card title="Fix a Reliant machine that is offline or won't connect" icon="server" href="/guides/machines/troubleshoot-offline-machine">
+    Get an offline Reliant machine working again: read what the chat says, check the daemon's stream, fix its credentials, and let the paused run resume.
+  </Card>
+  <Card title="Run several daemons and accounts on one computer" icon="server" href="/guides/machines/run-several-daemons-one-computer">
+    Run one Reliant daemon per checkout or per account on the same computer, see which instance each directory maps to, and check, read or stop any of them by name.
+  </Card>
+  <Card title="Reclaim worktree disk space and restore reclaimed work" icon="server" href="/guides/machines/reclaim-restore-worktrees">
+    Free the disk idle git worktrees hold on a Reliant machine, decide on the ones with unsaved work, and restore a reclaimed worktree from its capture.
+  </Card>
+</CardGroup>
+
+**How it works**
+
+<CardGroup cols={2}>
+  <Card title="How a tool call reaches your machine" icon="book-open" href="/deep-dives/how-tool-calls-reach-your-machine">
+    How an agent's tool call travels from the cloud worker through NATS and the gateway to the daemon on your machine, and what happens when the link drops.
+  </Card>
+  <Card title="How the Reliant daemon keeps credentials on your machine" icon="book-open" href="/deep-dives/daemon-security-model">
+    How a machine proves who it is to Reliant, what an agent's commands can reach on it, what credentials: none hides, and what leaves the machine.
+  </Card>
+  <Card title="How chats, workspaces and machines fit together" icon="book-open" href="/deep-dives/chats-worktrees-machines">
+    Which machine a chat runs on, why a branched chat stays on the machine that holds its workspace, and what switching, sleeping and removing a machine do.
+  </Card>
+</CardGroup>
+{/* /guides: machines-and-daemons */}
+
+## Forge
+
+Build a Go and React app with Forge: start a project, add features from the schema and the API, and keep it tested and secure. The [Forge overview](/forge/overview) is the reference.
+
+{/* guides: forge — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Build a Go and React app with Connect RPC and Postgres" icon="hammer" href="/guides/forge/build-go-react-app-connect-rpc">
+    Create a Go Connect RPC service, a Postgres table and a React frontend with Forge, then run the whole stack on your machine with no account.
+  </Card>
+  <Card title="Build a production app from one prompt with AI agents" icon="hammer" href="/guides/forge/build-app-from-one-prompt">
+    Describe an app in one message, and the Build an App workflow scopes, scaffolds, tests and reviews a Forge project you own, then serves it on your machine.
+  </Card>
+  <Card title="Deploy a Vite or Next.js static site with a CDN" icon="hammer" href="/guides/forge/deploy-static-site-cdn">
+    Put a Vite or Next.js static site on Reliant's free static hosting behind a CDN: build one release, deploy it to prod, check the live URL, then clean up.
+  </Card>
+  <Card title="Deploy an existing app from its Dockerfile, in any language" icon="hammer" href="/guides/forge/bring-existing-app-any-language">
+    Adopt an Express, Django or Rails app where it stands: Forge reads its Dockerfile and compose file, writes the deploy config, and ships it to Reliant hosting.
+  </Card>
+  <Card title="Add a database table with a CRUD API and pages" icon="hammer" href="/guides/forge/add-table-crud-api-pages">
+    Generate a Postgres table, five CRUD RPCs, typed React hooks and list, detail and edit pages from one proto message marked // forge:entity.
+  </Card>
+  <Card title="Write zero-downtime Postgres migrations and lint them" icon="hammer" href="/guides/forge/zero-downtime-postgres-migrations">
+    Change a live Postgres schema without breaking the release that is still serving: declare compatibility, expand then contract, and lint each migration.
+  </Card>
+  <Card title="Measure migration locks and table rewrites before production" icon="hammer" href="/guides/forge/measure-migration-locks">
+    See which Postgres locks, table rewrites and full scans each pending migration causes, on a disposable database, before the migration reaches production.
+  </Card>
+  <Card title="Let AI agents query production data read-only" icon="hammer" href="/guides/forge/let-agents-query-production-data">
+    Give an AI agent audited, read-only SQL access to production with forge db query: Postgres withholds secret columns, refuses writes and every query is recorded.
+  </Card>
+</CardGroup>
+
+**How it works**
+
+<CardGroup cols={2}>
+  <Card title="How forge generate turns proto and SQL into a whole app" icon="book-open" href="/deep-dives/how-forge-generate-works">
+    How forge generate projects your proto and SQL migrations into stubs, ORM, handlers, hooks and mocks, and why reruns, parallel runs and failed runs stay safe.
+  </Card>
+  <Card title="How Forge keeps Postgres migrations safe" icon="book-open" href="/deep-dives/safe-migrations">
+    How Forge keeps a Postgres schema change from breaking the release still serving: declared compatibility, lint, measured locks, gated rollouts and rollback floors.
+  </Card>
+  <Card title="How Forge tests work: real Postgres, generated tests and mocks" icon="book-open" href="/deep-dives/how-forge-tests-work">
+    How Forge tests a Go API against a real embedded Postgres with no Docker, which tests and mocks it generates, and why skipped tests never count as passing.
+  </Card>
+  <Card title="Reliant security model: fail-closed auth, scoped tokens, secrets" icon="book-open" href="/deep-dives/security-model">
+    How a forge API refuses unauthenticated calls, finds RPCs that never check the caller, keeps errors and secrets out of responses, and scopes every token.
+  </Card>
+</CardGroup>
+{/* /guides: forge */}
+
+## Hosting
+
+Deploy what you build to Reliant hosting, release it safely across environments, and manage its data and users. The [hosting overview](/hosting/overview) is the reference.
+
+{/* guides: hosting — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Deploy a Go API with managed Postgres to Reliant hosting" icon="cloud" href="/guides/hosting/deploy-go-api-managed-postgres">
+    Ship a Forge Go API, its migrations and a managed Postgres to production as one release, then prove it healthy with forge obs check.
+  </Card>
+  <Card title="Create a preview environment for every pull request" icon="cloud" href="/guides/hosting/preview-environment-every-pull-request">
+    Give each pull request its own hosted copy of your app on its own URL, created and deleted from GitHub Actions, and cleaned up by itself when it expires.
+  </Card>
+  <Card title="Promote a release from staging to production by digest" icon="cloud" href="/guides/hosting/promote-release-staging-to-production">
+    Move the exact release staging runs to production without a rebuild, approve the plan you read by its digest, and see a stale promotion refused.
+  </Card>
+  <Card title="Gate a production deploy on release health" icon="cloud" href="/guides/hosting/gate-production-deploy-release-health">
+    Hold production until staging proves a release healthy: declare a health gate in prod's KCL, judge staging with forge obs check, then promote the release.
+  </Card>
+  <Card title="Recover from a bad deploy by redeploying an earlier release" icon="cloud" href="/guides/hosting/recover-from-bad-deploy">
+    Put production back on the last good release in one deploy, check that rollback floors allow it, and set a floor so nobody deploys behind a release again.
+  </Card>
+</CardGroup>
+{/* /guides: hosting */}
+
+## Observability
+
+See how a release behaves in production and find what broke when it does not. The [observability page](/hosting/observability) is the reference.
+
+{/* guides: observability — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Send OpenTelemetry from any app to Reliant" icon="activity" href="/guides/observability/send-opentelemetry-from-any-app">
+    Send traces, logs and metrics from an app in any language to Reliant's hosted OpenTelemetry backend: mint a token with forge obs init and set the variables.
+  </Card>
+  <Card title="Find which release introduced a production error" icon="activity" href="/guides/observability/find-release-that-caused-error">
+    Trace a production error to the release and commits that introduced it with forge obs issue, then resolve it in the next release so a recurrence reopens it.
+  </Card>
+  <Card title="Debug production with an AI agent: logs, traces and errors" icon="activity" href="/guides/observability/debug-production-with-ai-agent">
+    Let an AI agent find why production fails: read errors, logs and traces with forge obs, follow one request to the failing line, and verify the fix.
+  </Card>
+</CardGroup>
+
+**How it works**
+
+<CardGroup cols={2}>
+  <Card title="How Reliant judges a release: from a span to a verdict" icon="book-open" href="/deep-dives/how-release-verdicts-work">
+    How Reliant turns spans, issues and alerts into a PASS, FAIL or INCONCLUSIVE verdict per release, and why missing telemetry is never read as a pass.
+  </Card>
+</CardGroup>
+{/* /guides: observability */}
+
+{/*
+Rules for guide writers (plan §2). Every guide and deep dive in this tab follows them.
+
+1. Run every L/LD/S step in ~/.reliant/scratch/<chat>/guides/<slug>/, never in a repo checkout, and paste real output.
+   H steps run only in the owner's sandbox. Otherwise write the step from --help and mark it "H steps: not run" in the
+   verification comment at the top of the page.
+2. Every command and flag traces to --help (inside a project pinned to the stated forge), to a file path, or to
+   benefits.yaml claim: text.
+3. Use <Steps>, <Note>, <Warning>, <Tip>, <AccordionGroup> and <CardGroup> only. Code fences carry a filename or terminal.
+4. Links are root-relative and use the /hosting/... paths. Never link /forge/hosting or /forge/observability/*.
+5. Use plain, second-person house style. No marketing adjectives and no third-party internals (ClickStack, OpenBao, CNPG).
+6. A writer touches only docs/guides/<pillar>/<slug>.mdx and docs/images/guides/<slug>/*. Never docs.json, llms.txt,
+   index.mdx, a reference page or another guide.
+
+Deep-dive rules (in addition to rules 2-5):
+- Sources are code paths and design docs (control-plane docs/norm-*.md, forge docs/concepts.md). Never quote internal
+  package names as product surface; name them only where a reader can observe them.
+- Diagrams: mermaid in the page, drawn with the diagrams skill's discipline (one shared lane order, no coordinate drift).
+- Every deep dive has a "Limits and what it does not do" section: the honesty rules live there.
+- A deep-dive writer touches only docs/deep-dives/<slug>.mdx, or the one existing page its row says to upgrade.
+*/}

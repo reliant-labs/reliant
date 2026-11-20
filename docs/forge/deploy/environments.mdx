@@ -1,9 +1,10 @@
 ---
-title: "Environments"
+title: "Multi-environment deploys: dev, staging and prod from day one"
+sidebarTitle: "Environments"
 description: "How a forge project declares where it runs: workloads declared once, bound to a runtime per environment, and the commands that show you what an environment is"
 ---
 
-A forge project describes every place it runs as code. Each **environment** is a directory under `deploy/kcl/`, and a new project has three: `dev` runs on your machine, while `staging` and `prod` deploy to [Reliant hosting](/forge/hosting). The environments are written in KCL, a typed configuration language, and they split one question in two: *what runs* is declared once, and *where it runs* is chosen per environment.
+A forge project describes every place it runs as code. Each **environment** is a directory under `deploy/kcl/`, and a new project has three: `dev` runs on your machine, while `staging` and `prod` deploy to [Reliant hosting](/hosting/overview). The environments are written in KCL, a typed configuration language, and they split one question in two: *what runs* is declared once, and *where it runs* is chosen per environment.
 
 That split is what keeps `dev` and `prod` from drifting, and it is what makes the rest of this section possible. An agent that wants to know what `prod` does reads one short file, and a person who wants to move one service to their own cluster edits one line.
 
@@ -43,7 +44,7 @@ _workloads = [
 | `forge.OnHost` | A process on your machine | `forge env up` runs it with `go run`, `air` (hot reload), a built binary, or `delve`. No image is built. |
 | `forge.OnCompose` | A service in `docker-compose.yml` | `docker compose up` for that service. |
 | `forge.OnCluster` | A Kubernetes cluster you operate | Renders Deployments, Services and the other objects shown in [What gets deployed](/forge/deploy/what-gets-deployed), and applies them to the kubectl context you name. |
-| `forge.OnHosted` | [Reliant hosting](/forge/hosting) | Publishes the workload; the platform renders and runs it under a restricted profile. |
+| `forge.OnHosted` | [Reliant hosting](/hosting/overview) | Publishes the workload; the platform renders and runs it under a restricted profile. |
 | `forge.BuildOnly` | Nowhere | Builds and ships the artifact (a CLI, an image others pull) and never runs it. |
 
 Frontends bind the same way, with runtimes for a dev server, hosted static hosting, your own bucket (`forge.OnBucket`) or Firebase (`forge.OnFirebase`).

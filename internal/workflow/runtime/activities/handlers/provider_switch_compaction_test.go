@@ -166,3 +166,33 @@ func TestProviderSwitchCompaction_SummaryRequestLandsOnBoundProvider(t *testing.
 		assert.Empty(t, captured.Preferences, "a held compaction must not have built any driver")
 	})
 }
+
+func TestProviderSwitchCompaction_ManualFallbackWinsBeforeResolvingOldModel(t *testing.T) {
+	// The old selector cannot resolve and no model on the legacy tier list
+	// is available. The banner's exact model can still serve the summary.
+	const model = "gpt-6.2-sol"
+	const fallback = model + "@codex"
+	avail := boundDrivers("", "codex", "openai")
+	avail.Availability = func(driver, id string) models.ModelAvailability {
+		return models.ModelAvailability{Disabled: driver == "codex" && id != model || driver == "openai" && id != model}
+	}
+	withAvailableDrivers(t, avail)
+	captured := &capturedDriverOptions{}
+	original := drivers.GetDriver
+	drivers.GetDriver = captureDriverOptionsResolver(captured)
+	t.Cleanup(func() { drivers.GetDriver = original })
+
+	ctx := context.Background()
+	a := &CompactActivity{}
+	chat := &db.Chat{ID: "chat-1", UserID: "u"}
+	history := []message.Message{{Role: "user", Parts: []message.ContentPart{message.TextContent{Text: "hello"}}}}
+	stale := &reliantv1.ModelSelector{Id: "claude-4.5-haiku@anthropic"}
+	_, err := a.generateCompactionSummaryOnProvider(ctx, chat, "root", fallback, types.FailoverPolicy{}, history, stale, types.RuntimeContext{})
+	require.Error(t, err, "legacy compaction still checks the old selector and tier list first")
+	assert.Empty(t, captured.Preferences)
+
+	_, err = a.generateCompactionSummaryOnProvider(ctx, chat, "root", fallback, types.FailoverPolicy{}, history, stale, types.RuntimeContext{ManualFallback: true})
+	require.NoError(t, err)
+	require.NotEmpty(t, captured.Preferences)
+	assert.Equal(t, fallback, string(captured.Preferences[0].ModelID))
+}

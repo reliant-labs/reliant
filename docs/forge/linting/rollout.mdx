@@ -1,6 +1,6 @@
 ---
 title: "Linting: new rules warn before they gate"
-description: "How a new or tightened forge lint rule warns for one release before it fails your build, how your forge_version pin decides, and how to gate early or stay in the grace period"
+description: "How a new or tightened forge lint rule warns for one release before it gates, how your forge_version pin decides, and how to opt in early or extend the grace."
 ---
 
 A forge release can add a lint rule or tighten an old one. If every new rule failed your build the day you bumped the pin, upgrading forge would also be the day you learned about two hundred findings you did not write. Forge avoids that. A new or tightened rule warns for one release, then gates in the next. The pin in your `forge.yaml` decides which side of that line you are on.
