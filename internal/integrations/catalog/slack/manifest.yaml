@@ -53,7 +53,7 @@ connection:
           - groups:read         # conversations.list (private channels the bot is in)
           - im:read             # conversations.list types=im
           - mpim:read           # conversations.list types=mpim
-          - channels:history    # conversations.history + message.channels events
+          - channels:history    # conversations.history/replies + message.channels events
           - groups:history      # message.groups events
           - im:history          # message.im events
           - mpim:history        # message.mpim events (group DMs)
@@ -562,6 +562,97 @@ actions:
                 text: { type: string }
                 thread_ts: { type: [string, "null"] }
                 reply_count: { type: integer }
+
+  # The same history scopes as conversations.history (channels:, groups:,
+  # im:, mpim:history), all already requested: no reconnect needed.
+  - id: conversations.replies
+    display_name: Read thread
+    summary: A thread's parent message and its replies, oldest first.
+    description: >-
+      Read a thread in a conversation the bot is a member of: the parent
+      message first, then its replies, oldest first. ts is the thread's parent
+      ts; for the thread an app_mentioned or message.posted event came from,
+      pass the event's thread_ts when it has one, else its ts (a message that
+      is not in a thread answers just itself). Optionally only replies between
+      oldest and latest. limit bounds the page size; up to 5 pages are
+      followed.
+    keywords: [thread, replies, conversation, read, mention, context, messages]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [channel, ts]
+      properties:
+        channel: *channel
+        ts:
+          type: string
+          pattern: "^[0-9]+\\.[0-9]+$"
+          title: Thread timestamp
+          description: The ts of the thread's parent message (a message's ts is its id).
+          examples: ["1712345678.123456"]
+        oldest:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]+)?$"
+          title: After timestamp
+          description: Only replies after this point, as a Slack ts or Unix seconds.
+          examples: ["1712345678.123456"]
+        latest:
+          type: string
+          pattern: "^[0-9]+(\\.[0-9]+)?$"
+          title: Before timestamp
+          description: Only replies before this point, as a Slack ts or Unix seconds.
+          examples: ["1712349999"]
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 100
+          title: Page size
+          description: How many messages to fetch per page, 1 to 200. Up to 5 pages are read.
+          examples: [50]
+        connection: *connection
+    request:
+      method: GET
+      path: /conversations.replies
+      query:
+        channel: "{{ params.channel }}"
+        ts: "{{ params.ts }}"
+        limit: "{{ params.limit }}"
+      query_expr: '{?"oldest": params.?oldest, ?"latest": params.?latest}'
+      pagination:
+        style: cursor
+        cursor_param: cursor
+        next_cursor: "response.?response_metadata.?next_cursor.orValue('')"
+        max_pages: 5
+      max_response_bytes: 5242880
+      errors: *slack_errors
+    output:
+      select: >-
+        response.messages.map(m, {"ts": m.ts,
+         "user": m.?user.orValue(null),
+         "bot_id": m.?bot_id.orValue(null),
+         "subtype": m.?subtype.orValue(null),
+         "text": m.?text.orValue(""),
+         "thread_ts": m.?thread_ts.orValue(null),
+         "reply_count": m.?reply_count.orValue(0)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                ts: { type: string }
+                user: { type: [string, "null"] }
+                bot_id: { type: [string, "null"] }
+                subtype: { type: [string, "null"] }
+                text: { type: string }
+                thread_ts: { type: [string, "null"], description: The thread's parent ts; equal to ts on the parent itself. }
+                reply_count: { type: integer, description: Set on the parent; 0 on a reply. }
 
 # Events API triggers. Slack pushes every installed workspace's events to one
 # Request URL, <PUBLIC_URL>/integrations/slack/events, verified with the app's
