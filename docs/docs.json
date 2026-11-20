@@ -288,11 +288,24 @@
                 ]
               },
               {
+                "group": "Automate your repo",
+                "pages": [
+                  "guides/workflows/review-pull-requests-with-ai",
+                  "guides/workflows/github-issues-to-pull-requests"
+                ]
+              },
+              {
                 "group": "Build workflows",
                 "pages": [
                   "guides/workflows/first-multi-agent-workflow",
                   "guides/workflows/run-tests-until-they-pass",
                   "guides/workflows/require-human-approval"
+                ]
+              },
+              {
+                "group": "Triggers & integrations",
+                "pages": [
+                  "guides/workflows/run-an-agent-on-a-schedule"
                 ]
               }
             ]
@@ -305,6 +318,13 @@
                 "pages": [
                   "deep-dives/how-tool-calls-reach-your-machine",
                   "deep-dives/daemon-security-model"
+                ]
+              },
+              {
+                "group": "Machines",
+                "pages": [
+                  "guides/machines/connect-computer-as-machine",
+                  "guides/machines/run-agents-on-your-own-server"
                 ]
               }
             ]
@@ -322,7 +342,8 @@
               {
                 "group": "Start a project",
                 "pages": [
-                  "guides/forge/build-go-react-app-connect-rpc"
+                  "guides/forge/build-go-react-app-connect-rpc",
+                  "guides/forge/bring-existing-app-any-language"
                 ]
               },
               {

@@ -28,6 +28,12 @@ Put agents to work on your repository: run the built-in workflows, write your ow
 
 {/* guides: agents-and-workflows — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
 <CardGroup cols={2}>
+  <Card title="Review every pull request with an AI agent" icon="workflow" href="/guides/workflows/review-pull-requests-with-ai">
+    Get an AI code review on every GitHub pull request: turn on Autopilot PR review for your repositories, then read, skip or re-run the review the bot posts.
+  </Card>
+  <Card title="Turn labelled GitHub issues into pull requests with AI" icon="workflow" href="/guides/workflows/github-issues-to-pull-requests">
+    Label a GitHub issue agent:ready and an AI agent writes a failing test and the fix, runs your checks and opens a pull request for a person to review and merge.
+  </Card>
   <Card title="Write your first multi-agent workflow in YAML" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
     Build a multi-agent coding workflow in YAML: a planner, an implementer and a reviewer that sends work back, checked locally, then run on your machine.
   </Card>
@@ -36,6 +42,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   </Card>
   <Card title="Require human approval before an AI agent acts" icon="workflow" href="/guides/workflows/require-human-approval">
     Pause an agent workflow until a person approves. Gate the change on an approval node, handle approve, deny and timeout, and ask questions mid-run.
+  </Card>
+  <Card title="Run an AI agent on a schedule with cron" icon="workflow" href="/guides/workflows/run-an-agent-on-a-schedule">
+    Run an AI agent on a cron schedule: create a schedule trigger with reliant trigger create, or declare one in a workflow, then check each firing and its run.
   </Card>
 </CardGroup>
 
@@ -53,6 +62,14 @@ Put agents to work on your repository: run the built-in workflows, write your ow
 Choose where agents run: your own computer, a server or a Reliant cloud machine, connected by a daemon. The [machines overview](/machines/overview) is the reference.
 
 {/* guides: machines-and-daemons — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+<CardGroup cols={2}>
+  <Card title="Connect your computer to Reliant to run AI agents on it" icon="server" href="/guides/machines/connect-computer-as-machine">
+    Run AI agents in a repo on your own computer: start the Reliant daemon, approve its pairing code in the app, and check that its stream is connected.
+  </Card>
+  <Card title="Run the Reliant daemon headless on a server or Raspberry Pi" icon="server" href="/guides/machines/run-agents-on-your-own-server">
+    Turn a Linux server or 64-bit Raspberry Pi into an always-on machine for AI coding agents: connect it with an access token and keep it up with systemd.
+  </Card>
+</CardGroup>
 
 **How it works**
 
@@ -74,6 +91,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
 <CardGroup cols={2}>
   <Card title="Build a Go and React app with Connect RPC and Postgres" icon="hammer" href="/guides/forge/build-go-react-app-connect-rpc">
     Create a Go Connect RPC service, a Postgres table and a React frontend with Forge, then run the whole stack on your machine with no account.
+  </Card>
+  <Card title="Deploy an existing app from its Dockerfile, in any language" icon="hammer" href="/guides/forge/bring-existing-app-any-language">
+    Adopt an Express, Django or Rails app where it stands: Forge reads its Dockerfile and compose file, writes the deploy config, and ships it to Reliant hosting.
   </Card>
   <Card title="Add a database table with a CRUD API and pages" icon="hammer" href="/guides/forge/add-table-crud-api-pages">
     Generate a Postgres table, five CRUD RPCs, typed React hooks and list, detail and edit pages from one proto message marked // forge:entity.
