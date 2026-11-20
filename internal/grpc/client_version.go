@@ -114,7 +114,7 @@ func (g clientVersionGate) check(ctx context.Context, procedure string, header h
 		attribute.String("reliant.client.version", client.Version),
 	)
 	floor := clientversion.FloorFor(g.policy, client.Kind)
-	switch clientversion.Judge(client.Version, floor.GetMinVersion()) {
+	switch clientversion.Judge(client.Version, floor.MinVersion) {
 	case clientversion.Met:
 		countClient(string(client.Kind), clientOutcomeMet)
 	case clientversion.Below:
@@ -122,13 +122,13 @@ func (g clientVersionGate) check(ctx context.Context, procedure string, header h
 			countClient(string(client.Kind), clientOutcomeRefused)
 			logging.InfoContext(ctx, "refused a client below its minimum version",
 				"procedure", procedure, "client_kind", client.Kind, "client_version", client.Version,
-				"min_version", floor.GetMinVersion())
+				"min_version", floor.MinVersion)
 			return upgradeRefusal(client, floor)
 		}
 		countClient(string(client.Kind), clientOutcomeBelow)
 		logging.InfoContext(ctx, "client below its minimum version (served: enforce is off)",
 			"procedure", procedure, "client_kind", client.Kind, "client_version", client.Version,
-			"min_version", floor.GetMinVersion())
+			"min_version", floor.MinVersion)
 	default:
 		countClient(string(client.Kind), clientOutcomeNoFloor)
 	}
@@ -165,15 +165,15 @@ func countClient(kind, outcome string) {
 
 // upgradeRefusal is the refusal of a client below its floor.
 func upgradeRefusal(client clientversion.Client, floor clientversion.Floor) error {
-	how := floor.GetUpgradeCommand()
+	how := floor.UpgradeCommand
 	if how == "" {
-		how = floor.GetUpgradeUrl()
+		how = floor.UpgradeURL
 	}
 	if how == "" {
 		how = "install the latest version"
 	}
 	msg := fmt.Sprintf("this %s (%s) is older than the minimum this server supports (%s); upgrade: %s",
-		client.Kind, client.Version, floor.GetMinVersion(), how)
+		client.Kind, client.Version, floor.MinVersion, how)
 	return upgradeRequired(msg, string(client.Kind), client.Version, floor)
 }
 
@@ -181,7 +181,7 @@ func upgradeRefusal(client clientversion.Client, floor clientversion.Floor) erro
 // while the policy refuses those.
 func unidentifiedRefusal() error {
 	return upgradeRequired("this client sends no Reliant-Client version; upgrade to the latest version",
-		"", "", (*configv1.WebClientVersionFloor)(nil))
+		"", "", clientversion.Floor{})
 }
 
 func upgradeRequired(msg, kind, version string, floor clientversion.Floor) error {
@@ -193,9 +193,9 @@ func upgradeRequired(msg, kind, version string, floor clientversion.Floor) error
 			Metadata: map[string]string{
 				"client_kind":     kind,
 				"client_version":  version,
-				"min_version":     floor.GetMinVersion(),
-				"upgrade_url":     floor.GetUpgradeUrl(),
-				"upgrade_command": floor.GetUpgradeCommand(),
+				"min_version":     floor.MinVersion,
+				"upgrade_url":     floor.UpgradeURL,
+				"upgrade_command": floor.UpgradeCommand,
 			},
 		})
 }

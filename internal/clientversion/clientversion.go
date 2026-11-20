@@ -98,32 +98,32 @@ func knownKind(k Kind) bool {
 	return false
 }
 
-// Floor is what every per-kind floor of ClientVersionPolicy offers: one
-// message per kind (their env vars differ), the same getters.
-type Floor interface {
-	GetMinVersion() string
-	GetUpgradeUrl() string
-	GetUpgradeCommand() string
+// Floor is one client kind's floor: the oldest version served (empty: no
+// floor) and what a client below it tells its user.
+type Floor struct {
+	MinVersion     string
+	UpgradeURL     string
+	UpgradeCommand string
 }
 
 // FloorFor is the policy's floor for kind; a kind the policy does not name
-// (or a nil policy) has an empty floor, which is no floor.
-func FloorFor(policy *configv1.ClientVersionPolicy, kind Kind) Floor {
+// (or a nil policy) has the zero Floor, which is no floor.
+func FloorFor(p *configv1.ClientVersionPolicy, kind Kind) Floor {
 	switch kind {
 	case KindWeb:
-		return policy.GetWeb()
+		return Floor{p.GetWebMinVersion(), p.GetWebUpgradeUrl(), p.GetWebUpgradeCommand()}
 	case KindDesktop:
-		return policy.GetDesktop()
+		return Floor{p.GetDesktopMinVersion(), p.GetDesktopUpgradeUrl(), p.GetDesktopUpgradeCommand()}
 	case KindDaemon:
-		return policy.GetDaemon()
+		return Floor{p.GetDaemonMinVersion(), p.GetDaemonUpgradeUrl(), p.GetDaemonUpgradeCommand()}
 	case KindCLI:
-		return policy.GetCli()
+		return Floor{p.GetCliMinVersion(), p.GetCliUpgradeUrl(), p.GetCliUpgradeCommand()}
 	case KindSDKGo:
-		return policy.GetSdkGo()
+		return Floor{p.GetSdkGoMinVersion(), p.GetSdkGoUpgradeUrl(), p.GetSdkGoUpgradeCommand()}
 	case KindSDKTS:
-		return policy.GetSdkTs()
+		return Floor{p.GetSdkTsMinVersion(), p.GetSdkTsUpgradeUrl(), p.GetSdkTsUpgradeCommand()}
 	}
-	return (*configv1.WebClientVersionFloor)(nil)
+	return Floor{}
 }
 
 // Result is Judge's verdict.

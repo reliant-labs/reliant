@@ -43,12 +43,10 @@ func testSystem(t *testing.T) testRoute {
 // floorPolicy floors the CLI at 1.9.0 and names how to upgrade it.
 func floorPolicy(enforce bool) *configv1.ClientVersionPolicy {
 	return &configv1.ClientVersionPolicy{
-		Cli: &configv1.CliClientVersionFloor{
-			MinVersion:     "1.9.0",
-			UpgradeUrl:     "https://reliantlabs.io/download",
-			UpgradeCommand: "brew upgrade --cask reliant",
-		},
-		Enforce: enforce,
+		CliMinVersion:     "1.9.0",
+		CliUpgradeUrl:     "https://reliantlabs.io/download",
+		CliUpgradeCommand: "brew upgrade --cask reliant",
+		Enforce:           enforce,
 	}
 }
 
@@ -166,8 +164,9 @@ func TestClientVersionGateObservesWithoutEnforce(t *testing.T) {
 
 func TestClientVersionGateRefusesStreams(t *testing.T) {
 	policy := &configv1.ClientVersionPolicy{
-		Web:     &configv1.WebClientVersionFloor{MinVersion: "1.9.0", UpgradeUrl: "https://app.reliantlabs.io"},
-		Enforce: true,
+		WebMinVersion: "1.9.0",
+		WebUpgradeUrl: "https://app.reliantlabs.io",
+		Enforce:       true,
 	}
 	_, baseURL := startTestServerWithClientVersions(t, policy, testStreaming(t))
 	client := reliantv1connect.NewStreamingServiceClient(h2cClient(), baseURL)
@@ -317,7 +316,7 @@ func TestClientVersionGateIgnoresNonReliantProcedures(t *testing.T) {
 	t.Parallel()
 	gate := newClientVersionGate(&configv1.ClientVersionPolicy{
 		Enforce: true, RefuseUnidentified: true, EnforceLegacyUnidentified: true,
-		Cli: &configv1.CliClientVersionFloor{MinVersion: "9.0.0"},
+		CliMinVersion: "9.0.0",
 	})
 	for _, procedure := range []string{"/forge.v1.Something/Do", "/grpc.health.v1.Health/Check"} {
 		require.NoError(t, gate.check(context.Background(), procedure, http.Header{}))
