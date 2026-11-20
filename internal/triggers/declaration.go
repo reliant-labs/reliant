@@ -377,6 +377,29 @@ func SeedPrompt(t *core.Trigger, decl *Declaration, scope triggerspec.Scope) (st
 	return rendered, nil
 }
 
+// LaunchPrompt is the user message a firing of t launches with: SeedPrompt,
+// or DefaultSeedPrompt when an activation of a declared trigger has neither
+// a message nor a prompt. Only a workflow that runs no agent may be activated
+// that way (WorkflowRunsAgent): a chain of run and action steps has nothing to
+// say to a model, but a launch needs a user message.
+func LaunchPrompt(t *core.Trigger, decl *Declaration, scope triggerspec.Scope) (string, error) {
+	prompt, err := SeedPrompt(t, decl, scope)
+	if err != nil || decl == nil || strings.TrimSpace(prompt) != "" {
+		return prompt, err
+	}
+	return DefaultSeedPrompt(t), nil
+}
+
+// DefaultSeedPrompt is the prompt of a run whose declared trigger and
+// activation both leave it unwritten: what started it, and nothing more.
+func DefaultSeedPrompt(t *core.Trigger) string {
+	name := t.Name
+	if t.WorkflowTrigger != nil && *t.WorkflowTrigger != "" {
+		name = *t.WorkflowTrigger
+	}
+	return fmt.Sprintf("Run %s: started by its trigger %q.", t.Workflow, name)
+}
+
 // FindDeclaredTrigger returns the trigger wf declares under name, or nil.
 func FindDeclaredTrigger(wf *reliantv1.Workflow, name string) *reliantv1.WorkflowTrigger {
 	for _, wt := range wf.GetTriggers() {

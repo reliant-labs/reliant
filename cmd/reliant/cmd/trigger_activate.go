@@ -129,7 +129,7 @@ itself, with a step that messages you.`,
 	fl.StringVar(&f.paramsJSON, "params-json", "", "Workflow inputs as one JSON object; --param entries win over its keys")
 	fl.StringArrayVar(&f.presets, "preset", nil, "Preset assignment as group=name, or just name for the top level; repeatable")
 	fl.StringArrayVar(&f.connections, "connection", nil, "Connection an integration listens through, as integration=connection-id (default: your default connection)")
-	fl.StringVar(&f.message, "message", "", "Prompt for a declared trigger that has none")
+	fl.StringVar(&f.message, "message", "", "Prompt for a declared trigger that has none (not needed when the workflow runs no agent)")
 	fl.StringVar(&f.namePrefix, "name-prefix", "", "Names new activations \"<prefix> · <trigger>\" (default: the workflow)")
 	fl.StringVar(&f.actingAs, "acting-as", "", "Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise)")
 	fl.BoolVar(&f.notify, "notify", false, "Desktop notification when a run succeeds; never an Inbox item (failures always notify)")

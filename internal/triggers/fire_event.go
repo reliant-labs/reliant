@@ -408,7 +408,7 @@ func eventSpec(ctx context.Context, repo any, trigger *core.Trigger, ev *core.Tr
 		}
 		values = merged
 	}
-	prompt, err := SeedPrompt(trigger, decl, scope)
+	prompt, err := LaunchPrompt(trigger, decl, scope)
 	if err != nil {
 		return launch.Spec{}, err
 	}
