@@ -431,10 +431,13 @@ func TestEnsureProjectServersLoaded_ConcurrentLoadsReplaceAnEditedServerOnce(t *
 	}
 	wg.Add(1)
 	go func() { defer wg.Done(); results[1] = m.EnsureProjectServersLoaded(context.Background(), projB) }()
-	// Give an unserialized B the time to start a second replacement; a
-	// serialized one is waiting for A and starts nothing either way.
-	deadline := time.Now().Add(200 * time.Millisecond)
-	for newStarts.Load() < 2 && time.Now().Before(deadline) {
+	// Wait for B to reach the decision: blocked on the server's reload lock
+	// (serialized), or starting a second replacement (unserialized).
+	deadline := time.Now().Add(10 * time.Second)
+	for m.reloadWaiters("tickets") == 0 && newStarts.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("the second load never reached the server")
+		}
 		time.Sleep(time.Millisecond)
 	}
 	close(release)
@@ -456,5 +459,74 @@ func TestEnsureProjectServersLoaded_ConcurrentLoadsReplaceAnEditedServerOnce(t *
 		if _, ok := m.GetProjectClient(p, "tickets"); !ok {
 			t.Fatalf("project %s lost the server", p)
 		}
+	}
+}
+
+// probeGatedClient's handshake waits for its gate, and it lists the tool it
+// was built with: one instance per server generation.
+type probeGatedClient struct {
+	fakeManagerClient
+	gate <-chan struct{}
+	tool string
+}
+
+func (c *probeGatedClient) Initialize(ctx context.Context) error {
+	if c.gate == nil {
+		return nil
+	}
+	select {
+	case <-c.gate:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (c *probeGatedClient) ListTools() ([]Tool, error) {
+	return []Tool{{Name: c.tool}}, nil
+}
+
+// A probe of the server an edit replaced, still running past its budget, is
+// never the answer for the replacement: the new server's listing returns its
+// own tools, not the old ones.
+func TestProjectListTools_AReplacementNeverJoinsItsPredecessorsProbe(t *testing.T) {
+	shortToolListBudget(t)
+	project := t.TempDir()
+	oldGate := make(chan struct{})
+	defer close(oldGate)
+	m := NewManager(RoleDaemon)
+	defer func() { _ = m.Close() }()
+	m.clientFactory = func(_ string, cfg config.MCPServer) (Client, error) {
+		if cfg.Command == "old-lsp" {
+			return &probeGatedClient{gate: oldGate, tool: "old_tool"}, nil
+		}
+		return &probeGatedClient{tool: "new_tool"}, nil
+	}
+	register := func(command string) {
+		t.Helper()
+		cfg := config.MCPServer{Type: config.MCPStdio, Command: command, Enabled: true, DirScoped: true}
+		if err := m.AddServer(context.Background(), "lsp", cfg); err != nil {
+			t.Fatalf("register %s: %v", command, err)
+		}
+		m.trackProjectServer(project, "lsp")
+	}
+
+	register("old-lsp")
+	if _, err := m.ProjectListTools(project, "lsp"); !errors.Is(err, ErrToolsStillLoading) {
+		t.Fatalf("old server's listing = %v, want still starting", err)
+	}
+	// The edit: the old server goes, its probe still blocked; the new one
+	// comes in under the same name and project.
+	if err := m.RemoveServer("lsp", "its config changed"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	register("new-lsp")
+
+	tools, err := m.ProjectListTools(project, "lsp")
+	if err != nil {
+		t.Fatalf("replacement's listing: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Name != "new_tool" {
+		t.Fatalf("replacement listed %v, want only its own new_tool", tools)
 	}
 }

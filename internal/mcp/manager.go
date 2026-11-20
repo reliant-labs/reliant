@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -227,7 +228,7 @@ type Manager struct {
 
 	// reloadLocks serializes, per logical server, deciding whether a project
 	// load must start or replace it and doing so (loadProjectServer).
-	reloadLocks map[string]*sync.Mutex
+	reloadLocks map[string]*reloadMutex
 
 	// projectConfigs is the config each project last loaded each server
 	// under, keyed by dirClientKey(server, project): how a project's edit to
@@ -306,7 +307,7 @@ func NewManager(role Role, opts ...ManagerOption) *Manager {
 		nextRetryAt:         make(map[string]time.Time),
 		failedConfigs:       make(map[string]config.MCPServer),
 		projectConfigs:      make(map[string]config.MCPServer),
-		reloadLocks:         make(map[string]*sync.Mutex),
+		reloadLocks:         make(map[string]*reloadMutex),
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -1444,18 +1445,38 @@ func (m *Manager) loadProjectServer(ctx context.Context, projectPath, name strin
 	m.rememberProjectConfig(projectPath, name, serverCfg)
 }
 
+// reloadMutex is one server's reload lock. waiting counts the loads blocked
+// on it, which is what lets a test wait for the second of two loads to reach
+// the lock instead of sleeping.
+type reloadMutex struct {
+	sync.Mutex
+	waiting atomic.Int32
+}
+
 // reloadLock takes the per-server lock loadProjectServer holds, and returns
 // its release.
 func (m *Manager) reloadLock(name string) func() {
 	m.mu.Lock()
 	l, ok := m.reloadLocks[name]
 	if !ok {
-		l = &sync.Mutex{}
+		l = &reloadMutex{}
 		m.reloadLocks[name] = l
 	}
 	m.mu.Unlock()
+	l.waiting.Add(1)
 	l.Lock()
+	l.waiting.Add(-1)
 	return l.Unlock
+}
+
+// reloadWaiters is how many loads are blocked on name's reload lock.
+func (m *Manager) reloadWaiters(name string) int32 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if l, ok := m.reloadLocks[name]; ok {
+		return l.waiting.Load()
+	}
+	return 0
 }
 
 // shouldRetryServerLoad reports whether a server that failed to start may be
@@ -1695,7 +1716,11 @@ func (m *Manager) listDirClientTools(serverName, projectPath string, client Clie
 			return tools, nil
 		}
 	}
-	ch := m.toolListFlights.DoChan(dirClientKey(serverName, normalizeProjectPath(projectPath)), func() (interface{}, error) {
+	// Keyed by the client instance as well: a replacement (an edit to
+	// mcp.json) must never join its predecessor's probe, which outlives a
+	// removal and would answer with the old server's tools.
+	flight := fmt.Sprintf("%s|%p", dirClientKey(serverName, normalizeProjectPath(projectPath)), client)
+	ch := m.toolListFlights.DoChan(flight, func() (interface{}, error) {
 		return client.ListTools()
 	})
 	timer := time.NewTimer(projectToolListBudget)
