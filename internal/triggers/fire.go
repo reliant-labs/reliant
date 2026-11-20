@@ -18,7 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
-	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 )
 
 // chatIDNamespace seeds the deterministic chat id a scheduled fire launches
@@ -656,25 +655,15 @@ func (f *Firer) recordOutcome(
 
 // failPermanently records a failed event and ends the fire without retries:
 // the trigger can never launch as written.
-// defaultWorkflowNamer is the launcher's own choice of a run's workflow when
-// none is named: the owner's default setting, else the system default.
-// *launch.Launcher satisfies it.
-type defaultWorkflowNamer interface {
-	ResolveDefaultWorkflow(ctx context.Context, userID, reqWorkflow string) string
-}
-
 // withDefaultWorkflow is t with its workflow named: t itself when it names
-// one, else a copy naming the workflow launcher would run.
+// one, else a copy naming the workflow launcher would run (the owner's
+// default setting, else the system default).
 func withDefaultWorkflow(ctx context.Context, launcher Launcher, t *core.Trigger) *core.Trigger {
-	if t == nil || t.Workflow != "" {
+	if t == nil || t.Workflow != "" || launcher == nil {
 		return t
 	}
-	name := v2workflow.DefaultWorkflow
-	if namer, ok := launcher.(defaultWorkflowNamer); ok {
-		name = namer.ResolveDefaultWorkflow(ctx, t.UserID, "")
-	}
 	named := *t
-	named.Workflow = name
+	named.Workflow = launcher.ResolveDefaultWorkflow(ctx, t.UserID, "")
 	return &named
 }
 
