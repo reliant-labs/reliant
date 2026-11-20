@@ -134,7 +134,7 @@ This works because a forge release records the digest of every artifact once, an
 
 ## What this does not do
 
-- **It does not require staging to pass first.** Promotion order is yours until you declare a health gate; {/* defer:/guides/hosting/gate-production-deploy-release-health */}Gate a production deploy on release health{/* /defer */} does that.
+- **It does not require staging to pass first.** Promotion order is yours until you declare a health gate; [Gate a production deploy on release health](/guides/hosting/gate-production-deploy-release-health) does that.
 - **It does not merge or rebase a hotfix for you.** The refusal stops the overwrite; you cut the release that carries both changes.
 - **It works within one control plane.** `--from` cannot promote between organizations or from a machine-ledger environment.
 
@@ -158,7 +158,9 @@ This works because a forge release records the digest of every artifact once, an
   <Card title="Recover from a bad deploy" icon="rotate-left" href="/guides/hosting/recover-from-bad-deploy">
     Redeploy an earlier release and set a rollback floor.
   </Card>
-{/* defer-card:/guides/hosting/gate-production-deploy-release-health ICA8Q2FyZCB0aXRsZT0iR2F0ZSBwcm9kIG9uIHJlbGVhc2UgaGVhbHRoIiBpY29uPSJzaGllbGQtY2hlY2siIGhyZWY9Ii9ndWlkZXMvaG9zdGluZy9nYXRlLXByb2R1Y3Rpb24tZGVwbG95LXJlbGVhc2UtaGVhbHRoIj4KICAgIFJlZnVzZSBhIHByb21vdGlvbiB1bnRpbCBzdGFnaW5nIHByb3ZlcyB0aGUgcmVsZWFzZSBnb29kLgogIDwvQ2FyZD4= */}
+  <Card title="Gate prod on release health" icon="shield-check" href="/guides/hosting/gate-production-deploy-release-health">
+    Refuse a promotion until staging proves the release good.
+  </Card>
   <Card title="How release promotion works" icon="layer-group" href="/forge/deploy/releases-and-promotion">
     Releases, plans, compare-and-set and exit codes.
   </Card>

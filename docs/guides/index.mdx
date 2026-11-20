@@ -160,6 +160,9 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   <Card title="Promote a release from staging to production by digest" icon="cloud" href="/guides/hosting/promote-release-staging-to-production">
     Move the exact release staging runs to production without a rebuild, approve the plan you read by its digest, and see a stale promotion refused.
   </Card>
+  <Card title="Gate a production deploy on release health" icon="cloud" href="/guides/hosting/gate-production-deploy-release-health">
+    Hold production until staging proves a release healthy: declare a health gate in prod's KCL, judge staging with forge obs check, then promote the release.
+  </Card>
   <Card title="Recover from a bad deploy by redeploying an earlier release" icon="cloud" href="/guides/hosting/recover-from-bad-deploy">
     Put production back on the last good release in one deploy, check that rollback floors allow it, and set a floor so nobody deploys behind a release again.
   </Card>
@@ -171,6 +174,14 @@ Deploy what you build to Reliant hosting, release it safely across environments,
 See how a release behaves in production and find what broke when it does not. The [observability page](/hosting/observability) is the reference.
 
 {/* guides: observability — the orchestrator adds a <CardGroup cols={2}> here as guides land */}
+
+**How it works**
+
+<CardGroup cols={2}>
+  <Card title="How Reliant judges a release: from a span to a verdict" icon="book-open" href="/deep-dives/how-release-verdicts-work">
+    How Reliant turns spans, issues and alerts into a PASS, FAIL or INCONCLUSIVE verdict per release, and why missing telemetry is never read as a pass.
+  </Card>
+</CardGroup>
 {/* /guides: observability */}
 
 {/*

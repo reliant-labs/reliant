@@ -384,7 +384,19 @@
                 "group": "Release safely",
                 "pages": [
                   "guides/hosting/promote-release-staging-to-production",
+                  "guides/hosting/gate-production-deploy-release-health",
                   "guides/hosting/recover-from-bad-deploy"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              {
+                "group": "How it works",
+                "pages": [
+                  "deep-dives/how-release-verdicts-work"
                 ]
               }
             ]
