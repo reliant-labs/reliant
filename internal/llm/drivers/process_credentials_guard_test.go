@@ -109,8 +109,8 @@ var driverGuardCases = map[models.Family]driverGuardCase{
 	copilot.Family:         refusesNoCredential,
 	codex.Family:           refusesNoCredential,
 	gemini.Family:          refusesNoCredential,
-	// Unplaced (no VERTEXAI_PROJECT), Vertex AI refuses to build. Placed, it
-	// uses the platform's own ADC by design: see vertexai.Configure.
+	// Vertex AI takes only the connected account's service-account key,
+	// never the server's Application Default Credentials.
 	vertexai.Family:    refusesNoCredential,
 	antigravity.Family: staticOnly,
 }
@@ -148,7 +148,6 @@ func (r *rawRecorder) url() string { return "http://" + r.ln.Addr().String() }
 
 func (r *rawRecorder) handle(conn net.Conn) {
 	defer func() { _ = conn.Close() }()
-	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	tp := textproto.NewReader(bufio.NewReader(conn))
 	line, err := tp.ReadLine()
 	if err != nil {
@@ -220,7 +219,6 @@ func guardModel(family models.Family) models.Model {
 func TestNoDriverSendsAProcessCredential(t *testing.T) {
 	trap := newRawRecorder(t)
 	setProcessCredentials(t, trap.url())
-	vertexai.Configure("", "")
 
 	families := registry.Families()
 	if len(families) == 0 {
@@ -286,13 +284,10 @@ var ambientCredentialAPIs = map[string]map[string]bool{
 }
 
 // ambientCredentialAllowed are the reviewed exceptions, by "file: pkg.Func",
-// each with why it is not a tenant fallback.
-var ambientCredentialAllowed = map[string]string{
-	// The platform's own Vertex AI identity, used only when the operator
-	// placed Vertex with VERTEXAI_PROJECT; no user or org can add a vertexai
-	// account, so it is never a stand-in for a missing user credential.
-	"vertexai/claude.go: google.FindDefaultCredentials": "platform-managed Vertex AI ADC",
-}
+// each with why it is not a tenant fallback. There are none: the server's own
+// Google credentials (ADC) included, a driver takes every credential from the
+// account (owner decision 2026-11-20).
+var ambientCredentialAllowed = map[string]string{}
 
 func TestDriversReadNoAmbientCredentialSource(t *testing.T) {
 	var offenders []string
