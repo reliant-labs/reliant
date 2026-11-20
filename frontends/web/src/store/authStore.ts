@@ -7,6 +7,7 @@ import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
 import { beginSessionTransition, setSessionOwner } from '@/lib/auth/sessionOwner'
+import { clearRouteOrgForAccountTransition, resolveRouteOrgAfterAccountTransition } from '@/lib/routeOrg'
 import { resetAccountScopedStateSync } from '@/lib/auth/accountScopedState'
 import { bindActiveOrgUser } from '@/store/activeOrgStore'
 import { API_KEY_USER_ID } from '@/lib/auth/apiKeyUser'
@@ -234,6 +235,7 @@ const commitIdentity = async (
       })
       uiHiddenForTransition = false
       setTelemetryUserId(null)
+      resolveRouteOrgAfterAccountTransition()
       return 'refused'
     }
     // The page now holds nobody's state, whichever identity is installed next.
@@ -242,9 +244,11 @@ const commitIdentity = async (
   if (ticket !== adoptionSeq) return 'superseded'
   beforeInstall?.()
   scopedStatePrincipal = nextPrincipal
+  const accountChanged = uiHiddenForTransition
   setSessionOwner(nextUserId)
-  set({ user, session, ...(uiHiddenForTransition ? { loading: false } : {}) })
+  set({ user, session, ...(accountChanged ? { loading: false } : {}) })
   uiHiddenForTransition = false
+  if (accountChanged) resolveRouteOrgAfterAccountTransition()
   return 'installed'
 }
 
@@ -262,6 +266,7 @@ let uiHiddenForTransition = false
  */
 const beginAccountTransition = (set: SetAuthState): void => {
   beginSessionTransition()
+  clearRouteOrgForAccountTransition()
   // Removed queries take their in-flight answers with them.
   queryClient.clear()
   resetAccountScopedStateSync()

@@ -100,6 +100,18 @@ describe.each(["reliant", "forge"] as const)("the %s host", (host) => {
       expect(mobileHandoffAllowed({ pathname: url, committedPathname: url, routeOrgScope: getRouteOrgScope() })).toBe(false);
     });
 
+    it("keeps the destination org when app settings redirects to usage", async () => {
+      const h = createOrgRouteHarness(world(host, flag, { tabOrg: "org-a" }));
+      await h.open("/o/acme/apps/shop/releases");
+      expect(await h.sendImplicit()).toBe("org-a");
+
+      await h.navigate("/o/side/apps/shop/settings");
+      expect(h.pathname()).toBe("/o/side/usage");
+      expect(getOrgScope().orgId).toBe("org-b");
+      expect(await h.sendImplicit()).toBe("org-b");
+      expect(await h.sendExplicit(getOrgScope().orgId)).toBe("org-b");
+    });
+
     it("keeps an org URL in place for a visitor who is not signed in", async () => {
       const h = createOrgRouteHarness(world(host, flag, { user: null }));
       await h.open("/o/acme/workflows");

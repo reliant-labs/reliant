@@ -41,6 +41,7 @@
 
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
+import { inOrgOfPath } from './lib/paths/org'
 import { memberOnly } from './lib/routeOrg'
 
 import { isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
@@ -307,8 +308,11 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const settingsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'settings',
-    beforeLoad: memberOnly(() => {
-      throw redirect({ href: orgUsagePath(), replace: true })
+    beforeLoad: memberOnly(({ location }) => {
+      // Keep the destination's org in the URL until it commits. Org-less
+      // Settings would read the previously committed tab's org instead.
+      const href = inOrg ? inOrgOfPath(location.pathname, '/usage') : orgUsagePath()
+      throw redirect({ href, replace: true })
     }),
   })
 

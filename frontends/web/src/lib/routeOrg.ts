@@ -3,6 +3,7 @@
 import { create } from "zustand";
 
 import { chooseActiveOrg, learnOrgSegments, useActiveOrgStore } from "@/store/activeOrgStore";
+import { currentSessionOwner } from "./auth/sessionOwner";
 
 /**
  * THE ORG THE PAGE ON SCREEN IS IN: the one authority for every org-scoped
@@ -90,20 +91,33 @@ interface MatchLike {
   context?: unknown;
 }
 
+/** Membership and the account epoch that resolved it. Cached matches may outlive that account. */
+export interface OrgRouteContext {
+  orgRoute: OrgRouteState;
+  orgRouteEpoch: number;
+}
+
 /** The scope `matches` (a committed match list) put the page in. */
 export function routeOrgScopeOfMatches(matches: readonly MatchLike[] | undefined): RouteOrgScope {
   const layout = (matches ?? []).find((match) => match.routeId === ORG_ROUTE_ID);
   if (!layout) return LEGACY;
-  const state = (layout.context as { orgRoute?: OrgRouteState } | undefined)?.orgRoute;
+  const context = layout.context as Partial<OrgRouteContext> | undefined;
+  const state = context?.orgRoute;
   if (!state) return { kind: "denied", reason: "unresolved" };
+  if (context?.orgRouteEpoch !== currentRouteOrgEpoch()) return PENDING;
   if (state.kind === "member") return { kind: "member", org: state.org };
   return { kind: "denied", reason: state.kind };
 }
 
 /** Whether a route's context (a `beforeLoad`'s `context`) is outside the org tree or in a member org. */
 export function inMemberOrLegacyContext(context: unknown): boolean {
-  const state = (context as { orgRoute?: OrgRouteState } | undefined)?.orgRoute;
-  return state === undefined || state.kind === "member";
+  const route = context as Partial<OrgRouteContext> | undefined;
+  return route?.orgRoute === undefined || (route.orgRoute.kind === "member" && route.orgRouteEpoch === currentRouteOrgEpoch());
+}
+
+/** Reuse the account epoch that also invalidates queued settings writes and caches. */
+export function currentRouteOrgEpoch(): number {
+  return currentSessionOwner().epoch;
 }
 
 const LEGACY: RouteOrgScope = { kind: "legacy" };
@@ -142,7 +156,20 @@ export function commitRouteOrgScope(scope: RouteOrgScope): void {
 }
 
 interface RouterLike {
-  state?: { matches?: readonly MatchLike[] };
+  state?: { matches?: readonly MatchLike[]; pendingMatches?: readonly MatchLike[] };
+  invalidate?: () => Promise<unknown>;
+}
+
+/** Drop the previous account's scope synchronously; do not reroute until auth is installed. */
+export function clearRouteOrgForAccountTransition(): void {
+  if (getRouteOrgScope().kind !== "legacy") commitRouteOrgScope(PENDING);
+}
+
+/** Re-resolve even an unchanged URL using the new account's membership cache. */
+export function resolveRouteOrgAfterAccountTransition(): void {
+  const router = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
+  const pendingOrg = router?.state?.pendingMatches?.some((match) => match.routeId === ORG_ROUTE_ID);
+  if (getRouteOrgScope().kind !== "legacy" || pendingOrg) void router?.invalidate?.();
 }
 
 /** The scope of the router's committed matches (the global registry's router, routes.tsx). */

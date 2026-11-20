@@ -30,7 +30,7 @@ import { OrgLayout } from './components/Orgs/OrgLayout'
 import { defaultOrgRoutingDeps, resolveOrgRoute, type OrgRoutingDeps } from './lib/orgRouting'
 import { homePath } from './lib/paths'
 import { inOrgOfPath } from './lib/paths/org'
-import { ORG_ROUTE_ID, type OrgRouteState } from './lib/routeOrg'
+import { currentRouteOrgEpoch, ORG_ROUTE_ID, useRouteOrgScope, type OrgRouteContext } from './lib/routeOrg'
 
 export interface OrgLayoutRouteOptions {
   /** The shell's sign-in guard, around the pages the layout renders itself. */
@@ -46,15 +46,19 @@ export function createOrgLayoutRoute<TParent extends AnyRoute>(getParentRoute: (
     beforeLoad: ({ params, location, preload }) => resolveOrgRoute(params.org, location, { preload, deps }),
     pendingComponent: LoadingSpinner,
     component: function OrgLayoutRoute() {
-      const { orgRoute } = route.useRouteContext() as { orgRoute: OrgRouteState }
+      const { orgRoute, orgRouteEpoch } = route.useRouteContext() as OrgRouteContext
+      const pending = useRouteOrgScope((s) => s.scope.kind === 'pending')
+      if (pending || orgRouteEpoch !== currentRouteOrgEpoch()) return <LoadingSpinner />
       return <OrgLayout state={orgRoute} Guard={Guard} />
     },
     // A path under the org that this host does not mount: the org's home in a
     // member org; the layout's own page (no access, sign in) otherwise, never
     // a redirect out of it.
     notFoundComponent: function OrgNotFound() {
-      const { orgRoute } = route.useRouteContext() as { orgRoute: OrgRouteState }
+      const { orgRoute, orgRouteEpoch } = route.useRouteContext() as OrgRouteContext
       const pathname = useRouterState({ select: (s) => s.location.pathname })
+      const pending = useRouteOrgScope((s) => s.scope.kind === 'pending')
+      if (pending || orgRouteEpoch !== currentRouteOrgEpoch()) return <LoadingSpinner />
       if (orgRoute.kind === 'member') return <Navigate to={inOrgOfPath(pathname, homePath())} replace />
       return <OrgLayout state={orgRoute} Guard={Guard} />
     },

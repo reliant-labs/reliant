@@ -47,7 +47,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 
 import { orgLinksEnabled } from "./orgRoutesFlag";
-import type { OrgRouteState } from "./routeOrg";
+import { currentRouteOrgEpoch, type OrgRouteContext } from "./routeOrg";
 
 /** What the resolution reads, swappable in tests. */
 export interface OrgRoutingDeps {
@@ -113,9 +113,16 @@ export async function resolveOrgRoute(
   segment: string,
   location: LocationLike,
   { deps = defaultOrgRoutingDeps }: { preload?: boolean; deps?: OrgRoutingDeps } = {},
-): Promise<{ orgRoute: OrgRouteState }> {
-  const userId = await deps.signedInUser();
-  if (!userId) return { orgRoute: { kind: "signed-out" } };
+): Promise<OrgRouteContext> {
+  let orgRouteEpoch: number;
+  let userId: string | null;
+  // Initial session restoration can install an account while signedInUser()
+  // waits. Read again rather than pairing the old answer with a new epoch.
+  do {
+    orgRouteEpoch = currentRouteOrgEpoch();
+    userId = await deps.signedInUser();
+  } while (orgRouteEpoch !== currentRouteOrgEpoch());
+  if (!userId) return { orgRoute: { kind: "signed-out" }, orgRouteEpoch };
   if (!deps.hasOrgs() || isMachineCredentialUser(userId)) {
     throw redirect({ href: `${orgFreePath(location.pathname)}${suffixOf(location)}`, replace: true });
   }
@@ -124,18 +131,22 @@ export async function resolveOrgRoute(
   try {
     mine = await deps.listOrgs();
   } catch (error) {
-    return { orgRoute: { kind: "error", error: error instanceof Error ? error : new Error(String(error)) } };
+    return { orgRoute: { kind: "error", error: error instanceof Error ? error : new Error(String(error)) }, orgRouteEpoch };
   }
+  // A late response for the previous account must not teach org segments or
+  // redirect the router. The auth transition schedules a fresh resolution.
+  if (orgRouteEpoch !== currentRouteOrgEpoch()) return { orgRoute: { kind: "signed-out" }, orgRouteEpoch };
   learnOrgSegments(mine.orgs);
   const org = findOrg(mine.orgs, segment);
   if (!org) {
     return {
       orgRoute: { kind: "not-member", orgs: mine.orgs.map((o) => ({ id: o.id, slug: o.slug, name: o.name })) },
+      orgRouteEpoch,
     };
   }
   const canonical = org.slug || org.id;
   if (segment !== canonical) throw redirect({ href: inOtherSegment(location, canonical), replace: true });
-  return { orgRoute: { kind: "member", org: { id: org.id, slug: org.slug } } };
+  return { orgRoute: { kind: "member", org: { id: org.id, slug: org.slug } }, orgRouteEpoch };
 }
 
 /**

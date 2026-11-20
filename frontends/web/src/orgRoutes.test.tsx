@@ -22,7 +22,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { requestOrgId } from './api/orgInterceptor'
 import { createOrgLayoutRoute } from './orgRoutes'
-import { routeOrgScopeHooks, useRouteOrgScope } from './lib/routeOrg'
+import { beginSessionTransition, setSessionOwner } from './lib/auth/sessionOwner'
+import { clearRouteOrgForAccountTransition, resolveRouteOrgAfterAccountTransition, routeOrgScopeHooks, useRouteOrgScope } from './lib/routeOrg'
 import type { OrgRoutingDeps } from './lib/orgRouting'
 import type { MyOrg } from './services/controlPlane/orgs'
 import { useActiveOrgStore } from './store/activeOrgStore'
@@ -41,9 +42,9 @@ function Page({ name }: { name: string }) {
   return <div data-testid="page">{`${name} in ${requestOrgId()}`}</div>
 }
 
-function reliantTree() {
+function reliantTree(routingDeps = deps) {
   const root = createRootRoute({ component: () => <Outlet />, ...routeOrgScopeHooks })
-  const orgLayout = createOrgLayoutRoute(() => root, { Guard: PassThrough, deps })
+  const orgLayout = createOrgLayoutRoute(() => root, { Guard: PassThrough, deps: routingDeps })
   const authenticated = createRoute({ getParentRoute: () => orgLayout, id: '_authenticated', component: () => <Outlet /> })
   const app = createRoute({ getParentRoute: () => orgLayout, id: '_app', component: () => <Outlet /> })
   const home = createRoute({ getParentRoute: () => app, path: '/', component: () => <Page name="home" /> })
@@ -109,6 +110,37 @@ describe('the /o/$org layout', () => {
     await waitFor(() => expect(requestOrgId()).toBe('org-b'))
     expect(r.state.location.pathname).toBe('/o/side/inbox')
     expect(useActiveOrgStore.getState().chosenId).toBe('org-b')
+  })
+
+  it('unmounts the previous account’s page while the same URL resolves for the next account', async () => {
+    let user = 'alice'
+    let release!: () => void
+    const wait = new Promise<void>((resolve) => { release = resolve })
+    setSessionOwner(user)
+    const r = open(reliantTree({
+      ...deps,
+      signedInUser: async () => user,
+      listOrgs: async () => {
+        if (user === 'alice') return deps.listOrgs()
+        await wait
+        return { orgs: [org('org-b', 'side', 'Side Project')], defaultOrgId: 'org-b' }
+      },
+    }), '/o/acme/inbox')
+    expect(await screen.findByTestId('page')).toHaveTextContent('inbox in org-a')
+
+    await act(async () => {
+      beginSessionTransition()
+      clearRouteOrgForAccountTransition()
+      user = 'bob'
+      setSessionOwner(user)
+      resolveRouteOrgAfterAccountTransition()
+    })
+    expect(screen.queryByTestId('page')).toBeNull()
+    expect(requestOrgId()).toBeNull()
+    await act(async () => release())
+    expect(await screen.findByTestId('org-access-denied')).toBeInTheDocument()
+    expect(screen.queryByTestId('page')).toBeNull()
+    expect(r.state.location.pathname).toBe('/o/acme/inbox')
   })
 
   it('leaves the org-less page to the tab org (the mirror)', async () => {
