@@ -39,11 +39,13 @@ default, the value a plain `docker build .` stamps:
       -D stamp_branch="$(git rev-parse --abbrev-ref HEAD)" \\
       -D stamp_commit_time="$(bash scripts/release-identity.sh --commit-time --commit HEAD)"
 
-Given the same five values, that build's layers are the ones a plain
-`docker build --build-arg ...` of the same tree produces (the binary
-byte-for-byte). Only the image config's timestamps differ: forge stamps them
-with SOURCE_DATE_EPOCH (the last commit touching the build's inputs) and
-passes --provenance=false, so a rebuild of the same commit keeps its digest.
+Given the same five values, the binary is byte for byte the one a plain
+`docker build --build-arg ...` of the same tree compiles, and on a shared
+layer cache so is every layer. The image config differs only in its
+timestamps: forge stamps them with SOURCE_DATE_EPOCH (the last commit touching
+the build's inputs) and passes --provenance=false. A cold rebuild still moves
+the digest, because the apt layer is not reproducible (ldconfig's cache and
+apt's logs differ per run), whoever runs the build.
 """
 
 import forge
