@@ -402,6 +402,12 @@
             "group": "Hosting",
             "pages": [
               {
+                "group": "How it works",
+                "pages": [
+                  "deep-dives/inside-reliant-hosting"
+                ]
+              },
+              {
                 "group": "Deploy",
                 "pages": [
                   "guides/hosting/deploy-go-api-managed-postgres",
