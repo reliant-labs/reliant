@@ -335,6 +335,11 @@ ASSIGNEE:
 - Claim pattern: update_task(task_id="X", status="in_progress", assignee="researcher-auth")
 - Other agents see assignments in list_tasks and skip claimed work
 
+ON A PLAN YOU WERE SPAWNED FROM (your parent's board):
+- You may update the task you were given: status, description, assignee, metadata
+- The first sub-agent to update a task holds it; another sub-agent's update is refused
+- Titles and the plan's shape stay with the thread that owns the plan
+
 METADATA OPTIONS:
 - notes: Add discoveries, blockers, or important context
 - preferred_agent: Suggest which agent should handle this
@@ -423,6 +428,24 @@ func (u *UpdateTaskTool) Execute(rctx *rctx.ToolContext, params UpdateTaskParams
 		}
 	}
 
+	// Only a task on this thread's plan, or on the plan it was spawned from,
+	// is this thread's to change; and on an inherited plan only the task this
+	// thread holds (see inheritedTaskRefusal).
+	scope, ownerThreadID, err := scopeTaskForThread(rctx.Context, u.repo, threadID, task)
+	if err != nil {
+		return NewTextErrorResponse(fmt.Sprintf("Failed to find the plan of task %s: %v", task.ID, err)), nil
+	}
+	meta := taskMetadataMap(task)
+	claim, _ := meta[claimedByThreadKey].(string)
+	switch scope {
+	case taskPlanForeign:
+		return NewTextErrorResponse(foreignTaskRefusal(params.TaskID)), nil
+	case taskPlanInherited:
+		if refusal := inheritedTaskRefusal(task, params, threadID, ownerThreadID, claim); refusal != "" {
+			return NewTextErrorResponse(refusal), nil
+		}
+	}
+
 	// Update fields
 	updated := false
 	if params.Title != "" {
@@ -442,30 +465,43 @@ func (u *UpdateTaskTool) Execute(rctx *rctx.ToolContext, params UpdateTaskParams
 		task.Description = &params.Description
 		updated = true
 	}
+	metaChanged := false
 	if params.Assignee != "" {
+		if scope == taskPlanOwn && claim != "" && (task.Assignee == nil || *task.Assignee != params.Assignee) {
+			// The plan's owner reassigning a task releases the old claim, so
+			// the agent it now goes to can take it.
+			delete(meta, claimedByThreadKey)
+			metaChanged = true
+		}
 		task.Assignee = &params.Assignee
 		updated = true
 	}
 
-	// Persist metadata if provided
-	if len(params.Metadata) > 0 {
-		// Merge with existing metadata if present
-		existing := make(map[string]interface{})
-		if task.Metadata != nil {
-			_ = json.Unmarshal([]byte(*task.Metadata), &existing)
+	// Merge metadata. The claim key is the tool's own record, never a param.
+	for k, v := range params.Metadata {
+		if k == claimedByThreadKey {
+			continue
 		}
-		for k, v := range params.Metadata {
-			existing[k] = v
-		}
-		if metaJSON, err := json.Marshal(existing); err == nil {
-			s := string(metaJSON)
-			task.Metadata = &s
-			updated = true
-		}
+		meta[k] = v
+		metaChanged = true
+		updated = true
 	}
 
 	if !updated {
 		return NewTextResponse("No updates provided"), nil
+	}
+
+	// A sub-agent that changes a task on its parent's board holds it from
+	// then on: a sibling's update to it is refused.
+	if scope == taskPlanInherited && claim != threadID {
+		meta[claimedByThreadKey] = threadID
+		metaChanged = true
+	}
+	if metaChanged {
+		if metaJSON, err := json.Marshal(meta); err == nil {
+			s := string(metaJSON)
+			task.Metadata = &s
+		}
 	}
 
 	task.UpdatedAt = time.Now()
@@ -519,6 +555,47 @@ Status: %s`,
 
 	logging.Debug("Task updated", "task_id", task.ID, "status", task.Status)
 	return NewTextResponse(responseText), nil
+}
+
+// taskMetadataMap is task's metadata as a map, empty when it has none or it
+// is not a JSON object.
+func taskMetadataMap(task *db.Task) map[string]interface{} {
+	meta := make(map[string]interface{})
+	if task.Metadata != nil {
+		_ = json.Unmarshal([]byte(*task.Metadata), &meta)
+		if meta == nil {
+			meta = make(map[string]interface{})
+		}
+	}
+	return meta
+}
+
+// inheritedTaskRefusal is why a sub-agent may not make this update to a task
+// on an ancestor's plan, or "" when it may.
+//
+// Several sub-agents share one inherited board. Each may report on the task
+// it was given — status, description, assignee, notes — but the plan's shape
+// is its owner's (add_task and create_subtask refuse), and so is a task's
+// title. A task one sub-agent has changed is held by it (claimedByThreadKey):
+// before this any sub-agent could overwrite a sibling's status, so a task
+// one agent was still working could read "completed" because another
+// guessed the wrong id.
+func inheritedTaskRefusal(task *db.Task, params UpdateTaskParams, threadID, ownerThreadID, claim string) string {
+	if params.Title != "" && params.Title != task.Title {
+		return fmt.Sprintf(
+			"Task %s is on the plan of an ancestor thread (%s); its title is that thread's to change.\n"+
+				"Report what you found in description or metadata.notes instead.", task.ID, ownerThreadID)
+	}
+	if claim != "" && claim != threadID {
+		holder := "another sub-agent"
+		if task.Assignee != nil && *task.Assignee != "" {
+			holder = fmt.Sprintf("another sub-agent (assignee: %s)", *task.Assignee)
+		}
+		return fmt.Sprintf(
+			"Task %q (%s) is held by %s, so it cannot be updated from this thread.\n"+
+				"Update only the task you were given; list_tasks shows the tasks with no assignee.", task.Title, task.ID, holder)
+	}
+	return ""
 }
 
 // CreateSubtaskTool allows agents to create subtasks
@@ -580,6 +657,19 @@ func (c *CreateSubtaskTool) Execute(rctx *rctx.ToolContext, params CreateSubtask
 	parentTask, err := c.repo.GetTask(rctx.Context, params.ParentTaskID)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find parent task: %v", err)), nil
+	}
+
+	// A subtask changes the plan's shape, which only its owner may do
+	// (add_task refuses on an inherited plan the same way).
+	scope, ownerThreadID, err := scopeTaskForThread(rctx.Context, c.repo, rctx.Thread, parentTask)
+	if err != nil {
+		return NewTextErrorResponse(fmt.Sprintf("Failed to find the plan of task %s: %v", parentTask.ID, err)), nil
+	}
+	switch scope {
+	case taskPlanForeign:
+		return NewTextErrorResponse(foreignTaskRefusal(params.ParentTaskID)), nil
+	case taskPlanInherited:
+		return NewTextErrorResponse(inheritedPlanWriteRefusal(ownerThreadID)), nil
 	}
 
 	// Serialize metadata to JSON if any fields are set

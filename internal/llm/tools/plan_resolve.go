@@ -107,6 +107,82 @@ func resolvePlanForWrite(ctx context.Context, repo planLookupStore, threadID str
 	return repo.GetPlanByThreadID(ctx, threadID)
 }
 
+// taskPlanScope is how a calling thread relates to the plan a task is on.
+type taskPlanScope int
+
+const (
+	// taskPlanForeign: the task is on no plan of this thread or of any thread
+	// it was spawned from. Nothing here may write it.
+	taskPlanForeign taskPlanScope = iota
+	// taskPlanOwn: the task is on a plan this thread created.
+	taskPlanOwn
+	// taskPlanInherited: the task is on an ancestor thread's plan, the board
+	// this thread was spawned from.
+	taskPlanInherited
+)
+
+// scopeTaskForThread reports how threadID relates to task's plan, and the
+// thread that owns that plan.
+//
+// Task ids reach the task tools from the model, and a task row is readable by
+// id alone, so a writer that trusted the id updated whatever task it named:
+// one on a sibling's plan, or on a plan in another chat. The plan the task is
+// on must be the caller's own or one of its ancestors' (the read-through
+// boundary, resolvePlanForRead); anything else is foreign.
+//
+// The plan is compared by its owning thread, not by id: a thread may have made
+// more than one plan, and every one of them is its own.
+func scopeTaskForThread(ctx context.Context, repo taskScopeStore, threadID string, task *db.Task) (taskPlanScope, string, error) {
+	if threadID == "" || task == nil {
+		return taskPlanForeign, "", nil
+	}
+	plan, err := repo.GetPlan(ctx, task.PlanID)
+	if err != nil {
+		if svcerr.IsNotFound(err) {
+			return taskPlanForeign, "", nil
+		}
+		return taskPlanForeign, "", err
+	}
+	if plan == nil {
+		return taskPlanForeign, "", nil
+	}
+	if plan.ThreadID == threadID {
+		return taskPlanOwn, plan.ThreadID, nil
+	}
+	currentID := threadID
+	for hop := 0; hop < maxPlanAncestorWalk; hop++ {
+		thread, threadErr := repo.GetThread(ctx, currentID)
+		if threadErr != nil || thread == nil || thread.ParentThreadID == nil || *thread.ParentThreadID == "" {
+			// An unreadable or parentless thread ends the chain: what the
+			// caller cannot prove is its own is foreign (fail closed).
+			return taskPlanForeign, "", nil
+		}
+		parentID := *thread.ParentThreadID
+		if parentID == currentID {
+			return taskPlanForeign, "", nil
+		}
+		if parentID == plan.ThreadID {
+			return taskPlanInherited, plan.ThreadID, nil
+		}
+		currentID = parentID
+	}
+	return taskPlanForeign, "", nil
+}
+
+// foreignTaskRefusal is what a task writer says about a task on no plan the
+// caller can see.
+func foreignTaskRefusal(taskID string) string {
+	return fmt.Sprintf(
+		"Task %s is not on this thread's plan or on the plan it was spawned from, so it cannot be changed here.\n"+
+			"Use list_tasks to see the tasks you can update.", taskID)
+}
+
+// claimedByThreadKey is the task-metadata key recording which thread claimed
+// a task on an inherited plan (see UpdateTaskTool). The assignee is
+// free-form text any agent can type, so it cannot say who holds a task; the
+// thread id can. Tools never let params write it.
+const claimedByThreadKey = "claimed_by_thread"
+
 // inheritedPlanWriteRefusal is the message a writer returns when the only plan
 // in scope belongs to an ancestor. It names the owner and the two legitimate
 // moves, so a sub-agent that tried to edit its parent's board is not left

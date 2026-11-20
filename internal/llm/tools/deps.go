@@ -124,9 +124,17 @@ type listTasksStore interface {
 	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
 }
 
+// taskScopeStore is what scopeTaskForThread reads to place a task's plan
+// relative to the calling thread.
+type taskScopeStore interface {
+	GetPlan(ctx context.Context, id string) (*db.Plan, error)
+	GetThread(ctx context.Context, id string) (*db.Thread, error)
+}
+
 // updateTaskStore is update_task's store.
 type updateTaskStore interface {
 	planLookupStore
+	GetPlan(ctx context.Context, id string) (*db.Plan, error)
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
 	GetTaskByPosition(ctx context.Context, planID string, position int) (*db.Task, error)
@@ -136,6 +144,7 @@ type updateTaskStore interface {
 
 // createSubtaskStore is create_subtask's store.
 type createSubtaskStore interface {
+	taskScopeStore
 	CreateTask(ctx context.Context, task *db.Task) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
