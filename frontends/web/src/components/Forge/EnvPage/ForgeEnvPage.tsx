@@ -61,6 +61,8 @@ import { isLocalLifecycle } from "@/services/forge/status";
 import { environments } from "@/services/forge/topology";
 import { useProjectStore } from "@/store/projectStore";
 import { isForgeShell } from "@/lib/shell";
+import { useOrgScope } from "@/lib/orgScope";
+import { OrgSwitchGate } from "@/components/Orgs/OrgSwitchGate";
 import { RunFromTerminal } from "@/components/ForgeShell/RunFromTerminal";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
@@ -77,7 +79,25 @@ import { OverviewTab, RunningTab } from "./EnvTabPanels";
 import { resolveTab, retiredTabOf, RETIRED_TABS, tabNeedsDaemon, tabParam, tabsFor, type EnvTab } from "./envTabs";
 import Link from "@/components/forge-ui/link";
 
+/**
+ * A link may name the org it was written for (`?org=`: the control plane's
+ * queued-deploy action URL does). The page reads the control plane in the
+ * ACTIVE org, so for another org it asks before switching (OrgSwitchGate) and
+ * reads nothing until the person has chosen; it never switches on its own.
+ */
 export function ForgeEnvPage() {
+  const navigate = useNavigate();
+  const { org } = useSearch({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
+  const dismissOrg = () =>
+    void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, org: undefined }), replace: true });
+  return (
+    <OrgSwitchGate requestedOrgId={org} onDismiss={dismissOrg} subject="environment link" testIdPrefix="env-org">
+      <EnvPageContent />
+    </OrgSwitchGate>
+  );
+}
+
+function EnvPageContent() {
   const navigate = useNavigate();
   const { env: envName } = useParams({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
   const { secret: secretParam, tab: tabSearch } = useSearch({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
@@ -165,8 +185,12 @@ export function ForgeEnvPage() {
   const placedId = liveEnv && isPlacedKind(liveEnv.kind) ? liveEnv.id : null;
   const cloudStatus = useCloudEnvStatus(placedId);
 
-  // Billing, with this page as the way back (and its project in the URL).
-  const goToBilling = useGoToBilling("forge");
+  // Billing, with this page as the way back (and its project in the URL), for
+  // the org this page read the environment in: the link carries it, so
+  // billing asks before acting in another org rather than paying for the
+  // wrong one.
+  const orgScope = useOrgScope();
+  const goToBilling = useGoToBilling("forge", { orgId: orgScope.orgId });
 
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
