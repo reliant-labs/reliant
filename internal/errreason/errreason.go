@@ -31,6 +31,11 @@ const (
 	// NoDaemon: no machine exists for the request at all
 	// (toolexec.ErrNoDaemon). FailedPrecondition; nothing to wait for.
 	NoDaemon = "no_daemon"
+	// WorktreeRecovering: the machine refused new work in a worktree for a
+	// moment, while it finalizes that worktree's recovery
+	// (toolexec.ErrRecoveryFinalizing). Unavailable; nothing ran, retry
+	// shortly. Not a connecting reason: the machine is up.
+	WorktreeRecovering = "worktree_recovering"
 
 	// ChatNotStarted: SendMessage on a chat whose root run has not started.
 	// FailedPrecondition; the client calls StartChat.

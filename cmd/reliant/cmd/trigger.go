@@ -72,6 +72,7 @@ proceed.`,
 		newTriggerEventsCmd(),
 		newTriggerActivateCmd(),
 		newTriggerDeactivateCmd(),
+		newTriggerRotateCmd(),
 	)
 	cmd.PersistentFlags().Bool("daemon-session", false, "Use this server's existing signed-in daemon account without widening its permissions")
 	return cmd
@@ -481,6 +482,52 @@ it started are real and still exist.`,
 	}
 }
 
+// newTriggerRotateCmd replaces a webhook trigger's token, as the app's Rotate
+// token does. It is refused in an agent's shell: a new token is a new way in,
+// and the person who will hand it to the sender runs it.
+func newTriggerRotateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "rotate <id-or-name>",
+		PreRunE: refuseFromAgentShell,
+		Short:   "Replace a webhook trigger's token",
+		Long: `Replace a webhook trigger's token, and print the new one once.
+
+The old token stops working at once, so give the new one to the sender. A
+webhook Reliant delivers to itself (a managed webhook, such as alerting) has
+no token to print: rotating re-provisions its sender with a new one.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := resolveConnection(cmd)
+			if err != nil {
+				return err
+			}
+			client := newTriggerServiceClient(conn)
+			trigger, err := resolveTrigger(cmd.Context(), client, args[0])
+			if err != nil {
+				return conn.annotate(err)
+			}
+			resp, err := client.RotateWebhookToken(cmd.Context(),
+				connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: trigger.GetId()}))
+			if err != nil {
+				return conn.annotate(fmt.Errorf("rotating the token of trigger %q: %w", trigger.GetName(), err))
+			}
+			out := cmd.OutOrStdout()
+			rotated := resp.Msg.GetTrigger()
+			if rotated == nil {
+				rotated = trigger
+			}
+			if cred := resp.Msg.GetWebhook(); cred.GetToken() != "" {
+				fmt.Fprintf(out, "Rotated the token of trigger %q (%s); the old token no longer works.\n", rotated.GetName(), rotated.GetId())
+				printWebhookCredential(out, rotated.GetName(), rotated.GetId(), rotated.GetWebhookUrl(), cred)
+				return nil
+			}
+			fmt.Fprintf(out, "Rotated the token of trigger %q (%s). Reliant delivers to this webhook itself, so the new token went to its sender and there is nothing to configure.\n",
+				rotated.GetName(), rotated.GetId())
+			return nil
+		},
+	}
+}
+
 func newTriggerFireCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "fire <id-or-name>",
@@ -834,6 +881,16 @@ func printTriggerDetailWith(out io.Writer, t *reliantv1.Trigger, connection stri
 		fmt.Fprintf(w, "Timezone:\t%s\n", orDash(sched.GetTimezone()))
 		fmt.Fprintf(w, "Overlap:\t%s\n", overlapLabel(sched.GetOverlap()))
 		fmt.Fprintf(w, "Catchup window:\t%s\n", orDash(sched.GetCatchupWindow()))
+	}
+	if u := t.GetWebhookUrl(); u != "" && t.GetWebhook() != nil {
+		// The token is never readable again; rotate issues a new one.
+		fmt.Fprintf(w, "Webhook URL:\t%s (token: shown once at enable; `reliant trigger rotate` issues a new one)\n", u)
+	} else if u != "" {
+		// An integration whose provider the user points at Reliant per
+		// resource (Twilio's number webhook): no token of the trigger's.
+		fmt.Fprintf(w, "Webhook URL:\t%s\n", u)
+	} else if t.GetWebhookManaged() {
+		fmt.Fprintf(w, "Webhook URL:\tnone to configure: Reliant delivers to this webhook itself\n")
 	}
 	fmt.Fprintf(w, "Next fire:\t%s\n", orDash(t.GetNextFireAt()))
 	for group, name := range t.GetPresets() {

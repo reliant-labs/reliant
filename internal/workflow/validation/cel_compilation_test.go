@@ -1107,3 +1107,34 @@ edges:
 	ValidateCELWithCompilation(wf, result, nil)
 	assert.NotEmpty(t, result.Errors(), "a misspelled root must still be rejected")
 }
+
+// TL-15: an approval step emits denial_reason when the approver gives one, but
+// the output schema did not declare it, so a workflow reading it failed
+// validation with "undefined field 'denial_reason'". data stays declared
+// (deprecated, never set) so a workflow that names it still validates.
+func TestValidation_ApprovalOutputDeclaresDenialReason(t *testing.T) {
+	t.Parallel()
+	wf, err := wfyaml.ParseWorkflow([]byte(`
+name: approve-then-say
+entry: [approve]
+nodes:
+  - id: approve
+    type: approval
+    args:
+      title: Ship it?
+  - id: say
+    type: run
+    command: "echo {{ nodes.approve.denial_reason }} {{ nodes.approve.status }}"
+edges:
+  - from: approve
+    to: say
+outputs:
+  legacy: "{{nodes.approve.data}}"
+`))
+	require.NoError(t, err)
+	result := &Result{}
+	ValidateCELWithCompilation(wf, result, nil)
+	for _, e := range result.Errors() {
+		t.Errorf("unexpected error: %s - %s", pathToString(e.Path), e.Message)
+	}
+}

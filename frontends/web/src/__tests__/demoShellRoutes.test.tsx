@@ -50,6 +50,10 @@ import { resetDemoSessionForTests } from "@/components/Forge/Demo/demoSession";
 import { resetShellForTests } from "@/lib/shell";
 import { buildDemoShellTree } from "@/demoShellRoutes";
 
+// This file asserts module-evaluation boot calls, before the first test.
+// Vitest 5 clears mock history before each test by default.
+vi.setConfig({ clearMocks: false });
+
 function renderDemoShell(path: string) {
   const router = createRouter({ routeTree: buildDemoShellTree(), history: createMemoryHistory({ initialEntries: [path] }) });
   render(<RouterProvider router={router} />);

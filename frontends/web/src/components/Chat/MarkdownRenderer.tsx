@@ -10,6 +10,7 @@ import { isHttpUrl } from '../../lib/url';
 import { FileLink } from './FileLink';
 import { CodeBlock } from './CodeBlock';
 import { openLink } from '../../lib/open-link';
+import { CHAT_LINK_CLASS } from './LinkifiedText';
 
 interface MarkdownRendererProps {
   content: string;
@@ -295,10 +296,7 @@ function createMarkdownComponents(
     a: ({ children, href, ...props }) => (
       <a
         href={href}
-        // Accent text is --primary-ink, which every scheme holds at AA on
-        // every surface (web-styling, "Accent text"); the underline is what
-        // says "link" in a scheme whose primary is not blue.
-        className="cursor-pointer text-primary-ink underline decoration-primary-ink/40 underline-offset-2 transition-colors duration-200 hover:decoration-primary-ink"
+        className={CHAT_LINK_CLASS}
         onClick={(e) => {
           if (href && onLinkClick) {
             e.preventDefault();
