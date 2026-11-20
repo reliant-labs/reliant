@@ -1612,6 +1612,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		celStringValuePtr(args.GetSystemPrompt()),
 		caps.CanLoad(tools.ToolWorktree),
 	)
+	if note := subAgentScratchNote(chat, rtx.Thread, rtx.SpawnDepth, projectPath != "" || worktreePath != ""); note != "" {
+		systemPrompts = append(systemPrompts, note)
+	}
 	if chat.NoMachine {
 		systemPrompts = append(systemPrompts, noMachineNotes(caps, projectGitHubRepos(project, repos))...)
 	}
