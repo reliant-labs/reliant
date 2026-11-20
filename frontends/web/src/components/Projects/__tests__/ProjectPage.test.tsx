@@ -31,6 +31,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
   useNavigate: () => state.navigate,
   useParams: () => state.params,
+  useRouter: () => ({ latestLocation: { pathname: "/projects/shop/workspaces" } }),
   Link: ({ to, children, ...rest }: { to: string; children: ReactNode }) => (
     <a href={to} {...rest}>
       {children}
@@ -132,8 +133,9 @@ describe("a project's page", () => {
     expect(chats.map((c) => c.textContent?.startsWith("Add a webhook") || c.textContent?.startsWith("Fix the cart"))).toEqual([true, true]);
     expect(chats[0]).toHaveTextContent("Add a webhook");
     fireEvent.click(chats[0]);
-    await waitFor(() => expect(state.navigate).toHaveBeenCalledWith({ to: "/project/shop" }));
-    expect(state.openChat).toHaveBeenCalledWith(expect.objectContaining({ id: "c2" }));
+    // openChat goes to the chat's own URL; the page adds no navigation of its own.
+    await waitFor(() => expect(state.openChat).toHaveBeenCalledWith(expect.objectContaining({ id: "c2" })));
+    expect(state.navigate).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("project-new-chat"));
     expect(state.openNewChat).toHaveBeenCalledWith({ projectId: "shop" });
   });

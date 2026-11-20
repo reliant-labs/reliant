@@ -23,7 +23,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useNavigate, useParams, useRouter } from "@tanstack/react-router";
 import { AlertTriangle, ExternalLink, FolderGit2, Globe, HardDrive, MessageSquare, SquarePen, Users } from "lucide-react";
 
 import AlertBanner from "@/components/forge-ui/alert_banner";
@@ -36,6 +36,7 @@ import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { logger } from "@/lib/logger";
 import { appPath, projectChatsPath, projectPath, projectsPath, type ProjectPageTab } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
@@ -144,12 +145,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "settings", label: "Settings" },
 ];
 
-/** "New chat in this project": the new-chat view, in this project, on the chat home filtered to it. */
+/** "New chat in this project": the new-chat view (`/new?project=`), which openNewChat navigates to. */
 function useNewChatInProject(projectId: string): () => void {
-  const navigate = useNavigate();
   return () => {
     void openNewChat({ projectId })
-      .then(() => navigate({ to: projectChatsPath(projectId) }))
       .catch((err: unknown) => {
         logger.error("[ProjectPage] Failed to start a chat", err);
         toast.error("Could not start a chat in this project");
@@ -423,7 +422,6 @@ function CodePanel({ row }: { row: ProjectCatalogRow }) {
 const RECENT_CHATS = 8;
 
 function ChatsPanel({ row }: { row: ProjectCatalogRow }) {
-  const navigate = useNavigate();
   const { data: chats = [], isLoading, isError } = useChatList(row.key);
   const newChat = useNewChatInProject(row.key);
   const recent = useMemo(
@@ -435,8 +433,8 @@ function ChatsPanel({ row }: { row: ProjectCatalogRow }) {
     [chats, row.key],
   );
   const open = (chat: Chat) => {
+    // openChat goes to the chat's own URL (`/c/<id>`).
     void openChat(chat)
-      .then(() => navigate({ to: projectChatsPath(row.key) }))
       .catch((err: unknown) => {
         logger.error("[ProjectPage] Failed to open chat", err);
         toast.error("Could not open that chat");
@@ -495,6 +493,7 @@ function ChatsPanel({ row }: { row: ProjectCatalogRow }) {
  */
 function ProjectWorkspaces({ project }: { project: Project }) {
   const navigate = useNavigate();
+  const router = useRouter();
   const currentId = useProjectStore((state) => state.currentProject?.id);
   const selectProject = useProjectStore((state) => state.selectProject);
   useEffect(() => {
@@ -508,7 +507,13 @@ function ProjectWorkspaces({ project }: { project: Project }) {
       </div>
     );
   }
-  return <WorkspacesBody onOpened={() => void navigate({ to: projectChatsPath(project.id) })} />;
+  // Opening a chat from a workspace row goes to its URL itself (`/c/<id>`);
+  // opening the workspace switches context only, so that one leaves for the
+  // project's chats. Only while this page is still the one on screen.
+  const onOpened = () => {
+    if (orgFreePath(router.latestLocation.pathname).startsWith("/projects/")) void navigate({ to: projectChatsPath(project.id) });
+  };
+  return <WorkspacesBody onOpened={onOpened} />;
 }
 
 // ── Settings ────────────────────────────────────────────────────────────────
