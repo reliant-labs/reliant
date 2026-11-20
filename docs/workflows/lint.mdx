@@ -126,11 +126,19 @@ events: [...]
 expect: {...}
 ```
 
-For an integration trigger the payload is merged over a sample of the event's declared payload, so give only the fields the trigger reads. `inputs:`, when also set, apply over the mapped inputs.
+For an integration trigger the payload is merged over a sample of the event's declared payload, so give only the fields the trigger reads. `inputs:`, when also set, apply over the mapped inputs. A schedule firing carries no event, so its scenario needs no payload: `trigger: {name: nightly}`.
 
 ### scenario-terminal-uncovered
 
 **Warning.** No scenario expects a run to end at this terminal node (a node with no outgoing edge). Coverage is read from what scenarios assert: a terminal named in `expect.completed`, `reached`, `node_outputs`, `messages` or `error_node`.
+
+### ask-question-not-ask-user
+
+**Warning.** An `ask_question` node's `metadata` is a JSON object without `"type": "ask_user"`. The app shows such a question with no options, and `reliant workflow answer` cannot answer it, so the run waits on a question nobody can resolve; validation and scenarios pass it. Write the metadata as the question card it is:
+
+```json
+{"type": "ask_user", "questions": [{"question": "Ship this change?", "options": [{"label": "Ship it"}, {"label": "Not yet"}]}]}
+```
 
 ### lint-allow-invalid
 
