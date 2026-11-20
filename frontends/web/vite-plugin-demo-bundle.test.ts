@@ -41,6 +41,21 @@ describe("demo twins", () => {
     expect(twinOf(at("src/lib/shell.ts"))).toBeUndefined();
   });
 
+  it("gives demo routes a stable anonymous epoch, without exporting real auth operations", async () => {
+    const real = at("src/lib/auth/sessionOwner.ts");
+    const twin = at("src/lib/auth/sessionOwner.demo.ts");
+    expect(reliantOnlyRule(real, root)?.why).toBe("Reliant auth");
+    expect(twinOf(real)).toBe(twin);
+    expect(reliantOnlyRule(twin, root)).toBeUndefined();
+
+    const demo = await import("./src/lib/auth/sessionOwner.demo");
+    expect(Object.keys(demo)).toEqual(["currentSessionOwner"]);
+    const owner = demo.currentSessionOwner();
+    expect(owner).toEqual({ userId: null, epoch: 0 });
+    expect(demo.currentSessionOwner()).toBe(owner);
+    expect(Object.isFrozen(owner)).toBe(true);
+  });
+
   // The first twin pays the cold import of the app's module graph (~2.5-3s
   // on an idle host), which a loaded gate stretches past vitest's default 5s.
   it.each(twins())("%s replaces a real module and exports only names it has", async (twin) => {
