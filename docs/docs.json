@@ -379,6 +379,8 @@
                 "group": "Build features",
                 "pages": [
                   "guides/forge/add-table-crud-api-pages",
+                  "guides/forge/add-custom-rpc",
+                  "guides/forge/background-worker-cron-job",
                   "guides/forge/scope-rows-to-owner"
                 ]
               },
