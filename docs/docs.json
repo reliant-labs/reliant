@@ -342,7 +342,8 @@
                 "group": "How it works",
                 "pages": [
                   "deep-dives/how-forge-generate-works",
-                  "deep-dives/safe-migrations"
+                  "deep-dives/safe-migrations",
+                  "deep-dives/security-model"
                 ]
               },
               {
@@ -363,7 +364,8 @@
                 "group": "Data & migrations",
                 "pages": [
                   "guides/forge/zero-downtime-postgres-migrations",
-                  "guides/forge/measure-migration-locks"
+                  "guides/forge/measure-migration-locks",
+                  "guides/forge/let-agents-query-production-data"
                 ]
               }
             ]
@@ -376,6 +378,13 @@
                 "pages": [
                   "guides/hosting/deploy-go-api-managed-postgres",
                   "guides/hosting/preview-environment-every-pull-request"
+                ]
+              },
+              {
+                "group": "Release safely",
+                "pages": [
+                  "guides/hosting/promote-release-staging-to-production",
+                  "guides/hosting/recover-from-bad-deploy"
                 ]
               }
             ]

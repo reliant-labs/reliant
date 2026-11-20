@@ -130,7 +130,7 @@ Deploying an earlier release is only safe while that release can run on the curr
 
 A forge-managed Postgres has a read-only role, `forge_ro`. `reliant forge db query` reads through it, inside a `READ ONLY` transaction. Its privileges come from the migrations as well. After every migration run, in the same session and under the same lock, the migrator applies `db/grants/readonly_gen.sql`. That script revokes everything the role holds, then grants `SELECT` column by column on exactly the declared columns. The role never gets a table-level `SELECT`, so a column added later stays unreadable until the next `forge generate` has decided whether it is secret.
 
-A column is withheld when it is marked `forge:secret`, either as a SQL `COMMENT ON COLUMN` or on the proto field. A credential-shaped column that nobody has decided about (a token, password or key) is withheld too, and `forge lint --db-grants` fails until someone marks it `forge:secret` or `forge:readable <why>`. Postgres enforces the boundary, not a redactor, so `select *`, `upper(col)` and `row_to_json` can't read a withheld column. {/* defer:/guides/forge/let-agents-query-production-data */}Let AI agents query production data read-only{/* /defer */} covers the query side.
+A column is withheld when it is marked `forge:secret`, either as a SQL `COMMENT ON COLUMN` or on the proto field. A credential-shaped column that nobody has decided about (a token, password or key) is withheld too, and `forge lint --db-grants` fails until someone marks it `forge:secret` or `forge:readable <why>`. Postgres enforces the boundary, not a redactor, so `select *`, `upper(col)` and `row_to_json` can't read a withheld column. [Let AI agents query production data read-only](/guides/forge/let-agents-query-production-data) covers the query side.
 
 ## Design decisions and trade-offs
 
@@ -223,9 +223,13 @@ reliant forge env floor show prod       # needs a hosted env
   <Card title="Measure migration locks" icon="lock" href="/guides/forge/measure-migration-locks">
     Run pending migrations on a disposable Postgres and read the locks and rewrites.
   </Card>
-{/* defer-card:/guides/forge/let-agents-query-production-data ICA8Q2FyZCB0aXRsZT0iTGV0IGFnZW50cyBxdWVyeSBwcm9kdWN0aW9uIGRhdGEiIGljb249ImRhdGFiYXNlIiBocmVmPSIvZ3VpZGVzL2ZvcmdlL2xldC1hZ2VudHMtcXVlcnktcHJvZHVjdGlvbi1kYXRhIj4KICAgIFJlYWQtb25seSwgYXVkaXRlZCBxdWVyaWVzIHRocm91Z2ggdGhlIHJvbGUgdGhhdCBjYW4ndCBzZWUgc2VjcmV0IGNvbHVtbnMuCiAgPC9DYXJkPg== */}
+  <Card title="Let agents query production data" icon="database" href="/guides/forge/let-agents-query-production-data">
+    Read-only, audited queries through the role that can't see secret columns.
+  </Card>
 {/* defer-card:/guides/forge/seed-realistic-dev-data ICA8Q2FyZCB0aXRsZT0iU2VlZCByZWFsaXN0aWMgZGV2IGRhdGEiIGljb249InNlZWRsaW5nIiBocmVmPSIvZ3VpZGVzL2ZvcmdlL3NlZWQtcmVhbGlzdGljLWRldi1kYXRhIj4KICAgIEdlbmVyYXRlIHJvd3MgdGhhdCBmaXQgdGhlIHNjaGVtYSB5b3VyIG1pZ3JhdGlvbnMgYnVpbGQuCiAgPC9DYXJkPg== */}
-{/* defer-card:/guides/hosting/recover-from-bad-deploy ICA8Q2FyZCB0aXRsZT0iUmVjb3ZlciBmcm9tIGEgYmFkIGRlcGxveSIgaWNvbj0icm90YXRlLWxlZnQiIGhyZWY9Ii9ndWlkZXMvaG9zdGluZy9yZWNvdmVyLWZyb20tYmFkLWRlcGxveSI+CiAgICBSb2xsIGZvcndhcmQsIG9yIHJlZGVwbG95IGFuIGVhcmxpZXIgcmVsZWFzZSBhYm92ZSBldmVyeSBmbG9vci4KICA8L0NhcmQ+ */}
+  <Card title="Recover from a bad deploy" icon="rotate-left" href="/guides/hosting/recover-from-bad-deploy">
+    Roll forward, or redeploy an earlier release above every floor.
+  </Card>
 {/* defer-card:/guides/hosting/restore-postgres-point-in-time ICA8Q2FyZCB0aXRsZT0iUmVzdG9yZSBQb3N0Z3JlcyB0byBhIHBvaW50IGluIHRpbWUiIGljb249ImNsb2NrLXJvdGF0ZS1sZWZ0IiBocmVmPSIvZ3VpZGVzL2hvc3RpbmcvcmVzdG9yZS1wb3N0Z3Jlcy1wb2ludC1pbi10aW1lIj4KICAgIFJlY292ZXIgZGF0YSBhIG1pZ3JhdGlvbiBvciBhIGJhZCByZWxlYXNlIGRhbWFnZWQuCiAgPC9DYXJkPg== */}
 </CardGroup>
 

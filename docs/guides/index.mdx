@@ -125,6 +125,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   <Card title="Measure migration locks and table rewrites before production" icon="hammer" href="/guides/forge/measure-migration-locks">
     See which Postgres locks, table rewrites and full scans each pending migration causes, on a disposable database, before the migration reaches production.
   </Card>
+  <Card title="Let AI agents query production data read-only" icon="hammer" href="/guides/forge/let-agents-query-production-data">
+    Give an AI agent audited, read-only SQL access to production with forge db query: Postgres withholds secret columns, refuses writes and every query is recorded.
+  </Card>
 </CardGroup>
 
 **How it works**
@@ -135,6 +138,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   </Card>
   <Card title="How Forge keeps Postgres migrations safe" icon="book-open" href="/deep-dives/safe-migrations">
     How Forge keeps a Postgres schema change from breaking the release still serving: declared compatibility, lint, measured locks, gated rollouts and rollback floors.
+  </Card>
+  <Card title="Reliant security model: fail-closed auth, scoped tokens, secrets" icon="book-open" href="/deep-dives/security-model">
+    How a forge API refuses unauthenticated calls, finds RPCs that never check the caller, keeps errors and secrets out of responses, and scopes every token.
   </Card>
 </CardGroup>
 {/* /guides: forge */}
@@ -150,6 +156,12 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   </Card>
   <Card title="Create a preview environment for every pull request" icon="cloud" href="/guides/hosting/preview-environment-every-pull-request">
     Give each pull request its own hosted copy of your app on its own URL, created and deleted from GitHub Actions, and cleaned up by itself when it expires.
+  </Card>
+  <Card title="Promote a release from staging to production by digest" icon="cloud" href="/guides/hosting/promote-release-staging-to-production">
+    Move the exact release staging runs to production without a rebuild, approve the plan you read by its digest, and see a stale promotion refused.
+  </Card>
+  <Card title="Recover from a bad deploy by redeploying an earlier release" icon="cloud" href="/guides/hosting/recover-from-bad-deploy">
+    Put production back on the last good release in one deploy, check that rollback floors allow it, and set a floor so nobody deploys behind a release again.
   </Card>
 </CardGroup>
 {/* /guides: hosting */}
