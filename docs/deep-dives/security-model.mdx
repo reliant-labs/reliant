@@ -98,7 +98,7 @@ A forge-managed Postgres has a read-only role, `forge_ro`, and `reliant forge db
 
 A hosted environment's secrets live in Reliant's managed store, one store per environment. You set a value in the console or with `reliant forge secret set --env prod NAME`, which reads the value from stdin so it never lands in shell history. Nothing reads it back: the credential Reliant's servers hold may read secret metadata but not secret data, so the storage layer refuses the request. Every write is a new version, and values reach workloads at deploy time as environment variables. Setting a secret needs the org admin role, or an automation token with `secret:write`.
 
-An environment marked **protected** adds a step-up before any change. To set, delete, undelete or destroy a value, an admin requests a one-time code emailed to their verified address. The code is good for 10 minutes and 5 attempts, and opens a 15-minute window for that person in that environment. Listing secrets is never gated. An org automation token has no person behind it, so it can't change a protected environment at all. Every write, step-up and refused write leaves an audit row naming the actor, secret and version, never the value. Without the step-up machinery, a protected environment is read-only, not open. [Secrets](/hosting/secrets) is the reference, and {/* defer:/guides/hosting/manage-production-secrets */}Manage production secrets per environment{/* /defer */} is the task guide.
+An environment marked **protected** adds a step-up before any change. To set, delete, undelete or destroy a value, an admin requests a one-time code emailed to their verified address. The code is good for 10 minutes and 5 attempts, and opens a 15-minute window for that person in that environment. Listing secrets is never gated. An org automation token has no person behind it, so it can't change a protected environment at all. Every write, step-up and refused write leaves an audit row naming the actor, secret and version, never the value. Without the step-up machinery, a protected environment is read-only, not open. [Secrets](/hosting/secrets) is the reference, and [Manage production secrets per environment](/guides/hosting/manage-production-secrets) is the task guide.
 
 ### 7. Secrets a workflow uses but never sees
 
@@ -235,7 +235,9 @@ Find the secret-scanning hook in a new API project:
   <Card title="Let agents query production data" icon="database" href="/guides/forge/let-agents-query-production-data">
     Read-only, audited queries through a role that can't see secret columns.
   </Card>
-{/* defer-card:/guides/hosting/manage-production-secrets ICA8Q2FyZCB0aXRsZT0iTWFuYWdlIHByb2R1Y3Rpb24gc2VjcmV0cyIgaWNvbj0ibG9jayIgaHJlZj0iL2d1aWRlcy9ob3N0aW5nL21hbmFnZS1wcm9kdWN0aW9uLXNlY3JldHMiPgogICAgU2V0IHdyaXRlLW9ubHkgc2VjcmV0cyBwZXIgZW52aXJvbm1lbnQgYW5kIHZlcmlmeSB0aGVtIHdpdGhvdXQgcmVhZGluZyB0aGVtLgogIDwvQ2FyZD4= */}
+  <Card title="Manage production secrets" icon="lock" href="/guides/hosting/manage-production-secrets">
+    Set write-only secrets per environment and verify them without reading them.
+  </Card>
   <Card title="Call an API without exposing the key" icon="plug" href="/guides/workflows/call-api-without-exposing-key">
     Use a stored secret in a workflow's HTTP request header.
   </Card>

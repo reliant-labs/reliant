@@ -211,6 +211,12 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   <Card title="Create a preview environment for every pull request" icon="cloud" href="/guides/hosting/preview-environment-every-pull-request">
     Give each pull request its own hosted copy of your app on its own URL, created and deleted from GitHub Actions, and cleaned up by itself when it expires.
   </Card>
+  <Card title="Add a custom domain with automatic HTTPS" icon="cloud" href="/guides/hosting/custom-domain-https">
+    Serve a hosted environment on a hostname you own: claim it, publish the CNAME and TXT records forge prints, bind a workload, and get HTTPS issued for you.
+  </Card>
+  <Card title="Manage production secrets per environment" icon="cloud" href="/guides/hosting/manage-production-secrets">
+    Give each environment its own secret values: a gitignored file for dev, the write-only hosted store for prod, set from stdin and rotated without a redeploy.
+  </Card>
   <Card title="Promote a release from staging to production by digest" icon="cloud" href="/guides/hosting/promote-release-staging-to-production">
     Move the exact release staging runs to production without a rebuild, approve the plan you read by its digest, and see a stale promotion refused.
   </Card>
