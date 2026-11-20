@@ -128,7 +128,10 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
             </ResizableSidebar>
           </div>
         )}
-        <div className={inShell ? "flex h-full min-w-0 flex-1 flex-col" : "contents"}>{children}</div>
+        {/* The shell's ONE main landmark: pages inside it render their body as a plain region (PageMain). */}
+        <div role={inShell ? "main" : undefined} className={inShell ? "flex h-full min-w-0 flex-1 flex-col" : "contents"} data-testid={inShell ? "shell-main" : undefined}>
+          {children}
+        </div>
       </div>
     </ShellFrameContext.Provider>
   );

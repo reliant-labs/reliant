@@ -8,6 +8,7 @@ import {
 } from "./SettingsNavigation";
 import { cn } from "../../lib/utils";
 import { ShellPageHeader, useShellFrame } from "../Layout/shell/shellFrame";
+import { PageMain } from "@/components/Layout/shell/shellFrame";
 
 const SettingsContent = lazy(() =>
   import("./SettingsContent").then((module) => ({
@@ -147,7 +148,7 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
               <SettingsNavigation activeSection={section} onSectionChange={onSectionChange} isCollapsed={isCollapsed} />
             </div>
           </aside>
-          <main className="min-w-0 flex-1 overflow-hidden bg-background">{content}</main>
+          <PageMain className="min-w-0 flex-1 overflow-hidden bg-background">{content}</PageMain>
         </div>
       </div>
     );
@@ -178,7 +179,7 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
       </aside>
 
       {/* Settings Content */}
-      <main className="min-w-0 flex-1 overflow-hidden bg-background">{content}</main>
+      <PageMain className="min-w-0 flex-1 overflow-hidden bg-background">{content}</PageMain>
     </div>
   );
 }

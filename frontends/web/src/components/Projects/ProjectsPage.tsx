@@ -19,7 +19,7 @@ import PageHeader from "@/components/forge-ui/page_header";
 import Tabs from "@/components/forge-ui/tabs";
 import { useProjects } from "@/hooks/project-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import { projectChatsPath, projectsPath } from "@/lib/paths";
+import { projectChatsPath, projectsPath, withSearch } from "@/lib/paths";
 
 import { AppsBody } from "../Apps/AppsPage";
 import { ProjectsOverview } from "../Forge/Console/ProjectsOverview";
@@ -29,6 +29,7 @@ import { chatSetupNeeded } from "../OnboardingFlow/onboardingGate";
 import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { AreaShell } from "../Layout/AreaShell";
+import { useShellSeveral } from "../Layout/sidebar/shellProject";
 
 type ProjectsFilter = "all" | "apps" | "sites";
 
@@ -48,7 +49,9 @@ export function ProjectsPage() {
 
 export function ProjectsBody() {
   // The filter is the URL's (`?show=apps|sites`), so a refresh, Back and a shared link keep it.
-  const { show } = useSearch({ strict: false }) as { show?: unknown };
+  const { show, browse } = useSearch({ strict: false }) as { show?: unknown; browse?: unknown };
+  // Several projects in the shell: this page is their Home, the summary rows alone (U6b).
+  const { mode: several } = useShellSeveral();
   const filter: ProjectsFilter = show === "apps" || show === "sites" ? show : "all";
   const navigate = useNavigate();
   const setFilter = (next: ProjectsFilter) =>
@@ -63,12 +66,32 @@ export function ProjectsBody() {
   // The apps list's own action, in the page's header now that the page heads the list.
   const startBuilding = useStartBuildingApp();
 
+  if (several && browse === undefined) {
+    return (
+      <div className="space-y-4" data-testid="projects-page" data-mode="home">
+        <div className="forge-ui">
+          <ProjectsOverview />
+        </div>
+        <div className="mx-auto max-w-[var(--page-max)] text-right">
+          <a
+            href={withSearch(projectsPath(), { browse: 1 })}
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+              event.preventDefault();
+              void navigate({ href: withSearch(projectsPath(), { browse: 1 }) });
+            }}
+            className="no-color text-meta text-muted-foreground hover:text-foreground hover:underline"
+            data-testid="projects-browse-all"
+          >
+            Browse all projects
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6" data-testid="projects-page">
-      {/* Several projects in the shell: this page is their Home, the summary first. */}
-      <div className="forge-ui empty:hidden">
-        <ProjectsOverview />
-      </div>
       <PageHeader
         title="Projects"
         meta={<span>Your apps and sites, and the code you work on.</span>}

@@ -64,6 +64,7 @@ import Tooltip from "../forge-ui/tooltip";
 import { useWorkflowsScope } from "./useWorkflowsScope";
 import { homePath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
+import { PageMain } from "@/components/Layout/shell/shellFrame";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
   workflows: Workflow,
@@ -151,9 +152,9 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
         {fill ? (
           <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         ) : (
-          <main className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-2 max-md:px-4">
+          <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-2 max-md:px-4">
             <div className="mx-auto w-full max-w-6xl">{children}</div>
-          </main>
+          </PageMain>
         )}
       </div>
     );

@@ -7,7 +7,7 @@
  * loading the nav.
  */
 
-import { createContext, useContext, type CSSProperties, type ReactNode } from "react";
+import { createContext, useContext, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { PanelLeft } from "lucide-react";
 import { create } from "zustand";
 
@@ -76,6 +76,22 @@ export const ShellFrameContext = createContext<ShellFrame>({ inShell: false, nav
 
 export function useShellFrame(): ShellFrame {
   return useContext(ShellFrameContext);
+}
+
+/**
+ * A page's body region. Inside the one shell the frame is the page's ONE
+ * `main` landmark (AppShellFrame), so the body is a plain region; outside it
+ * (the forge host before it runs the shell, a preview) the body is the main
+ * landmark itself. A div with a role either way, so the shell turning on or
+ * off never changes the element and never remounts the page.
+ */
+export function PageMain({ children, ...props }: HTMLAttributes<HTMLDivElement> & { children?: ReactNode }) {
+  const { inShell } = useShellFrame();
+  return (
+    <div role={inShell ? undefined : "main"} {...props}>
+      {children}
+    </div>
+  );
 }
 
 // ── Opening and closing the nav ─────────────────────────────────────────────

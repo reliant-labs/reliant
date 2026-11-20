@@ -17,7 +17,7 @@
 
 import type { ReactNode } from "react";
 
-import { ShellPageHeader } from "@/components/Layout/shell/shellFrame";
+import { PageMain, ShellPageHeader } from "@/components/Layout/shell/shellFrame";
 import { AppPageProjectPicker } from "@/components/Layout/sidebar/AppPageProjectPicker";
 
 import { useConsoleNavExtras } from "./consoleNavExtras";
@@ -63,7 +63,7 @@ export function ConsoleFrame({ project, page, env, dashboardTitle, scope, platfo
         <AppPageProjectPicker app={project} page={page} />
         <ConsoleBreadcrumb project={project} env={env} crumbs={crumbs} />
       </ShellPageHeader>
-      <main className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4">{children}</main>
+      <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4">{children}</PageMain>
     </div>
   );
 }

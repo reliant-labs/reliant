@@ -25,7 +25,7 @@ import ErrorBoundary from "../ErrorBoundary";
 import Tooltip from "../forge-ui/tooltip";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import { orgFreePath } from "@/lib/paths/org";
-import { ShellPageHeader, useShellFrame } from "./shell/shellFrame";
+import { PageMain, ShellPageHeader, useShellFrame } from "./shell/shellFrame";
 
 interface AreaShellProps {
   /** The area's list path, e.g. "/inbox". Anything below it is a detail page. */
@@ -68,11 +68,11 @@ function ShellArea({ areaPath, areaLabel, children }: AreaShellProps) {
           </button>
         )}
       </ShellPageHeader>
-      <main className="relative min-h-0 flex-1 overflow-y-auto">
+      <PageMain className="relative min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-5xl px-8 pb-12 pt-2">
           <ErrorBoundary layout="panel">{children}</ErrorBoundary>
         </div>
-      </main>
+      </PageMain>
     </div>
   );
 }
@@ -166,13 +166,13 @@ function StandaloneArea({ areaPath, areaLabel, areaNoun, children }: AreaShellPr
       {/* `relative`, so an absolutely positioned descendant (every sr-only
           span) is contained by the scroller rather than stretching the
           document — without it the window scrolls past the content. */}
-      <main className="relative flex-1 overflow-y-auto">
+      <PageMain className="relative flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-5xl px-6 py-8">
           {/* A crash in the area stays in the area: the title bar above keeps
               the way out, which in Electron is the only one. */}
           <ErrorBoundary layout="panel">{children}</ErrorBoundary>
         </div>
-      </main>
+      </PageMain>
     </div>
   );
 }

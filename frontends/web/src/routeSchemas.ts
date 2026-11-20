@@ -208,6 +208,8 @@ export const appsSearchSchema = z.object({
 // retired /apps and /sites redirect there with their query (lib/paths/legacy.ts).
 export const projectsSearchSchema = appsSearchSchema.extend({
   show: z.enum(["apps", "sites"]).optional().catch(undefined),
+  /** With several projects in the shell, the page is their Home; `browse` lists every project instead. */
+  browse: z.coerce.number().optional().catch(undefined),
 });
 
 // Search params for `/upgrade`. `returnTo` is the URL the user should be sent
