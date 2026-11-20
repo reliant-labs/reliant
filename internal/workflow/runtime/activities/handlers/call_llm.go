@@ -23,6 +23,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -2201,6 +2202,17 @@ streamLoop:
 				"retry", retry,
 				"retryDelay", retryDelay)
 			return nil, stalled
+		}
+		// Malformed model output (Gemini's MALFORMED_FUNCTION_CALL and kin)
+		// is retried once, by the error's own schedule; see
+		// malformedOutputError.
+		if errors.Is(streamErr, drivererrors.ErrMalformedModelOutput) {
+			malformed := newMalformedOutputError(ctx, streamErr, resolved.ProviderDriver, resolvedModelID)
+			_, retry := malformed.RetryAfter()
+			activity.GetLogger(ctx).Warn("[CallLLM] Provider reported malformed model output",
+				"chatID", chat.ID, "thread", thread, "provider", resolved.ProviderDriver,
+				"model", resolvedModelID, "attempt", malformed.attempt, "retry", retry, "error", streamErr)
+			return nil, malformed
 		}
 		failedCall := usageLimitContext{
 			Scope: llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope(), ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
