@@ -521,6 +521,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant trigger fire`](#reliant-trigger-fire) | Run a trigger now |
 | [`reliant trigger get`](#reliant-trigger-get) | Show one trigger |
 | [`reliant trigger list`](#reliant-trigger-list) | List your triggers |
+| [`reliant trigger rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`reliant trigger update`](#reliant-trigger-update) | Replace a trigger's definition |
 | [`reliant version`](#reliant-version) | Print version information |
 | [`reliant workflow`](#reliant-workflow) | Manage and validate workflows |
@@ -21970,6 +21971,7 @@ reliant trigger
 | [`fire`](#reliant-trigger-fire) | Run a trigger now |
 | [`get`](#reliant-trigger-get) | Show one trigger |
 | [`list`](#reliant-trigger-list) | List your triggers |
+| [`rotate`](#reliant-trigger-rotate) | Replace a webhook trigger's token |
 | [`update`](#reliant-trigger-update) | Replace a trigger's definition |
 
 **Flags:**
@@ -21999,6 +22001,13 @@ brought to them.
 them) and leaves the workflow's other activations as they are. A named
 trigger that is already activated is brought to the flags, not duplicated.
 
+A webhook trigger's URL and token are printed when its activation is created,
+once: store the token in the sender then. `reliant trigger rotate` issues a new
+one. A webhook that declares hmac: needs the secret its sender signs with:
+--hmac-secret-file <trigger>=<file> reads it from a file ("-" for standard
+input), keeping it out of your shell history. It is stored sealed and never
+shown; pass it again to replace it.
+
 --notify is about successful runs only. With it, a run that completes
 successfully is marked unread, which raises a desktop notification, and stays
 out of the archive so the notification has a run to open. It never puts the
@@ -22019,6 +22028,7 @@ reliant trigger activate [flags]
 |------|------|---------|-------------|
 | `--acting-as` | `string` | - | Who GitHub writes speak as: app (the Reliant bot) or owner (default: app for a new activation, unchanged otherwise) |
 | `--connection` | `stringArray` | `[]` | Connection an integration listens through, as integration=connection-id (default: your default connection) |
+| `--hmac-secret-file` | `stringArray` | `[]` | Signing secret of a webhook trigger that declares hmac:, as trigger=path (path - reads standard input); repeatable |
 | `--machine` | `string` | - | Machine the runs execute on, by daemon id or hostname (or --no-machine) |
 | `--message` | `string` | - | Prompt for a declared trigger that has none (not needed when the workflow runs no agent) |
 | `--name-prefix` | `string` | - | Names new activations "<prefix> · <trigger>" (default: the workflow) |
@@ -22201,6 +22211,22 @@ reliant trigger list [flags]
 |------|------|---------|-------------|
 | `--all` | `bool` | - | List triggers across every project |
 | `--project-id` | `string` | - | List one project's triggers |
+
+---
+
+### reliant trigger rotate
+
+Replace a webhook trigger's token
+
+Replace a webhook trigger's token, and print the new one once.
+
+The old token stops working at once, so give the new one to the sender. A
+webhook Reliant delivers to itself (a managed webhook, such as alerting) has
+no token to print: rotating re-provisions its sender with a new one.
+
+```
+reliant trigger rotate <id-or-name>
+```
 
 ---
 

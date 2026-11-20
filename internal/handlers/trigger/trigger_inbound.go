@@ -96,6 +96,9 @@ func (s *Service) applyInboundDefinition(ctx context.Context, userID string, def
 		}
 		hasSecret := existing != nil && existing.Kind == core.TriggerKindWebhook && s.storedSecret(ctx, existing.ID)
 		if src.HMAC && def.WebhookHmacSecret == nil && !hasSecret {
+			if name := def.GetWorkflowTrigger(); name != "" {
+				return svcerr.InvalidArgument(fmt.Sprintf("webhook_hmac_secret is required to verify signatures: trigger %q declares hmac:, so give it the secret the sender signs with (reliant trigger activate --hmac-secret-file %s=<file>)", name, name))
+			}
 			return svcerr.InvalidArgument("webhook_hmac_secret is required to verify signatures")
 		}
 	case core.TriggerKindIntegration:

@@ -59,7 +59,7 @@ All four sources end the same way: a **firing record** (the rows `reliant trigge
 | Source | Dedupe key |
 |--------|------------|
 | Schedule | The scheduled slot. Each slot's fire has its own id, and the run's chat id is derived from it, so a retried fire lands in the same chat |
-| Webhook | `dedupe_key` when the trigger declares one; otherwise the first of `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id` or `X-Delivery-Id`; otherwise a hash of the body within the same minute |
+| Webhook | `dedupe_key` when the trigger declares one; otherwise the first of `Idempotency-Key`, `X-Idempotency-Key` or `X-Delivery-Id`; otherwise a hash of the body within the same minute |
 | Integration event | The provider's own event or delivery id |
 | Workflow event | The run's outcome event: one per run reaching an outcome |
 
@@ -152,10 +152,9 @@ A failed run never pauses a schedule: a trigger that retired itself quietly woul
 ## Limits and what it does not do
 
 - **A slot missed beyond the catch-up window leaves no trace** in the firing history.
-- **On Reliant's hosted platform, identical webhook retries without an idempotency header start two runs.** The hosted proxy adds its own `X-Request-Id`, which takes precedence over the body hash. Send `Idempotency-Key`, or declare a `dedupe_key`.
 - **Overlap applies only to schedules**, and gives way to `concurrency:` when the workflow declares one. Webhook and app events are bounded only by `concurrency:`.
 - **A waiting firing expires after 24 hours**, recorded failed.
-- **In reliant v1.21.3, signed (HMAC) webhooks can't be enabled:** neither the **Enable** dialog nor `reliant trigger activate` takes the secret. Use the bearer token.
+- **Signed (HMAC) webhooks are enabled from the CLI:** `reliant trigger activate --hmac-secret-file <trigger>=<file>` takes the secret; the **Enable** dialog does not yet.
 - **`reliant trigger activate` doesn't print a webhook's token.** Take it from the app.
 - **A schedule created without `--workflow` records nothing when it fires** (v1.21.3). Pass `--workflow`.
 - **`reliant trigger deactivate` without `--project-id` pauses the workflow in every project.**
