@@ -22,6 +22,7 @@
  *       /users                              who can sign in to the scope (its managed identity)
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
+ *       /experiments, /experiments/$changeId  Forge Changes (remote config, rollouts, A/B tests)
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -37,6 +38,7 @@ import {
   forgeConsoleDashboardsSearchSchema,
   forgeConsoleDataSearchSchema,
   forgeConsoleEnvSearchSchema,
+  forgeConsoleExperimentsSearchSchema,
   forgeConsoleObsSearchSchema,
   forgeConsoleOverviewSearchSchema,
   forgeConsoleReleaseSearchSchema,
@@ -77,6 +79,9 @@ export interface ForgeConsoleComponents {
   secrets: RouteComponent
   domains: RouteComponent
   activity: RouteComponent
+  /** Experiments: the project's Forge Changes, and one change. */
+  experiments: RouteComponent
+  experiment: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
@@ -280,6 +285,21 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleActivitySearchSchema,
     component: components.activity,
   })
+  // Forge Changes: remote config, gradual rollouts and A/B tests
+  // (components/Forge/Experiments). The nav row is behind the web config's
+  // CHANGES_UI; the routes are always mounted.
+  const experimentsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'experiments',
+    validateSearch: forgeConsoleExperimentsSearchSchema,
+    component: components.experiments,
+  })
+  const experimentRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'experiments/$changeId',
+    validateSearch: forgeConsoleExperimentsSearchSchema,
+    component: components.experiment,
+  })
   // The retired "Project settings": it held only the organization's usage,
   // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
@@ -318,6 +338,8 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       monitoringRoute,
       settingsRoute,
       activityRoute,
+      experimentsRoute,
+      experimentRoute,
     ]),
   ])
 }

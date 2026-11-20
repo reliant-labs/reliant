@@ -25,6 +25,9 @@
  *   /forge/p/:project/secrets                 Secrets
  *   /forge/p/:project/domains                 Domains
  *   /forge/p/:project/activity                Activity (the audit log)
+ *   /forge/p/:project/experiments             Experiments: the project's Forge Changes
+ *                                             (remote config, rollouts, A/B tests)
+ *   /forge/p/:project/experiments/:changeId   one change (`who` opens it on a "Who gets it?" answer)
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -151,7 +154,11 @@ export type ConsolePage =
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
   | { kind: "domains" }
-  | { kind: "activity" };
+  | { kind: "activity" }
+  /** Forge Changes: remote config, gradual rollouts and A/B tests (Experiments/ExperimentsPage.tsx). */
+  | { kind: "experiments" }
+  /** One change, by its control-plane id: a change is one per environment, so its id names both. */
+  | { kind: "experiment"; changeId: string };
 
 /**
  * One app's console. U3 moves it to `/o/<org>/apps/<app>` (design §3.1): the
@@ -193,6 +200,10 @@ export function consolePath(project: string, page: ConsolePage, ctx?: PathContex
       return `${base}/domains`;
     case "activity":
       return `${base}/activity`;
+    case "experiments":
+      return `${base}/experiments`;
+    case "experiment":
+      return `${base}/experiments/${encodeURIComponent(page.changeId)}`;
   }
 }
 
@@ -230,6 +241,9 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return isObsNavView(sub) && !dashKind ? { kind: "obs-view", view: sub } : null;
       case "environments":
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
+      case "experiments":
+        if (dashKind) return null;
+        return sub ? { kind: "experiment", changeId: safeDecode(sub) } : { kind: "experiments" };
       case "storage":
       case "data":
       case "users":

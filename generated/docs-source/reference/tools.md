@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (74 tools)
+- [Other Tools](#other-tools) (77 tools)
 
 ---
 
@@ -2150,6 +2150,7 @@ _Miscellaneous tools and utilities._
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
+| [`get_change`](#get_change) | readonly | Show one Forge Change in full: its declared variants (from the environment's current release), mo... |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, an e... |
 | [`github__branch_get`](#github__branch_get) | integration | Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protec... |
 | [`github__check_run_list`](#github__check_run_list) | integration | List the check runs on a commit, newest first, with name, status, conclusion, the App that wrote ... |
@@ -2184,10 +2185,12 @@ _Miscellaneous tools and utilities._
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
+| [`list_changes`](#list_changes) | readonly | List the Forge Changes of a project: remote config, gradual rollouts and A/B tests, the same list... |
 | [`list_machines`](#list_machines) | readonly | List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected)... |
 | [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
+| [`manage_change`](#manage_change) | - | Draft, preview, launch, ramp, roll out or stop one Forge Change (remote config, gradual rollout o... |
 | [`manage_machine`](#manage_machine) | - | Start, stop, resize or label one of the user's own machines (from list_machines), exactly as Sett... |
 | [`manage_machine_pool`](#manage_machine_pool) | - | Define or delete one of the user's machine pools: a named set of their machines (those whose labe... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
@@ -2391,6 +2394,14 @@ WHAT YOU GET BACK:
 NOTES:
 - A model or quality the user's providers cannot serve returns an error naming
   the tiers that are available.
+
+---
+
+### get_change
+
+**Tags:** `readonly`
+
+Show one Forge Change in full: its declared variants (from the environment's current release), mode, who gets it (unit, audience, percentage, split), the preview list, the success metric, the open run, whether the environment needs a person's approval to launch or ramp up, its revision, and its most recent audit events (who did what, and how it was approved). Results (the experiment readout) are not available through this tool yet.
 
 ---
 
@@ -2670,6 +2681,14 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 ---
 
+### list_changes
+
+**Tags:** `readonly`
+
+List the Forge Changes of a project: remote config, gradual rollouts and A/B tests, the same list as the console's Experiments page. Each change shows its key, id, environment, mode (off, preview, everyone, rollout, experiment), the share of its audience that gets it, how long its current run has been open, whether the environment's current release declares it, and its revision. Use get_change for one change's variants, audience, metric and audit trail, and manage_change to draft, preview, launch, ramp, roll out or stop one.
+
+---
+
 ### list_machines
 
 **Tags:** `readonly`
@@ -2719,6 +2738,23 @@ Use this when you need a tool that isn't currently loaded. You can:
 - Search for tools by keyword or tag name: {"query": "workflow"}
 
 Loaded tools become available immediately on the next turn.
+
+---
+
+### manage_change
+
+Draft, preview, launch, ramp, roll out or stop one Forge Change (remote config, gradual rollout or A/B test), exactly as the console's Experiments page does, as the user, with the same audit trail. The release declares what a change can be (changes.yaml: key, variants, default); this decides who gets it.
+
+- draft: without change_id, create a change (key + environment; it starts off). With change_id, edit what the next launch freezes: description, unit, audience (or clear_audience), split, metric (or clear_metric). A running experiment keeps its frozen copy until the next launch. No card.
+- preview: replace the preview list (teammates by unit id, each with a variant; ids are hashed server-side and never measured). activate moves an off change to preview. No card.
+- launch: start an experiment (a new run) at percent of the audience with the draft's split and metric. Launching while a run is open ends that run. Needs the user's approval card.
+- ramp: move a running experiment or rollout to percent. Raising it only adds people; it needs an approval card. Lowering it needs none.
+- roll_out: give variant to everyone (everyone=true) or to percent of the audience. Needs an approval card.
+- stop: the kill switch. Everyone gets the default, previews included, and the open run ends. Never needs approval.
+- end_run: conclude an experiment or rollout without shipping a variant (back to preview). Never needs approval.
+- request_approval: email the user a one-time code for one launch, ramp up or roll-out in a protected environment.
+
+Production needs a person: in a protected environment (prod) the control plane refuses a launch, ramp up or roll-out from an agent with approval_required even after the card. Then ask the user to approve it in the Experiments page of the Forge console, or run request_approval and retry with the code they read to you as step_up_code. Launching or rolling out a variant the environment's current release does not declare is refused until a release that declares it is deployed. Unattended runs may only draft, preview, stop, end_run and ramp down.
 
 ---
 

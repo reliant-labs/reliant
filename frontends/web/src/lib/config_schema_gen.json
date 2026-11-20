@@ -41,6 +41,11 @@
       "source": "config"
     },
     {
+      "name": "CHANGES_UI",
+      "type": "string",
+      "source": "config"
+    },
+    {
       "name": "CLI_DEFAULTS_BAKED",
       "type": "string",
       "source": "config"

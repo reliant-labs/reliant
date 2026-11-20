@@ -862,6 +862,15 @@ export const forgeConsoleUsersSearchSchema = z.object({
   q: identitySubjectParam,
 });
 
+/**
+ * Experiments (components/Forge/Experiments): the scope, and on one change
+ * the "Who gets it?" answer it opens on (a new change, from its form).
+ */
+export const forgeConsoleExperimentsSearchSchema = z.object({
+  env: envScopeParam,
+  who: z.enum(["everyone", "some", "compare"]).optional().catch(undefined),
+});
+
 /** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */
 export const forgeLegacyEnvSearchSchema = z.object({
   project: z.string().optional(),

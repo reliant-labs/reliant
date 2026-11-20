@@ -113,6 +113,8 @@ var serverSafeTools = map[string]struct{}{
 	ToolListMachines: {}, ToolManageMachine: {}, ToolManageMachinePool: {},
 	// Raises an approval card and reads the connection the person made.
 	ToolProposeConnection: {},
+	// Forge Changes live in the control plane, reached as the user.
+	ToolListChanges: {}, ToolGetChange: {}, ToolManageChange: {},
 }
 
 // noMachineOnlyTools are tools that exist only for a run with no machine, and

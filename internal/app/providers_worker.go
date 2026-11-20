@@ -93,6 +93,9 @@ type WorkerDaemonRouter struct {
 	// ControlPlane is the adapter the router resumes machines through, nil
 	// when self-hosted. manage_machine stops and resizes through it too.
 	ControlPlane controlplane.Service
+	// ControlPlaneURL is the control plane's base URL, "" when self-hosted.
+	// The Forge Changes tools call it as the user (change_controller.go).
+	ControlPlaneURL string
 }
 
 // A run step's retry reattaches through the worker's router
@@ -117,7 +120,9 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 	repo := d.DB
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
 	var cpService controlplane.Service
+	cpURL := ""
 	if cp := ControlPlaneEndpoint(d.ControlPlane); cp.Hosted() {
+		cpURL = cp.URL
 		cpDeps := controlplane.Deps{ControlPlane: d.ControlPlane}
 		if secret := cp.InternalServiceSecret; secret != "" {
 			cpDeps.Sign = func() (string, error) { return auth.SignInternalServiceToken(secret) }
@@ -139,7 +144,7 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 	}
 	router := toolexec.NewNATSDaemonRouter(d.NATS.Conn, opts...)
 	logging.Info("Tool execution routing via NATS")
-	return &WorkerDaemonRouter{NATSDaemonRouter: router, ControlPlane: cpService}, nil
+	return &WorkerDaemonRouter{NATSDaemonRouter: router, ControlPlane: cpService, ControlPlaneURL: cpURL}, nil
 }
 
 // WorkerIntegrationCredentials is the credential source the worker's
@@ -542,6 +547,9 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
 		MachineController: newMachineController(repo, d.Router, registry),
+		// list_changes / get_change / manage_change run Forge Changes as the
+		// user, through the control plane's ChangesService.
+		ChangeController: newChangeController(repo, d.Router),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
 		ConnectionProposer: newConnectionProposer(repo, d.Membership),

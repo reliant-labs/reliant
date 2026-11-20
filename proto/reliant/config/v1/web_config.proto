@@ -228,6 +228,12 @@ message ReliantWebConfig {
     description: "Where the desktop and CLI downloads the UI links to are published."
   }];
 
+  // 31, not 30: 30 is taken on the unmerged org-routes branch (web.org_routes).
+  string changes_ui = 31 [(forge.v1.config) = {
+    env_var: "CHANGES_UI"
+    description: "\"true\": show the Experiments row in the forge console's nav (Forge Changes: remote config, gradual rollouts and A/B tests, components/Forge/Experiments). Unset: hidden, though /forge/p/<app>/experiments still opens. Set it once the control plane serves ChangesService."
+  }];
+
   string cli_defaults_baked = 22 [(forge.v1.config) = {
     env_var: "CLI_DEFAULTS_BAKED"
     description: "\"true\": the `reliant` binary released beside this deployment has its server, gateway and auth defaults compiled in, so the copy-paste CLI commands render bare instead of behind RELIANT_*= overrides. Only the release knows this; set it where that release is the one users download."

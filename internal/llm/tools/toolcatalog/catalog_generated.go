@@ -280,6 +280,12 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
+	"get_change": {
+		Bindable: map[string]struct{}{
+			"change_id": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"get_integration_schema": {
 		Bindable: map[string]struct{}{
 			"ref": {},
@@ -668,6 +674,14 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_changes": {
+		Bindable: map[string]struct{}{
+			"environment": {},
+			"org_id":      {},
+			"project":     {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"list_machines": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -728,6 +742,30 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"name":  {},
 			"query": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"manage_change": {
+		Bindable: map[string]struct{}{
+			"action":            {},
+			"activate":          {},
+			"audience":          {},
+			"change_id":         {},
+			"clear_audience":    {},
+			"clear_metric":      {},
+			"description":       {},
+			"environment":       {},
+			"everyone":          {},
+			"expected_revision": {},
+			"key":               {},
+			"metric":            {},
+			"percent":           {},
+			"preview":           {},
+			"project":           {},
+			"split":             {},
+			"step_up_code":      {},
+			"unit":              {},
+			"variant":           {},
 		},
 		Unbindable: map[string]string{},
 	},

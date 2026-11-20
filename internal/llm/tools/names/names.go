@@ -143,6 +143,12 @@ const (
 
 	// Ask a person to connect an integration, on an approval card.
 	ToolProposeConnection = "propose_connection"
+
+	// Forge Changes: list them, read one, and draft, preview, launch, ramp,
+	// roll out or stop one.
+	ToolListChanges  = "list_changes"
+	ToolGetChange    = "get_change"
+	ToolManageChange = "manage_change"
 )
 
 // AllToolNames returns all known tool names for validation.
@@ -151,6 +157,7 @@ var AllToolNames = []string{
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
 	ToolWaitForMachine, ToolListMachines, ToolManageMachine, ToolManageMachinePool,
 	ToolProposeConnection,
+	ToolListChanges, ToolGetChange, ToolManageChange,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,

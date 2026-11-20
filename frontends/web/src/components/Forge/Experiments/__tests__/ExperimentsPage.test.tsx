@@ -1,0 +1,281 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * The Experiments page against a fake ChangesService: the real ChangesApi
+ * (and its protojson reading) over an in-memory call function, so what is
+ * asserted is what the page sends on the wire and what it does with each
+ * answer — the list, the empty and not-available states, a new change, the
+ * approval-code flow, a revision conflict, and Stop.
+ */
+
+import type { ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Code, ConnectError } from "@connectrpc/connect";
+
+import { renderWithQuery } from "@/test/renderWithQuery";
+import { ChangesApiProvider } from "@/services/controlPlane/changes/ChangesApiContext";
+import { createChangesApi } from "@/services/controlPlane/changes/changesApi";
+
+import { ChangeDetail } from "../ChangeDetail";
+import { ExperimentsPage } from "../ExperimentsPage";
+
+const state = vi.hoisted(() => ({
+  console: {} as Record<string, unknown>,
+  navigate: vi.fn(),
+  search: {} as Record<string, unknown>,
+}));
+
+vi.mock("../../Console/consoleContext", () => ({ useForgeConsole: () => state.console }));
+vi.mock("@/components/forge-ui/link", () => ({
+  default: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
+}));
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => state.navigate,
+  useSearch: () => state.search,
+  useParams: () => ({}),
+}));
+
+const ENVS = [
+  { id: "env-prod", name: "prod" },
+  { id: "env-staging", name: "staging" },
+];
+
+/** A change as the control plane sends it (protojson). */
+function wireChange(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "chg-1",
+    orgId: "org-1",
+    environmentId: "env-prod",
+    key: "new-checkout",
+    description: "The one-page checkout",
+    mode: "CHANGE_MODE_OFF",
+    unit: "CHANGE_UNIT_USER",
+    percentBp: 1000,
+    split: [
+      { variant: "control", weightBp: 5000 },
+      { variant: "treatment", weightBp: 5000 },
+    ],
+    metric: { event: "checkout_completed", windowHours: 48 },
+    revision: "7",
+    declaration: {
+      type: "bool",
+      defaultVariant: "control",
+      variants: [
+        { name: "control", valueJson: "false" },
+        { name: "treatment", valueJson: "true" },
+      ],
+    },
+    approvalRequired: true,
+    ...overrides,
+  };
+}
+
+type Handler = (body: Record<string, unknown>) => unknown;
+
+/** The fake service: one handler per method, every call recorded. */
+function fakeService(handlers: Record<string, Handler>) {
+  const calls: { method: string; body: Record<string, unknown> }[] = [];
+  const call = vi.fn(async (method: string, body: Record<string, unknown>) => {
+    calls.push({ method, body });
+    const handler = handlers[method];
+    if (!handler) throw new ConnectError(`no handler for ${method}`, Code.Unimplemented);
+    return handler(body);
+  });
+  return { api: createChangesApi(call, async () => "org-1"), calls, of: (method: string) => calls.filter((c) => c.method === method) };
+}
+
+const reason = (r: string, code: Code, message = r) => new ConnectError(message, code, new Headers({ "x-forge-error-reason": r }));
+
+function roster() {
+  return {
+    isLoading: false,
+    resolvingName: false,
+    live: { isLoading: false, data: { availability: "available" } },
+    envs: ENVS.map((e) => ({ name: e.name, lifecycle: "deployed", live: { id: e.id, name: e.name }, forge: null, source: "backend" })),
+  };
+}
+
+function renderPage(service: ReturnType<typeof fakeService>) {
+  return renderWithQuery(
+    <ChangesApiProvider api={service.api}>
+      <ExperimentsPage />
+    </ChangesApiProvider>
+  );
+}
+
+function renderDetail(service: ReturnType<typeof fakeService>) {
+  return renderWithQuery(
+    <ChangesApiProvider api={service.api}>
+      <ChangeDetail changeId="chg-1" envs={ENVS} backHref="/forge/p/shop/experiments" />
+    </ChangesApiProvider>
+  );
+}
+
+beforeEach(() => {
+  state.navigate.mockReset();
+  state.search = {};
+  state.console = {
+    forgeProject: "shop",
+    env: "all",
+    roster: roster(),
+    setEnv: vi.fn(),
+    href: (page: { kind: string; changeId?: string }) => (page.changeId ? `/forge/p/shop/experiments/${page.changeId}` : `/forge/p/shop/${page.kind}`),
+  };
+});
+
+describe("ExperimentsPage", () => {
+  it("lists the project's changes with their mode, environment and who gets them", async () => {
+    const service = fakeService({
+      ListChanges: () => ({
+        changes: [
+          wireChange({ mode: "CHANGE_MODE_EXPERIMENT", percentBp: 2000, currentRun: { id: "r_abcdefgh", kind: "experiment", startedAt: new Date(Date.now() - 3 * 3600_000).toISOString() } }),
+          wireChange({ id: "chg-2", key: "dark-mode", environmentId: "env-staging", mode: "CHANGE_MODE_EVERYONE", everyoneVariant: "on", declaration: undefined }),
+        ],
+      }),
+    });
+    renderPage(service);
+
+    const row = await screen.findByTestId("change-row-new-checkout");
+    expect(within(row).getByText("Experiment")).toBeInTheDocument();
+    expect(within(row).getByText("prod")).toBeInTheDocument();
+    expect(within(row).getByText("20% of users are in the comparison")).toBeInTheDocument();
+    expect(within(row).getByText("3h")).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "new-checkout" })).toHaveAttribute("href", "/forge/p/shop/experiments/chg-1");
+    const other = screen.getByTestId("change-row-dark-mode");
+    expect(within(other).getByText("Everyone gets on")).toBeInTheDocument();
+    expect(within(other).getByText("Not declared yet")).toBeInTheDocument();
+    // Scoped by org and project; "All" sends no environment.
+    expect(service.of("ListChanges")[0]!.body).toMatchObject({ orgId: "org-1", project: "shop" });
+    expect(service.of("ListChanges")[0]!.body).not.toHaveProperty("environmentId");
+  });
+
+  it("narrows the list to the top bar's environment", async () => {
+    state.console = { ...state.console, env: "staging" };
+    const service = fakeService({ ListChanges: () => ({ changes: [] }) });
+    renderPage(service);
+    await screen.findByText("No changes yet");
+    expect(service.of("ListChanges")[0]!.body).toMatchObject({ environmentId: "env-staging" });
+  });
+
+  it("offers New change when there are none", async () => {
+    renderPage(fakeService({ ListChanges: () => ({ changes: [] }) }));
+    expect(await screen.findByText("No changes yet")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /New change/ }).length).toBeGreaterThan(0);
+  });
+
+  it("says so when the control plane has no ChangesService", async () => {
+    renderPage(fakeService({}));
+    expect(await screen.findByText("Experiments aren't available here yet")).toBeInTheDocument();
+  });
+
+  it("drafts a new change, noting a key no release declares yet", async () => {
+    const service = fakeService({
+      ListChanges: () => ({ changes: [wireChange()] }),
+      CreateChange: (body) => ({ change: wireChange({ id: "chg-new", key: body.key, environmentId: body.environmentId, declaration: undefined }) }),
+    });
+    renderPage(service);
+    await screen.findByTestId("change-row-new-checkout");
+    await userEvent.click(screen.getByRole("button", { name: /New change/ }));
+
+    await userEvent.type(screen.getByTestId("new-change-key"), "pricing-page");
+    expect(screen.getByTestId("new-change-undeclared")).toHaveTextContent("Not declared yet");
+    await userEvent.selectOptions(screen.getByTestId("new-change-env"), "env-staging");
+    await userEvent.click(screen.getByRole("radio", { name: "Compare versions" }));
+    await userEvent.click(screen.getByTestId("new-change-submit"));
+
+    await waitFor(() => expect(service.of("CreateChange")).toHaveLength(1));
+    expect(service.of("CreateChange")[0]!.body).toEqual({ environmentId: "env-staging", key: "pricing-page", description: "", unit: "CHANGE_UNIT_USER" });
+    await waitFor(() => expect(state.navigate).toHaveBeenCalledWith({ href: "/forge/p/shop/experiments/chg-new?who=compare" }));
+  });
+});
+
+describe("ChangeDetail", () => {
+  it("asks for an approval code when a protected environment refuses a launch, then retries with it", async () => {
+    let launches = 0;
+    const service = fakeService({
+      GetChange: () => ({ change: wireChange() }),
+      ListChangeEvents: () => ({ events: [] }),
+      LaunchChange: () => {
+        launches++;
+        if (launches === 1) throw reason("approval_required", Code.PermissionDenied);
+        return { change: wireChange({ mode: "CHANGE_MODE_EXPERIMENT", revision: "8", currentRun: { id: "r_new", kind: "experiment" } }) };
+      },
+      RequestChangeApproval: () => ({ sentTo: "a***@example.com", expiresAt: "2026-11-20T10:10:00Z" }),
+    });
+    renderDetail(service);
+    await userEvent.click(await screen.findByTestId("who-launch"));
+
+    const panel = await screen.findByTestId("change-approval");
+    expect(panel).toHaveTextContent("prod is a protected environment");
+    await userEvent.click(within(panel).getByTestId("approval-send"));
+    expect(await within(panel).findByText(/We sent a code to a\*\*\*@example.com/)).toBeInTheDocument();
+    await userEvent.type(within(panel).getByTestId("approval-code"), "123456");
+    await userEvent.click(within(panel).getByRole("button", { name: "Approve and launch" }));
+
+    await waitFor(() => expect(screen.queryByTestId("change-approval")).not.toBeInTheDocument());
+    const [first, retry] = service.of("LaunchChange");
+    expect(first!.body).toEqual({ changeId: "chg-1", expectedRevision: "7", percentBp: 1000 });
+    expect(retry!.body).toEqual({ changeId: "chg-1", expectedRevision: "7", percentBp: 1000, stepUpCode: "123456" });
+    expect(await screen.findByText("Revision 8")).toBeInTheDocument();
+  });
+
+  it("refetches on a revision conflict and says what moved, saving nothing", async () => {
+    let reads = 0;
+    const service = fakeService({
+      GetChange: () => {
+        reads++;
+        return { change: reads === 1 ? wireChange() : wireChange({ revision: "9", percentBp: 3000, mode: "CHANGE_MODE_EXPERIMENT" }) };
+      },
+      ListChangeEvents: () => ({ events: [] }),
+      LaunchChange: () => {
+        throw reason("change_revision_conflict", Code.FailedPrecondition);
+      },
+    });
+    renderDetail(service);
+    await userEvent.click(await screen.findByTestId("who-launch"));
+
+    const notice = await screen.findByTestId("change-conflict");
+    expect(notice).toHaveTextContent("Someone changed this while you were looking");
+    expect(notice).toHaveTextContent("Mode: Off → Experiment");
+    expect(notice).toHaveTextContent("Share: 10% → 30%");
+    expect(await screen.findByText("Revision 9")).toBeInTheDocument();
+    expect(service.of("LaunchChange")).toHaveLength(1);
+  });
+
+  it("stops with one click and a confirm, sending no revision", async () => {
+    const service = fakeService({
+      GetChange: () => ({ change: wireChange({ mode: "CHANGE_MODE_EXPERIMENT", currentRun: { id: "r_abcdefgh", kind: "experiment" } }) }),
+      ListChangeEvents: () => ({ events: [] }),
+      StopChange: () => ({ change: wireChange({ mode: "CHANGE_MODE_OFF", revision: "8" }) }),
+    });
+    renderDetail(service);
+    await userEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Everyone gets the default right away");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Stop" }));
+
+    await waitFor(() => expect(service.of("StopChange")).toHaveLength(1));
+    expect(service.of("StopChange")[0]!.body).toEqual({ changeId: "chg-1" });
+  });
+
+  it("shows the audit trail and holds results until the readout service ships", async () => {
+    const service = fakeService({
+      GetChange: () => ({ change: wireChange() }),
+      ListChangeEvents: () => ({
+        events: [{ id: "ev-1", revision: "7", actorKind: "agent", actorId: "alice", action: "update_draft", diffJson: '{"percent_bp":{"from":500,"to":1000}}' }],
+      }),
+    });
+    renderDetail(service);
+    expect(await screen.findByTestId("results-pending-service")).toHaveTextContent("Results appear once the readout service ships");
+    const history = await screen.findByTestId("change-history");
+    expect(history).toHaveTextContent("alice (an agent acting for them) edited the draft");
+    expect(history).toHaveTextContent("percent_bp: 500 → 1000");
+  });
+});

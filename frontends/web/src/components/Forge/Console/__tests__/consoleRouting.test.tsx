@@ -225,6 +225,8 @@ function renderAt(initialEntry: string) {
     secrets: probe("secrets"),
     domains: probe("domains"),
     activity: probe("activity"),
+    experiments: probe("experiments"),
+    experiment: probe("experiment"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
