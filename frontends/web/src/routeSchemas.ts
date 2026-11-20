@@ -589,6 +589,11 @@ export const forgeConsoleSearchSchema = z.object({
   env: envScopeParam,
 });
 
+/** Environments: the scope, and `show=previews` (Deployments › Previews, U6e) for the preview environments alone. */
+export const forgeConsoleEnvironmentsSearchSchema = forgeConsoleSearchSchema.extend({
+  show: z.enum(["previews"]).optional().catch(undefined),
+});
+
 /**
  * Free text the router may have parsed as JSON: a search for "981" or a
  * version "1.2" arrives as a number, and must stay the text it was.

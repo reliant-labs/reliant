@@ -102,7 +102,7 @@ import {
 import { ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
 import { useShellProject } from "./sidebar/shellProject";
 import { FindBox } from "./sidebar/FindBox";
-import type { NavSlots } from "./sidebar/NavRenderer";
+import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
 import { ShellNavBody } from "./sidebar/ShellNavBody";
 import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
 import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta";
@@ -125,8 +125,8 @@ interface SidebarProps {
   pathname?: string;
   /** The page's search, carried by the rows that keep a scope (`?project=`, `?env=`). */
   search?: Record<string, unknown>;
-  /** Opens a page: the shell's navigate (Layout/shell/AppShell.tsx). */
-  onNavigate?: (href: string) => void;
+  /** Opens a page: the shell's navigate (Layout/shell/AppShell.tsx); `drill` keeps a drawer open. */
+  onNavigate?: (href: string, options?: NavigateOptions) => void;
   /** Open the Runs tab with filters; the Workflows row's pill passes "live". */
   onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
@@ -713,7 +713,7 @@ function SidebarComponent({
   onNavigate,
   onOpenRuns,
 }: SidebarProps) {
-  const go = useCallback((href: string) => onNavigate?.(href), [onNavigate]);
+  const go = useCallback((href: string, options?: NavigateOptions) => onNavigate?.(href, options), [onNavigate]);
   // What the list shows is the project shell's scope (U6b, sidebar/shellProject.ts):
   // one project's chats, several projects' (the chat filter of several,
   // hooks/useChatProjectFilter), or every project's — grouped by project

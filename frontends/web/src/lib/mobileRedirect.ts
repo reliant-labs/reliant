@@ -106,6 +106,11 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/projects",
     "/apps",
     "/sites",
+    // Rows of the one nav (U6e) with no phone twin: Connectors and the org's
+    // Usage & billing are pages of the shell, which fits a phone, so the nav's
+    // drawer opens them rather than the chat list.
+    "/connectors",
+    "/usage",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return false;

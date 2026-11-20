@@ -6,8 +6,8 @@
  *
  *   Overview                the summary: health, what needs attention, a strip of the services
  *   Services                everything the app runs, live (services, workers, jobs, the site, the database)
- *   Storage                 buckets and managed Postgres
- *   Dashboards        ▸     Live state (built in) · the app's own and starred dashboards — the ONE place (U6c bug 4)
+ *   Storage                 the app's object storage buckets (databases are Data)
+ *   Dashboards        ▸     the app's own and starred dashboards — the ONE place (U6c bug 4; Live state merged into Services, U6e)
  *   Issues            ▾     Errors · Alerts
  *   Performance       ▾     Traces · RPC explorer
  *   Sessions
@@ -55,7 +55,7 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   events: "The product events and metrics your app sends",
   analytics: "Who your users are, what they do, and where they come from",
   "speed-insights": "How fast each page loads and responds for real visitors",
-  storage: "Your app's buckets and its managed Postgres databases",
+  storage: "Your app's object storage buckets: files, uploads and assets",
 };
 
 /** The Product analytics hub: the dashboard its row opens, and every dashboard key that is one of its tabs. */
@@ -119,7 +119,7 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
   const isOpen = (candidate: ConsoleNavDashboard) => page.kind === "dashboard" && page.dashKind === candidate.dashKind && page.key === candidate.key;
   // The app's own dashboards, then its starred ones not already listed.
   const listed = [...customDashboards, ...nested.filter((star) => !customDashboards.some((own) => own.dashKind === star.dashKind && own.key === star.key))];
-  // Dashboards: ONE top-level row (U6c, owner bug 4), the built-in Live state and the app's own dashboards under it.
+  // Dashboards: ONE top-level row (U6c, owner bug 4), the app's own dashboards under it.
   const dashboards: OpenNavItem = {
     label: "Dashboards",
     href: href({ kind: "obs-view", view: "dashboards" }),
@@ -127,11 +127,12 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     // A dashboard that is not a hub tab and not listed lights Dashboards itself.
     active: lit(isObs("dashboards") || (page.kind === "dashboard" && !onHub && !listed.some(isOpen))),
     alwaysOpen: customDashboards.length > 0,
-    children: [
-      { label: "Live state", href: href({ kind: "live-state" }), active: lit(page.kind === "live-state") },
-      ...listed.map((candidate) => ({ label: candidate.title, href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }), active: lit(isOpen(candidate)) })),
-      ...(listed.length ? [{ label: "All dashboards", href: href({ kind: "obs-view", view: "dashboards" }), active: false }] : []),
-    ],
+    children: listed.length
+      ? [
+          ...listed.map((candidate) => ({ label: candidate.title, href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }), active: lit(isOpen(candidate)) })),
+          { label: "All dashboards", href: href({ kind: "obs-view", view: "dashboards" }), active: false },
+        ]
+      : undefined,
   };
   // Profiles hides on a definite empty read, as in the console's own nav, unless it is the open page.
   const profiles = optionalViews?.profiles !== false || isObs("profiles");
@@ -248,6 +249,10 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
   if (isHubPage(page, productAnalytics)) return [{ label: "Analytics" }, ...own.slice(-1)];
+  // Releases and Environments sit in the shell nav's Deployments ▾ (U6e).
+  if (page.kind === "releases" || page.kind === "release" || page.kind === "environments" || page.kind === "environment") {
+    return own[0]?.label === "Deployments" ? own : [{ label: "Deployments" }, ...own];
+  }
   if (page.kind === "dashboard") {
     const rest = own.filter((crumb) => crumb.label !== "Observability");
     return rest[0]?.label === "Dashboards" ? rest : [{ label: "Dashboards" }, ...rest];

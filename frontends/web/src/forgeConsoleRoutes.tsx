@@ -67,6 +67,7 @@ import {
   forgeConsoleReleaseSearchSchema,
   forgeConsoleReleasesSearchSchema,
   forgeConsoleSearchSchema,
+  forgeConsoleEnvironmentsSearchSchema,
   forgeConsoleSbomsSearchSchema,
   forgeConsoleSecretsSearchSchema,
   forgeConsoleServicesSearchSchema,
@@ -321,7 +322,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const environmentsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'environments',
-    validateSearch: forgeConsoleSearchSchema,
+    validateSearch: forgeConsoleEnvironmentsSearchSchema,
     component: components.environments,
   })
   const environmentRoute = createRoute({

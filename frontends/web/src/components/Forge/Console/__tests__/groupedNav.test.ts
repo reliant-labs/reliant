@@ -31,7 +31,7 @@ describe("buildGroupedConsoleNav", () => {
       ["Overview", ""],
       ["Services", ""],
       ["Storage", ""],
-      ["Dashboards", "Live state"],
+      ["Dashboards", ""],
       ["Issues", "Errors,Alerts"],
       ["Performance", "Traces,RPC explorer"],
       ["Sessions", ""],
@@ -67,7 +67,7 @@ describe("buildGroupedConsoleNav", () => {
     const starred = ["a", "b", "c", "d"].map((key) => ({ title: `Board ${key}`, dashKind: "release" as const, key }));
     const { items } = nav({ starred, page: { kind: "dashboard", dashKind: "release", key: "b" } });
     const dashboards = flat(items).find((item) => item.label === "Dashboards")!;
-    expect(dashboards.children?.map((child) => child.label)).toEqual(["Live state", "Board a", "Board b", "Board c", "All dashboards"]);
+    expect(dashboards.children?.map((child) => child.label)).toEqual(["Board a", "Board b", "Board c", "All dashboards"]);
     expect(lit(items)).toEqual(["Board b"]);
   });
 
@@ -103,7 +103,8 @@ describe("groupedCrumbs", () => {
       { label: "Dashboards", href: "/d" },
       { label: "api" },
     ]);
-    expect(groupedCrumbs({ kind: "releases" }, [{ label: "Releases" }])).toBeNull();
+    expect(groupedCrumbs({ kind: "releases" }, [{ label: "Releases" }])).toEqual([{ label: "Deployments" }, { label: "Releases" }]);
+    expect(groupedCrumbs({ kind: "secrets" }, [{ label: "Secrets" }])).toBeNull();
   });
 });
 

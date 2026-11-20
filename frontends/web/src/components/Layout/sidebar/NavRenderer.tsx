@@ -40,7 +40,16 @@ export interface NavRendererProps {
   config: NavConfig;
   ctx: NavCtx;
   slots: NavSlots;
-  onNavigate: (href: string) => void;
+  /**
+   * Runs a row's page. `drill`: the row opens a drill-in (or leaves one, the
+   * back header), so a drawer holding the nav stays open to show it; any
+   * other row is a destination, and a drawer closes on it.
+   */
+  onNavigate: (href: string, options?: NavigateOptions) => void;
+}
+
+export interface NavigateOptions {
+  drill?: boolean;
 }
 
 type Depth = 0 | 1 | 2 | 3;
@@ -182,7 +191,7 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
               icon={item.icon}
               label={item.label}
               href={href ? link(href) : undefined}
-              onClick={href ? () => onNavigate(link(href)) : undefined}
+              onClick={href ? () => onNavigate(link(href), { drill: true }) : undefined}
               current={current}
               trail={trail}
               action={slot(item.action, { place: "row", depth })}
@@ -197,7 +206,7 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
             depth={depth}
             icon={depth === 0 ? item.icon : undefined}
             href={href ? link(href) : undefined}
-            onClick={href ? () => onNavigate(link(href)) : undefined}
+            onClick={href ? () => onNavigate(link(href), { drill: true }) : undefined}
             current={current}
             trail={trail}
             testId={testId}
@@ -218,7 +227,7 @@ export function NavRenderer({ config, ctx, slots, onNavigate }: NavRendererProps
         onClick={(event) => {
           if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
           event.preventDefault();
-          onNavigate(back);
+          onNavigate(back, { drill: true });
         }}
         data-testid="nav-back"
         aria-label={`Back from ${area.label}`}

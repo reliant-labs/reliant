@@ -13,7 +13,7 @@ import { consolePageOf, orgPageOf } from "../../Forge/Console/paths";
 import type { GroupedNavInput } from "../../Forge/Console/groupedNav";
 import { useConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
 import { hybridNav, type NavCtx } from "./navConfig";
-import { NavRenderer, type NavSlots } from "./NavRenderer";
+import { NavRenderer, type NavigateOptions, type NavSlots } from "./NavRenderer";
 import type { ShellProject } from "./shellProject";
 
 export interface ShellNavBodyProps {
@@ -21,7 +21,7 @@ export interface ShellNavBodyProps {
   pathname: string;
   search: Record<string, unknown>;
   slots: NavSlots;
-  onNavigate: (href: string) => void;
+  onNavigate: (href: string, options?: NavigateOptions) => void;
 }
 
 export function ShellNavBody(props: ShellNavBodyProps) {

@@ -45,6 +45,8 @@ import { useShortcutLabel } from "@/store/shortcutsStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 
 import { ResizableSidebar } from "../ResizableSidebar";
+import type { NavigateOptions } from "../sidebar/NavRenderer";
+import { holdNavDrawerOpen, navDrawerHeld } from "../sidebar/navDrawerHold";
 import { ShellFrameContext, shellFrameScope, toggleShellNav, useNavDrawer, useShellFrame, type ShellFrame } from "./shellFrame";
 
 // The nav and its chat list load with the first shell page, not with the
@@ -72,8 +74,12 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
   const overlay = useSidebarOverlay({ isSidebarExpanded: !inShell || docked || narrow });
   const shown = docked || (narrow ? drawerOpen : overlay.isSidebarHovered);
 
-  // A drawer closes when a row in it opens a page, and when the window widens.
-  useEffect(() => setDrawerOpen(false), [pathname, narrow, setDrawerOpen]);
+  // A drawer closes when a row in it opens a page (unless the row drilled into
+  // Agents or Observability: navDrawerHold), and when the window widens.
+  useEffect(() => {
+    if (!navDrawerHeld()) setDrawerOpen(false);
+  }, [pathname, setDrawerOpen]);
+  useEffect(() => setDrawerOpen(false), [narrow, setDrawerOpen]);
   useEffect(() => {
     if (!narrow || !drawerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -146,7 +152,16 @@ function ShellNav() {
   const { navDocked } = useShellFrame();
   const toggleShortcut = useShortcutLabel("toggleSidebar");
 
-  const onNavigate = useCallback((href: string) => void navigate({ href }), [navigate]);
+  // A destination closes the narrow window's drawer, even one that is the page
+  // already on screen; a drill-in keeps it open to show the area's rows.
+  const onNavigate = useCallback(
+    (href: string, options?: NavigateOptions) => {
+      if (options?.drill) holdNavDrawerOpen();
+      else useNavDrawer.getState().setOpen(false);
+      void navigate({ href });
+    },
+    [navigate],
+  );
   const onOpenChatSearch = useCallback(() => void shortcutHost?.run("onChatSearch"), [shortcutHost]);
 
   return (

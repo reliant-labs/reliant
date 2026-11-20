@@ -11,98 +11,30 @@
  *
  * Rendered as a portal so it can sit above `MobileShell`'s `overflow-hidden`
  * flex column regardless of which screen is mounted below it.
+ *
+ * Its destinations are the ONE nav model (U6e, owner: drilling in on a phone
+ * brought back an old nav): the hybrid config the desktop nav draws, drill-ins
+ * included (Layout/sidebar/MobileHybridNav). Drilling into Agents or
+ * Observability keeps the drawer open on the area's rows; a destination closes it.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { dialogOpener } from "../../lib/dialogOpener";
-import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  Activity,
-  Boxes,
-  FolderOpen,
-  Github,
-  Inbox,
-  MessageSquarePlus,
-  Search,
-  Server,
-  Settings,
-  User,
-  Workflow,
-  X,
-} from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { FolderOpen, X } from "lucide-react";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
-import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
 import { MobileOrgSwitcher } from "./MobileOrgSwitcher";
-import { projectsPath, mobileAccountPath, mobileGitHubPath, mobileInboxPath, mobileMachinesPath, mobileNewChatPath, mobileProjectsPath, mobileSearchPath, mobileSettingsPath, mobileWorkflowsPath } from "@/lib/paths";
-import { orgPath } from "@/components/Forge/Console/paths";
+import { mobileProjectsPath } from "@/lib/paths";
+import { MobileHybridNav } from "../Layout/sidebar/MobileHybridNav";
+import type { NavigateOptions } from "../Layout/sidebar/NavRenderer";
+import { holdNavDrawerOpen, navDrawerHeld } from "../Layout/sidebar/navDrawerHold";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface NavItem {
-  to: string;
-  /** The destination's search (Projects' filter). */
-  search?: Record<string, string>;
-  label: string;
-  icon: typeof MessageSquarePlus;
-  /** The Inbox row carries the Inbox badge. */
-  inboxBadge?: boolean;
-}
-
-/**
- * The drawer's destinations, in the desktop sidebar's order (Layout/Sidebar):
- * New chat, then Apps and Observability (the org's apps and their telemetry), then
- * the Inbox, then the rest.
- *
- * Apps (Projects, narrowed to the apps) and Observability open the desktop
- * pages, outside `/m/*`: they fit a phone (the console's chrome collapses to
- * an off-canvas nav), so there is one of each rather than a mobile copy.
- */
-function navItems(): NavItem[] {
-  return [
-    { to: mobileNewChatPath(), label: "New chat", icon: MessageSquarePlus },
-    { to: projectsPath(), search: { show: "apps" }, label: "Apps", icon: Boxes },
-    { to: orgPath({ kind: "observability" }), label: "Observability", icon: Activity },
-    { to: mobileInboxPath(), label: "Inbox", icon: Inbox, inboxBadge: true },
-    { to: mobileSearchPath(), label: "Search", icon: Search },
-    { to: mobileWorkflowsPath(), label: "Workflows", icon: Workflow },
-    { to: mobileMachinesPath(), label: "Sandboxes", icon: Server },
-    { to: mobileGitHubPath(), label: "GitHub", icon: Github },
-    { to: mobileSettingsPath(), label: "Settings", icon: Settings },
-    { to: mobileAccountPath(), label: "Account", icon: User },
-  ];
-}
-
-/** The Inbox tile's corner badge: the blocking count, else a dot for automation problems. */
-function InboxBadge() {
-  const { count, informational, degraded, announcement } = useMobileDrawerStore((s) => s.inboxBadge);
-  return (
-    <>
-      {count > 0 && (
-        <span
-          data-testid="drawer-inbox-count"
-          aria-hidden="true"
-          className="absolute right-1.5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground"
-        >
-          {count}
-        </span>
-      )}
-      {count === 0 && informational && (
-        <span data-testid="drawer-inbox-dot" aria-hidden="true" className="absolute right-3 top-3 h-2 w-2 rounded-full bg-destructive" />
-      )}
-      {announcement && (
-        <span className="sr-only">
-          , {announcement}
-          {degraded ? " (may be incomplete)" : ""}
-        </span>
-      )}
-    </>
-  );
 }
 
 // Elements a focus trap should cycle between. Scoped to the drawer panel, not
@@ -118,6 +50,8 @@ function focusableElements(container: HTMLElement): HTMLElement[] {
 
 export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const search = useRouterState({ select: (s) => s.location.search }) as Record<string, unknown>;
+  const navigate = useNavigate();
   const currentProject = useProjectStore((s) => s.currentProject);
   const panelRef = useRef<HTMLDivElement>(null);
   // The control that opened the drawer (usually the hamburger button; see
@@ -183,13 +117,24 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   }, [isOpen, onClose]);
 
   // Closes on route change — otherwise the drawer stays open over the
-  // destination the user just tapped their way into.
+  // destination the user just tapped their way into — unless the change is a
+  // drill into (or out of) Agents or Observability, whose rows it then shows.
   useEffect(() => {
     if (previousPathnameRef.current !== pathname) {
       previousPathnameRef.current = pathname;
-      if (isOpen) onClose();
+      if (isOpen && !navDrawerHeld()) onClose();
     }
   }, [pathname, isOpen, onClose]);
+
+  // A destination closes the drawer (even the page already on screen); a drill-in keeps it open.
+  const onNavigate = useCallback(
+    (href: string, options?: NavigateOptions) => {
+      if (options?.drill) holdNavDrawerOpen();
+      else onClose();
+      void navigate({ href });
+    },
+    [navigate, onClose],
+  );
 
   if (!isOpen) return null;
 
@@ -230,76 +175,33 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
           </button>
         </div>
 
-        {/* `overscroll-contain` stops a scroll that reaches the end of the
-            drawer from chaining to the page behind it. The bottom padding
-            matters in landscape, where the viewport is ~390px tall and the
-            last item would otherwise sit flush against the edge with no hint
-            that the drawer continues. */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-3 pb-6">
-          {/* Destinations as a compact grid (mobile-chat-redesign §9, after
-              ChatGPT's 2026 drawer): up to nine 48px rows became at most three
-              64px rows of tiles, which keeps the project switcher below them
-              on screen even in landscape. */}
-          <nav className="grid grid-cols-3 gap-1 py-2" aria-label="Main">
-            {navItems().map(({ to, search, label, icon: Icon, inboxBadge }) => {
-              const active = pathname === to || pathname.startsWith(`${to}/`);
-              return (
-                <Link
-                  key={to}
-                  to={to}
-                  search={search}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "relative flex min-h-[64px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-lg px-1 text-xs",
-                    "active:bg-foreground/5",
-                    // A filled tile, not just colored text: color alone made
-                    // the current destination easy to miss at a glance, and
-                    // it is the drawer's only orientation cue.
-                    active
-                      ? "bg-primary/10 font-medium text-primary-ink"
-                      : "text-foreground/85",
-                  )}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  <span className="max-w-full truncate">{label}</span>
-                  {inboxBadge && <InboxBadge />}
-                </Link>
-              );
-            })}
-          </nav>
+        {/* The org this tab acts in, and the project it contains, where the
+            desktop nav has its switcher. */}
+        <div className="shrink-0 space-y-2 px-3 pb-2">
+          <MobileOrgSwitcher onSwitched={onClose} />
+          <Link
+            to={mobileProjectsPath()}
+            className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
+              <FolderOpen className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs text-muted-foreground">Project</div>
+              <div className="truncate text-sm font-medium text-foreground">{currentProject?.name ?? "Select a project"}</div>
+            </div>
+          </Link>
+        </div>
 
-          {/* The org this tab acts in, above the project it contains: the
-              desktop sidebar's org switcher, on the phone. */}
-          <div className="pt-2">
-            <MobileOrgSwitcher onSwitched={onClose} />
-          </div>
+        {/* The one nav model, drill-ins and all; it scrolls inside itself
+            (`overscroll-contain`, so a scroll that reaches its end never
+            chains to the page behind the drawer). */}
+        <div className="flex min-h-0 flex-1 flex-col overscroll-contain">
+          <MobileHybridNav pathname={pathname} search={search} onNavigate={onNavigate} />
+        </div>
 
-          {/* The current project as a card rather than a tile: it is the
-              drawer's stateful row — it reports something as well as
-              navigating — and the card is what distinguishes it from the
-              plain destinations above. */}
-          <div className="pt-2">
-            <Link
-              to={mobileProjectsPath()}
-              className="flex min-h-[60px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
-                <FolderOpen className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs text-muted-foreground">
-                  Project
-                </div>
-                <div className="truncate text-sm font-medium text-foreground">
-                  {currentProject?.name ?? "Select a project"}
-                </div>
-              </div>
-            </Link>
-          </div>
-
-          <div className="pt-2">
-            <MobileInstallMenuItem />
-          </div>
+        <div className="shrink-0 px-3 pb-2">
+          <MobileInstallMenuItem />
         </div>
       </div>
     </div>,
