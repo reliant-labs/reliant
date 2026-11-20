@@ -242,6 +242,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   <Card title="Connect Claude Code or Cursor to Forge over MCP" icon="hammer" href="/guides/forge/connect-claude-code-cursor-mcp">
     Give Claude Code or Cursor Forge's lint, generate, skills and shapes as MCP tools, check the server answers, and add the hosted connector for telemetry.
   </Card>
+  <Card title="Keep your test suite fast: mark slow tests and enforce budgets" icon="hammer" href="/guides/forge/keep-test-suite-fast">
+    Find the Go tests that slow every edit, mark them with testkit.Slow so they leave the -short tier, and fail CI when a new slow test arrives unmarked.
+  </Card>
   <Card title="Upgrade Forge and apply its migration playbooks" icon="hammer" href="/guides/forge/upgrade-forge-version">
     Move a project's pinned Forge version forward: preview the change with --check, list the migration playbooks, run project upgrade, and review the diff.
   </Card>
@@ -324,6 +327,12 @@ See how a release behaves in production and find what broke when it does not. Th
   <Card title="Route production alerts to Slack, PagerDuty or email" icon="activity" href="/guides/observability/route-alerts-slack-pagerduty">
     Send Forge's default alerts to Slack, PagerDuty or email: create receivers in your organization, then route by severity with forge.AlertRoute in KCL.
   </Card>
+  <Card title="Write alert rules as code and test them locally" icon="activity" href="/guides/observability/custom-alert-rules-as-code">
+    Declare an alert rule in KCL as a SQL query, check it against your local stack's telemetry, watch it fire on your machine, and ship it with the next release.
+  </Card>
+  <Card title="Add a custom metric without a cardinality explosion" icon="activity" href="/guides/observability/add-custom-metric">
+    Declare a business metric with a unit and a closed set of attribute keys, record it from a handler, and query it with forge obs without one series per user.
+  </Card>
   <Card title="Find which release introduced a production error" icon="activity" href="/guides/observability/find-release-that-caused-error">
     Trace a production error to the release and commits that introduced it with forge obs issue, then resolve it in the next release so a recurrence reopens it.
   </Card>
@@ -335,6 +344,9 @@ See how a release behaves in production and find what broke when it does not. Th
   </Card>
   <Card title="Find CPU hotspots with continuous profiling" icon="activity" href="/guides/observability/find-cpu-hotspots-continuous-profiling">
     Find the Go function burning your CPU: turn on continuous profiling, read the flamegraph, export pprof with forge obs profile, and narrow it to one trace.
+  </Card>
+  <Card title="Read browser and backend logs in one place during development" icon="activity" href="/guides/observability/browser-and-backend-logs-locally">
+    Find a browser error, its stack and the backend request it failed on with one grep over .forge/logs/dev, then query the same errors with forge obs locally.
   </Card>
 </CardGroup>
 

@@ -415,6 +415,7 @@
                   "guides/forge/find-endpoints-missing-auth-checks",
                   "guides/forge/scan-dependencies-vulnerabilities",
                   "guides/forge/connect-claude-code-cursor-mcp",
+                  "guides/forge/keep-test-suite-fast",
                   "guides/forge/upgrade-forge-version"
                 ]
               }
@@ -469,7 +470,9 @@
                 "pages": [
                   "guides/observability/send-opentelemetry-from-any-app",
                   "guides/observability/find-slowest-rpcs",
-                  "guides/observability/route-alerts-slack-pagerduty"
+                  "guides/observability/route-alerts-slack-pagerduty",
+                  "guides/observability/custom-alert-rules-as-code",
+                  "guides/observability/add-custom-metric"
                 ]
               },
               {
@@ -478,7 +481,8 @@
                   "guides/observability/find-release-that-caused-error",
                   "guides/observability/debug-production-with-ai-agent",
                   "guides/observability/debug-frontend-errors-session-timelines",
-                  "guides/observability/find-cpu-hotspots-continuous-profiling"
+                  "guides/observability/find-cpu-hotspots-continuous-profiling",
+                  "guides/observability/browser-and-backend-logs-locally"
                 ]
               }
             ]
