@@ -128,7 +128,7 @@ describe("MobileNavDrawer", () => {
     expect(screen.getByRole("link", { name: /New chat/ })).toHaveAttribute("href", "/m/new");
     expect(screen.getByRole("link", { name: /Search/ })).toHaveAttribute("href", "/m/search");
     expect(screen.getByRole("link", { name: /Workflows/ })).toHaveAttribute("href", "/m/workflows");
-    expect(screen.getByRole("link", { name: /Machines/ })).toHaveAttribute("href", "/m/daemons");
+    expect(screen.getByRole("link", { name: /Sandboxes/ })).toHaveAttribute("href", "/m/daemons");
     expect(screen.getByRole("link", { name: /GitHub/ })).toHaveAttribute("href", "/m/github");
     expect(screen.getByRole("link", { name: /Settings/ })).toHaveAttribute("href", "/m/settings");
     expect(screen.getByRole("link", { name: /Account/ })).toHaveAttribute("href", "/m/account");
@@ -192,7 +192,7 @@ describe("MobileNavDrawer", () => {
     renderAt("/m/chats", true, onClose);
     await screen.findByRole("dialog", { name: "Navigation" });
 
-    await user.click(screen.getByRole("link", { name: /Machines/ }));
+    await user.click(screen.getByRole("link", { name: /Sandboxes/ }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 

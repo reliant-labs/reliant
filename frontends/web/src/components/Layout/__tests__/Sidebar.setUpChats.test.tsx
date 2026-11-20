@@ -98,7 +98,7 @@ describe("the nav's Chats section with no usable machine", () => {
 
     const card = screen.getByTestId("set-up-chats-card");
     expect(card).toHaveTextContent("Set up chats");
-    expect(card).toHaveTextContent("Chats run your agents on a machine");
+    expect(card).toHaveTextContent("Chats run your agents in an agent sandbox");
     // A real link: refresh, a new tab and a shared link all work.
     const link = within(card).getByRole("link", { name: "Set up" });
     expect(link).toHaveAttribute("href", href);

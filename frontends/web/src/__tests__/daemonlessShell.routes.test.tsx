@@ -121,7 +121,7 @@ const NO_MACHINE_PAGES = [
   ["/forge/p/x", null],
   ["/inbox", "InboxPage"],
   ["/workflows", null],
-  ["/usage", "UsagePage"],
+  ["/usage", "UsageBillingPage"],
   ["/settings/account", "SettingsPage"],
 ] as const;
 

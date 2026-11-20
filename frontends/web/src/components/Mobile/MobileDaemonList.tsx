@@ -58,7 +58,7 @@ function NewMachineButton({ onCreate }: { onCreate: () => void }) {
     <button
       type="button"
       onClick={onCreate}
-      aria-label="Add machine"
+      aria-label="Add sandbox"
       className="flex min-h-[44px] items-center gap-1 rounded-lg px-3 text-sm font-medium text-primary-ink active:bg-primary/10"
     >
       <Plus className="h-4 w-4" />
@@ -167,7 +167,7 @@ export function MobileDaemonList() {
               className={MOBILE_PRIMARY_ACTION}
             >
               <Plus className="h-4 w-4" />
-              Add machine
+              Add sandbox
             </button>
           }
         />

@@ -109,15 +109,3 @@ export function projectCostRow(name: string, cost: ProjectCost): ProjectCostRow 
   }
   return { name, monthToDate: cost.monthToDate, forecast: cost.forecast?.amount, top };
 }
-
-/** Rows most expensive first; a project without a measured figure sorts last, by name. */
-export function sortProjectRows(rows: ProjectCostRow[]): ProjectCostRow[] {
-  const value = (row: ProjectCostRow) => row.monthToDate?.usdNanos;
-  return [...rows].sort((a, b) => {
-    const av = value(a);
-    const bv = value(b);
-    if (av !== undefined && bv !== undefined && av !== bv) return bv > av ? 1 : -1;
-    if ((av === undefined) !== (bv === undefined)) return av === undefined ? 1 : -1;
-    return a.name.localeCompare(b.name);
-  });
-}

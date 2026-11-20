@@ -22,7 +22,6 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useQueries } from "@tanstack/react-query";
 import { CreditCard, FolderOpen, Receipt, Wallet } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
@@ -66,7 +65,7 @@ import {
 } from "@/components/Settings/cloud/billingUtils";
 import { SubscriptionStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { useApps } from "@/hooks/apps-queries";
-import { organizationUsageKeys, useOrganizationUsage } from "@/hooks/organization-usage-queries";
+import { useOrganizationUsage, useProjectCost } from "@/hooks/organization-usage-queries";
 import {
   useComputeSubscription,
   useCreateBillingPortalSession,
@@ -75,7 +74,6 @@ import {
 } from "@/hooks/useCloudBillingQueries";
 import { projectsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch } from "@/lib/paths";
 import { buildCheckoutReturnUrls, openCheckout } from "@/lib/stripeCheckout";
-import { getProjectCost } from "@/services/controlPlane/observability/organizationCostsApi";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 
 import { AreaShell } from "../Layout/AreaShell";
@@ -85,10 +83,8 @@ import {
   projectAmountText,
   projectCategoryLabel,
   projectCostRow,
-  sortProjectRows,
   usageCategoryLabel,
   usageRangeOf,
-  type ProjectCostRow,
 } from "./usageBillingModel";
 
 const LINK = "no-color text-primary-ink hover:underline";
@@ -192,25 +188,13 @@ function Headline({ query, orgId, range }: { query: UsageQuery; orgId: string; r
   );
 }
 
-/** Each hosted project's month so far (GetProjectCost), linking to its own Usage page. */
+/**
+ * Each hosted project's month so far (GetProjectCost through useProjectCost,
+ * the project Usage page's own hook and cache), linking to that page. Rows
+ * follow the apps list's order: newest deploy first.
+ */
 function ProjectBreakdown({ orgId }: { orgId: string }) {
   const { apps, loading, availability } = useApps();
-  const costs = useQueries({
-    queries: apps.map((app) => ({
-      queryKey: organizationUsageKeys.projectCost(orgId, app.name),
-      queryFn: () => getProjectCost(orgId, app.name),
-      enabled: !!orgId,
-      staleTime: 60_000,
-      retry: false,
-    })),
-  });
-  const rows = sortProjectRows(
-    apps.map((app, i) => {
-      const cost = costs[i]?.data;
-      return cost ? projectCostRow(app.name, cost) : { name: app.name, monthToDate: undefined, forecast: undefined };
-    }),
-  );
-  const stateOf = (name: string) => costs[apps.findIndex((app) => app.name === name)];
 
   return (
     <section className="space-y-3" aria-labelledby="usage-billing-projects" data-testid="usage-billing-projects">
@@ -249,8 +233,8 @@ function ProjectBreakdown({ orgId }: { orgId: string }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <ProjectRow key={row.name} row={row} state={stateOf(row.name)} />
+              {apps.map((app) => (
+                <ProjectRow key={app.name} orgId={orgId} name={app.name} />
               ))}
             </tbody>
           </table>
@@ -260,25 +244,22 @@ function ProjectBreakdown({ orgId }: { orgId: string }) {
   );
 }
 
-function ProjectRow({ row, state }: { row: ProjectCostRow; state: { isPending: boolean; isError: boolean; error: unknown } | undefined }) {
-  const pending = state?.isPending;
-  const failed = state?.isError;
-  const cell = (text: string) => (pending ? <span className="text-ink-muted">…</span> : failed ? <span className="text-ink-muted">Unavailable</span> : text);
+function ProjectRow({ orgId, name }: { orgId: string; name: string }) {
+  const cost = useProjectCost(orgId, name);
+  const row = cost.data ? projectCostRow(name, cost.data) : undefined;
+  const cell = (text: string) =>
+    cost.isPending ? <span className="text-ink-muted">…</span> : !row ? <span className="text-ink-muted">Unavailable</span> : text;
   return (
     <tr className="border-b border-border-subtle last:border-b-0" data-testid="usage-billing-project-row">
       <td className="h-11 px-3 text-ui font-medium">
-        <Link href={consolePath(row.name, { kind: "usage" })} className="no-color text-ink hover:underline">
-          {row.name}
+        <Link href={consolePath(name, { kind: "usage" })} className="no-color text-ink hover:underline">
+          {name}
         </Link>
       </td>
-      <td className="h-11 px-3 text-right text-ui tabular-nums text-ink">{cell(projectAmountText(row.monthToDate))}</td>
-      <td className="h-11 px-3 text-right text-ui tabular-nums text-ink-muted">{cell(projectAmountText(row.forecast))}</td>
+      <td className="h-11 px-3 text-right text-ui tabular-nums text-ink">{cell(projectAmountText(row?.monthToDate))}</td>
+      <td className="h-11 px-3 text-right text-ui tabular-nums text-ink-muted">{cell(projectAmountText(row?.forecast))}</td>
       <td className="h-11 px-3 text-ui text-ink-muted">
-        {pending || failed
-          ? cell("")
-          : row.top
-            ? `${projectCategoryLabel(row.top.category)} · ${Math.round(row.top.share * 100)}%`
-            : "No hosted usage this month"}
+        {cell(row?.top ? `${projectCategoryLabel(row.top.category)} · ${Math.round(row.top.share * 100)}%` : "No hosted usage this month")}
       </td>
     </tr>
   );

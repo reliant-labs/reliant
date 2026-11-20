@@ -18,12 +18,12 @@ describe("SettingsNavigation grouping", () => {
   it("shows six groups, in order, with the everyday items open", () => {
     renderNav("account");
     const headings = screen.getAllByTestId(/^settings-group-/).map((el) => el.getAttribute("data-testid")?.replace("settings-group-", ""));
-    expect(headings).toEqual(["Account", "AI", "Connections", "Machines & projects", "Preferences", "Advanced"]);
+    expect(headings).toEqual(["Account", "AI", "Connections", "Sandboxes & projects", "Preferences", "Advanced"]);
 
     expect(labels("Account")).toEqual(["Account", "Billing & usage", "Members", "Policies", "AI accounts", "AI usage", "Privacy"]);
     expect(labels("AI")).toEqual(["AI providers"]);
     expect(labels("Connections")).toEqual(["Integrations", "GitHub", "Tools (MCP)"]);
-    expect(labels("Machines & projects")).toEqual(["Machines", "Projects"]);
+    expect(labels("Sandboxes & projects")).toEqual(["Agent sandboxes", "Projects"]);
     expect(labels("Preferences")).toEqual(["Appearance", "Chat & editor", "Notifications", "Keyboard shortcuts"]);
   });
 
@@ -75,9 +75,9 @@ describe("SettingsNavigation grouping", () => {
     expect(toggle()).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("keeps Machines and its route id in Machines & projects", () => {
+  it("keeps Agent sandboxes and its route id (machines) in Sandboxes & projects", () => {
     const { onSectionChange } = renderNav("account");
-    fireEvent.click(within(group("Machines & projects")).getByRole("button", { name: "Machines" }));
+    fireEvent.click(within(group("Sandboxes & projects")).getByRole("button", { name: "Agent sandboxes" }));
     expect(onSectionChange).toHaveBeenCalledWith("machines");
   });
 
