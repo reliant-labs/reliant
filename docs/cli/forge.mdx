@@ -96,7 +96,7 @@ this forge is v0.1.46-0.20261020021425-45d38939f475, but …/forge.yaml pins for
 Which way to go depends on which side is behind:
 
 - **Your `reliant` is older than the project** (a teammate upgraded first): update Reliant. The desktop app checks for updates under **Reliant → Check for Updates**.
-- **The project is older than your `reliant`**: run `reliant forge project upgrade` to move the pin forward on purpose. It updates the project's Go modules to the running Forge, refreshes the scaffolded files you have not edited, and shows a diff for the ones you have, without overwriting them. Commit the result like any other change. `reliant forge upgrade list` shows any one-time migration guides that apply.
+- **The project is older than your `reliant`**: run `reliant forge project upgrade` to move the pin forward on purpose. It updates the project's Go modules to the running Forge, refreshes the scaffolded files you have not edited, and shows a diff for the ones you have, without overwriting them. Commit the result like any other change. `reliant forge project upgrade list` shows any one-time migration guides that apply.
 - **You need the old Forge for one command**: use the `go run …@<pin>` line from the message. It runs the pinned version without installing anything.
 
 `--allow-version-skew` exists for people working on Forge itself. Avoid it on a real project: generating with the wrong Forge is exactly what the check prevents.
