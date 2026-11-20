@@ -141,9 +141,18 @@ export function inboxPath(ctx?: PathContext): string {
 
 // ── Apps (forge) ────────────────────────────────────────────────────────────
 
-/** The org's usage and spend on what forge provisions (ForgeShell/ForgeUsagePage.tsx). */
+/** The org's Usage & billing page (components/Usage/UsageBillingPage.tsx); `usageBillingPath` names the same URL. */
 export function usagePath(ctx?: PathContext): string {
   return withOrg("/usage", ctx);
+}
+
+/**
+ * Usage & billing (components/Usage/UsageBillingPage.tsx): the org's spend
+ * over time, per project, AI and sandbox time, plan, credits and invoices.
+ * The nav footer's entry; Settings › Billing is its admin side.
+ */
+export function usageBillingPath(ctx?: PathContext): string {
+  return usagePath(ctx);
 }
 
 /**
@@ -217,7 +226,16 @@ export function settingsPath(section?: SettingsSection): string {
   return section ? `/settings/${section}` : "/settings";
 }
 
-/** One machine's page in Settings › Machines. */
+/**
+ * Agent sandboxes: the machines page, Settings › Agent sandboxes (the UI's
+ * name for machines; the section id, routes and APIs keep "machines").
+ * `/machines` and `/o/<org>/machines` redirect here.
+ */
+export function sandboxesPath(): string {
+  return settingsPath("machines");
+}
+
+/** One machine's page in Settings › Agent sandboxes. */
 export function machineSettingsPath(machineId: string): string {
   return `/settings/machines/${seg(machineId)}`;
 }

@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 import { chatSetupPath } from "./onboardingGate";
 
-export const SET_UP_CHATS_COPY = "Chats run your agents on a machine";
+export const SET_UP_CHATS_COPY = "Chats run your agents in an agent sandbox";
 
 export function SetUpChatsCard({
   setup,

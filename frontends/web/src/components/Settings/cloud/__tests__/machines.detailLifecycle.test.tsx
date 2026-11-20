@@ -258,7 +258,7 @@ describe('machine detail — lifecycle actions', () => {
     expect(screen.getByText(/disconnect/i)).toBeInTheDocument()
     expect(mocks.suspendDaemon).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: /restart machine/i }))
+    await user.click(screen.getByRole('button', { name: /restart sandbox/i }))
 
     await waitFor(() => expect(mocks.resumeEnvironment).toHaveBeenCalledTimes(1))
     expect(mocks.suspendDaemon).toHaveBeenCalledTimes(1)

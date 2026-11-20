@@ -140,7 +140,7 @@ describe("ProjectsPage's Set up chats card", () => {
     state.setup = setup;
     render(<ProjectsPage />);
     const card = screen.getByTestId("set-up-chats-card");
-    expect(card).toHaveTextContent("Chats run your agents on a machine");
+    expect(card).toHaveTextContent("Chats run your agents in an agent sandbox");
     const link = within(card).getByRole("link", { name: "Set up" });
     expect(link).toHaveAttribute("href", href);
     fireEvent.click(link);

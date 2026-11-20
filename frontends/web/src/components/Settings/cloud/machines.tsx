@@ -227,7 +227,7 @@ function isExternalDaemon(d: Pick<Daemon, "daemonType">): boolean {
 }
 
 export const CONNECTED_MACHINE_REMOVE_REASON =
-  "Connected machines can't be removed. Disconnect it first.";
+  "Connected sandboxes can't be removed. Disconnect it first.";
 
 // A connected self-hosted machine re-registers itself on its next heartbeat, so
 // "forgetting" it just makes the row vanish and reappear. Cloud machines are
@@ -284,7 +284,7 @@ const SIZE_TIERS = [
 // This replaced a `<Badge variant="neutral">` — a bordered pill that looked
 // like a button, did nothing on click, and named no way forward at all.
 const NO_FUNDING_DESCRIPTION =
-  "Redeem a coupon code or subscribe to a compute plan to start a machine. Machines run on the compute sizes your plan allows.";
+  "Redeem a coupon code or subscribe to a compute plan to start an agent sandbox. Sandboxes run on the compute sizes your plan allows.";
 
 
 /**
@@ -402,7 +402,7 @@ function SelfHostedSetupCard() {
       <CardHeader>
         <CardTitle className="inline-flex items-center gap-2">
           <Laptop className="h-4 w-4 text-muted-foreground" />
-          Run Reliant on your own machine
+          Run Reliant on your own computer
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           Install the desktop app or CLI on a laptop or server and start it. It
@@ -443,13 +443,13 @@ export function MachinesSection() {
         <div className="space-y-6">
           <div>
             <SettingsPageHeader
-              title="Machines"
-              description="Managed and self-hosted machines that run your projects."
+              title="Agent sandboxes"
+              description="Where your agents run: cloud sandboxes Reliant manages, and computers of yours you connect."
             />
             {!cloud && (
               <p className="mb-4 text-sm text-muted-foreground">
                 Cloud machines are managed by the Reliant control plane, which isn&apos;t configured for this build.
-                Self-hosted machines you connect still appear here.
+                Self-hosted sandboxes you connect still appear here.
               </p>
             )}
             {search.from === "connectors" && (
@@ -459,7 +459,7 @@ export function MachinesSection() {
               >
                 <span className="font-medium">Connectors moved here.</span>{" "}
                 <span className="text-muted-foreground">
-                  Outside AI apps now get access to one machine at a time. Open a machine and use its Access
+                  Outside AI apps now get access to one sandbox at a time. Open a sandbox and use its Access
                   section to grant, review or revoke an app.
                 </span>
               </p>
@@ -506,17 +506,17 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   const suspendMut = useMutation({
     mutationFn: (id: string) => suspendDaemon(id),
     onSuccess: () => { setActionError(""); invalidate(); },
-    onError: (e) => setActionError(describeError(e, "Failed to suspend machine")),
+    onError: (e) => setActionError(describeError(e, "Failed to suspend sandbox")),
   });
   const resumeMut = useMutation({
     mutationFn: (id: string) => resumeEnvironment(id),
     onSuccess: (_data, id) => { markWaking(id); setActionError(""); invalidate(); },
-    onError: (e) => setActionError(describeError(e, "Failed to resume machine")),
+    onError: (e) => setActionError(describeError(e, "Failed to resume sandbox")),
   });
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteDaemon(id),
     onSuccess: () => { setDeleteTarget(null); setActionError(""); invalidate(); },
-    onError: (e) => setActionError(describeError(e, "Failed to delete machine")),
+    onError: (e) => setActionError(describeError(e, "Failed to delete sandbox")),
   });
 
   // The status filter applies globally across both groups (rather than one
@@ -547,7 +547,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         </select>
         {cloud && (
           <Button onClick={() => setCreateOpen(true)} size="xl" leftIcon={<Plus />}>
-            Add machine
+            Add sandbox
           </Button>
         )}
       </div>
@@ -556,12 +556,12 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
 
       {daemonsQ.isLoading ? (
         <Card>
-          <CardContent className="text-sm text-muted-foreground">Loading machines…</CardContent>
+          <CardContent className="text-sm text-muted-foreground">Loading sandboxes…</CardContent>
         </Card>
       ) : daemonsQ.error ? (
         <Card>
           <CardContent>
-            <p className="text-sm font-medium text-destructive-ink">Failed to load machines</p>
+            <p className="text-sm font-medium text-destructive-ink">Failed to load sandboxes</p>
             <p className="mt-1 text-sm text-muted-foreground">{describeError(daemonsQ.error)}</p>
             <Button variant="outline" size="md" className="mt-3" onClick={() => daemonsQ.refetch()} leftIcon={<RefreshCw />}>
               Retry
@@ -571,21 +571,21 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
       ) : daemons.length === 0 && !cloud ? (
         <EmptyState
           icon={Server}
-          title="No machines"
-          description="Connect a self-hosted machine with the steps below."
+          title="No sandboxes"
+          description="Connect a self-hosted sandbox with the steps below."
         />
       ) : daemons.length === 0 ? (
         <EmptyState
           icon={Server}
-          title="No machines yet"
+          title="No sandboxes yet"
           description={
             eligibilityQ.data?.eligible
-              ? "Add a cloud machine, or connect your own computer."
+              ? "Add a cloud sandbox, or connect your own computer."
               : NO_FUNDING_DESCRIPTION
           }
           action={
             <Button onClick={() => setCreateOpen(true)} size="xl" leftIcon={<Plus />}>
-              Add machine
+              Add sandbox
             </Button>
           }
         />
@@ -594,7 +594,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           {managedDaemons.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-xs font-semibold text-muted-foreground">
-                Cloud machines
+                Cloud sandboxes
               </h3>
               <ManagedMachinesTable
                 daemons={managedDaemons}
@@ -611,7 +611,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           {selfHostedDaemons.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-xs font-semibold text-muted-foreground">
-                Self-hosted machines
+                Self-hosted sandboxes
               </h3>
               <SelfHostedMachinesTable
                 daemons={selfHostedDaemons}
@@ -802,7 +802,7 @@ function ManagedMachinesTable({
               size="md"
               onClick={() => onDelete(d)}
               aria-label={`Delete ${daemonDisplayName(d)}`}
-              title="Delete machine"
+              title="Delete sandbox"
               icon={<Trash2 className="text-destructive-ink" aria-hidden="true" />}
             />
           </div>
@@ -813,7 +813,7 @@ function ManagedMachinesTable({
   return (
     <div className="forge-ui">
       <DataTable<MachineRow>
-        ariaLabel="Cloud machines"
+        ariaLabel="Cloud sandboxes"
         columns={columns}
         data={daemons.map((d) => ({ id: d.daemonId, d }))}
         getRowKey={(r) => r.id}
@@ -844,7 +844,7 @@ function MakeDefaultButton({ daemon }: { daemon: Daemon }) {
       disabled={isPending}
       onClick={() => makeDefault(daemon.daemonId)}
       leftIcon={<Star className="h-4 w-4" aria-hidden="true" />}
-      aria-label={`Make ${daemonDisplayName(daemon)} your default machine`}
+      aria-label={`Make ${daemonDisplayName(daemon)} your default sandbox`}
     >
       Make default
     </Button>
@@ -952,7 +952,7 @@ function SelfHostedMachinesTable({
   return (
     <div className="forge-ui">
       <DataTable<MachineRow>
-        ariaLabel="Self-hosted machines"
+        ariaLabel="Self-hosted sandboxes"
         columns={columns}
         data={daemons.map((d) => ({ id: d.daemonId, d }))}
         getRowKey={(r) => r.id}
@@ -982,7 +982,7 @@ function RemoveMachineModal({
   onConfirm: () => void;
 }) {
   const external = target ? isExternalDaemon(target) : false;
-  const title = external ? "Forget This Machine" : "Delete Machine";
+  const title = external ? "Forget This Sandbox" : "Delete Sandbox";
   const confirmLabel = external ? "Forget" : "Delete";
   const confirmingLabel = external ? "Forgetting…" : "Deleting…";
 
@@ -992,8 +992,8 @@ function RemoveMachineModal({
         {external ? (
           <>
             Remove <span className="font-semibold text-foreground">{target && daemonDisplayName(target)}</span> from
-            this list? This only removes the connection record here — it does not affect the actual machine, and it
-            will reappear if that machine reconnects.
+            this list? This only removes the connection record here — it does not affect the actual sandbox, and it
+            will reappear if that sandbox reconnects.
           </>
         ) : (
           <>
@@ -1127,27 +1127,27 @@ function RestartMachineModal({
   onConfirm: () => void;
 }) {
   return (
-    <Modal open={target !== null} onClose={onClose} title="Restart Machine">
+    <Modal open={target !== null} onClose={onClose} title="Restart Sandbox">
       <p className="text-sm text-muted-foreground">
         Restart <span className="font-semibold text-foreground">{target && daemonDisplayName(target)}</span>? The
-        machine stops and starts again, so any open sessions on it — running agents,
+        sandbox stops and starts again, so any open sessions on it — running agents,
         terminals and dev servers — will disconnect. Files on its disk are kept.
       </p>
       <p className="mt-3 text-sm text-muted-foreground">
-        A restart is also how a machine picks up a new workspace image.
+        A restart is also how a sandbox picks up a new workspace image.
       </p>
       {/* Progress, in the modal that started it. The sequence outlives a
           single RPC, so closing this on click would leave the user watching
           an unchanged page with no indication anything was happening. */}
       {stage && (
         <p className="mt-4 text-sm font-medium text-foreground" data-testid="restart-progress">
-          {stage === "stopping" ? "Stopping the machine…" : "Starting the machine…"}
+          {stage === "stopping" ? "Stopping the sandbox…" : "Starting the sandbox…"}
         </p>
       )}
       <div className="mt-6 flex justify-end gap-3">
         <Button variant="outline" disabled={isPending} onClick={onClose} size="xl">Cancel</Button>
         <Button loading={isPending} onClick={onConfirm} size="xl">
-          {isPending ? "Restarting…" : "Restart machine"}
+          {isPending ? "Restarting…" : "Restart sandbox"}
         </Button>
       </div>
     </Modal>
@@ -1220,7 +1220,7 @@ function ResizeMachineModal({
   const name = target ? daemonDisplayName(target) : "";
 
   return (
-    <Modal open={target !== null} onClose={isPending ? () => {} : onClose} title="Resize Machine" maxWidth="max-w-xl">
+    <Modal open={target !== null} onClose={isPending ? () => {} : onClose} title="Resize Sandbox" maxWidth="max-w-xl">
       <p className="text-sm text-muted-foreground" data-testid="resize-effect">
         {running ? (
           <>
@@ -1298,10 +1298,10 @@ function ResizeMachineModal({
       {stage && (
         <p className="mt-4 text-sm font-medium text-foreground" data-testid="resize-progress">
           {stage === "stopping"
-            ? "Stopping the machine…"
+            ? "Stopping the sandbox…"
             : stage === "resizing"
               ? "Applying the new size…"
-              : "Starting the machine…"}
+              : "Starting the sandbox…"}
         </p>
       )}
 
@@ -1405,17 +1405,17 @@ function EnvironmentDetail({
   const suspendMut = useMutation({
     mutationFn: () => suspendDaemon(daemonId),
     onSuccess: () => { setError(""); refetchAll(); },
-    onError: (e) => setError(describeError(e, "Failed to suspend machine")),
+    onError: (e) => setError(describeError(e, "Failed to suspend sandbox")),
   });
   const resumeMut = useMutation({
     mutationFn: () => resumeEnvironment(daemonId),
     onSuccess: () => { markWaking(daemonId); setError(""); refetchAll(); },
-    onError: (e) => setError(describeError(e, "Failed to resume machine")),
+    onError: (e) => setError(describeError(e, "Failed to resume sandbox")),
   });
   const deleteMut = useMutation({
     mutationFn: () => deleteDaemon(daemonId),
     onSuccess: () => { setDeleteOpen(false); invalidateDaemonList(qc); onBack(); },
-    onError: (e) => setError(describeError(e, "Failed to delete machine")),
+    onError: (e) => setError(describeError(e, "Failed to delete sandbox")),
   });
 
   /**
@@ -1463,7 +1463,7 @@ function EnvironmentDetail({
       await cycleMachine();
     },
     onSuccess: () => { setError(""); refetchAll(); },
-    onError: (e) => setError(describeError(e, "Failed to restart machine")),
+    onError: (e) => setError(describeError(e, "Failed to restart sandbox")),
     // Clear the stage on BOTH paths: leaving it set after a failure would
     // disable every lifecycle button with a stale "Stopping…" reason and
     // strand the machine with no way to act on it from this page.
@@ -1495,11 +1495,11 @@ function EnvironmentDetail({
       const label = SIZE_TIERS.find((t) => t.value === size)?.label ?? "the new size";
       toast.success(
         daemon?.status === DaemonStatus.SUSPENDED
-          ? `${daemon ? daemonDisplayName(daemon) : "The machine"} will start as ${label}`
-          : `${daemon ? daemonDisplayName(daemon) : "The machine"} is restarting as ${label}`,
+          ? `${daemon ? daemonDisplayName(daemon) : "The sandbox"} will start as ${label}`
+          : `${daemon ? daemonDisplayName(daemon) : "The sandbox"} is restarting as ${label}`,
       );
     },
-    onError: (e) => setResizeError(describeError(e, "Failed to resize machine")),
+    onError: (e) => setResizeError(describeError(e, "Failed to resize sandbox")),
     onSettled: () => { setRestartStage(null); setCycling(null); refetchAll(); },
   });
 
@@ -1522,7 +1522,7 @@ function EnvironmentDetail({
       } catch (e) {
         throw new Error(
           `The disk is growing to ${targetGib} GB, but the restart failed: ${describeError(e)}. ` +
-            "Restart the machine to use the space.",
+            "Restart the sandbox to use the space.",
         );
       }
     },
@@ -1530,7 +1530,7 @@ function EnvironmentDetail({
       setGrowError("");
       setGrowDenied(false);
       setGrowOpen(false);
-      const name = daemon ? daemonDisplayName(daemon) : "The machine";
+      const name = daemon ? daemonDisplayName(daemon) : "The sandbox";
       toast.success(
         restart
           ? `${name} restarted with a ${targetGib} GB disk`
@@ -1615,15 +1615,15 @@ function EnvironmentDetail({
         onClick={onBack}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to Machines
+        <ArrowLeft className="h-4 w-4" /> Back to agent sandboxes
       </button>
 
       {loading ? (
-        <Card><CardContent className="text-sm text-muted-foreground">Loading machine…</CardContent></Card>
+        <Card><CardContent className="text-sm text-muted-foreground">Loading sandbox…</CardContent></Card>
       ) : loadError ? (
         <Card><CardContent className="text-sm text-destructive-ink">{describeError(loadError)}</CardContent></Card>
       ) : !daemon ? (
-        <Card><CardContent className="text-sm text-muted-foreground">Machine not found.</CardContent></Card>
+        <Card><CardContent className="text-sm text-muted-foreground">Sandbox not found.</CardContent></Card>
       ) : (
         <>
           <div
@@ -1695,8 +1695,8 @@ function EnvironmentDetail({
               exists and is merely unavailable right now. */}
           {external && cloud && (
             <p className="text-sm text-muted-foreground">
-              This machine runs on your own hardware, so it can't be suspended or
-              restarted from here. Stop or restart the Reliant daemon on the machine
+              This sandbox runs on your own hardware, so it can't be suspended or
+              restarted from here. Stop or restart the Reliant daemon on that computer
               itself.
             </p>
           )}
@@ -1719,19 +1719,19 @@ function EnvironmentDetail({
                   Choose a smaller size
                 </Button>
                 <Button variant="ghost" disabled={busy} onClick={() => setDeleteOpen(true)}>
-                  Cancel machine
+                  Cancel sandbox
                 </Button>
               </div>
             </div>
           )}
 
           {/*
-            Why a machine is failed or stopped, at the top, not buried in a
+            Why a sandbox is failed or stopped, at the top, not buried in a
             detail row. This used to render only as "Last status" three cards
             down, so a user looking at a red "Failed" badge had no reason next
             to it and no cue that one existed further down the page.
 
-            A STOPPED machine gets the same prominence but not the error
+            A STOPPED sandbox gets the same prominence but not the error
             styling: being stopped is normal, and the reason is there to
             explain a stop the user did not perform.
           */}
@@ -1820,9 +1820,9 @@ function EnvironmentDetail({
                   )}
                   {/*
                     The label tracks the state. "Connected at <timestamp>"
-                    beside a DISCONNECTED machine describes a connection that
+                    beside a DISCONNECTED sandbox describes a connection that
                     no longer exists, and reads as a live one — the timestamp
-                    is in fact when the machine was last connected. Same
+                    is in fact when the sandbox was last connected. Same
                     value, honestly captioned.
                   */}
                   <InfoRow
