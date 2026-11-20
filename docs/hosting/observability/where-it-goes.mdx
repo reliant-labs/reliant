@@ -69,6 +69,7 @@ The uncaught-error capture is the part that matters. A `TypeError` that crashes 
 Three things to know:
 
 - **Development only.** The receiving endpoint is a Vite plugin or a Next.js route that does not exist in a production build, and the capture does nothing outside dev. An empty file in a deployed environment is expected. Deployed browser errors go to the store instead; see [Hosted dashboards, alerts and issues](/hosting/observability/dashboards-and-alerts#frontend-errors-issues-and-source-maps).
+- **The file, not the store.** These console lines live only in `frontend_<name>.log`; `obs logs` does not query them. The browser's spans and uncaught errors do reach the local store over `/_otel`. Each `forge env up` starts the log files afresh, so copy one first if you need the previous run. [Read browser and backend logs in one place](/guides/observability/browser-and-backend-logs-locally) walks through both.
 - **Lines arrive in batches.** Console calls are coalesced into one request every 250 ms (errors flush at once, and the buffer is sent when the page unloads), so `tail -f` lags the browser slightly. This keeps one request per log line from using up the browser's connections to your dev server.
 - **It is ordinary scaffolded code you own.** One call in `src/main.tsx` or `src/app/providers.tsx` and one plugin entry. If a file has no `[browser:` lines at all, check those two places before concluding the code never ran.
 
