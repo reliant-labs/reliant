@@ -15,9 +15,8 @@ type Settings struct {
 	StreamTimeouts llm.StreamTimeouts
 	// ReliantBaseURL is the Reliant LLM gateway (RELIANT_API_BASE_URL).
 	ReliantBaseURL string
-	// VertexProject and VertexLocation place Vertex AI calls
-	// (VERTEXAI_PROJECT, VERTEXAI_LOCATION).
-	VertexProject  string
+	// VertexLocation is the Vertex AI region (VERTEXAI_LOCATION). The project
+	// is the connected account's.
 	VertexLocation string
 	// DebugOpenAIResponsesInput and DebugOpenAIToolSchemas log the OpenAI
 	// Responses payloads (RELIANT_DEBUG_OPENAI_*).
@@ -30,6 +29,6 @@ type Settings struct {
 func Configure(s Settings) {
 	llm.ConfigureStreamTimeouts(s.StreamTimeouts)
 	ConfigureReliantBaseURL(s.ReliantBaseURL)
-	vertexai.Configure(s.VertexProject, s.VertexLocation)
+	vertexai.Configure(s.VertexLocation)
 	openai.ConfigureDebug(s.DebugOpenAIResponsesInput, s.DebugOpenAIToolSchemas)
 }

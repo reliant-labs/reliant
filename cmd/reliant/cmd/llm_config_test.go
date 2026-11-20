@@ -14,7 +14,7 @@ import (
 )
 
 var llmEnv = []string{
-	"RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION",
+	"RELIANT_API_BASE_URL", "VERTEXAI_LOCATION",
 	"RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT",
 	"RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT",
 	"RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS",
@@ -62,7 +62,6 @@ func TestLLMEnvContract(t *testing.T) {
 
 	for name, value := range map[string]string{
 		"RELIANT_API_BASE_URL":                       "http://control-plane:8090/v1",
-		"VERTEXAI_PROJECT":                           "reliant-prod",
 		"VERTEXAI_LOCATION":                          "europe-west4",
 		"RELIANT_LLM_STREAM_IDLE_TIMEOUT":            "3m",
 		"RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT":   "12m",
@@ -78,7 +77,7 @@ func TestLLMEnvContract(t *testing.T) {
 	want = drivers.Settings{
 		StreamTimeouts: llm.StreamTimeouts{Idle: 3 * time.Minute, ContentStall: 12 * time.Minute,
 			Progress: 20 * time.Minute, MidBlock: 45 * time.Minute},
-		ReliantBaseURL: "http://control-plane:8090/v1", VertexProject: "reliant-prod", VertexLocation: "europe-west4",
+		ReliantBaseURL: "http://control-plane:8090/v1", VertexLocation: "europe-west4",
 		DebugOpenAIResponsesInput: true, DebugOpenAIToolSchemas: true,
 	}
 	assert.Equal(t, want, api)

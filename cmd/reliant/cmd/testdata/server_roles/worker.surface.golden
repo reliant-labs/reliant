@@ -83,7 +83,6 @@ TEMPORAL_PORT kind=int32 flag="temporal-port" default="7233" required=false opti
 TLS_CERT_FILE kind=string flag="tls-cert" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 TLS_KEY_FILE kind=string flag="tls-key" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 VERTEXAI_LOCATION kind=string flag="" default="us-central1" required=false optional=false sensitive=false allowed=[] aliases=[]
-VERTEXAI_PROJECT kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 WORKSPACE_BASE_DOMAIN kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 WORKSPACE_URL_PORT kind=int32 flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 WORKSPACE_URL_SCHEME kind=string flag="" default="https" required=false optional=false sensitive=false allowed=[http https] aliases=[]
