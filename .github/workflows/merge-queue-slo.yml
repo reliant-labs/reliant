@@ -2,6 +2,7 @@ name: Merge queue SLO
 
 # workflow_run executes the default branch's workflow, never the merge group's
 # copy. The issue writer therefore cannot be edited by the candidate it reports.
+# Verification and safe disablement: dev-docs/merge-queue-readonly-recovery.md.
 on:
   workflow_run:
     workflows: [Merge queue]

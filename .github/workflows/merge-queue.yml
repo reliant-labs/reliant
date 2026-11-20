@@ -181,11 +181,15 @@ jobs:
           JOB: golangci (changed)
           WAIT_S: "960"
           POLL_S: "10"
+          MAX_POLLS: "8"
         run: |
           set -euo pipefail
           url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           deadline=$(( $(date +%s) + WAIT_S ))
+          polls=0
+          interval=$POLL_S
           while :; do
+            polls=$((polls + 1))
             state=$(curl --fail --silent --show-error --max-time 10 \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs" \
               | jq -r --arg job "$JOB" '[.jobs[] | select(.name == $job)][0] // {} | "\(.status // "absent") \(.conclusion // "")"') || state="unreadable "
@@ -193,11 +197,18 @@ jobs:
               "completed success") echo "${JOB}: success"; exit 0 ;;
               completed\ *) echo "::error title=${JOB} did not pass::${JOB}: ${state#completed } (${url}); its log names each finding"; exit 1 ;;
             esac
-            if [ "$(date +%s)" -ge "${deadline}" ]; then
-              echo "::error title=${JOB} did not finish::${JOB} is still ${state% *} after ${WAIT_S}s (${url})"; exit 1
+            now=$(date +%s)
+            if ((now >= deadline || polls >= MAX_POLLS)); then
+              echo "::error title=${JOB} did not finish::${JOB} is still ${state% *} after ${polls} anonymous checks (${url})"; exit 1
             fi
-            echo "${JOB}: ${state% *}; waiting"
-            sleep "${POLL_S}"
+            # Back off under the shared anonymous REST quota. Reserve the
+            # last request for the original deadline, not the last short sleep.
+            remaining=$((deadline - now))
+            sleep_for=$interval
+            if ((polls + 1 == MAX_POLLS || sleep_for > remaining)); then sleep_for=$remaining; fi
+            echo "${JOB}: ${state% *}; waiting ${sleep_for}s"
+            sleep "$sleep_for"
+            interval=$((interval * 2))
           done
       - name: Summary
         if: ${{ !cancelled() }}
