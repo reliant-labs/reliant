@@ -90,6 +90,11 @@ inputs:
 
 outputs:
   project_root: "{{inputs.working_directory}}"
+  # What the reviewer verified with its own tools on the last attempt: the live
+  # URL, the pages it snapshotted and what it saw, the checks it ran. The
+  # review schema requires it, so a person can see what a pass rests on.
+  inspection_evidence: "{{has(nodes.build_app.review_response) && has(nodes.build_app.review_response.inspection_evidence) ? nodes.build_app.review_response.inspection_evidence : {}}}"
+  review_grade: "{{nodes.build_app.review_grade}}"
 
 nodes:
   - id: build_app
