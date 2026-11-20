@@ -57,7 +57,7 @@ A forge service builds its interceptor chain from slots, and authentication is t
 
 The allow-list isn't maintained by hand. Forge projects it from the protos into `pkg/middleware/procedures_gen.go`, and an RPC is listed only because its proto says `option (forge.v1.method) = { auth_required: false }`. Matching is exact and uses Connect's generated procedure constants, so a renamed RPC breaks the build instead of leaving a stale string behind. The probes (`/healthz`, `/readyz`, `/metrics`) sit in front of the chain and need no credential. [Middleware and the request path](/forge/concepts/middleware-and-request-path#auth-fails-closed) walks the whole chain and its order.
 
-A credential reaches the validator by its shape. A bearer JWT goes to the validator `SetupAuth` builds, an `fk_` API key goes to a validator over your own table (hashed and compared in constant time), and the native sign-in session cookie is read last. After validation, an enrich hook you own (`enrichClaims` in `pkg/middleware`, or a component that implements `ClaimsEnricher`) can add roles, an org or a tenant to the claims before any handler runs. If it returns an error, the request is rejected. {/* defer:/guides/forge/add-sign-in-passkeys */}Add sign-in with passkeys, magic links or social login{/* /defer */} covers the sign-in side.
+A credential reaches the validator by its shape. A bearer JWT goes to the validator `SetupAuth` builds, an `fk_` API key goes to a validator over your own table (hashed and compared in constant time), and the native sign-in session cookie is read last. After validation, an enrich hook you own (`enrichClaims` in `pkg/middleware`, or a component that implements `ClaimsEnricher`) can add roles, an org or a tenant to the claims before any handler runs. If it returns an error, the request is rejected. [Add sign-in with passkeys, magic links or social login](/guides/forge/add-sign-in-passkeys) covers the sign-in side.
 
 ### 2. You write the access rules, and the audit finds the gaps
 
@@ -229,7 +229,9 @@ Find the secret-scanning hook in a new API project:
   <Card title="Scope rows to their owner" icon="users" href="/guides/forge/scope-rows-to-owner">
     Declare a `forge:owner` column and filter every query by the caller.
   </Card>
-{/* defer-card:/guides/forge/add-sign-in-passkeys ICA8Q2FyZCB0aXRsZT0iQWRkIHNpZ24taW4gd2l0aCBwYXNza2V5cyIgaWNvbj0ia2V5IiBocmVmPSIvZ3VpZGVzL2ZvcmdlL2FkZC1zaWduLWluLXBhc3NrZXlzIj4KICAgIFBhc3NrZXlzLCBtYWdpYyBsaW5rcyBvciBzb2NpYWwgbG9naW4sIGFuZCB0aGUgUlBDcyBhbmQgcGFnZXMgdGhhdCBzdGF5IHB1YmxpYy4KICA8L0NhcmQ+ */}
+  <Card title="Add sign-in with passkeys" icon="key" href="/guides/forge/add-sign-in-passkeys">
+    Passkeys, magic links or social login, and the RPCs and pages that stay public.
+  </Card>
   <Card title="Let agents query production data" icon="database" href="/guides/forge/let-agents-query-production-data">
     Read-only, audited queries through a role that can't see secret columns.
   </Card>
