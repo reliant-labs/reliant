@@ -370,7 +370,6 @@ func (g *Graph) newIntegrationSettings() (*IntegrationSettings, error) {
 
 func (g *Graph) newProcessSettings() (*ProcessSettings, error) {
 	return NewProcessSettings(ProcessSettingsDeps{
-		DataDir:      g.ServerProcessConfig.GetDataDir(),
 		LLM:          g.ServerProcessConfig.GetLlm(),
 		Preview:      g.ServerProcessConfig.GetPreview(),
 		Integrations: g.IntegrationSettings(),

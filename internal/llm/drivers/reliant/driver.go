@@ -19,18 +19,20 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/openai/openai-go/v3/packages/param"
+	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/openai/openai-go/v3/shared"
 	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/cache"
+	openaidriver "github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -40,6 +42,9 @@ import (
 type ReliantClient struct {
 	Options llm.DriverOptions
 	Client  openai.Client
+
+	// ladder overrides the retry ladder's defaults; tests inject the clock.
+	ladder ratelimit.Retryer
 }
 
 // Name returns the name of the driver
@@ -118,7 +123,10 @@ func NewClient(opts llm.DriverOptions) *ReliantClient {
 		"api_model", opts.Model.APIModel,
 	)
 
-	clientOptions := []option.RequestOption{}
+	// Retries are the shared ladder's (see retryer). openai-go would otherwise
+	// retry twice more inside every attempt, silently and without a cap on the
+	// gateway's Retry-After.
+	clientOptions := []option.RequestOption{option.WithMaxRetries(0)}
 	if opts.ApiKey != "" {
 		clientOptions = append(clientOptions, option.WithAPIKey(opts.ApiKey))
 	}
@@ -553,61 +561,45 @@ func (c *ReliantClient) preparedParams(messages []openai.ChatCompletionMessagePa
 func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, toolList []tools.Tool) (response *llm.DriverResponse, err error) {
 	params := c.preparedParams(c.ConvertMessages(prompts, messages), c.ConvertTools(toolList))
 
-	attempts := 0
-	for {
-		attempts++
-		var rawResp *http.Response
-		openaiResponse, err := c.Client.Chat.Completions.New(
-			ctx,
-			params,
-			option.WithResponseInto(&rawResp),
-		)
-		if err != nil {
-			retry, wait, retryErr := c.shouldRetry(attempts, err)
-			if retryErr != nil {
-				return nil, retryErr
-			}
-			if retry {
-				logging.WarnContext(ctx, "Retrying Reliant API request",
-					"attempt", attempts,
-					"max_retries", models.MaxRetries,
-					"after_ms", wait.Delay.Milliseconds(),
-				)
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(wait.Delay):
-					continue
-				}
-			}
-			return nil, retryErr
+	var (
+		rawResp        *http.Response
+		openaiResponse *openai.ChatCompletion
+	)
+	if err := c.retryer().Run(ctx, func(attempt int) (ratelimit.Failure, bool) {
+		var callErr error
+		openaiResponse, callErr = c.Client.Chat.Completions.New(ctx, params, option.WithResponseInto(&rawResp))
+		if callErr != nil {
+			return c.failure(attempt, callErr), false
 		}
-
-		content := ""
-		if openaiResponse.Choices[0].Message.Content != "" {
-			content = openaiResponse.Choices[0].Message.Content
-		}
-
-		toolCalls := c.toolCalls(*openaiResponse)
-		finishReason := c.finishReason(string(openaiResponse.Choices[0].FinishReason))
-
-		if len(toolCalls) > 0 {
-			finishReason = message.FinishReasonToolUse
-		}
-
-		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
-
-		return &llm.DriverResponse{
-			Content:   content,
-			ToolCalls: toolCalls,
-			Usage: c.usage(*openaiResponse,
-				gatewayReportedCost(rawResp, openaiResponse.Usage),
-				cacheCreationInputTokens(openaiResponse.Usage)),
-			FinishReason:       finishReason,
-			UpstreamRequestID:  upstreamRequestID,
-			UpstreamProxymanID: upstreamProxymanID,
-		}, nil
+		return ratelimit.Failure{}, true
+	}, nil); err != nil {
+		return nil, err
 	}
+
+	content := ""
+	if openaiResponse.Choices[0].Message.Content != "" {
+		content = openaiResponse.Choices[0].Message.Content
+	}
+
+	toolCalls := c.toolCalls(*openaiResponse)
+	finishReason := c.finishReason(string(openaiResponse.Choices[0].FinishReason))
+
+	if len(toolCalls) > 0 {
+		finishReason = message.FinishReasonToolUse
+	}
+
+	upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
+
+	return &llm.DriverResponse{
+		Content:   content,
+		ToolCalls: toolCalls,
+		Usage: c.usage(*openaiResponse,
+			gatewayReportedCost(rawResp, openaiResponse.Usage),
+			cacheCreationInputTokens(openaiResponse.Usage)),
+		FinishReason:       finishReason,
+		UpstreamRequestID:  upstreamRequestID,
+		UpstreamProxymanID: upstreamProxymanID,
+	}, nil
 }
 
 func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, toolList []tools.Tool) <-chan llm.DriverEvent {
@@ -616,179 +608,182 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 		IncludeUsage: openai.Bool(true),
 	}
 
-	attempts := 0
 	eventChan := make(chan llm.DriverEvent)
 
 	go func() {
-		for {
-			attempts++
-			var streamResp *http.Response
-			openaiStream := c.Client.Chat.Completions.NewStreaming(
-				ctx,
-				params,
-				option.WithResponseInto(&streamResp),
-			)
-
-			acc := openai.ChatCompletionAccumulator{}
-			currentContent := ""
-			toolCallResults := make([]message.ToolCall, 0)
-			// The accumulator sums the usage fields it knows about, which drops
-			// LiteLLM's `cost` and `cache_creation_input_tokens` — both live in
-			// the chunk's extra fields, so they have to be taken from the usage
-			// chunk itself as it goes past.
-			reportedCost := 0.0
-			reportedCacheCreation := int64(0)
-
-			for openaiStream.Next() {
-				chunk := openaiStream.Current()
-				acc.AddChunk(chunk)
-
-				if cost := usageCost(chunk.Usage); cost > 0 {
-					reportedCost = cost
-				}
-				if written := cacheCreationInputTokens(chunk.Usage); written > 0 {
-					reportedCacheCreation = written
-				}
-
-				for _, choice := range chunk.Choices {
-					if choice.Delta.Content != "" {
-						eventChan <- llm.DriverEvent{
-							Type:    llm.EventContentDelta,
-							Content: choice.Delta.Content,
-						}
-						currentContent += choice.Delta.Content
-					}
-				}
+		// The request retries through the shared ladder until the stream
+		// yields its first chunk (a refusal surfaces from that first Next).
+		// Each wait is announced BEFORE it is taken: the whole ladder runs
+		// inside one Temporal activity attempt, so without the event the run
+		// emits nothing while it sleeps (measured on run b7aa4056: eight of
+		// ten fan-out units spent ~113s of their ~129s life here, and every
+		// supervision surface read it as "the model is thinking").
+		var (
+			streamResp   *http.Response
+			openaiStream *ssestream.Stream[openai.ChatCompletionChunk]
+			hasNext      bool
+			attempts     int
+		)
+		emitCancelled := false
+		openErr := c.retryer().Run(ctx, func(attempt int) (ratelimit.Failure, bool) {
+			attempts = attempt
+			streamResp = nil
+			openaiStream = c.Client.Chat.Completions.NewStreaming(ctx, params, option.WithResponseInto(&streamResp))
+			if hasNext = openaiStream.Next(); hasNext {
+				return ratelimit.Failure{}, true
 			}
-
-			err := openaiStream.Err()
-			if err == nil || errors.Is(err, io.EOF) {
-				var finishReason message.FinishReason
-
-				if len(acc.Choices) > 0 {
-					finishReason = c.finishReason(string(acc.ChatCompletion.Choices[0].FinishReason))
-					if len(acc.Choices[0].Message.ToolCalls) > 0 {
-						toolCallResults = append(toolCallResults, c.toolCalls(acc.ChatCompletion)...)
-					}
-				} else if currentContent != "" {
-					logging.WarnContext(ctx, fmt.Sprintf("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent)))
-					llm.EndStreamWithError(eventChan, fmt.Errorf("stream interrupted: incomplete response from Reliant proxy"),
-						c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
-					return
-				} else {
-					logging.ErrorContext(ctx, "Stream ended with no content and no completion data")
-					llm.EndStreamWithError(eventChan, fmt.Errorf("empty response from Reliant proxy"),
-						c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
-					return
-				}
-
-				if len(toolCallResults) > 0 {
-					finishReason = message.FinishReasonToolUse
-				}
-
-				upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)
-
-				eventChan <- llm.DriverEvent{
-					Type: llm.EventComplete,
-					Response: &llm.DriverResponse{
-						Content:            currentContent,
-						ToolCalls:          toolCallResults,
-						Usage:              c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation),
-						FinishReason:       finishReason,
-						UpstreamRequestID:  upstreamRequestID,
-						UpstreamProxymanID: upstreamProxymanID,
-					},
-				}
+			return c.failure(attempt, openaiStream.Err()), false
+		}, func(wait llm.RetryWait) error {
+			_ = openaiStream.Close()
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
+			case <-ctx.Done():
+				emitCancelled = true
+				return ctx.Err()
+			}
+		})
+		if openErr != nil {
+			if emitCancelled {
 				close(eventChan)
 				return
 			}
-
-			// Out of retries, or not retryable: what this last request billed
-			// goes out after the error, or the usage ledger loses it.
-			billed := c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation)
-			retry, wait, retryErr := c.shouldRetry(attempts, err)
-			if retryErr != nil {
-				llm.EndStreamWithError(eventChan, retryErr, billed)
-				return
-			}
-			if retry {
-				logging.WarnContext(ctx, "Retrying Reliant API request",
-					"attempt", attempts,
-					"max_retries", models.MaxRetries,
-					"after_ms", wait.Delay.Milliseconds(),
-				)
-				// Announce the wait BEFORE taking it. The whole ladder runs inside
-				// one Temporal activity attempt, so without this the run emits
-				// nothing at all while it sleeps: measured on run b7aa4056, eight of
-				// ten fan-out units spent ~113s of their ~129s life here and every
-				// supervision surface read it as "the model is thinking".
-				// The attempt's accumulator is dropped with it; what it billed
-				// goes out on the wait, so the usage ledger counts this request too.
-				wait.Usage = llm.FailedAttemptUsage(billed)
-				select {
-				case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
-				case <-ctx.Done():
-					close(eventChan)
-					return
-				}
-				select {
-				case <-ctx.Done():
-					if ctx.Err() != nil {
-						eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-					}
-					close(eventChan)
-					return
-				case <-time.After(wait.Delay):
-					continue
-				}
-			}
-			llm.EndStreamWithError(eventChan, retryErr, billed)
+			llm.EndStreamWithError(eventChan, openErr, llm.TokenUsage{})
 			return
 		}
+
+		acc := openai.ChatCompletionAccumulator{}
+		currentContent := ""
+		toolCallResults := make([]message.ToolCall, 0)
+		// The accumulator sums the usage fields it knows about, which drops
+		// LiteLLM's `cost` and `cache_creation_input_tokens` — both live in
+		// the chunk's extra fields, so they have to be taken from the usage
+		// chunk itself as it goes past.
+		reportedCost := 0.0
+		reportedCacheCreation := int64(0)
+
+		for ok := hasNext; ok; ok = openaiStream.Next() {
+			chunk := openaiStream.Current()
+			acc.AddChunk(chunk)
+
+			if cost := usageCost(chunk.Usage); cost > 0 {
+				reportedCost = cost
+			}
+			if written := cacheCreationInputTokens(chunk.Usage); written > 0 {
+				reportedCacheCreation = written
+			}
+
+			for _, choice := range chunk.Choices {
+				if choice.Delta.Content != "" {
+					eventChan <- llm.DriverEvent{
+						Type:    llm.EventContentDelta,
+						Content: choice.Delta.Content,
+					}
+					currentContent += choice.Delta.Content
+				}
+			}
+		}
+
+		err := openaiStream.Err()
+		if err == nil || errors.Is(err, io.EOF) {
+			var finishReason message.FinishReason
+
+			if len(acc.Choices) > 0 {
+				finishReason = c.finishReason(string(acc.ChatCompletion.Choices[0].FinishReason))
+				if len(acc.Choices[0].Message.ToolCalls) > 0 {
+					toolCallResults = append(toolCallResults, c.toolCalls(acc.ChatCompletion)...)
+				}
+			} else if currentContent != "" {
+				logging.WarnContext(ctx, fmt.Sprintf("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent)))
+				llm.EndStreamWithError(eventChan, fmt.Errorf("stream interrupted: incomplete response from Reliant proxy"),
+					c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
+				return
+			} else {
+				logging.ErrorContext(ctx, "Stream ended with no content and no completion data")
+				llm.EndStreamWithError(eventChan, fmt.Errorf("empty response from Reliant proxy"),
+					c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation))
+				return
+			}
+
+			if len(toolCallResults) > 0 {
+				finishReason = message.FinishReasonToolUse
+			}
+
+			upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)
+
+			eventChan <- llm.DriverEvent{
+				Type: llm.EventComplete,
+				Response: &llm.DriverResponse{
+					Content:            currentContent,
+					ToolCalls:          toolCallResults,
+					Usage:              c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation),
+					FinishReason:       finishReason,
+					UpstreamRequestID:  upstreamRequestID,
+					UpstreamProxymanID: upstreamProxymanID,
+				},
+			}
+			close(eventChan)
+			return
+		}
+
+		// A failure once the stream is open is not retried here: its events
+		// already reached the consumer. CallLLM's own retry owns it. What
+		// this request billed goes out after the error, or the usage ledger
+		// loses it.
+		billed := c.usage(acc.ChatCompletion, reportedCost, reportedCacheCreation)
+		llm.EndStreamWithError(eventChan, c.failure(attempts, err).Err, billed)
 	}()
 
 	return eventChan
 }
 
-// shouldRetry decides whether a failed request is retryable and, when it is,
-// describes the wait about to be taken (attempt, delay, provider status, and the
-// decision reason). The description is returned rather than only logged so the
-// caller can publish it: a backoff that exists only in a log line is invisible
-// to every surface a supervisor reads.
-func (c *ReliantClient) shouldRetry(attempts int, err error) (bool, llm.RetryWait, error) {
+// retryer is the shared ladder (ratelimit.Retryer) every driver retries
+// through: the gateway's Retry-After honored up to the ladder's cap (a longer
+// one is a usage limit, not a sleep), 2s doubling backoff with jitter
+// otherwise.
+func (c *ReliantClient) retryer() ratelimit.Retryer {
+	r := c.ladder
+	if r.Provider == "" {
+		r.Provider = "Reliant"
+		r.Log = "Reliant API request"
+	}
+	return r
+}
+
+// failure describes failed attempt n to the ladder. The gateway's own
+// classification (shouldRetryReliantAPIError) decides what is retryable, and
+// names the retry; what is not becomes final, typed where the frontend must
+// tell it apart (managed quota exhausted, an org policy's refusal).
+func (c *ReliantClient) failure(attempt int, err error) ratelimit.Failure {
+	f := openaidriver.Failure(err)
 	var apierr *openai.Error
 	if !errors.As(err, &apierr) {
-		return false, llm.RetryWait{}, err
+		return f
 	}
 
 	retry, reason := shouldRetryReliantAPIError(apierr)
-	c.logReliantAPIError(attempts, apierr, retry, reason)
+	c.logReliantAPIError(attempt, apierr, retry, reason)
 	if !retry {
-		// Surface the reliant-managed quota-exhausted case as a typed,
-		// marker-bearing error so the frontend can detect it across the
-		// Temporal serialization boundary (see ErrReliantManagedQuotaExhausted).
-		if reason == "reliant_managed_quota_exhausted" {
-			return false, llm.RetryWait{}, wrapReliantManagedQuotaError(apierr)
+		f.Fatal = true
+		switch reason {
+		case "reliant_managed_quota_exhausted":
+			// Surface the reliant-managed quota-exhausted case as a typed,
+			// marker-bearing error so the frontend can detect it across the
+			// Temporal serialization boundary (see ErrReliantManagedQuotaExhausted).
+			f.Err = wrapReliantManagedQuotaError(apierr)
+		case "org_policy_refused":
+			// An org policy's verdict: typed, so it pauses the turn with its
+			// reason instead of reading as a dead credential (orgpolicy.Refusal).
+			f.Err = &orgpolicy.Refusal{Reason: orgPolicyRefusalReason(apierr), Detail: strings.TrimSpace(apierr.Message)}
 		}
-		// An org policy's verdict: typed, so it pauses the turn with its
-		// reason instead of reading as a dead credential (orgpolicy.Refusal).
-		if reason == "org_policy_refused" {
-			return false, llm.RetryWait{}, &orgpolicy.Refusal{Reason: orgPolicyRefusalReason(apierr), Detail: strings.TrimSpace(apierr.Message)}
-		}
-		return false, llm.RetryWait{}, err
+		return f
 	}
-
-	if attempts > models.MaxRetries {
-		return false, llm.RetryWait{}, reliantRetryExhaustedError(apierr)
+	f.Fatal = false
+	f.Reason = reason
+	if attempt > models.MaxRetries {
+		f.Err = reliantRetryExhaustedError(apierr)
 	}
-
-	return true, llm.RetryWait{
-		Attempt:     attempts,
-		MaxAttempts: models.MaxRetries,
-		Delay:       time.Duration(retryDelayMs(attempts, apierr)) * time.Millisecond,
-		StatusCode:  apierr.StatusCode,
-		Reason:      reason,
-	}, nil
+	return f
 }
 
 func shouldRetryReliantAPIError(apierr *openai.Error) (bool, string) {
@@ -855,22 +850,6 @@ func shouldRetryReliantAPIError(apierr *openai.Error) (bool, string) {
 	default:
 		return false, fmt.Sprintf("non_retryable_status_%d", apierr.StatusCode)
 	}
-}
-
-func retryDelayMs(attempts int, apierr *openai.Error) int64 {
-	retryMs := 0
-	if apierr != nil && apierr.Response != nil {
-		retryAfterValues := apierr.Response.Header.Values("Retry-After")
-		if len(retryAfterValues) > 0 {
-			if _, err := fmt.Sscanf(retryAfterValues[0], "%d", &retryMs); err == nil {
-				return int64(retryMs * 1000)
-			}
-		}
-	}
-
-	backoffMs := 2000 * (1 << (attempts - 1))
-	jitterMs := int(float64(backoffMs) * 0.2)
-	return int64(backoffMs + jitterMs)
 }
 
 func reliantRetryExhaustedError(apierr *openai.Error) error {
