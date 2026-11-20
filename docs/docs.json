@@ -317,6 +317,9 @@
                 "group": "Triggers & integrations",
                 "pages": [
                   "guides/workflows/run-an-agent-on-a-schedule",
+                  "guides/workflows/nightly-dependency-security-sweep",
+                  "guides/workflows/daily-slack-digest",
+                  "guides/workflows/slack-bot-agent",
                   "guides/workflows/start-agent-from-webhook",
                   "guides/workflows/call-api-without-exposing-key"
                 ]
