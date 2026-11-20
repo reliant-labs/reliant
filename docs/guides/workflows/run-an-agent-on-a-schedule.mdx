@@ -97,7 +97,7 @@ By the end of this guide an agent runs in your repository every weekday at 9am, 
     NAME                                       STATE    HEALTH   SCHEDULE    ...  WORKFLOW      NEXT FIRE             LAST
     guides-sandbox-schedule · weekday-morning  enabled  unknown  32 7 * * *  ...  repo-summary  2026-11-21T07:32:00Z  launched at 2026-11-20T07:32:00Z
     OCCURRED AT           OUTCOME   CHAT                                  DEFINITION
-    2026-11-20T07:32:00Z  launched  e6a5726f-4dd1-50ef-a0f6-f65a1f8c8b3c  machine ovh-build-1 at .reliant/workflows/repo-summary.yaml @ master 13ef0c7, clean ...
+    2026-11-20T07:32:00Z  launched  e6a5726f-4dd1-50ef-a0f6-f65a1f8c8b3c  machine build-box at .reliant/workflows/repo-summary.yaml @ master 13ef0c7, clean ...
     ```
 
     `launched` with a chat ID means the run started. **DEFINITION** records the exact commit of the workflow it ran. Follow the run with `reliant workflow follow <chat-id>`; it is also under **Workflows → Runs** in the app. To test without waiting for 9am, `reliant trigger fire <name>` runs it now.

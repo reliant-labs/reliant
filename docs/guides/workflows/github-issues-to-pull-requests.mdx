@@ -35,7 +35,7 @@ This is `autopilot-issue-worker`, one of the [Autopilot](/guides/autopilot) buil
 
     ```bash terminal
     reliant trigger activate --workflow builtin://autopilot-issue-worker \
-      --machine ns1023237 --project-id 9859294a-8b3c-419f-a5c4-eb85a022fd65 \
+      --machine build-box --project-id 9859294a-8b3c-419f-a5c4-eb85a022fd65 \
       --param 'repos=["reliant-labs/guides-sandbox"]' \
       --param 'gate_command=go test ./...' \
       --name-prefix "guides-sandbox-autopilot · issue-worker"

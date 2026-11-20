@@ -96,9 +96,9 @@ You will add `digest`, a scheduled job that counts the active products in `shop`
     ```
     ```text
     job     tick                    claimed_by  claimed_at
-    digest  2026-11-20 10:39:00+00  ns1023237   2026-11-20 10:39:00.005313+00
-    digest  2026-11-20 10:38:00+00  ns1023237   2026-11-20 10:38:00.000443+00
-    digest  2026-11-20 10:37:00+00  ns1023237   2026-11-20 10:37:00.006307+00
+    digest  2026-11-20 10:39:00+00  build-box   2026-11-20 10:39:00.005313+00
+    digest  2026-11-20 10:38:00+00  build-box   2026-11-20 10:38:00.000443+00
+    digest  2026-11-20 10:37:00+00  build-box   2026-11-20 10:37:00.006307+00
     ```
     cronkit creates this table on first use and prunes rows older than a day. Stop the stack with `reliant forge env down dev`.
   </Step>
