@@ -325,9 +325,12 @@ type usageLimitWaiter struct {
 
 	// useModel is the model the latest "Use <model> now" named, valid for the
 	// waits that began before useModelEpoch was reached.
-	useModel       string
-	useModelEpoch  int
-	manualFallback bool
+	useModel      string
+	useModelEpoch int
+	// Keep the banner selection independently of picker/background wakes:
+	// waits can still be completing marker activities when those arrive.
+	manualModel string
+	manualEpoch int
 	// leases are the threads currently on a fallback model.
 	leases map[string]*fallbackLease
 	// keepStays is the usage-limit-stay version of this run: a lease outlives
@@ -385,12 +388,12 @@ func (w *usageLimitWaiter) listen(ch workflow.ReceiveChannel, onWake func(workfl
 				return
 			}
 			w.retryEpoch++
-			// A background wake must not erase a pending banner click before
-			// all the waits it targeted have processed it. The epoch makes it
-			// ineligible for any later wait.
-			if !w.manualFallback || sig.UseModel != "" {
-				w.useModel, w.useModelEpoch = sig.UseModel, w.retryEpoch
-				w.manualFallback = sig.ManualFallback && sig.UseModel != ""
+			w.useModel, w.useModelEpoch = sig.UseModel, w.retryEpoch
+			// Picker and background wakes must not erase a banner click that
+			// targeted waits have yet to consume. Its own epoch excludes waits
+			// that begin later; picker clearing of established leases stays below.
+			if sig.ManualFallback && sig.UseModel != "" {
+				w.manualModel, w.manualEpoch = sig.UseModel, w.retryEpoch
 			}
 			if sig.UseModel != "" && !sig.ManualFallback {
 				// A picker choice takes precedence over banner leases, even
@@ -491,7 +494,7 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	// Accept explicit clicks across that gap, but keep the later epoch for
 	// legacy wakes so old histories still park and retry as recorded.
 	markerEpoch := w.retryEpoch
-	manualSinceMarker := func() bool { return w.manualFallback && w.useModelEpoch > markerEpoch }
+	manualSinceMarker := func() bool { return w.manualEpoch > markerEpoch }
 	// The marker goes down BEFORE the park, or a supervisor reading the chat
 	// cannot tell this run from a wedged one. See db.ProviderBackoff.
 	w.recordMarker(ctx, req.Thread, limit.Provider, decision)
@@ -543,9 +546,13 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	// either case a thread already waiting on the requested provider retries
 	// without switching. Preserve the legacy rule for older wake payloads.
 	manual := manualSinceMarker()
-	alreadyOnIt := ((w.capacityWake || manual) && sameProvider(w.useModel, facts.Provider)) || (!manual && w.tracker.chatProvider != "")
-	if failover && w.useModel != "" && (manual || w.useModelEpoch > startEpoch) && decision.Until.After(workflow.Now(ctx)) && !alreadyOnIt {
-		w.startLease(ctx, req.Thread, limit, facts, w.useModel, decision.Until, decision.Probing, manual)
+	model := w.useModel
+	if manual {
+		model = w.manualModel
+	}
+	alreadyOnIt := ((w.capacityWake || manual) && sameProvider(model, facts.Provider)) || (!manual && w.tracker.chatProvider != "")
+	if failover && model != "" && (manual || w.useModelEpoch > startEpoch) && decision.Until.After(workflow.Now(ctx)) && !alreadyOnIt {
+		w.startLease(ctx, req.Thread, limit, facts, model, decision.Until, decision.Probing, manual)
 	}
 	// A message that cut the wait short is read by the step retried below (its
 	// call_llm drains the mailbox), so it is not owed another turn.

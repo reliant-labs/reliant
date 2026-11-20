@@ -274,6 +274,14 @@ func (s *UsageLimitFailoverSuite) TestUseModelNow_TurnsTheWaitIntoALease() {
 // A saved Claude pin applies to the root and its spawns. One banner click
 // wakes all three and temporarily routes them to the exact Codex selection.
 func (s *UsageLimitFailoverSuite) TestBannerFallbackOverridesPinForRootAndSpawnsUntilReset() {
+	s.bannerFallbackForRootAndSpawns(false)
+}
+
+func (s *UsageLimitFailoverSuite) TestPickerWakePreservesPendingBannerForRootAndSpawns() {
+	s.bannerFallbackForRootAndSpawns(true)
+}
+
+func (s *UsageLimitFailoverSuite) bannerFallbackForRootAndSpawns(pickerWake bool) {
 	env := s.NewTestWorkflowEnvironment()
 	env.SetTestTimeout(30 * time.Second)
 	const pin = "claude"
@@ -323,6 +331,11 @@ func (s *UsageLimitFailoverSuite) TestBannerFallbackOverridesPinForRootAndSpawns
 			markersStarted++
 			if markersStarted == 3 {
 				env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{UseModel: fallback, ManualFallback: true})
+				if pickerWake {
+					// Queue a nonempty picker hint before the marker returns:
+					// every targeted wait must retain the explicit banner choice.
+					env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{UseModel: "claude-4.6-sonnet@claude"})
+				}
 			}
 		}
 	})
