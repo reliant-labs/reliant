@@ -23,16 +23,12 @@ import {
   Plus,
   Trash2,
   Archive,
-  ChevronRight,
   Edit,
   Copy,
   RotateCcw,
   Mail,
   GitBranch,
-  Search,
-  Settings,
   SquarePen,
-  Workflow,
   Activity,
   FolderInput,
   Pin,
@@ -40,8 +36,7 @@ import {
   Eye,
   EyeOff,
   MoreHorizontal,
-  MessagesSquare,
-  House,
+  Bell,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -89,10 +84,7 @@ import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import { focusEventName } from "../../lib/keyboard/focus";
-import { homePath, inboxPath, newChatPath, projectChatsPath, projectPath, projectsPath, settingsPath, withSearch, workflowsPath } from "../../lib/paths";
-import { orgFreePath } from "../../lib/paths/org";
-import { chatShellRouteOf } from "../../lib/chatRoute";
-import { WORKFLOWS_TABS, isWorkflowsAreaPath, workflowsTabForPath } from "../../lib/workflowsArea";
+import { inboxPath, newChatPath, settingsPath, withSearch } from "../../lib/paths";
 import type { Chat } from "../../api/client";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
@@ -104,14 +96,14 @@ import {
   ProjectGroupHeader,
   SIDEBAR_HEADING_HOVER_ACTION,
   SIDEBAR_ICON_BUTTON,
-  SidebarFooter,
-  SidebarRow,
   SidebarSubRow,
   WorkspaceSubheading,
 } from "./sidebar/primitives";
-import { AppActivityRow, ProjectAppNav } from "./sidebar/AppsNavSection";
 import { ProjectSwitcherRow } from "./sidebar/ProjectSwitcher";
-import { isChatPage, useShellProject } from "./sidebar/shellProject";
+import { useShellProject } from "./sidebar/shellProject";
+import { FindBox } from "./sidebar/FindBox";
+import type { NavSlots } from "./sidebar/NavRenderer";
+import { ShellNavBody } from "./sidebar/ShellNavBody";
 import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
 import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
@@ -702,7 +694,6 @@ function SidebarComponent({
   search = NO_SEARCH,
   onNavigate,
   onOpenRuns,
-  onOpenChatSearch,
 }: SidebarProps) {
   const go = useCallback((href: string) => onNavigate?.(href), [onNavigate]);
   // What the list shows is the project shell's scope (U6b, sidebar/shellProject.ts):
@@ -724,7 +715,6 @@ function SidebarComponent({
     refetch: refetchChatList,
   } = useChatListWithWorkspaces(severalProjects ?? projectFilterId, { enabled: !noChatsHere });
   const newChatShortcut = useShortcutLabel("newChat");
-  const chatSearchShortcut = useShortcutLabel("chatSearch");
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
   // The list carries each chat's workspace and every listed project's main
   // one, so the sidebar groups from this response alone.
@@ -819,14 +809,6 @@ function SidebarComponent({
   // New chat starts in the shell's one project; across several, wherever openNewChat would.
   const newChatHref = withSearch(newChatPath(), { project: projectFilterId ?? undefined });
   const inboxHref = inboxPath();
-  const workflowsHref = workflowsPath();
-  const settingsHref = settingsPath();
-  const inWorkflows = isWorkflowsAreaPath(pathname);
-  const workflowsTab = workflowsTabForPath(pathname);
-  // The Chats accordion: open on a chat page, folded elsewhere unless opened by hand.
-  const onChatPage = isChatPage(pathname);
-  const [chatsOpen, setChatsOpen] = useState(onChatPage);
-  useEffect(() => setChatsOpen(onChatPage), [onChatPage]);
   const [showAllChats, setShowAllChats] = useState(false);
   useEffect(() => setShowAllChats(false), [shell.key, shell.mode]);
   // Focus target for the "focus the chat list" shortcut. The list has no
@@ -1802,138 +1784,87 @@ function SidebarComponent({
   const capped = !!projectFilterId && !showAllChats && activeChatCount > CHATS_CAP;
   const shownGroups = capped ? capChatGroups(activeGroups, CHATS_CAP, activeChatId) : activeGroups;
   const shownFlat = capped ? capChats(flatList, CHATS_CAP, activeChatId) : flatList;
-  const chatsHref = shell.mode === "one" && shell.projectId ? projectChatsPath(shell.projectId) : homePath();
-  const homeHref = shell.mode === "one" && shell.projectId ? projectPath(shell.projectId) : projectsPath();
-  const chatsAtHome = chatShellRouteOf(pathname)?.kind === "home";
   const chatsNeedYou = [...needsYouByProject.values()].reduce((total, count) => total + count, 0);
 
-  return (
-    <div
-      ref={sidebarRootRef}
-      className="flex h-full flex-col bg-background"
-      data-onboarding="left-sidebar"
-      // Marks the focus context for the keyboard dispatcher and gives the pane
-      // something focusable, so "focus the chat list" has a target.
-      data-context="left-sidebar"
-      tabIndex={-1}
-    >
-      {/* [Org ▾] / [Project ▾]: the org, and the project(s) every row below is about. */}
-      <ProjectSwitcherRow shell={shell} pathname={pathname} onNavigate={go} />
+  // The chat list's controls: the machine filter and the list's menu (sort, view, archived, show all).
+  const chatListActions = !setupNeeded && !noChatsHere && (
+    <>
+      {showMachineFilter && (
+        // At rest only on hover, like the menu; filtered, it names what it shows and stays.
+        <span className={cn("flex min-w-0", !machineFilter && SIDEBAR_HEADING_HOVER_ACTION)}>
+          <MachineFilterMenu
+            filter={machineFilter}
+            machines={menuMachines}
+            onChange={handleMachineFilterChange}
+            includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
+            needsYouByMachine={needsYouByMachine}
+          />
+        </span>
+      )}
+      <span className={cn("flex", SIDEBAR_HEADING_HOVER_ACTION)}>
+        <ChatListMenu
+          filterId={projectFilterId}
+          projects={projects}
+          onAddProject={() => openAddProject()}
+          onManageProjects={() => go(settingsPath("projects"))}
+          sortOrder={sortOrder}
+          onSortChange={setSortOrder}
+          viewMode={viewMode}
+          onViewChange={setViewMode}
+          showAll={
+            showAllOffered
+              ? { on: projectPrefs.showAll, onChange: setShowAllProjects, disabled: !projectPrefsWritable }
+              : undefined
+          }
+          archived={chatListTab === "archived"}
+          onArchivedChange={(archived) => setChatListTab(archived ? "archived" : "active")}
+        />
+      </span>
+    </>
+  );
 
-      {/* THE PROJECT SHELL (U6b): Chats (an accordion), Inbox, Search,
-          Workflows; then the project's app, section by section, like the
-          forge console's nav. The whole column scrolls on a short window;
-          the open Chats scroll inside themselves, at most 45% of it. */}
-      {/* Block flow, not flex: a flex column here let its rows shrink below
-          their content and spill over one another instead of scrolling. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3" data-testid="sidebar-regions">
-        <nav className="mt-1 space-y-0.5 px-2" aria-label="Chat sidebar navigation">
-          {/* Home: the project's page; with several projects, their summary (Projects). */}
-          <SidebarRow
-            icon={<House className="size-4" />}
-            label="Home"
-            href={homeHref}
-            onClick={() => go(homeHref)}
-            current={orgFreePath(pathname) === orgFreePath(homeHref)}
-            testId="sidebar-home-button"
-          />
-          <SidebarRow
-            icon={<MessagesSquare className="size-4" />}
-            label="Chats"
-            href={chatsHref}
-            onClick={() => {
-              setChatsOpen(true);
-              go(chatsHref);
-            }}
-            current={chatsAtHome}
-            testId="sidebar-chats-button"
-            onboardingId="project-filter"
-            className="group/heading"
-            trail={
-              !chatsOpen && chatsNeedYou > 0 ? (
-                <span role="img" aria-label="A chat needs you" title="A chat needs you" className="size-2 rounded-full bg-warning" />
-              ) : undefined
-            }
-            action={
-              <>
-                {chatsOpen && !setupNeeded && !noChatsHere && showMachineFilter && (
-                  // At rest only on hover, like the menu; filtered, it names what it shows and stays.
-                  <span className={cn("flex min-w-0", !machineFilter && SIDEBAR_HEADING_HOVER_ACTION)}>
-                    <MachineFilterMenu
-                      filter={machineFilter}
-                      machines={menuMachines}
-                      onChange={handleMachineFilterChange}
-                      includeNoMachine={hasNoMachineChats || !!machineFilter?.includes(NO_MACHINE)}
-                      needsYouByMachine={needsYouByMachine}
-                    />
-                  </span>
-                )}
-                {chatsOpen && !setupNeeded && !noChatsHere && (
-                  <span className={cn("flex", SIDEBAR_HEADING_HOVER_ACTION)}>
-                    <ChatListMenu
-                      filterId={projectFilterId}
-                      projects={projects}
-                      onAddProject={() => openAddProject()}
-                      onManageProjects={() => go(settingsPath("projects"))}
-                      sortOrder={sortOrder}
-                      onSortChange={setSortOrder}
-                      viewMode={viewMode}
-                      onViewChange={setViewMode}
-                      showAll={
-                        showAllOffered
-                          ? { on: projectPrefs.showAll, onChange: setShowAllProjects, disabled: !projectPrefsWritable }
-                          : undefined
-                      }
-                      archived={chatListTab === "archived"}
-                      onArchivedChange={(archived) => setChatListTab(archived ? "archived" : "active")}
-                    />
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setChatsOpen((open: boolean) => !open)}
-                  aria-expanded={chatsOpen}
-                  aria-controls="sidebar-chats"
-                  aria-label={chatsOpen ? "Fold chats" : "Show chats"}
-                  data-testid="sidebar-chats-toggle"
-                  className={SIDEBAR_ICON_BUTTON}
-                >
-                  <ChevronRight className={cn("size-3.5 transition-transform", chatsOpen && "rotate-90")} aria-hidden="true" />
-                </button>
-              </>
-            }
-          />
-          {chatsOpen && (
-            <div id="sidebar-chats" data-testid="sidebar-chats">
-              {/* Chats cannot run yet (no machine): one card that sets them up, in place of the list. */}
-              {setupNeeded ? (
-                <div className="py-0.5">
-                  {/* New chat sets chats up first (handleNewChat). */}
-                  <SidebarSubRow
-                    label="New chat"
-                    depth={1}
-                    icon={<SquarePen className="size-4" />}
-                    href={chatSetupPath(setup)}
-                    onClick={handleNewChat}
-                    testId="create-chat-button"
-                  />
-                  <div className="py-1">
-                    <SetUpChatsCard setup={setup} variant="nav" onNavigate={go} />
-                  </div>
-                </div>
-              ) : (
-                // The one element that bounds the chats: at most 45% of the window, scrolling inside.
-                <div className="max-h-[45dvh] overflow-y-auto overscroll-contain" data-testid="sidebar-scroller">
-                  <SidebarSubRow
-                    label="New chat"
-                    ariaLabel="New chat"
-                    depth={1}
-                    icon={<SquarePen className="size-4" />}
-                    href={newChatHref}
-                    onClick={handleNewChat}
-                    trail={newChatShortcut ? <kbd className="font-sans">{newChatShortcut}</kbd> : undefined}
-                    testId="create-chat-button"
-                  />
+  // What the nav config's slots are (Layout/sidebar/navConfig): the live pieces only the chat shell can draw.
+  const slots: NavSlots = {
+    "new-chat": ({ depth }) => (
+      // While chats cannot run, New chat sets them up first (handleNewChat).
+      <SidebarSubRow
+        label="New chat"
+        ariaLabel="New chat"
+        depth={depth}
+        icon={<SquarePen className="size-4" />}
+        href={setupNeeded ? chatSetupPath(setup) : newChatHref}
+        onClick={handleNewChat}
+        trail={!setupNeeded && newChatShortcut ? <kbd className="font-sans">{newChatShortcut}</kbd> : undefined}
+        testId="create-chat-button"
+      />
+    ),
+    "chat-list": ({ place, depth }) => (
+      <div
+        id="sidebar-chats"
+        data-testid="sidebar-chats"
+        data-place={place}
+        className={place === "fill" ? "flex min-h-0 flex-1 flex-col" : undefined}
+      >
+        {/* "Chats" over the list, its controls at the right on hover. */}
+        <div
+          className={cn("group/heading flex h-7 shrink-0 items-center gap-1 pr-1 text-meta font-medium text-muted-foreground", depth === 0 ? "mt-3 pl-2" : "mt-1 pl-8")}
+          data-onboarding="project-filter"
+          data-testid="sidebar-chats-heading"
+        >
+          <span className="min-w-0 flex-1 truncate">Chats</span>
+          {chatListActions}
+        </div>
+        {/* Chats cannot run yet (no machine): one card that sets them up, in place of the list. */}
+        {setupNeeded ? (
+          <div className="py-1">
+            <SetUpChatsCard setup={setup} variant="nav" onNavigate={go} />
+          </div>
+        ) : (
+          // The one element that bounds the chats: the rest of a drill-in's column, or 45% of the window in an accordion.
+          <div
+            className={cn("overflow-y-auto overscroll-contain", place === "fill" ? "min-h-0 flex-1" : "max-h-[45dvh]")}
+            data-testid="sidebar-scroller"
+          >
                   {chatListTab === "archived" && (
                     <div className="flex h-7 items-center gap-2 pl-8 pr-2 text-meta text-muted-foreground">
                       <span className="min-w-0 flex-1 truncate">Archived</span>
@@ -2109,72 +2040,43 @@ function SidebarComponent({
                       </p>
                     )}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <InboxNavItem href={inboxHref} onOpen={() => go(inboxHref)} current={isAtOrBelow(pathname, inboxHref)} />
-          <SidebarRow
-            icon={<Search className="size-4" />}
-            label="Search"
-            onClick={onOpenChatSearch}
-            trail={chatSearchShortcut ? <kbd className="font-sans">{chatSearchShortcut}</kbd> : undefined}
-          />
-          {/* One entry for the whole area. Live automations are its trail, with
-              their own link to Runs; its tabs nest under it while it is open. */}
-          <SidebarRow
-            icon={<Workflow className="size-4" />}
-            label="Workflows"
-            href={workflowsHref}
-            onClick={() => go(workflowsHref)}
-            current={inWorkflows && !workflowsTab}
-            expanded={inWorkflows || undefined}
-            onboardingId="workflow-button"
-            testId="sidebar-workflows-button"
-            action={<AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />}
-          />
-          {inWorkflows && (
-            <div role="group" aria-label="Workflows sections" data-testid="sidebar-workflows-sections" className="space-y-0.5">
-              {WORKFLOWS_TABS.map((tab) => {
-                // The area's scope rides along between its tabs.
-                const href = withSearch(tab.href(), { project: search.project, allProjects: search.allProjects });
-                return (
-                  <SidebarSubRow
-                    key={tab.key}
-                    label={tab.key === "workflows" ? "Library" : tab.label}
-                    href={href}
-                    onClick={() => go(href)}
-                    current={workflowsTab === tab.key}
-                    testId={`sidebar-workflows-${tab.key}`}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </nav>
-
-        {/* The project's app, section by section (no heading: whitespace). */}
-        <div className="mt-6">
-          <ProjectAppNav app={shell.app} pathname={pathname} search={search} onNavigate={go} />
-        </div>
+          </div>
+        )}
       </div>
+    ),
+    "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />,
+    "chats-need-you": () =>
+      chatsNeedYou > 0 ? (
+        <span role="img" aria-label="A chat needs you" title="A chat needs you" className="size-2 rounded-full bg-warning" />
+      ) : null,
+    inbox: () => (
+      <InboxNavItem
+        icon={<Bell className="size-4" />}
+        href={inboxHref}
+        onOpen={() => go(inboxHref)}
+        current={isAtOrBelow(pathname, inboxHref)}
+      />
+    ),
+    "update-button": () => <SidebarUpdateButton />,
+  };
 
-      {/* The app's Activity, then Settings: org things (members, billing and
-          usage, machines, AI accounts) live there. */}
-      <SidebarFooter>
-        {shell.app && <AppActivityRow app={shell.app} pathname={pathname} search={search} onNavigate={go} />}
-        <SidebarRow
-          icon={<Settings className="size-4" />}
-          label="Settings"
-          href={settingsHref}
-          onClick={() => go(settingsHref)}
-          current={isAtOrBelow(pathname, settingsHref)}
-          testId="sidebar-settings-button"
-          // Renders nothing unless the desktop app has an update waiting.
-          action={<SidebarUpdateButton />}
-        />
-      </SidebarFooter>
+  return (
+    <div
+      ref={sidebarRootRef}
+      className="flex h-full flex-col bg-background"
+      data-onboarding="left-sidebar"
+      // Marks the focus context for the keyboard dispatcher and gives the pane
+      // something focusable, so "focus the chat list" has a target.
+      data-context="left-sidebar"
+      tabIndex={-1}
+    >
+      {/* Find, at the very top (it opens the command palette); then the org and project switcher. */}
+      <FindBox />
+      {/* [Org ▾] / [Project ▾]: the org, and the project(s) every row below is about. */}
+      <ProjectSwitcherRow shell={shell} pathname={pathname} onNavigate={go} />
+
+      {/* The nav as data (U6c): the variant's rows, or the area the route is in, then the footer. */}
+      <ShellNavBody shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={go} />
 
       {/* One context menu for every row; its items follow the row. */}
       {contextMenu && (

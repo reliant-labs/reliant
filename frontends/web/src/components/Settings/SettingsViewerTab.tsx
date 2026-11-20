@@ -134,22 +134,16 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
   }, []);
 
   if (inShell) {
-    // Inside the one shell: the shell's nav is the way out and the org
-    // switcher, so Settings is a page — a bar naming it, and its sections as
-    // the page's own list beside the section (one surface, no rule).
+    // Inside the one shell, Settings' sections ARE the shell's nav: on any
+    // /settings page the left nav drills into them (Layout/sidebar/navConfig,
+    // U6c, owner: Settings replaces the nav, Vercel-style). So the page is a
+    // bar naming it and the section, with no second column.
     return (
       <div ref={containerRef} className="flex h-full min-w-0 flex-col bg-background">
         <ShellPageHeader testId="settings-header">
           <span className="text-ui font-medium text-foreground">Settings</span>
         </ShellPageHeader>
-        <div className="flex min-h-0 flex-1">
-          <aside aria-label="Settings" className={cn("flex shrink-0 flex-col pb-4", isCollapsed ? "w-16" : "w-[220px]")}>
-            <div ref={navigationRef} className="flex min-h-0 flex-1 flex-col">
-              <SettingsNavigation activeSection={section} onSectionChange={onSectionChange} isCollapsed={isCollapsed} />
-            </div>
-          </aside>
-          <PageMain className="min-w-0 flex-1 overflow-hidden bg-background">{content}</PageMain>
-        </div>
+        <PageMain className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background">{content}</PageMain>
       </div>
     );
   }

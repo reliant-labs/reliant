@@ -16,13 +16,13 @@ interface SettingsNavigationProps {
   isCollapsed?: boolean;
 }
 
-interface SectionItem {
+export interface SectionItem {
   id: SettingsSection;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
-interface SectionGroup {
+export interface SectionGroup {
   label: string;
   items: SectionItem[];
   /** Folded behind its heading until opened, or until the active section is inside it. */
@@ -129,6 +129,20 @@ export function showDeveloperSettings(): boolean {
 function isItemVisible(item: SectionItem): boolean {
   if (item.id === "developer") return showDeveloperSettings();
   return true;
+}
+
+/**
+ * The sections as the shell's Settings drill-in lists them (U6c: Settings
+ * replaces the left nav instead of opening a second column): each group's
+ * visible sections, then About.
+ */
+export function settingsNavGroups(): { groups: SectionGroup[]; about: SectionItem } {
+  return {
+    groups: sectionGroups
+      .map((group) => ({ ...group, items: group.items.filter(isItemVisible) }))
+      .filter((group) => group.items.length > 0),
+    about: ABOUT,
+  };
 }
 
 /** Section IDs in sidebar display order (About last, as the footer); used for keyboard nav. */

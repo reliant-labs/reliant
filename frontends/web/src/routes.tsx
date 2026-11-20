@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { followActiveOrg } from './components/Orgs/followActiveOrg'
+import { retainNavParam } from './components/Layout/sidebar/navConfig/variant'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type AnyRoute } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
@@ -377,7 +378,8 @@ const rootRoute = createRootRoute({
   beforeLoad: ({ location }) => forwardIntoOrg(location),
   // Keep `?tour=` across navigations that don't name it (retainTourParam).
   // The root has no search schema, so its middleware type is `{}`-shaped.
-  search: { middlewares: [retainTourParam as never] },
+  // And `?nav=` (the nav variant being tried, Layout/sidebar/navConfig/variant.ts), the same way.
+  search: { middlewares: [retainTourParam as never, retainNavParam as never] },
   notFoundComponent: () => <Navigate to={homePath()} search={{}} />,
   errorComponent: RouteErrorFallback,
 })
