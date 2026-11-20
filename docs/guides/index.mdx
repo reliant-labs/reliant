@@ -164,6 +164,12 @@ Build a Go and React app with Forge: start a project, add features from the sche
   <Card title="Add a database table with a CRUD API and pages" icon="hammer" href="/guides/forge/add-table-crud-api-pages">
     Generate a Postgres table, five CRUD RPCs, typed React hooks and list, detail and edit pages from one proto message marked // forge:entity.
   </Card>
+  <Card title="Add a custom Connect RPC Go handler with typed React hooks" icon="hammer" href="/guides/forge/add-custom-rpc">
+    Declare a Connect RPC in proto, scaffold its Go handler, return errors with svcerr.Wrap, and call it from React through the generated, typed mutation hook.
+  </Card>
+  <Card title="Add a Go cron job or background worker to a Forge service" icon="hammer" href="/guides/forge/background-worker-cron-job">
+    Scaffold a Go cron job worker that fires each tick on one replica, run it locally, and ship it hosted inside your API workload with no extra infrastructure.
+  </Card>
   <Card title="Scope rows to their owner in a multi-tenant API" icon="hammer" href="/guides/forge/scope-rows-to-owner">
     Make each signed-in user see and change only their own rows: declare a forge:owner column, finish the scaffolded owner filter and prove it with a two-user test.
   </Card>
