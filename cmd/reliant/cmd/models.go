@@ -557,7 +557,11 @@ func changeMachineEndpoints(cmd *cobra.Command, machine string, target endpointU
 	case !has:
 		return fmt.Errorf("%s was not added to %s: 'reliant models endpoint list --machine %s' shows its servers", target.raw, name, d.GetDaemonId())
 	default:
-		if user, ok := customEndpointUsing(ctx, client, d.GetDaemonId(), target.root); ok {
+		user, ok, err := customEndpointUsing(ctx, client, d.GetDaemonId(), target.root)
+		if err != nil {
+			return conn.annotate(fmt.Errorf("could not check whether a custom endpoint reaches its server through %s at %s, so nothing was changed: %w", name, target.raw, err))
+		}
+		if ok {
 			return fmt.Errorf("%s is how your custom endpoint %q reaches its server through %s: delete that endpoint in %s instead", target.raw, user, name, localModelsPlace)
 		}
 		for _, u := range current {
@@ -603,18 +607,20 @@ func changeMachineEndpoints(cmd *cobra.Command, machine string, target endpointU
 }
 
 // customEndpointUsing names the custom endpoint relayed through daemonID at
-// root, if any: removing that URL by hand would stop its relay.
-func customEndpointUsing(ctx context.Context, client modelEndpointsClient, daemonID, root string) (string, bool) {
+// root, if any: removing that URL by hand would stop its relay. A failed
+// lookup is an error, never "none": the caller must not remove a URL whose
+// owner it could not establish.
+func customEndpointUsing(ctx context.Context, client modelEndpointsClient, daemonID, root string) (string, bool, error) {
 	resp, err := client.ListModelEndpoints(ctx, connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	for _, e := range resp.Msg.GetEndpoints() {
 		if e.GetRoute() == reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_VIA_DAEMON && e.GetDaemonId() == daemonID && rootOf(e.GetBaseUrl()) == root {
-			return e.GetName(), true
+			return e.GetName(), true, nil
 		}
 	}
-	return "", false
+	return "", false, nil
 }
 
 func machineEndpointsErr(conn *connection, name, doing string, err error) error {

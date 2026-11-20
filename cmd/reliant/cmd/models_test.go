@@ -54,6 +54,8 @@ type fakeModelsRegistry struct {
 	storedMissing bool
 	sets          []*reliantv1.SetLocalModelEndpointsRequest
 	offline       bool
+	// endpointsErr makes ListModelEndpoints (the custom endpoints) fail.
+	endpointsErr error
 }
 
 func (f *fakeModelsRegistry) inventory(daemonID string) *reliantv1.LocalModelInventory {
@@ -108,9 +110,13 @@ func (f *fakeModelsRegistry) SetLocalModelEndpoints(_ context.Context, req *conn
 
 type fakeCustomEndpoints struct {
 	reliantv1connect.UnimplementedModelEndpointServiceHandler
+	registry *fakeModelsRegistry
 }
 
-func (fakeCustomEndpoints) ListModelEndpoints(context.Context, *connect.Request[reliantv1.ListModelEndpointsRequest]) (*connect.Response[reliantv1.ListModelEndpointsResponse], error) {
+func (f fakeCustomEndpoints) ListModelEndpoints(context.Context, *connect.Request[reliantv1.ListModelEndpointsRequest]) (*connect.Response[reliantv1.ListModelEndpointsResponse], error) {
+	if f.registry != nil && f.registry.endpointsErr != nil {
+		return nil, f.registry.endpointsErr
+	}
 	return connect.NewResponse(&reliantv1.ListModelEndpointsResponse{Endpoints: []*reliantv1.ModelEndpoint{
 		{Id: "ep-1", Name: "Lab GPU", BaseUrl: "https://llm.example.test/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT,
 			Models: []*reliantv1.ModelEndpointModel{{Name: "llama3"}, {Name: "secret", Hidden: true}},
@@ -134,7 +140,7 @@ func newModelsHarness(t *testing.T, daemons ...*reliantv1.DaemonInfo) (*fakeMode
 	mux.Handle(p1, h1)
 	p2, h2 := reliantv1connect.NewDaemonRegistryServiceHandler(registry)
 	mux.Handle(p2, h2)
-	p3, h3 := reliantv1connect.NewModelEndpointServiceHandler(fakeCustomEndpoints{})
+	p3, h3 := reliantv1connect.NewModelEndpointServiceHandler(fakeCustomEndpoints{registry: registry})
 	mux.Handle(p3, h3)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -244,6 +250,19 @@ func TestModelsEndpointRemoveRefusesACustomEndpointsRelay(t *testing.T) {
 
 	_, err := executeRoot(t, "models", "endpoint", "remove", "http://vpn-box.internal:8000")
 	assert.ErrorContains(t, err, `your custom endpoint "VPN box" reaches its server through laptop`)
+	assert.Empty(t, registry.sets)
+}
+
+// When the custom endpoints cannot be read, nobody can say whether the URL is
+// a relay, so remove refuses instead of disconnecting one.
+func TestModelsEndpointRemoveRefusesWhenTheRelayOwnerIsUnknown(t *testing.T) {
+	_, registry := newModelsHarness(t, laptopDaemon())
+	registry.configured["d-laptop"] = append(registry.configured["d-laptop"], "http://vpn-box.internal:8000/v1")
+	registry.endpointsErr = connect.NewError(connect.CodeUnavailable, errors.New("endpoints store unavailable"))
+
+	_, err := executeRoot(t, "models", "endpoint", "remove", "http://vpn-box.internal:8000")
+	assert.ErrorContains(t, err, "could not check whether a custom endpoint reaches its server through laptop")
+	assert.ErrorContains(t, err, "nothing was changed")
 	assert.Empty(t, registry.sets)
 }
 
