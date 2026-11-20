@@ -54,7 +54,7 @@ function describe(page: ConsolePage): { title: string; shows: string } {
   }
 }
 
-export function AppSectionEmptyState({ page, projectId }: { page: ConsolePage; projectId: string | null }) {
+export function AppSectionEmptyState({ page, projectId, title: heading }: { page: ConsolePage; projectId: string | null; title?: string }) {
   const navigate = useNavigate();
   const { title, shows } = describe(page);
   // A chat that deploys this project's code; with no code here, one that builds an app.
@@ -65,7 +65,7 @@ export function AppSectionEmptyState({ page, projectId }: { page: ConsolePage; p
         <Rocket className="size-4" aria-hidden="true" />
       </span>
       <div>
-        <h1 className="text-section text-ink">{title} appears once this project is deployed</h1>
+        <h1 className="text-section text-ink">{heading ?? `${title} appears once this project is deployed`}</h1>
         <p className="mt-1 text-ui text-ink-muted">{shows}.</p>
         <p className="mt-1 text-ui text-ink-muted">
           Deploying puts the app on Reliant hosting with prod and staging; this page fills in with its first release.

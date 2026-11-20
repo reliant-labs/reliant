@@ -22,6 +22,7 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { projectChatsPath, projectsPath } from "@/lib/paths";
 
 import { AppsBody } from "../Apps/AppsPage";
+import { ProjectsOverview } from "../Forge/Console/ProjectsOverview";
 import { useStartBuildingApp } from "../Apps/startBuilding";
 import { SitesList } from "../ForgeShell/ForgeSitesPage";
 import { chatSetupNeeded } from "../OnboardingFlow/onboardingGate";
@@ -64,6 +65,10 @@ export function ProjectsBody() {
 
   return (
     <div className="space-y-6" data-testid="projects-page">
+      {/* Several projects in the shell: this page is their Home, the summary first. */}
+      <div className="forge-ui empty:hidden">
+        <ProjectsOverview />
+      </div>
       <PageHeader
         title="Projects"
         meta={<span>Your apps and sites, and the code you work on.</span>}

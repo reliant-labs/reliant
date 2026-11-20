@@ -325,9 +325,10 @@ export function SidebarSubLabel({ children, depth = 1 }: { children: ReactNode; 
   );
 }
 
-/** The footer block under the list: whitespace above it, no rule. */
+/** The footer block under the nav: a hairline above it, where the nav scrolls under. */
 export function SidebarFooter({ children }: { children: ReactNode }) {
-  return <div className="shrink-0 space-y-0.5 p-2">{children}</div>;
+  // The hairline is the edge the scrolling nav above passes under.
+  return <div className="shrink-0 space-y-0.5 border-t border-border-subtle p-2">{children}</div>;
 }
 
 // --- The Chats heading ----------------------------------------------------

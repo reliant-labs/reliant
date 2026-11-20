@@ -14,8 +14,8 @@ import { Activity, Gauge } from "lucide-react";
 
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 
-import { buildGroupedConsoleNav } from "../../Forge/Console/groupedNav";
-import { orgPageOf } from "../../Forge/Console/paths";
+import { buildGroupedConsoleNav, type GroupedNavInput } from "../../Forge/Console/groupedNav";
+import { consolePageOf, orgPageOf } from "../../Forge/Console/paths";
 import { useConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
 import { buildOrgNav } from "../../Forge/Org/OrgShell";
 import { SidebarNavTree } from "./NavTree";
@@ -42,9 +42,18 @@ export function ProjectAppNav({ app, pathname, search, onNavigate }: { app: stri
   );
 }
 
+/**
+ * The app's rows for the page on screen. Off the console (a chat, the Inbox)
+ * the model's page defaults to the Overview, but no app row is the current
+ * one there: they are all ways out.
+ */
+export function appNavFor(model: GroupedNavInput, pathname: string) {
+  return buildGroupedConsoleNav({ ...model, hostPageActive: model.hostPageActive || !consolePageOf(pathname) });
+}
+
 function AppSections({ app, pathname, search, onNavigate }: { app: string } & AppsNavSectionProps) {
   const model = useConsoleNavModel(app, pathname, search);
-  const nav = buildGroupedConsoleNav(model);
+  const nav = appNavFor(model, pathname);
   return (
     <section
       aria-label={`${app} app`}
@@ -62,7 +71,7 @@ function AppSections({ app, pathname, search, onNavigate }: { app: string } & Ap
 /** The app's Activity, for the nav's footer (as in the forge console). */
 export function AppActivityRow({ app, pathname, search, onNavigate }: { app: string } & AppsNavSectionProps) {
   const model = useConsoleNavModel(app, pathname, search);
-  const activity = buildGroupedConsoleNav(model).footer[0];
+  const activity = appNavFor(model, pathname).footer[0];
   if (!activity?.href) return null;
   const href = activity.href;
   return (

@@ -1,10 +1,9 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * Overview while the shell shows several projects (U6b, owner 2026-11-20):
- * one compact row per project — its health, errors and p95 in prod over the
- * last 24 hours, its last release — and a way into that project alone. The
- * one-project Overview is the console's own page; this is the list above it.
+ * Home while the shell shows several projects (U6b, owner 2026-11-20), at
+ * the top of the Projects page: one compact row per project — its health, errors and p95 in prod over the
+ * last 24 hours, its last release — and a way into that project alone.
  */
 
 import { useMemo } from "react";
@@ -33,9 +32,10 @@ const VERDICT_LABEL: Partial<Record<HostedVerdict, string>> = {
 
 export function ProjectsOverview() {
   const { mode, rows } = useShellSeveral();
+  if (!mode) return null;
   return (
     <div className="mx-auto max-w-[var(--page-max)]" data-testid="projects-overview">
-      <h1 className="text-section text-ink">Overview</h1>
+      <h1 className="text-section text-ink">Home</h1>
       <p className="mt-1 text-ui text-ink-muted">
         {mode === "all" ? "Every project" : `${rows.length} projects`}, in prod over the last 24 hours.
       </p>
@@ -56,11 +56,12 @@ export function ProjectsOverview() {
   );
 }
 
-function ProjectRow({ row }: { row: ProjectCatalogRow }) {
-  const navigate = useNavigate();
-  const setLastPick = useShellLastPick((state) => state.set);
-  const deployed = deployedAppOf(row);
-  const app = sectionsAppOf(row) ?? row.name;
+/**
+ * An app's health in prod over the last 24 hours: its prod environment (the
+ * verdict, the release live there) and its requests, errors and p95. Shared by
+ * the Overview of several projects and a project's Home.
+ */
+export function useAppHealth(app: string, deployed: boolean) {
   const { apps } = useApps();
   const summary = apps.find((candidate) => candidate.name === app);
   const prod = summary?.envs.find((env) => env.name === "prod") ?? summary?.envs[0];
@@ -72,8 +73,17 @@ function ProjectRow({ row }: { row: ProjectCatalogRow }) {
   const panel = useMemo(() => redPanel("number"), []);
   const totals = usePanelQuery(deployed ? scope : null, "24h", panel, []);
   const value = (label: string) => totals.data?.series.find((series) => series.label === label)?.value ?? null;
-  const errors = value("errors");
-  const p95 = value("p95");
+  return { prod, requests: value("requests"), errors: value("errors"), p95: value("p95") };
+}
+
+export const VERDICT_WORDS = VERDICT_LABEL;
+
+function ProjectRow({ row }: { row: ProjectCatalogRow }) {
+  const navigate = useNavigate();
+  const setLastPick = useShellLastPick((state) => state.set);
+  const deployed = deployedAppOf(row);
+  const app = sectionsAppOf(row) ?? row.name;
+  const { prod, errors, p95 } = useAppHealth(app, !!deployed);
   const href = consolePath(app, { kind: "overview" });
   const deployedAt = prod?.deployedAt ? Date.parse(prod.deployedAt) : NaN;
 

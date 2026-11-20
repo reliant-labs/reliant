@@ -266,13 +266,15 @@ describe("Sidebar selected chat scroll", () => {
       </QueryClientProvider>
     );
 
-    // The project shell (U6b): Chats (open on the chat home, New chat first),
+    // The project shell (U6b): Home, Chats (open on the chat home, New chat first),
     // Inbox, Search, Workflows; no Projects, Usage or Apps rows.
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
     const order = [...nav.querySelectorAll("a, button")]
       .map((el) => el.getAttribute("aria-label") ?? el.textContent?.trim() ?? "")
-      .filter((name) => ["Chats", "New chat", "Inbox", "Search", "Workflows"].some((label) => name.startsWith(label)));
-    expect(order.slice(0, 2).map((name) => name.replace(/Ctrl.*$/, ""))).toEqual(["Chats", "New chat"]);
+      .filter((name) => ["Home", "Chats", "New chat", "Inbox", "Search", "Workflows"].some((label) => name.startsWith(label)));
+    expect(order.slice(0, 3).map((name) => name.replace(/Ctrl.*$/, ""))).toEqual(["Home", "Chats", "New chat"]);
+    // Home is its own page; on the chat home only the chats are about it.
+    expect(screen.getByTestId("sidebar-home-button")).not.toHaveAttribute("aria-current");
     expect(order.filter((name) => ["Inbox", "Search", "Workflows"].some((label) => name.startsWith(label))).map((name) => name.match(/^(Inbox|Search|Workflows)/)?.[1])).toEqual([
       "Inbox",
       "Search",
@@ -329,6 +331,18 @@ describe("Sidebar selected chat scroll", () => {
     expect(onNavigate).not.toHaveBeenCalled();
     // The Chats row itself is a real link to the chats.
     expect(screen.getByTestId("sidebar-chats-button").tagName).toBe("A");
+  });
+
+  it("links Home to the summary of every project, current only there", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/projects" onNavigate={vi.fn()} />
+      </QueryClientProvider>
+    );
+    const home = screen.getByTestId("sidebar-home-button");
+    expect(home).toHaveAttribute("href", "/projects");
+    expect(home).toHaveAttribute("aria-current", "page");
   });
 
   it("marks Settings while a settings page is on screen", () => {

@@ -192,6 +192,8 @@ const UsagePage = lazyRoute(
   () => import('./components/ForgeShell/ForgeUsagePage'), 'UsagePage')
 const ProjectsPage = lazyRoute(
   () => import('./components/Projects/ProjectsPage'), 'ProjectsPage')
+const ProjectHomePage = lazyRoute(
+  () => import('./components/Projects/ProjectHomePage'), 'ProjectHomePage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -893,6 +895,13 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: ProjectsPage,
   })
 
+  // A project's Home (U6b): the project shell's first row (lib/paths projectPath).
+  const projectHomeRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/projects/$projectId',
+    component: ProjectHomePage,
+  })
+
   // The retired org-scoped pages (/apps, /sites), in this form: each only
   // redirects to the page that replaced it (lib/paths/legacy.ts RETIRED_PAGES).
   const retiredPageRoutes = createRetiredPageRoutes(authParent, 'org-scoped')
@@ -901,7 +910,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, projectsRoute, ...retiredPageRoutes] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, projectsRoute, projectHomeRoute, ...retiredPageRoutes] as const,
   }
 }
 

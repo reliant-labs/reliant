@@ -41,6 +41,7 @@ import {
   EyeOff,
   MoreHorizontal,
   MessagesSquare,
+  House,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -88,7 +89,8 @@ import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import { focusEventName } from "../../lib/keyboard/focus";
-import { homePath, inboxPath, newChatPath, projectChatsPath, settingsPath, withSearch, workflowsPath } from "../../lib/paths";
+import { homePath, inboxPath, newChatPath, projectChatsPath, projectPath, projectsPath, settingsPath, withSearch, workflowsPath } from "../../lib/paths";
+import { orgFreePath } from "../../lib/paths/org";
 import { chatShellRouteOf } from "../../lib/chatRoute";
 import { WORKFLOWS_TABS, isWorkflowsAreaPath, workflowsTabForPath } from "../../lib/workflowsArea";
 import type { Chat } from "../../api/client";
@@ -1801,6 +1803,7 @@ function SidebarComponent({
   const shownGroups = capped ? capChatGroups(activeGroups, CHATS_CAP, activeChatId) : activeGroups;
   const shownFlat = capped ? capChats(flatList, CHATS_CAP, activeChatId) : flatList;
   const chatsHref = shell.mode === "one" && shell.projectId ? projectChatsPath(shell.projectId) : homePath();
+  const homeHref = shell.mode === "one" && shell.projectId ? projectPath(shell.projectId) : projectsPath();
   const chatsAtHome = chatShellRouteOf(pathname)?.kind === "home";
   const chatsNeedYou = [...needsYouByProject.values()].reduce((total, count) => total + count, 0);
 
@@ -1821,8 +1824,19 @@ function SidebarComponent({
           Workflows; then the project's app, section by section, like the
           forge console's nav. The whole column scrolls on a short window;
           the open Chats scroll inside themselves, at most 45% of it. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pb-3" data-testid="sidebar-regions">
+      {/* Block flow, not flex: a flex column here let its rows shrink below
+          their content and spill over one another instead of scrolling. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-3" data-testid="sidebar-regions">
         <nav className="mt-1 space-y-0.5 px-2" aria-label="Chat sidebar navigation">
+          {/* Home: the project's page; with several projects, their summary (Projects). */}
+          <SidebarRow
+            icon={<House className="size-4" />}
+            label="Home"
+            href={homeHref}
+            onClick={() => go(homeHref)}
+            current={orgFreePath(pathname) === orgFreePath(homeHref)}
+            testId="sidebar-home-button"
+          />
           <SidebarRow
             icon={<MessagesSquare className="size-4" />}
             label="Chats"
@@ -1890,7 +1904,7 @@ function SidebarComponent({
             }
           />
           {chatsOpen && (
-            <div id="sidebar-chats" className="flex max-h-[45dvh] min-h-0 flex-col" data-testid="sidebar-chats">
+            <div id="sidebar-chats" data-testid="sidebar-chats">
               {/* Chats cannot run yet (no machine): one card that sets them up, in place of the list. */}
               {setupNeeded ? (
                 <div className="py-0.5">
@@ -1908,7 +1922,8 @@ function SidebarComponent({
                   </div>
                 </div>
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" data-testid="sidebar-scroller">
+                // The one element that bounds the chats: at most 45% of the window, scrolling inside.
+                <div className="max-h-[45dvh] overflow-y-auto overscroll-contain" data-testid="sidebar-scroller">
                   <SidebarSubRow
                     label="New chat"
                     ariaLabel="New chat"

@@ -32,8 +32,7 @@ export function AppPageProjectPicker({ app, page }: { app: string; page: Console
     [rows],
   );
 
-  // Overview of several lists them all (Forge/Console/ProjectsOverview).
-  if (!several || options.length === 0 || page.kind === "overview") return null;
+  if (!several || options.length === 0) return null;
   const current = options.find((option) => option.app === app);
   const groups: MenuGroup[] = [
     {
