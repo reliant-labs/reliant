@@ -138,8 +138,7 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 // one the person can actually use, or the next turn would only fail; and a
 // plain click sends no model at all.
 func TestRetryUsageLimitWait_UseModel(t *testing.T) {
-	t.Parallel()
-
+	// Provider setup below uses the package's global driver store.
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -170,6 +169,22 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	})
 
+	t.Run("only the banner marks its model as a manual fallback", func(t *testing.T) {
+		connectOnlyAnthropic(t, ctx, repo, "test-user")
+		db.SeedProviderAccount(t, repo, "test-user", "codex", "test-key-codex")
+		model := "gpt-6.2-sol@codex"
+		resp, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &model}))
+		require.NoError(t, err)
+		assert.True(t, resp.Msg.Woken)
+		chat, err := repo.GetChat(ctx, chatID)
+		require.NoError(t, err)
+		require.NoError(t, svc.wakeChat(ctx, chat, model, "the chat's model changed"))
+		require.Equal(t, []interface{}{
+			v2.CapacityWakeSignal{},
+			v2.CapacityWakeSignal{UseModel: model, ManualFallback: true},
+			v2.CapacityWakeSignal{UseModel: model},
+		}, temporal.payloads)
+	})
 }
 
 type usageLimitPayloadClient struct {
