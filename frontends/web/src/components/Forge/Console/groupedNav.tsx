@@ -13,9 +13,7 @@
  *                           Events & metrics · registered rows (Experiments: consoleNavRegistry.ts `group`)
  *   Releases
  *   Data · Users
- *   Storage                 buckets and managed Postgres (U6c: top level)
- *   Dashboards        ▸     Live state (built in) · the app's own · up to three stars — the ONE place (U6c)
- *   More tools        ▸     Logs · Metrics · Profiles · Service graph · Speed insights
+ *   More tools        ▸     Dashboards (and up to three stars) · Logs · Metrics · Profiles · Service graph · Storage
  *   ── Configure            Environments › · Secrets · Domains · Usage
  *   footer                  Activity
  *
@@ -25,7 +23,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, Boxes, CircleAlert, Database, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Receipt, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, Boxes, CircleAlert, Database, LayoutDashboard, LayoutGrid, PlayCircle, Receipt, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
@@ -80,14 +78,15 @@ export type OpenNavItem = SidebarNavItem & { alwaysOpen?: boolean };
 
 /** The group each view sits in, for the nav and the breadcrumb ("Issues › Errors"). */
 const GROUP_OF: Partial<Record<ObsNavView, string>> = {
-  errors: "Performance & issues",
-  alerts: "Performance & issues",
-  traces: "Performance & issues",
-  rpc: "Observability",
-  logs: "Observability",
-  metrics: "Observability",
-  profiles: "Observability",
-  graph: "Observability",
+  errors: "Issues",
+  alerts: "Issues",
+  traces: "Performance",
+  rpc: "Performance",
+  logs: "More tools",
+  metrics: "More tools",
+  profiles: "More tools",
+  graph: "More tools",
+  dashboards: "More tools",
 };
 
 const isHubPage = (page: ConsolePage, hub: ProductAnalyticsHub | undefined) => !!hub && page.kind === "dashboard" && hub.keys.includes(page.key);
@@ -131,28 +130,23 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
   // Profiles hides on a definite empty read, as in the console's own nav, unless it is the open page.
   const profiles = optionalViews?.profiles !== false || isObs("profiles");
 
-  // Dashboards is ONE row (U6c, owner bug 4): the page, with the built-in
-  // Live state, the app's own dashboards and its stars under it.
-  const dashboardsGroup: OpenNavItem = {
-    ...dashboards,
-    icon: icon(LayoutGrid),
-    active: lit(isObs("dashboards") || (page.kind === "dashboard" && !onHub && !onCustom && !nested.some(openStar))),
-    children: [
-      { label: "Live state", href: href({ kind: "live-state" }), active: lit(page.kind === "live-state") },
-      ...customDashboards.map((candidate) => ({
-        label: candidate.title,
-        href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }),
-        active: lit(openCustom(candidate)),
-      })),
-      ...(dashboards.children ?? []).filter((child) => !customDashboards.some((candidate) => candidate.title === child.label) && child.label !== "All dashboards"),
-    ],
-  };
+  const dashboardsGroup: OpenNavItem | null = customDashboards.length
+    ? {
+        label: "Dashboards",
+        icon: icon(LayoutGrid),
+        alwaysOpen: true,
+        children: customDashboards.map((candidate) => ({
+          label: candidate.title,
+          href: href({ kind: "dashboard", dashKind: candidate.dashKind, key: candidate.key }),
+          active: lit(openCustom(candidate)),
+        })),
+      }
+    : null;
 
   const items: SidebarNavItem[] = [
     row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview"),
     row("Services", { kind: "services" }, icon(Boxes), page.kind === "services" || page.kind === "service" || page.kind === "workload"),
-    row("Storage", { kind: "storage" }, icon(HardDrive), page.kind === "storage"),
-    dashboardsGroup,
+    ...(dashboardsGroup ? [dashboardsGroup] : []),
     {
       label: "Issues",
       icon: icon(CircleAlert),
@@ -171,7 +165,6 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
       icon: icon(BarChart3),
       children: [
         ...(productAnalytics ? [{ label: "Insights", href: href(productAnalytics.open), active: lit(onHub) }] : []),
-        { label: "Analytics", href: href({ kind: "analytics" }), active: lit(page.kind === "analytics") },
         { label: "Events & metrics", href: href({ kind: "events" }), active: lit(page.kind === "events") },
       ],
     },
@@ -183,11 +176,12 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
       label: "More tools",
       icon: icon(Wrench),
       children: [
+        dashboards,
         obs("logs"),
         obs("metrics"),
         ...(profiles ? [obs("profiles")] : []),
         obs("graph"),
-        { label: "Speed insights", href: href({ kind: "speed-insights" }), active: lit(page.kind === "speed-insights") },
+        { label: "Storage", href: href({ kind: "storage" }), active: lit(page.kind === "storage") },
       ],
     },
     ...configureNavRows(input, href).map((item) => ({ ...item, active: lit(!!item.active), children: item.children?.map((child) => ({ ...child, active: lit(!!child.active) })) })),
@@ -267,6 +261,6 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
   if (isHubPage(page, productAnalytics)) return [{ label: "Product analytics" }, { label: "Insights" }, ...own.slice(-1)];
-  if (page.kind === "dashboard") return own.filter((crumb) => crumb.label !== "Observability");
+  if (page.kind === "dashboard") return [{ label: "More tools" }, ...own.filter((crumb) => crumb.label !== "Observability")];
   return null;
 }

@@ -118,7 +118,9 @@ describe("mergeLiveState", () => {
     const model = mergeLiveState({ envs: ENVS, env: "prod", workloads: [], jobs: [], telemetry: [], hosted: HOSTED });
     const db = model.rows.find((row) => row.type === "database");
     expect(db).toMatchObject({ name: "db", statusNote: DATABASE_STATUS_NOTE, tone: "neutral", release: "v1.4.0" });
-    expect(model.rows.find((row) => row.type === "site")).toMatchObject({ name: "site", statusNote: undefined });
+    const site = model.rows.find((row) => row.type === "site");
+    expect(site?.name).toBe("site");
+    expect(site?.statusNote).toBeUndefined();
     // A database never counts as needing attention: there is no reading to judge.
     expect(model.attention).toBe(0);
   });
