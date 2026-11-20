@@ -68,7 +68,7 @@ func TestQuestionResumeResponseData_CarriesMarkerAsFreetext(t *testing.T) {
 func TestResumeSignalsBeforeMarkingRunning(t *testing.T) {
 	t.Parallel()
 
-	src, err := os.ReadFile("chat_send.go")
+	src, err := os.ReadFile("rpc_send_message.go")
 	require.NoError(t, err)
 
 	// Scope to the paused-chat resume branch so unrelated status writes
@@ -135,7 +135,7 @@ func TestFailedResumeIsReportedNotSwallowed(t *testing.T) {
 	assert.Contains(t, shared[at:], "return outcome, err",
 		"resumePausedRun must hand a resume failure back to its caller")
 
-	src, err := os.ReadFile("chat_send.go")
+	src, err := os.ReadFile("rpc_send_message.go")
 	require.NoError(t, err)
 	body := string(src)
 	at = strings.Index(body, "s.resumePausedRun(")
