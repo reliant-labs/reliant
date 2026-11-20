@@ -1,6 +1,6 @@
 ---
 title: "CLI Reference"
-description: "Complete reference for all Reliant CLI commands, flags, and options"
+description: "Every reliant CLI command, subcommand and flag, generated from the command tree: daemons, workflows, triggers, machines, projects, worktrees, auth and forge."
 ---
 
 {/*
@@ -2395,7 +2395,7 @@ ADDRESS — the API server the control plane dials, from its own pods:
 
   default        the context's cluster.server and CA. On a GKE context, the
                  cluster's PUBLIC endpoint and CA from GKE (gcloud describe).
-  --address      an https://host[:port] override, port 443 or 6443. Use it when
+  --address      an `https://host[:port]` override, port 443 or 6443. Use it when
                  the control plane reaches the cluster at another address than
                  your kubeconfig does.
   --ca-file      a PEM bundle for the API server's certificate, over the CA
@@ -2480,7 +2480,7 @@ reliant forge cloud cluster connect <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--address` | `string` | - | https://host[:port] the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
+| `--address` | `string` | - | `https://host[:port]` the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:`<ns>`[,`<ns>`…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
 | `--ca-file` | `string` | - | PEM file for the API server's certificate authority (default: read from the context, or GKE) |
@@ -3166,7 +3166,7 @@ declare in KCL:
 
     control_plane = forge.ControlPlane `{}`    # Reliant cloud (https://admin.reliantapi.com)
     control_plane = forge.ControlPlane \{     # any other control plane
-        endpoint = "http://127.0.0.1:8090"
+        endpoint = `"http://127.0.0.1:8090"`
     \}
 
 (two envs declaring the same endpoint share one login). When nothing declares
@@ -3579,7 +3579,7 @@ ADDRESS — the API server the control plane dials, from its own pods:
 
   default        the context's cluster.server and CA. On a GKE context, the
                  cluster's PUBLIC endpoint and CA from GKE (gcloud describe).
-  --address      an https://host[:port] override, port 443 or 6443. Use it when
+  --address      an `https://host[:port]` override, port 443 or 6443. Use it when
                  the control plane reaches the cluster at another address than
                  your kubeconfig does.
   --ca-file      a PEM bundle for the API server's certificate, over the CA
@@ -3664,7 +3664,7 @@ reliant forge cluster connect <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--address` | `string` | - | https://host[:port] the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
+| `--address` | `string` | - | `https://host[:port]` the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:`<ns>`[,`<ns>`…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
 | `--ca-file` | `string` | - | PEM file for the API server's certificate authority (default: read from the context, or GKE) |
@@ -11862,7 +11862,7 @@ declare in KCL:
 
     control_plane = forge.ControlPlane `{}`    # Reliant cloud (https://admin.reliantapi.com)
     control_plane = forge.ControlPlane \{     # any other control plane
-        endpoint = "http://127.0.0.1:8090"
+        endpoint = `"http://127.0.0.1:8090"`
     \}
 
 (two envs declaring the same endpoint share one login). When nothing declares
@@ -22276,7 +22276,7 @@ Answer a pending question on a workflow execution
 Answers the pending question for a workflow execution via
 QuestionService.ResolveQuestion — no hand-built JSON required. The response is
 assembled into the exact ask_user shape the workflow expects
-(`{"answers":`[\{question, selected, freetext\}]`}`), including multi-sub-question
+(`{"answers":[{question, selected, freetext}]}`), including multi-sub-question
 asks.
 
 Selecting options:
