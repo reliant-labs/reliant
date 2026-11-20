@@ -375,6 +375,10 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 // (cliauth.ExpiresInParam: at least 60 seconds).
 const minTokenLifetime = time.Minute
 
+// maxTokenLifetime is the longest lifetime the control plane mints (its
+// default, which it clamps every request to).
+const maxTokenLifetime = 90 * 24 * time.Hour
+
 // parseTokenLifetime reads --expires-in: a Go duration (90m, 12h) or whole
 // days (7d). Empty asks for nothing: the server's default lifetime.
 func parseTokenLifetime(raw string) (time.Duration, error) {
@@ -388,6 +392,11 @@ func parseTokenLifetime(raw string) (time.Duration, error) {
 		if err != nil || n <= 0 {
 			return 0, fmt.Errorf("--expires-in %q: give a duration such as 1h, 12h or 7d", raw)
 		}
+		// Checked before multiplying: a huge day count would overflow
+		// time.Duration and wrap to a short, wrong lifetime.
+		if n > int(maxTokenLifetime/(24*time.Hour)) {
+			return 0, fmt.Errorf("--expires-in %q: a token lives at most 90d", raw)
+		}
 		d = time.Duration(n) * 24 * time.Hour
 	} else {
 		parsed, err := time.ParseDuration(raw)
@@ -398,6 +407,9 @@ func parseTokenLifetime(raw string) (time.Duration, error) {
 	}
 	if d < minTokenLifetime {
 		return 0, fmt.Errorf("--expires-in %q: a token lives at least 1m", raw)
+	}
+	if d > maxTokenLifetime {
+		return 0, fmt.Errorf("--expires-in %q: a token lives at most 90d", raw)
 	}
 	return d, nil
 }
