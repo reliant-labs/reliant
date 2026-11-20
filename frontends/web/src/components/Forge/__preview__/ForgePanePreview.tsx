@@ -42,6 +42,7 @@ import {
 
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { VulnerabilityApiProvider } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import { useProjectStore, type Project } from "@/store/projectStore";
 import { projectsKey } from "@/hooks/project-queries";
 import { ListProjectsResponseSchema } from "@/gen/reliant/v1/project_pb";
@@ -56,6 +57,7 @@ import { DataPage } from "../Data/DataPage";
 import { UsersPage } from "../Users/UsersPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
+import { fixtureVulnerabilityApi, type VulnScenario } from "../Security/fixtures";
 import { SbomsPage } from "../Security/SbomsPage";
 import { VulnerabilitiesPage } from "../Security/VulnerabilitiesPage";
 import { VulnerabilityPage } from "../Security/VulnerabilityPage";
@@ -508,12 +510,17 @@ function ForgePanePreviewCase() {
   }, []);
   const router = useMemo(() => buildRouter(path), [path]);
   const obsApi = useMemo(() => createFixtureApi(), []);
+  // The Security pages read the fixture VulnerabilityService: `?vulns=<scenario>` (Security/fixtures.ts), default "findings".
+  const vulnScenario = (params.get("vulns") as VulnScenario) || "findings";
+  const vulnApi = useMemo(() => fixtureVulnerabilityApi(vulnScenario), [vulnScenario]);
 
   if (!ready) return null;
   return (
     <QueryClientProvider client={queryClient}>
       <ObservabilityApiProvider api={obsApi}>
-        <RouterProvider router={router} />
+        <VulnerabilityApiProvider api={vulnApi}>
+          <RouterProvider router={router} />
+        </VulnerabilityApiProvider>
       </ObservabilityApiProvider>
     </QueryClientProvider>
   );
