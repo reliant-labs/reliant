@@ -55,6 +55,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   <Card title="Delegate work to parallel AI sub-agents" icon="workflow" href="/guides/workflows/delegate-to-sub-agents">
     Have one agent split a task across parallel AI sub-agents: a shared plan, a briefing file, spawn in one turn, then steer, stop and combine the results.
   </Card>
+  <Card title="Use a different AI model for each workflow step" icon="workflow" href="/guides/workflows/choose-model-per-step">
+    Route each workflow step to its own model: a fast tier for quick reads, a flagship that thinks hard for the step that must be right, and an exact model id.
+  </Card>
   <Card title="Test AI agent workflows with scenarios before you ship" icon="workflow" href="/guides/workflows/test-workflows-with-scenarios">
     Test every path of an AI agent workflow before it runs for real: mock agents and commands in scenarios, run them locally, and read the mismatch when one fails.
   </Card>
@@ -181,6 +184,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   </Card>
   <Card title="Let AI agents query production data read-only" icon="hammer" href="/guides/forge/let-agents-query-production-data">
     Give an AI agent audited, read-only SQL access to production with forge db query: Postgres withholds secret columns, refuses writes and every query is recorded.
+  </Card>
+  <Card title="Test a Go API against a real Postgres database" icon="hammer" href="/guides/forge/test-go-api-real-postgres">
+    Write table-driven Go tests that call your Connect handlers against a real Postgres with no Docker, and unit-test business logic with Forge's generated mocks.
   </Card>
   <Card title="Find API endpoints that never check who is calling" icon="hammer" href="/guides/forge/find-endpoints-missing-auth-checks">
     List every signed-in RPC whose handler never reads the caller, then fix each with a role or owner check, or mark it global with a reason a reviewer reads.
