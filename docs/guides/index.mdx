@@ -43,6 +43,9 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   <Card title="Add an AI security code review to every pull request" icon="workflow" href="/guides/workflows/ai-security-review-pull-requests">
     Get a security review on each GitHub pull request: turn on Autopilot security review for a repository, then read the findings it posts by severity, with evidence and a fix.
   </Card>
+  <Card title="Have an agent address pull request review comments" icon="workflow" href="/guides/workflows/agent-addresses-review-comments">
+    Let an agent act on review feedback: it changes the code, runs your checks, pushes to the pull request's own branch and replies in each review thread.
+  </Card>
   <Card title="Write your first multi-agent workflow in YAML" icon="workflow" href="/guides/workflows/first-multi-agent-workflow">
     Build a multi-agent coding workflow in YAML: a planner, an implementer and a reviewer that sends work back, checked locally, then run on your machine.
   </Card>
@@ -96,6 +99,18 @@ Put agents to work on your repository: run the built-in workflows, write your ow
   </Card>
   <Card title="Run one workflow when another finishes or fails" icon="workflow" href="/guides/workflows/chain-workflows-on-finish">
     Chain Reliant workflows with a workflow_event trigger: start a follow-up run whenever another workflow's run fails, finishes or waits for a person.
+  </Card>
+  <Card title="Triage incoming Gmail with an AI agent" icon="workflow" href="/guides/workflows/triage-email-with-an-agent">
+    Have an agent classify every new Gmail message, email you a summary of urgent ones and acknowledge the ones that need a reply, with no machine running.
+  </Card>
+  <Card title="Answer SMS and WhatsApp messages with an AI agent" icon="workflow" href="/guides/workflows/sms-whatsapp-agent">
+    Build an AI agent that answers text messages: when one of your Twilio numbers gets an SMS or WhatsApp message, it replies from your FAQ, with no machine running.
+  </Card>
+  <Card title="Start and follow agent runs from a Go service" icon="workflow" href="/guides/workflows/start-runs-from-go">
+    Start a Reliant workflow from Go code, follow it to a pass or fail verdict, put its question to a person, and fire an automation, with the Go SDK.
+  </Card>
+  <Card title="Stream a live agent chat with the TypeScript SDK" icon="workflow" href="/guides/workflows/stream-run-events-typescript">
+    Follow a Reliant run's chat live from TypeScript: messages, questions and workflow status as they happen, resumed from a saved cursor after a disconnect.
   </Card>
 </CardGroup>
 
@@ -327,6 +342,9 @@ Deploy what you build to Reliant hosting, release it safely across environments,
   </Card>
   <Card title="Restore a managed Postgres database to a point in time" icon="cloud" href="/guides/hosting/restore-postgres-point-in-time">
     Undo a bad delete on Reliant hosting: declare a new managed Postgres restored from backups to the moment before it, check the rows, and point your app at it.
+  </Card>
+  <Card title="Invite and manage your app's users from the CLI" icon="cloud" href="/guides/hosting/manage-app-users-cli">
+    Invite people to your hosted app, change their roles, lock them out and end their sessions from the terminal, with forge cloud identity on Reliant hosting.
   </Card>
 </CardGroup>
 
