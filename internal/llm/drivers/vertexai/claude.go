@@ -578,7 +578,7 @@ func (c *VertexAIClient) getClaudeEndpoint(stream bool) string {
 
 // getAccessToken gets a Google Cloud access token
 func (c *VertexAIClient) getAccessToken(ctx context.Context) (string, error) {
-	creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
+	creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform") //nolint:forbidigo // the platform's own Vertex AI identity, used only when the operator placed Vertex with VERTEXAI_PROJECT; no user or org can add a vertexai account, so it never stands in for a missing user credential
 	if err != nil {
 		return "", fmt.Errorf("failed to find credentials: %w", err)
 	}
