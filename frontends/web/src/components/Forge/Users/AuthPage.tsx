@@ -42,7 +42,6 @@ export function AuthPage() {
         className="mb-0"
         title="Auth"
         subtitle={SUBTITLE[tab]}
-        actions={[{ label: "Learn", href: learnUrl("auth"), variant: "secondary", icon: <ExternalLink className="h-3.5 w-3.5" /> }]}
       />
       <nav aria-label="Auth" className="-mt-1 flex gap-1 border-b border-border" data-testid="auth-tabs">
         {AUTH_TABS.map((candidate) => (

@@ -517,7 +517,7 @@ export function ChatSectionHeading({
       >
         {project && (
           <>
-            <span className="min-w-0 shrink truncate font-medium text-foreground/80" title={project}>
+            <span className="min-w-0 max-w-[60%] shrink-0 truncate font-medium text-foreground/80" title={project}>
               {project}
             </span>
             <span aria-hidden="true">·</span>
