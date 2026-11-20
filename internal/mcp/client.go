@@ -48,10 +48,22 @@ type client struct {
 	mcpService      *mcpservice.MCPService
 
 	preferredEnvelopeByTool map[string]string
+
+	// lookupEnv resolves the ${VAR} references in cfg at launch (expand.go).
+	// Never nil: NewClient substitutes resolveNoEnv for nil.
+	lookupEnv func(string) (string, bool)
 }
 
-// NewClient creates a new MCP client with the given configuration
-func NewClient(name string, cfg config.MCPServer) (Client, error) {
+// NewClient creates a new MCP client with the given configuration.
+//
+// lookupEnv is where the config's ${VAR} references are resolved at launch
+// (expand.go). Only a process running in the user's environment — the daemon —
+// may pass os.LookupEnv. nil resolves nothing: every reference takes its
+// ${VAR:-default}, or the empty string.
+func NewClient(name string, cfg config.MCPServer, lookupEnv func(string) (string, bool)) (Client, error) {
+	if lookupEnv == nil {
+		lookupEnv = resolveNoEnv
+	}
 	// Create SDK client implementation
 	impl := &mcp.Implementation{
 		Name:    "reliant",
@@ -68,6 +80,7 @@ func NewClient(name string, cfg config.MCPServer) (Client, error) {
 		toolCallService:         mcpservice.NewToolCallService(nil),
 		mcpService:              mcpservice.NewMCPService(nil),
 		preferredEnvelopeByTool: make(map[string]string),
+		lookupEnv:               lookupEnv,
 	}, nil
 }
 
@@ -90,9 +103,10 @@ func (c *client) Initialize(ctx context.Context) error {
 	var stdioCmd *exec.Cmd
 
 	// The config arrives with its ${VAR} references as the user wrote them;
-	// this is where they are resolved, from this (the user's) environment.
+	// this is where they are resolved, through the lookup the client was
+	// built with (the daemon's environment on a daemon, nothing on a server).
 	// See expand.go.
-	launch := resolveLaunchConfig(c.cfg, os.LookupEnv) //nolint:forbidigo // resolves the user's ${VAR} references from the daemon's (the user's) environment, by design
+	launch := resolveLaunchConfig(c.cfg, c.lookupEnv)
 
 	switch launch.Type {
 	case config.MCPStdio:

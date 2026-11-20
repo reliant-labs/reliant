@@ -128,6 +128,12 @@ type Manager struct {
 	// (WithChromeBrowserURL).
 	chromeBrowserURL string
 
+	// lookupEnv resolves the ${VAR} references in a server config when its
+	// client launches (WithEnvLookup, expand.go). nil resolves nothing, which
+	// is the default for every role: the process environment is read only when
+	// the daemon passes it explicitly.
+	lookupEnv func(string) (string, bool)
+
 	// role is fixed at construction. A Server-role manager can never hold a
 	// stdio server and never reads the local filesystem for config.
 	role Role
@@ -248,6 +254,17 @@ func WithChromeBrowserURL(url string) ManagerOption {
 	return func(m *Manager) { m.chromeBrowserURL = url }
 }
 
+// WithEnvLookup sets where the ${VAR} references in a server config
+// (`Authorization: Bearer ${GITHUB_TOKEN}`, url, args, env) are resolved when
+// its client launches. The daemon passes os.LookupEnv: it runs in the user's
+// environment. A server process must never pass its own environment — that
+// would substitute Reliant's credentials into a tenant's request. Without this
+// option nothing is resolved: a reference takes its ${VAR:-default}, or the
+// empty string.
+func WithEnvLookup(lookup func(name string) (string, bool)) ManagerOption {
+	return func(m *Manager) { m.lookupEnv = lookup }
+}
+
 func NewManager(role Role, opts ...ManagerOption) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Manager{
@@ -260,7 +277,6 @@ func NewManager(role Role, opts ...ManagerOption) *Manager {
 		dirClients:          make(map[string]Client),
 		dirClientLastUse:    make(map[string]time.Time),
 		preconditions:       make(map[string]preconditionVerdict),
-		clientFactory:       NewClient,
 		healthChecks:        make(map[string]*healthStatus),
 		healthCheckInterval: 30 * time.Second,
 		ctx:                 ctx,
@@ -271,7 +287,20 @@ func NewManager(role Role, opts ...ManagerOption) *Manager {
 	for _, opt := range opts {
 		opt(m)
 	}
+	m.clientFactory = m.newClient
 	return m
+}
+
+// newClient is the default clientFactory. Every path that constructs a client
+// (AddServer, session- and dir-scoped clients) reaches it, so it re-checks the
+// role: AddServer already refuses a stdio server off the daemon, and a stdio
+// client inherits this process's environment (client.go), which only the
+// daemon's may be.
+func (m *Manager) newClient(name string, cfg config.MCPServer) (Client, error) {
+	if m.role != RoleDaemon && isStdioConfig(cfg) {
+		return nil, fmt.Errorf("MCP server %q: %w", name, ErrStdioOnServer)
+	}
+	return NewClient(name, cfg, m.lookupEnv)
 }
 
 // SetPendingServers stores servers for lazy initialization

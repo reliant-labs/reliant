@@ -16,6 +16,9 @@ import (
 // launch, by the daemon — the only process that runs in the user's
 // environment. The API server and the worker run in Reliant's, so a reference
 // resolved there would substitute a Reliant credential into the user's config.
+// The environment is therefore an explicit dependency (WithEnvLookup, the
+// lookupEnv argument of NewClient): only the daemon passes os.LookupEnv, and
+// a manager or client given none resolves nothing from its process.
 //
 // Syntax: ${VAR}, ${VAR:-default} (default when VAR is unset or empty) and
 // $VAR. A reference is looked up in the server's own env block first, so
@@ -26,7 +29,7 @@ import (
 
 // resolveLaunchConfig returns cfg with every reference in its command, args,
 // url, headers, dir and env values resolved through lookupEnv (the daemon's
-// environment). The project-path placeholders in args (projectPathPlaceholders)
+// environment on a daemon; resolveNoEnv anywhere else). The project-path placeholders in args (projectPathPlaceholders)
 // are substituted first, so they never reach the environment lookup. cfg is not
 // modified.
 func resolveLaunchConfig(cfg config.MCPServer, lookupEnv func(string) (string, bool)) config.MCPServer {
@@ -70,6 +73,11 @@ func resolveLaunchConfig(cfg config.MCPServer, lookupEnv func(string) (string, b
 	}
 	return out
 }
+
+// resolveNoEnv is the lookup of a process that is not running in the user's
+// environment: every variable is unset, so a reference takes its default or
+// becomes the empty string. Only the server's own env block still resolves.
+func resolveNoEnv(string) (string, bool) { return "", false }
 
 // referenceExpander returns a function resolving the ${VAR}, ${VAR:-default}
 // and $VAR references in a string through lookup.
