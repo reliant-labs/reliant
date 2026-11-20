@@ -265,7 +265,35 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 	var resultThread *db.Thread
 	var resultCW *db.ContextWindow
 
-	err = s.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	// READ COMMITTED, because every invariant this transaction keeps is held
+	// by a lock or a single statement, not by SERIALIZABLE's proof:
+	//   - the workflow insert is one INSERT … ON CONFLICT DO NOTHING, and its
+	//     admission triggers (recovery_workflow_admission, chat_write_admission,
+	//     project_delete_admission) are row-lock protocols: the chat row, then
+	//     its worktree rows in id order, FOR NO KEY UPDATE, then a bump of each
+	//     worktree's activity_generation;
+	//   - two creates of one new thread id (a retried activity overlapping
+	//     its first attempt) collide on threads_pkey, SQLSTATE 23505, which the
+	//     attempt budget below retries; the retry finds the thread and takes
+	//     the inherit path;
+	//   - an inherited thread's workflow_id is one UPDATE, last writer wins,
+	//     as it was when SERIALIZABLE retried the loser;
+	//   - the new thread's context window counter is the new thread's own;
+	//   - the ambient-memory exclusion is a monotonic latch: a lineage read,
+	//     then an UPDATE that only ever sets it, never clears it.
+	// SERIALIZABLE made every child a workflow starts at once in one chat (a
+	// parallel node, a fan-out of spawns) abort the others. Each admission
+	// waits for the chat row lock and then finds the worktree row bumped by
+	// the transaction it waited for; SERIALIZABLE refuses to lock a row
+	// updated after its snapshot, so every waiter failed with SQLSTATE 40001
+	// "could not serialize access due to concurrent update" on every attempt
+	// until one ran out of all seven (prod issues 1f232560, 53e2370c). With no
+	// worktree bound, the same inserts' predicate locks aborted one another
+	// with "read/write dependencies" instead. READ COMMITTED re-reads the row
+	// it waited for and goes on
+	// (TestCreateWorkflowWithThread_ConcurrentChildrenInOneChatDoNotConflict).
+	createTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	err = s.repo.RunTx(ctx, createTx, func(txCtx context.Context) error {
 		// Step 1: Create workflow first (if it doesn't exist).
 		// For inline workflows (workflow nodes that execute within parent), the
 		// workflow ID is the same as the parent, so it already exists. CreateWorkflow
