@@ -6889,6 +6889,11 @@
               "Name": "app_name",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListChatsResponse": [
@@ -8577,6 +8582,11 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListChatsResponse": [
@@ -36086,6 +36096,11 @@
               "Name": "app_name",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListSharedChatsResponse": [
@@ -36398,6 +36413,11 @@
               "name": "app_name",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListSharedChatsResponse": [

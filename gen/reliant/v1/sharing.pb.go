@@ -254,7 +254,13 @@ type ListSharedChatsRequest struct {
 	// Narrow the list to chats tagged with this app (Chat.app_name): the
 	// shared half of an app's chat list. A malformed name lists nothing; an
 	// empty one is the same as unset.
-	AppName       *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
+	AppName *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
+	// Narrow the list to several projects' shared chats: the union of
+	// project_id and project_ids, so a client may set either or both; with
+	// both empty every project is listed, as before this field existed. A
+	// project with nothing shared with the org contributes nothing. At most
+	// 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+	ProjectIds    []string `protobuf:"bytes,6,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -322,6 +328,13 @@ func (x *ListSharedChatsRequest) GetAppName() string {
 		return *x.AppName
 	}
 	return ""
+}
+
+func (x *ListSharedChatsRequest) GetProjectIds() []string {
+	if x != nil {
+		return x.ProjectIds
+	}
+	return nil
 }
 
 type ListSharedChatsResponse struct {
@@ -500,14 +513,16 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"visibility\"g\n" +
 	"\x1cSetProjectVisibilityResponse\x12-\n" +
 	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\x12\x18\n" +
-	"\achanged\x18\x02 \x01(\bR\achanged\"\xe1\x01\n" +
+	"\achanged\x18\x02 \x01(\bR\achanged\"\x93\x02\n" +
 	"\x16ListSharedChatsRequest\x12\x1a\n" +
 	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tH\x01R\tprojectId\x88\x01\x01\x12\x1f\n" +
 	"\x05limit\x18\x03 \x01(\x05B\t\xbaH\x06\x1a\x04\x18d(\x00R\x05limit\x12\x1f\n" +
 	"\x06offset\x18\x04 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\x06offset\x12\x1e\n" +
-	"\bapp_name\x18\x05 \x01(\tH\x02R\aappName\x88\x01\x01B\t\n" +
+	"\bapp_name\x18\x05 \x01(\tH\x02R\aappName\x88\x01\x01\x120\n" +
+	"\vproject_ids\x18\x06 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10\xc8\x01\"\x04r\x02\x10\x01R\n" +
+	"projectIdsB\t\n" +
 	"\a_org_idB\r\n" +
 	"\v_project_idB\v\n" +
 	"\t_app_name\"A\n" +
