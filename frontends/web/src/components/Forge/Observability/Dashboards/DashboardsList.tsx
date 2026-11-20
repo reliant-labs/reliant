@@ -173,9 +173,9 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
   }, [all, search.q, search.group, search.owner]);
   const galleryShown = useMemo(() => {
     if (orgWide) return [];
-    const items = filtered ? shown.map((d) => itemOf(d, cardAbout, project)) : (() => {
+    const items = filtered ? shown.map((d) => itemOf(d, cardAbout, project, cardNote)) : (() => {
       const landing = landingOf(all, project);
-      return galleryItems(landing.cards, landing.own, cardAbout, project);
+      return galleryItems(landing.cards, landing.own, cardAbout, project, cardNote);
     })();
     // Stars first; otherwise the landing's order.
     return [...items].sort((a, b) => Number(b.dashboard.starred) - Number(a.dashboard.starred));
@@ -481,8 +481,12 @@ const CARD_ABOUT: Record<string, string> = {
 
 /** A card's line: forge's own dashboards in our words, what a built-in needs, else the dashboard's description. */
 function cardAbout(d: DashboardSummary): string {
-  if (d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d)) return d.description || "Requires cost-read permission";
   return (d.source !== "builtin" || isStandardBuiltin(d) ? CARD_ABOUT[d.ref.key] : undefined) ?? d.description;
+}
+
+/** An organization view needs billing permission to open (LLM usage is the caller's own). */
+function cardNote(d: DashboardSummary): string | undefined {
+  return d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d) ? "Requires cost-read permission" : undefined;
 }
 
 /**

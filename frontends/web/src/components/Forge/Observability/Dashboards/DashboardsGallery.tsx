@@ -44,25 +44,30 @@ export interface GalleryItem {
   dashboard: DashboardSummary;
   /** A hub's tabs, named under the description. */
   tabs?: string[];
+  /** What opening it needs, said in the card's footer (an organization view's billing permission). */
+  note?: string;
+  /** The card's test id suffix: the hub's id, or the dashboard's key. */
+  id: string;
 }
 
 /** Every card of the gallery: the landing's hubs and provided dashboards, then the team's own, or the search results. */
-export function galleryItems(cards: readonly LandingCard[], own: readonly DashboardSummary[], about: (d: DashboardSummary) => string, project: string): GalleryItem[] {
+export function galleryItems(cards: readonly LandingCard[], own: readonly DashboardSummary[], about: (d: DashboardSummary) => string, project: string, noteOf: (d: DashboardSummary) => string | undefined = () => undefined): GalleryItem[] {
   const fromCard = (card: LandingCard): GalleryItem =>
     card.kind === "hub"
       ? {
           key: `hub:${card.id}`,
+          id: card.id,
           title: card.hub.title,
           description: card.hub.about,
           dashboard: card.hub.tabs[0]!.summary,
           tabs: card.hub.tabs.map((tab) => tab.label),
         }
-      : { key: card.id, title: card.title, description: about(card.dashboard), dashboard: card.dashboard };
-  return [...cards.map(fromCard), ...own.map((d) => itemOf(d, about, project))];
+      : { key: card.id, id: card.dashboard.ref.key, title: card.title, description: about(card.dashboard), dashboard: card.dashboard, note: noteOf(card.dashboard) };
+  return [...cards.map(fromCard), ...own.map((d) => itemOf(d, about, project, noteOf))];
 }
 
-export function itemOf(d: DashboardSummary, about: (d: DashboardSummary) => string, project: string): GalleryItem {
-  return { key: `${d.ref.kind}/${d.ref.projectId}/${d.ref.key}`, title: displayTitle(d.title, project), description: about(d), dashboard: d };
+export function itemOf(d: DashboardSummary, about: (d: DashboardSummary) => string, project: string, noteOf: (d: DashboardSummary) => string | undefined = () => undefined): GalleryItem {
+  return { key: `${d.ref.kind}/${d.ref.projectId}/${d.ref.key}`, id: d.ref.key, title: displayTitle(d.title, project), description: about(d), dashboard: d, note: noteOf(d) };
 }
 
 const FILTERS: { value: GalleryBadge | undefined; label: string }[] = [
@@ -179,7 +184,7 @@ function GalleryCard({ item, project, envIds, href, onStar }: { item: GalleryIte
     <li
       ref={ref}
       className={cn("relative flex min-h-56 min-w-0 flex-col rounded-xl border border-border bg-surface transition-colors", href && "hover:border-border-strong hover:bg-ink/5")}
-      data-testid={`dashboards-card-${d.ref.key}`}
+      data-testid={`dashboards-card-${item.id}`}
       data-badge={badge}
     >
       <div className="flex items-start gap-2 px-4 pt-3">
@@ -201,22 +206,24 @@ function GalleryCard({ item, project, envIds, href, onStar }: { item: GalleryIte
           <StarButton starred={d.starred} title={item.title} onToggle={() => onStar(d)} />
         </span>
       </div>
-      <div className="mx-4 mt-2 h-20" data-testid={`dashboards-card-${d.ref.key}-preview`}>
+      <div className="mx-4 mt-2 h-20" data-testid={`dashboards-card-${item.id}-preview`}>
         <CardPreview dashboard={d} project={project} envIds={envIds} enabled={near} />
       </div>
       <div className="mt-auto flex min-w-0 items-center gap-2 px-4 pb-3 pt-3 text-meta text-ink-muted">
-        <span className={cn("inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-2xs font-medium", BADGE_CLASS[badge])} data-testid={`dashboards-card-${d.ref.key}-badge`}>
+        <span className={cn("inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-2xs font-medium", BADGE_CLASS[badge])} data-testid={`dashboards-card-${item.id}-badge`}>
           {GALLERY_BADGE_LABELS[badge]}
         </span>
-        {item.tabs && item.tabs.length > 1 ? (
-          <span className="min-w-0 truncate" title={item.tabs.join(" · ")}>
+        {item.note ? (
+          <span className="min-w-0 truncate">{item.note}</span>
+        ) : item.tabs && item.tabs.length > 1 ? (
+          <span className="min-w-0 truncate" title={item.tabs.join(" · ")} data-testid={`dashboards-card-${item.id}-tabs`}>
             {item.tabs.length} dashboards
           </span>
         ) : d.panelCount > 0 ? (
           <span className="shrink-0 tabular-nums">{d.panelCount} panels</span>
         ) : null}
         {d.lastViewedAtMs !== null && (
-          <span className="ml-auto shrink-0" data-testid={`dashboards-card-${d.ref.key}-viewed`}>
+          <span className="ml-auto shrink-0" data-testid={`dashboards-card-${item.id}-viewed`}>
             Viewed {formatAgo(d.lastViewedAtMs)}
           </span>
         )}
