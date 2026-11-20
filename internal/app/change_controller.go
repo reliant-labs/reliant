@@ -435,7 +435,129 @@ func (c *changeController) RequestChangeApproval(ctx context.Context, userID, ch
 	return tools.ChangeApprovalCode{SentTo: resp.SentTo, ExpiresAt: resp.ExpiresAt}, nil
 }
 
+func (c *changeController) GetChangeReadout(ctx context.Context, userID, changeID, runID string) (tools.ChangeReadout, error) {
+	jwt, err := c.asUserSession(userID)
+	if err != nil {
+		return tools.ChangeReadout{}, err
+	}
+	req := map[string]any{"changeId": changeID}
+	if runID != "" {
+		req["runId"] = runID
+	}
+	var resp readoutJSON
+	if err := c.rpc.call(ctx, jwt, "GetChangeReadout", req, &resp); err != nil {
+		return tools.ChangeReadout{}, err
+	}
+	return resp.readout(), nil
+}
+
 // ── protojson shapes (controlplane.v1.Change and friends) ──────────────────
+
+// jsonFloat reads a protojson double: a number, or the strings "NaN",
+// "Infinity", "-Infinity" (read as 0, which the readout never sends for a
+// value it means).
+type jsonFloat float64
+
+func (f *jsonFloat) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || s == "NaN" || strings.HasSuffix(s, "Infinity") {
+		*f = 0
+		return nil
+	}
+	*f = jsonFloat(v)
+	return nil
+}
+
+type readoutJSON struct {
+	ChangeID string `json:"changeId"`
+	Key      string `json:"key"`
+	Run      struct {
+		ID string `json:"id"`
+	} `json:"run"`
+	Verdict     string `json:"verdict"`
+	Reason      string `json:"reason"`
+	BestVariant string `json:"bestVariant"`
+	Arms        []struct {
+		Variant          string    `json:"variant"`
+		WeightBP         int32     `json:"weightBp"`
+		Assigned         jsonInt64 `json:"assigned"`
+		WindowComplete   jsonInt64 `json:"windowComplete"`
+		Conversions      jsonInt64 `json:"conversions"`
+		Rate             jsonFloat `json:"rate"`
+		CILow            jsonFloat `json:"ciLow"`
+		CIHigh           jsonFloat `json:"ciHigh"`
+		Pending          jsonInt64 `json:"pending"`
+		ExpectedAssigned jsonFloat `json:"expectedAssigned"`
+	} `json:"arms"`
+	Comparisons []struct {
+		Treatment   string     `json:"treatment"`
+		Control     string     `json:"control"`
+		AbsLift     jsonFloat  `json:"absLift"`
+		RelLift     *jsonFloat `json:"relLift"`
+		DiffCILow   jsonFloat  `json:"diffCiLow"`
+		DiffCIHigh  jsonFloat  `json:"diffCiHigh"`
+		PValue      jsonFloat  `json:"pValue"`
+		Alpha       jsonFloat  `json:"alpha"`
+		Significant bool       `json:"significant"`
+		Verdict     string     `json:"verdict"`
+		Reason      string     `json:"reason"`
+	} `json:"comparisons"`
+	SRM struct {
+		PValue            jsonFloat `json:"pValue"`
+		ChiSquare         jsonFloat `json:"chiSquare"`
+		Failed            bool      `json:"failed"`
+		Skipped           bool      `json:"skipped"`
+		UnplannedVariants []string  `json:"unplannedVariants"`
+	} `json:"srm"`
+	Conflicted           jsonInt64         `json:"conflicted"`
+	Assigned             jsonInt64         `json:"assigned"`
+	Pending              jsonInt64         `json:"pending"`
+	UndeclaredVariants   []string          `json:"undeclaredVariants"`
+	ReadoutStart         time.Time         `json:"readoutStart"`
+	ReadoutEnd           time.Time         `json:"readoutEnd"`
+	ReadoutEndReason     string            `json:"readoutEndReason"`
+	Final                bool              `json:"final"`
+	Metric               *changeMetricJSON `json:"metric"`
+	Alpha                jsonFloat         `json:"alpha"`
+	HorizonNote          string            `json:"horizonNote"`
+	TruncatedByRetention bool              `json:"truncatedByRetention"`
+}
+
+func (r readoutJSON) readout() tools.ChangeReadout {
+	out := tools.ChangeReadout{
+		ChangeID: r.ChangeID, Key: r.Key, RunID: r.Run.ID,
+		Verdict: enumWord(r.Verdict, "CHANGE_READOUT_VERDICT_"), Reason: r.Reason, BestVariant: r.BestVariant,
+		SRM: tools.ChangeReadoutSRM{PValue: float64(r.SRM.PValue), ChiSquare: float64(r.SRM.ChiSquare), Failed: r.SRM.Failed,
+			Skipped: r.SRM.Skipped, UnplannedVariants: r.SRM.UnplannedVariants},
+		Conflicted: int64(r.Conflicted), Assigned: int64(r.Assigned), Pending: int64(r.Pending), UndeclaredVariants: r.UndeclaredVariants,
+		ReadoutStart: r.ReadoutStart, ReadoutEnd: r.ReadoutEnd, ReadoutEndReason: r.ReadoutEndReason, Final: r.Final,
+		Alpha: float64(r.Alpha), HorizonNote: r.HorizonNote, TruncatedByRetention: r.TruncatedByRetention,
+	}
+	if out.Verdict == "" {
+		out.Verdict = "no_data"
+	}
+	for _, a := range r.Arms {
+		out.Arms = append(out.Arms, tools.ChangeReadoutArm{Variant: a.Variant, WeightBP: a.WeightBP, Assigned: int64(a.Assigned),
+			WindowComplete: int64(a.WindowComplete), Conversions: int64(a.Conversions), Rate: float64(a.Rate), CILow: float64(a.CILow),
+			CIHigh: float64(a.CIHigh), Pending: int64(a.Pending), ExpectedAssigned: float64(a.ExpectedAssigned)})
+	}
+	for _, c := range r.Comparisons {
+		cmp := tools.ChangeReadoutComparison{Treatment: c.Treatment, Control: c.Control, AbsLift: float64(c.AbsLift),
+			DiffCILow: float64(c.DiffCILow), DiffCIHigh: float64(c.DiffCIHigh), PValue: float64(c.PValue), Alpha: float64(c.Alpha),
+			Significant: c.Significant, Verdict: enumWord(c.Verdict, "CHANGE_READOUT_VERDICT_"), Reason: c.Reason}
+		if c.RelLift != nil {
+			v := float64(*c.RelLift)
+			cmp.RelLift = &v
+		}
+		out.Comparisons = append(out.Comparisons, cmp)
+	}
+	if m := r.Metric; m != nil {
+		out.Metric = &tools.ChangeMetric{Event: m.Event, Prop: m.Prop, PropValue: m.PropValue, WindowHours: m.WindowHours,
+			MinSamplePerArm: int64(m.MinSamplePerArm), ControlVariant: m.ControlVariant}
+	}
+	return out
+}
 
 // jsonInt64 reads a protojson int64: a string ("7"), or a number from a
 // lenient encoder.

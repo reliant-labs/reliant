@@ -130,3 +130,23 @@ func TestChangeControllerNeedsALiveSession(t *testing.T) {
 	_, err := c.ListChanges(context.Background(), "owner", "proj", tools.ChangeFilter{})
 	require.ErrorContains(t, err, "no live sign-in")
 }
+
+const protoReadout = `{"changeId":"chg-1","key":"new-checkout","run":{"id":"r_abcdefgh","kind":"experiment"},"verdict":"CHANGE_READOUT_VERDICT_INCONCLUSIVE","reason":"below_min_sample","arms":[{"variant":"control","weightBp":5000,"assigned":"40","windowComplete":"30","conversions":"3","rate":0.1,"ciLow":0.034,"ciHigh":0.256,"pending":"10","expectedAssigned":41.5},{"variant":"treatment","weightBp":5000,"assigned":"43","windowComplete":"31","rate":0,"ciHigh":0.11}],"comparisons":[{"treatment":"treatment","control":"control","absLift":-0.1,"diffCiLow":-0.25,"diffCiHigh":0.02,"pValue":0.07,"alpha":0.05,"verdict":"CHANGE_READOUT_VERDICT_INCONCLUSIVE","reason":"below_min_sample"}],"srm":{"skipped":true},"assigned":"83","pending":"22","readoutStart":"2026-11-19T10:00:00Z","readoutEnd":"2026-11-20T10:00:00Z","readoutEndReason":"now","metric":{"event":"checkout_completed","windowHours":168,"minSamplePerArm":"100","controlVariant":"control"},"alpha":0.05,"horizonNote":"Decide once."}`
+
+func TestChangeControllerReadsTheReadout(t *testing.T) {
+	srv, got := changesServer(t, func(_ string, _ map[string]any, w http.ResponseWriter) { _, _ = io.WriteString(w, protoReadout) })
+	c := testChangeController(srv, &fakeChangeEnvs{})
+	r, err := c.GetChangeReadout(context.Background(), "owner", "chg-1", "")
+	require.NoError(t, err)
+	require.Equal(t, map[string]any{"_method": changesServicePath + "GetChangeReadout", "changeId": "chg-1"}, (*got)[0], "no run id lets the server pick")
+	require.Equal(t, "inconclusive", r.Verdict)
+	require.Equal(t, "r_abcdefgh", r.RunID)
+	require.Equal(t, int64(40), r.Arms[0].Assigned)
+	require.Equal(t, int64(0), r.Arms[1].Conversions, "a zero value protojson omits")
+	require.InDelta(t, 0.256, r.Arms[0].CIHigh, 1e-9)
+	require.Nil(t, r.Comparisons[0].RelLift)
+	require.Equal(t, "inconclusive", r.Comparisons[0].Verdict)
+	require.True(t, r.SRM.Skipped)
+	require.Equal(t, int64(100), r.Metric.MinSamplePerArm)
+	require.Equal(t, int64(83), r.Assigned)
+}

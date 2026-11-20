@@ -27,7 +27,7 @@ import type {
   ChangeUnit,
 } from "./changesTypes";
 import { callChanges, type ChangesCall } from "./changesTransport";
-import { changeEventOf, changeOf, unitEnum } from "./changesWire";
+import { changeEventOf, changeOf, readoutOf, unitEnum } from "./changesWire";
 
 export interface ListChangesInput {
   orgId: string;
@@ -75,11 +75,12 @@ export interface ChangesApi {
   stopChange: (changeId: string, expectedRevision?: number) => Promise<Change>;
   endChangeRun: (changeId: string, expectedRevision: number) => Promise<Change>;
   /**
-   * The results of one run. ABSENT until the control plane serves
-   * GetChangeReadout (changesTypes.ts, ChangeReadout); the results panel says
-   * so instead of drawing anything.
+   * One experiment run's results. `runId` omitted: the open experiment run,
+   * else the latest. Not cached server-side (a ClickHouse read per call), so
+   * never polled. A control plane without the rpc answers Unimplemented and
+   * the results panel says the readout service is coming.
    */
-  getChangeReadout?: (changeId: string, runId: string, signal?: AbortSignal) => Promise<ChangeReadout>;
+  getChangeReadout: (changeId: string, runId?: string, signal?: AbortSignal) => Promise<ChangeReadout>;
 }
 
 const changeIn = (resp: unknown): Change => changeOf((resp as { change?: unknown } | null)?.change);
@@ -154,6 +155,9 @@ export function createChangesApi(call: ChangesCall = callChanges, orgId: () => P
     },
     async endChangeRun(changeId, expectedRevision) {
       return changeIn(await call("EndChangeRun", { changeId, expectedRevision: String(expectedRevision) }));
+    },
+    async getChangeReadout(changeId, runId, signal) {
+      return readoutOf(await call("GetChangeReadout", runId ? { changeId, runId } : { changeId }, signal));
     },
   };
 }

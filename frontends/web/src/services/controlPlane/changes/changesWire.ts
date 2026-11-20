@@ -27,6 +27,12 @@
 
 import type {
   Change,
+  ChangeReadout,
+  ChangeReadoutArm,
+  ChangeReadoutComparison,
+  ChangeReadoutEndReason,
+  ChangeReadoutReason,
+  ChangeReadoutVerdict,
   ChangeAudience,
   ChangeDeclaration,
   ChangeEvent,
@@ -188,5 +194,80 @@ export function changeEventOf(v: unknown): ChangeEvent {
     approvalMethod: str(e.approvalMethod),
     approvedBy: str(e.approvedBy),
     createdAt: date(e.createdAt),
+  };
+}
+
+// ── the readout ─────────────────────────────────────────────────────────────
+
+const VERDICTS: readonly ChangeReadoutVerdict[] = ["no_data", "srm_failed", "inconclusive", "treatment_better", "treatment_worse"];
+const REASONS: readonly ChangeReadoutReason[] = ["below_min_sample", "window_not_complete", "interval_spans_zero"];
+const END_REASONS: readonly ChangeReadoutEndReason[] = ["now", "left_experiment", "run_ended"];
+
+export function verdictOf(v: unknown): ChangeReadoutVerdict {
+  const word = str(v).replace(/^CHANGE_READOUT_VERDICT_/, "").toLowerCase();
+  return (VERDICTS as readonly string[]).includes(word) ? (word as ChangeReadoutVerdict) : "no_data";
+}
+
+const reasonOf = (v: unknown): ChangeReadoutReason | "" => ((REASONS as readonly string[]).includes(str(v)) ? (str(v) as ChangeReadoutReason) : "");
+
+function armOf(v: unknown): ChangeReadoutArm {
+  const a = obj(v);
+  return {
+    variant: str(a.variant),
+    weightBp: num(a.weightBp),
+    assigned: num(a.assigned),
+    windowComplete: num(a.windowComplete),
+    conversions: num(a.conversions),
+    rate: num(a.rate),
+    ciLow: num(a.ciLow),
+    ciHigh: num(a.ciHigh),
+    pending: num(a.pending),
+    expectedAssigned: num(a.expectedAssigned),
+  };
+}
+
+function comparisonOf(v: unknown): ChangeReadoutComparison {
+  const c = obj(v);
+  return {
+    treatment: str(c.treatment),
+    control: str(c.control),
+    absLift: num(c.absLift),
+    relLift: c.relLift === undefined || c.relLift === null ? null : num(c.relLift),
+    diffCiLow: num(c.diffCiLow),
+    diffCiHigh: num(c.diffCiHigh),
+    pValue: num(c.pValue),
+    alpha: num(c.alpha),
+    significant: c.significant === true,
+    verdict: verdictOf(c.verdict),
+    reason: reasonOf(c.reason),
+  };
+}
+
+export function readoutOf(v: unknown): ChangeReadout {
+  const r = obj(v);
+  const srm = obj(r.srm);
+  const end = str(r.readoutEndReason);
+  return {
+    changeId: str(r.changeId),
+    key: str(r.key),
+    run: runOf(r.run),
+    verdict: verdictOf(r.verdict),
+    reason: reasonOf(r.reason),
+    bestVariant: str(r.bestVariant),
+    arms: arr(r.arms).map(armOf),
+    comparisons: arr(r.comparisons).map(comparisonOf),
+    srm: { pValue: num(srm.pValue), chiSquare: num(srm.chiSquare), failed: srm.failed === true, skipped: srm.skipped === true, unplannedVariants: arr(srm.unplannedVariants).map(str) },
+    conflicted: num(r.conflicted),
+    assigned: num(r.assigned),
+    pending: num(r.pending),
+    undeclaredVariants: arr(r.undeclaredVariants).map(str),
+    readoutStart: date(r.readoutStart),
+    readoutEnd: date(r.readoutEnd),
+    readoutEndReason: (END_REASONS as readonly string[]).includes(end) ? (end as ChangeReadoutEndReason) : "",
+    final: r.final === true,
+    metric: metricOf(r.metric),
+    alpha: num(r.alpha),
+    horizonNote: str(r.horizonNote),
+    truncatedByRetention: r.truncatedByRetention === true,
   };
 }

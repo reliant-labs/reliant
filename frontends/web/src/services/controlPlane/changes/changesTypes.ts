@@ -176,69 +176,95 @@ export interface ChangeDraftEdit {
 // ── The readout (results) ───────────────────────────────────────────────────
 
 /**
- * CHANGE READOUT — the results of one experiment run, as the control plane
- * will serve them (GetChangeReadout, a later control-plane PR, wrapping forge
- * pkg/obsquery ExperimentReadoutQuery and pkg/experimentstats.Analyze).
+ * CHANGE READOUT — the results of one experiment run (ChangesService
+ * GetChangeReadout, wrapping forge pkg/obsquery ExperimentReadoutQuery and
+ * pkg/experimentstats.Analyze). Field names follow the proto.
  *
  * THE SERVER DECIDES; THE CONSOLE RENDERS (the ReleaseComparison model). The
  * verdict, every interval, the sample-ratio check and "inconclusive" are
- * computed server-side and never re-derived here. Until the rpc ships,
- * ChangesApi.getChangeReadout is absent and the results panel says so: no
- * number on that panel is ever computed or invented by the web.
+ * computed server-side and never re-derived here.
  */
 export type ChangeReadoutVerdict = "no_data" | "srm_failed" | "inconclusive" | "treatment_better" | "treatment_worse";
 
 /** Why a readout is inconclusive (experimentstats). An unknown reason is shown as inconclusive without one. */
-export type ChangeInconclusiveReason = "below_min_sample" | "window_not_complete" | "interval_spans_zero";
+export type ChangeReadoutReason = "below_min_sample" | "window_not_complete" | "interval_spans_zero";
 
-export interface ChangeReadoutInterval {
-  low: number;
-  high: number;
-}
+/** Why the readout window ends where it does. */
+export type ChangeReadoutEndReason = "now" | "left_experiment" | "run_ended";
 
-/** One arm: units counted by assignment (intent-to-treat). */
+/** One version: units counted by assignment (intent-to-treat). */
 export interface ChangeReadoutArm {
   variant: string;
-  /** The planned share, basis points. */
-  plannedWeightBp: number;
-  /** Units assigned to the arm (window complete or not). */
+  /** The planned share, basis points; 0 for a variant the split does not have. */
+  weightBp: number;
+  /** Every unit assigned to the arm, window complete or not. */
   assigned: number;
-  /** Units whose metric window has closed: only these feed the verdict. */
+  /** Units whose whole metric window has closed: only these feed the rate and the verdict. */
   windowComplete: number;
-  converted: number;
-  /** converted / windowComplete; null with no complete window. */
-  rate: number | null;
-  /** Wilson interval of `rate`. */
-  rateInterval: ChangeReadoutInterval | null;
+  conversions: number;
+  /** conversions / windowComplete, and its Wilson interval at 1 − alpha. */
+  rate: number;
+  ciLow: number;
+  ciHigh: number;
+  /** assigned − windowComplete: still inside their window, never non-converters. */
+  pending: number;
+  expectedAssigned: number;
 }
 
 /** One treatment against the control. */
 export interface ChangeReadoutComparison {
-  variant: string;
+  treatment: string;
   control: string;
-  absoluteLift: number | null;
-  relativeLift: number | null;
-  /** Newcombe interval of treatment − control. */
-  differenceInterval: ChangeReadoutInterval | null;
-  pValue: number | null;
+  absLift: number;
+  /** Null when the control's rate is 0. */
+  relLift: number | null;
+  /** Newcombe interval of absLift at 1 − alpha (this comparison's, Bonferroni-corrected). */
+  diffCiLow: number;
+  diffCiHigh: number;
+  pValue: number;
+  alpha: number;
+  significant: boolean;
   verdict: ChangeReadoutVerdict;
+  reason: ChangeReadoutReason | "";
+}
+
+/** The sample-ratio mismatch check. */
+export interface ChangeReadoutSrm {
+  /** 0 when skipped. */
+  pValue: number;
+  chiSquare: number;
+  failed: boolean;
+  /** Not run: too few units, or fewer than two planned arms. */
+  skipped: boolean;
+  unplannedVariants: string[];
 }
 
 export interface ChangeReadout {
   changeId: string;
-  runId: string;
+  key: string;
+  run: ChangeRun | null;
   verdict: ChangeReadoutVerdict;
-  inconclusiveReason: ChangeInconclusiveReason | null;
-  /** The sample-ratio check over every assigned unit; null while it is skipped (tiny samples). */
-  srmPValue: number | null;
-  /** Units whose rows name more than one variant: counted in no arm. */
-  conflictedUnits: number;
+  reason: ChangeReadoutReason | "";
+  /** Set only when verdict is treatment_better. */
+  bestVariant: string;
   arms: ChangeReadoutArm[];
   comparisons: ChangeReadoutComparison[];
-  /** The pre-registered horizon: per-arm minimum, and the confidence level (0.95). */
-  minSamplePerArm: number;
-  confidence: number;
-  windowHours: number;
-  /** Counted up to here: min(run end, now). */
-  horizon: Date | null;
+  srm: ChangeReadoutSrm;
+  /** Units assigned more than one version: in no arm. */
+  conflicted: number;
+  assigned: number;
+  pending: number;
+  undeclaredVariants: string[];
+  readoutStart: Date | null;
+  readoutEnd: Date | null;
+  readoutEndReason: ChangeReadoutEndReason | "";
+  /** The readout window is closed: the numbers no longer move. */
+  final: boolean;
+  /** The run's frozen metric as the readout applied it (defaults filled in). */
+  metric: ChangeMetric | null;
+  /** The significance level; confidence is 1 − alpha. */
+  alpha: number;
+  horizonNote: string;
+  /** Events older than their retention are gone: early assignments are not counted. */
+  truncatedByRetention: boolean;
 }

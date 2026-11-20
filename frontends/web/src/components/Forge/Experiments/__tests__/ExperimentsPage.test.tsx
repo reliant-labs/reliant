@@ -273,7 +273,7 @@ describe("ChangeDetail", () => {
       }),
     });
     renderDetail(service);
-    expect(await screen.findByTestId("results-pending-service")).toHaveTextContent("Results appear once the readout service ships");
+    expect(await screen.findByTestId("results-not-deployed")).toHaveTextContent("Results appear once the readout service ships");
     const history = await screen.findByTestId("change-history");
     expect(history).toHaveTextContent("alice (an agent acting for them) edited the draft");
     expect(history).toHaveTextContent("percent_bp: 500 → 1000");

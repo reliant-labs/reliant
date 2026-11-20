@@ -14,6 +14,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 
 import { useChangesApi } from "@/services/controlPlane/changes/ChangesApiContext";
 import type { Change } from "@/services/controlPlane/changes/changesTypes";
+import { readoutErrorKind } from "@/services/controlPlane/changes/errors";
 
 export const changeKeys = {
   all: ["changes"] as const,
@@ -58,18 +59,22 @@ export function useChangeEvents(changeId: string) {
   });
 }
 
-/** The readout of the change's open run, or `unavailable` while the control plane has no readout rpc. */
+/**
+ * The readout of the change's experiment run (the open one, else the latest:
+ * the server picks). Every call is a ClickHouse read, so it is never polled
+ * and a known refusal (no experiment, no metric, not deployed) is not
+ * retried.
+ */
 export function useChangeReadout(change: Change | undefined) {
   const api = useChangesApi();
-  const read = api.getChangeReadout;
-  const runId = change?.currentRun?.id ?? "";
-  const query = useQuery({
-    queryKey: changeKeys.readout(change?.id ?? "", runId),
-    queryFn: ({ signal }) => read!(change!.id, runId, signal),
-    enabled: !!read && !!change && !!runId,
+  return useQuery({
+    queryKey: changeKeys.readout(change?.id ?? "", change?.currentRun?.id ?? ""),
+    queryFn: ({ signal }) => api.getChangeReadout(change!.id, undefined, signal),
+    enabled: !!change,
     staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    retry: (failures, error) => readoutErrorKind(error) === "other" && failures < 2,
   });
-  return { unavailable: !read, ...query };
 }
 
 /** Record a mutation's answer: the change at its new revision; the list and trail refetch. */

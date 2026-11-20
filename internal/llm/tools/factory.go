@@ -546,6 +546,10 @@ func (f *ToolsFactory) GetChange() Tool {
 	return NewGetChangeTool(f.store(), f.opts.ChangeController)
 }
 
+func (f *ToolsFactory) ChangeResults() Tool {
+	return NewChangeResultsTool(f.store(), f.opts.ChangeController)
+}
+
 func (f *ToolsFactory) ManageChange() Tool {
 	return NewManageChangeTool(f.store(), f.opts.ChangeController)
 }

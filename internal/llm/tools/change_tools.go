@@ -227,6 +227,9 @@ type ChangeController interface {
 	CreateChange(ctx context.Context, userID, projectID string, in ChangeCreate) (ChangeSummary, error)
 	ApplyChange(ctx context.Context, userID string, op ChangeOp) (ChangeSummary, error)
 	RequestChangeApproval(ctx context.Context, userID, changeID string) (ChangeApprovalCode, error)
+	// GetChangeReadout is one experiment run's results; runID "" lets the
+	// control plane pick (the open experiment run, else the latest).
+	GetChangeReadout(ctx context.Context, userID, changeID, runID string) (ChangeReadout, error)
 }
 
 const changesUnavailable = "Forge Changes is not available in this runtime (it needs the hosted control plane)."
@@ -305,7 +308,7 @@ type GetChangeParams struct {
 	ChangeID string `json:"change_id" jsonschema:"required,description=A change id from list_changes. Never guess one."`
 }
 
-const getChangeDescription = `Show one Forge Change in full: its declared variants (from the environment's current release), mode, who gets it (unit, audience, percentage, split), the preview list, the success metric, the open run, whether the environment needs a person's approval to launch or ramp up, its revision, and its most recent audit events (who did what, and how it was approved). Results (the experiment readout) are not available through this tool yet.`
+const getChangeDescription = `Show one Forge Change in full: its declared variants (from the environment's current release), mode, who gets it (unit, audience, percentage, split), the preview list, the success metric, the open run, whether the environment needs a person's approval to launch or ramp up, its revision, and its most recent audit events (who did what, and how it was approved). For an experiment's results use change_results.`
 
 type getChangeTool struct {
 	repo       runCallerStore
@@ -898,10 +901,27 @@ func describeChangeError(err error, action string) string {
 		return "the environment's current release does not declare that variant. Use a variant get_change lists, or deploy a release that declares it"
 	case "change_exists":
 		return "a change with that key already exists in that environment; list_changes shows its id"
+	case "no_experiment_run":
+		return "this change has never run an experiment, so there are no results yet; manage_change action=launch starts one"
+	case "run_not_experiment":
+		return "that run was a rollout, not an experiment, so it has no results to compare"
+	case "metric_missing":
+		return "the run was launched without a success metric, so there is nothing to measure. Set one with manage_change action=draft (metric) and relaunch"
+	case "readout_plan_invalid":
+		return "the run's split has no control and treatment to compare. Fix the split with manage_change action=draft and relaunch"
+	case "scope_missing":
+		return "the user's credential lacks the scope to read results (obs:read)"
 	}
 	switch apiErr.Code {
 	case "unimplemented":
+		if action == "results" {
+			return "the control plane does not serve experiment results yet (the readout service is not deployed)"
+		}
 		return "this control plane does not run Forge Changes yet"
+	case "unavailable":
+		if action == "results" {
+			return "results need observability, which is not set up for this org yet, or it did not answer; try again later"
+		}
 	case "not_found":
 		return "no such change or environment that the user can see"
 	case "permission_denied":

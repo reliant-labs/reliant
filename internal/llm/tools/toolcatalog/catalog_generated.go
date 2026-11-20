@@ -47,6 +47,13 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"change_results": {
+		Bindable: map[string]struct{}{
+			"change_id": {},
+			"run_id":    {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"code_context": {
 		Bindable: map[string]struct{}{
 			"depth":          {},

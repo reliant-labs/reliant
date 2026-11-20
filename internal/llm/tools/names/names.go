@@ -149,6 +149,8 @@ const (
 	ToolListChanges  = "list_changes"
 	ToolGetChange    = "get_change"
 	ToolManageChange = "manage_change"
+	// An experiment run's results (a ClickHouse read per call).
+	ToolChangeResults = "change_results"
 )
 
 // AllToolNames returns all known tool names for validation.
@@ -157,7 +159,7 @@ var AllToolNames = []string{
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
 	ToolWaitForMachine, ToolListMachines, ToolManageMachine, ToolManageMachinePool,
 	ToolProposeConnection,
-	ToolListChanges, ToolGetChange, ToolManageChange,
+	ToolListChanges, ToolGetChange, ToolManageChange, ToolChangeResults,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,

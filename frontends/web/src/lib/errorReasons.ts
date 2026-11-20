@@ -208,6 +208,14 @@ export const ERROR_REASONS = [
   "variant_not_declared",
   /** CreateChange of a key that already has a change in the environment (AlreadyExists). */
   "change_exists",
+  /** GetChangeReadout of a change that never ran an experiment (FailedPrecondition). */
+  "no_experiment_run",
+  /** GetChangeReadout of a run launched as a rollout, not an experiment (FailedPrecondition). */
+  "run_not_experiment",
+  /** GetChangeReadout of a run frozen with no success metric (FailedPrecondition). */
+  "metric_missing",
+  /** GetChangeReadout of a run whose split has no control and treatment to compare (FailedPrecondition). */
+  "readout_plan_invalid",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

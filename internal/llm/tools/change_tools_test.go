@@ -14,10 +14,12 @@ import (
 
 // fakeChanges is one change, new-checkout in prod, and every op applied to it.
 type fakeChanges struct {
-	change   ChangeSummary
-	ops      []ChangeOp
-	creates  []ChangeCreate
-	applyErr error
+	readout    ChangeReadout
+	readoutErr error
+	change     ChangeSummary
+	ops        []ChangeOp
+	creates    []ChangeCreate
+	applyErr   error
 }
 
 func newFakeChanges() *fakeChanges {
@@ -59,6 +61,10 @@ func (f *fakeChanges) ApplyChange(_ context.Context, _ string, op ChangeOp) (Cha
 }
 func (f *fakeChanges) RequestChangeApproval(context.Context, string, string) (ChangeApprovalCode, error) {
 	return ChangeApprovalCode{SentTo: "a***@example.com"}, nil
+}
+
+func (f *fakeChanges) GetChangeReadout(context.Context, string, string, string) (ChangeReadout, error) {
+	return f.readout, f.readoutErr
 }
 
 func newTestChangeTool(f *fakeChanges) Tool {

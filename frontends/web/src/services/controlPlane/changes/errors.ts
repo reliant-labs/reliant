@@ -97,3 +97,39 @@ export function describeChangeError(error: unknown): string {
       return changeErrorMessage(error) || "The control plane didn't answer. Try again.";
   }
 }
+
+/**
+ * Why the results panel has no readout to draw (GetChangeReadout):
+ *
+ *   not-deployed      Unimplemented / 404: the control plane has no readout
+ *                     service yet.
+ *   no-experiment     "no_experiment_run": the change never ran an experiment.
+ *   not-experiment    "run_not_experiment": the run was a rollout.
+ *   no-metric         "metric_missing": launched without a success metric.
+ *   plan-invalid      "readout_plan_invalid": no control and treatment.
+ *   no-observability  Unavailable: the org's observability is not set up (or
+ *                     did not answer).
+ *   denied            PermissionDenied ("scope_missing": no obs:read) or
+ *                     Unauthenticated.
+ *   other             anything else: the server's words.
+ */
+export type ReadoutErrorKind = "not-deployed" | "no-experiment" | "not-experiment" | "no-metric" | "plan-invalid" | "no-observability" | "denied" | "other";
+
+export function readoutErrorKind(error: unknown): ReadoutErrorKind {
+  if (!(error instanceof ConnectError)) return "other";
+  if (hasErrorReason(error, "no_experiment_run")) return "no-experiment";
+  if (hasErrorReason(error, "run_not_experiment")) return "not-experiment";
+  if (hasErrorReason(error, "metric_missing")) return "no-metric";
+  if (hasErrorReason(error, "readout_plan_invalid")) return "plan-invalid";
+  switch (error.code) {
+    case Code.Unimplemented:
+      return "not-deployed";
+    case Code.Unavailable:
+      return "no-observability";
+    case Code.PermissionDenied:
+    case Code.Unauthenticated:
+      return "denied";
+    default:
+      return "other";
+  }
+}

@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (77 tools)
+- [Other Tools](#other-tools) (78 tools)
 
 ---
 
@@ -2171,6 +2171,7 @@ _Miscellaneous tools and utilities._
 | Tool | Tags | Description |
 |------|------|-------------|
 | [`ask_user`](#ask_user) | coding:default, coding:plan | Ask the user one or more questions. By default the question is posted to the user (in the chat an... |
+| [`change_results`](#change_results) | readonly | Read the results of one Forge Change experiment run, as the control plane computes them: the verd... |
 | [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
@@ -2276,6 +2277,14 @@ Usage notes:
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.
 - Use allow_multiple: true when choices are not mutually exclusive.
 - Group related questions in a single call (up to 4 questions).
+
+---
+
+### change_results
+
+**Tags:** `readonly`
+
+Read the results of one Forge Change experiment run, as the control plane computes them: the verdict (no data, sample-ratio check failed, inconclusive and why, the new version better, or worse), each version's assigned people, people whose metric window has closed, conversions and conversion rate with its confidence interval, each treatment's lift against the control with its interval, the sample-ratio check, and the window the readout covers (still collecting or final). Every call runs a query, so do not poll it. A fixed-horizon test is decided once, at the pre-registered sample size: do not treat an early significant result as a decision.
 
 ---
 
@@ -2426,7 +2435,7 @@ NOTES:
 
 **Tags:** `readonly`
 
-Show one Forge Change in full: its declared variants (from the environment's current release), mode, who gets it (unit, audience, percentage, split), the preview list, the success metric, the open run, whether the environment needs a person's approval to launch or ramp up, its revision, and its most recent audit events (who did what, and how it was approved). Results (the experiment readout) are not available through this tool yet.
+Show one Forge Change in full: its declared variants (from the environment's current release), mode, who gets it (unit, audience, percentage, split), the preview list, the success metric, the open run, whether the environment needs a person's approval to launch or ramp up, its revision, and its most recent audit events (who did what, and how it was approved). For an experiment's results use change_results.
 
 ---
 
