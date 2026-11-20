@@ -5,18 +5,15 @@
  * console sections as top-level rows — Overview, Issues, Performance,
  * Sessions, … Configure — straight from the console's grouped nav
  * (Forge/Console/groupedNav.tsx), so the nav reads like the forge console's.
- * A project with no deployed app shows one quiet line with the way to deploy
- * it instead. While the org-wide Observability views are open, they nest
+ * While the org-wide Observability views are open, they nest
  * under an Observability row here too.
  */
 
 import { useMemo } from "react";
-import { Activity, Gauge, Rocket } from "lucide-react";
+import { Activity, Gauge } from "lucide-react";
 
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
-import { projectChatsPath, withSearch } from "@/lib/paths";
 
-import { START_REPO } from "../../Apps/appStart";
 import { buildGroupedConsoleNav } from "../../Forge/Console/groupedNav";
 import { orgPageOf } from "../../Forge/Console/paths";
 import { useConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
@@ -30,22 +27,16 @@ export interface AppsNavSectionProps {
   onNavigate: (href: string) => void;
 }
 
-/** The current project's app sections, or (no deployed app) the way to deploy one. */
-export function ProjectAppNav({
-  app,
-  projectId,
-  pathname,
-  search,
-  onNavigate,
-}: { app: string | null; projectId: string | null } & AppsNavSectionProps) {
+/**
+ * The current project's app sections. Every project has them (owner,
+ * 2026-11-20): on an app with nothing deployed, each page says what it will
+ * show and how to deploy (Forge/Console/AppSectionEmptyState.tsx).
+ */
+export function ProjectAppNav({ app, pathname, search, onNavigate }: { app: string | null } & AppsNavSectionProps) {
   const orgPage = orgPageOf(pathname);
   return (
     <>
-      {app ? (
-        <AppSections app={app} pathname={pathname} search={search} onNavigate={onNavigate} />
-      ) : (
-        projectId && <NoAppRow projectId={projectId} onNavigate={onNavigate} />
-      )}
+      {app && <AppSections app={app} pathname={pathname} search={search} onNavigate={onNavigate} />}
       {orgPage && <OrgObservabilityRows pathname={pathname} search={search} onNavigate={onNavigate} />}
     </>
   );
@@ -63,7 +54,7 @@ function AppSections({ app, pathname, search, onNavigate }: { app: string } & Ap
       data-app={app}
       className="space-y-0.5 px-2"
     >
-      <SidebarNavTree items={nav.items} onNavigate={onNavigate} testIdPrefix="sidebar-app-section" />
+      <SidebarNavTree items={nav.items} depth={0} onNavigate={onNavigate} testIdPrefix="sidebar-app-section" />
     </section>
   );
 }
@@ -83,32 +74,6 @@ export function AppActivityRow({ app, pathname, search, onNavigate }: { app: str
       current={!!activity.active}
       testId="sidebar-app-activity"
     />
-  );
-}
-
-/** A project with no deployed app: one quiet row that starts a chat to deploy it. */
-function NoAppRow({ projectId, onNavigate }: { projectId: string; onNavigate: (href: string) => void }) {
-  const href = withSearch(projectChatsPath(projectId), { start: START_REPO });
-  return (
-    <div className="px-2" data-testid="sidebar-no-app">
-      <div className="rounded-md border border-border px-3 py-2.5">
-        <p className="text-ui text-foreground">No app deployed yet</p>
-        <p className="mt-0.5 text-meta text-muted-foreground">Deploy this project to see its errors, traces, data and users here.</p>
-        <a
-          href={href}
-          onClick={(event) => {
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-            event.preventDefault();
-            onNavigate(href);
-          }}
-          data-testid="sidebar-no-app-deploy"
-          className="no-color mt-2 inline-flex h-7 items-center gap-1.5 rounded-md px-2 -ml-2 text-ui font-medium text-primary-ink transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Rocket className="size-3.5" aria-hidden="true" />
-          Deploy
-        </a>
-      </div>
-    </div>
   );
 }
 

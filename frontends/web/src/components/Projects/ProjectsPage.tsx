@@ -20,7 +20,6 @@ import Tabs from "@/components/forge-ui/tabs";
 import { useProjects } from "@/hooks/project-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { projectChatsPath, projectsPath } from "@/lib/paths";
-import { isLive } from "@/services/forge/apps";
 
 import { AppsBody } from "../Apps/AppsPage";
 import { useStartBuildingApp } from "../Apps/startBuilding";

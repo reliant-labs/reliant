@@ -232,7 +232,8 @@ export function SidebarRow({
 // --- Nested rows ----------------------------------------------------------
 
 /**
- * How far a nested row's text sits in. Depth 1 lines its icon up under the
+ * How far a nested row's text sits in. Depth 0 is a top-level row (the
+ * project shell's app sections, drawn like the forge console's). Depth 1 lines its icon up under the
  * parent's label (an app's sections under the app); depth 2 lines its label
  * up with depth 1's (Errors under Issues); depth 3 steps in once more (a
  * starred dashboard under Dashboards).
@@ -241,8 +242,8 @@ const SUB_INDENT = ["pl-2", "pl-8", "pl-14", "pl-16"] as const;
 
 export interface SidebarSubRowProps {
   label: string;
-  /** Depth under the top-level row, 1–3. */
-  depth?: 1 | 2 | 3;
+  /** Depth under the top-level row, 1–3 (0: a top-level row itself). */
+  depth?: 0 | 1 | 2 | 3;
   icon?: ReactNode;
   /** The page the row opens; omitted, the row is a button (a group that opens in place). */
   href?: string;
@@ -290,7 +291,7 @@ export function SidebarSubRow({
   const target = cn(
     "flex h-[var(--row-h)] w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-ui transition-colors hover:bg-foreground/5 hover:text-foreground",
     SUB_INDENT[depth],
-    current ? "bg-foreground/[0.08] font-medium text-foreground" : "text-foreground/75",
+    current ? "bg-foreground/[0.08] font-medium text-foreground" : depth === 0 ? "text-foreground" : "text-foreground/75",
     FOCUS_INSET,
   );
   return href ? (
@@ -312,9 +313,9 @@ export function SidebarSubRow({
 }
 
 /** A quiet label over a run of nested rows ("Configure" in an app's sections). */
-export function SidebarSubLabel({ children, depth = 1 }: { children: ReactNode; depth?: 1 | 2 }) {
+export function SidebarSubLabel({ children, depth = 1 }: { children: ReactNode; depth?: 0 | 1 | 2 }) {
   return (
-    <div className={cn("mt-2 flex h-7 items-center text-meta font-medium text-muted-foreground", SUB_INDENT[depth])}>
+    <div className={cn("mt-3 flex h-7 items-center text-meta font-medium text-muted-foreground", SUB_INDENT[depth])}>
       {children}
     </div>
   );

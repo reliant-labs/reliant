@@ -77,8 +77,8 @@ export interface SidebarNavTreeProps {
   items: readonly SidebarNavItem[];
   /** Runs a row's page (the shell's navigate). */
   onNavigate: (href: string) => void;
-  /** Depth of the first level, 1 under a top-level row. */
-  depth?: 1 | 2;
+  /** Depth of the first level: 1 under a top-level row, 0 as top-level rows. */
+  depth?: 0 | 1 | 2;
   /** Prefix for each row's test id (`<prefix>-<label>`). */
   testIdPrefix?: string;
 }
@@ -100,6 +100,7 @@ export function SidebarNavTree({ items, onNavigate, depth = 1, testIdPrefix }: S
         key={`${item.section ?? ""}:${item.label}`}
         item={item}
         depth={depth}
+        top
         onNavigate={onNavigate}
         testIdPrefix={testIdPrefix}
       />,
@@ -111,11 +112,13 @@ export function SidebarNavTree({ items, onNavigate, depth = 1, testIdPrefix }: S
 function NavTreeItem({
   item,
   depth,
+  top = false,
   onNavigate,
   testIdPrefix,
 }: {
   item: SidebarNavItem;
-  depth: 1 | 2 | 3;
+  depth: 0 | 1 | 2 | 3;
+  top?: boolean;
   onNavigate: (href: string) => void;
   testIdPrefix?: string;
 }) {
@@ -138,7 +141,7 @@ function NavTreeItem({
         label={item.label}
         depth={depth}
         // Icons only at the first level: below it, labels line up instead.
-        icon={depth === 1 ? item.icon : undefined}
+        icon={top ? item.icon : undefined}
         href={href}
         onClick={href ? () => onNavigate(href) : undefined}
         current={!!item.active}
