@@ -324,7 +324,12 @@
                 "group": "Machines",
                 "pages": [
                   "guides/machines/connect-computer-as-machine",
-                  "guides/machines/run-agents-on-your-own-server"
+                  "guides/machines/run-agents-on-your-own-server",
+                  "guides/machines/pin-workflow-to-machine",
+                  "guides/machines/manage-cloud-machines-cli",
+                  "guides/machines/share-dev-server-preview-url",
+                  "guides/machines/sandbox-agent-commands-credentials-none",
+                  "guides/machines/troubleshoot-offline-machine"
                 ]
               }
             ]
