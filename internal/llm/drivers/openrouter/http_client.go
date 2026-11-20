@@ -8,12 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -210,49 +207,17 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		"messageCount", len(request.Messages),
 		"bodySize", len(requestBody))
 
-	// Send request with retry logic for transient errors
-	httpClient := llm.ResilientHTTPClient()
-	var body []byte
-	for attempt := 1; ; attempt++ {
-		httpReq, err := c.newOpenRouterRequest(ctx, requestBody)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create request: %w", err)
-		}
-
-		resp, err := httpClient.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("failed to send request: %w", err)
-		}
-
-		body, err = io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response: %w", err)
-		}
-
-		logging.DebugContext(ctx, "OpenRouter response", "status", resp.StatusCode, "bodySize", len(body))
-
-		if resp.StatusCode == http.StatusOK {
-			break
-		}
-
-		if !isRetryableStatus(resp.StatusCode) || attempt > models.MaxRetries {
-			return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-		}
-
-		delay := retryDelay(attempt, resp)
-		logging.WarnContext(ctx, "OpenRouter retrying request",
-			"status", resp.StatusCode,
-			"attempt", attempt,
-			"maxRetries", models.MaxRetries,
-			"delay", delay)
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(delay):
-			continue
-		}
+	// Send the request through the retry ladder
+	resp, err := c.openRequest(ctx, llm.ResilientHTTPClient(), requestBody, nil)
+	if err != nil {
+		return nil, err
 	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	logging.DebugContext(ctx, "OpenRouter response", "status", resp.StatusCode, "bodySize", len(body))
 
 	// Parse response
 	var openRouterResp OpenRouterResponse
@@ -408,49 +373,17 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		"hasReasoning", request.Reasoning != nil,
 		"bodySize", len(requestBody))
 
-	// Send request with retry logic for transient errors
-	httpClient := llm.ResilientHTTPClient()
-	var body []byte
-	for attempt := 1; ; attempt++ {
-		httpReq, err := c.newOpenRouterRequest(ctx, requestBody)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create request: %w", err)
-		}
-
-		resp, err := httpClient.Do(httpReq)
-		if err != nil {
-			return nil, fmt.Errorf("failed to send request: %w", err)
-		}
-
-		body, err = io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response: %w", err)
-		}
-
-		logging.DebugContext(ctx, "OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", len(body))
-
-		if resp.StatusCode == http.StatusOK {
-			break
-		}
-
-		if !isRetryableStatus(resp.StatusCode) || attempt > models.MaxRetries {
-			return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
-		}
-
-		delay := retryDelay(attempt, resp)
-		logging.WarnContext(ctx, "OpenRouter retrying Gemini request",
-			"status", resp.StatusCode,
-			"attempt", attempt,
-			"maxRetries", models.MaxRetries,
-			"delay", delay)
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(delay):
-			continue
-		}
+	// Send the request through the retry ladder
+	resp, err := c.openRequest(ctx, llm.ResilientHTTPClient(), requestBody, nil)
+	if err != nil {
+		return nil, err
 	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	logging.DebugContext(ctx, "OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", len(body))
 
 	// Parse response
 	var openRouterResp OpenRouterResponse
