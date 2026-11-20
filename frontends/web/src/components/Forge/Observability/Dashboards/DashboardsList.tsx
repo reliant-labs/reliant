@@ -44,7 +44,7 @@
  */
 
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Boxes, Building2, ChevronDown, ChevronRight, LayoutDashboard, Lock, Plus, Search, Server, Star, Tag as TagIcon, Users, type LucideIcon } from "lucide-react";
+import { Boxes, ChevronDown, ChevronRight, LayoutDashboard, Lock, Plus, Search, Star } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
@@ -64,9 +64,10 @@ import { formatAgo } from "../format";
 import { appLabel, type ObsEnvironment } from "../obsPlace";
 import { OBS_TOPICS, ObsError } from "../ObsStates";
 import { DashboardHeader } from "./DashboardHeader";
-import { DASHBOARD_GROUPS, GROUP_LABELS, groupOf, listSections, SECTION_ABOUT, SECTION_LABELS, workloadOf, type DashboardGroup, type ListSection } from "./dashboardGroups";
-import { displayTitle, landingOf, withoutSuperseded, type Landing as LandingModel, type LandingCard } from "./dashboardHubs";
-import { filterIndex, galleryTemplates, isStandardBuiltin, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
+import { DASHBOARD_GROUPS, GROUP_LABELS, listSections, SECTION_ABOUT, SECTION_LABELS, workloadOf, type DashboardGroup, type ListSection } from "./dashboardGroups";
+import { displayTitle, landingOf, withoutSuperseded } from "./dashboardHubs";
+import { filterIndex, galleryBadgeOf, galleryTemplates, isStandardBuiltin, NAV_STARRED, ownerOf, ownersOf, SOURCE_LABELS, starredOf, type SourceFilter } from "./dashboardModel";
+import { GalleryGrid, GalleryToolbar, galleryItems, itemOf } from "./DashboardsGallery";
 import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
 import { BUTTON_PRIMARY, INK_LINK, Menu, StarButton } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
@@ -162,6 +163,23 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
   const toggleStar = (d: DashboardSummary) => star.mutate({ ref: d.ref, starred: !d.starred });
   // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
   const writeHint = canWrite ? undefined : obsLock.reason ?? "Only organization admins can create dashboards.";
+
+  // The gallery (project mode): every match as a card when a search or a filter is on, else the landing's cards then the team's own.
+  const badgeCounts = useMemo(() => {
+    const matches = filterIndex(all, { q: search.q, group: search.group, owner: search.owner });
+    const counts = { all: matches.length, builtin: 0, repo: 0, custom: 0 };
+    for (const d of matches) counts[galleryBadgeOf(d)] += 1;
+    return counts;
+  }, [all, search.q, search.group, search.owner]);
+  const galleryShown = useMemo(() => {
+    if (orgWide) return [];
+    const items = filtered ? shown.map((d) => itemOf(d, cardAbout, project)) : (() => {
+      const landing = landingOf(all, project);
+      return galleryItems(landing.cards, landing.own, cardAbout, project);
+    })();
+    // Stars first; otherwise the landing's order.
+    return [...items].sort((a, b) => Number(b.dashboard.starred) - Number(a.dashboard.starred));
+  }, [orgWide, filtered, shown, all, project]);
 
   const header = (
     <DashboardHeader
@@ -295,7 +313,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
   } else if (all.length === 0) {
     list = empty;
   } else {
-    list = (
+    list = orgWide ? (
       <div className="space-y-4">
         <Toolbar search={search} onSearch={onToolbar} owners={owners} filtered={filtered} apps={appFilter ? apps : undefined} appFilter={appFilter} onClear={clearFilters} />
         {shown.length === 0 ? (
@@ -304,9 +322,9 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
             <button type="button" className={INK_LINK} onClick={clearFilters}>
               Clear the filters
             </button>
-            {orgWide ? "." : " or start from a template below."}
+            .
           </Card>
-        ) : orgWide ? (
+        ) : (
           <>
             <StarredStrip dashboards={starred} href={hrefs.dashboard} filtered={filtered} />
             <DashboardTable
@@ -319,17 +337,31 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
               onStar={toggleStar}
             />
           </>
+        )}
+      </div>
+    ) : (
+      // The project's page is a gallery (U6e): one card per dashboard, forge's hubs one card each.
+      <div className="space-y-4" data-testid="dashboards-list">
+        <GalleryToolbar q={search.q} source={search.source} counts={badgeCounts} onSearch={onToolbar} />
+        {shown.length === 0 ? (
+          <Card className="py-8 text-center text-sm text-ink-muted" data-testid="dashboards-no-match">
+            No dashboards match.{" "}
+            <button type="button" className={INK_LINK} onClick={clearFilters}>
+              Clear the filters
+            </button>{" "}
+            or start from a template below.
+          </Card>
         ) : (
-          <>
-            <StarredStrip dashboards={starred} href={hrefs.dashboard} filtered={filtered} project={project} />
-            {filtered ? (
-              <div data-testid="dashboards-list">
-                <DashboardRows testId="dashboards-results" label="Matching dashboards" dashboards={shown} project={project} environments={environments} href={hrefs.dashboard} onStar={toggleStar} withGroup />
-              </div>
-            ) : (
-              <Landing landing={landingOf(all, project)} project={project} environments={environments} href={hrefs.dashboard} onStar={toggleStar} canWrite={canWrite} />
-            )}
-          </>
+          <GalleryGrid
+            items={galleryShown}
+            project={project}
+            envIds={envId ? [envId] : []}
+            href={hrefs.dashboard}
+            onStar={toggleStar}
+            onNew={filtered ? null : () => setCreating("blank")}
+            canWrite={canWrite}
+            writeHint={writeHint}
+          />
         )}
       </div>
     );
@@ -439,57 +471,6 @@ function StarredStrip({ dashboards, href, filtered, project }: { dashboards: Das
   );
 }
 
-// ── The project's landing ───────────────────────────────────────────────────
-
-const CARD_ICON: Record<string, LucideIcon> = { overview: LayoutDashboard, product: Users, services: Server, jobs: Server, releases: TagIcon, platform: Boxes, custom: LayoutDashboard };
-
-/** The cards (hubs and provided dashboards), then the team's own dashboards as rows. */
-function Landing({
-  landing,
-  project,
-  environments,
-  href,
-  onStar,
-  canWrite,
-}: {
-  landing: LandingModel;
-  project: string;
-  environments: readonly ObsEnvironment[];
-  href: (ref: DashboardRef) => string;
-  onStar: (d: DashboardSummary) => void;
-  canWrite: boolean;
-}) {
-  return (
-    <div className="space-y-6" data-testid="dashboards-list">
-      {landing.cards.length > 0 && (
-        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Dashboards forge and Reliant provide" data-testid="dashboards-hubs">
-          {landing.cards.map((card) => (
-            <LandingCardItem key={card.id} card={card} href={href} onStar={onStar} />
-          ))}
-        </ul>
-      )}
-      <section className="space-y-2" aria-labelledby="dashboards-own-heading">
-        <div className="flex items-baseline gap-2">
-          <h2 id="dashboards-own-heading" className="text-sm font-medium text-ink">
-            Your dashboards
-          </h2>
-          <span className="text-xs tabular-nums text-ink-muted" data-testid="dashboards-own-count">
-            {landing.own.length}
-          </span>
-          <span className="hidden text-xs text-ink-muted sm:inline">Declared in {project}&apos;s repo or saved here</span>
-        </div>
-        {landing.own.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border px-3 py-3 text-sm text-ink-muted" data-testid="dashboards-own-empty">
-            {canWrite ? "None yet. Start one from a template below, or save a copy of any dashboard to change it." : "None yet. A dashboard the team saves here, or declares in the repo, is listed here."}
-          </p>
-        ) : (
-          <DashboardRows testId="dashboards-own" label="Your dashboards" dashboards={landing.own} project={project} environments={environments} href={href} onStar={onStar} />
-        )}
-      </section>
-    </div>
-  );
-}
-
 /** What forge's own dashboards are for, in a line: their descriptions are written for the dashboard, not a card. */
 const CARD_ABOUT: Record<string, string> = {
   overview: "The whole project at a glance: requests, errors, latency, traffic and users",
@@ -498,132 +479,10 @@ const CARD_ABOUT: Record<string, string> = {
   frontend: "Your frontend as visitors see it: sessions, errors and web vitals",
 };
 
-const CARD = "relative flex min-h-24 flex-col rounded-lg border border-border bg-surface px-3.5 py-3 transition-colors hover:border-border-strong hover:bg-ink/5";
-const CARD_LINK =
-  "min-w-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:rounded-lg after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring";
-
-/** One card: a hub (its tabs named under it) or one dashboard (with its star). The whole card opens it. */
-function LandingCardItem({ card, href, onStar }: { card: LandingCard; href: (ref: DashboardRef) => string; onStar: (d: DashboardSummary) => void }) {
-  if (card.kind === "hub") {
-    const { hub } = card;
-    const Icon = CARD_ICON[hub.id] ?? LayoutDashboard;
-    const workloads = hub.id === "services" ? hub.tabs.filter((tab) => workloadOf(tab.summary)).length : 0;
-    const named = hub.tabs.slice(0, 3).map((tab) => tab.label);
-    const more = hub.tabs.length - named.length;
-    return (
-      <li className={CARD} data-testid={`dashboards-hub-${hub.id}`}>
-        <span className="flex min-w-0 items-center gap-2">
-          <Icon className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-          <Link href={href(hub.tabs[0]!.ref)} className={CARD_LINK}>
-            {hub.title}
-          </Link>
-          {workloads > 0 && (
-            <span className="text-xs tabular-nums text-ink-muted" aria-label={`${workloads} services`}>
-              {workloads}
-            </span>
-          )}
-        </span>
-        <span className="mt-1 line-clamp-2 text-xs text-ink-muted">{hub.about}</span>
-        <span className="mt-auto truncate pt-2 text-xs text-ink-muted" data-testid={`dashboards-hub-${hub.id}-tabs`}>
-          {named.join(" · ")}
-          {more > 0 ? ` · +${more} more` : ""}
-        </span>
-      </li>
-    );
-  }
-  const d = card.dashboard;
-  const target = href(d.ref);
-  const Icon = d.source === "builtin" && !isStandardBuiltin(d) ? Building2 : (CARD_ICON[groupOf(d)] ?? LayoutDashboard);
-  const note = d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d) ? "Requires cost-read permission" : null;
-  return (
-    <li className={CARD} data-testid={`dashboards-hub-${d.ref.key}`}>
-      <span className="flex min-w-0 items-center gap-2">
-        <Icon className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-        {target ? (
-          <Link href={target} aria-label={d.title} className={CARD_LINK}>
-            {card.title}
-          </Link>
-        ) : (
-          <span className="min-w-0 truncate text-sm font-medium text-ink">{card.title}</span>
-        )}
-        <span className="relative z-10 -my-1.5 -mr-1.5 ml-auto shrink-0">
-          <StarButton starred={d.starred} title={d.title} onToggle={() => onStar(d)} />
-        </span>
-      </span>
-      <span className="mt-1 line-clamp-2 text-xs text-ink-muted">{(d.source !== "builtin" || isStandardBuiltin(d) ? CARD_ABOUT[d.ref.key] : undefined) ?? (d.description || "\u00a0")}</span>
-      {note && <span className="mt-auto pt-2 text-xs text-ink-muted">{note}</span>}
-    </li>
-  );
-}
-
-/**
- * Dashboards as quiet rows: the name, its tags, a line of description where
- * there is room, when it last changed (where it came from in the tooltip),
- * and the star. The whole row opens it. `withGroup` names the group, for
- * search results that mix them.
- */
-function DashboardRows({
-  testId,
-  label,
-  dashboards,
-  project,
-  environments,
-  href,
-  onStar,
-  withGroup = false,
-}: {
-  testId: string;
-  label: string;
-  dashboards: DashboardSummary[];
-  project: string;
-  environments: readonly ObsEnvironment[];
-  href: (ref: DashboardRef) => string;
-  onStar: (d: DashboardSummary) => void;
-  withGroup?: boolean;
-}) {
-  return (
-    <Card padding="none" className="overflow-hidden">
-      <ul className="divide-y divide-border" aria-label={label} data-testid={testId}>
-        {dashboards.map((d) => {
-          const target = href(d.ref);
-          const title = displayTitle(d.title, project);
-          const tags = d.tags ?? [];
-          return (
-            <li key={rowKey(d)} className={cn("flex min-h-10 items-center gap-3 px-3 py-1.5", target && "relative hover:bg-ink/5")} data-testid="dashboards-row">
-              <span className="flex min-w-0 flex-1 items-center gap-2">
-                {target ? (
-                  <Link
-                    href={target}
-                    aria-label={d.title}
-                    className="min-w-0 shrink-0 truncate text-sm font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring sm:max-w-[60%]"
-                  >
-                    {title}
-                  </Link>
-                ) : (
-                  <span className="min-w-0 truncate text-sm font-medium text-ink">{title}</span>
-                )}
-                {withGroup && <span className="shrink-0 text-xs text-ink-muted">{d.source === "builtin" && !isStandardBuiltin(d) ? "Built-in" : GROUP_LABELS[groupOf(d)]}</span>}
-                {tags.length > 0 && (
-                  <span className="hidden min-w-0 items-center gap-1 overflow-hidden sm:inline-flex">
-                    {tags.slice(0, 3).map((tag) => (
-                      <Tag key={tag}>{tag}</Tag>
-                    ))}
-                  </span>
-                )}
-                {d.description && tags.length === 0 && !withGroup && <span className="hidden min-w-0 flex-1 truncate text-xs text-ink-muted lg:block">{d.description}</span>}
-              </span>
-              <span className="relative z-10 hidden shrink-0 md:inline">
-                <UpdatedCell d={d} environments={environments} />
-              </span>
-              <span className="relative z-10 -my-1 shrink-0">
-                <StarButton starred={d.starred} title={d.title} onToggle={() => onStar(d)} />
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
+/** A card's line: forge's own dashboards in our words, what a built-in needs, else the dashboard's description. */
+function cardAbout(d: DashboardSummary): string {
+  if (d.source === "builtin" && d.viewKind !== "llm-usage" && !isStandardBuiltin(d)) return d.description || "Requires cost-read permission";
+  return (d.source !== "builtin" || isStandardBuiltin(d) ? CARD_ABOUT[d.ref.key] : undefined) ?? d.description;
 }
 
 /**
@@ -806,18 +665,6 @@ function SourceCell({ d, environments }: { d: DashboardSummary; environments: re
     <Tooltip content={originOf(d, environments)}>
       <span className="text-xs text-ink-muted underline decoration-dotted decoration-ink-muted/50 underline-offset-2" data-testid="dashboards-row-source">
         {SOURCE_LABELS[d.source]}
-      </span>
-    </Tooltip>
-  );
-}
-
-/** When a dashboard last changed, quietly; where it came from (the release, the file, who saved it) is the tooltip. */
-function UpdatedCell({ d, environments }: { d: DashboardSummary; environments: readonly ObsEnvironment[] }) {
-  const updated = updatedOf(d);
-  return (
-    <Tooltip content={originOf(d, environments)}>
-      <span className="text-xs text-ink-muted" data-testid="dashboards-row-source">
-        {updated === "—" ? SOURCE_LABELS[d.source] : `${SOURCE_LABELS[d.source]} · ${updated}`}
       </span>
     </Tooltip>
   );
