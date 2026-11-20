@@ -105,7 +105,7 @@ describe("transcript prose type", () => {
   it("draws the user turn as a neutral right-aligned bubble", () => {
     renderOn("desktop", MessageRole.USER);
     const bubble = screen.getByText("Hello there.").closest(".user-message-content");
-    expect(bubble).toHaveClass("bg-bubble", "rounded-2xl", "max-w-[85%]");
+    expect(bubble).toHaveClass("bg-bubble", "rounded-2xl", "max-w-[70%]");
     expect(bubble?.className).not.toMatch(/\b(border|shadow|bg-primary)/);
     expect(bubble?.parentElement).toHaveClass("flex-col", "items-end");
   });

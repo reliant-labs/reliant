@@ -10,7 +10,7 @@ interface PermissionsPanelWrapperProps {
  */
 export function PermissionsPanelWrapper({ children }: PermissionsPanelWrapperProps) {
   return (
-    <div className="px-4 sm:px-6 flex-shrink-0">
+    <div className="px-[var(--chat-gutter)] flex-shrink-0">
       <div className="max-w-[var(--chat-column)] mx-auto flex justify-end">
         {children}
       </div>
