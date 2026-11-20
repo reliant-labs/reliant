@@ -131,8 +131,8 @@ By the end of this guide your CI can start an agent with one HTTP request: when 
 
     ```text
     OCCURRED AT           OUTCOME   CHAT                                  DEFINITION                                                                           DETAIL
-    2026-11-20T10:30:00Z  skipped   -                                     machine ovh-build-1 at .reliant/workflows/deploy-failure-triage.yaml @ main db00adb  filter did not match: trigger.payload.body.?status.orValue('') == 'failed'
-    2026-11-20T10:29:59Z  launched  a608a0cd-13a7-5b62-8454-7373d6db743d  machine ovh-build-1 at .reliant/workflows/deploy-failure-triage.yaml @ main db00adb  -
+    2026-11-20T10:30:00Z  skipped   -                                     machine build-box at .reliant/workflows/deploy-failure-triage.yaml @ main db00adb  filter did not match: trigger.payload.body.?status.orValue('') == 'failed'
+    2026-11-20T10:29:59Z  launched  a608a0cd-13a7-5b62-8454-7373d6db743d  machine build-box at .reliant/workflows/deploy-failure-triage.yaml @ main db00adb  -
     ```
 
     Open the launched run under **Workflows → Runs**, or follow it with `reliant workflow follow <chat-id>`. Its first message is the prompt with `service: checkout-api` filled in, and the `record` step says `Deploy of checkout-api failed at commit 9f2c1ab.`
