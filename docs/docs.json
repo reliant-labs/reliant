@@ -297,7 +297,8 @@
                   "guides/workflows/review-pull-requests-with-ai",
                   "guides/workflows/github-issues-to-pull-requests",
                   "guides/workflows/production-alerts-to-github-issues",
-                  "guides/workflows/production-error-to-fix"
+                  "guides/workflows/production-error-to-fix",
+                  "guides/workflows/ai-security-review-pull-requests"
                 ]
               },
               {
@@ -382,7 +383,8 @@
                   "guides/forge/build-app-from-one-prompt",
                   "guides/forge/deploy-static-site-cdn",
                   "guides/forge/bring-existing-app-any-language",
-                  "guides/forge/adopt-existing-vite-nextjs"
+                  "guides/forge/adopt-existing-vite-nextjs",
+                  "guides/forge/port-codebase-to-forge"
                 ]
               },
               {
