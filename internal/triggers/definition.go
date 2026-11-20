@@ -65,7 +65,7 @@ func (w LaunchWorkflows) FiringDefinition(ctx context.Context, t *core.Trigger) 
 	}
 	pin := w.CatalogPin
 	if pinner, ok := w.Repo.(catalogPinner); ok && pin == "" && t.ProjectID != "" {
-		p, err := pinner.PinProjectCatalog(ctx, db.CatalogPinScope{ProjectID: t.ProjectID, DaemonID: catalogMachine(t), UserID: t.UserID})
+		p, err := pinDeliveryCatalog(ctx, pinner, db.CatalogPinScope{ProjectID: t.ProjectID, DaemonID: catalogMachine(t), UserID: t.UserID})
 		if err != nil {
 			return nil, &workflowsource.StoreError{Err: fmt.Errorf("pin the workflow catalog trigger %s fires against: %w", t.ID, err)}
 		}
@@ -298,7 +298,7 @@ func attributePinned(ctx context.Context, store any, t *core.Trigger, def *core.
 	if !ok {
 		return
 	}
-	catalog, found, err := pinned.GetPinnedProjectCatalog(ctx, pin)
+	catalog, found, err := workflowsource.ReadPinnedCatalog(ctx, pinned, pin)
 	if err != nil || !found {
 		logging.WarnContext(ctx, "Could not read the pinned catalog a trigger fired against; recording the definition without its machine",
 			"trigger_id", t.ID, "catalog_pin", pin, "error", err)

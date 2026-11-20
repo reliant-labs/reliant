@@ -39,6 +39,7 @@ const AccessFreshness = core.IntegrationAccessFreshness
 type EventsOptions struct {
 	Store    EventsStore
 	Intake   Intake
+	Inbox    ReceiptStore
 	Registry *Registry
 	// PublicURL is this server's externally reachable base (PUBLIC_URL).
 	// Required: a provider signs the URL it was given, and without the base
@@ -143,7 +144,7 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	e.recordAndAck(ctx, w, providerID, delivery, nil)
+	e.recordAndAck(ctx, w, providerID, delivery, nil, req.ReceivedAt)
 }
 
 // recordAndAck applies a parsed delivery's revocations, routes its events
@@ -151,9 +152,26 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 // connection-account routes the events may reach (a ConnectionSigned
 // provider's routes whose connection verified the delivery); nil means
 // every route of the integration.
-func (e *EventsReceiver) recordAndAck(reqCtx context.Context, w http.ResponseWriter, providerID string, delivery *Delivery, verified []*core.IntegrationTriggerRoute) {
+func (e *EventsReceiver) recordAndAck(reqCtx context.Context, w http.ResponseWriter, providerID string, delivery *Delivery, verified []*core.IntegrationTriggerRoute, receivedAt time.Time) {
 	ctx, cancel := recordingContext(reqCtx)
 	defer cancel()
+	if e.opts.Inbox != nil {
+		if len(delivery.Events) != 0 || len(delivery.Revocations) != 0 {
+			receipt, err := newIntegrationReceipt(providerID, delivery, verified, receivedAt)
+			var created bool
+			if err == nil {
+				created, err = e.opts.Inbox.RecordTriggerDelivery(ctx, receipt, delivery.Revocations)
+			}
+			recordReceiptMetric(core.TriggerDeliveryIntegration, created, err)
+			if err != nil {
+				logging.ErrorContext(ctx, "integration inbox receipt failed", "provider", providerID, "receipt_id", receipt.ID)
+				writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
+				return
+			}
+		}
+		ackDelivery(w, delivery)
+		return
+	}
 	// Revocations first: an event in the same delivery routes under the
 	// reduced access. A failure here is a 503 like a routing failure — the
 	// receiver must not ack a revocation it did not apply.
@@ -162,13 +180,17 @@ func (e *EventsReceiver) recordAndAck(reqCtx context.Context, w http.ResponseWri
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
-	if err := e.route(ctx, providerID, delivery.Events, verified); err != nil {
+	if err := e.route(ctx, providerID, delivery.Events, verified, nil); err != nil {
 		// A partial failure still recorded what it could. Asking the sender
 		// to retry is right: the recorded half dedupes.
 		logging.ErrorContext(ctx, "integration delivery could not be fully recorded", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
+	ackDelivery(w, delivery)
+}
+
+func ackDelivery(w http.ResponseWriter, delivery *Delivery) {
 	if delivery.Ack != nil {
 		writeResponse(w, delivery.Ack)
 		return
@@ -249,7 +271,7 @@ func (e *EventsReceiver) serveConnectionSigned(w http.ResponseWriter, r *http.Re
 	}
 	// The verified routes all record `account`; an event claiming another
 	// account would be the provider's bug, and routeMatches drops it.
-	e.recordAndAck(ctx, w, providerID, delivery, verified)
+	e.recordAndAck(ctx, w, providerID, delivery, verified, req.ReceivedAt)
 }
 
 func (e *EventsReceiver) verifyWithConnection(ctx context.Context, provider ConnectionSigned, req *Request, userID, connectionID string) bool {
@@ -284,7 +306,12 @@ func (e *EventsReceiver) verifyWithConnection(ctx context.Context, provider Conn
 // verified, when non-nil, REPLACES the integration's route list: the
 // delivery was verified per connection, and only those connections' routes
 // may hear it. It is never widened to the full list.
-func (e *EventsReceiver) route(ctx context.Context, providerID string, events []Event, verified []*core.IntegrationTriggerRoute) error {
+type routeAttempt struct {
+	receivedAt    time.Time
+	beforeTrigger func(context.Context) error
+}
+
+func (e *EventsReceiver) route(ctx context.Context, providerID string, events []Event, verified []*core.IntegrationTriggerRoute, attempt *routeAttempt) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -307,12 +334,19 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 					"provider", providerID, "type", ev.Type)
 				continue
 			}
-			errs = append(errs, e.routeByAccess(ctx, providerID, ev))
+			err := e.routeByAccess(ctx, providerID, ev, attempt)
+			if errors.Is(err, errInboxLeaseLost) {
+				return err
+			}
+			errs = append(errs, err)
 			continue
 		}
 		if !routesLoaded {
 			var err error
-			if routes, err = e.opts.Store.ListIntegrationTriggers(ctx, providerID); err != nil {
+			readCtx, cancel := context.WithTimeout(ctx, recordTimeout)
+			routes, err = e.opts.Store.ListIntegrationTriggers(readCtx, providerID)
+			cancel()
+			if err != nil {
 				return fmt.Errorf("list %s triggers: %w", providerID, err)
 			}
 			routesLoaded = true
@@ -321,13 +355,11 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 			if !routeMatches(r, ev) {
 				continue
 			}
-			if ok, err := e.policyAdmits(ctx, providerID, r.Trigger); !ok {
-				errs = append(errs, err)
-				continue
+			err := e.routeToTrigger(ctx, providerID, r.Trigger, ev, attempt)
+			if errors.Is(err, errInboxLeaseLost) {
+				return err
 			}
-			if _, err := e.opts.Intake.Accept(ctx, r.Trigger, toInbound(providerID, r.Trigger, ev), triggers.AcceptOptions{}); err != nil {
-				errs = append(errs, fmt.Errorf("trigger %s: %w", r.Trigger.ID, err))
-			}
+			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
@@ -336,8 +368,10 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 // routeByAccess hands an access-gated event to every trigger whose owner can
 // see its resource. The decision is made before any row is written, so the
 // event never appears in the history of a user who cannot see it.
-func (e *EventsReceiver) routeByAccess(ctx context.Context, providerID string, ev Event) error {
-	matched, err := e.opts.Store.ListAccessRoutedTriggers(ctx, providerID, ev.AccountKey, ev.ResourceKey, e.now().Add(-AccessFreshness))
+func (e *EventsReceiver) routeByAccess(ctx context.Context, providerID string, ev Event, attempt *routeAttempt) error {
+	readCtx, cancel := context.WithTimeout(ctx, recordTimeout)
+	matched, err := e.opts.Store.ListAccessRoutedTriggers(readCtx, providerID, ev.AccountKey, ev.ResourceKey, e.now().Add(-AccessFreshness))
+	cancel()
 	if err != nil {
 		return fmt.Errorf("list %s triggers for %s/%s: %w", providerID, ev.AccountKey, ev.ResourceKey, err)
 	}
@@ -347,15 +381,34 @@ func (e *EventsReceiver) routeByAccess(ctx context.Context, providerID string, e
 		if err != nil || !t.Enabled || !eventInScope(t, cfg, ev) {
 			continue
 		}
-		if ok, err := e.policyAdmits(ctx, providerID, t); !ok {
-			errs = append(errs, err)
-			continue
+		err = e.routeToTrigger(ctx, providerID, t, ev, attempt)
+		if errors.Is(err, errInboxLeaseLost) {
+			return err
 		}
-		if _, err := e.opts.Intake.Accept(ctx, t, toInbound(providerID, t, ev), triggers.AcceptOptions{}); err != nil {
-			errs = append(errs, fmt.Errorf("trigger %s: %w", t.ID, err))
-		}
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
+}
+
+func (e *EventsReceiver) routeToTrigger(ctx context.Context, providerID string, t *core.Trigger, ev Event, attempt *routeAttempt) error {
+	if attempt != nil {
+		if t.CreatedAt.After(attempt.receivedAt) {
+			return nil
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, recordTimeout)
+		defer cancel()
+		if err := attempt.beforeTrigger(ctx); err != nil {
+			return err
+		}
+	}
+	if ok, err := e.policyAdmits(ctx, providerID, t); !ok {
+		return err
+	}
+	if _, err := e.opts.Intake.Accept(ctx, t, toInbound(providerID, t, ev), triggers.AcceptOptions{}); err != nil {
+		return fmt.Errorf("trigger %s: %w", t.ID, err)
+	}
+	return nil
 }
 
 // policyAdmits applies t's org's integrations policy before an event reaches

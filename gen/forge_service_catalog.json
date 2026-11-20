@@ -497,6 +497,7 @@
         "TemporalClient",
         "TemporalWorker",
         "TokenAuthority",
+        "TriggerDeliveryRelay",
         "TriggerPollers",
         "UserUpdateHub",
         "Vault",
@@ -53980,6 +53981,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewTriggerAlerting"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "TriggerDeliveryRelay",
+      "name": "TriggerDeliveryRelay",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.TriggerDeliveryRelay",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewTriggerDeliveryRelay"
       },
       "methods": [],
       "implementation_candidates": []

@@ -39,6 +39,7 @@ type SecretOpener interface {
 type HooksOptions struct {
 	Store  HooksStore
 	Intake Intake
+	Inbox  ReceiptStore
 	// Opener opens HMAC secrets; nil disables signature verification (a
 	// trigger configured for it then accepts only its token).
 	Opener SecretOpener
@@ -124,19 +125,32 @@ func (h *HooksReceiver) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	recCtx, cancel := recordingContext(ctx)
 	defer cancel()
-	res, err := h.opts.Intake.Accept(recCtx, trigger, triggers.InboundEvent{
+	ev := triggers.InboundEvent{
 		Kind:       core.TriggerEventKindWebhook,
 		DedupeKey:  trigger.ID + ":" + deliveryKey(r.Header, body, now),
 		OccurredAt: now,
 		Payload:    payload,
 		Sender:     webhookSender(trigger),
-	}, triggers.AcceptOptions{})
+	}
+	if h.opts.Inbox != nil {
+		h.receiveHook(recCtx, w, r, trigger, ev, now)
+		return
+	}
+	res, err := h.opts.Intake.Accept(recCtx, trigger, ev, triggers.AcceptOptions{})
 	if err != nil {
 		logging.ErrorContext(r.Context(), "webhook delivery could not be recorded", "trigger_id", trigger.ID, "error", err)
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
-	reply, err := json.Marshal(map[string]any{"event_id": res.EventID, "outcome": res.Outcome, "duplicate": res.Duplicate})
+	writeHookAccepted(w, res)
+}
+
+func writeHookAccepted(w http.ResponseWriter, res *triggers.AcceptResult) {
+	writeHookJSON(w, map[string]any{"event_id": res.EventID, "outcome": res.Outcome, "duplicate": res.Duplicate})
+}
+
+func writeHookJSON(w http.ResponseWriter, body map[string]any) {
+	reply, err := json.Marshal(body)
 	if err != nil {
 		writeStatus(w, http.StatusAccepted, "accepted")
 		return
@@ -260,6 +274,14 @@ func VerifyHMAC(cfg *core.WebhookHMACConfig, secret, body []byte, signature stri
 // (triggers.Intake.declaredDedupeKey), for senders such as Alertmanager that
 // send no idempotency header and repeat the same event with a changed body.
 func deliveryKey(header http.Header, body []byte, now time.Time) string {
+	if key := explicitDeliveryKey(header); key != "" {
+		return key
+	}
+	sum := sha256.Sum256(body)
+	return fmt.Sprintf("body:%s:%d", hex.EncodeToString(sum[:16]), now.Truncate(bodyBucket).Unix())
+}
+
+func explicitDeliveryKey(header http.Header) string {
 	for _, name := range idempotencyHeaders {
 		if key := strings.TrimSpace(header.Get(name)); key != "" {
 			if len(key) > maxIdempotencyKey {
@@ -269,6 +291,5 @@ func deliveryKey(header http.Header, body []byte, now time.Time) string {
 			return "key:" + key
 		}
 	}
-	sum := sha256.Sum256(body)
-	return fmt.Sprintf("body:%s:%d", hex.EncodeToString(sum[:16]), now.Truncate(bodyBucket).Unix())
+	return ""
 }
