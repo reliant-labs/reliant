@@ -9360,10 +9360,10 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"CWhat the approver is asked to decide, shown as the approval's title\x82\x01(Deploy {{inputs.version}} to production?R\x05title\x12\x81\x01\n" +
 	"\atimeout\x18\x03 \x01(\v2\x15.reliant.v1.CelStringBP\x82\xb5\x18L\n" +
 	"9How long to wait for a decision before the step times out\x82\x01\x0330m\x8a\x01\bdurationR\atimeout:Z\x8a\xb5\x18V\n" +
-	"\bapproval\x12\bApproval\x1a*Pause workflow execution for user approval*\autility2\vShieldCheck\"\x9e\x03\n" +
-	"\x0fAskQuestionArgs\x12\x93\x02\n" +
-	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xdf\x01\x82\xb5\x18\xda\x01\n" +
-	"XThe questions to ask, as JSON: a questions list, each with question text and its options\x82\x01v{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}\x8a\x01\x04JSONR\bmetadata:u\x8a\xb5\x18q\n" +
+	"\bapproval\x12\bApproval\x1a*Pause workflow execution for user approval*\autility2\vShieldCheck\"\x86\x04\n" +
+	"\x0fAskQuestionArgs\x12\xfb\x02\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xc7\x02\x82\xb5\x18\xc2\x02\n" +
+	"\xbf\x01The questions to ask, as JSON: {\"type\": \"ask_user\", \"questions\": [...]}, each question with its text and options. Without \"type\": \"ask_user\" the app shows no options and nothing can answer it\x82\x01v{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}\x8a\x01\x04JSONR\bmetadata:u\x8a\xb5\x18q\n" +
 	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\xd4\r\n" +
 	"\x13SaveMessageNodeArgs\x12Y\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +

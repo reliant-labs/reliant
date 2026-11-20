@@ -1035,7 +1035,7 @@ message AskQuestionArgs {
 
   // Metadata is a JSON string containing the question definition.
   CelString metadata = 1 [(reliant) = {
-    description: "The questions to ask, as JSON: a questions list, each with question text and its options"
+    description: "The questions to ask, as JSON: {\"type\": \"ask_user\", \"questions\": [...]}, each question with its text and options. Without \"type\": \"ask_user\" the app shows no options and nothing can answer it"
     example: "{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}"
     type_hint: "JSON"
   }];

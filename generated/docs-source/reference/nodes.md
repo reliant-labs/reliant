@@ -162,7 +162,7 @@ Pause workflow execution to ask the user a question
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `metadata` | string | No | - | The questions to ask, as JSON: a questions list, each with question text and its options |
+| `metadata` | string | No | - | The questions to ask, as JSON: {"type": "ask_user", "questions": [...]}, each question with its text and options. Without "type": "ask_user" the app shows no options and nothing can answer it |
 
 ### Outputs
 

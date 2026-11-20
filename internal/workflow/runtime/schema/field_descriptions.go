@@ -11,7 +11,7 @@ func init() {
 	FieldDescriptions["action.hosted_use"] = "Hosted HTTP use-grant reference for this fixed action"
 	FieldDescriptions["action.uses"] = "Which integration action to run, as integration/action@major"
 	FieldDescriptions["action.with"] = "Action parameters, keyed as in the action's schema. Values may be literals or {{ }} templates"
-	FieldDescriptions["ask_question.metadata"] = "The questions to ask, as JSON: a questions list, each with question text and its options"
+	FieldDescriptions["ask_question.metadata"] = "The questions to ask, as JSON: {\\\"type\\\": \\\"ask_user\\\", \\\"questions\\\": [...]}, each question with its text and options. Without \\\"type\\\": \\\"ask_user\\\" the app shows no options and nothing can answer it"
 	FieldDescriptions["call_llm.exclude_ambient_memory"] = "Exclude automatic saved memories (default false); not full context isolation"
 	FieldDescriptions["call_llm.exclude_skill_catalog"] = "Exclude configured skills for this call (default false); rejects skill preloads, does not redact history or restrict other tools"
 	FieldDescriptions["call_llm.model"] = "A model tag (flagship, fast, cheap) or an explicit model ID"
