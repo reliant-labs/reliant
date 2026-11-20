@@ -48,10 +48,10 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Domains", shows: "The addresses your app answers on" };
     case "activity":
       return { title: "Activity", shows: "Every deploy, change and alert, newest first" };
+    // "live-state" is retired (U6e): its URL redirects to Services.
+    case "live-state":
     case "services":
     case "service":
-    // Retired (U6e): its URL redirects to Services.
-    case "live-state":
       return { title: "Services", shows: PAGE_SUBTITLES.services };
     case "usage":
       return { title: "Usage", shows: PAGE_SUBTITLES.usage };

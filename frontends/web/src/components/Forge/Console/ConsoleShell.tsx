@@ -259,9 +259,9 @@ export function consoleCrumbs(
       return [{ label: "Domains" }];
     case "activity":
       return [{ label: "Activity" }];
-    case "services":
-    // Retired (U6e): the Live state dashboard is Services' charts view; its URL redirects there.
+    // "live-state" is retired (U6e): the Live state dashboard is Services' charts view; its URL redirects there.
     case "live-state":
+    case "services":
       return [{ label: "Services" }];
     case "service":
       return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
