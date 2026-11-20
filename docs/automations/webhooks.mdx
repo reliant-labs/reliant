@@ -66,7 +66,7 @@ On Reliant's hosted platform, enabling it connects the automation to your organi
 | `413` | Body larger than 1 MiB |
 | `503` | The delivery could not be recorded; retry |
 
-Deliveries are de-duplicated so a sender's retry does not start a second run. The key is the first of `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id` or `X-Delivery-Id` that you send. With none, an identical body within the same minute counts as a retry.
+Deliveries are de-duplicated so a sender's retry does not start a second run. The key is the first of `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id` or `X-Delivery-Id` that you send. With none, an identical body within the same minute counts as a retry. On Reliant's hosted service that fallback does not apply today: the proxy in front of the webhook endpoint adds an `X-Request-Id` to every delivery, so two identical posts are two events. To make a sender's retry one run there, send an `Idempotency-Key`, or name the event with `dedupe_key` (below).
 
 ### Deduplicating by what the event is about
 
