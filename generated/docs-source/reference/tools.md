@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (74 tools)
+- [Other Tools](#other-tools) (78 tools)
 
 ---
 
@@ -2152,8 +2152,11 @@ _Miscellaneous tools and utilities._
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, an e... |
 | [`github__branch_get`](#github__branch_get) | integration | Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protec... |
+| [`github__branch_rules`](#github__branch_rules) | integration | List every rule that applies to a branch from the repository's and its organization's active rule... |
 | [`github__check_run_list`](#github__check_run_list) | integration | List the check runs on a commit, newest first, with name, status, conclusion, the App that wrote ... |
 | [`github__code_search`](#github__code_search) | integration | Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:own... |
+| [`github__commit_statuses`](#github__commit_statuses) | integration | Read the commit statuses of a branch, tag or commit: the combined state (failure if any context f... |
+| [`github__compare`](#github__compare) | integration | Compare two branches, tags or commits of one repository: status (ahead, behind, diverged or ident... |
 | [`github__issue_comment`](#github__issue_comment) | integration | Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share... |
 | [`github__issue_comment_list`](#github__issue_comment_list) | integration | List the comments on an issue, or on a pull request's conversation tab (pass the PR number as iss... |
 | [`github__issue_comment_update`](#github__issue_comment_update) | integration | Edit a comment by id. body REPLACES the whole text, so read the current one first (issue.comment.... |
@@ -2203,6 +2206,7 @@ _Miscellaneous tools and utilities._
 | [`skill`](#skill) | coding:default, readonly, coding:plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`slack__conversations_history`](#slack__conversations_history) | integration | Read messages from a channel the bot is a member of, newest first, optionally between oldest and ... |
 | [`slack__conversations_list`](#slack__conversations_list) | integration | List the workspace's conversations: public channels, and private channels the bot is a member of.... |
+| [`slack__conversations_replies`](#slack__conversations_replies) | integration | Read a thread in a conversation the bot is a member of: the parent message first, then its replie... |
 | [`slack__message_post`](#slack__message_post) | integration | Post a message as the Reliant bot to a channel or DM by its ID. Give text, Block Kit blocks, or b... |
 | [`slack__message_reply`](#slack__message_reply) | integration | Post a reply in the thread of an existing message, identified by its channel and ts (a reply to a... |
 | [`slack__message_update`](#slack__message_update) | integration | Replace the text and/or blocks of a message the Reliant bot posted, identified by channel and ts.... |
@@ -2414,6 +2418,14 @@ Return one branch: whether it exists, its head commit sha, and whether GitHub tr
 
 ---
 
+### github__branch_rules
+
+**Tags:** `integration`
+
+List every rule that applies to a branch from the repository's and its organization's active rulesets: required status checks, required reviews, the merge queue, linear history, restricted pushes and so on. Each rule has its type, its parameters (the required check contexts, the approving review count, ...) and the ruleset it comes from. Rulesets in evaluate or disabled mode are not listed, and neither is classic branch protection: branch.get's protected says whether either applies. Follows GitHub's pagination up to 1000 rules.
+
+---
+
 ### github__check_run_list
 
 **Tags:** `integration`
@@ -2427,6 +2439,22 @@ List the check runs on a commit, newest first, with name, status, conclusion, th
 **Tags:** `integration`
 
 Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:owner/name, org:name or user:name; without one it searches every repository the connection can see. language:, path: and extension: narrow it further, for example "ParseDuration repo:golang/go language:go". Only default branches are indexed, files over 384 KB are not, and GitHub allows about ten code searches a minute, so prefer one precise query over many broad ones.
+
+---
+
+### github__commit_statuses
+
+**Tags:** `integration`
+
+Read the commit statuses of a branch, tag or commit: the combined state (failure if any context failed or errored, pending if any is pending or there are none, else success) and the latest status of each context, with its state, description, target_url and the login that set it. These are commit statuses, which external CI posts; check runs (GitHub Actions and Apps) are read with check_run.list, and a required check may be either. At most 100 contexts are listed; truncated says when there were more. Needs the GitHub App's Commit statuses (read) permission; without it GitHub answers 403.
+
+---
+
+### github__compare
+
+**Tags:** `integration`
+
+Compare two branches, tags or commits of one repository: status (ahead, behind, diverged or identical), ahead_by, behind_by, total_commits, the merge base, and the commits head has that base lacks, oldest first, each as its sha, its author's login and the first line of its message (capped at 300 characters). One page of up to limit commits (at most 100) is returned; has_more says whether a later page holds more, read with page. Changed files are not returned: use pr.list_files for a diff.
 
 ---
 
@@ -2899,6 +2927,14 @@ Read messages from a channel the bot is a member of, newest first, optionally be
 **Tags:** `integration`
 
 List the workspace's conversations: public channels, and private channels the bot is a member of. Returns each channel's ID (what every other action takes), name, and whether the bot is a member — it can only post to and read channels it is in. Follows Slack's cursor pagination.
+
+---
+
+### slack__conversations_replies
+
+**Tags:** `integration`
+
+Read a thread in a conversation the bot is a member of: the parent message first, then its replies, oldest first. ts is the thread's parent ts; for the thread an app_mentioned or message.posted event came from, pass the event's thread_ts when it has one, else its ts (a message that is not in a thread answers just itself). Optionally only replies between oldest and latest. limit bounds the page size; up to 5 pages are followed.
 
 ---
 

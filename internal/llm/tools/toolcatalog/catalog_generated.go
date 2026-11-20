@@ -329,6 +329,15 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__branch_rules": {
+		Bindable: map[string]struct{}{
+			"branch":     {},
+			"connection": {},
+			"owner":      {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__check_run_list": {
 		Bindable: map[string]struct{}{
 			"app_id":     {},
@@ -348,6 +357,27 @@ var generatedToolParams = map[string]ToolParams{
 			"page":       {},
 			"per_page":   {},
 			"q":          {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__commit_statuses": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"owner":      {},
+			"ref":        {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__compare": {
+		Bindable: map[string]struct{}{
+			"base":       {},
+			"connection": {},
+			"head":       {},
+			"limit":      {},
+			"owner":      {},
+			"page":       {},
+			"repo":       {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -1017,6 +1047,17 @@ var generatedToolParams = map[string]ToolParams{
 			"connection":       {},
 			"exclude_archived": {},
 			"types":            {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"slack__conversations_replies": {
+		Bindable: map[string]struct{}{
+			"channel":    {},
+			"connection": {},
+			"latest":     {},
+			"limit":      {},
+			"oldest":     {},
+			"ts":         {},
 		},
 		Unbindable: map[string]string{},
 	},
