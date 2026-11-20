@@ -26,6 +26,8 @@ import { HardDrive } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
+import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 
@@ -92,7 +94,10 @@ function ProjectStoragePage() {
         <CloudNotice availability={availability} detail={roster.live.data?.detail} />
         <BucketsSection>
           {recorded.length === 0 ? (
-            <EmptyRow>No environment is deployed yet, so there are no buckets to list.</EmptyRow>
+            <>
+              <EmptyRow>No environment is deployed yet, so there are no buckets to list.</EmptyRow>
+              <ProjectEmptyCtaRow deploy={<DeployWithAgentButton env={null} />} learn="storage" testId="storage-empty-cta" />
+            </>
           ) : (
             <BucketTable showProject={false}>
               {recorded.map((candidate) => (

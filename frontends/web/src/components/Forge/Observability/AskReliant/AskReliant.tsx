@@ -46,7 +46,7 @@ import { toast } from "@/lib/toast-manager";
 import { openAddProject } from "@/store/addProjectDialogStore";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
-import { ForgeConsoleContext } from "../../Console/consoleContext";
+import { ForgeConsoleContext } from "../../Console/consoleContextValue";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON } from "../Dashboards/parts";
 import { AskAgentSheet } from "./AskAgentSheet";
 import { AskReliantNoProject } from "./AskReliantNoProject";
@@ -56,6 +56,7 @@ import { askWorkspaceName, buildAskReliantPrompt, type AskEnv, type AskIntent, t
 import { resolveAskProject, type AskProjectResolution } from "./askReliantProject";
 import { startAskReliantChat } from "./startAskReliantChat";
 import { projectChatsPath } from "@/lib/paths";
+import { ASK_DEPLOY_LABEL } from "@/components/EmptyState/ProjectEmptyCta";
 
 export interface AskReliantOptions {
   /** The forge project, when the surface knows it and the console context does not. */
@@ -397,7 +398,7 @@ export function DeployWithAgentButton({ env, forgeProject, envChoices }: AskReli
         title={`Open a new chat with the deploy${env ? ` to ${env}` : ""} written up for an agent. Nothing runs until you send it.`}
         data-testid="deploy-with-agent"
       >
-        Deploy with an agent
+        {ASK_DEPLOY_LABEL}
       </Button>
       {dialog}
     </>

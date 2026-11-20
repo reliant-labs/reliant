@@ -24,7 +24,8 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Gauge } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import Link from "@/components/forge-ui/link";
+import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
+import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
 import Status, { type StatusTone } from "@/components/forge-ui/status";
 import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,6 @@ import PageHeader from "@/components/forge-ui/page_header";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatCount } from "../Observability/format";
 import { ObsError } from "../Observability/ObsStates";
-import { DOCS } from "../GettingStarted";
 
 const DEFAULT_RANGE: RangePreset = "7d";
 
@@ -236,24 +236,21 @@ export function SpeedInsightsPage() {
 
 function SpeedInsightsEmpty({ windowWords }: { windowWords: string }) {
   return (
-    <div className="mx-auto flex max-w-[var(--form-max)] flex-col items-start gap-3 py-12" data-testid="speed-insights-empty">
-      <span className="flex size-9 items-center justify-center rounded-xl border border-border text-ink-muted">
-        <Gauge className="size-4" aria-hidden="true" />
-      </span>
-      <div className="space-y-1 text-ui text-ink-muted">
-        <h2 className="text-section text-ink">No page has been measured in the {windowWords}</h2>
-        <p>
-          Speed insights shows, for every page of your frontend, how fast it loads (LCP), how quickly it responds to a tap or click (INP), how much it shifts as it
-          loads (CLS) and how long the server takes to answer (TTFB), as real visitors experience them.
-        </p>
-        <p>
-          A forge frontend measures them already: the browser runtime (<code className="font-mono text-code">@reliantlabs/forge-web-runtime</code>) sends them with its
-          telemetry. Deploy a frontend, open it, and the first figures appear within a minute.
-        </p>
-      </div>
-      <Link href={DOCS.observability} className="no-color text-ui text-primary-ink hover:underline">
-        How browser telemetry works
-      </Link>
-    </div>
+    <ProjectEmptyCta
+      testId="speed-insights-empty"
+      icon={<Gauge />}
+      title={`No page has been measured in the ${windowWords}`}
+      deploy={<DeployWithAgentButton env={null} />}
+      learn="speed-insights"
+    >
+      <p>
+        Speed insights shows, for every page of your frontend, how fast it loads (LCP), how quickly it responds to a tap or click (INP), how much it shifts as it
+        loads (CLS) and how long the server takes to answer (TTFB), as real visitors experience them.
+      </p>
+      <p>
+        A forge frontend measures them already: the browser runtime (<code className="font-mono text-code">@reliantlabs/forge-web-runtime</code>) sends them with its
+        telemetry. Deploy a frontend, open it, and the first figures appear within a minute.
+      </p>
+    </ProjectEmptyCta>
   );
 }

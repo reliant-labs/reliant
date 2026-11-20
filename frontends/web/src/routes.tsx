@@ -192,6 +192,8 @@ const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
 const UsageBillingPage = lazyRoute(
   () => import('./components/Usage/UsageBillingPage'), 'UsageBillingPage')
+const ConnectorsPage = lazyRoute(
+  () => import('./components/Connectors/ConnectorsPage'), 'ConnectorsPage')
 const ProjectsPage = lazyRoute(
   () => import('./components/Projects/ProjectsPage'), 'ProjectsPage')
 const ProjectHomePage = lazyRoute(
@@ -887,6 +889,14 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: UsageBillingPage,
   })
 
+  // Connectors: integrations and MCP servers, a tab each (`?tab=`, read
+  // without a route id; components/Connectors/ConnectorsPage.tsx, U6d).
+  const connectorsRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/connectors',
+    component: ConnectorsPage,
+  })
+
   // /machines: an alias for Agent sandboxes, Settings' machines page
   // (sandboxesAliasRoute.tsx).
   const sandboxesAliasRoute = createSandboxesAliasRoute(authParent)
@@ -917,7 +927,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, ...retiredPageRoutes] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, connectorsRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, ...retiredPageRoutes] as const,
   }
 }
 

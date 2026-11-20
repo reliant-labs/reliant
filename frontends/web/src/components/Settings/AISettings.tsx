@@ -67,6 +67,7 @@ export function AISettings() {
     <>
       <SettingsPageHeader
         title="AI providers"
+        learn="ai-providers"
         description="Connect the AI accounts your agents run on, and choose which models they use."
         actions={
           <Button
