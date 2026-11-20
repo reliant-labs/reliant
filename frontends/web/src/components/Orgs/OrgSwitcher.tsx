@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast-manager";
 import type { MyOrg } from "@/services/controlPlane/orgs";
 
-import { SIDEBAR_ORG_TRIGGER, ShellBrandMark, SidebarOrgLabel } from "../Layout/sidebar/primitives";
+import { SIDEBAR_ORG_TRIGGER, SidebarOrgLabel } from "../Layout/sidebar/primitives";
 import { CreateOrganizationDialog } from "./CreateOrganizationDialog";
 
 /**
@@ -124,9 +124,9 @@ function SidebarOrgSwitcher({
           top ? (
             <button {...props} type="button" data-testid="org-switcher" className={cn(SIDEBAR_ORG_TRIGGER, compact && "w-auto max-w-full flex-none gap-1.5 px-1.5")}>
               {compact ? (
-                // Sized to the name (a flex-1 name would shrink-wrap to nothing beside the project).
+                // Sized to the name (a flex-1 name would shrink-wrap to nothing beside the project);
+                // no mark: the row is tight, and the project half carries one.
                 <>
-                  <ShellBrandMark />
                   <span className="min-w-0 truncate font-semibold" data-testid="org-switcher-name">
                     {active.name}
                   </span>

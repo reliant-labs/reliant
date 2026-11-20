@@ -124,7 +124,7 @@ export function ProjectSwitcherRow({
   return (
     <SidebarOrgRow>
       <div className="flex min-w-0 flex-1 items-center gap-0.5" data-testid="shell-switcher">
-        <div className="flex min-w-0 max-w-[45%] shrink-0">
+        <div className="flex min-w-0 max-w-[50%] shrink-0">
           <OrgSwitcher
             variant="sidebar-switcher"
             fallback={

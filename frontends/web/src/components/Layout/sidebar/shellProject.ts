@@ -265,9 +265,11 @@ export function useShellProject(pathname: string, search: Record<string, unknown
   const routeRefKey = routeRef ? refKey(routeRef) : null;
   const explicit = !!route && "explicit" in route && route.explicit;
 
+  // Until the filter holds the remembered choice again (a reload), the choice itself.
+  const severalIds = filterIds.length >= 2 ? filterIds : lastPick === SEVERAL_PROJECTS_PICK ? rememberedKey.split(",").filter(Boolean) : [];
   const mode: ShellMode =
-    filterIds.length >= 2 && !explicit ? "many" : lastPick === ALL_PROJECTS_PICK && !explicit ? "all" : "one";
-  const filterKey = filterIds.join(",");
+    severalIds.length >= 2 && !explicit ? "many" : lastPick === ALL_PROJECTS_PICK && !explicit ? "all" : "one";
+  const filterKey = severalIds.join(",");
 
   const resolved = useMemo((): ShellProject => {
     const allIds = (catalog?.rows ?? []).flatMap((row) => (row.kind === "project" ? [row.project.id] : []));
@@ -327,9 +329,11 @@ export function useShellProject(pathname: string, search: Record<string, unknown
 export function useShellSeveral(): { mode: "many" | "all" | null; rows: ProjectCatalogRow[] } {
   const filterIds = useChatProjectFilterIds();
   const lastPick = useShellLastPick((state) => state.key);
+  const severalPick = useShellLastPick((state) => state.several);
   const { catalog } = useSelectorCatalog(undefined);
-  const mode = filterIds.length >= 2 ? "many" : lastPick === ALL_PROJECTS_PICK ? "all" : null;
-  const filterKey = filterIds.join(",");
+  const severalIds = filterIds.length >= 2 ? filterIds : lastPick === SEVERAL_PROJECTS_PICK ? severalPick : [];
+  const mode = severalIds.length >= 2 ? "many" : lastPick === ALL_PROJECTS_PICK ? "all" : null;
+  const filterKey = severalIds.join(",");
   const rows = useMemo(() => {
     if (!mode || !catalog) return [];
     const ids = filterKey.split(",");
