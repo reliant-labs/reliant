@@ -92,22 +92,19 @@ describe("the nav's Chats section with no usable machine", () => {
   it.each([
     ["onboard", "/onboarding"],
     ["connect-machine", "/settings/machines"],
-  ] as const)("is the connect-a-sandbox call to action for %s, linking to %s", (setup: ChatSetup, href) => {
+  ] as const)("is the connect-a-sandbox call to action for %s; New chat goes to %s", (setup: ChatSetup, href) => {
     state.setup = setup;
     const onNavigate = renderSidebar();
 
     const card = screen.getByTestId("connect-sandbox-cta");
     expect(card).toHaveTextContent("Connect an agent sandbox to start chats");
-    expect(within(card).getByTestId("connect-sandbox-cloud")).toHaveAttribute("href", href);
-    // A real link: refresh, a new tab and a shared link all work.
-    const link = within(card).getByTestId("connect-sandbox-own");
-    expect(link).toHaveAttribute("href", href);
+    expect(card).toHaveAttribute("data-variant", "nav");
+    // Both ways open the one Add sandbox sheet, in place (Machines/AddMachineSheet).
+    expect(within(card).getByTestId("connect-sandbox-own")).toHaveTextContent("Use your own machine");
+    expect(within(card).getByTestId("connect-sandbox-cloud")).toHaveTextContent("Provision a Reliant sandbox");
     // The list is gone, chats and all.
     expect(screen.queryByTestId("sidebar-scroller")).toBeNull();
     expect(screen.queryByText("Fix the build")).toBeNull();
-
-    fireEvent.click(link);
-    expect(onNavigate).toHaveBeenLastCalledWith(href);
 
     // New chat stays, and goes where the card does instead of opening a chat:
     // its link says so too.
@@ -116,24 +113,6 @@ describe("the nav's Chats section with no usable machine", () => {
     fireEvent.click(newChat);
     expect(onNavigate).toHaveBeenLastCalledWith(href);
     expect(state.openNewChat).not.toHaveBeenCalled();
-  });
-
-  it("leaves a modified click on the call to action to the browser", () => {
-    state.setup = "onboard";
-    const onNavigate = renderSidebar();
-    // After the app's handler had its say: jsdom cannot open a new tab.
-    let leftToBrowser = false;
-    document.addEventListener(
-      "click",
-      (event) => {
-        leftToBrowser = !event.defaultPrevented;
-        event.preventDefault();
-      },
-      { once: true },
-    );
-    fireEvent.click(screen.getByTestId("connect-sandbox-own"), { metaKey: true });
-    expect(leftToBrowser).toBe(true);
-    expect(onNavigate).not.toHaveBeenCalled();
   });
 
   it.each(["ready", "checking", "unknown"] as const)("is the chat list for %s, and New chat opens a chat", (setup) => {

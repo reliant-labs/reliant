@@ -71,10 +71,10 @@ describe("the hybrid nav's shape", () => {
     expect(ids.filter((id) => id === "slot-inbox")).toHaveLength(1);
   });
 
-  it("keeps Sign-in users out of Configure (it is Auth now), and Configure is Environments, Secrets, Domains, Usage", () => {
+  it("keeps Sign-in users out of Configure (it is Auth now), and Configure is Environments, Secrets, Domains, Usage, Activity", () => {
     const ctx = ctxAt(inboxPath());
     const configure = hybridNav.items.find((item) => item.id === "configure")!;
-    expect(flattenIds([configure], ctx)).toEqual(["configure", "environments", "secrets", "domains", "project-usage"]);
+    expect(flattenIds([configure], ctx)).toEqual(["configure", "environments", "secrets", "domains", "project-usage", "activity"]);
   });
 
   it("puts Speed insights and Sessions in Performance & issues, inside the Observability drill-in", () => {
