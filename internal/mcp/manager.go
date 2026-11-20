@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"sync"
@@ -213,6 +214,17 @@ type Manager struct {
 
 	// Retry backoff for project-server autoloading to avoid repeated noisy failures
 	nextRetryAt map[string]time.Time
+
+	// failedConfigs is the config each server in nextRetryAt failed to start
+	// with: a different config is a fix, retried without the cooldown
+	// (shouldRetryServerLoad).
+	failedConfigs map[string]config.MCPServer
+
+	// projectConfigs is the config each project last loaded each server
+	// under, keyed by dirClientKey(server, project): how a project's edit to
+	// a running server's config is told apart from another project declaring
+	// the same name differently (projectConfigEdited).
+	projectConfigs map[string]config.MCPServer
 }
 
 type healthStatus struct {
@@ -283,6 +295,8 @@ func NewManager(role Role, opts ...ManagerOption) *Manager {
 		cancel:              cancel,
 		pendingServers:      make(map[string]config.MCPServer),
 		nextRetryAt:         make(map[string]time.Time),
+		failedConfigs:       make(map[string]config.MCPServer),
+		projectConfigs:      make(map[string]config.MCPServer),
 	}
 	for _, opt := range opts {
 		opt(m)
@@ -493,6 +507,7 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 
 		m.mu.Lock()
 		m.nextRetryAt[name] = time.Now().Add(failedServerRetryCooldown)
+		m.failedConfigs[name] = cfg
 		m.mu.Unlock()
 
 		return fmt.Errorf("failed to initialize MCP client: %w", classifiedErr)
@@ -503,6 +518,7 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 	m.clients[name] = client
 	m.serverConfigs[name] = cfg
 	delete(m.nextRetryAt, name)
+	delete(m.failedConfigs, name)
 	m.mu.Unlock()
 
 	// A second registration under a live name used to overwrite the map entry
@@ -586,6 +602,7 @@ func (m *Manager) RemoveServer(name, reason string) error {
 		}
 	}
 	delete(m.nextRetryAt, name)
+	delete(m.failedConfigs, name)
 	m.untrackProjectServer(name)
 	m.mu.Unlock()
 
@@ -993,6 +1010,7 @@ func (m *Manager) Close() error {
 	m.dirClientLastUse = make(map[string]time.Time)
 	m.preconditions = make(map[string]preconditionVerdict)
 	m.projectServers = make(map[string]map[string]bool)
+	m.projectConfigs = make(map[string]config.MCPServer)
 	m.mu.Unlock()
 
 	// Close all clients in parallel for faster shutdown
@@ -1353,15 +1371,27 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		}
 
 		if runningServers[name] {
-			m.trackProjectServer(normalizedProjectPath, name)
-			logging.DebugContext(ctx, "MCP server already running; associated with requested project scope",
-				"name", name,
-				"projectPath", normalizedProjectPath)
-			result.LoadedServers = append(result.LoadedServers, name)
-			continue
-		}
-
-		if !m.shouldRetryServerLoad(name) {
+			if m.projectConfigEdited(normalizedProjectPath, name, serverCfg) {
+				// The project's own config for this server changed since it
+				// last loaded it, and what is running is not the new config: an
+				// edit to mcp.json. Start the new one now. It used to stay on
+				// the old command until something restarted it, and a restart
+				// issued before the server-side copy of the config caught up
+				// restarted the old command again.
+				reason := fmt.Sprintf("its config changed in project %s", normalizedProjectPath)
+				if err := m.RemoveServer(name, reason); err != nil && !strings.Contains(err.Error(), "not found") {
+					logging.WarnContext(ctx, "Failed to stop an MCP server whose config changed", "name", name, "error", err)
+				}
+			} else {
+				m.trackProjectServer(normalizedProjectPath, name)
+				m.rememberProjectConfig(normalizedProjectPath, name, serverCfg)
+				logging.DebugContext(ctx, "MCP server already running; associated with requested project scope",
+					"name", name,
+					"projectPath", normalizedProjectPath)
+				result.LoadedServers = append(result.LoadedServers, name)
+				continue
+			}
+		} else if !m.shouldRetryServerLoad(name, serverCfg) {
 			logging.DebugContext(ctx, "Skipping MCP server autoload due to retry cooldown", "name", name)
 			continue
 		}
@@ -1378,20 +1408,79 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 			m.trackProjectServer(normalizedProjectPath, name)
 			result.LoadedServers = append(result.LoadedServers, name)
 		}
+		m.rememberProjectConfig(normalizedProjectPath, name, serverCfg)
 		cancel()
 	}
 
 	return result
 }
 
-func (m *Manager) shouldRetryServerLoad(name string) bool {
+// shouldRetryServerLoad reports whether a server that failed to start may be
+// tried again: once its cooldown has passed, or at once when its config is no
+// longer the one that failed. A fix to a broken command used to wait out the
+// cooldown like a retry of the same broken command.
+func (m *Manager) shouldRetryServerLoad(name string, cfg config.MCPServer) bool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	next, exists := m.nextRetryAt[name]
 	if !exists {
 		return true
 	}
+	if failed, ok := m.failedConfigs[name]; ok && !mcpConfigEqual(failed, cfg) {
+		return true
+	}
 	return time.Now().After(next)
+}
+
+// projectConfigEdited reports whether a running server must be restarted for
+// a project because the project's config for it was edited: the config this
+// project last loaded it under differs from the one it reads now, and the
+// running server is not already the new one.
+//
+// The first comparison is what keeps this to edits. Two projects that declare
+// one server name differently share its single client (it is name-scoped);
+// comparing only against what is running would restart it on every load as
+// the two projects took turns, where neither had changed anything.
+func (m *Manager) projectConfigEdited(projectPath, name string, cfg config.MCPServer) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	previous, seen := m.projectConfigs[dirClientKey(name, projectPath)]
+	if !seen || mcpConfigEqual(previous, cfg) {
+		return false
+	}
+	running, ok := m.serverConfigs[name]
+	return !ok || !mcpConfigEqual(running, cfg)
+}
+
+// rememberProjectConfig records the config a project loaded a server under,
+// for projectConfigEdited.
+func (m *Manager) rememberProjectConfig(projectPath, name string, cfg config.MCPServer) {
+	m.mu.Lock()
+	m.projectConfigs[dirClientKey(name, projectPath)] = cfg
+	m.mu.Unlock()
+}
+
+// mcpConfigEqual compares two server configs, an empty list or map being the
+// same as an absent one (config read from JSON and config built in code spell
+// "none" differently).
+func mcpConfigEqual(a, b config.MCPServer) bool {
+	return reflect.DeepEqual(normalizeMCPConfig(a), normalizeMCPConfig(b))
+}
+
+func normalizeMCPConfig(c config.MCPServer) config.MCPServer {
+	if len(c.Env) == 0 {
+		c.Env = nil
+	}
+	if len(c.Args) == 0 {
+		c.Args = nil
+	}
+	if len(c.Headers) == 0 {
+		c.Headers = nil
+	}
+	if len(c.RequiresFiles) == 0 {
+		c.RequiresFiles = nil
+	}
+	return c
 }
 
 // GetProjectClients returns running clients for a specific project keyed by logical server name.
@@ -1445,6 +1534,22 @@ func (m *Manager) AddProjectServer(ctx context.Context, projectPath, serverName 
 	return nil
 }
 
+// ProjectServerConfig is the config a project's MCP config files declare for
+// one server on this machine now, read from disk, with the built-in servers
+// beneath them. ok is false when the project declares no such server.
+//
+// A server process works from a copy of these files that the machine syncs
+// to it every few seconds. A restart has to start what the files say now, or a
+// restart issued right after an edit starts the old command again.
+func (m *Manager) ProjectServerConfig(ctx context.Context, projectPath, serverName string) (config.MCPServer, bool) {
+	normalized := normalizeProjectPath(projectPath)
+	if normalized == "" {
+		return config.MCPServer{}, false
+	}
+	cfg, ok := m.loadProjectServersFromConfig(ctx, normalized)[serverName]
+	return cfg, ok
+}
+
 // RemoveProjectServer removes and closes a project-scoped server connection.
 // reason is logged as RemoveServer's is.
 //
@@ -1493,7 +1598,42 @@ func (m *Manager) ProjectCallTool(session, projectPath, serverName, toolName str
 	return m.CallTool(session, serverName, toolName, arguments)
 }
 
+// ProjectListTools lists one project-scoped server's tools, resolved the way
+// ProjectCallTool resolves a call. For a DIR-SCOPED server that is the
+// project's own client: the shared client was registered with no tree, so a
+// server that takes the tree as `${projectPath}` (or reads its working
+// directory) cannot even start from it. Listing it there failed or answered
+// for the wrong tree, which is how a dir-scoped server connected and yet its
+// tools were never offered to an agent. Every other server lists from the
+// shared client, as before.
+func (m *Manager) ProjectListTools(projectPath, serverName string) ([]Tool, error) {
+	if err := m.ensureInitialized(); err != nil {
+		return nil, fmt.Errorf("failed to initialize MCP servers: %w", err)
+	}
+	if !m.isProjectServer(projectPath, serverName) {
+		return nil, fmt.Errorf("server %q not found", serverName)
+	}
+	dirClient, ok, err := m.dirClientFor(serverName, projectPath)
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		return dirClient.ListTools()
+	}
+	m.mu.RLock()
+	client, exists := m.clients[serverName]
+	m.mu.RUnlock()
+	if !exists {
+		return nil, fmt.Errorf("server %q not found", serverName)
+	}
+	return client.ListTools()
+}
+
 // ListProjectTools returns tools from all connected project-scoped MCP servers.
+//
+// A dir-scoped server lists from the project's own client (ProjectListTools);
+// a project its declared files rule out offers none of its tools, and that is
+// not a failure.
 func (m *Manager) ListProjectTools(projectPath string) (map[string][]Tool, error) {
 	if err := m.ensureInitialized(); err != nil {
 		return nil, fmt.Errorf("failed to initialize MCP servers: %w", err)
@@ -1506,6 +1646,26 @@ func (m *Manager) ListProjectTools(projectPath string) (map[string][]Tool, error
 	for name, client := range clients {
 		if !m.isHealthy(name) {
 			logging.Warn("Skipping unhealthy MCP server", "name", name)
+			continue
+		}
+
+		dirClient, isDir, dirErr := m.dirClientFor(name, projectPath)
+		if dirErr != nil {
+			logging.Debug("Not offering a dir-scoped MCP server's tools in this project", "name", name, "reason", dirErr)
+			continue
+		}
+		if isDir {
+			// Private and lazily (re)spawned, like a dir-scoped call: its
+			// failure is not the shared server's health.
+			tools, err := dirClient.ListTools()
+			if err != nil {
+				logging.Error("Failed to list tools from dir-scoped MCP server", "name", name, "projectPath", projectPath, "error", err)
+				errors = append(errors, fmt.Errorf("%s: %w", name, err))
+				continue
+			}
+			if len(tools) > 0 {
+				result[name] = tools
+			}
 			continue
 		}
 

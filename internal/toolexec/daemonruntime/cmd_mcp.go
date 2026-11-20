@@ -310,7 +310,11 @@ func handleMCPServerStatus(_ context.Context, payload []byte) ([]byte, error) {
 			entry.ResourcesEnabled = info.Capabilities.Resources != nil
 			entry.PromptsEnabled = info.Capabilities.Prompts != nil
 		}
-		if tools, err := client.ListTools(); err == nil {
+		listTools := client.ListTools
+		if req.ProjectPath != "" {
+			listTools = func() ([]mcp.Tool, error) { return mgr.ProjectListTools(req.ProjectPath, name) }
+		}
+		if tools, err := listTools(); err == nil {
 			entry.ToolCount = len(tools)
 		}
 
@@ -360,6 +364,14 @@ type mcpManageServerRequest struct {
 	ProjectPath string            `json:"project_path"`
 	ServerName  string            `json:"server_name"`
 	Config      *config.MCPServer `json:"config,omitempty"` // required for add/restart
+
+	// PreferProjectConfig asks an add or restart for a project to start the
+	// server as the project's config files on this machine declare it now,
+	// and to use Config only when they declare no such server. The server
+	// sends Config from its synced copy of those files, which trails an edit
+	// by a few seconds. A daemon that predates the field ignores it and starts
+	// Config, which is what every daemon did before.
+	PreferProjectConfig bool `json:"prefer_project_config,omitempty"`
 }
 
 type mcpManageServerResponse struct {
@@ -381,6 +393,15 @@ func handleMCPManageServer(ctx context.Context, payload []byte) ([]byte, error) 
 	var req mcpManageServerRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	if req.PreferProjectConfig && req.ProjectPath != "" && (req.Action == "add" || req.Action == "restart") {
+		if current, ok := mgr.ProjectServerConfig(ctx, req.ProjectPath, req.ServerName); ok {
+			if !current.Enabled {
+				return json.Marshal(mcpManageServerResponse{Error: fmt.Sprintf("MCP server %q is disabled in this project's MCP config", req.ServerName)})
+			}
+			req.Config = &current
+		}
 	}
 
 	var err error
@@ -444,13 +465,17 @@ func handleMCPListTools(_ context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	var client mcp.Client
-	var exists bool
+	// A project's listing resolves the way its tool calls do: a dir-scoped
+	// server lists from the project's own client, not the shared one.
 	if req.ProjectPath != "" {
-		client, exists = mgr.GetProjectClient(req.ProjectPath, req.ServerName)
-	} else {
-		client, exists = mgr.GetClient(req.ServerName)
+		tools, err := mgr.ProjectListTools(req.ProjectPath, req.ServerName)
+		if err != nil {
+			return json.Marshal(mcpListToolsResponse{Error: err.Error()})
+		}
+		return json.Marshal(mcpListToolsResponse{Tools: tools})
 	}
+
+	client, exists := mgr.GetClient(req.ServerName)
 	if !exists {
 		return json.Marshal(mcpListToolsResponse{Error: fmt.Sprintf("server %q not found", req.ServerName)})
 	}
