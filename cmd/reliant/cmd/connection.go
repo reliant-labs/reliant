@@ -14,7 +14,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	forgeconfig "github.com/reliant-labs/forge/pkg/config"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/cliauth"
@@ -355,6 +357,10 @@ func (c *connection) annotate(err error) error {
 	if err == nil {
 		return nil
 	}
+	if hint := scopeMissingHint(err); hint != "" {
+		return fmt.Errorf("%w\n  server:     %s\n  credential: %s\n  hint: %s",
+			err, c.describeServer(), c.describeCredential(), hint)
+	}
 	switch connect.CodeOf(err) {
 	case connect.CodeUnauthenticated, connect.CodePermissionDenied:
 		return fmt.Errorf("%w\n  server:     %s\n  credential: %s\n  hint: the credential must belong to that server — re-authenticate with 'reliant auth login%s'",
@@ -362,6 +368,31 @@ func (c *connection) annotate(err error) error {
 	default:
 		return err
 	}
+}
+
+// scopeMissingHint is the fix for a refusal of a credential that is valid
+// but narrower than the call (PermissionDenied, reason scope_missing, the
+// scope it needs named in the error metadata), or "" for any other error.
+// "Re-authenticate" is wrong advice there: the token is fine, and signing in
+// again changes nothing. The token needs the scope, or the command needs a
+// broader credential.
+func scopeMissingHint(err error) string {
+	var cerr *connect.Error
+	if !errors.As(err, &cerr) || cerr.Code() != connect.CodePermissionDenied ||
+		cerr.Meta().Get(svcerr.ReasonHeader) != fat.ReasonScopeMissing {
+		return ""
+	}
+	scopes := strings.TrimSpace(cerr.Meta().Get(fat.ScopesHeader))
+	if scopes == "" {
+		return "this credential is valid but narrower than this command needs; use your own login ('reliant auth login') or a token with the scope it names"
+	}
+	if strings.Contains(scopes, string(fat.ScopeReliantAPI)) {
+		return fmt.Sprintf("this credential is valid but scoped, and this command needs %s, the whole API. "+
+			"Unset %s to use your own login, or mint a whole-API token: 'reliant auth token create --name <name>' "+
+			"(narrow scopes such as runs:start cover the RunService the SDK calls, not this command)", scopes, envToken)
+	}
+	return fmt.Sprintf("this credential is valid but lacks %s; mint a token that carries it: 'reliant auth token create --name <name> --scope %s'",
+		scopes, scopes)
 }
 
 // httpClient builds the Connect HTTP client for this connection, authenticated
