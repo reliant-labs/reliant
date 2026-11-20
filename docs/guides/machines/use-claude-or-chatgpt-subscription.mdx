@@ -1,0 +1,117 @@
+---
+title: "Use your Claude or ChatGPT subscription with Reliant"
+sidebarTitle: "Use a subscription"
+description: "Sign in with the Claude, ChatGPT, GitHub Copilot or Google plan you already pay for, so Reliant's coding agents run on it instead of API credit."
+keywords: ["use Claude subscription coding agent", "claude pro max coding agent", "chatgpt plan codex agent", "github copilot subscription agent", "reliant auth serve", "connect ai provider subscription"]
+---
+
+{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · L steps run in scratch: yes — `reliant auth serve` started, `curl http://127.0.0.1:19284/health` answered, a second `auth serve` failed with "oauth helper port already in use", both stopped; `reliant providers list` run against the Reliant Labs account (emails replaced with placeholders, list trimmed) · H steps: not run — the provider sign-in itself needs a person at a browser · sources: frontends/web/src/components/Settings/{AISettings.tsx,SettingsNavigation.tsx,providers/providerCatalog.ts}, frontends/web/src/components/OAuthHelperPanel.tsx:83-90, frontends/web/src/lib/oauth-local.ts (port 19284, daemon-opened helper, co-location probe), frontends/web/src/lib/oauth-providers.ts (Copilot is a device-code flow), cmd `reliant auth serve --help`, `reliant providers --help`, `reliant workflow funding --help`, docs/settings/api-keys.mdx (billing, limits), docs/changelog.mdx (several accounts per provider) · unverified: the Add provider screens and each provider's sign-in page, the desktop app flow, the at-limit chat card */}
+
+By the end of this guide your agents run on a plan you already pay for, such as Claude Pro or Max, a ChatGPT plan or GitHub Copilot, instead of on an API key or Reliant credits.
+
+Reliant's servers make the model calls under your account with the provider. Signing in only has to hand Reliant a login, and that hand-off is the one part that needs your own computer.
+
+## Before you begin
+
+- A paid plan with the provider.
+- The Reliant desktop app, or the web app with the `reliant` CLI installed on the computer you browse from ([Installation](/getting-started/installation)).
+
+<Steps>
+  <Step title="Choose the provider">
+    Open **Settings → AI providers**, click **Add provider**, and pick one from the subscription group:
+
+    | Provider | Plan | How you sign in |
+    |---|---|---|
+    | **Claude** | Claude Pro or Max | Your Claude account, in the browser |
+    | **ChatGPT** | A ChatGPT plan (Codex models) | Your ChatGPT account, in the browser |
+    | **Google** | Your Google account (Gemini models, through Antigravity) | In the browser |
+    | **GitHub Copilot** | Copilot Individual or Enterprise | A short code you enter on GitHub |
+
+    Each plan unlocks only its own models. The **Providers** column of the [Models Reference](/reference/models) lists them as `claude`, `codex`, `antigravity` and `copilot`.
+  </Step>
+
+  <Step title="Sign in">
+    Claude, ChatGPT and Google send your browser back to `localhost` when you approve, so something on the computer you are browsing from has to receive it.
+
+    - **Desktop app:** nothing to do. Its machine receives it.
+    - **Web app, with `reliant daemon start` running on this computer:** the app asks that machine to receive it.
+    - **Web app, otherwise:** the sign-in panel asks for the helper. Run it and leave it open until you are connected:
+
+    ```bash terminal
+    reliant auth serve
+    ```
+
+    ```text terminal
+    OAuth helper server listening on http://127.0.0.1:19284
+    Press Ctrl+C to stop
+    ```
+
+    The panel notices it within a few seconds and shows the sign-in button. The helper only passes the authorization code to the app; your login is exchanged and stored by Reliant, with your account. Check it is up with `curl http://127.0.0.1:19284/health`:
+
+    ```text terminal
+    {"status":"ok","service":"reliant","ready":true,"version":"1.21.3","source":"auth-serve"}
+    ```
+
+    GitHub Copilot needs none of this: Reliant shows a code, you enter it on GitHub's site and approve.
+  </Step>
+
+  <Step title="Check the account is connected">
+    The provider's card in **Settings → AI providers** shows the account. From a terminal, `reliant providers list` shows every account your chats can run on, and who pays for each:
+
+    ```bash terminal
+    reliant providers list
+    ```
+
+    ```text terminal
+    Yours
+      claude  you@example.com     Max 5×    available
+      claude  you@work.example    Pro       limited until 2026-11-21T18:00:00Z
+      codex   you@example.com     Pro       available
+    ```
+
+    You can connect more than one account per provider (**Add another Claude account**); a chat uses one at a time, and when that one hits its usage limit the chat moves to another or waits for the reset.
+  </Step>
+
+  <Step title="Use it">
+    The models it unlocks now appear in a chat's model picker. A workflow that asks for a tier, such as `tags: [flagship]`, gets the best model in that tier from the providers you have connected, so built-in workflows use the subscription with no change ([Model configuration](/settings/model-config)).
+  </Step>
+</Steps>
+
+## What this does not do
+
+- **It doesn't lift your plan's limits.** Usage counts against the subscription, under your account with the provider, and its terms and limits apply. At a limit the run doesn't fail: the chat shows which provider is limited and when it resets, and carries on at the reset. **Retry now** and **Stop** are there, and another connected provider can take over in the meantime ([AI providers](/settings/api-keys#rate-limits-and-usage-limits)).
+- **It doesn't run model calls on your computer.** Reliant's servers call the provider; your computer is only needed to sign in.
+- **In an organization, it isn't spent without you.** A chat in an organization asks before it moves from the organization's AI accounts to your own; `reliant workflow funding <execution-id>` shows the question, and only a person in the app can answer it. An automation turned on from the CLI spends only the organization's accounts.
+- **The CLI can't connect a provider.** Accounts are added in the app; `reliant providers` only lists them.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The sign-in helper is not running on this computer.">
+    Run `reliant auth serve` on the computer your browser is on, and keep it open until the panel shows the sign-in button.
+  </Accordion>
+  <Accordion title="Your connected machine is not this computer, so … sign-in cannot reach it.">
+    Your machine is a cloud machine or another computer, so the `localhost` redirect can't reach it. Run `reliant auth serve` here.
+  </Accordion>
+  <Accordion title="oauth helper port already in use: 127.0.0.1:19284">
+    A helper, or a daemon that opened one, is already running on this computer, so you don't need another. If another program holds port 19284, stop it: the web app looks for the helper on that port only.
+  </Accordion>
+  <Accordion title="needs sign-in">
+    Reliant is signed out of that account, so chats can't use it. Click **Reconnect** on the account in **Settings → AI providers** and sign in again.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Run a local LLM coding agent" icon="microchip" href="/guides/machines/use-local-models">
+    Add Ollama or vLLM beside your subscription, one step each.
+  </Card>
+{/* defer-card:/guides/workflows/choose-model-per-step ICA8Q2FyZCB0aXRsZT0iVXNlIGEgZGlmZmVyZW50IG1vZGVsIGZvciBlYWNoIHN0ZXAiIGljb249InNodWZmbGUiIGhyZWY9Ii9ndWlkZXMvd29ya2Zsb3dzL2Nob29zZS1tb2RlbC1wZXItc3RlcCI+CiAgICBQaW4gYSBzdGVwIHRvIGEgbW9kZWwgeW91ciBwbGFuIHVubG9ja3MuCiAgPC9DYXJkPg== */}
+  <Card title="Write your first multi-agent workflow" icon="diagram-project" href="/guides/workflows/first-multi-agent-workflow">
+    Put the subscription to work on a planner, an implementer and a reviewer.
+  </Card>
+  <Card title="AI providers" icon="key" href="/settings/api-keys">
+    API keys, Reliant AI and every source side by side.
+  </Card>
+</CardGroup>

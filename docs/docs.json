@@ -342,6 +342,13 @@
                   "guides/machines/run-several-daemons-one-computer",
                   "guides/machines/reclaim-restore-worktrees"
                 ]
+              },
+              {
+                "group": "Models",
+                "pages": [
+                  "guides/machines/use-local-models",
+                  "guides/machines/use-claude-or-chatgpt-subscription"
+                ]
               }
             ]
           },
