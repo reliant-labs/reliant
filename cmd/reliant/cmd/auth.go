@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -319,6 +320,13 @@ Purely local: no network call.`,
 			}
 			info["token_prefix"] = cred.TokenPrefix
 			info["scopes"] = cred.Scopes
+			// "Logged in" said nothing of what the login may do, so a login
+			// without daemon:manage (a forge sign-in, or one older than the
+			// scope) looked fine until `machine list` refused it (TL-46).
+			machinesRefused := len(cred.Scopes) > 0 && !slices.Contains(cred.Scopes, cliauth.ScopeMachines)
+			if len(cred.Scopes) > 0 {
+				info["can_manage_machines"] = !machinesRefused
+			}
 			if cred.ExpiresAt != nil {
 				info["expires_at"] = cred.ExpiresAt.Format(time.RFC3339)
 			}
@@ -336,6 +344,10 @@ Purely local: no network call.`,
 				fmt.Fprintf(out, "  Expires:     %s\n", cred.ExpiresAt.Format(time.RFC3339))
 			}
 			fmt.Fprintf(out, "  Credentials: %s\n", path)
+			if machinesRefused {
+				fmt.Fprintf(out, "  Machines:    this login cannot list or manage machines (it lacks %s); 'reliant auth login%s' makes one that can\n",
+					cliauth.ScopeMachines, target.serverFlagHint())
+			}
 			return nil
 		},
 	}
