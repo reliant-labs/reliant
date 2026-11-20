@@ -22039,6 +22039,10 @@ Pause every activation of a workflow
 
 Pause every activation of a workflow, as the app's Disable does.
 
+With no --project or --project-id it pauses the workflow's activations in
+EVERY project, so it says so first, and each paused line names its project.
+Pass --project (a path) or --project-id to pause one project's only.
+
 It is not all or nothing: a pause that fails is reported and the rest still
 pause. Resume with activate; remove one activation with delete.
 
@@ -22050,8 +22054,9 @@ reliant trigger deactivate [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--project-id` | `string` | - | Pause only this project's activations (default: every project) |
-| `--workflow` | `string` | - | Workflow whose activations to pause (required) |
+| `--project` | `string` | - | Pause only the activations of the project at this path |
+| `--project-id` | `string` | - | Pause only this project's activations (default, with no --project either: every project) |
+| `--workflow` | `string` | - | Workflow whose activations to pause: a slug, or builtin://`<name>` (required) |
 
 ---
 
