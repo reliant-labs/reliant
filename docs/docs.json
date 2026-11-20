@@ -448,7 +448,8 @@
                 "group": "Monitor",
                 "pages": [
                   "guides/observability/send-opentelemetry-from-any-app",
-                  "guides/observability/find-slowest-rpcs"
+                  "guides/observability/find-slowest-rpcs",
+                  "guides/observability/route-alerts-slack-pagerduty"
                 ]
               },
               {
@@ -456,6 +457,7 @@
                 "pages": [
                   "guides/observability/find-release-that-caused-error",
                   "guides/observability/debug-production-with-ai-agent",
+                  "guides/observability/debug-frontend-errors-session-timelines",
                   "guides/observability/find-cpu-hotspots-continuous-profiling"
                 ]
               }
