@@ -1,4 +1,6 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -55,6 +57,40 @@ describe("demo twins", () => {
     expect(demo.currentSessionOwner()).toBe(owner);
     expect(Object.isFrozen(owner)).toBe(true);
   });
+
+  it("rejects session-owner mutators at demo bundle time", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "demo-session-owner-"));
+    const entry = path.join(dir, "entry.ts");
+    const config = path.join(dir, "vite.config.ts");
+    try {
+      fs.writeFileSync(entry, 'import { beginSessionTransition } from "session-owner-fixture";\nbeginSessionTransition();\n');
+      fs.writeFileSync(config, `
+        import { demoSubstitutes } from ${JSON.stringify(at("vite-plugin-demo-bundle.ts"))};
+        export default {
+          root: ${JSON.stringify(dir)},
+          plugins: [{
+            name: "session-owner-fixture",
+            resolveId(source) {
+              return source === "session-owner-fixture" ? ${JSON.stringify(at("src/lib/auth/sessionOwner.ts"))} : null;
+            },
+          }, demoSubstitutes()],
+          build: { write: false, minify: false, rollupOptions: { input: ${JSON.stringify(entry)} } },
+        };
+      `);
+      // Run the real CLI outside Vitest's VM, where native bundler bindings
+      // cannot receive plugin objects from the test realm.
+      const result = spawnSync(process.execPath, [at("node_modules/vite/bin/vite.js"), "build", "--config", config], {
+        cwd: root,
+        encoding: "utf8",
+        timeout: 15_000,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/"beginSessionTransition" is not exported by .*sessionOwner\.demo\.ts/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }, 20_000);
 
   // The first twin pays the cold import of the app's module graph (~2.5-3s
   // on an idle host), which a loaded gate stretches past vitest's default 5s.
