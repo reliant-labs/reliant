@@ -76,7 +76,7 @@ func getProviderForModel(modelID models.ModelID) providerType {
 }
 
 // defaultLocation is the Vertex AI region used when none is configured.
-const defaultLocation = "us-central1"
+const defaultLocation = llm.DefaultVertexLocation
 
 // placement is the process's configured Vertex AI project and region
 // (VERTEXAI_PROJECT, VERTEXAI_LOCATION: the server role's LLM config).

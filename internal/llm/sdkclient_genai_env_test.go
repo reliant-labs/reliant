@@ -67,6 +67,33 @@ func TestGenAISDKClientIgnoresProcessEnvironment(t *testing.T) {
 		}
 	})
 
+	t.Run("the Enterprise backend is refused", func(t *testing.T) {
+		_, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{Backend: genai.BackendEnterprise, Project: "p", Location: "us-central1"})
+		if !errors.Is(err, errGenAIEnterpriseUnsupported) {
+			t.Fatalf("err = %v, want errGenAIEnterpriseUnsupported", err)
+		}
+	})
+
+	t.Run("the caller's config is not mutated", func(t *testing.T) {
+		in := &genai.ClientConfig{Backend: genai.BackendGeminiAPI, APIKey: "account-key"}
+		if _, err := NewGenAISDKClient(context.Background(), in); err != nil {
+			t.Fatal(err)
+		}
+		if in.HTTPOptions.BaseURL != "" || in.HTTPClient != nil {
+			t.Fatalf("NewGenAISDKClient filled the caller's config: base %q, http client set %v", in.HTTPOptions.BaseURL, in.HTTPClient != nil)
+		}
+	})
+
+	t.Run("a Vertex AI client with only a project defaults to us-central1", func(t *testing.T) {
+		client, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{Backend: genai.BackendVertexAI, Project: "platform-project"})
+		if err != nil {
+			t.Skipf("no Application Default Credentials on this host: %v", err)
+		}
+		if cc := client.ClientConfig(); cc.Location != DefaultVertexLocation || cc.HTTPOptions.BaseURL != "https://us-central1-aiplatform.googleapis.com/" {
+			t.Fatalf("resolved location %q base %q, want us-central1 and its endpoint", cc.Location, cc.HTTPOptions.BaseURL)
+		}
+	})
+
 	t.Run("a Vertex AI client goes to its own location's endpoint", func(t *testing.T) {
 		client, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{
 			Backend: genai.BackendVertexAI, Project: "platform-project", Location: "us-central1",

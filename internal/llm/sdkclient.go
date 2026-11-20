@@ -68,10 +68,13 @@ func NewAnthropicSDKClient(opts ...anthropicopt.RequestOption) anthropicsdk.Clie
 // The Vertex AI credential is unchanged: with no Credentials genai uses the
 // process's Application Default Credentials, the platform's own Vertex
 // identity, placed by VERTEXAI_PROJECT / VERTEXAI_LOCATION.
-func NewGenAISDKClient(ctx context.Context, cfg *genai.ClientConfig) (*genai.Client, error) {
-	if cfg == nil {
+func NewGenAISDKClient(ctx context.Context, in *genai.ClientConfig) (*genai.Client, error) {
+	if in == nil {
 		return nil, errGenAIBackendRequired
 	}
+	// Defaults go on a copy: a caller may reuse its config, even concurrently.
+	cfg := *in
+	cfg.HTTPOptions.Headers = in.HTTPOptions.Headers.Clone()
 	switch cfg.Backend {
 	case genai.BackendGeminiAPI:
 		if strings.TrimSpace(cfg.APIKey) == "" {
@@ -80,29 +83,40 @@ func NewGenAISDKClient(ctx context.Context, cfg *genai.ClientConfig) (*genai.Cli
 		if cfg.HTTPOptions.BaseURL == "" {
 			cfg.HTTPOptions.BaseURL = genAIGeminiBaseURL
 		}
-	case genai.BackendVertexAI, genai.BackendEnterprise:
-		if strings.TrimSpace(cfg.Project) == "" || strings.TrimSpace(cfg.Location) == "" {
+	case genai.BackendVertexAI:
+		if strings.TrimSpace(cfg.Project) == "" {
 			return nil, errVertexPlacementRequired
+		}
+		if strings.TrimSpace(cfg.Location) == "" {
+			cfg.Location = DefaultVertexLocation
 		}
 		if cfg.HTTPOptions.BaseURL == "" && cfg.APIKey == "" {
 			cfg.HTTPOptions.BaseURL = genAIVertexBaseURL(cfg.Location)
 		}
+	case genai.BackendEnterprise:
+		// No caller uses it, and its endpoint and credential contract is not
+		// Vertex AI's: refuse it rather than guess.
+		return nil, errGenAIEnterpriseUnsupported
 	default:
 		return nil, errGenAIBackendRequired
 	}
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = StreamingHTTPClient()
 	}
-	return genai.NewClient(ctx, cfg)
+	return genai.NewClient(ctx, &cfg)
 }
+
+// DefaultVertexLocation is the Vertex AI region used when none is configured.
+const DefaultVertexLocation = "us-central1"
 
 // ErrGeminiAPIKeyRequired is returned for a Gemini API client with no key of
 // the account's.
 var ErrGeminiAPIKeyRequired = errors.New("gemini api key is required: connect Gemini from Settings")
 
 var (
-	errGenAIBackendRequired    = errors.New("genai client needs an explicit backend (Gemini API or Vertex AI)")
-	errVertexPlacementRequired = errors.New("vertex ai client needs an explicit project and location (VERTEXAI_PROJECT, VERTEXAI_LOCATION)")
+	errGenAIBackendRequired       = errors.New("genai client needs an explicit backend (Gemini API or Vertex AI)")
+	errVertexPlacementRequired    = errors.New("vertex ai client needs an explicit project (VERTEXAI_PROJECT)")
+	errGenAIEnterpriseUnsupported = errors.New("the genai Enterprise backend is not supported")
 )
 
 // genAIGeminiBaseURL is genai's own Gemini API endpoint, used in place of
