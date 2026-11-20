@@ -212,6 +212,12 @@ const ForgeConsoleDataPage = lazyRoute(
   () => import('./components/Forge/Data/DataPage'), 'DataPage')
 const ForgeConsoleUsersPage = lazyRoute(
   () => import('./components/Forge/Users/UsersPage'), 'UsersPage')
+const ForgeConsoleVulnerabilitiesPage = lazyRoute(
+  () => import('./components/Forge/Security/VulnerabilitiesPage'), 'VulnerabilitiesPage')
+const ForgeConsoleVulnerabilityPage = lazyRoute(
+  () => import('./components/Forge/Security/VulnerabilityPage'), 'VulnerabilityPage')
+const ForgeConsoleSbomsPage = lazyRoute(
+  () => import('./components/Forge/Security/SbomsPage'), 'SbomsPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/SecretsPage'), 'SecretsPage')
 const ForgeConsoleActivityPage = lazyRoute(
@@ -814,6 +820,9 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   storage: gated(ForgeConsoleStoragePage),
   data: gated(ForgeConsoleDataPage),
   users: gated(ForgeConsoleUsersPage),
+  vulnerabilities: gated(ForgeConsoleVulnerabilitiesPage),
+  vulnerability: gated(ForgeConsoleVulnerabilityPage),
+  sboms: gated(ForgeConsoleSbomsPage),
   environments: gated(ForgeEnvironmentsPage),
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),
