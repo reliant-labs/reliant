@@ -205,3 +205,64 @@ server_image = fw.Workload {
     runtime = forge.BuildOnly {}
     build = server_image_build({})
 }
+
+# The standalone CLI: ./cmd/reliant cross-compiled for the platform matrix
+# .goreleaser.yml declares — linux, darwin and windows on amd64 and arm64,
+# minus windows/arm64 — one build variant each, named <goos>-<goarch> so forge
+# writes bin/reliant-cli-<goos>-<goarch> (.exe on windows). The name matches
+# control-plane's `reliant_cli_service`. forge builds every variant with
+# CGO_ENABLED=0, as goreleaser's `env` does.
+#
+# release.yml's build-backend builds a sixth target, windows/arm64, with
+# `-tags exp.winarm64` (a delve build tag). Adding it is one more entry with
+# `tags = ["exp.winarm64"]`; goreleaser's matrix leaves it out, so this does too.
+#
+# The ldflags are goreleaser's: `-s -w` plus the internal/version stamp. The
+# stamp's values are per build, so the env that binds this passes them
+# (`reliant_cli_variants`, keyed like `server_image_build`'s build args), never
+# this declaration; a key the stamp leaves out keeps its in-code "unknown".
+# It also writes CommitTime, as release.yml's build does (goreleaser's
+# ldflags predate that var).
+# Each value must be free of spaces: forge joins the ldflags with one.
+# goreleaser's four `internal/builddefaults` -X flags are not reproduced: that
+# package no longer exists, so the linker ignores them, and with goreleaser's
+# empty defaults they stamped nothing anyway. The OSS-clean equivalent is no
+# endpoint stamp, which is what this builds (release.yml's
+# pkg/config.BuildDefaults stamp is the release's opt-in, not goreleaser's).
+_CLI_PLATFORMS = [
+    ["linux", "amd64"]
+    ["linux", "arm64"]
+    ["darwin", "amd64"]
+    ["darwin", "arm64"]
+    ["windows", "amd64"]
+]
+
+# The internal/version var each stamp key writes (the Dockerfile's build-arg
+# names, so one stamp serves both builds).
+_VERSION_VARS = {
+    VERSION = "Version"
+    COMMIT = "Commit"
+    BUILD_DATE = "Date"
+    BRANCH = "Branch"
+    COMMIT_TIME = "CommitTime"
+}
+
+reliant_cli_variants = lambda stamp: {str: str} -> [forge.BuildVariant] {
+    _ldflags = ["-s", "-w"] + [
+        "-X github.com/reliant-labs/reliant/internal/version.${var}=${stamp[key]}"
+        for key, var in _VERSION_VARS if key in stamp
+    ]
+    [forge.BuildVariant {
+        name = "${p[0]}-${p[1]}"
+        goos = p[0]
+        goarch = p[1]
+        ldflags = _ldflags
+    } for p in _CLI_PLATFORMS]
+}
+
+reliant_cli = fw.Workload {
+    name = "reliant-cli"
+    kind = "tool"
+    runtime = forge.BuildOnly {build_variants = reliant_cli_variants({})}
+    build = forge.GoBuild {cmd = "./cmd/reliant"}
+}
