@@ -25,7 +25,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"golang.org/x/oauth2/google"
 )
 
 // Claude API structures for Vertex AI
@@ -565,7 +564,7 @@ func (c *VertexAIClient) convertSchemaToMap(schema interface{}) map[string]inter
 
 // getClaudeEndpoint returns the Vertex AI Claude API endpoint
 func (c *VertexAIClient) getClaudeEndpoint(stream bool) string {
-	project, location := projectAndLocation()
+	project, location := c.account.project, vertexLocation()
 
 	action := "rawPredict"
 	if stream {
@@ -576,19 +575,14 @@ func (c *VertexAIClient) getClaudeEndpoint(stream bool) string {
 		location, project, location, c.options.Model.APIModel, action)
 }
 
-// getAccessToken gets a Google Cloud access token
+// getAccessToken gets an access token for the connected account's
+// service-account key.
 func (c *VertexAIClient) getAccessToken(ctx context.Context) (string, error) {
-	creds, err := google.FindDefaultCredentials(ctx, "https://www.googleapis.com/auth/cloud-platform")
-	if err != nil {
-		return "", fmt.Errorf("failed to find credentials: %w", err)
-	}
-
-	token, err := creds.TokenSource.Token()
+	token, err := c.account.creds.Token(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get token: %w", err)
 	}
-
-	return token.AccessToken, nil
+	return token.Value, nil
 }
 
 // makeClaudeRequest makes an HTTP request to the Claude API

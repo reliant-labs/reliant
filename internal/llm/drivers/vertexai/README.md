@@ -16,39 +16,28 @@ Driver for Google Cloud Vertex AI supporting Gemini models. Claude models via Ve
 
 ## Setup
 
-### Environment Variables
+Vertex AI runs on reliant's multi-tenant server roles, so it never uses the
+server's own Google credentials (Application Default Credentials, the metadata
+server, `GOOGLE_APPLICATION_CREDENTIALS`, a gcloud login). Each user or org
+connects a **service-account key** in Settings, like an API key; calls are
+billed to and placed in the key's `project_id`.
 
 ```bash
-# Required
-export VERTEXAI_PROJECT="your-gcp-project-id"
-
-# Optional (defaults to us-central1)
-export VERTEXAI_LOCATION="us-central1"
-```
-
-### Authentication
-
-**Option 1: Application Default Credentials (Recommended)**
-
-```bash
-gcloud auth application-default login
-```
-
-**Option 2: Service Account**
-
-```bash
-gcloud iam service-accounts create vertexai-driver \
-  --display-name="Vertex AI Driver"
-
+gcloud iam service-accounts create vertexai-driver --display-name="Vertex AI Driver"
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="serviceAccount:vertexai-driver@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/aiplatform.user"
-
 gcloud iam service-accounts keys create key.json \
   --iam-account=vertexai-driver@YOUR_PROJECT_ID.iam.gserviceaccount.com
-
-export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
+# Paste the contents of key.json into Settings → Providers → Vertex AI.
 ```
+
+Only `service_account` keys are accepted. Workload-identity
+(`external_account`) configs are refused: their subject token comes from a
+file, URL or program, which on a server would be the server's own. The key's
+`token_uri` must be Google's; tokens are self-signed JWTs.
+
+The region is the server's `VERTEXAI_LOCATION` (default `us-central1`).
 
 ## Usage
 
@@ -91,15 +80,8 @@ VertexAIClient
 
 ## Troubleshooting
 
-### "VERTEXAI_PROJECT environment variable is required"
-```bash
-export VERTEXAI_PROJECT="your-project-id"
-```
-
-### "Failed to initialize Gemini client"
-```bash
-gcloud auth application-default login
-```
+### "vertex ai needs a service-account key: connect Vertex AI from Settings"
+Connect a service-account key (see Setup).
 
 ### "Permission denied"
 ```bash
@@ -116,8 +98,6 @@ Ensure you're using the correct model ID with the `vertex-` prefix and that the 
 ### Running Tests
 
 ```bash
-export VERTEXAI_PROJECT="your-test-project"
-export VERTEXAI_LOCATION="us-central1"
 go test ./internal/llm/drivers/vertexai/...
 ```
 

@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"cloud.google.com/go/auth"
 	anthropicsdk "github.com/anthropics/anthropic-sdk-go"
 	anthropicopt "github.com/anthropics/anthropic-sdk-go/option"
 	openaisdk "github.com/openai/openai-go/v3"
@@ -65,9 +67,11 @@ func NewAnthropicSDKClient(opts ...anthropicopt.RequestOption) anthropicsdk.Clie
 // must carry the account's key, a Vertex AI client its project and location,
 // and the endpoint is filled here when the caller has none.
 //
-// The Vertex AI credential is unchanged: with no Credentials genai uses the
-// process's Application Default Credentials, the platform's own Vertex
-// identity, placed by VERTEXAI_PROJECT / VERTEXAI_LOCATION.
+// A Vertex AI client must carry the connected account's Credentials. With
+// none, genai would use the server's Application Default Credentials (the
+// metadata server, GOOGLE_APPLICATION_CREDENTIALS, a gcloud login); this
+// constructor refuses instead, and signs every request with the account's
+// token itself.
 func NewGenAISDKClient(ctx context.Context, in *genai.ClientConfig) (*genai.Client, error) {
 	if in == nil {
 		return nil, errGenAIBackendRequired
@@ -84,15 +88,34 @@ func NewGenAISDKClient(ctx context.Context, in *genai.ClientConfig) (*genai.Clie
 			cfg.HTTPOptions.BaseURL = genAIGeminiBaseURL
 		}
 	case genai.BackendVertexAI:
+		// Only the account's own credentials: with none, genai would fall
+		// back to the server's Application Default Credentials.
+		if cfg.Credentials == nil || cfg.APIKey != "" {
+			return nil, errVertexCredentialsRequired
+		}
 		if strings.TrimSpace(cfg.Project) == "" {
 			return nil, errVertexPlacementRequired
 		}
 		if strings.TrimSpace(cfg.Location) == "" {
 			cfg.Location = DefaultVertexLocation
 		}
-		if cfg.HTTPOptions.BaseURL == "" && cfg.APIKey == "" {
+		if cfg.HTTPOptions.BaseURL == "" {
 			cfg.HTTPOptions.BaseURL = genAIVertexBaseURL(cfg.Location)
 		}
+		// genai signs requests only through a client it builds itself (and
+		// then from ADC when Credentials is nil); a client of ours carries the
+		// account's token through bearerTransport.
+		httpClient := StreamingHTTPClient()
+		if cfg.HTTPClient != nil {
+			copied := *cfg.HTTPClient
+			httpClient = &copied
+		}
+		base := httpClient.Transport
+		if base == nil {
+			base = http.DefaultTransport
+		}
+		httpClient.Transport = &bearerTransport{base: base, creds: cfg.Credentials}
+		cfg.HTTPClient = httpClient
 	case genai.BackendEnterprise:
 		// No caller uses it, and its endpoint and credential contract is not
 		// Vertex AI's: refuse it rather than guess.
@@ -115,7 +138,8 @@ var ErrGeminiAPIKeyRequired = errors.New("gemini api key is required: connect Ge
 
 var (
 	errGenAIBackendRequired       = errors.New("genai client needs an explicit backend (Gemini API or Vertex AI)")
-	errVertexPlacementRequired    = errors.New("vertex ai client needs an explicit project (VERTEXAI_PROJECT)")
+	errVertexPlacementRequired    = errors.New("vertex ai client needs an explicit project")
+	errVertexCredentialsRequired  = errors.New("vertex ai client needs the account's credentials; the server's own are never used")
 	errGenAIEnterpriseUnsupported = errors.New("the genai Enterprise backend is not supported")
 )
 
@@ -134,4 +158,21 @@ func genAIVertexBaseURL(location string) string {
 	default:
 		return fmt.Sprintf("https://%s-aiplatform.googleapis.com/", location)
 	}
+}
+
+// bearerTransport signs each request with an access token from creds. It is
+// how a Vertex AI client of ours carries the connected account's credentials.
+type bearerTransport struct {
+	base  http.RoundTripper
+	creds *auth.Credentials
+}
+
+func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	tok, err := t.creds.Token(req.Context())
+	if err != nil {
+		return nil, fmt.Errorf("vertex ai access token: %w", err)
+	}
+	signed := req.Clone(req.Context())
+	signed.Header.Set("Authorization", "Bearer "+tok.Value)
+	return t.base.RoundTrip(signed)
 }

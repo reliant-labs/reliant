@@ -20,14 +20,15 @@ message LLMConfig {
     description: "Reliant LLM gateway base URL"
   }];
 
-  string vertexai_project = 2 [(forge.v1.config) = {
-    env_var: "VERTEXAI_PROJECT"
-    description: "Vertex AI project (required to call Vertex AI models)"
-  }];
+  // Field 2 was vertexai_project (VERTEXAI_PROJECT): Vertex AI calls now use
+  // the project of the service-account key a user or org connects, never a
+  // server-wide project and the server's own Google credentials.
+  reserved 2;
+  reserved "vertexai_project";
   string vertexai_location = 3 [(forge.v1.config) = {
     env_var: "VERTEXAI_LOCATION"
     default_value: "us-central1"
-    description: "Vertex AI region"
+    description: "Vertex AI region for connected Vertex AI accounts"
   }];
 
   // The stream guards (internal/llm transport.go, stream_stall.go). Each is
