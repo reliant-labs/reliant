@@ -5,8 +5,6 @@ description: "Give each pull request its own hosted copy of your app on its own 
 keywords: ["preview environments per PR", "pull request preview environment", "forge env preview", "ephemeral environments", "review apps", "forge env gc"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin; preview verbs need forge v1.5.0+) · L steps run in scratch: yes (guides-scratch/preview/guides-sandbox-preview: env new preview --from prod, env new --check, env preview name/create, env list, gc --dry-run/--json; workflow YAML checked with actionlint v1.7.7) · H steps: run in Reliant Labs org sandbox (project guides-sandbox-preview: preview-pr-42 deployed twice, curled, deleted with env preview delete; preview-gc-demo deployed with --ttl 8m and deleted by the platform after expiry, then env gc --yes; all torn down, hosted project + release images remain, no delete verb) · unverified: the GitHub Actions run itself. There is no OIDC or short-lived credential path for Actions, so no long-lived token was stored as a repo secret; the YAML was linted only. The automation token scopes are taken from forge/deploy/releases-and-promotion */}
-
 By the end of this guide every pull request gets its own hosted copy of your app, with its own URL, its own database and an expiry date. Reviewers open the change running, and the copy is deleted when the pull request closes or its time runs out.
 
 A preview is an ordinary forge environment with an expiry marker, so `env deploy` and `env status` work on it unchanged. [Preview environments](/hosting/preview-environments) is the reference for every flag.
@@ -15,7 +13,7 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
 
 - A forge project with an environment bound to [Reliant hosting](/hosting/overview), for example a `prod` you already deploy.
 - Forge v1.5.0 or later in the project. Check it with `reliant forge --version` inside the project.
-- Billing for app hosting. Each preview is a hosted environment, and each preview's static site counts against the one free site per organization ([Billing](/hosting/overview#billing)).
+- Billing for app hosting. Each preview is a hosted environment, and each preview's static site counts against the one free site per person ([Billing](/hosting/overview#billing)).
 - Admin access to the GitHub repository, to add a secret and a workflow.
 
 <Steps>
@@ -187,7 +185,7 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
     [preview] deleted preview-pr-42
     ```
 
-    In our run the URL returned `404` about 90 seconds later.
+    The URL returned `404` about 90 seconds later.
   </Step>
 
   <Step title="Collect previews that expired">
@@ -232,10 +230,12 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Preview environments" icon="code-branch" href="/hosting/preview-environments">
+  <Card title="Preview environments" icon="git-branch" href="/hosting/preview-environments">
     Every flag, naming rule and cost detail.
   </Card>
-{/* defer-card:/guides/hosting/deploy-from-github-actions ICA8Q2FyZCB0aXRsZT0iRGVwbG95IGZyb20gR2l0SHViIEFjdGlvbnMiIGljb249ImdpdGh1YiIgaHJlZj0iL2d1aWRlcy9ob3N0aW5nL2RlcGxveS1mcm9tLWdpdGh1Yi1hY3Rpb25zIj4KICAgIERlcGxveSBzdGFnaW5nIGFuZCBwcm9kdWN0aW9uIGZyb20gQ0kgd2l0aCBhbiBhdXRvbWF0aW9uIHRva2VuLgogIDwvQ2FyZD4= */}
+  <Card title="Deploy from GitHub Actions" icon="github" href="/guides/hosting/deploy-from-github-actions">
+    Deploy staging and production from CI with an automation token.
+  </Card>
   <Card title="Promote a release to production" icon="arrow-up-right" href="/guides/hosting/promote-release-staging-to-production">
     Move the exact release staging ran to production by digest.
   </Card>

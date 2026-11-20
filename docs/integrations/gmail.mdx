@@ -50,7 +50,7 @@ nodes:
     uses: slack/message.post@1
     with:
       channel: C0123ABCD
-      text: "Invoice mail from {{ nodes.read.from }}: {{ nodes.read.subject }}"
+      text: "Invoice mail from {{ nodes.read.data.from }}: {{ nodes.read.data.subject }}"
 
 edges:
   - from: read

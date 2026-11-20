@@ -5,8 +5,6 @@ description: "How an agent's tool call travels from the cloud worker through NAT
 keywords: ["how reliant daemon works", "ai agent run commands on my machine", "outbound only connection no inbound ports", "daemon heartbeat reconnect", "no daemon connected", "agent paused waiting for machine"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · commands run: reliant daemon --help, daemon status, daemon ls, daemon start --non-interactive / status / stop in a scratch HOME (guides-scratch/how-tool-calls-reach-your-machine, stopped), log lines from this machine's own daemon (read only) · sources: internal/toolexec/daemon_router_nats.go (subjects :39-59, daemonStaleThreshold :854-859, daemonRequestError, toolRequestRoundTrip), internal/toolexec/daemon_reconnect.go (DaemonReconnectGrace), internal/toolexec/tool_result_redelivery.go, internal/toolexec/nats_bridge.go (NATSToolBridge, handleAsync), internal/toolexec/nats_chunked.go, nats_chunked_request.go, internal/toolexec/transport/policy.go + client.go, internal/toolexec/daemonruntime/runtime.go (run loop), session_liveness.go, gateway_session.go, internal/handlers/tools_daemon/tools_daemon.go (staleConnectionThreshold), internal/daemonliveness/reachable.go:31-41, internal/servergateway/flowhealth.go, internal/workflow/runtime/daemon_offline_tracker.go, internal/llm/tools/registry.go (Placement), internal/machinewake/contract.go:22-23, proto/reliant/v1/tools_daemon.proto, cmd/reliant/cmd/daemon.go (status/stability) */}
-
 **In short**
 
 - The daemon on your machine dials **out** to Reliant's gateway and holds one long-lived, two-way gRPC stream open. Your machine needs no open inbound port.
@@ -220,7 +218,7 @@ Other lines to look for: `Session ended; reconnecting` (an unplanned drop, with 
   <Card title="Run agents on your own server" icon="server" href="/guides/machines/run-agents-on-your-own-server">
     Run the daemon headless with a token, under systemd, on a server or Raspberry Pi.
   </Card>
-  <Card title="Troubleshoot an offline machine" icon="plug-circle-exclamation" href="/guides/machines/troubleshoot-offline-machine">
+  <Card title="Troubleshoot an offline machine" icon="plug-zap" href="/guides/machines/troubleshoot-offline-machine">
     Fix a machine that is offline, waking or not connecting, and resume a paused chat.
   </Card>
 </CardGroup>
