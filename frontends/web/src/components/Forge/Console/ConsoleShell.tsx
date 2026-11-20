@@ -268,6 +268,8 @@ export function consoleCrumbs(
       return [{ label: "Analytics", href: href({ kind: "analytics" }) }, { label: ANALYTICS_TAB_LABELS[page.tab ?? "overview"] }];
     case "speed-insights":
       return [{ label: "Observability" }, { label: "Speed insights" }];
+    case "live-state":
+      return [{ label: "Dashboards", href: href({ kind: "obs-view", view: "dashboards" }) }, { label: "Live state" }];
     case "extension":
       return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
   }

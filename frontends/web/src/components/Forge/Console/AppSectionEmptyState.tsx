@@ -56,6 +56,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
       return { title: "Events & metrics", shows: PAGE_SUBTITLES.events };
     case "analytics":
       return { title: "Analytics", shows: PAGE_SUBTITLES.analytics };
+    case "live-state":
+      return { title: "Live state", shows: "Every service's instances, CPU, memory, requests, latency and errors" };
     case "speed-insights":
       return { title: "Speed insights", shows: PAGE_SUBTITLES["speed-insights"] };
     case "extension": {

@@ -32,6 +32,8 @@
  *   /forge/p/:project/analytics[/:tab]        Analytics: the built-in Product analytics dashboards as
  *                                             tabs (overview · users · product · acquisition) + events
  *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
+ *   /forge/p/:project/observability/dashboards/live-state
+ *                                             the built-in Live state dashboard
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -177,8 +179,17 @@ export type ConsolePage =
   | { kind: "analytics"; tab?: AnalyticsTab }
   /** Speed insights (U6c): web vitals per page, from the browser runtime's RUM spans (Analytics/SpeedInsightsPage.tsx). */
   | { kind: "speed-insights" }
+  /**
+   * The built-in Live state dashboard (U6c): charts per service — instances,
+   * CPU, memory, rate, latency, errors — from the hook the Services tab reads
+   * (LiveState/LiveStateDashboard.tsx). Listed on Dashboards beside the custom ones.
+   */
+  | { kind: "live-state" }
   /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
   | { kind: "extension"; id: string; segment: string };
+
+/** The Live state dashboard's segment under Dashboards: one segment, so it never meets `dashboards/$kind/$key`. */
+export const LIVE_STATE_SEGMENT = "live-state";
 
 /** The Analytics page's tabs, in order: forge's four built-in Product analytics dashboards, then Events & metrics. */
 export const ANALYTICS_TABS = ["overview", "users", "product", "acquisition", "events"] as const;
@@ -271,6 +282,8 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return !page.tab || page.tab === ANALYTICS_TABS[0] ? `${base}/analytics` : `${base}/analytics/${page.tab}`;
     case "speed-insights":
       return `${base}/speed-insights`;
+    case "live-state":
+      return `${base}/observability/dashboards/${LIVE_STATE_SEGMENT}`;
     case "extension":
       return `${base}/${encodeURIComponent(page.segment)}`;
   }
@@ -286,6 +299,7 @@ export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, 
 /** Dashboards: built-in and custom, the one place they are listed. */
 export const dashboardsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "dashboards" }, ctx);
 export const analyticsPath = (app: string, tab?: AnalyticsTab, ctx?: PathContext) => consolePath(app, { kind: "analytics", tab }, ctx);
+export const liveStatePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "live-state" }, ctx);
 export const speedInsightsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "speed-insights" }, ctx);
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
@@ -319,6 +333,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return sub ? { kind: "release", version: safeDecode(sub) } : { kind: "releases" };
       case "observability":
         if (!sub) return null;
+        if (sub === "dashboards" && dashKind === LIVE_STATE_SEGMENT && !dashKey) return { kind: "live-state" };
         if (sub === "dashboards" && dashKind) {
           return isDashboardPageKind(dashKind) && dashKey && rest.length === 0 ? { kind: "dashboard", dashKind, key: safeDecode(dashKey) } : null;
         }

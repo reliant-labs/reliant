@@ -254,7 +254,7 @@ function Line({ timestamps, values, unit, label, tone }: { timestamps: number[];
   return <UPlotChart height={110} timestamps={timestamps} series={[{ label, values, tone }]} unit={unit} label={label} legend={false} />;
 }
 
-function RedCharts({
+export function RedCharts({
   scope,
   range,
   name,
@@ -263,7 +263,10 @@ function RedCharts({
   cpuNow,
   memNow,
   loadingUsage,
+  instances,
 }: {
+  /** The Live state dashboard's sixth card: ready of desired, and the instances seen in the window. */
+  instances?: { ready: string; pods: readonly WorkloadPod[] };
   scope: ObsScope | null;
   range: RangePreset;
   name: string;
@@ -296,6 +299,19 @@ function RedCharts({
   const window = RANGE_LABELS[range].toLowerCase();
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="service-charts">
+      {instances && (
+        <MetricCard title="Instances" figure={instances.ready} detail={`ready · ${instances.pods.length} seen in the ${window}`} loading={loadingUsage} empty={instances.pods.length === 0 ? "No instance reported in the window." : null} testId="service-chart-instances">
+          <ul className="h-[110px] space-y-1 overflow-y-auto px-2 text-meta">
+            {instances.pods.map((pod) => (
+              <li key={pod.name} className="flex items-center gap-2">
+                <Status tone={POD_STATE[pod.state].tone} label={POD_STATE[pod.state].label} hideLabel />
+                <span className="min-w-0 flex-1 truncate font-mono text-ink">{pod.name}</span>
+                {pod.restarts > 0 && <span className="shrink-0 tabular-nums text-warning-ink">{pod.restarts} restarts</span>}
+              </li>
+            ))}
+          </ul>
+        </MetricCard>
+      )}
       <MetricCard title="Requests" figure={totalRequests === null ? "—" : formatCount(totalRequests)} detail={window} loading={totals.isLoading} empty={noTraffic} testId="service-chart-requests">
         <Line timestamps={timestamps} values={requests} unit="count" label={`Requests to ${name}`} />
       </MetricCard>
