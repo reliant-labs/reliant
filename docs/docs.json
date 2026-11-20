@@ -24,6 +24,8 @@
           {
             "group": "Get started",
             "pages": [
+              "index",
+              "getting-started/why-reliant",
               "getting-started/quick-start",
               "getting-started/installation",
               "getting-started/concepts"
@@ -132,7 +134,6 @@
             "group": "Account & billing",
             "pages": [
               "account/billing",
-              "account/observability-billing",
               "help/privacy"
             ]
           },
@@ -171,8 +172,7 @@
             "group": "Get started",
             "pages": [
               "forge/overview",
-              "forge/quick-start",
-              "forge/deploy-without-an-account"
+              "forge/quick-start"
             ]
           },
           {
@@ -193,41 +193,22 @@
             ]
           },
           {
-            "group": "Deploy & host",
+            "group": "Deploy",
             "pages": [
-              {
-                "group": "Deploy",
-                "pages": [
-                  "forge/environments-and-deploys",
-                  "forge/deploy/environments",
-                  "forge/deploy/what-gets-deployed",
-                  "forge/deploy/releases-and-promotion",
-                  "forge/deploy/self-hosted-delivery",
-                  "forge/deploy/escape-hatches"
-                ]
-              },
-              "forge/hosting",
-              "forge/secrets",
-              "forge/llm-provider",
-              "forge/custom-domains",
-              "forge/sign-in"
+              "forge/environments-and-deploys",
+              "forge/deploy/environments",
+              "forge/deploy/what-gets-deployed",
+              "forge/deploy/releases-and-promotion",
+              "forge/deploy/release-gates",
+              "forge/deploy/self-hosted-delivery",
+              "forge/deploy/escape-hatches",
+              "forge/llm-provider"
             ]
           },
           {
             "group": "Operate",
             "pages": [
-              {
-                "group": "Observability",
-                "pages": [
-                  "forge/observability",
-                  "forge/observability/signals",
-                  "forge/observability/where-it-goes",
-                  "forge/observability/forge-obs",
-                  "forge/observability/dashboards-and-alerts",
-                  "forge/observability/health-and-shutdown",
-                  "forge/observability/agents"
-                ]
-              },
+              "forge/observability/health-and-shutdown",
               {
                 "group": "Linting",
                 "pages": [
@@ -248,6 +229,42 @@
             "group": "Forge CLI",
             "pages": [
               "cli/forge"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Hosting",
+        "groups": [
+          {
+            "group": "Host your app",
+            "pages": [
+              "hosting/overview",
+              "forge/deploy-without-an-account",
+              "hosting/managed-postgres",
+              "hosting/preview-environments",
+              "hosting/custom-domains",
+              "hosting/secrets",
+              "forge/sign-in"
+            ]
+          },
+          {
+            "group": "Observability",
+            "pages": [
+              "hosting/observability",
+              "hosting/observability/signals",
+              "hosting/observability/where-it-goes",
+              "hosting/observability/forge-obs",
+              "hosting/observability/dashboards-and-alerts",
+              "hosting/observability/session-timelines",
+              "hosting/observability/profiling",
+              "hosting/observability/agents"
+            ]
+          },
+          {
+            "group": "Billing",
+            "pages": [
+              "hosting/observability-billing"
             ]
           }
         ]
@@ -307,11 +324,11 @@
     },
     {
       "source": "/features/secrets",
-      "destination": "/forge/secrets"
+      "destination": "/hosting/secrets"
     },
     {
       "source": "/features/custom-domains",
-      "destination": "/forge/custom-domains"
+      "destination": "/hosting/custom-domains"
     },
     {
       "source": "/features/forge-sign-in",
@@ -319,10 +336,62 @@
     },
     {
       "source": "/observability",
-      "destination": "/forge/observability"
+      "destination": "/hosting/observability"
+    },
+    {
+      "source": "/forge/hosting",
+      "destination": "/hosting/overview"
+    },
+    {
+      "source": "/forge/secrets",
+      "destination": "/hosting/secrets"
+    },
+    {
+      "source": "/forge/custom-domains",
+      "destination": "/hosting/custom-domains"
+    },
+    {
+      "source": "/account/observability-billing",
+      "destination": "/hosting/observability-billing"
+    },
+    {
+      "source": "/forge/observability",
+      "destination": "/hosting/observability"
+    },
+    {
+      "source": "/forge/observability/agents",
+      "destination": "/hosting/observability/agents"
+    },
+    {
+      "source": "/forge/observability/dashboards-and-alerts",
+      "destination": "/hosting/observability/dashboards-and-alerts"
+    },
+    {
+      "source": "/forge/observability/forge-obs",
+      "destination": "/hosting/observability/forge-obs"
+    },
+    {
+      "source": "/forge/observability/signals",
+      "destination": "/hosting/observability/signals"
+    },
+    {
+      "source": "/forge/observability/where-it-goes",
+      "destination": "/hosting/observability/where-it-goes"
     }
   ],
   "seo": {
-    "indexing": "navigable"
+    "indexing": "navigable",
+    "metatags": {
+      "description": "Reliant docs: AI coding agents and multi-agent workflows, the Forge framework for Go and React apps, and hosting with built-in observability.",
+      "og:site_name": "Reliant Docs",
+      "og:type": "website",
+      "og:image": "https://reliantlabs.io/og-image.png",
+      "og:image:width": "1200",
+      "og:image:height": "630",
+      "og:image:alt": "Reliant + Forge: the whole stack for building with AI agents",
+      "twitter:card": "summary_large_image",
+      "twitter:site": "@reliantlabs",
+      "twitter:image": "https://reliantlabs.io/og-image.png"
+    }
   }
 }

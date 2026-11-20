@@ -1,6 +1,6 @@
 ---
 title: "Health probes and graceful shutdown"
-description: "The /healthz and /readyz endpoints every forge process serves, how a process reports what it is waiting for while it boots, and how a rollout drains a replica without dropping requests"
+description: "Forge health probes and graceful shutdown: the /healthz and /readyz endpoints, how a booting process reports what it waits for, and how rollouts drain replicas."
 ---
 
 Two questions get asked of a running process over and over: "are you alive?" and "can you take traffic?". Forge answers both from the first instant a process runs, and answers them honestly while it starts up and while it shuts down. These are the signals the platform uses to decide when to send a new pod traffic and when it is safe to stop an old one, so getting them right is what makes a rollout invisible to users.
@@ -26,7 +26,7 @@ The port is bound before anything else happens, before the database is touched a
 
 A root that reaches the database migrates before it builds the graph, so a service never starts answering requests against a schema its migrations have not reached.
 
-You can check the same thing yourself in development. `forge env status dev --signal app` checks `/healthz` and `/readyz`, as part of the [runtime checks](/forge/observability/where-it-goes#check-that-the-pipeline-works).
+You can check the same thing yourself in development. `forge env status dev --signal app` checks `/healthz` and `/readyz`, as part of the [runtime checks](/hosting/observability/where-it-goes#check-that-the-pipeline-works).
 
 ## Graceful shutdown
 
@@ -66,8 +66,8 @@ OK is the default because a browser treats Unavailable as "the network died" and
 
 ### A drain is not an incident
 
-A call that this replica ended because it is shutting down is logged like a success, with `expected=true`, and never at ERROR. The error-level policy treats `context.Canceled` and a draining stream as `canceled`, not `server`, so a rollout does not open issues, trip the [error-rate alert](/forge/observability/dashboards-and-alerts#alerts) or fail the [`obs check`](/forge/observability/forge-obs#obs-check-did-the-deploy-work) that follows it.
+A call that this replica ended because it is shutting down is logged like a success, with `expected=true`, and never at ERROR. The error-level policy treats `context.Canceled` and a draining stream as `canceled`, not `server`, so a rollout does not open issues, trip the [error-rate alert](/hosting/observability/dashboards-and-alerts#alerts) or fail the [`obs check`](/hosting/observability/forge-obs#obs-check-did-the-deploy-work) that follows it.
 
 ## Related topics
 
-[What every boundary records](/forge/observability/signals) describes the error classes a drain is excluded from. [Environments & deploys](/forge/environments-and-deploys) covers rollouts. Agents can load the `services/shutdown` skill for the full drain contract, including how to use the same pieces from a `main` that runs its own listener.
+[What every boundary records](/hosting/observability/signals) describes the error classes a drain is excluded from. [Environments & deploys](/forge/environments-and-deploys) covers rollouts. Agents can load the `services/shutdown` skill for the full drain contract, including how to use the same pieces from a `main` that runs its own listener.

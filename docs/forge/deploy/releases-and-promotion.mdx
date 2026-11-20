@@ -1,6 +1,7 @@
 ---
-title: "Releases and promotion"
-description: "How forge builds once and promotes by digest: releases as OCI bundles, the append-only ledger, plans and approvals, deploy exit codes, signing, and the opt-in health gate"
+title: "Release promotion: build once, deploy by digest"
+sidebarTitle: "Releases"
+description: "How forge builds a release once and promotes it by digest: OCI release bundles, the append-only ledger, deploy plans and approvals, exit codes and signing."
 ---
 
 A forge deploy does not ship your working tree. It ships a **release**: an immutable record of one build of your project, holding the digest of every image and static bundle, the commit and tree it came from, and the rendered objects the environment will run. Releases are built once and promoted by digest, so the bytes that passed `staging` are the bytes `prod` runs.
@@ -78,7 +79,7 @@ The codes are designed for scripts. The distinction that matters is not pass or 
 | 4 | Declined, nothing lost: a rollout is in flight, the environment is pinned, or a health gate has no passing verdict yet | Wait and retry, or pass `--supersede` (recorded). |
 | 5 | The plan was printed and nobody approved it | Add `--yes`. Nothing was promoted. |
 | 6 | A newer promotion replaced the one being waited on | The release was overtaken. |
-| 7 | Accepted and recorded, queued on a person (billing) | Hand over the printed link and stop. See [Hosting](/forge/hosting#queued-deploys). |
+| 7 | Accepted and recorded, queued on a person (billing) | Hand over the printed link and stop. See [Hosting](/hosting/overview#queued-deploys). |
 | 8 | The wait ran out while the rollout was still progressing | Keep watching with `forge env status <env> --wait`. |
 | 9 | A self-hosted Flux environment needs a permission this credential cannot grant | A cluster admin acts; re-running changes nothing. |
 
@@ -142,7 +143,7 @@ Prod now takes release R only once staging has proved R good. The verdict is the
 | Inconclusive, or never ran on staging | 2 | Refused: `health_gate_unproven` (exit 4). |
 | Not judged yet | 8 | Refused: `health_gate_pending` (exit 4). Run `forge obs check staging --release <v> --wait`, then retry. |
 
-A release prod itself already ran with a pass is admitted without staging, so a roll-forward to a known-good older release needs no detour. During an incident, `forge env deploy prod <release> --override-health-gate "<why>"` overrides this gate only, and records who did it, why, and what staging showed. See [Observability](/forge/observability) for how release health is judged.
+A release prod itself already ran with a pass is admitted without staging, so a roll-forward to a known-good older release needs no detour. During an incident, `forge env deploy prod <release> --override-health-gate "<why>"` overrides this gate only, and records who did it, why, and what staging showed. See [Observability](/hosting/observability) for how release health is judged.
 
 ## Deploying from CI
 
@@ -167,4 +168,4 @@ Both need a version. A no-version deploy cuts a release covering every artifact,
 
 ## Related topics
 
-[Self-hosted delivery](/forge/deploy/self-hosted-delivery) covers delivering to your own cluster with Flux and no control plane. [Environments](/forge/deploy/environments) covers the declarations a release is cut from, and [Hosting on Reliant](/forge/hosting) what happens once a hosted deploy is queued on billing. Agents can run `forge skill load deploy/plan`, `deploy/delivery-policy` and `deploy/offline-ledger` for the full reference.
+[Release gates and regression checks](/forge/deploy/release-gates) covers `forge obs check`, the health gate and rollback floors in one place. [Self-hosted delivery](/forge/deploy/self-hosted-delivery) covers delivering to your own cluster with Flux and no control plane. [Environments](/forge/deploy/environments) covers the declarations a release is cut from, and [Hosting on Reliant](/hosting/overview) what happens once a hosted deploy is queued on billing. Agents can run `forge skill load deploy/plan`, `deploy/delivery-policy` and `deploy/offline-ledger` for the full reference.

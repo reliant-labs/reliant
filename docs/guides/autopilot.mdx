@@ -1,6 +1,6 @@
 ---
 title: "Autopilot"
-description: "Five built-in workflows that review pull requests, security-review them, work issues, answer review feedback and take your alerts and errors on call, on your GitHub repositories, and never merge"
+description: "Reliant Autopilot: five built-in workflows that review and security-review pull requests, work issues, answer review feedback and triage alerts. None merge."
 ---
 
 **Autopilot** is a pack of five built-in workflows for GitHub. Each is an [automation](/automations/overview): it waits for an event, runs unattended, and leaves its work as ordinary issues, comments, reviews, branches and pull requests that you can read and overrule. You turn each one on, and nothing is on until you do.
@@ -189,7 +189,7 @@ On-call takes two kinds of page, through one pipeline:
 - **Alerts**: the rules your environments declare, and the platform's own (a failed deploy, an exhausted quota), that are `critical` or `error`.
 - **Errors**: the platform groups the errors your services and frontends report into **issues**, and raises an alert when one is **new** (`NewIssue`), when a resolved one comes back in a later release (`IssueRegressed`), and when an open one's error rate spikes to five times its previous day (`IssueSpike`). These pass whatever their severity.
 
-Both reach Autopilot the way they reach Slack, PagerDuty and the console: through your organization's Alertmanager. So a [silence](/forge/observability/dashboards-and-alerts#alerts) mutes Autopilot too, and an error that pages Slack is one that Autopilot investigates.
+Both reach Autopilot the way they reach Slack, PagerDuty and the console: through your organization's Alertmanager. So a [silence](/hosting/observability/dashboards-and-alerts#alerts) mutes Autopilot too, and an error that pages Slack is one that Autopilot investigates.
 
 **On Reliant's hosted platform** there is nothing to wire. Turning on-call on connects it to every alert of the project's environments that passes the filter above, with no token to copy and no route to write; your other receivers and routes are unchanged. Turning it off disconnects it.
 
