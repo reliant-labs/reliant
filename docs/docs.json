@@ -333,7 +333,9 @@
                   "guides/machines/manage-cloud-machines-cli",
                   "guides/machines/share-dev-server-preview-url",
                   "guides/machines/sandbox-agent-commands-credentials-none",
-                  "guides/machines/troubleshoot-offline-machine"
+                  "guides/machines/troubleshoot-offline-machine",
+                  "guides/machines/run-several-daemons-one-computer",
+                  "guides/machines/reclaim-restore-worktrees"
                 ]
               }
             ]
