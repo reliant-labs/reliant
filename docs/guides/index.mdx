@@ -209,6 +209,12 @@ Build a Go and React app with Forge: start a project, add features from the sche
   <Card title="Call an LLM from your deployed app without managing API keys" icon="hammer" href="/guides/forge/call-llm-from-deployed-app">
     Give a hosted Forge API a capped, per-environment model key: declare forge.LLM, add forge.llm_env(), and call the official Anthropic or OpenAI SDK unmodified.
   </Card>
+  <Card title="Expose REST endpoints and an OpenAPI spec from a Connect API" icon="hammer" href="/guides/forge/rest-and-openapi-from-connect">
+    Serve plain REST URLs such as GET /v1/products from your existing Connect RPC handlers, and generate an OpenAPI 3 spec from the same proto, with no second API.
+  </Card>
+  <Card title="Build the UI before the backend with mock mode" icon="hammer" href="/guides/forge/build-ui-before-backend-mock-mode">
+    Run your Forge frontend with no API: every RPC answers from generated fixtures, and named scenarios stub the states you design for, such as an empty list.
+  </Card>
   <Card title="Write zero-downtime Postgres migrations and lint them" icon="hammer" href="/guides/forge/zero-downtime-postgres-migrations">
     Change a live Postgres schema without breaking the release that is still serving: declare compatibility, expand then contract, and lint each migration.
   </Card>
@@ -217,6 +223,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   </Card>
   <Card title="Let AI agents query production data read-only" icon="hammer" href="/guides/forge/let-agents-query-production-data">
     Give an AI agent audited, read-only SQL access to production with forge db query: Postgres withholds secret columns, refuses writes and every query is recorded.
+  </Card>
+  <Card title="Seed realistic Postgres development data from your schema" icon="hammer" href="/guides/forge/seed-realistic-dev-data">
+    Fill your dev Postgres with foreign-key-consistent rows that read like your product: auto-seed on env up, your domain words in vocab.yaml, then db seed reset.
   </Card>
   <Card title="Gate pull requests on lint, tests and generated-code drift" icon="hammer" href="/guides/forge/gate-prs-forge-lint-tests">
     Run one CI gate on your machine and in GitHub Actions that fails a pull request on lint errors, failing tests or stale generated code, one table row per check.
@@ -232,6 +241,9 @@ Build a Go and React app with Forge: start a project, add features from the sche
   </Card>
   <Card title="Connect Claude Code or Cursor to Forge over MCP" icon="hammer" href="/guides/forge/connect-claude-code-cursor-mcp">
     Give Claude Code or Cursor Forge's lint, generate, skills and shapes as MCP tools, check the server answers, and add the hosted connector for telemetry.
+  </Card>
+  <Card title="Upgrade Forge and apply its migration playbooks" icon="hammer" href="/guides/forge/upgrade-forge-version">
+    Move a project's pinned Forge version forward: preview the change with --check, list the migration playbooks, run project upgrade, and review the diff.
   </Card>
 </CardGroup>
 

@@ -393,7 +393,9 @@
                   "guides/forge/background-worker-cron-job",
                   "guides/forge/add-sign-in-passkeys",
                   "guides/forge/scope-rows-to-owner",
-                  "guides/forge/call-llm-from-deployed-app"
+                  "guides/forge/call-llm-from-deployed-app",
+                  "guides/forge/rest-and-openapi-from-connect",
+                  "guides/forge/build-ui-before-backend-mock-mode"
                 ]
               },
               {
@@ -401,7 +403,8 @@
                 "pages": [
                   "guides/forge/zero-downtime-postgres-migrations",
                   "guides/forge/measure-migration-locks",
-                  "guides/forge/let-agents-query-production-data"
+                  "guides/forge/let-agents-query-production-data",
+                  "guides/forge/seed-realistic-dev-data"
                 ]
               },
               {
@@ -411,7 +414,8 @@
                   "guides/forge/test-go-api-real-postgres",
                   "guides/forge/find-endpoints-missing-auth-checks",
                   "guides/forge/scan-dependencies-vulnerabilities",
-                  "guides/forge/connect-claude-code-cursor-mcp"
+                  "guides/forge/connect-claude-code-cursor-mcp",
+                  "guides/forge/upgrade-forge-version"
                 ]
               }
             ]
