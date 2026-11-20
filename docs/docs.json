@@ -411,7 +411,9 @@
                 "group": "Deploy",
                 "pages": [
                   "guides/hosting/deploy-go-api-managed-postgres",
-                  "guides/hosting/preview-environment-every-pull-request"
+                  "guides/hosting/preview-environment-every-pull-request",
+                  "guides/hosting/custom-domain-https",
+                  "guides/hosting/manage-production-secrets"
                 ]
               },
               {
