@@ -7,8 +7,13 @@
  * moves is one edit here.
  *
  * The slugs are a contract with the docs (reliant `docs/`, Mintlify): each
- * names a page in docs/docs.json. Pages marked NEW in the U6d briefing are
- * written there alongside this table.
+ * names a page in docs/docs.json's navigation, never a redirect source (the
+ * observability, secrets and domains pages live under hosting/ since main
+ * moved them). features/chats, integrations/connectors, forge/services,
+ * forge/data, forge/storage, forge/auth, forge/observability/speed-insights,
+ * forge/observability/product-analytics, forge/security/vulnerabilities,
+ * account/project-usage and forge/migrate-an-existing-app are added by docs
+ * PR #3089 (docs/project-shell-learn).
  */
 
 import { BookOpen } from "lucide-react";
@@ -28,16 +33,16 @@ export const LEARN_SLUGS = {
   services: "forge/services",
   data: "forge/data",
   storage: "forge/storage",
-  auth: "forge/sign-in",
-  dashboards: "forge/observability/dashboards-and-alerts",
-  observability: "forge/observability",
+  auth: "forge/auth",
+  dashboards: "hosting/observability/dashboards-and-alerts",
+  observability: "hosting/observability",
   "speed-insights": "forge/observability/speed-insights",
   analytics: "forge/observability/product-analytics",
   security: "forge/security/vulnerabilities",
   releases: "forge/deploy/releases-and-promotion",
   environments: "forge/deploy/environments",
-  secrets: "forge/secrets",
-  domains: "forge/custom-domains",
+  secrets: "hosting/secrets",
+  domains: "hosting/custom-domains",
   usage: "account/project-usage",
   "usage-billing": "account/billing",
   migrate: "forge/migrate-an-existing-app",
