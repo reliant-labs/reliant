@@ -127,18 +127,19 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "answers"), []byte(answers.String()), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		// Each call pops the next line; a line "fail" is an API error, and
-		// past the last line the last one repeats.
-		writeExec(t, filepath.Join(dir, "gh"), `#!/usr/bin/env bash
-case "$*" in *"/actions/runs/123/attempts/2/jobs"*) ;; *) echo "unexpected gh $*" >&2; exit 9 ;; esac
+		// Each public API call pops the next answer without credentials.
+		writeExec(t, filepath.Join(dir, "curl"), `#!/usr/bin/env bash
+case "$*" in *"/actions/runs/123/attempts/2/jobs"*) ;; *) echo "unexpected curl $*" >&2; exit 9 ;; esac
+[[ -z ${GH_TOKEN:-} && -z ${GITHUB_TOKEN:-} ]] || exit 8
 f="`+dir+`/answers"
 line=$(head -1 "$f"); [ "$(wc -l <"$f")" -gt 1 ] && { sed 1d "$f" >"$f.n"; mv "$f.n" "$f"; }
 [ "$line" = fail ] && exit 1
-printf '%s\n' "$line"
+read -r status conclusion <<<"$line"
+jq -n --arg job "$JOB" --arg status "$status" --arg conclusion "$conclusion" '{jobs:[{name:$job,status:$status,conclusion:$conclusion}]}'
 `)
 		env := map[string]string{
 			"PATH": dir + ":" + os.Getenv("PATH"), "GITHUB_REPOSITORY": "o/r", "GITHUB_RUN_ID": "123",
-			"GITHUB_RUN_ATTEMPT": "2", "GITHUB_SERVER_URL": "https://github.com", "GH_TOKEN": "tok",
+			"GITHUB_RUN_ATTEMPT": "2", "GITHUB_SERVER_URL": "https://github.com", "GH_TOKEN": "", "GITHUB_TOKEN": "",
 			"JOB": wait.Env["JOB"], "WAIT_S": waitS, "POLL_S": "0",
 		}
 		return ciShell(t, wait.Run, env)
