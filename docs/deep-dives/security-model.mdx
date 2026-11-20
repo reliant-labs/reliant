@@ -104,7 +104,7 @@ An environment marked **protected** adds a step-up before any change. To set, de
 
 A workflow declares the secrets it needs and puts one in a credential slot: an `http/request@1` header such as `"Bearer {{ secrets.TRADER_KEY }}"`, or `credential: { secret: NAME }` on an integration action. Anywhere else, a secret reference is a validation error, and a `run` step never receives one, because a command can print its own environment. For one step attempt, the worker fetches the value through the control plane and writes it only into the outgoing request. It never becomes a step input, so it isn't in the run's state, its history, logs, spans, outputs or the UI. The request goes over HTTPS only, and redirects are followed only within the starting host.
 
-Which workflows may use a secret is the secret's access list. An org owner or admin edits it with `reliant forge secret allow NAME --env <env> --workflow <name>`, and a protected environment asks for the step-up here too. [HTTP requests: secrets](/integrations/http#secrets) has the full rules, and {/* defer:/guides/workflows/call-api-without-exposing-key */}Call any API from a workflow without exposing the key{/* /defer */} walks through one.
+Which workflows may use a secret is the secret's access list. An org owner or admin edits it with `reliant forge secret allow NAME --env <env> --workflow <name>`, and a protected environment asks for the step-up here too. [HTTP requests: secrets](/integrations/http#secrets) has the full rules, and [Call any API from a workflow without exposing the key](/guides/workflows/call-api-without-exposing-key) walks through one.
 
 ### 8. One machine credential, closed scopes
 
@@ -232,7 +232,9 @@ Find the secret-scanning hook in a new API project:
     Read-only, audited queries through a role that can't see secret columns.
   </Card>
 {/* defer-card:/guides/hosting/manage-production-secrets ICA8Q2FyZCB0aXRsZT0iTWFuYWdlIHByb2R1Y3Rpb24gc2VjcmV0cyIgaWNvbj0ibG9jayIgaHJlZj0iL2d1aWRlcy9ob3N0aW5nL21hbmFnZS1wcm9kdWN0aW9uLXNlY3JldHMiPgogICAgU2V0IHdyaXRlLW9ubHkgc2VjcmV0cyBwZXIgZW52aXJvbm1lbnQgYW5kIHZlcmlmeSB0aGVtIHdpdGhvdXQgcmVhZGluZyB0aGVtLgogIDwvQ2FyZD4= */}
-{/* defer-card:/guides/workflows/call-api-without-exposing-key ICA8Q2FyZCB0aXRsZT0iQ2FsbCBhbiBBUEkgd2l0aG91dCBleHBvc2luZyB0aGUga2V5IiBpY29uPSJwbHVnIiBocmVmPSIvZ3VpZGVzL3dvcmtmbG93cy9jYWxsLWFwaS13aXRob3V0LWV4cG9zaW5nLWtleSI+CiAgICBVc2UgYSBzdG9yZWQgc2VjcmV0IGluIGEgd29ya2Zsb3cncyBIVFRQIHJlcXVlc3QgaGVhZGVyLgogIDwvQ2FyZD4= */}
+  <Card title="Call an API without exposing the key" icon="plug" href="/guides/workflows/call-api-without-exposing-key">
+    Use a stored secret in a workflow's HTTP request header.
+  </Card>
   <Card title="Sandbox agent commands" icon="shield-halved" href="/guides/machines/sandbox-agent-commands-credentials-none">
     Run commands that read untrusted text with `credentials: none`.
   </Card>

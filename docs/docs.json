@@ -313,7 +313,9 @@
               {
                 "group": "Triggers & integrations",
                 "pages": [
-                  "guides/workflows/run-an-agent-on-a-schedule"
+                  "guides/workflows/run-an-agent-on-a-schedule",
+                  "guides/workflows/start-agent-from-webhook",
+                  "guides/workflows/call-api-without-exposing-key"
                 ]
               }
             ]
