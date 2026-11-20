@@ -62,7 +62,7 @@ _restored = forge.ManagedDatabase {
     name = "notes-restored"
     runtime = forge.OnHosted {}
     spec = {
-        restore = forge.DatabaseRestore {
+        restore = {
             sourceDatabase = "notes"
             pointInTime = "2026-11-10T14:05:00Z"   # RFC 3339; omit it to replay every archived change
         }
