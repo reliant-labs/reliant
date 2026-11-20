@@ -21765,7 +21765,8 @@ machine probes. The machine probes it at once; its chat models are then listed
 by 'reliant models list --local' as <name>@local.
 
 --machine names the machine by id or name; with one machine it may be left out.
-The machine must be online.
+The machine must be online: its current servers are read from it before the
+list is changed, so nothing added elsewhere is lost.
 
 ```
 reliant models endpoint add <base-url> [flags]
@@ -21806,7 +21807,8 @@ Stop a machine looking for a local model server you added
 
 Removes a base URL added with 'models endpoint add' (or Add endpoint in the
 app) from the machine's servers. A detected server cannot be removed: it is found
-again on its well-known port.
+again on its well-known port. A server a custom endpoint reaches through this
+machine is removed by deleting that endpoint in the app.
 
 ```
 reliant models endpoint remove <base-url> [flags]
