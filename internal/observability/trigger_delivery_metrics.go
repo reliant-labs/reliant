@@ -1,4 +1,3 @@
-//forge:exclude-contract: process-global Prometheus collectors, as in metrics.go
 package observability
 
 import "github.com/prometheus/client_golang/prometheus"

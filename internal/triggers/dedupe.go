@@ -25,10 +25,6 @@ import (
 // (a missing field, an empty result). That last case degrades to the default
 // rather than dropping or merging events, and is logged so the author hears
 // about a key that does not fit the payload.
-func (in *Intake) declaredDedupeKey(ctx context.Context, trigger *core.Trigger, decl *Declaration, ev InboundEvent, occurredAt time.Time) string {
-	return in.declaredDedupeKeyAt(ctx, trigger, decl, ev, occurredAt, in.now())
-}
-
 func (in *Intake) declaredDedupeKeyAt(ctx context.Context, trigger *core.Trigger, decl *Declaration, ev InboundEvent, occurredAt, bucketTime time.Time) string {
 	if decl == nil || decl.DedupeKey == "" || ev.Kind != core.TriggerEventKindWebhook {
 		return ev.DedupeKey

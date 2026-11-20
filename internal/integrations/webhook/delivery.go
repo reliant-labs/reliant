@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -221,7 +222,7 @@ func acceptBoundDelivery(ctx context.Context, intake Intake, t *core.Trigger, d 
 	if err := json.Unmarshal(d.Payload, &body); err != nil {
 		return nil, err
 	}
-	if body.OwnerID != t.UserID {
+	if !authz.CanAccessPersonal(body.OwnerID, t.UserID) {
 		return nil, errors.New("targeted delivery owner changed")
 	}
 	opts := triggers.AcceptOptions{}

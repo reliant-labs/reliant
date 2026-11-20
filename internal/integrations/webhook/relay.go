@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -220,7 +221,7 @@ func (r *Relay) routeBound(ctx context.Context, d core.TriggerDelivery) (*trigge
 	if err != nil {
 		return nil, err
 	}
-	if t == nil || !t.Enabled || t.UserID != body.OwnerID || t.CreatedAt.After(d.ReceivedAt) {
+	if t == nil || !t.Enabled || !authz.CanAccessPersonal(body.OwnerID, t.UserID) || t.CreatedAt.After(d.ReceivedAt) {
 		return nil, nil
 	}
 	if d.Source == core.TriggerDeliveryWebhook {
@@ -243,7 +244,7 @@ func (r *Relay) routeBound(ctx context.Context, d core.TriggerDelivery) (*trigge
 	if err != nil {
 		return nil, err
 	}
-	if conn == nil || conn.Status != core.ConnectionStatusActive || conn.IntegrationID != d.Provider || conn.UserID != t.UserID {
+	if conn == nil || conn.Status != core.ConnectionStatusActive || conn.IntegrationID != d.Provider || !authz.CanAccessPersonal(t.UserID, conn.UserID) {
 		return nil, nil
 	}
 	account, _ := body.Event.Payload["account"].(string)
