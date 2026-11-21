@@ -24,6 +24,7 @@
  */
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -582,7 +583,8 @@ export async function getServiceSignals(req: GetServiceSignalsRequest, options: 
 
 // ── Usage and billing ────────────────────────────────────────────────────────
 
-function quotaState(state: ObservabilityQuotaState): QuotaState {
+// The legacy ObservabilityService enum has the same numbers, so either reads here.
+function quotaState(state: ObservabilityQuotaState | number): QuotaState {
   switch (state) {
     case ObservabilityQuotaState.OK:
       return "ok";
@@ -595,6 +597,22 @@ function quotaState(state: ObservabilityQuotaState): QuotaState {
   }
 }
 
+/**
+ * GetObservabilityUsage from ObservabilityBillingService, or, against a control
+ * plane that predates that service (it answers Unimplemented), from
+ * ObservabilityService's retired copy, which every older release serves. The
+ * two responses carry the same fields this module reads. Keep the fallback
+ * until the replacement's oldest supported release is past it.
+ */
+async function fetchObservabilityUsage(orgId: string) {
+  try {
+    return await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
+  } catch (err) {
+    if (!(err instanceof ConnectError && err.code === Code.Unimplemented)) throw err;
+    return await client().getObservabilityUsage({ orgId });
+  }
+}
+
 const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "profiles"];
 
 /**
@@ -604,7 +622,7 @@ const USAGE_SIGNALS: readonly UsageSignal[] = ["logs", "traces", "metrics", "pro
  * It spends no ClickHouse read slot, so it bypasses obsClient's read queue.
  */
 export async function getObservabilityUsage(orgId: string): Promise<ObservabilityUsage> {
-  const res = await getControlPlaneClient(ObservabilityBillingService).getObservabilityUsage({ orgId });
+  const res = await fetchObservabilityUsage(orgId);
   const signal = (value: string): UsageSignal =>
     (USAGE_SIGNALS as readonly string[]).includes(value) ? (value as UsageSignal) : "logs";
   return {
