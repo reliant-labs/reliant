@@ -270,7 +270,7 @@ function AppPicker({ apps, selected, onChange }: { apps: string[]; selected: str
       }
     >
       <fieldset>
-        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Apps</legend>
+        <legend className="px-1 pb-1 text-2xs font-medium text-ink-muted">Apps</legend>
         <button
           type="button"
           onClick={() => onChange([])}
@@ -321,7 +321,7 @@ function EnvPicker({ environments, selected, onChange }: { environments: ObsEnvi
       }
     >
       <fieldset>
-        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Environments</legend>
+        <legend className="px-1 pb-1 text-2xs font-medium text-ink-muted">Environments</legend>
         <button
           type="button"
           onClick={() => onChange([])}
@@ -385,13 +385,13 @@ function KeyList({ query, used, onPick, suggestions }: { query: string; used?: s
       {custom && <ul className="pb-1">{option(typed, `Use "${typed}"`)}</ul>}
       {first.length > 0 && (
         <section>
-          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Common</h4>
+          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium text-ink-muted">Common</h4>
           <ul>{first.map((a) => option(a.key, a.label))}</ul>
         </section>
       )}
       {sections.map(({ cls, keys }) => (
         <section key={cls}>
-          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">{CLASS_LABELS[cls]}</h4>
+          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium text-ink-muted">{CLASS_LABELS[cls]}</h4>
           <ul>{keys.map((a) => option(a.key, a.label))}</ul>
         </section>
       ))}

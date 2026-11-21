@@ -132,7 +132,7 @@ export function InlinePresetPicker({
           ) : valueIsTemplate ? (
             <>
               <Code2 className="w-3 h-3 flex-shrink-0" />
-              <span className="inline-flex items-center rounded px-1 py-0.5 text-xs font-semibold uppercase tracking-wide bg-violet-500/20 border border-violet-500/30 flex-shrink-0">
+              <span className="inline-flex items-center rounded px-1 py-0.5 text-xs font-semibold bg-violet-500/20 border border-violet-500/30 flex-shrink-0">
                 Expr
               </span>
               <span className="truncate max-w-28">{value}</span>

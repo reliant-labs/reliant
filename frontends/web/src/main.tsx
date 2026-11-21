@@ -14,6 +14,9 @@ import "./lib/configGuard";
 import "./lib/claimLinkBoot";
 // An org invitation link's token, likewise — see lib/inviteLink.ts.
 import "./lib/inviteLinkBoot";
+// A dev sign-in link's token, likewise; a no-op outside a dev server started
+// with VITE_DEV_SIGN_IN=true — see lib/devSignIn.ts.
+import "./lib/devSignInBoot";
 // Finally the landing site's rid / utm_* handoff is held before the router or a
 // sign-in redirect replaces the URL — see lib/landingAttribution.ts.
 import "./lib/attributionBoot";

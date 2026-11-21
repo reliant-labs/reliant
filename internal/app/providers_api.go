@@ -153,6 +153,7 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			PublicKeyPEM:              jwtPublicKey,
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
+			DevJWTSecret:              api.GetAuthDevJwtSecret(),
 		},
 		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
 		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
@@ -162,6 +163,11 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		WorktreeReclaimQuiet: api.GetWorktreeReclaimQuiet().AsDuration(),
 		WorktreeReclaimGrace: api.GetWorktreeReclaimGrace().AsDuration(),
 		PayloadGCHorizon:     api.GetPayloadBlobGcHorizon().AsDuration(),
+	}
+	// A dev signer outside the dev tier stops the process here, before it
+	// binds a port (auth.WithDevSigner refuses it again at every validator).
+	if err := auth.CheckDevSigner(s.Auth); err != nil {
+		return nil, err
 	}
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
@@ -828,6 +834,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
+		WithDeliveryInbox(repo).
 		WithConnectionSecrets(d.Connections.Tokens).
 		// A trigger whose org's policy does not allow its integration is
 		// paused (org-policies §4.3). The API holds no schedule client, and an

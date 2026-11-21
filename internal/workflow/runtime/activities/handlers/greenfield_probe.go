@@ -364,7 +364,7 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("environments, releases and custom domains, a component library and the `frontend/design` ")
 	b.WriteString("skill, browser console logs in .forge/logs, and room to add an API when it needs a waitlist or a ")
 	b.WriteString("checkout (its own forge project beside the site, reached by URL). For a PWA, forge builds, hosts and ships it; the service worker ")
-	b.WriteString("and manifest are yours to write. Run `reliant forge skill load deploy/static-site` for that ")
+	b.WriteString("and manifest are yours to write. Run `reliant forge agent skill load deploy/static-site` for that ")
 	b.WriteString("path instead of the service sequence.\n\n")
 
 	b.WriteString("For an app, SQL migrations are the schema truth, protobuf defines the API, and forge ")
@@ -372,7 +372,7 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("It scales the whole way up: many services, Next.js and React Native (Expo) frontends side by ")
 	b.WriteString("side, deployed as host processes, to a Kubernetes cluster they operate, or hosted on Reliant's ")
 	b.WriteString("infrastructure with a managed Postgres, managed secrets and custom domains. Run ")
-	b.WriteString("`reliant forge skill load forge` before starting.\n\n")
+	b.WriteString("`reliant forge agent skill load forge` before starting.\n\n")
 
 	b.WriteString("Build it IN this directory: `reliant forge project new --in-place --mod <module>` ")
 	b.WriteString("(add `--name <product>` when the directory is not named after the product), not ")
@@ -388,7 +388,7 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("the deploy is queued (exit 7) and goes live once the user sets billing up — hand them ")
 	b.WriteString("the link it prints. Reliant hosting runs services, workers and jobs; a cron-kind ")
 	b.WriteString("workload or an operator needs a cluster they operate (a worker that runs its own ")
-	b.WriteString("schedule is fine hosted). Run `reliant forge skill load deploy/hosting` before deploying.\n\n")
+	b.WriteString("schedule is fine hosted). Run `reliant forge agent skill load deploy/hosting` before deploying.\n\n")
 
 	b.WriteString("Propose it, do not impose it. For an app it commits the project to Go, Postgres ")
 	b.WriteString("and Connect RPC, with Next.js or React Native on top; for a static site, to a ")

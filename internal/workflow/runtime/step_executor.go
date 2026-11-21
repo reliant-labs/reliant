@@ -85,6 +85,10 @@ type StepExecutor struct {
 	// pre-allocated message id of the dispatch it cancelled, until that node
 	// is re-dispatched (noteCancelledForPause).
 	cutOffTurns map[string]string
+	// interruptedTurns marks the execute_tools nodes a same-thread interrupt
+	// cancelled, until that node is re-dispatched to settle its batch
+	// (noteInterruptedTurn, interrupt_settle.go).
+	interruptedTurns map[string]bool
 }
 
 // WithAskUserHandoff lets this executor's execute_tools batches park their
@@ -413,10 +417,15 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		e.pauseCtrl.CapacitySlot.beforeStep(e.ctx)
 	}
 
+	// An execute_tools step an interrupt cancelled is re-dispatched to settle
+	// its batch, running none of it (interrupt_settle.go).
+	settleInterrupted := stepType == model.NodeTypeExecuteTools && e.takeInterruptedTurn(node.GetId())
+
 	// A machine step that follows a hold first makes sure the machine is
 	// awake (machine_resume_wake.go): the idle policy may have suspended it
-	// while the run waited, and the step's own calls never wake it.
-	if machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult); machine {
+	// while the run waited, and the step's own calls never wake it. A batch
+	// being settled runs nothing on the machine.
+	if machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult); machine && !settleInterrupted {
 		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), toolNames, toolsKnown)
 	}
 
@@ -453,7 +462,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
-			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID, event)
+			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID, event, settleInterrupted)
 		} else {
 			e.logger.Error("[StepExecutor] Unknown step type", "stepType", stepType, "stepID", node.GetId())
 			future = e.executeFailActivity(node, "unknown step type: "+stepType)
@@ -904,6 +913,7 @@ func (e *StepExecutor) startAction(
 	evalResult *reliantv1.Node,
 	preallocatedMessageID string,
 	event *core.WorkflowEvent,
+	settleInterrupted bool,
 ) (workflow.Future, string, bool) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
@@ -963,6 +973,9 @@ func (e *StepExecutor) startAction(
 		// under it, on whichever worker runs the batch (run_telemetry.go).
 		if rtx.Telemetry != nil {
 			rtx.Telemetry.TurnTraceParent = e.upstreamTurnTraceParent(node, evalResult.GetExecuteTools().GetResolvedToolCalls())
+		}
+		if settleInterrupted {
+			return e.startSettleInterrupted(node, evalResult, rtx)
 		}
 		// A batch with spawn/ask_user calls is merged workflow-side, so the
 		// workflow is the executor of that output and saves it itself; any

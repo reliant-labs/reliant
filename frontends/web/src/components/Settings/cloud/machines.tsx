@@ -346,7 +346,7 @@ function Modal({
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-scrim" onClick={onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
@@ -593,7 +593,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         <div className="space-y-6">
           {managedDaemons.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="text-xs font-semibold text-muted-foreground">
                 Cloud machines
               </h3>
               <ManagedMachinesTable
@@ -610,7 +610,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           )}
           {selfHostedDaemons.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <h3 className="text-xs font-semibold text-muted-foreground">
                 Self-hosted machines
               </h3>
               <SelfHostedMachinesTable

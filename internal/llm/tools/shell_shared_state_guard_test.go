@@ -279,13 +279,13 @@ func TestSharedStateGuard_RefusalNamesTheSafeAlternative(t *testing.T) {
 	for _, cmd := range []string{`go clean -cache`, `rm -rf $GOCACHE`, `docker system prune -af`, `find $GOCACHE -delete`} {
 		got := refusalFor(cmd)
 		for _, want := range []string{
-			cmd,                        // says which command
-			"machine-disk",             // the skill
-			"steward",                  // who trims
-			"reliant forge storage gc", // the safe tool
-			"shared",                   // why
-			"There is no override",     // and that asking again will not help
-			"2026-10-26",               // what this is about
+			cmd,                                // says which command
+			"machine-disk",                     // the skill
+			"steward",                          // who trims
+			"reliant forge machine storage gc", // the safe tool
+			"shared",                           // why
+			"There is no override",             // and that asking again will not help
+			"2026-10-26",                       // what this is about
 		} {
 			if !strings.Contains(got, want) {
 				t.Errorf("refusal of %q does not mention %q:\n%s", cmd, want, got)
@@ -316,7 +316,7 @@ func TestShellTool_RefusesSharedStateCommandsBeforeDispatch(t *testing.T) {
 			if len(d.ran) != 0 {
 				t.Fatalf("command reached the daemon: %q", d.ran)
 			}
-			if !resp.IsError || !strings.Contains(resp.Content, "reliant forge storage gc") {
+			if !resp.IsError || !strings.Contains(resp.Content, "reliant forge machine storage gc") {
 				t.Fatalf("expected a refusal naming the safe remedy, got IsError=%v content=%q", resp.IsError, resp.Content)
 			}
 		})

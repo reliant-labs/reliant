@@ -131,6 +131,17 @@ func TestCheckRunWritesAskForChecksAlone(t *testing.T) {
 	assert.Nil(t, permissionsFor("check_run.list"), "a read is the owner's: never a bot token")
 }
 
+// A release is contents alone: the bot's token for it carries no issues or
+// pull_requests, which control-plane's default cap would add.
+func TestReleaseWritesAskForContentsAlone(t *testing.T) {
+	for _, action := range []string{"release.create", "release.update"} {
+		assert.Equal(t, map[string]string{"contents": "write"}, permissionsFor(action), action)
+	}
+	for _, read := range []string{"branch.rules", "compare", "commit.statuses"} {
+		assert.Nil(t, permissionsFor(read), "%s is a read: the owner's, never a bot token", read)
+	}
+}
+
 // A mint that cannot be done must FAIL the write. It never falls through to the
 // owner's token: the activation said the bot makes this write.
 func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {

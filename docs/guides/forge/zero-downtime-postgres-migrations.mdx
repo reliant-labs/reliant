@@ -5,8 +5,6 @@ description: "Change a live Postgres schema without breaking the release that is
 keywords: ["zero downtime postgres migration", "expand and contract migration", "postgres add column not null", "migration safety lint", "backward compatible migration"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.7.0 (project pin v1.6.1-0.20261115024114-0ab7c562e817, the v1.7.0 commit) · L steps run in scratch: yes (db migration new, lint --migration-safety on the unsafe and fixed files, db analyze cross-check) · H steps: none */}
-
 By the end of this guide you will have added a required column to a table that already has rows, in two releases, with `forge lint --migration-safety` passing on each migration. Nothing in it needs an account.
 
 A deploy runs its migrations first and then rolls out the new code, so for a while the release that is still serving runs against the new schema. A migration is safe when that previous release keeps working on the schema it leaves. Forge asks you to say so in each file, and its migration lint rejects the SQL that works on your empty test database and fails on a populated one.

@@ -19,12 +19,12 @@
 //
 // ## How it renders
 //
-// 1. `forge kcl eval` (or `reliant forge kcl eval`, when no forge is on PATH)
+// 1. `forge env kcl eval` (or `reliant forge env kcl eval`, when no forge is on PATH)
 //    evaluates the entrypoint with control-plane's pinned forge, which materializes forge's KCL module into FORGE_KCL_MODULE_CACHE.
 //    Pointing that at a scratch dir means the module used is exactly the one
 //    this forge supplies, never whatever happens to be cached already.
 // 2. `kcl run -E forge=<that module>` renders the same file again for the
-//    output. `forge kcl eval` sorts object keys, and the committed
+//    output. `forge env kcl eval` sorts object keys, and the committed
 //    release.config.json keeps the KCL's declaration order — the drift gate
 //    compares it byte for byte.
 
@@ -64,7 +64,7 @@ export function renderReleaseConfig(controlPlaneDir, env) {
     let rendered = false;
     for (const [command, ...route] of [["forge"], ["reliant", "forge"]]) {
       try {
-        run(command, [...route, "kcl", "eval", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config"], {
+        run(command, [...route, "env", "kcl", "eval", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config"], {
           cwd: controlPlaneDir,
           env: { ...process.env, FORGE_KCL_MODULE_CACHE: moduleCache, FORGE_SILENCE_EXPERIMENTAL: "1" },
         });
@@ -72,7 +72,7 @@ export function renderReleaseConfig(controlPlaneDir, env) {
         break;
       } catch (err) {
         if (err.code === "ENOENT") continue;
-        throw new ReleaseConfigRenderError(`forge kcl eval failed for env=${env}:\n${err.stderr || err.message}`);
+        throw new ReleaseConfigRenderError(`forge env kcl eval failed for env=${env}:\n${err.stderr || err.message}`);
       }
     }
     if (!rendered) return { unavailable: "neither forge nor reliant is installed" };

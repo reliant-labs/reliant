@@ -215,6 +215,15 @@ func terminalTokenValidator(settings auth.Settings) auth.TokenValidator {
 		} else if settings.JWKSURL != "" {
 			validator, _ = auth.LoadJWKS(context.Background(), settings.JWKSURL, settings.JWTOptions()...)
 		}
+		// The dev tier's signer too, so a dev sign-in can open a terminal.
+		// Refused outside the dev tier: nil then refuses every connection,
+		// and the gRPC interceptor has already refused the process.
+		if validator != nil {
+			var err error
+			if validator, err = auth.WithDevSigner(validator, settings); err != nil {
+				validator = nil
+			}
+		}
 	}
 	return validator
 }

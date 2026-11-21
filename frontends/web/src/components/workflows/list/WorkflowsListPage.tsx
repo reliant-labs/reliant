@@ -627,7 +627,7 @@ function WorkflowsBody() {
           )}
           {view.buildingBlocks.length > 0 && (
             <details className="group" data-testid="building-blocks">
-              <summary className="mb-2 cursor-pointer select-none px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <summary className="mb-2 cursor-pointer select-none px-1 text-xs font-semibold text-muted-foreground">
                 Building blocks
                 <span className="ml-1.5 font-medium text-muted-foreground/70">{view.buildingBlocks.length}</span>
               </summary>
@@ -707,7 +707,7 @@ function OnSummary({ triggers, allProjects }: { triggers: Trigger[]; allProjects
   ];
   return (
     <details open className="group space-y-3" data-testid="on-summary">
-      <summary className="cursor-pointer select-none px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <summary className="cursor-pointer select-none px-1 text-xs font-semibold text-muted-foreground">
         Runs by itself{allProjects ? ", every project" : ""}
       </summary>
       <Card padding="none" className="overflow-hidden" data-testid="automation-counts">
@@ -806,7 +806,7 @@ function InvalidSection({
 }) {
   return (
     <section aria-label="Failed to load" className="pt-2">
-      <h2 className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-destructive-ink">
+      <h2 className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold text-destructive-ink">
         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
         Failed to load
         <span className="ml-0.5 font-medium text-destructive-ink/70">{workflows.length}</span>
