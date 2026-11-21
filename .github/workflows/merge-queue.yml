@@ -1,17 +1,16 @@
 name: Merge queue
 
 # The merge queue's verdict: the job named "CI result" (the ruleset's required
-# check), on every merge group. It is a few seconds of aggregation over the two
-# jobs that do the work, `merge-gate` and `golangci`, which run at the same
-# time: it passes only when both succeeded (THE VERDICT, below). The gate's
+# check), on every merge group. It is a few seconds of aggregation over the
+# jobs that do the work, `merge-gate`, `golangci` and `vitest`, which run at
+# the same time: it passes only when each succeeded (THE VERDICT, below). The gate's
 # budget is five minutes of wall time, runner queue included (owner,
 # 2026-11-01: "merge-queue tests take at most 5 minutes; anything longer
 # belongs in the pre-release gate").
 #
-# WHAT RUNS HERE: `task ci:merge -- --queue`, the affected tier relative to the
-# group's base: build, the affected -short tests (direct importers; on a FULL
-# web fallback the vitest files the group's own web modules reach), the web
-# typecheck when web changed, forge lint's own lanes scoped to the changed
+# WHAT RUNS HERE: `task ci:merge -- --queue --skip-vitest`, the affected tier
+# relative to the group's base: build, the affected -short Go and electron
+# tests (direct importers), the web typecheck when web changed, forge lint's own lanes scoped to the changed
 # directories (--optional-deps-guard and --tracing among them), the forge demo
 # bundle's build when the change reaches it, forge generate / docs drift when
 # their inputs changed, migration safety and order when a migration changed,
@@ -32,6 +31,16 @@ name: Merge queue
 # three times on findings only the release gate's whole-module lint saw (staticcheck QF1001
 # from #2293 and #2427, gosec G101 from #2368); this job reproduces all three.
 #
+# BESIDE IT TOO, the affected vitest files (owner, 2026-11-21): the `vitest`
+# job, four legs, each `scripts/vitest-shard.sh --shard <i>/4`. Every leg plans
+# the group exactly as the gate does (same rules, same base, same reach; on a
+# FULL web fallback the files the group's own web modules reach) and runs
+# vitest's shard i of that ONE file list, so the four run every selected file
+# once and drop none. A hub web module reaches ~1100 files (#2935, #3009): one
+# 4-CPU runner, in one process beside the Go tests, ran out of the gate's 30
+# minutes. A group that selects no vitest file passes each leg in seconds,
+# after the planner, so `vitest` concludes success or failure, never skipped.
+#
 # WHAT DOES NOT: vet, forge lint's golangci, buf, whole-project and deploy
 # lanes, golangci over packages the group did not change, buf lint on an
 # unchanged proto, the race detector, slow and integration tests, the whole
@@ -51,10 +60,11 @@ name: Merge queue
 # START (a `needs:` between them would put the lint, then a second runner
 # queue, in front of the gate).
 #
-# THE VERDICT. `CI result` needs exactly the two workers, runs `if: always()`
+# THE VERDICT. `CI result` needs exactly the three workers, runs `if: always()`
 # (a failed or cancelled worker must turn it red, never skip it: GitHub counts
-# a skipped required check as passed), and passes only when both
-# `needs.<job>.result` are `success`. It reads nothing else: no checkout, no
+# a skipped required check as passed), and passes only when every
+# `needs.<job>.result` is `success`; `needs.vitest.result` is the matrix's
+# roll-up, `success` only when all four legs succeeded. It reads nothing else: no checkout, no
 # token, no API. Until 2026-11-21 it read the lint's verdict by polling this
 # run's jobs API anonymously; that API answered 403, and a group whose gate
 # and lint had both passed went red after eight polls (reliant #3095). The
@@ -133,7 +143,7 @@ jobs:
           COMPAT
           chmod 0700 "$compat"
           CI_PR="$(sed -n 's|.*/pr-\([0-9][0-9]*\)-.*|\1|p' <<<"${HEAD_REF}")" \
-            COMPAT_GH="$compat" MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}" --queue
+            COMPAT_GH="$compat" MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}" --queue --skip-vitest
       - name: task test:flake (each new or changed test, three times)
         if: ${{ !cancelled() }}
         run: task test:flake -- --base "${BASE}"
@@ -262,21 +272,53 @@ jobs:
 
   # The required check (header: THE VERDICT). Both workers' results, from
   # `needs`, and nothing else: no checkout, no token, no API.
+  # The affected vitest files, in four shards (header: BESIDE IT TOO). The
+  # gate passes --skip-vitest, so this job is the only one that runs them, and
+  # `CI result` needs it. One matrix job: needs.vitest.result rolls the legs up.
+  vitest:
+    name: vitest (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    # Each leg runs a quarter of the files; CI result starts after the
+    # slowest, inside the ruleset's 45-minute check timeout.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      BASE: ${{ github.event.merge_group.base_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Go for the planner (tools/test-affected: the standard library and
+      # yaml, compiled in seconds, so main's build cache is not worth its
+      # restore), Node and pnpm for vitest.
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+          go-build-cache: "false"
+          postgres-cache: "false"
+          github-read-token: ""
+      - name: scripts/vitest-shard.sh
+        run: scripts/vitest-shard.sh --base "${BASE}" --shard "${{ matrix.shard }}/4"
+
   ci-result:
     name: CI result
-    needs: [merge-gate, golangci]
+    needs: [merge-gate, golangci, vitest]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Merge gate and golangci (changed) passed
+      - name: Merge gate, golangci (changed) and vitest passed
         env:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          bad=$(jq -r '. as $needs | ("merge-gate", "golangci") as $job
+          bad=$(jq -r '. as $needs | ("merge-gate", "golangci", "vitest") as $job
             | ($needs[$job].result // "missing") as $result
             | select($result != "success") | "\($job): \($result)"' <<<"${RESULTS}")
           if [ -n "${bad}" ]; then echo "::error title=CI result::jobs that did not pass:"; echo "${bad}"; exit 1; fi
-          echo "merge-gate and golangci both passed"
+          echo "merge-gate, golangci and vitest all passed"
