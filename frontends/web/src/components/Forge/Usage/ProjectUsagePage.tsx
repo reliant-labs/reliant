@@ -15,6 +15,7 @@
 
 import { useMemo, type ReactNode } from "react";
 
+import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Tag from "@/components/forge-ui/tag";
@@ -120,7 +121,7 @@ export function ProjectUsagePage() {
               {days.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 px-2 py-8" data-testid="usage-none">
                   <p className="text-center text-meta text-ink-muted">No hosted usage recorded this month yet.</p>
-                  <DeployWithAgentButton env={null} />
+                  <ProjectEmptyCtaRow deploy={<DeployWithAgentButton env={null} />} learn="usage" className="justify-center" testId="usage-empty-cta" />
                 </div>
               ) : days.length === 1 ? (
                 // One point is not a chart: say the day's figure in words until a second day lands.

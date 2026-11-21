@@ -22,7 +22,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockNavigate = vi.fn()
 let mockSearch: { returnTo?: string } = {}
 
-vi.mock('@tanstack/react-router', () => ({
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
   useNavigate: () => mockNavigate,
   useSearch: () => mockSearch,
 }))

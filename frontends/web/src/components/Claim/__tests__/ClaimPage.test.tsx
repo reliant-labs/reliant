@@ -4,7 +4,7 @@
  *
  * The flow under test is the settled one (design §4, path 1):
  *   preview (no sign-in)  →  OpenClaimSession  →  adopt the session
- *   →  /upgrade?returnTo=/claim  →  [back on /claim, now upgraded]  →  CompleteClaim  →  /apps
+ *   →  /upgrade?returnTo=/claim  →  [back on /claim, now upgraded]  →  CompleteClaim  →  the apps (/projects?show=apps)
  *
  * Auth is a controllable store; the control plane is the real generated client
  * over a mock transport, so what is asserted is the traffic, not an internal.
@@ -15,7 +15,8 @@ import { Code, ConnectError } from '@connectrpc/connect'
 import { timestampFromDate } from '@bufbuild/protobuf/wkt'
 
 const navigate = vi.fn()
-vi.mock('@tanstack/react-router', () => ({
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
   useNavigate: () => navigate,
   useLocation: () => ({ pathname: '/claim' }),
 }))
@@ -332,7 +333,7 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     expect(screen.getByTestId('claim-site')).toBeInTheDocument()
   })
 
-  it('confirming calls CompleteClaim as themselves, joins the org, and lands on /apps with the app highlighted', async () => {
+  it('confirming calls CompleteClaim as themselves, joins the org, and lands on the apps with the app highlighted', async () => {
     const rpcs = vi.fn()
     arrive({
       'ClaimableService.GetClaim': { response: LIVE },
@@ -341,7 +342,7 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     })
     fireEvent.click(await screen.findByTestId('claim-into-account-button'))
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront' }, replace: true }))
     // No session was released: this person is not the anonymous user.
     expect(rpcNames(rpcs)).toEqual(['CompleteClaim'])
     expect(auth.adoptSession).not.toHaveBeenCalled()
@@ -358,7 +359,7 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     switchToJoinedOrg.mockRejectedValueOnce(new Error('list failed'))
     arrive({ 'ClaimableService.GetClaim': { response: LIVE }, 'ClaimableService.CompleteClaim': { response: MEMBERSHIP } })
     fireEvent.click(await screen.findByTestId('claim-into-account-button'))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront' }, replace: true }))
     expect(readPendingClaim()).toBeNull()
   })
 
@@ -395,7 +396,7 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     })
     fireEvent.click(await screen.findByTestId('claim-into-account-button'))
     fireEvent.click(await screen.findByRole('button', { name: /try again/i }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront' }, replace: true }))
     expect(attempts).toBe(2)
   })
 
@@ -458,7 +459,7 @@ describe('a signed-in user whose claim needs a free hosting choice', () => {
     expect(track).toHaveBeenCalledWith('claim_free_site_prompted', { source: 'preview' })
   })
 
-  it('1. keep the new site live: claims with the claimed choice, then lands on /apps naming what was paused', async () => {
+  it('1. keep the new site live: claims with the claimed choice, then lands on the apps naming what was paused', async () => {
     const completes = await openDialog({
       'ClaimableService.CompleteClaim': (input: unknown) => (
         completes_((input as { freeSite: number }).freeSite),
@@ -470,7 +471,7 @@ describe('a signed-in user whose claim needs a free hosting choice', () => {
     fireEvent.click(screen.getByTestId('free-site-continue'))
 
     await waitFor(() =>
-      expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront', pausedSite: 'web', kept: 'claimed' }, replace: true }),
+      expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront', pausedSite: 'web', kept: 'claimed' }, replace: true }),
     )
     expect(completes_).toHaveBeenCalledWith(FreeSiteChoice.CLAIMED)
     expect(switchToJoinedOrg).toHaveBeenCalledWith('org_claimed')
@@ -488,7 +489,7 @@ describe('a signed-in user whose claim needs a free hosting choice', () => {
     fireEvent.click(screen.getByTestId('free-site-continue'))
 
     await waitFor(() =>
-      expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront', pausedSite: 'web', kept: 'existing' }, replace: true }),
+      expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront', pausedSite: 'web', kept: 'existing' }, replace: true }),
     )
     expect(completes_).toHaveBeenCalledWith(FreeSiteChoice.EXISTING)
   })
@@ -589,7 +590,7 @@ describe('a signed-in user whose claim needs a free hosting choice', () => {
       'ClaimableService.CompleteClaim': (input: unknown) => (completes((input as { freeSite: number }).freeSite), DONE),
     })
     fireEvent.click(await screen.findByTestId('claim-into-account-button'))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront' }, replace: true }))
     expect(screen.queryByTestId('free-site-dialog')).toBeNull()
     expect(completes).toHaveBeenCalledWith(FreeSiteChoice.UNSPECIFIED)
   })
@@ -645,18 +646,18 @@ describe('someone with an account who is not signed in to it', () => {
   })
 })
 
-describe('coming back upgraded (same user id) → CompleteClaim → /apps', () => {
+describe('coming back upgraded (same user id) → CompleteClaim → the apps', () => {
   beforeEach(() => {
     updatePendingClaim({ anonUserId: 'anon-1', project: 'storefront' })
     auth.user = { id: 'anon-1', is_anonymous: false }
   })
 
-  it('completes the claim and lands on /apps with the app highlighted', async () => {
+  it('completes the claim and lands on the apps with the app highlighted', async () => {
     const complete = vi.fn(() => ({ orgId: 'org_1', claimPath: 'upgrade', hostnames: ['a.sites.reliantlabs.dev'], holds: [] }))
     const preview = vi.fn(() => LIVE)
     arrive({ 'ClaimableService.CompleteClaim': complete, 'ClaimableService.GetClaim': preview })
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront' }, replace: true }))
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ claimToken: TOKEN }))
     // No preview on the way back: CompleteClaim answers for the claim itself.
     expect(preview).not.toHaveBeenCalled()
@@ -700,7 +701,7 @@ describe('coming back upgraded (same user id) → CompleteClaim → /apps', () =
     const complete = vi.fn(() => ({ orgId: 'o', claimPath: 'upgrade', hostnames: [], holds: [] }))
     arrive({ 'ClaimableService.CompleteClaim': complete })
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront' }, replace: true }))
     expect(complete).toHaveBeenCalledTimes(1)
   })
 
@@ -714,7 +715,7 @@ describe('coming back upgraded (same user id) → CompleteClaim → /apps', () =
     arrive({ 'ClaimableService.CompleteClaim': { error: refused('claimable_upgrade_required', Code.PermissionDenied) } })
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/upgrade', search: { returnTo: '/claim' } }))
-    expect(navigate).not.toHaveBeenCalledWith(expect.objectContaining({ to: '/apps' }))
+    expect(navigate).not.toHaveBeenCalledWith(expect.objectContaining({ to: '/projects' }))
     expect(readPendingClaim()?.token).toBe(TOKEN)
     expect(track).toHaveBeenCalledWith('claim_failed', { stage: 'complete', reason: 'claimable_upgrade_required' })
   })
@@ -753,7 +754,7 @@ describe('coming back upgraded (same user id) → CompleteClaim → /apps', () =
     expect(readPendingClaim()?.token).toBe(TOKEN)
 
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront' }, replace: true }))
   })
 
   it('a PermissionDenied with no reason at all gets the same generic screen', async () => {
@@ -783,7 +784,7 @@ describe('coming back upgraded (same user id) → CompleteClaim → /apps', () =
     expect(readPendingClaim()?.token).toBe(TOKEN)
 
     fireEvent.click(screen.getByRole('button', { name: /try again/i }))
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/projects', search: { show: 'apps', claimed: 'storefront' }, replace: true }))
   })
 })
 
@@ -830,7 +831,7 @@ describe('in the forge shell (forge.reliantlabs.io)', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ href: '/forge/p/storefront', replace: true }))
     expect(complete).toHaveBeenCalledWith(expect.objectContaining({ claimToken: TOKEN }))
-    expect(navigate).not.toHaveBeenCalledWith(expect.objectContaining({ to: '/apps' }))
+    expect(navigate).not.toHaveBeenCalledWith(expect.objectContaining({ to: '/projects' }))
     expect(readPendingClaim()).toBeNull()
   })
 
@@ -845,6 +846,6 @@ describe('in the forge shell (forge.reliantlabs.io)', () => {
         pausedSite: MINE,
       }),
     })
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/apps' })))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/projects' })))
   })
 })

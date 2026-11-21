@@ -72,7 +72,7 @@ import {
   useCurrentUserInvoices,
   useWalletOverview,
 } from "@/hooks/useCloudBillingQueries";
-import { projectsPath, settingsPath, usageBillingPath, withSearch } from "@/lib/paths";
+import { projectsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch } from "@/lib/paths";
 import { buildCheckoutReturnUrls, openCheckout } from "@/lib/stripeCheckout";
 
 import { AreaShell } from "../Layout/AreaShell";
@@ -92,7 +92,7 @@ const LINK = "no-color text-primary-ink hover:underline";
 /** The route's page (routes.tsx): the view in the app's area chrome. */
 export function UsageBillingPage() {
   return (
-    <AreaShell areaPath={usageBillingPath()} areaLabel="Usage & billing" areaNoun="usage and billing">
+    <AreaShell areaPath={usageBillingPath()} areaLabel="Usage & billing" areaNoun="usage and billing" learn="usage-billing">
       <UsageBillingView />
     </AreaShell>
   );
@@ -289,7 +289,7 @@ function OrgLevel({ query, orgId, range }: { query: UsageQuery; orgId: string; r
                   <>
                     {running !== undefined ? `running · ${sandboxes.kind === "amount" ? formatUsd(sandboxes.nanos) : amountCaption(sandboxes)}` : amountCaption(sandboxes)}
                     {" · "}
-                    <Link href={settingsPath("machines")} className={LINK}>
+                    <Link href={sandboxesPath()} className={LINK}>
                       Manage sandboxes ›
                     </Link>
                   </>

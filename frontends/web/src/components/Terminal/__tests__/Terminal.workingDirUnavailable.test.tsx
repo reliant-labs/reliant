@@ -316,8 +316,8 @@ describe("Terminal with no machine on the account", () => {
       sockets[0].fail("no_machine", NO_MACHINE);
     });
 
-    expect(screen.getByTestId("no-machine-state").textContent).toContain("No machine yet");
-    expect(screen.getByRole("button", { name: "Add machine" })).toBeTruthy();
+    expect(screen.getByTestId("no-machine-state").textContent).toContain("No agent sandbox yet");
+    expect(screen.getByRole("button", { name: "Add sandbox" })).toBeTruthy();
 
     await act(async () => {
       vi.advanceTimersByTime(LONGEST_RETRY_MS * 5);

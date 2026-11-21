@@ -127,7 +127,7 @@ function AddMachineSheetBody({
   suggestedSize,
   repo: callerRepo = null,
   initialKind,
-  title = "Add a machine",
+  title = "Add an agent sandbox",
   onWatchingChange,
 }: AddMachineSheetProps & { onWatchingChange: (watching: boolean) => void }) {
   const cloud = capabilities.cloudDaemons;
@@ -225,7 +225,7 @@ function AddMachineSheetBody({
       invalidateDaemonList(qc);
       if (!result.daemonId) {
         setStep({ kind: "choose" });
-        setError("The machine was created, but its id was not returned. It will appear in Settings → Machines.");
+        setError("The sandbox was created, but its id was not returned. It will appear in Settings → Agent sandboxes.");
         return;
       }
       setStep({ kind: "provisioning", daemonId: result.daemonId, name: result.machineName, startedAt: Date.now() });
@@ -241,13 +241,13 @@ function AddMachineSheetBody({
         return;
       }
       setStep({ kind: row.terms === "included" ? "choose" : "paid" });
-      setError(describeError(err, "Could not create the machine"));
+      setError(describeError(err, "Could not create the sandbox"));
     }
   };
 
   const primary = (): { label: string; run: () => void; disabled?: boolean } => {
     if (kind === "self") return { label: "Continue", run: () => setStep({ kind: "pair" }) };
-    if (!row) return { label: "Create machine", run: () => undefined, disabled: true };
+    if (!row) return { label: "Create sandbox", run: () => undefined, disabled: true };
     if (row.terms !== "included") {
       return { label: "Continue to payment", run: () => setStep({ kind: "pay" }), disabled: !row.plan };
     }
@@ -303,7 +303,7 @@ function AddMachineSheetBody({
               <div>
                 <p className="text-sm font-medium text-foreground">Your plan is active</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {row ? `${row.label} machines are on your plan now.` : "Your plan covers this machine now."} Nothing
+                  {row ? `${row.label} sandboxes are on your plan now.` : "Your plan covers this sandbox now."} Nothing
                   has been started yet.
                 </p>
               </div>
@@ -335,7 +335,7 @@ function AddMachineSheetBody({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              We&apos;ll tell you when {step.name} is ready. It also appears in Settings → Machines.
+              We&apos;ll tell you when {step.name} is ready. It also appears in Settings → Agent sandboxes.
             </p>
           </div>
         );
@@ -348,7 +348,7 @@ function AddMachineSheetBody({
               mode="add"
               onConnected={(daemonId) => {
                 const machine = daemons.find((d) => d.daemonId === daemonId);
-                finish({ daemonId, name: machine?.name || machine?.hostname || "Your machine" });
+                finish({ daemonId, name: machine?.name || machine?.hostname || "Your sandbox" });
               }}
             />
           </div>
@@ -397,7 +397,7 @@ function AddMachineSheetBody({
                       </option>
                     ))}
                   </select>
-                  <span className="block text-xs text-muted-foreground">A suspended machine is not billed for compute.</span>
+                  <span className="block text-xs text-muted-foreground">A suspended sandbox is not billed for compute.</span>
                 </label>
                 <div className="space-y-1">
                   <span className="text-xs font-medium text-foreground">Repository</span>
@@ -521,7 +521,7 @@ function ChooseStep({
         />
         {cloud &&
           (loading ? (
-            <p className="px-1 py-2 text-sm text-muted-foreground">Loading machine sizes…</p>
+            <p className="px-1 py-2 text-sm text-muted-foreground">Loading sandbox sizes…</p>
           ) : (
             rows.map((r) => (
               <MachineRowButton

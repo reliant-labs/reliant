@@ -59,7 +59,7 @@ import { useConsoleNavModel } from "./useConsoleNavModel";
 import { useObsNavOpen } from "./obsNavOpen";
 import { rememberEnv } from "./envScope";
 import { consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
-import { appsPath } from "@/lib/paths";
+import { projectsHref } from "@/lib/paths";
 
 const RAIL_KEY = "forge.console.rail";
 
@@ -160,9 +160,9 @@ export function ConsoleLayout() {
     () => (
       <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
         {/* The forge shell has no app to close back to: its mark leads
-            home (the Apps list), and Reliant is a link in its own chrome. */}
+            home (Projects' apps), and Reliant is a link in its own chrome. */}
         {forgeShell ? (
-          <a href={appsPath()} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
+          <a href={projectsHref("apps")} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
             <ForgeMark className="h-6 w-6" />
           </a>
         ) : (
@@ -171,7 +171,7 @@ export function ConsoleLayout() {
         <ConsoleProjectSwitcher
           forgeProject={forgeProject}
           onSelect={(app) => void navigate({ href: switchTarget(app, page) })}
-          onSelectAll={() => void navigate({ href: appsPath() })}
+          onSelectAll={() => void navigate({ href: projectsHref("apps") })}
         />
       </div>
     ),

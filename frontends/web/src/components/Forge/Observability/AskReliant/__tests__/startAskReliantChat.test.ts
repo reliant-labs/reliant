@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WorktreeStatus } from "@/gen/reliant/v1/worktree_pb";
 import { useComposerHandoffStore } from "@/store/composerHandoffStore";
+import { useNewChatAppStore } from "@/store/newChatAppStore";
 import type { Project } from "@/store/projectStore";
 
 const calls: string[] = [];
@@ -32,6 +33,7 @@ describe("startAskReliantChat", () => {
   beforeEach(() => {
     calls.length = 0;
     useComposerHandoffStore.setState({ pending: null });
+    useNewChatAppStore.getState().clear();
     projectState.currentProject = { id: "p1" };
     createWorktree.mockReset().mockImplementation(async () => {
       calls.push("create");
@@ -55,7 +57,7 @@ describe("startAskReliantChat", () => {
 
     expect(started).toEqual({ worktreeId: "w9", chatId: "chat-1" });
     expect(calls).toEqual(["create", "remember", "start", "created", "open-chat", "open"]);
-    expect(startChat).toHaveBeenCalledWith("w9", "fix it");
+    expect(startChat).toHaveBeenCalledWith("w9", "fix it", undefined, undefined, undefined, undefined, undefined, { appName: undefined });
     expect(onChatCreated).toHaveBeenCalledWith("chat-1");
     expect(openChatInWorkspace).toHaveBeenCalledWith(expect.objectContaining({ id: "chat-1" }), { navigate: true });
     expect(trackEvent).toHaveBeenCalledWith("chat_created", expect.any(Object));
@@ -105,6 +107,18 @@ describe("startAskReliantChat", () => {
 
     const offered = useComposerHandoffStore.getState().pending;
     expect(offered).toMatchObject({ projectId: "p1", worktreeId: "w9", text: "the prompt", onChatCreated });
+  });
+
+  it("tags the chat with the app it started from: on the start when sent, else for the composer's send", async () => {
+    await startAskReliantChat({ project: shop, prompt: "fix it", workspaceName: "fix-x", send: true, openProject: vi.fn(), appName: "shopfront" });
+    expect(startChat).toHaveBeenCalledWith("w9", "fix it", undefined, undefined, undefined, undefined, undefined, { appName: "shopfront" });
+
+    await startAskReliantChat({ project: shop, prompt: "look", workspaceName: "ask-x", openProject: vi.fn(), appName: "shopfront" });
+    expect(useNewChatAppStore.getState().tag).toEqual({ projectId: "p1", appName: "shopfront" });
+
+    // A name the server would refuse is dropped, never sent.
+    await startAskReliantChat({ project: shop, prompt: "look", workspaceName: "ask-y", openProject: vi.fn(), appName: "not a name" });
+    expect(useNewChatAppStore.getState().tag).toBeNull();
   });
 
   it("selects the project first when another is open", async () => {

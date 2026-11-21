@@ -146,6 +146,7 @@ export function IntegrationsSettings() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Integrations"
+        learn="connectors"
         description="The accounts your automations and agents act through: GitHub, Slack, Gmail, Twilio and HTTP. Connect one here, or when a workflow step first needs it; this is also where to check it still works, or revoke it."
         actions={
           <Button variant="primary" size="lg" leftIcon={<Plus />} onClick={() => setPicking(true)} disabled={connectable.length === 0}>

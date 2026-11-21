@@ -123,7 +123,7 @@ import { ALL_PROJECTS_PICK, refOfKey, SEVERAL_PROJECTS_PICK, useShellLastPick } 
 import { useProjectStore } from "@/store/projectStore";
 import { consolePath } from "@/components/Forge/Console/paths";
 import ForgeLink from "@/components/forge-ui/link";
-import { appsPath, onboardingPath, settingsPath, usageBillingPath } from "@/lib/paths";
+import { onboardingPath, projectsPath, settingsPath, usageBillingPath } from "@/lib/paths";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -502,7 +502,7 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
             void navigate({ href: safeReturnTo });
             return;
           }
-          void navigate({ to: appsPath() });
+          void navigate({ to: projectsPath(), search: { show: "apps" } });
         }}
         leftIcon={<ArrowLeft />}
       >
