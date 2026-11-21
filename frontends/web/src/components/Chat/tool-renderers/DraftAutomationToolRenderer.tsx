@@ -55,7 +55,7 @@ function DraftAutomationCardComponent({ chatId, metadata }: DraftAutomationCardP
     });
 
   return (
-    <div data-testid="draft-automation-card" className="my-1.5 rounded-lg border border-border bg-card px-3 py-2.5">
+    <div data-testid="draft-automation-card" className="my-1.5 w-full rounded-lg border border-border bg-card px-3 py-2.5">
       <div className="flex items-start gap-2.5">
         <CalendarClock className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0 flex-1">

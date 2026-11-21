@@ -296,8 +296,11 @@ export function createDefaultWorktreeState(): WorktreeState {
     chatQueue: [],
     openViewers: [],
     activeViewerIndex: null,
+    // Closed by default, like the terminal: the chat takes the width until
+    // the person opens a panel (the header's toggles), and that choice
+    // persists per workspace.
     rightPanelState: {
-      fileBrowser: true,
+      fileBrowser: false,
     },
     rightSidebarTab: "files",
     // Closed by default: a first screen with the chat, the file browser and a
@@ -386,7 +389,7 @@ function cleanupDeprecatedStorage(): void {
 // Store Implementation
 // ============================================================================
 
-const CURRENT_VERSION = 7;
+const CURRENT_VERSION = 8;
 
 type WorkspaceStateWrite =
   | Partial<WorkspaceStateStore>
@@ -1115,6 +1118,21 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
             }
           }
           logger.info("[WorkspaceState] Migrated to v6: Added workflowLayoutDirection field");
+        }
+
+        // Migration v7 -> v8: the right panel became closed by default. Up to
+        // v7 it was open by default, so a persisted `true` is almost always
+        // that default rather than a choice: close it once, and from here on
+        // what the person opens persists.
+        if (version < 8) {
+          const state = persistedState as Partial<WorkspaceStateStore>;
+          for (const project of Object.values(state.projects ?? {})) {
+            for (const worktree of Object.values(project?.worktrees ?? {})) {
+              const wt = worktree as Partial<WorktreeState> | undefined;
+              if (wt?.rightPanelState) wt.rightPanelState = { ...wt.rightPanelState, fileBrowser: false };
+            }
+          }
+          logger.info("[WorkspaceState] Migrated to v8: right panel closed by default");
         }
 
         return persistedState as WorkspaceStateStore;

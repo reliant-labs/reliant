@@ -152,10 +152,16 @@ func (c workflowCheck) summary() string {
 // a draft would fail at run start). The workflow being validated resolves to
 // itself, so a workflow that spawns itself can be validated — and marked
 // complete — while it is still a draft.
+//
+// A `daemon: {pool: …}` must name one of the user's machine pools
+// (checkMachinePools): only here, where the owner is known, can that be
+// checked before the run fails placing it.
 func (s *Service) validateWorkflowDefinition(ctx context.Context, userID string, definition []byte) workflowCheck {
-	return validateWorkflowDefinitionWith(definition, func(self *reliantv1.Workflow) v2.WorkflowLoader {
+	check := validateWorkflowDefinitionWith(definition, func(self *reliantv1.Workflow) v2.WorkflowLoader {
 		return workflowsource.DraftLoader(ctx, s.deps.Repo, userID, self)
 	})
+	checkMachinePools(check, s.poolLookup(ctx, userID))
+	return check
 }
 
 // validateWorkflowDefinitionWith validates definition, resolving its refs

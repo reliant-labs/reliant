@@ -61,9 +61,10 @@ func (s *Service) ListTriggers(
 	// whole list (launch.NewRequestResolver).
 	resolver := launch.NewRequestResolver(s.deps.Repo)
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: resolver})
+	next := s.nextFireTimes(ctx, stored)
 	out := make([]*reliantv1.Trigger, 0, len(stored))
 	for _, t := range stored {
-		out = append(out, s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], workflows, resolver))
+		out = append(out, s.renderWithWorkflows(ctx, t, next[t.ID], recent[t.ID], regs[t.ID], workflows, resolver))
 	}
 	return connect.NewResponse(&reliantv1.ListTriggersResponse{Triggers: out}), nil
 }
