@@ -101,7 +101,7 @@ function PresetGroup({
     <section aria-label={label}>
       <h3
         className={cn(
-          "mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide",
+          "mb-2 flex items-center gap-1.5 text-xs font-semibold",
           danger ? "text-destructive-ink" : "text-muted-foreground",
         )}
       >

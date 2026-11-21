@@ -420,7 +420,7 @@ describe("banners in the status sheet", () => {
     const gutter = within(sheet).getByTestId("gutter-banner");
     expect(gutter).toHaveClass("px-3", "py-2.5", "text-xs");
     expect(gutter.className).not.toMatch(/sm:px-6/);
-    expect(gutter.querySelector(".max-w-\\[1200px\\]")).toBeNull();
+    expect(gutter.querySelector(".max-w-\\[var\\(--chat-column\\)\\]")).toBeNull();
   });
 
   it("keeps the full-width band treatment inline on a wide column", () => {
@@ -431,7 +431,7 @@ describe("banners in the status sheet", () => {
     expect(recovery.closest("[data-status-slot-item]")).toHaveClass("contents");
 
     const gutter = screen.getByTestId("gutter-banner");
-    expect(gutter).toHaveClass("px-4", "sm:px-6", "lg:px-8");
-    expect(gutter.querySelector(".max-w-\\[1200px\\]")).not.toBeNull();
+    expect(gutter).toHaveClass("px-[var(--chat-gutter)]");
+    expect(gutter.querySelector(".max-w-\\[var\\(--chat-column\\)\\]")).not.toBeNull();
   });
 });

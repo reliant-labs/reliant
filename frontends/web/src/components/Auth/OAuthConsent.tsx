@@ -370,7 +370,7 @@ export function OAuthConsent() {
 
           {scopes.length > 0 && (
             <div className="space-y-2 pt-1">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+              <p className="text-xs text-muted-foreground">
                 It will be able to
               </p>
               <ul className="space-y-1.5">

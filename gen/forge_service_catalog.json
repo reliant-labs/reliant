@@ -497,6 +497,7 @@
         "TemporalClient",
         "TemporalWorker",
         "TokenAuthority",
+        "TriggerDeliveryRelay",
         "TriggerPollers",
         "UserUpdateHub",
         "Vault",
@@ -38262,6 +38263,12 @@
               "Name": "worktree_name",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "client_minimums",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ClientMinimums"
             }
           ],
           "ReadyRequest": null,
@@ -38332,11 +38339,67 @@
               "Name": "branch",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "client_minimums",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ClientMinimums"
             }
           ]
         },
         "Audience": "user",
         "Schemas": {
+          "reliant.v1.ClientMinimum": [
+            {
+              "name": "min_version",
+              "kind": "string"
+            },
+            {
+              "name": "upgrade_url",
+              "kind": "string"
+            },
+            {
+              "name": "upgrade_command",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ClientMinimums": [
+            {
+              "name": "web",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "desktop",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "daemon",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "cli",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "sdk_go",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "sdk_ts",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "enforced",
+              "kind": "bool"
+            }
+          ],
           "reliant.v1.DevAuthClearRequest": [],
           "reliant.v1.DevAuthClearResponse": [
             {
@@ -38408,6 +38471,11 @@
             {
               "name": "worktree_name",
               "kind": "string"
+            },
+            {
+              "name": "client_minimums",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimums"
             }
           ],
           "reliant.v1.ReadyRequest": [],
@@ -38466,10 +38534,17 @@
             {
               "name": "branch",
               "kind": "string"
+            },
+            {
+              "name": "client_minimums",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimums"
             }
           ]
         },
         "SchemaFiles": {
+          "reliant.v1.ClientMinimum": "reliant/v1/system.proto",
+          "reliant.v1.ClientMinimums": "reliant/v1/system.proto",
           "reliant.v1.DevAuthClearRequest": "reliant/v1/system.proto",
           "reliant.v1.DevAuthClearResponse": "reliant/v1/system.proto",
           "reliant.v1.DevAuthLoadRequest": "reliant/v1/system.proto",
@@ -46946,6 +47021,10 @@
               "kind": "map",
               "map_key_kind": "string",
               "map_value_kind": "string"
+            },
+            {
+              "name": "pool",
+              "kind": "string"
             }
           ],
           "reliant.v1.DeleteWorkflowRequest": [
@@ -54033,6 +54112,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewTriggerAlerting"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "TriggerDeliveryRelay",
+      "name": "TriggerDeliveryRelay",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.TriggerDeliveryRelay",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewTriggerDeliveryRelay"
       },
       "methods": [],
       "implementation_candidates": []

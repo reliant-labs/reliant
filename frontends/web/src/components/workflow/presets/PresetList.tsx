@@ -95,7 +95,7 @@ export function PresetList({ projectId, presets, availablePresets, onChanged, la
                   <WorkflowBadge label={WORKFLOW_SOURCE_LABEL[preset.source as keyof typeof WORKFLOW_SOURCE_LABEL] ?? preset.source} variant="neutral" />
                   {tag && <span className="font-mono text-xs text-muted-foreground">{tag}</span>}
                   {isPresetHidden(preset.name) && (
-                    <span className="text-xs font-medium uppercase text-muted-foreground">Hidden</span>
+                    <span className="text-xs font-medium text-muted-foreground">Hidden</span>
                   )}
                 </span>
                 {typeof preset.description === "string" && preset.description && (
