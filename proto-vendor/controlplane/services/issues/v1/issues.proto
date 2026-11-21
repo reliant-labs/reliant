@@ -245,7 +245,10 @@ service IssuesService {
           label: "reason"
         }
         scope: "org_id"
-        detail: ["env_id", "reason"]
+        detail: [
+          "env_id",
+          "reason"
+        ]
       }
     };
   }
