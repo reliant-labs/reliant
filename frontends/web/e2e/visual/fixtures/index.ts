@@ -8,6 +8,7 @@ import { projectCatalogFixtures } from './projects'
 import { servicesFixtures } from './services'
 import { speedInsightsFixtures, speedInsightsQueryPanel } from './speedInsights'
 import { u6cFixtures } from './u6c'
+import { testsFixtures } from './tests'
 import { overviewFixtures, overviewQueryPanel } from './overview'
 import { withDashboardFixtures } from './dashboards'
 
@@ -31,6 +32,7 @@ export const allFixtures: Fixtures = withDashboardFixtures({
   ...projectCatalogFixtures,
   ...servicesFixtures,
   ...u6cFixtures,
+  ...testsFixtures,
   ...overviewFixtures,
   ...speedInsightsFixtures,
   ...dataFixtures,

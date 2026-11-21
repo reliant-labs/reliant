@@ -47,6 +47,12 @@
  *   /forge/p/:project/security/vulnerabilities/:advisory
  *                                             one advisory, across the project's releases
  *   /forge/p/:project/security/sboms          Security › SBOMs: each artifact's SBOM and scan (`release`)
+ *   /forge/p/:project/tests                   Tests › Overview: coverage headline and trend, pass rate,
+ *                                             flaky counts, the last run (`branch`)
+ *   /forge/p/:project/tests/coverage          Tests › Coverage (`path`, `commit`, `lane`, `base`: a file
+ *                                             path rides the search, never a segment)
+ *   /forge/p/:project/tests/runs[/:run]       Tests › Runs, and one run
+ *   /forge/p/:project/tests/flaky[/:test]     Tests › Flaky tests, and one test (its id, encoded)
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -209,6 +215,18 @@ export type ConsolePage =
   | { kind: "sboms" }
   /** Auth (U6d): who can sign in, and how (Users/AuthPage.tsx). Omitted tab: users. */
   | { kind: "auth"; tab?: AuthTab }
+  /** Tests › Overview: one branch's test health (Tests/TestsOverviewPage.tsx). */
+  | { kind: "tests" }
+  /** Tests › Coverage: the coverage tree and a file's lines; the path is in the search (Tests/TestsPlaceholderPages.tsx until W2). */
+  | { kind: "tests-coverage" }
+  /** Tests › Runs: recorded runs, newest first. */
+  | { kind: "tests-runs" }
+  /** One recorded run. */
+  | { kind: "tests-run"; run: string }
+  /** Tests › Flaky tests: by flake rate, with host health below. */
+  | { kind: "tests-flaky" }
+  /** One test's flake record (its TestKey id). */
+  | { kind: "tests-flaky-test"; test: string }
   /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
   | { kind: "extension"; id: string; segment: string };
 
@@ -248,6 +266,36 @@ export const SECURITY_SEGMENT = "security";
 export const SECURITY_PAGES = { vulnerabilities: "vulnerabilities", sboms: "sboms" } as const;
 /** The Security pages, in nav order. */
 export const SECURITY_PAGE_KINDS = ["vulnerabilities", "sboms"] as const satisfies readonly ConsolePage["kind"][];
+
+/**
+ * The Tests section's path segments: `/forge/p/<app>/tests[/<page>]` (forge
+ * docs/proposals/tests-coverage-flakes.md §3.1). Its Overview is the bare
+ * segment; a coverage path rides the search (`?path=`), because a file path
+ * would need segments consolePageOf does not split.
+ */
+export const TESTS_SEGMENT = "tests";
+export const TESTS_PAGES = { coverage: "coverage", runs: "runs", flaky: "flaky" } as const;
+/** The Tests pages, in nav order, and the page kinds each lights (a run is under Runs, a test under Flaky tests). */
+export const TESTS_VIEWS = ["overview", "coverage", "runs", "flaky"] as const;
+export type TestsView = (typeof TESTS_VIEWS)[number];
+export const TESTS_VIEW_KINDS: Record<TestsView, readonly ConsolePage["kind"][]> = {
+  overview: ["tests"],
+  coverage: ["tests-coverage"],
+  runs: ["tests-runs", "tests-run"],
+  flaky: ["tests-flaky", "tests-flaky-test"],
+};
+export const TESTS_VIEW_LABELS: Record<TestsView, string> = { overview: "Overview", coverage: "Coverage", runs: "Runs", flaky: "Flaky tests" };
+const TESTS_VIEW_PAGE: Record<TestsView, ConsolePage> = {
+  overview: { kind: "tests" },
+  coverage: { kind: "tests-coverage" },
+  runs: { kind: "tests-runs" },
+  flaky: { kind: "tests-flaky" },
+};
+
+/** Whether `page` is one of the Tests pages. */
+export function isTestsPage(page: ConsolePage): boolean {
+  return Object.values(TESTS_VIEW_KINDS).some((kinds) => kinds.includes(page.kind));
+}
 
 /**
  * What a link may name (U6c path-builder contract): every ConsolePage, plus
@@ -340,6 +388,18 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}/${encodeURIComponent(page.advisory)}`;
     case "sboms":
       return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.sboms}`;
+    case "tests":
+      return `${base}/${TESTS_SEGMENT}`;
+    case "tests-coverage":
+      return `${base}/${TESTS_SEGMENT}/${TESTS_PAGES.coverage}`;
+    case "tests-runs":
+      return `${base}/${TESTS_SEGMENT}/${TESTS_PAGES.runs}`;
+    case "tests-run":
+      return `${base}/${TESTS_SEGMENT}/${TESTS_PAGES.runs}/${encodeURIComponent(page.run)}`;
+    case "tests-flaky":
+      return `${base}/${TESTS_SEGMENT}/${TESTS_PAGES.flaky}`;
+    case "tests-flaky-test":
+      return `${base}/${TESTS_SEGMENT}/${TESTS_PAGES.flaky}/${encodeURIComponent(page.test)}`;
   }
 }
 
@@ -378,6 +438,12 @@ export const securityPath = (app: string, view: SecurityView = "vulnerabilities"
 /** Auth (U6d): `users` (the old Users page; the default) or `sign-in`. */
 export const authPath = (app: string, tab?: AuthTab, ctx?: PathContext) => consolePath(app, { kind: "auth", tab }, ctx);
 export const projectUsagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "usage" }, ctx);
+/** Tests (the Tests nav group): `overview` (the default), `coverage`, `runs` or `flaky`. */
+export const testsPath = (app: string, view: TestsView = "overview", ctx?: PathContext) => consolePath(app, TESTS_VIEW_PAGE[view], ctx);
+/** One recorded run, under Tests › Runs. */
+export const testRunPath = (app: string, runId: string, ctx?: PathContext) => consolePath(app, { kind: "tests-run", run: runId }, ctx);
+/** One test's flake record, under Tests › Flaky tests, by its TestKey id ("go:<pkg>:TestRefund"). */
+export const flakyTestPath = (app: string, testId: string, ctx?: PathContext) => consolePath(app, { kind: "tests-flaky-test", test: testId }, ctx);
 
 function safeDecode(segment: string): string {
   try {
@@ -438,6 +504,13 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
           return dashKind ? { kind: "vulnerability", advisory: safeDecode(dashKind) } : { kind: "vulnerabilities" };
         }
         return sub === SECURITY_PAGES.sboms && !dashKind ? { kind: "sboms" } : null;
+      case TESTS_SEGMENT:
+        if (!sub) return { kind: "tests" };
+        if (dashKey) return null;
+        if (sub === TESTS_PAGES.coverage) return dashKind ? null : { kind: "tests-coverage" };
+        if (sub === TESTS_PAGES.runs) return dashKind ? { kind: "tests-run", run: safeDecode(dashKind) } : { kind: "tests-runs" };
+        if (sub === TESTS_PAGES.flaky) return dashKind ? { kind: "tests-flaky-test", test: safeDecode(dashKind) } : { kind: "tests-flaky" };
+        return null;
       default: {
         // A page registered in the nav, while it is registered.
         const entry = sub ? undefined : consoleNavEntryForSegment(section);

@@ -39,6 +39,8 @@ export const LEARN_SLUGS = {
   "speed-insights": "forge/observability/speed-insights",
   analytics: "forge/observability/product-analytics",
   security: "forge/security/vulnerabilities",
+  // The Tests pages' guide until a page of their own is written (forge docs/proposals/tests-coverage-flakes.md).
+  tests: "deep-dives/how-forge-tests-work",
   releases: "forge/deploy/releases-and-promotion",
   environments: "forge/deploy/environments",
   secrets: "hosting/secrets",
@@ -72,6 +74,7 @@ const SECTION_NAMES: Record<LearnSection, string> = {
   "speed-insights": "speed insights",
   analytics: "analytics",
   security: "security",
+  tests: "tests",
   releases: "releases",
   environments: "environments",
   secrets: "secrets",

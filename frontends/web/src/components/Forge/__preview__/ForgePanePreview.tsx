@@ -65,6 +65,8 @@ import { StoragePage } from "../Storage/StoragePage";
 import { SbomsPage } from "../Security/SbomsPage";
 import { VulnerabilitiesPage } from "../Security/VulnerabilitiesPage";
 import { VulnerabilityPage } from "../Security/VulnerabilityPage";
+import { TestsOverviewPage } from "../Tests/TestsOverviewPage";
+import { TestsCoveragePage, TestsFlakyPage, TestsFlakyTestPage, TestsRunPage, TestsRunsPage } from "../Tests/TestsPlaceholderPages";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
@@ -455,6 +457,12 @@ function buildRouter(path: string) {
     vulnerabilities: VulnerabilitiesPage,
     vulnerability: VulnerabilityPage,
     sboms: SbomsPage,
+    tests: TestsOverviewPage,
+    testsCoverage: TestsCoveragePage,
+    testsRuns: TestsRunsPage,
+    testsRun: TestsRunPage,
+    testsFlaky: TestsFlakyPage,
+    testsFlakyTest: TestsFlakyTestPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,

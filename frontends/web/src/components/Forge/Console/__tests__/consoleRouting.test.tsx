@@ -226,6 +226,12 @@ function renderAt(initialEntry: string, { inShell = false }: { inShell?: boolean
     vulnerabilities: probe("vulnerabilities"),
     vulnerability: probe("vulnerability"),
     sboms: probe("sboms"),
+    tests: probe("tests"),
+    testsCoverage: probe("tests-coverage"),
+    testsRuns: probe("tests-runs"),
+    testsRun: probe("tests-run"),
+    testsFlaky: probe("tests-flaky"),
+    testsFlakyTest: probe("tests-flaky-test"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -487,6 +493,23 @@ describe("the environment scope", () => {
     const router = renderAt("/forge/p/alpha/security/sboms?env=e2e&release=v1.5.0");
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "sboms");
     await landsOn(router, "/forge/p/alpha/security/sboms", { env: "e2e", release: "v1.5.0" });
+  });
+
+  it.each([
+    ["/forge/p/alpha/tests?env=e2e&branch=main", "tests", "/forge/p/alpha/tests", { env: "e2e", branch: "main" }],
+    [
+      "/forge/p/alpha/tests/coverage?env=e2e&path=internal/billing/refund.go&commit=9f3c&lane=unit&base=77e0c1d",
+      "tests-coverage",
+      "/forge/p/alpha/tests/coverage",
+      { env: "e2e", path: "internal/billing/refund.go", commit: "9f3c", lane: "unit", base: "77e0c1d" },
+    ],
+    ["/forge/p/alpha/tests/runs?env=e2e", "tests-runs", "/forge/p/alpha/tests/runs", { env: "e2e" }],
+    ["/forge/p/alpha/tests/runs/01JD7Q?env=e2e", "tests-run", "/forge/p/alpha/tests/runs/01JD7Q", { env: "e2e" }],
+    ["/forge/p/alpha/tests/flaky?env=e2e", "tests-flaky", "/forge/p/alpha/tests/flaky", { env: "e2e" }],
+  ])("routes the Tests page %s", async (url, page, path, search) => {
+    const router = renderAt(url);
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", page);
+    await landsOn(router, path, search);
   });
 
   it("reads a numeric-looking key back as the text it is", async () => {

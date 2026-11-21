@@ -57,7 +57,7 @@ import { useConsoleUser } from "./consoleHost";
 import { useConsoleNavModel } from "./useConsoleNavModel";
 import { useObsNavOpen } from "./obsNavOpen";
 import { rememberEnv } from "./envScope";
-import { consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
+import { consolePath, isTestsPage, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 import { projectsHref } from "@/lib/paths";
 
 const RAIL_KEY = "forge.console.rail";
@@ -192,7 +192,8 @@ export function ConsoleLayout() {
             <ObsQuotaBanner />
           </div>
           {/* The Overview is the landing: with nothing deployed it shows the chats and the way to deploy (WorkloadPages OverviewPage). */}
-          {undeployed && page.kind !== "overview" ? <AppSectionEmptyState page={page} projectId={deployProjectId} /> : <Outlet />}
+          {/* Tests need no deploy: a CI lane records runs before any release (TestsService RecordTestRun), so they keep their pages. */}
+          {undeployed && page.kind !== "overview" && !isTestsPage(page) ? <AppSectionEmptyState page={page} projectId={deployProjectId} /> : <Outlet />}
         </ForgeConsoleContext.Provider>
       ) : (
         <div aria-busy="true" aria-label="Loading" data-testid="forge-console-loading" className="space-y-4">

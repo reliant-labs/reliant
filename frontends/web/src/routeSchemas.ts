@@ -696,6 +696,27 @@ export const forgeConsoleSbomsSearchSchema = z.object({
   env: envScopeParam,
   release: z.union([z.string().min(1).max(256), z.number().transform(String)]).optional().catch(undefined),
 });
+
+/** A git ref or a lane the router may have parsed as a number ("1234"). */
+const testsRefParam = (max: number) => z.union([z.string().min(1).max(max), z.number().transform(String)]).optional().catch(undefined);
+
+/** Tests (Overview, Runs, Flaky tests): the scope, and a branch other than the default one. */
+export const forgeConsoleTestsSearchSchema = z.object({
+  env: envScopeParam,
+  branch: testsRefParam(256),
+});
+
+/**
+ * Tests › Coverage: the scope, the path (repo-relative; a file path rides the
+ * search because consolePageOf splits only fixed segments), whose report
+ * (`commit`), one lane, and the base diff coverage is taken against.
+ */
+export const forgeConsoleTestsCoverageSearchSchema = forgeConsoleTestsSearchSchema.extend({
+  path: z.string().max(4096).optional().catch(undefined),
+  commit: testsRefParam(64),
+  lane: testsRefParam(64),
+  base: testsRefParam(64),
+});
 /**
  * Data (components/Forge/Data): the scope, and the browser's view — which
  * database, which table, its filters, sort, visible columns, the first row
