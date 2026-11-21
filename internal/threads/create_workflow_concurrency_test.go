@@ -50,6 +50,9 @@ func TestCreateWorkflowWithThread_ConcurrentChildrenInOneChatDoNotConflict(t *te
 			chatID := h.createChatInWorktree(t)
 			mainThread, _ := h.createThread("", chatID)
 
+			// The recorder is safe for the children's concurrent retries: it
+			// appends under its own mutex, and Len reads under it
+			// (internal/db/testutil.go, RetryBackoffs).
 			retries := db.RecordRetryBackoffs(h.repo)
 			start := make(chan struct{})
 			errs := make([]error, children)
