@@ -78,12 +78,6 @@ func TestMachineState_KindsAndClientText(t *testing.T) {
 			assert.NotContains(t, svcerr.ToConnect(got).Message(), "resolving daemon")
 			assert.NotContains(t, svcerr.ToConnect(got).Message(), "nats:")
 
-			// The deprecated *connect.Error spelling decides the same code and
-			// keeps its old message, byte for byte: doing around err's text.
-			cerr, ok := MachineStateConnectError("list commands", err)
-			assert.True(t, ok)
-			assert.Equal(t, tc.wantCode, cerr.Code())
-			assert.Equal(t, "list commands: "+err.Error(), cerr.Message())
 		})
 	}
 }
@@ -151,20 +145,6 @@ func TestError_DaemonTextKeptTransportTextRedacted(t *testing.T) {
 		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(got))
 		assert.Equal(t, text, svcerr.ToConnect(got).Message(), "the daemon's explanation, without plumbing around it")
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(got))
-	})
-	t.Run("deprecated DispatchConnectError decides the same codes, old messages", func(t *testing.T) {
-		for _, err := range []error{
-			toolexec.DaemonReportedFailure("git.push", "rejected"),
-			toolexec.DaemonReportedFailure("git.push", "working dir does not exist: /gone"),
-			toolexec.DaemonReportedFailure("git.push", "an older version of Reliant"),
-			fmt.Errorf("resolving daemon for command: %w", machineStates[1].err),
-			errors.New("nats: connection closed"),
-		} {
-			want := svcerr.Code(Error("daemon command git.push", err))
-			got := DispatchConnectError("git.push", err)
-			assert.Equal(t, want, got.Code(), err.Error())
-			assert.Contains(t, got.Message(), err.Error(), "the old message carries err's whole text")
-		}
 	})
 }
 

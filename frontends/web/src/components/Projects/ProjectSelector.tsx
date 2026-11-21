@@ -53,7 +53,6 @@ import { useProjectCatalog } from "@/hooks/project-catalog-queries";
 import { useProjects } from "@/hooks/project-queries";
 import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
 import { appPath, projectPath } from "@/lib/paths";
-import { isForgeShell } from "@/lib/shell";
 import { cn } from "@/lib/utils";
 import {
   appEntries,
@@ -227,7 +226,6 @@ export function useSelectorCatalog(orgId: string | null | undefined): { catalog:
     if (view.catalog) return { catalog: view.catalog, loading: false };
     const plainReady = !plain.isLoading && (plain.projects.length > 0 || view.error !== null);
     if (plainReady) return { catalog: catalogFromProjects(orgId ?? "", plain.projects), loading: false };
-    if (isForgeShell()) return { catalog: undefined, loading: false };
     return { catalog: undefined, loading: view.isLoading || plain.isLoading };
   }, [view.catalog, view.isLoading, view.error, plain.isLoading, plain.projects, orgId]);
 }

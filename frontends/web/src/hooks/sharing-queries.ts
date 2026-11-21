@@ -32,8 +32,10 @@ export const ORG_FEED_REFRESH_DEBOUNCE_MS = 250;
 /**
  * The chats other members shared with `orgId`, most recently active first;
  * with `projectIds`, only those projects' (the chat list's project filter:
- * ListSharedChats' `project_ids`, their union). A server older than the field
- * answers every project, so the answer is narrowed here too.
+ * ListSharedChats' `project_ids`, their union, applied by the server before
+ * its page limit). No fallback for a server without the field: the web ships
+ * with one that has it. The narrowing only guarantees the list never shows a
+ * chat of a project not chosen.
  */
 export function useSharedChats(orgId: string | null, projectIds: readonly string[] = []) {
   const ids = [...projectIds].sort();

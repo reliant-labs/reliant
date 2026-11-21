@@ -105,8 +105,7 @@ export interface FullToolBodies {
 /**
  * Everything a copy or an export needs whole, in one round: the elided
  * inputs and results (by block id, one GetContentBlockBodies batch with
- * `full`) and the truncated results of an older server (GetToolResult, by
- * call). Throws when any of it cannot be read, so a caller never puts a
+ * `full`) and the truncated results (GetToolResult, by call). Throws when any of it cannot be read, so a caller never puts a
  * skeleton or a stub where the body belongs.
  */
 export async function fetchFullToolBodies(

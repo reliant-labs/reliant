@@ -60,6 +60,7 @@ import { useObsNavOpen } from "./obsNavOpen";
 import { rememberEnv } from "./envScope";
 import { consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 import { projectsHref } from "@/lib/paths";
+import { changesUIEnabled } from "@/lib/changesFeature";
 
 const RAIL_KEY = "forge.console.rail";
 
@@ -241,6 +242,7 @@ export function ConsoleLayout() {
       starred={starred}
       dashboardTitle={dashboardTitle}
       optionalViews={optionalViews}
+      experiments={changesUIEnabled()}
       obsOpen={obsOpen}
       onObsOpenChange={setObsOpen}
       scope={scope}

@@ -179,8 +179,8 @@ export const LogConfigSchema: GenMessage<LogConfig> = /*@__PURE__*/
 
 /**
  * StorageReaperConfig is how the daemon schedules forge's storage reaper
- * (`forge storage auto-gc`) on its own machine. A daemon has no systemd timer
- * or cron to run `forge storage install`'s schedule, and the pass that
+ * (`forge machine storage auto-gc`) on its own machine. A daemon has no systemd timer
+ * or cron to run `forge machine storage install`'s schedule, and the pass that
  * `forge env up` starts in the background is rate-limited to once a day and
  * only fires after an `up`; the Go build cache grows far faster than that
  * (internal/diskwatch/reaper.go has the design). The reaper's own budgets
@@ -217,7 +217,7 @@ export type StorageReaperConfig = Message<"reliant.config.v1.StorageReaperConfig
   pressureInterval: string;
 
   /**
-   * Forge's machine storage policy, the file `forge storage` reads. FORGE_STORAGE_POLICY
+   * Forge's machine storage policy, the file `forge machine storage` reads. FORGE_STORAGE_POLICY
    * is forge's own variable, so the daemon and the passes it starts agree on the
    * file. Unset: forge's default, <user config dir>/forge/storage.json.
    *
@@ -226,7 +226,7 @@ export type StorageReaperConfig = Message<"reliant.config.v1.StorageReaperConfig
   policyPath: string;
 
   /**
-   * How often the Go-cache pass (`forge storage gocache --apply`) runs between
+   * How often the Go-cache pass (`forge machine storage gocache --apply`) runs between
    * full passes. Under agent load ~25 GiB of the shared Go build cache crosses
    * forge's 2h safety floor every hour, so an hourly trim leaves that much
    * removable cache on the disk. A Go duration; below 2m is raised to 2m;
@@ -249,10 +249,11 @@ export const StorageReaperConfigSchema: GenMessage<StorageReaperConfig> = /*@__P
  * (internal/worktreereclaim/sweep.go): every linked git worktree on the
  * machine, whether Reliant made it or an agent ran `git worktree add`, is
  * captured into a local ref of its own repository
- * (refs/reliant/reclaimed/...) before it is deleted. It rides the storage
- * reaper's schedule and single-flight (RELIANT_STORAGE_REAPER), so it runs
- * only where that does. Durations are Go durations; a value the daemon cannot
- * use is named in a warning and replaced by its default.
+ * (refs/reliant/reclaimed/...) before it is deleted. It runs on the storage
+ * reaper's schedule and single-flight (RELIANT_STORAGE_REAPER): in dry-run
+ * only where the reaper runs, and in mode on also where the reaper is off,
+ * on its own. Durations are Go durations; a value the daemon cannot use is
+ * named in a warning and replaced by its default.
  *
  * @generated from message reliant.config.v1.WorktreeReclaimConfig
  */

@@ -96,4 +96,24 @@ message GatewayConfig {
     default_value: "/ready,/readyz"
     description: "Readiness probe paths on the health port (comma-separated)"
   }];
+
+  // Machine stats for self-hosted machines the platform runs (its pipeline
+  // boxes). A machine is watched when it belongs to one of these orgs, is not
+  // a managed workspace (whose pod logs reach tenant zero already) and
+  // carries machine_stats_label among its durable labels; the gateway then
+  // logs its heartbeat's load, memory and disk as `machine health` /
+  // `machine volume` lines once a minute (internal/machinehealth has the
+  // attribute contract control-plane's alerts read). Empty: no machine is
+  // watched.
+  repeated string machine_stats_orgs = 23 [(forge.v1.config) = {
+    env_var: "MACHINE_STATS_ORGS"
+    description: "Comma-separated org ids whose labelled self-hosted machines' heartbeat stats the gateway logs as machine health/machine volume lines (empty: off)"
+  }];
+  // The durable machine label, key=value, that opts a machine in those orgs
+  // into machine stats (a bare key matches any value).
+  string machine_stats_label = 24 [(forge.v1.config) = {
+    env_var: "MACHINE_STATS_LABEL"
+    default_value: "monitor=platform"
+    description: "Durable machine label (key=value) that opts a self-hosted machine in MACHINE_STATS_ORGS into heartbeat machine stats"
+  }];
 }

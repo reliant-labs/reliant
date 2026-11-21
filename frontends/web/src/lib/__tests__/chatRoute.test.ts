@@ -90,6 +90,23 @@ describe("moving the URL", () => {
     ]);
   });
 
+  it("keeps the chat's valid view and panel when only its thread changes", () => {
+    at("/c/a", { view: "simplified", panel: "changes", tour: "x" });
+    navigateToChatUrl("a", { threadId: "t-1" });
+    at("/c/a/t/t-1", { view: "simplified", panel: "changes" });
+    navigateToChatUrl("a");
+    at("/c/a", { view: "bogus", panel: "files" });
+    navigateToChatUrl("a", { threadId: "t-1" });
+    // Another chat has its own.
+    navigateToChatUrl("b");
+    expect(navigate.mock.calls.map(([options]) => options)).toEqual([
+      { href: "/c/a/t/t-1?view=simplified&panel=changes", replace: false },
+      { href: "/c/a?view=simplified&panel=changes", replace: false },
+      { href: "/c/a/t/t-1?panel=files", replace: false },
+      { href: "/c/b", replace: false },
+    ]);
+  });
+
   it("does nothing when the URL already names that chat and thread", () => {
     at("/c/a/t/t-1");
     navigateToChatUrl("a", { threadId: "t-1" });

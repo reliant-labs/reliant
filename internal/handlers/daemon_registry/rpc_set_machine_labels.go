@@ -12,6 +12,12 @@ import (
 )
 
 // SetMachineLabels replaces one of the caller's machines' durable labels.
+//
+// A label decides which machine pools a machine is in, and so where
+// pool-bound runs execute: a person signed in to the app sets one, or an
+// agent's call a person approved on its card, or (deprecated) the user's CLI
+// login; never a daemon's credential (requirePoolWriter). A daemon's
+// own connect-time labels (`reliant daemon start --label`) do not come here.
 func (s *Service) SetMachineLabels(
 	ctx context.Context,
 	req *connect.Request[pb.SetMachineLabelsRequest],
@@ -19,6 +25,9 @@ func (s *Service) SetMachineLabels(
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
+	}
+	if err := s.requirePoolWriter(ctx, "label a machine"); err != nil {
+		return nil, err
 	}
 	msg := req.Msg
 	if msg.GetDaemonId() == "" {

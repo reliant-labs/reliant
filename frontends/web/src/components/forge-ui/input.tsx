@@ -24,7 +24,7 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
 
 const sizeStyles: Record<InputSize, string> = {
   sm: "h-8 px-2.5 text-sm",
-  md: "h-10 px-3 text-sm",
+  md: "h-10 px-3.5 text-sm",
   lg: "h-12 px-3.5 text-base",
 };
 
@@ -39,7 +39,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
   const resolvedId = id ?? ctx?.id;
 
   const composed = [
-    "block w-full rounded-md border bg-surface",
+    "block w-full rounded-lg border bg-surface",
     "text-ink placeholder:text-ink-muted transition-colors",
     "focus:outline-none focus-visible:ring-2",
     "disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-muted",

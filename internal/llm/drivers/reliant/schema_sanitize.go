@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	llmtools "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -75,10 +76,21 @@ func geminiFallbackToolSchema() map[string]any {
 	}
 }
 
+// geminiCompatibleToolParameters is a tool's parameters for a Gemini model
+// behind the gateway. The schema is first rewritten into the shapes Gemini's
+// Schema subset can represent (geminiwire.NormalizeJSONSchema: $ref inlined,
+// type arrays and null branches as nullable, oneOf/allOf folded, required
+// trimmed to declared properties, unsupported keywords dropped), the same
+// rules the native Gemini transports apply, so a schema the gateway forwards
+// does not depend on how the gateway's own translator copes with them. What
+// is still not representable after that falls back to an empty object.
 func geminiCompatibleToolParameters(tool llmtools.Tool) map[string]any {
 	params := rawToolSchemaMap(tool)
 	if params == nil {
 		params = map[string]any{}
+	}
+	if schemaType, ok := params["type"].(string); !ok || schemaType == "" || schemaType == "object" {
+		params = geminiwire.NormalizeJSONSchema(params)
 	}
 
 	if schemaType, ok := params["type"].(string); ok && schemaType != "" && schemaType != "object" {

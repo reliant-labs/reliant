@@ -224,8 +224,11 @@ StreamingDone:
 	// Input was the empty string, and every caller that unmarshalled one got
 	// "unexpected end of JSON input" — deterministically, so retries could not
 	// help. Only fall back to the mid-stream calls when the driver reported
-	// none at the end.
-	if len(finalResponse.ToolCalls) == 0 && len(toolCalls) > 0 {
+	// none at the end — and not when it said it dropped calls on purpose: a
+	// Responses driver may announce a finished function_call item mid-stream
+	// and then withhold it because the response did not complete
+	// (DriverResponse.DroppedToolCalls). Falling back would run it anyway.
+	if len(finalResponse.ToolCalls) == 0 && len(finalResponse.DroppedToolCalls) == 0 && len(toolCalls) > 0 {
 		finalResponse.ToolCalls = toolCalls
 	}
 

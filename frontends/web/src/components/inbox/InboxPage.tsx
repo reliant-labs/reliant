@@ -305,7 +305,7 @@ function SectionCard({
   return (
     <section aria-labelledby={headingId} data-testid={`inbox-section-${section.kind}`}>
       <div className="mb-1.5 flex items-center justify-between gap-3 px-1">
-        <h2 id={headingId} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 id={headingId} className="text-xs font-semibold text-muted-foreground">
           {section.title}
           <span className="ml-1.5 tabular-nums text-muted-foreground/80">{section.items.length}</span>
         </h2>

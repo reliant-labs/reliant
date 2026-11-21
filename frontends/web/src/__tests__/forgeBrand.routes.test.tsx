@@ -37,6 +37,7 @@ vi.mock("@/components/Automations/dialog/AutomationDialogHost", () => ({ Automat
 vi.mock("@/components/AnonSignInNudge", () => ({ AnonSignInNudge: () => null }));
 vi.mock("@/lib/toast", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/toast")>()), Toaster: () => null }));
 vi.mock("@/components/NewBuildPrompt", () => ({ NewBuildPrompt: () => null }));
+vi.mock("@/components/ClientMinimumWatch", () => ({ ClientMinimumWatch: () => null }));
 vi.mock("@/components/Settings/GlobalUpdateHandler", () => ({ GlobalUpdateHandler: () => null }));
 vi.mock("@/components/Onboarding", () => ({
   ContextualTipsLayer: () => null,

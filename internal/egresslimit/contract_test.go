@@ -1,5 +1,5 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file
-// Contract test rows; canonical pattern in `forge skill load testing/patterns`.
+// Contract test rows; canonical pattern in `forge agent skill load testing/patterns`.
 package egresslimit_test
 
 import (
@@ -21,7 +21,7 @@ import (
 // contract.go-defined Service interface.
 //
 // Library reference: github.com/reliant-labs/forge/pkg/tdd
-// Skill: forge skill load contracts
+// Skill: forge agent skill load contracts
 //
 // Add a row by appending a tdd.ContractCase. Each row supplies a Call
 // closure that invokes one method and returns (any, error); use Want

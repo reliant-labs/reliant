@@ -22,7 +22,7 @@
 
 import { chatPath, newChatPath, threadPath } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
-import type { NewChatSearch } from "@/routeSchemas";
+import { chatViewSearchSchema, type NewChatSearch } from "@/routeSchemas";
 import { orgSegmentOf } from "@/store/activeOrgStore";
 
 export type ChatShellRoute =
@@ -85,7 +85,9 @@ function orgCtx(orgId: string | null | undefined): { org?: string } {
  * on by itself: a chat archived from under the person, a draft that became
  * a chat). Nothing when the URL already names it. `orgId` is the chat's org
  * (`Chat.org_id`): the link goes there rather than to the page's org, so a
- * chat of another org never loads under this one first.
+ * chat of another org never loads under this one first. Opening or closing
+ * a thread of the chat on screen keeps its `view` and `panel`: only the
+ * thread changed, not how the chat looks.
  *
  * Synchronous up to the router's own location: once this returns,
  * routeOwnsChat() and every reader of the latest location see the chat, so a
@@ -101,8 +103,21 @@ export function navigateToChatUrl(
   const now = chatShellRouteOf(latestPathname());
   if (now?.kind === "chat" && now.chatId === chatId && now.threadId === threadId) return;
   const ctx = orgCtx(orgId);
-  const href = threadId ? threadPath(chatId, threadId, ctx) : chatPath(chatId, ctx);
-  void r.navigate({ href, replace });
+  const path = threadId ? threadPath(chatId, threadId, ctx) : chatPath(chatId, ctx);
+  // Only the thread changes: the chat keeps how it looks (its view and panel).
+  const query = now?.kind === "chat" && now.chatId === chatId ? chatViewQuery(r) : "";
+  void r.navigate({ href: path + query, replace });
+}
+
+/** The page's chat view state (`view`, `panel`), validated, as a query string ("" for none). */
+function chatViewQuery(r: RouterLike): string {
+  const parsed = chatViewSearchSchema.safeParse(r.latestLocation?.search ?? r.state.location.search ?? {});
+  if (!parsed.success) return "";
+  const params = new URLSearchParams();
+  if (parsed.data.view) params.set("view", parsed.data.view);
+  if (parsed.data.panel) params.set("panel", parsed.data.panel);
+  const query = params.toString();
+  return query ? `?${query}` : "";
 }
 
 /**
@@ -120,14 +135,23 @@ export function navigateToNewChatUrl(search: NewChatSearch, { replace }: { repla
 
 /** The draft context the new-chat view last applied (store/openChat.ts applyNewChat). */
 let appliedNewChat: NewChatSearch | null = null;
+/** Settles once the view shows appliedNewChat: true, or false when its apply failed. */
+let appliedNewChatShown: Promise<boolean> = Promise.resolve(true);
 
 /** A stable key for a new-chat draft context, to compare with the one applied. */
 export function newChatTargetKey(search: NewChatSearch): string {
   return JSON.stringify([search.project ?? null, search.machine ?? null, search.ws ?? null, search.app ?? null]);
 }
 
-export function markNewChatApplied(search: NewChatSearch): void {
+/** Record `search` as the applied draft context; `shown` settles once the view shows it (default: it already does). */
+export function markNewChatApplied(search: NewChatSearch, shown: Promise<boolean> = Promise.resolve(true)): void {
   appliedNewChat = { ...search };
+  appliedNewChatShown = shown;
+}
+
+/** When the applied draft context is on screen (true), or its apply failed (false). */
+export function newChatAppliedShown(): Promise<boolean> {
+  return appliedNewChatShown;
 }
 
 export function newChatAppliedKey(): string | null {

@@ -43,11 +43,11 @@ const PLANS = {
   ],
   daemonPricing: {
     sizes: [
-      { size: "s1", multiplier: 1n, hourlyPriceCents: "10", storageGib: 30n },
-      { size: "s2", multiplier: 1n, hourlyPriceCents: "10.05", storageGib: 30n },
-      { size: "m", multiplier: 1n, hourlyPriceCents: "14.6", storageGib: 50n },
-      { size: "l", multiplier: 2n, hourlyPriceCents: "29.2", storageGib: 80n },
-      { size: "xl", multiplier: 4n, hourlyPriceCents: "58.4", storageGib: 120n },
+      { size: "s1", hourlyPriceCents: "10", storageGib: 30n },
+      { size: "s2", hourlyPriceCents: "10.05", storageGib: 30n },
+      { size: "m", hourlyPriceCents: "14.6", storageGib: 50n },
+      { size: "l", hourlyPriceCents: "29.2", storageGib: 80n },
+      { size: "xl", hourlyPriceCents: "58.4", storageGib: 120n },
     ],
     storageCentsPerGibMonth: "25",
     placeholder: false,

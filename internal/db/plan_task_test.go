@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // createTestPlan inserts a plan into the test DB and returns it.
@@ -164,7 +165,7 @@ func TestPlanCRUD(t *testing.T) {
 		createTestPlan(t, repo, newChatID)
 		createTestPlan(t, repo, newChatID)
 
-		plans, err := repo.ListPlansByThread(ctx, newChatID)
+		plans, err := store.ListPlansByThread(ctx, repo.ORM(), newChatID)
 		if err != nil {
 			t.Fatalf("ListPlansByThread: %v", err)
 		}
@@ -448,7 +449,7 @@ func TestTaskDependencies(t *testing.T) {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 
-		got, err := repo.GetTaskDependency(ctx, dep.ID)
+		got, err := store.GetTaskDependency(ctx, repo.ORM(), dep.ID)
 		if err != nil {
 			t.Fatalf("GetTaskDependency: %v", err)
 		}
@@ -511,7 +512,7 @@ func TestTaskDependencies(t *testing.T) {
 		}
 
 		// TaskA should appear in deps for A, B, and C
-		depsA, err := repo.ListTaskDependenciesByTask(ctx, taskA.ID)
+		depsA, err := store.ListTaskDependenciesByTask(ctx, repo.ORM(), taskA.ID)
 		if err != nil {
 			t.Fatalf("ListTaskDependenciesByTask A: %v", err)
 		}
@@ -519,7 +520,7 @@ func TestTaskDependencies(t *testing.T) {
 			t.Errorf("expected 2 deps for taskA, got %d", len(depsA))
 		}
 
-		depsB, err := repo.ListTaskDependenciesByTask(ctx, taskB.ID)
+		depsB, err := store.ListTaskDependenciesByTask(ctx, repo.ORM(), taskB.ID)
 		if err != nil {
 			t.Fatalf("ListTaskDependenciesByTask B: %v", err)
 		}
@@ -543,7 +544,7 @@ func TestTaskDependencies(t *testing.T) {
 			}
 		}
 
-		blockers, err := repo.ListBlockersForTask(ctx, taskC.ID)
+		blockers, err := store.ListBlockersForTask(ctx, repo.ORM(), taskC.ID)
 		if err != nil {
 			t.Fatalf("ListBlockersForTask: %v", err)
 		}
@@ -602,7 +603,7 @@ func TestTaskDependencies(t *testing.T) {
 			t.Fatalf("DeleteTaskDependencyByPair: %v", err)
 		}
 
-		_, err := repo.GetTaskDependency(ctx, dep.ID)
+		_, err := store.GetTaskDependency(ctx, repo.ORM(), dep.ID)
 		if err == nil {
 			t.Error("expected error when getting deleted dependency")
 		}
@@ -670,7 +671,7 @@ func TestTaskDependencies(t *testing.T) {
 			t.Fatalf("DeleteTask: %v", err)
 		}
 
-		_, err := repo.GetTaskDependency(ctx, dep.ID)
+		_, err := store.GetTaskDependency(ctx, repo.ORM(), dep.ID)
 		if err == nil {
 			t.Error("expected dependency to be cascade-deleted with task")
 		}

@@ -32,6 +32,7 @@ func init() {
 	RegisterCommand("fs.read_pdf_pages", handleFSReadPDFPages)
 	RegisterCommand("fs.write_file", handleFSWriteFile)
 	RegisterCommand("fs.write_binary_file", handleFSWriteBinaryFile)
+	RegisterCommand(daemon.CreateBinaryFileCommand, handleFSCreateBinaryFile)
 	RegisterCommand("fs.patch_file", handleFSPatchFile)
 	RegisterCommand("fs.stat", handleFSStat)
 	RegisterCommand("fs.list_dir", handleFSListDir)
@@ -380,6 +381,35 @@ func handleFSWriteBinaryFile(ctx context.Context, payload []byte) ([]byte, error
 	resp.BytesWritten = len(content)
 
 	return json.Marshal(resp)
+}
+
+// =============================================================================
+// fs.create_binary_file
+// =============================================================================
+
+// handleFSCreateBinaryFile is fs.write_binary_file for a file that must not
+// exist yet: the payload is the same, and the write is daemon.WriteNewFile,
+// which refuses an existing path in the same open that creates the file.
+func handleFSCreateBinaryFile(ctx context.Context, payload []byte) ([]byte, error) {
+	var req fsWriteBinaryFileRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		opens, closes := payloadFraming(payload)
+		return nil, fmt.Errorf("invalid payload (%d bytes, json_opens=%t, json_closes=%t): %w",
+			len(payload), opens, closes, err)
+	}
+	path, err := daemonpolicy.ResolveDir(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+	content, err := base64.StdEncoding.DecodeString(req.Data)
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 content for %s: %w", path, err)
+	}
+	modTime, err := daemon.WriteNewFile(path, content)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(fsWriteBinaryFileResponse{Created: true, ModTime: modTime, BytesWritten: len(content)})
 }
 
 // =============================================================================
@@ -1382,9 +1412,8 @@ func openForRead(path, root string) (*os.File, error) {
 var viewerOpened = func(string) {}
 
 // viewerGuard marks a reply to a viewer command as having passed the
-// credential guard. The server requires it before it shows a file outside
-// the workspace: a daemon from before the guard ignores viewer_root, and its
-// reply has no mark (internal/handlers/file_system, requireViewerGuard).
+// credential guard. The server shows no file from a reply without it
+// (internal/handlers/file_system, requireViewerGuard).
 type viewerGuard struct {
 	ViewerGuarded bool `json:"viewer_guarded,omitempty"`
 }

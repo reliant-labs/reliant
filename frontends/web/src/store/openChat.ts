@@ -151,9 +151,27 @@ export function openNewChat(target: NewChatTarget = {}): Promise<void> {
   return applyNewChat(target);
 }
 
-/** Show the new-chat view for `target` without touching the URL: the `/new` route's own apply. */
-export async function applyNewChat(target: NewChatTarget = {}): Promise<void> {
-  markNewChatApplied(newChatSearchOf({ ...target, projectId: target.projectId ?? newChatTargetProjectId() }));
+/**
+ * Show the new-chat view for `target` without touching the URL: the `/new`
+ * route's own apply. Records the context as applied at once, with when it
+ * is on screen (lib/chatRoute.ts newChatAppliedShown), so the route neither
+ * applies it twice nor mirrors the view's old context over it meanwhile.
+ */
+export function applyNewChat(target: NewChatTarget = {}): Promise<void> {
+  let settle: (shown: boolean) => void = () => {};
+  const shown = new Promise<boolean>((resolve) => {
+    settle = resolve;
+  });
+  markNewChatApplied(newChatSearchOf({ ...target, projectId: target.projectId ?? newChatTargetProjectId() }), shown);
+  const done = showNewChat(target);
+  done.then(
+    () => settle(true),
+    () => settle(false),
+  );
+  return done;
+}
+
+async function showNewChat(target: NewChatTarget): Promise<void> {
   const isLatest = beginWorkspaceOpen();
   const projectId = target.projectId ?? newChatTargetProjectId();
   if (projectId && target.daemonId) {

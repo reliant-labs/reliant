@@ -102,7 +102,6 @@ function tab(layout: IdentityLayout, envId: string) {
       lifecycle="deployed"
       live={{ id: envId, name: envName } as LiveEnv}
       liveLoading={false}
-      envNameById={(id) => id.replace("env-", "")}
       layout={layout}
     />
   );

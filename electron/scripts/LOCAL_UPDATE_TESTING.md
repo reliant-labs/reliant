@@ -13,7 +13,7 @@ Since both versions are unsigned, updates work between them without code signing
 
 ## Prerequisites
 
-- Node.js and npm installed
+- Node.js and pnpm installed
 - Go installed (for backend build)
 - Python 3 (for the local HTTP server)
 - macOS (for testing macOS updates)

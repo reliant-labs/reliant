@@ -102,8 +102,10 @@ export async function listChats(
 /**
  * The sidebar's chat list of several projects (the chat filter): ListChats'
  * `project_ids`, the union of those projects, as long as the all-projects
- * list. A server older than the field ignores it and answers every project,
- * so the answer is narrowed here too: never a chat of a project not chosen.
+ * list. The server applies the union before its limit (#3008), so the page
+ * is the chosen projects' most recent chats. No fallback for a server
+ * without the field: the web ships with one that has it. The narrowing below
+ * only guarantees the list never shows a chat of a project not chosen.
  */
 export async function listChatsOfProjects(
   projectIds: readonly string[],

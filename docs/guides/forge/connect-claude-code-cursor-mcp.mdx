@@ -2,17 +2,17 @@
 title: "Connect Claude Code or Cursor to Forge over MCP"
 sidebarTitle: "Connect over MCP"
 description: "Give Claude Code or Cursor Forge's lint, generate, skills and shapes as MCP tools, check the server answers, and add the hosted connector for telemetry."
-keywords: ["MCP server Go framework", "forge mcp", "Claude Code MCP", "Cursor mcp.json", "MCP server for coding agents", "npx @reliantlabs/forge mcp"]
+keywords: ["MCP server Go framework", "forge agent mcp", "Claude Code MCP", "Cursor mcp.json", "MCP server for coding agents", "npx @reliantlabs/forge agent mcp"]
 ---
 
 By the end of this guide, Claude Code or Cursor will list Forge's tools next to its own: lint, generate, the skill catalog, and `shapes`, which says where every RPC, table and handler is with its file and line. Use this when your agent works in an editor rather than a Reliant chat.
 
-`forge mcp` runs the same commands in process and answers over stdio, so a tool call and the CLI give the same result. In a Reliant chat you need none of this: the agent's shell already has `reliant forge`, signed in. [Why this helps an agent](/hosting/observability/agents) covers the wider design.
+`forge agent mcp` runs the same commands in process and answers over stdio, so a tool call and the CLI give the same result. In a Reliant chat you need none of this: the agent's shell already has `reliant forge`, signed in. [Why this helps an agent](/hosting/observability/agents) covers the wider design.
 
 ## Before you begin
 
 - Claude Code or Cursor.
-- Node 18 or later for `npx -y @reliantlabs/forge mcp`, which downloads the matching Forge binary the first time it runs. If you have Reliant installed, `reliant forge mcp` is the same server and needs no download.
+- Node 18 or later for `npx -y @reliantlabs/forge agent mcp`, which downloads the matching Forge binary the first time it runs. If you have Reliant installed, `reliant forge agent mcp` is the same server and needs no download.
 - For telemetry tools, a Reliant account with a deployed project (see the last step).
 
 <Steps>
@@ -20,10 +20,10 @@ By the end of this guide, Claude Code or Cursor will list Forge's tools next to 
     From your repo:
 
     ```bash terminal
-    claude mcp add forge -- npx -y @reliantlabs/forge mcp
+    claude mcp add forge -- npx -y @reliantlabs/forge agent mcp
     ```
 
-    With Reliant installed, `claude mcp add forge -- reliant forge mcp` does the same with the Forge Reliant ships. The server acts on the directory it starts in, and every tool except `explain_error` also takes a `dir` argument, so the agent can point it at another repo.
+    With Reliant installed, `claude mcp add forge -- reliant forge agent mcp` does the same with the Forge Reliant ships. The server acts on the directory it starts in, and every tool except `explain_error` also takes a `dir` argument, so the agent can point it at another repo.
   </Step>
   <Step title="Or add it to Cursor">
     Put this in `.cursor/mcp.json` for one project, or `~/.cursor/mcp.json` for all of them:
@@ -37,7 +37,7 @@ By the end of this guide, Claude Code or Cursor will list Forge's tools next to 
     ```
   </Step>
   <Step title="Check the server answers">
-    In Claude Code, `/mcp` lists the server and its tools. To see exactly what an editor receives, send the MCP handshake yourself. This is the result of an `initialize` then `tools/list` over stdio to `npx -y @reliantlabs/forge mcp`:
+    In Claude Code, `/mcp` lists the server and its tools. To see exactly what an editor receives, send the MCP handshake yourself. This is the result of an `initialize` then `tools/list` over stdio to `npx -y @reliantlabs/forge agent mcp`:
 
     ```text Output (trimmed)
     server: {'name': 'forge', 'title': 'Reliant Forge', 'version': 'v1.8.0'} protocol: 2025-06-18
@@ -59,7 +59,7 @@ By the end of this guide, Claude Code or Cursor will list Forge's tools next to 
     skill_search       ro=True   Find skills by keyword ...
     ```
 
-    `ro=False` marks the tools that change something, so your editor asks before calling them. The server's instructions tell the model what Forge is and to load the `forge` skill first (`adopt` in a repo that is not a Forge project yet). `reliant forge mcp` on Reliant v1.21.3 returned the same 16 tools.
+    `ro=False` marks the tools that change something, so your editor asks before calling them. The server's instructions tell the model what Forge is and to load the `forge` skill first (`adopt` in a repo that is not a Forge project yet). `reliant forge agent mcp` on Reliant v1.21.3 returned the same 16 tools.
   </Step>
   <Step title="Ask it something">
     Ask the agent where the task API lives. It calls `shapes` with `grep: "Task"`, which returned this on a Go API project:

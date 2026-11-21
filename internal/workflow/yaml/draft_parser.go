@@ -31,7 +31,12 @@ func normalizeDraftWorkflowYAML(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("v2yaml: expected document node")
 	}
 
-	workflowNode := doc.Content[0]
+	// Normalize what an alias points to as if it were written in place.
+	workflowNode, err := expandYAMLAliases(doc.Content[0])
+	if err != nil {
+		return nil, err
+	}
+	doc.Content[0] = workflowNode
 	nodesNode := getYAMLField(workflowNode, "nodes")
 	if nodesNode != nil {
 		normalizeDraftNodeList(nodesNode)

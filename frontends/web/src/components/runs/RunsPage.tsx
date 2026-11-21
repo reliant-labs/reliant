@@ -21,13 +21,14 @@ import { useChat } from "@/hooks/chat-queries";
 import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useProjects } from "@/hooks/project-queries";
-import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
 import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useWorkflowsScope } from "../workflows/useWorkflowsScope";
 import { RunList } from "./RunList";
 import { RunFilters, useRunsSearch } from "./RunFilters";
+import { RunsHeadline } from "./RunsHeadline";
+import { DEFAULT_RUN_RANGE } from "./runFilterState";
 import { clearRunFilters, hasActiveRunFilters } from "./runFilterState";
 import { workflowLibraryPath } from "@/lib/paths";
 import { ProjectEmptyCtaRow } from "@/components/EmptyState/ProjectEmptyCta";
@@ -78,7 +79,7 @@ export function RunsView() {
   const filtered = hasActiveRunFilters(search);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       <div className="forge-ui">
         <PageHeader
           className=""
@@ -87,18 +88,23 @@ export function RunsView() {
         />
       </div>
 
+      {!list.isLoading && !list.isError && list.runs.length > 0 && (
+        <RunsHeadline runs={list.runs} range={filters.range ?? DEFAULT_RUN_RANGE} more={!!list.hasNextPage} />
+      )}
+
+      <div className="space-y-3">
       <RunFilters triggerName={triggerName} parentTitle={parentTitle} />
 
       {list.isLoading ? (
         <RunListSkeleton />
       ) : list.isError ? (
-        <Card padding="lg" role="alert">
-          <p className="text-sm font-medium text-foreground">Runs could not be loaded.</p>
-          <p className="mt-1 text-sm text-muted-foreground">{runErrorMessage(list.error)}</p>
+        <div role="alert" className="border-t border-border pt-6">
+          <p className="text-section text-foreground">Runs could not be loaded.</p>
+          <p className="mt-1 text-ui text-muted-foreground">{runErrorMessage(list.error)}</p>
           <Button className="mt-4" variant="outline" onClick={() => void list.refetch()}>
             Try again
           </Button>
-        </Card>
+        </div>
       ) : list.runs.length === 0 && list.events.length === 0 ? (
         filtered ? (
           <NoMatchingRuns />
@@ -113,7 +119,7 @@ export function RunsView() {
           projectNames={projectNames}
           footer={
             list.isFetchNextPageError ? (
-              <div className="flex items-center justify-center gap-2 border-t border-border/60 px-5 py-3 text-sm" role="alert">
+              <div className="flex items-center justify-center gap-2 border-t border-border-subtle px-5 py-3 text-ui" role="alert">
                 <span className="text-muted-foreground">Couldn't load more.</span>
                 <button
                   type="button"
@@ -124,7 +130,7 @@ export function RunsView() {
                 </button>
               </div>
             ) : list.hasNextPage ? (
-              <div className="flex justify-center border-t border-border/60 px-5 py-3">
+              <div className="flex justify-center border-t border-border-subtle px-5 py-3">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -138,6 +144,7 @@ export function RunsView() {
           }
         />
       )}
+      </div>
     </div>
   );
 }
@@ -146,9 +153,9 @@ function RunListSkeleton() {
   // Eight rows in the Finished shape (§5.5). No section labels: the Live
   // section must not pop in above content the user has started reading.
   return (
-    <Card padding="none" aria-busy="true" aria-label="Loading runs">
+    <div className="border-t border-border" aria-busy="true" aria-label="Loading runs">
       {Array.from({ length: 8 }, (_, row) => (
-        <div key={row} className="flex items-center gap-3 border-b border-border/60 px-5 py-3.5 last:border-b-0">
+        <div key={row} className="flex items-center gap-3 border-b border-border-subtle px-3 py-3.5 last:border-b-0">
           <div className="h-2.5 w-2.5 rounded-full bg-border" />
           <div className="flex-1 space-y-1.5">
             <div className="h-3.5 w-56 max-w-full animate-pulse rounded bg-border motion-reduce:animate-none" />
@@ -157,32 +164,33 @@ function RunListSkeleton() {
           <div className="hidden h-3 w-20 animate-pulse rounded bg-border/60 motion-reduce:animate-none md:block" />
         </div>
       ))}
-    </Card>
+    </div>
   );
 }
 
 function NoRuns() {
   const navigate = useNavigate();
   return (
-    <Card padding="lg" className="flex flex-col items-center px-6 py-14 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground">
+    // A designed empty state: an icon tile, what goes here, one way to start (and one quieter one).
+    <div className="flex flex-col items-center px-6 py-16 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-border text-muted-foreground">
         <Activity className="h-6 w-6" aria-hidden="true" />
       </div>
-      <h2 className="mt-4 text-base font-semibold text-foreground">No runs yet</h2>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">
+      <h2 className="mt-4 text-section text-foreground">No runs yet</h2>
+      <p className="mt-2 max-w-md text-ui text-muted-foreground">
         Runs appear here when you start a chat, run a workflow, or a trigger fires.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-2">
         <Button variant="primary" leftIcon={<Workflow className="h-4 w-4" />} onClick={() => void navigate({ to: workflowLibraryPath() })}>
           Run a workflow
         </Button>
-        <Button variant="outline" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={() => openAutomationDialog({})}>
+        <Button variant="ghost" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={() => openAutomationDialog({})}>
           Make one run by itself
         </Button>
       </div>
       {/* The project shell's other ways in (U6d): an agent deploys with forge, or Move to Forge brings an app over. */}
       <ProjectEmptyCtaRow learn="workflows" className="mt-3 justify-center" testId="runs-empty-cta" />
-    </Card>
+    </div>
   );
 }
 
@@ -194,10 +202,10 @@ function NoMatchingRuns() {
   const windowLabel = range === "7d" ? "7 days" : range === "30d" ? "30 days" : range === "all" ? undefined : "24 hours";
 
   return (
-    <Card padding="lg" className="px-6 py-10 text-center">
-      <h2 className="text-base font-semibold text-foreground">No runs match these filters</h2>
+    <div className="border-t border-border px-6 py-12 text-center">
+      <h2 className="text-section text-foreground">No runs match these filters</h2>
       {windowLabel && (
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-ui text-muted-foreground">
           Showing the last {windowLabel}.
           {range !== "30d" && (
             <>
@@ -216,6 +224,6 @@ function NoMatchingRuns() {
       <Button className="mt-5" variant="outline" onClick={clear}>
         Clear filters
       </Button>
-    </Card>
+    </div>
   );
 }

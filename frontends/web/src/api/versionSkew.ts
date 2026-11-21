@@ -11,6 +11,11 @@
  * So: tell the user once, in a modal that offers exactly that fix, and record
  * the skew once per session as a warning — the procedure name is how we learn
  * which old builds are still out there.
+ *
+ * The same modal, forced, is the answer to a server that REQUIRES a newer
+ * build (noteUpgradeRequired, below). A 404 is still how a build from before
+ * the `Reliant-Client` header is pushed: the server's legacy lever answers its
+ * header-less calls with one, and this skew prompt opens.
  */
 
 import { reportFailure } from "../lib/errorReporting";
@@ -45,8 +50,76 @@ export function noteVersionSkew(serviceTypeName: string, methodName: string): vo
   })();
 }
 
+/** Why the server requires a newer build: it refused a call, or it publishes a minimum above this one. */
+export type UpgradeRequiredSource = "refused" | "served-minimum";
+
+let _forcedShown = false;
+let _forcedRetry: ReturnType<typeof setTimeout> | undefined;
+
+/** First and longest wait before trying again to open a forced prompt that failed to open. */
+const FORCED_RETRY_FIRST_MS = 1_000;
+const FORCED_RETRY_MAX_MS = 30_000;
+
+// Lazy: modalStore → components → transport → here would be a cycle.
+let loadModalStore = () => import("../store/modalStore");
+
+/**
+ * The server requires a newer build of this app. Unlike a skew this is not a
+ * suggestion: the server refuses this build's calls (or will once it enforces
+ * the minimum it publishes), so the prompt is forced. It cannot be dismissed,
+ * it replaces whatever modal is up (that modal's actions would be refused
+ * too), and nothing replaces it (store/modalStore.ts).
+ *
+ * It is reported once, and opened until it opens: a refusal and the minimum
+ * watch can both signal at once, and they coalesce into one prompt. If the
+ * modal's lazy chunk fails to load (a deploy replaced the bundle, a network
+ * blip), it tries again on a backoff rather than wait for another signal that
+ * may never come while every call is refused.
+ */
+export function noteUpgradeRequired(
+  source: UpgradeRequiredSource,
+  info: { minVersion?: string; upgradeUrl?: string } = {},
+): void {
+  if (_forcedShown) return;
+  _forcedShown = true;
+  reportFailure(`upgrade-required: ${source}`, {
+    upgrade_source: source,
+    min_version: info.minVersion ?? "",
+  });
+  void openForcedPrompt(info, FORCED_RETRY_FIRST_MS);
+}
+
+async function openForcedPrompt(
+  info: { minVersion?: string; upgradeUrl?: string },
+  retryMs: number,
+): Promise<void> {
+  try {
+    const { useModalStore } = await loadModalStore();
+    useModalStore.getState().openModal("app-out-of-date", {
+      forced: true,
+      minVersion: info.minVersion,
+      upgradeUrl: info.upgradeUrl,
+    });
+  } catch (err) {
+    logger.error("[versionSkew] failed to open the forced upgrade prompt; trying again", err);
+    _forcedRetry = setTimeout(() => {
+      _forcedRetry = undefined;
+      void openForcedPrompt(info, Math.min(retryMs * 2, FORCED_RETRY_MAX_MS));
+    }, retryMs);
+  }
+}
+
 /** Test seam. */
 export function resetVersionSkewForTests(): void {
   _modalShown = false;
+  _forcedShown = false;
+  clearTimeout(_forcedRetry);
+  _forcedRetry = undefined;
+  loadModalStore = () => import("../store/modalStore");
   _reported.clear();
+}
+
+/** Test seam: how the forced prompt reaches the modal store. */
+export function setModalStoreLoaderForTests(loader: typeof loadModalStore): void {
+  loadModalStore = loader;
 }

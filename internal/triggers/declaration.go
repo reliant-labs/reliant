@@ -9,6 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -124,6 +128,37 @@ func resolveTriggerWorkflow(ctx context.Context, workflows WorkflowResolver, t *
 type LaunchWorkflows struct {
 	Repo       launch.WorkflowResolver
 	CatalogPin string
+	// Pinner snapshots the catalog a firing decides against
+	// (FiringDefinition, db.Repo.PinProjectCatalog); nil pins through Repo
+	// when Repo can.
+	Pinner catalogPinner
+}
+
+// ForOneFire is w for the life of one fire: each catalog, draft and preset
+// its resolutions read is read once (launch.NewRequestResolver), the pinned
+// catalog snapshot included, while the fire still pins through w's store.
+// A fire resolves its workflow for the definition it records, the
+// declaration, the check and the capacity policy, all in one snapshot: prod's
+// FireTriggerEvent re-read that snapshot row 40 times in one activity (trace
+// 7f55dfed…, 2026-11-20).
+func (w LaunchWorkflows) ForOneFire() LaunchWorkflows {
+	if w.Repo == nil {
+		return w
+	}
+	if w.Pinner == nil {
+		w.Pinner, _ = w.Repo.(catalogPinner)
+	}
+	w.Repo = launch.NewRequestResolver(w.Repo)
+	return w
+}
+
+// oneFire is workflows for one fire (LaunchWorkflows.ForOneFire); any other
+// resolver is used as it is.
+func oneFire(workflows WorkflowResolver) WorkflowResolver {
+	if lw, ok := workflows.(LaunchWorkflows); ok {
+		return lw.ForOneFire()
+	}
+	return workflows
 }
 
 var _ MachineWorkflowResolver = LaunchWorkflows{}
@@ -532,6 +567,11 @@ func activationFor(ctx context.Context, workflows WorkflowResolver, t *core.Trig
 	if workflows == nil {
 		return nil, errNoResolver
 	}
+	// Resolving and validating the workflow tree is mostly CPU, which a trace
+	// otherwise shows only as a gap between catalog reads.
+	ctx, span := otel.Tracer("reliant.triggers").Start(ctx, "triggers.activation",
+		trace.WithAttributes(attribute.String("trigger.id", t.ID), attribute.String("trigger.workflow", t.Workflow)))
+	defer span.End()
 	return ResolveDeclaration(ctx, workflows, t)
 }
 

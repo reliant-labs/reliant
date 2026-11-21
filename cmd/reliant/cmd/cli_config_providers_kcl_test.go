@@ -20,7 +20,7 @@ import (
 // Cobra side (the command loads the config it is given) is
 // TestCLIGroupsConfigureTheMachine.
 func TestProvidersLoadsCLIConfigThroughKCL(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 	project := kcleval.Options{ProjectDir: "../../..", Binary: pinnedForge(t)}
 	const fixture = "deploy/kcl/testdata/cli_config_providers.k"

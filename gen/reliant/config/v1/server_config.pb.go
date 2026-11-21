@@ -57,8 +57,12 @@ type ServerProcessConfig struct {
 	// The org-policy enforcement switches every server role applies (the API
 	// server's own org rollout gates are ApiServerConfig's OrgsConfig).
 	OrgPolicyEnforcement *OrgPolicyEnforcementConfig `protobuf:"bytes,14,opt,name=org_policy_enforcement,json=orgPolicyEnforcement,proto3" json:"org_policy_enforcement,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// The oldest build of each client this server serves, and whether it
+	// refuses older ones (client_version_config.proto). The API server serves
+	// it on SystemService.Version / Info; the gateway judges daemons by it.
+	ClientVersions *ClientVersionPolicy `protobuf:"bytes,15,opt,name=client_versions,json=clientVersions,proto3" json:"client_versions,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ServerProcessConfig) Reset() {
@@ -178,6 +182,13 @@ func (x *ServerProcessConfig) GetNetwork() *NetworkConfig {
 func (x *ServerProcessConfig) GetOrgPolicyEnforcement() *OrgPolicyEnforcementConfig {
 	if x != nil {
 		return x.OrgPolicyEnforcement
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetClientVersions() *ClientVersionPolicy {
+	if x != nil {
+		return x.ClientVersions
 	}
 	return nil
 }
@@ -532,7 +543,7 @@ var File_reliant_config_v1_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\"\xf2\a\n" +
+	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a(reliant/config/v1/analytics_config.proto\x1a-reliant/config/v1/client_version_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\"\xc3\b\n" +
 	"\x13ServerProcessConfig\x12J\n" +
 	"\rcontrol_plane\x18\x01 \x01(\v2%.reliant.config.v1.ControlPlaneConfigR\fcontrolPlane\x121\n" +
 	"\x04nats\x18\x02 \x01(\v2\x1d.reliant.config.v1.NatsConfigR\x04nats\x12=\n" +
@@ -549,7 +560,8 @@ const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\x03llm\x18\v \x01(\v2\x1c.reliant.config.v1.LLMConfigR\x03llm\x12:\n" +
 	"\apreview\x18\f \x01(\v2 .reliant.config.v1.PreviewConfigR\apreview\x12:\n" +
 	"\anetwork\x18\r \x01(\v2 .reliant.config.v1.NetworkConfigR\anetwork\x12c\n" +
-	"\x16org_policy_enforcement\x18\x0e \x01(\v2-.reliant.config.v1.OrgPolicyEnforcementConfigR\x14orgPolicyEnforcement:\x17\xca\xc1\x18\x13\n" +
+	"\x16org_policy_enforcement\x18\x0e \x01(\v2-.reliant.config.v1.OrgPolicyEnforcementConfigR\x14orgPolicyEnforcement\x12O\n" +
+	"\x0fclient_versions\x18\x0f \x01(\v2&.reliant.config.v1.ClientVersionPolicyR\x0eclientVersions:\x17\xca\xc1\x18\x13\n" +
 	"\areliant\x1a\b\n" +
 	"\x06serverJ\x04\b\t\x10\n" +
 	"R\x06sentry\"\xaa\b\n" +
@@ -616,6 +628,7 @@ var file_reliant_config_v1_server_config_proto_goTypes = []any{
 	(*AnalyticsConfig)(nil),            // 9: reliant.config.v1.AnalyticsConfig
 	(*LLMConfig)(nil),                  // 10: reliant.config.v1.LLMConfig
 	(*PreviewConfig)(nil),              // 11: reliant.config.v1.PreviewConfig
+	(*ClientVersionPolicy)(nil),        // 12: reliant.config.v1.ClientVersionPolicy
 }
 var file_reliant_config_v1_server_config_proto_depIdxs = []int32{
 	6,  // 0: reliant.config.v1.ServerProcessConfig.control_plane:type_name -> reliant.config.v1.ControlPlaneConfig
@@ -629,11 +642,12 @@ var file_reliant_config_v1_server_config_proto_depIdxs = []int32{
 	11, // 8: reliant.config.v1.ServerProcessConfig.preview:type_name -> reliant.config.v1.PreviewConfig
 	2,  // 9: reliant.config.v1.ServerProcessConfig.network:type_name -> reliant.config.v1.NetworkConfig
 	1,  // 10: reliant.config.v1.ServerProcessConfig.org_policy_enforcement:type_name -> reliant.config.v1.OrgPolicyEnforcementConfig
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	12, // 11: reliant.config.v1.ServerProcessConfig.client_versions:type_name -> reliant.config.v1.ClientVersionPolicy
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_server_config_proto_init() }
@@ -642,6 +656,7 @@ func file_reliant_config_v1_server_config_proto_init() {
 		return
 	}
 	file_reliant_config_v1_analytics_config_proto_init()
+	file_reliant_config_v1_client_version_config_proto_init()
 	file_reliant_config_v1_control_plane_config_proto_init()
 	file_reliant_config_v1_integrations_config_proto_init()
 	file_reliant_config_v1_llm_config_proto_init()

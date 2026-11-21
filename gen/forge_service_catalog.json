@@ -29,6 +29,7 @@
         "Connection",
         "Connector",
         "ConnectorGrants",
+        "CoverageSource",
         "DBRepo",
         "Daemon",
         "DaemonEventsConsumer",
@@ -65,6 +66,7 @@
         "ProcessSettings",
         "Project",
         "ProviderAccount",
+        "PullRequestRecord",
         "Question",
         "QueuedDeliverer",
         "QueuedDelivery",
@@ -169,6 +171,13 @@
         {
           "component": "Connector",
           "service": "reliant.v1.ConnectorService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "CoverageSource",
+          "service": "reliant.v1.CoverageSourceService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -281,6 +290,13 @@
         {
           "component": "ProviderAccount",
           "service": "reliant.v1.ProviderAccountService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "PullRequestRecord",
+          "service": "reliant.v1.PullRequestRecordService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -497,6 +513,7 @@
         "TemporalClient",
         "TemporalWorker",
         "TokenAuthority",
+        "TriggerDeliveryRelay",
         "TriggerPollers",
         "UserUpdateHub",
         "Vault",
@@ -12232,6 +12249,152 @@
           "reliant.v1.ConnectorKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConnectorKind"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.CoverageSourceService",
+      "proto_file": "reliant/v1/coverage_source.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.CoverageSourceService/GetCoverageSource",
+          "name": "GetCoverageSource",
+          "input": "reliant.v1.GetCoverageSourceRequest",
+          "output": "reliant.v1.GetCoverageSourceResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "CoverageSourceService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetCoverageSource",
+            "InputType": "GetCoverageSourceRequest",
+            "OutputType": "GetCoverageSourceResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetCoverageSourceRequest",
+            "OutputTypeFQ": "reliant.v1.GetCoverageSourceResponse",
+            "InputProtoFile": "reliant/v1/coverage_source.proto",
+            "OutputProtoFile": "reliant/v1/coverage_source.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: one covered file's source from GitHub; changes nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/coverage_source.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetCoverageSourceRequest": [
+            {
+              "Name": "project",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "blob_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "GetCoverageSourceResponse": [
+            {
+              "Name": "content",
+              "ProtoType": "bytes",
+              "IsOptional": false
+            },
+            {
+              "Name": "unavailable",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetCoverageSourceRequest": [
+            {
+              "name": "project",
+              "kind": "string",
+              "validate": {
+                "min_len": 1,
+                "max_len": 256
+              }
+            },
+            {
+              "name": "blob_id",
+              "kind": "string",
+              "validate": {
+                "pattern": "^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"
+              }
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.GetCoverageSourceResponse": [
+            {
+              "name": "content",
+              "kind": "bytes",
+              "oneof": "result"
+            },
+            {
+              "name": "unavailable",
+              "kind": "enum",
+              "type_name": "reliant.v1.CoverageSourceUnavailable",
+              "oneof": "result"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetCoverageSourceRequest": "reliant/v1/coverage_source.proto",
+          "reliant.v1.GetCoverageSourceResponse": "reliant/v1/coverage_source.proto"
+        },
+        "Enums": {
+          "reliant.v1.CoverageSourceUnavailable": [
+            "COVERAGE_SOURCE_UNAVAILABLE_UNSPECIFIED",
+            "COVERAGE_SOURCE_UNAVAILABLE_NO_REPO",
+            "COVERAGE_SOURCE_UNAVAILABLE_UNCOMMITTED",
+            "COVERAGE_SOURCE_UNAVAILABLE_GONE",
+            "COVERAGE_SOURCE_UNAVAILABLE_REVOKED",
+            "COVERAGE_SOURCE_UNAVAILABLE_NOT_YET_AVAILABLE",
+            "COVERAGE_SOURCE_UNAVAILABLE_TOO_LARGE"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.CoverageSourceUnavailable": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.CoverageSourceUnavailable": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "CoverageSourceUnavailable"
           }
         }
       }
@@ -29448,6 +29611,446 @@
       }
     },
     {
+      "name": "reliant.v1.PullRequestRecordService",
+      "proto_file": "reliant/v1/pull_request_record.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.PullRequestRecordService/GetPullRequestRecord",
+          "name": "GetPullRequestRecord",
+          "input": "reliant.v1.GetPullRequestRecordRequest",
+          "output": "reliant.v1.GetPullRequestRecordResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.PullRequestRecordService/ListPullRequestRecords",
+          "name": "ListPullRequestRecords",
+          "input": "reliant.v1.ListPullRequestRecordsRequest",
+          "output": "reliant.v1.ListPullRequestRecordsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "PullRequestRecordService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetPullRequestRecord",
+            "InputType": "GetPullRequestRecordRequest",
+            "OutputType": "GetPullRequestRecordResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetPullRequestRecordRequest",
+            "OutputTypeFQ": "reliant.v1.GetPullRequestRecordResponse",
+            "InputProtoFile": "reliant/v1/pull_request_record.proto",
+            "OutputProtoFile": "reliant/v1/pull_request_record.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
+            "Name": "ListPullRequestRecords",
+            "InputType": "ListPullRequestRecordsRequest",
+            "OutputType": "ListPullRequestRecordsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ListPullRequestRecordsRequest",
+            "OutputTypeFQ": "reliant.v1.ListPullRequestRecordsResponse",
+            "InputProtoFile": "reliant/v1/pull_request_record.proto",
+            "OutputProtoFile": "reliant/v1/pull_request_record.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/pull_request_record.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "GetPullRequestRecordRequest": [
+            {
+              "Name": "repository",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "number",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "policy",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.VerdictPolicy"
+            }
+          ],
+          "GetPullRequestRecordResponse": [
+            {
+              "Name": "record",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PullRequestRecord"
+            },
+            {
+              "Name": "heads",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PullRequestHead"
+            },
+            {
+              "Name": "reviews",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PullRequestReviewMarker"
+            }
+          ],
+          "ListPullRequestRecordsRequest": [
+            {
+              "Name": "repository",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "state",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "policy",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.VerdictPolicy"
+            }
+          ],
+          "ListPullRequestRecordsResponse": [
+            {
+              "Name": "records",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.PullRequestRecord"
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.GetPullRequestRecordRequest": [
+            {
+              "name": "repository",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "number",
+              "kind": "int32"
+            },
+            {
+              "name": "policy",
+              "kind": "message",
+              "type_name": "reliant.v1.VerdictPolicy"
+            }
+          ],
+          "reliant.v1.GetPullRequestRecordResponse": [
+            {
+              "name": "record",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestRecord"
+            },
+            {
+              "name": "heads",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestHead",
+              "repeated": true
+            },
+            {
+              "name": "reviews",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestReviewMarker",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ListPullRequestRecordsRequest": [
+            {
+              "name": "repository",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "state",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "page_size",
+              "kind": "int32"
+            },
+            {
+              "name": "page_token",
+              "kind": "string"
+            },
+            {
+              "name": "policy",
+              "kind": "message",
+              "type_name": "reliant.v1.VerdictPolicy"
+            }
+          ],
+          "reliant.v1.ListPullRequestRecordsResponse": [
+            {
+              "name": "records",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestRecord",
+              "repeated": true
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.PullRequestCheck": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "app_slug",
+              "kind": "string"
+            },
+            {
+              "name": "check_run_id",
+              "kind": "int64"
+            },
+            {
+              "name": "status",
+              "kind": "string"
+            },
+            {
+              "name": "conclusion",
+              "kind": "string"
+            },
+            {
+              "name": "completed_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.PullRequestHead": [
+            {
+              "name": "sha",
+              "kind": "string"
+            },
+            {
+              "name": "previous_sha",
+              "kind": "string"
+            },
+            {
+              "name": "first_seen_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "superseded_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.PullRequestRecord": [
+            {
+              "name": "provider",
+              "kind": "string"
+            },
+            {
+              "name": "repository",
+              "kind": "string"
+            },
+            {
+              "name": "repository_id",
+              "kind": "string"
+            },
+            {
+              "name": "number",
+              "kind": "int32"
+            },
+            {
+              "name": "state",
+              "kind": "string"
+            },
+            {
+              "name": "draft",
+              "kind": "bool"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "author_login",
+              "kind": "string"
+            },
+            {
+              "name": "head_sha",
+              "kind": "string"
+            },
+            {
+              "name": "head_ref",
+              "kind": "string"
+            },
+            {
+              "name": "base_ref",
+              "kind": "string"
+            },
+            {
+              "name": "base_sha",
+              "kind": "string"
+            },
+            {
+              "name": "labels",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "merged_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "merge_commit_sha",
+              "kind": "string"
+            },
+            {
+              "name": "snapshot_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "observed_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "verdict",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestVerdict"
+            },
+            {
+              "name": "checks",
+              "kind": "message",
+              "type_name": "reliant.v1.PullRequestCheck",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.PullRequestReviewMarker": [
+            {
+              "name": "review_id",
+              "kind": "string"
+            },
+            {
+              "name": "commit_sha",
+              "kind": "string"
+            },
+            {
+              "name": "marker_sha",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "of_review_id",
+              "kind": "string"
+            },
+            {
+              "name": "author_login",
+              "kind": "string"
+            },
+            {
+              "name": "submitted_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.PullRequestVerdict": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "review_id",
+              "kind": "string"
+            },
+            {
+              "name": "author_login",
+              "kind": "string"
+            },
+            {
+              "name": "submitted_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "rereview",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.VerdictPolicy": [
+            {
+              "name": "trusted_authors",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "rereview_authors",
+              "kind": "string",
+              "repeated": true
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.GetPullRequestRecordRequest": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.GetPullRequestRecordResponse": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.ListPullRequestRecordsRequest": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.ListPullRequestRecordsResponse": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestCheck": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestHead": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestRecord": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestReviewMarker": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.PullRequestVerdict": "reliant/v1/pull_request_record.proto",
+          "reliant.v1.VerdictPolicy": "reliant/v1/pull_request_record.proto"
+        }
+      }
+    },
+    {
       "name": "reliant.v1.QuestionService",
       "proto_file": "reliant/v1/question.proto",
       "methods": [
@@ -38526,6 +39129,12 @@
               "Name": "worktree_name",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "client_minimums",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ClientMinimums"
             }
           ],
           "ReadyRequest": null,
@@ -38596,11 +39205,67 @@
               "Name": "branch",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "client_minimums",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ClientMinimums"
             }
           ]
         },
         "Audience": "user",
         "Schemas": {
+          "reliant.v1.ClientMinimum": [
+            {
+              "name": "min_version",
+              "kind": "string"
+            },
+            {
+              "name": "upgrade_url",
+              "kind": "string"
+            },
+            {
+              "name": "upgrade_command",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ClientMinimums": [
+            {
+              "name": "web",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "desktop",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "daemon",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "cli",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "sdk_go",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "sdk_ts",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimum"
+            },
+            {
+              "name": "enforced",
+              "kind": "bool"
+            }
+          ],
           "reliant.v1.DevAuthClearRequest": [],
           "reliant.v1.DevAuthClearResponse": [
             {
@@ -38672,6 +39337,11 @@
             {
               "name": "worktree_name",
               "kind": "string"
+            },
+            {
+              "name": "client_minimums",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimums"
             }
           ],
           "reliant.v1.ReadyRequest": [],
@@ -38730,10 +39400,17 @@
             {
               "name": "branch",
               "kind": "string"
+            },
+            {
+              "name": "client_minimums",
+              "kind": "message",
+              "type_name": "reliant.v1.ClientMinimums"
             }
           ]
         },
         "SchemaFiles": {
+          "reliant.v1.ClientMinimum": "reliant/v1/system.proto",
+          "reliant.v1.ClientMinimums": "reliant/v1/system.proto",
           "reliant.v1.DevAuthClearRequest": "reliant/v1/system.proto",
           "reliant.v1.DevAuthClearResponse": "reliant/v1/system.proto",
           "reliant.v1.DevAuthLoadRequest": "reliant/v1/system.proto",
@@ -41224,6 +41901,11 @@
               "name": "upgrade",
               "kind": "message",
               "type_name": "reliant.v1.DaemonUpgradeStatus"
+            },
+            {
+              "name": "machine_stats",
+              "kind": "message",
+              "type_name": "reliant.v1.MachineStats"
             }
           ],
           "reliant.v1.DaemonKillProcessRequest": [
@@ -41930,6 +42612,39 @@
               "kind": "int64"
             }
           ],
+          "reliant.v1.MachineStats": [
+            {
+              "name": "load1",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "load5",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "load15",
+              "kind": "double",
+              "optional": true
+            },
+            {
+              "name": "cpus",
+              "kind": "double"
+            },
+            {
+              "name": "mem_total_bytes",
+              "kind": "uint64"
+            },
+            {
+              "name": "mem_available_bytes",
+              "kind": "uint64"
+            },
+            {
+              "name": "sampled_at_ms",
+              "kind": "int64"
+            }
+          ],
           "reliant.v1.ProcessOutputChunkMessage": [
             {
               "name": "process_id",
@@ -42226,6 +42941,14 @@
             },
             {
               "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "upgrade_command",
+              "kind": "string"
+            },
+            {
+              "name": "upgrade_url",
               "kind": "string"
             }
           ],
@@ -42729,6 +43452,7 @@
           "reliant.v1.LocalModelInventory": "reliant/v1/tools_daemon.proto",
           "reliant.v1.LocalModelRefresh": "reliant/v1/tools_daemon.proto",
           "reliant.v1.MachineHealth": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.MachineStats": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputChunkMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputSubscribeMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ProcessOutputUnsubscribeMessage": "reliant/v1/tools_daemon.proto",
@@ -46923,6 +47647,11 @@
             {
               "name": "exclude_skill_catalog",
               "kind": "bool"
+            },
+            {
+              "name": "continuation",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.CallLLMMessageInput": [
@@ -47210,6 +47939,10 @@
               "kind": "map",
               "map_key_kind": "string",
               "map_value_kind": "string"
+            },
+            {
+              "name": "pool",
+              "kind": "string"
             }
           ],
           "reliant.v1.DeleteWorkflowRequest": [
@@ -53245,6 +53978,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "CoverageSource",
+      "name": "CoverageSource",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/coverage_source.Service",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "DBRepo",
       "name": "DBRepo",
       "kind": "provider",
@@ -53857,6 +54602,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "PullRequestRecord",
+      "name": "PullRequestRecord",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/pull_request_record.Service",
+      "source": {
+        "path": "internal/handlers/pull_request_record/service.go",
+        "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Question",
       "name": "Question",
       "kind": "component",
@@ -54297,6 +55054,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewTriggerAlerting"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "TriggerDeliveryRelay",
+      "name": "TriggerDeliveryRelay",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.TriggerDeliveryRelay",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewTriggerDeliveryRelay"
       },
       "methods": [],
       "implementation_candidates": []
@@ -54964,6 +55733,50 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "CoverageSource",
+      "field": "Blobs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Blobs",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Projects",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Projects",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "CoverageSource",
+      "field": "Reports",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Reports",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "Daemon",
       "field": "Router",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon.Sender",
@@ -55489,6 +56302,15 @@
     },
     {
       "consumer": "Project",
+      "field": "Apps",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.HostedApps",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.CloneDispatcher",
       "methods": [],
@@ -55604,6 +56426,19 @@
       "candidates": [],
       "providers": [
         "Chat",
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "PullRequestRecord",
+      "field": "Store",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/pull_request_record.Store",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
         "Database"
       ],
       "resolution": "composition_expression"
@@ -56564,6 +57399,22 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "CoverageSource.Blobs",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "CoverageSource.Reports",
+      "source": {
+        "path": "internal/handlers/coverage_source/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "DaemonEventPublisher.Ctx",
       "source": {
         "path": "internal/app/nodes_gateway.go",
@@ -56615,6 +57466,14 @@
       "component": "OrgUsage.Prices",
       "source": {
         "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Apps",
+      "source": {
+        "path": "internal/handlers/project/service.go",
         "symbol": "New"
       }
     },

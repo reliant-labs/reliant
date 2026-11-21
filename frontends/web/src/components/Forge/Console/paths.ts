@@ -37,6 +37,9 @@
  *   /forge/p/:project/analytics[/:tab]        Analytics: the built-in Product analytics dashboards as
  *                                             tabs (overview · users · product · acquisition) + events
  *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
+ *   /forge/p/:project/experiments             Experiments: the project's Forge Changes
+ *                                             (remote config, rollouts, A/B tests)
+ *   /forge/p/:project/experiments/:changeId   one change (`who` opens it on a "Who gets it?" answer)
  *   /forge/p/:project/security/vulnerabilities
  *                                             Security › Vulnerabilities: the findings of the
  *                                             scope's releases (`release`, `severity`, `fixable`,
@@ -195,6 +198,10 @@ export type ConsolePage =
   | { kind: "auth"; tab?: AuthTab }
   /** A page another module registered in the nav (consoleNavRegistry.ts): `/<segment>` under the app. */
   | { kind: "extension"; id: string; segment: string }
+  /** Forge Changes: remote config, gradual rollouts and A/B tests (Experiments/ExperimentsPage.tsx). */
+  | { kind: "experiments" }
+  /** One change, by its control-plane id: a change is one per environment, so its id names both. */
+  | { kind: "experiment"; changeId: string }
   /** Security › Vulnerabilities: the findings of the scope's releases (Security/VulnerabilitiesPage.tsx). */
   | { kind: "vulnerabilities" }
   /** One advisory in the project (Security/VulnerabilityPage.tsx). */
@@ -319,6 +326,10 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/speed-insights`;
     case "extension":
       return `${base}/${encodeURIComponent(page.segment)}`;
+    case "experiments":
+      return `${base}/experiments`;
+    case "experiment":
+      return `${base}/experiments/${encodeURIComponent(page.changeId)}`;
     case "vulnerabilities":
       return `${base}/${SECURITY_SEGMENT}/${SECURITY_PAGES.vulnerabilities}`;
     case "vulnerability":
@@ -394,6 +405,9 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "analytics":
         if (!sub) return { kind: "analytics" };
         return isAnalyticsTab(sub) && !dashKind ? { kind: "analytics", tab: sub } : null;
+      case "experiments":
+        if (dashKind) return null;
+        return sub ? { kind: "experiment", changeId: safeDecode(sub) } : { kind: "experiments" };
       case "storage":
       case "data":
       case "users":
@@ -500,6 +514,8 @@ export type LegacyObsSearch = Omit<ObsSearch, "view"> & { view?: ObsView | "work
 export interface LegacyEnvSearch extends LegacyObsSearch {
   tab?: string;
   secret?: string;
+  /** The org the link was written for (a queued deploy's action URL); the environment page asks before switching to it. */
+  org?: string;
 }
 
 /**
@@ -519,6 +535,10 @@ function legacyWorkloadsTarget(project: string, env: string, workload: string | 
  * scoped to that environment; everything else about the
  * environment — overview, the local dev stack, domain bindings, the retired
  * tab names — is the environment's own page under Configure.
+ *
+ * `org` rides along to the environment's own page, the one page that honours
+ * it (its OrgSwitchGate asks before acting in another org): the control
+ * plane's queued-deploy link is `/forge/env/<env>?forgeProject=…&org=…`.
  */
 export function legacyEnvTarget(project: string, env: string, search: LegacyEnvSearch): string {
   switch (search.tab) {
@@ -539,9 +559,9 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
       return withSearch(consolePath(project, { kind: "domains" }), { env });
     case "identity":
     case "running":
-      return withSearch(consolePath(project, { kind: "environment", env }), { env, tab: search.tab });
+      return withSearch(consolePath(project, { kind: "environment", env }), { env, tab: search.tab, org: search.org });
     default:
-      return withSearch(consolePath(project, { kind: "environment", env }), { env });
+      return withSearch(consolePath(project, { kind: "environment", env }), { env, org: search.org });
   }
 }
 

@@ -33,7 +33,13 @@ cli_config: config_gen.CLIConfig = {
 
 # Every `reliant` process (the binary's root config).
 reliant_config: config_gen.ReliantConfig = {
-    runtime = {environment = "dev"}
+    runtime = {
+        # On a line of its own: `forge db seed apply|reset` and `forge db
+        # reset` confirm an env is development by reading
+        # `environment = "dev"` at the start of a line in this file, and
+        # refuse (fail closed) when they cannot find it.
+        environment = "dev"
+    }
 }
 
 # The `reliant daemon start` process.
@@ -90,6 +96,13 @@ server_process_config: config_gen.ServerProcessConfig = {
     # the LAN (an Ollama on the host). Every other env leaves this off.
     network = {
         allow_private_egress = True
+    }
+    # No client floors in dev: every build, however old, is served, and
+    # nothing is refused (client_version_config.proto).
+    client_versions = {
+        enforce = False
+        enforce_legacy_unidentified = False
+        refuse_unidentified = False
     }
 }
 

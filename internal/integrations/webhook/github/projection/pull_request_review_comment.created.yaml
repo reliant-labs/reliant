@@ -25,6 +25,15 @@ data:
     fields:
       id: integer
       body: { kind: string, cap: true }
+      # A pipeline leaves its markers at the end of the body, past the cap.
+      markers:
+        kind: markers
+        from: body
+        omit_empty: true
+        description: >-
+          The <!-- name key=value --> markers of the whole body, read before it
+          is capped: at most 16, in body order, none from a code block. Absent
+          when the body has none.
       html_url: string
       user: { kind: object, object: user }
       author_association: string

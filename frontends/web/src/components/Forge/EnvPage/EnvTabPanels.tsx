@@ -16,7 +16,7 @@ import { RunFromTerminal } from "@/components/ForgeShell/RunFromTerminal";
 import { useState, type ReactNode } from "react";
 import { Play, RefreshCw } from "lucide-react";
 
-import Card, { CardHeader } from "@/components/forge-ui/card";
+import { CardHeader } from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Button from "@/components/forge-ui/button";
@@ -32,6 +32,7 @@ import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import type { ForgeOutcome, ForgeTopologyEnv } from "@/services/forge/topology";
 
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
+import { INK_LINK } from "../Releases/releaseParts";
 import { formatTimestamp } from "../Overview/EnvironmentList";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
@@ -41,7 +42,10 @@ import { EnvDomains } from "./EnvDomains";
 import { LiveSecretsSection } from "./LiveSecretsSection";
 import { LiveState } from "./LiveState";
 
-/** A titled section. */
+/**
+ * A titled section of the page. No card: sections are told apart by their
+ * heading and the whitespace between them, the way the Overview's are.
+ */
 export function Panel({
   title,
   description,
@@ -59,22 +63,18 @@ export function Panel({
   flush?: boolean;
 }) {
   return (
-    <Card padding="none" data-testid={testId}>
-      {/* The header's own padding: forge-ui's CardHeader has none, so in a
-          `padding="none"` card it would sit on the border. */}
-      <div className="px-4 pt-3">
-        <CardHeader title={title} description={description} actions={actions} />
-      </div>
-      <div className={flush ? "" : "px-4 pb-4"}>{children}</div>
-    </Card>
+    <section className="min-w-0 space-y-3" data-testid={testId}>
+      <CardHeader title={title} description={description} actions={actions} />
+      <div className={flush ? "border-t border-border" : ""}>{children}</div>
+    </section>
   );
 }
 
 function PanelSkeleton({ testId, rows = 3 }: { testId: string; rows?: number }) {
   return (
-    <Card padding="md" data-testid={testId} aria-busy="true">
+    <div data-testid={testId} aria-busy="true">
       <SkeletonLoader variant="list-item" count={rows} />
-    </Card>
+    </div>
   );
 }
 
@@ -124,7 +124,7 @@ export function OverviewTab(props: OverviewTabProps) {
   // knows, and offer the one action that fixes it.
   if (!live) {
     return (
-      <div className="space-y-4" data-testid="env-overview-unregistered">
+      <div className="space-y-10" data-testid="env-overview-unregistered">
         <Panel
           title="Not registered in Reliant"
           description="Reliant has no record of this environment, so its releases and secrets aren't tracked here yet. Register it from your checkout — after that it shows here with your daemon offline."
@@ -165,27 +165,27 @@ export function OverviewTab(props: OverviewTabProps) {
   }
 
   return (
-    <div className="space-y-4" data-testid="live-section" data-kind={live.kind}>
+    <div className="space-y-10" data-testid="live-section" data-kind={live.kind}>
       {registered && (
-        <p data-testid="register-done" className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-ink">
-          Registered. <span className="font-mono">{envName}</span> is tracked in Reliant now — its secrets can be set
+        <p data-testid="register-done" className="text-ui text-ink">
+          Registered. <span className="font-medium">{envName}</span> is tracked in Reliant now — its secrets can be set
           from the Secrets tab, with your daemon offline.
         </p>
       )}
       <Panel title="State" testId="env-state">
         {declaredNotBuilt(live) ? (
           <div className="space-y-2">
-            <p data-testid="live-declared-not-built" className="text-sm text-ink-muted">
+            <p data-testid="live-declared-not-built" className="text-ui text-ink-muted">
               Declared, not built yet. Its secrets can be set; a build records the first release.
             </p>
             {live.provenance !== "" && (
-              <p data-testid="live-provenance" className="font-mono text-xs text-ink-muted">
+              <p data-testid="live-provenance" className="font-mono text-meta text-ink-muted">
                 {live.provenance}
               </p>
             )}
           </div>
         ) : neverBuilt(live) ? (
-          <p data-testid="live-row-blank" className="text-sm text-ink-muted">
+          <p data-testid="live-row-blank" className="text-ui text-ink-muted">
             Registered, with nothing recorded yet. <code className="font-mono text-ink">forge env build {live.name} --release</code>{" "}
             records the first release.
           </p>
@@ -195,7 +195,7 @@ export function OverviewTab(props: OverviewTabProps) {
             {/* THE PROVENANCE LINE (§2.1): images from the release's source,
                 config from the render's. Descriptive, not approving. */}
             {live.provenance !== "" && (
-              <p data-testid="live-provenance" className="font-mono text-xs text-ink-muted">
+              <p data-testid="live-provenance" className="font-mono text-meta text-ink-muted">
                 {live.provenance}
               </p>
             )}
@@ -229,9 +229,9 @@ export function OverviewTab(props: OverviewTabProps) {
       {/* The workloads themselves — health, pods, releases, restarts — are the
           Overview's (one place, every environment), not a second copy here. */}
       <Panel title="Workloads" testId="section-workloads">
-        <p className="text-sm text-ink-muted">
+        <p className="text-ui text-ink-muted">
           {props.envName}&apos;s services and jobs, their health and their pods are on the{" "}
-          <Link href={props.workloadsHref} className="text-ink underline underline-offset-2" data-testid="env-workloads-link">
+          <Link href={props.workloadsHref} className={INK_LINK} data-testid="env-workloads-link">
             Overview, scoped to {props.envName}
           </Link>
           .
@@ -282,7 +282,7 @@ function EnvFrontends({
     return loading ? (
       <FrontendsLoading />
     ) : (
-      <p className="px-4 pb-4 text-sm text-ink-muted" data-testid="env-frontends-unavailable">
+      <p className="pt-3 text-ui text-ink-muted" data-testid="env-frontends-unavailable">
         Reliant could not read this environment&apos;s deployments just now, so its frontends are not shown. They will appear when the next read succeeds.
       </p>
     );
@@ -294,9 +294,7 @@ function EnvFrontends({
   );
   if (frontends.length === 0) {
     return (
-      <div className="px-4 pb-4">
-        <FrontendsEmpty env={env.name} />
-      </div>
+      <FrontendsEmpty env={env.name} />
     );
   }
   return <FrontendList frontends={frontends} domainsHref={domainsHref} />;

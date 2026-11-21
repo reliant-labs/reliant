@@ -72,8 +72,6 @@ export interface IdentityTabProps {
   lifecycle: EnvLifecycle;
   live: LiveEnv | null;
   liveLoading: boolean;
-  /** Names an environment of this project by its control-plane id (owners and sharers arrive as ids). */
-  envNameById: (id: string) => string | undefined;
   /**
    * "tab" (default): the environment page's Identity tab, one column, with a
    * link to the project's Users page. "page": the Users page itself
@@ -86,7 +84,7 @@ export interface IdentityTabProps {
 
 export type IdentityLayout = "tab" | "page" | "users" | "service";
 
-export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById, layout = "tab" }: IdentityTabProps) {
+export function IdentityTab({ envName, lifecycle, live, liveLoading, layout = "tab" }: IdentityTabProps) {
   if (lifecycle === "local") return <LocalIdentity envName={envName} />;
   if (liveLoading && !live) return <IdentitySkeleton />;
   if (!live) {
@@ -97,18 +95,16 @@ export function IdentityTab({ envName, lifecycle, live, liveLoading, envNameById
       </p>
     );
   }
-  return <DeployedIdentity envId={live.id} envName={envName} envNameById={envNameById} layout={layout} />;
+  return <DeployedIdentity envId={live.id} envName={envName} layout={layout} />;
 }
 
 function DeployedIdentity({
   envId,
   envName,
-  envNameById,
   layout,
 }: {
   envId: string;
   envName: string;
-  envNameById: (id: string) => string | undefined;
   layout: IdentityLayout;
 }) {
   const org = useIdentityOrg();
@@ -208,7 +204,7 @@ function DeployedIdentity({
   if (layout === "service") {
     return (
       <div className="space-y-4" data-testid="identity-tab" data-layout="service">
-        <StatusPanel envId={envId} status={s} envNameById={envNameById} />
+        <StatusPanel envId={envId} status={s} />
         <ExportPanel orgId={org.orgId} envId={envId} status={s} />
       </div>
     );
@@ -225,7 +221,7 @@ function DeployedIdentity({
             <IdentityUsers orgId={org.orgId} envId={envId} envName={envName} status={s} />
           </div>
           <div className="min-w-0 space-y-4">
-            <StatusPanel envId={envId} status={s} envNameById={envNameById} narrow />
+            <StatusPanel envId={envId} status={s} narrow />
             <ExportPanel orgId={org.orgId} envId={envId} status={s} />
           </div>
         </div>
@@ -237,7 +233,7 @@ function DeployedIdentity({
     <div className="space-y-4" data-testid="identity-tab">
       <UsersPageLink envName={envName} />
       {readOnlyNote}
-      <StatusPanel envId={envId} status={s} envNameById={envNameById} />
+      <StatusPanel envId={envId} status={s} />
       <IdentityUsers orgId={org.orgId} envId={envId} envName={envName} status={s} />
       <ExportPanel orgId={org.orgId} envId={envId} status={s} />
     </div>
@@ -392,21 +388,19 @@ const APP_COLUMNS: DataTableColumn<AppRow>[] = [
 function StatusPanel({
   envId,
   status: s,
-  envNameById,
   narrow = false,
 }: {
   envId: string;
   status: IdentityStatus;
-  envNameById: (id: string) => string | undefined;
   /** A side column: facts stacked, and the applications as a list rather than a table. */
   narrow?: boolean;
 }) {
   // The control plane names the owner and sharers (they can be in another
-  // project); an older server sends ids only, which this project may know.
+  // project); one that is no longer live keeps its id.
   const named = new Map(
     [s.ownerEnvironment, ...s.sharerEnvironments].filter((e): e is IdentityEnvironmentRef => !!e).map((e) => [e.id, e])
   );
-  const name = (id: string) => named.get(id)?.name || envNameById(id) || id;
+  const name = (id: string) => named.get(id)?.name || id;
   const describe = (id: string) => {
     const e = named.get(id);
     return e?.project ? `${e.project} / ${name(id)} (${id})` : id;
@@ -575,7 +569,7 @@ function StatusPanel({
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-ink-muted">{title}</h3>
+      <h3 className="text-xs font-medium text-ink-muted">{title}</h3>
       <CardInset padding="sm">{children}</CardInset>
     </section>
   );

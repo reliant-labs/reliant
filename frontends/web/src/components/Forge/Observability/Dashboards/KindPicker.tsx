@@ -143,7 +143,7 @@ export function KindPicker({ value, onChange, testId = "panel-builder-kind" }: {
             <KindThumbnail kind={v.kind} />
             <span className="min-w-0">
               <span className={cn("block text-xs leading-snug", selected ? "font-medium text-ink" : "text-ink")}>{v.label}</span>
-              <span id={`${id}-${v.kind}`} className="mt-0.5 block break-words text-2xs leading-snug text-ink-muted">
+              <span id={`${id}-${v.kind}`} className="mt-0.5 block break-words text-meta leading-snug text-ink-muted">
                 {v.description}
               </span>
             </span>

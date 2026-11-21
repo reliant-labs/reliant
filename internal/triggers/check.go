@@ -4,6 +4,7 @@ package triggers
 import (
 	"context"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
 )
@@ -28,6 +29,36 @@ func openCheck(ctx context.Context, checks CheckOpener, workflows WorkflowResolv
 	if err != nil {
 		return err
 	}
+	return openWorkflowCheck(ctx, checks, wf, repo, trigger, decl, ev)
+}
+
+// openRefusedCheck opens ev's check before the fire records that ev can never
+// launch (EventFirer.refuse), so a firing refused before launch still
+// concludes its check: the syncer reads the failed outcome and writes failure
+// ("Reliant could not run this check"). Without it, a required check of a
+// firing that never launched would stay missing on GitHub for good.
+//
+// It is openCheck, except that a workflow that does not resolve opens nothing
+// instead of retrying: the refusal stands either way, and a workflow that
+// cannot be read (a deleted machine takes its catalog with it) declares no
+// check to open. A failure to READ it, or to record the check, is still
+// returned, so the fire retries before it settles anything.
+func openRefusedCheck(ctx context.Context, checks CheckOpener, workflows WorkflowResolver, repo any, trigger *core.Trigger, decl *Declaration, ev *core.TriggerEvent) error {
+	if checks == nil || workflows == nil {
+		return nil
+	}
+	wf, err := resolveTriggerWorkflow(ctx, workflows, trigger)
+	if err != nil {
+		if retryableRead(err) {
+			return err
+		}
+		return nil
+	}
+	return openWorkflowCheck(ctx, checks, wf, repo, trigger, decl, ev)
+}
+
+// openWorkflowCheck opens ev's check of wf, when wf declares one.
+func openWorkflowCheck(ctx context.Context, checks CheckOpener, wf *reliantv1.Workflow, repo any, trigger *core.Trigger, decl *Declaration, ev *core.TriggerEvent) error {
 	if wf.GetCheck() == nil {
 		return nil
 	}

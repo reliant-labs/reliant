@@ -38,7 +38,7 @@ export function MessageTimestamp({ at, className }: { at: string; className?: st
   return (
     <time
       dateTime={at}
-      className={cn("text-xs leading-none text-muted-foreground", className)}
+      className={cn("text-meta leading-none text-muted-foreground", className)}
       title={new Date(at).toLocaleString()}
     >
       {formatRelativeTimestamp(at)}

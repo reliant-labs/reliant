@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 
+	"go.opentelemetry.io/otel"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -517,7 +518,7 @@ func AutomationPrecedence(chat *db.Chat) bool {
 }
 
 func (l *Launcher) loadWorkflowInputs(ctx context.Context, scope Scope, workflowName string) map[string]*reliantv1.Input {
-	resolved, err := workflowsource.Resolve(ctx, l.repo, scope.sourceOptions(), workflowName)
+	resolved, err := workflowsource.Resolve(ctx, l.workflowReads(), scope.sourceOptions(), workflowName)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not load workflow inputs for build", "workflow", workflowName, "error", err)
 		return nil
@@ -556,7 +557,7 @@ func (l *Launcher) validateChatWorkflowInputsAt(ctx context.Context, userID stri
 	// A workflow that does not resolve fails the validation: passing inputs
 	// nobody checked is how a run was admitted and then failed at its first
 	// step on them.
-	resolved, err := workflowsource.Resolve(ctx, l.repo, chatScopeAt(userID, chat, workflowName, pin).sourceOptions(), workflowName)
+	resolved, err := workflowsource.Resolve(ctx, l.workflowReads(), chatScopeAt(userID, chat, workflowName, pin).sourceOptions(), workflowName)
 	if err != nil {
 		var storeErr *workflowsource.StoreError
 		if errors.As(err, &storeErr) {
@@ -667,7 +668,7 @@ func (l *Launcher) SubstituteUnservableModels(ctx context.Context, userID string
 	if len(inputs) == 0 {
 		return nil
 	}
-	resolved, err := workflowsource.Resolve(ctx, l.repo, chatScope(userID, chat, workflowName).sourceOptions(), workflowName)
+	resolved, err := workflowsource.Resolve(ctx, l.workflowReads(), chatScope(userID, chat, workflowName).sourceOptions(), workflowName)
 	if err != nil {
 		return nil
 	}
@@ -721,7 +722,7 @@ func substituteModelInputs(inputs map[string]interface{}, schemas map[string]*re
 // LoadWorkflowForValidation loads a builtin or project workflow by ref — not
 // one of the user's own — resolved by the one rule (workflowref).
 func (l *Launcher) LoadWorkflowForValidation(ctx context.Context, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	resolved, err := workflowsource.Resolve(ctx, l.repo, workflowsource.Options{ProjectID: projectID}, workflowName)
+	resolved, err := workflowsource.Resolve(ctx, l.workflowReads(), workflowsource.Options{ProjectID: projectID}, workflowName)
 	if err != nil {
 		return nil, fmt.Errorf("workflow '%s': %w", workflowName, err)
 	}
@@ -848,7 +849,7 @@ func (s Scope) sourceOptions() workflowsource.Options {
 }
 
 func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
-	return resolveRunWorkflow(ctx, l.repo, scope, workflowName)
+	return resolveRunWorkflow(ctx, l.workflowReads(), scope, workflowName)
 }
 
 func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, scope Scope, workflowName string) (*reliantv1.Workflow, error) {
@@ -901,6 +902,8 @@ func admissionScope(userID, projectID, daemonID, pin, workflowName string, ev Ev
 // run will execute on: the tree is admitted against that machine's synced
 // catalog, the one the run's own loads read (the union when it is empty).
 func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, daemonID, pin string, ev Event, projectFirst bool) error {
+	ctx, span := otel.Tracer("reliant.launch").Start(ctx, "launch.validateWorkflowTree")
+	defer span.End()
 	scope := admissionScope(userID, projectID, daemonID, pin, workflowName, ev, projectFirst)
 	wf, err := l.loadCreateChatWorkflowForValidation(ctx, scope, workflowName)
 	if err != nil {
@@ -915,7 +918,7 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 		return err
 	}
 
-	return validateResolvedWorkflowTree(ctx, l.repo, scope, workflowName, wf)
+	return validateResolvedWorkflowTree(ctx, l.workflowReads(), scope, workflowName, wf)
 }
 
 // validateResolvedWorkflowTree validates wf and every workflow and preset it
@@ -1033,7 +1036,7 @@ func (l *Launcher) validateNoMachine(ctx context.Context, scope Scope, workflowN
 // Used by BuildWorkflowInputs where the full preset is needed for ApplyToInputs.
 func (l *Launcher) createDBPresetLoaderFull(ctx context.Context, userID, projectID, daemonID, pin string) func(name string) (*preset.Preset, error) {
 	return func(name string) (*preset.Preset, error) {
-		return loadPresetFromDB(ctx, l.repo, userID, projectID, daemonID, pin, name)
+		return loadPresetFromDB(ctx, l.workflowReads(), userID, projectID, daemonID, pin, name)
 	}
 }
 
@@ -1049,7 +1052,7 @@ func RunMachine(chat *db.Chat) string {
 
 // LoadPresetFromDB loads a preset by name. Priority: user presets > stored project presets > builtins.
 func (l *Launcher) LoadPresetFromDB(ctx context.Context, userID, projectID, name string) (*preset.Preset, error) {
-	return loadPresetFromDB(ctx, l.repo, userID, projectID, "", "", name)
+	return loadPresetFromDB(ctx, l.workflowReads(), userID, projectID, "", "", name)
 }
 
 // ResolveRunPreset uses the launcher's exact user/project/builtin precedence.

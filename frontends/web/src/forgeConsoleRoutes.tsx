@@ -29,6 +29,11 @@
  *       /events                             Product analytics › Events & metrics
  *       /analytics, /analytics/$tab          Analytics: the built-in dashboards as tabs (U6c)
  *       /speed-insights                     web vitals per page (U6c)
+ *       /experiments, /experiments/$changeId  Forge Changes (remote config, rollouts, A/B tests)
+ *       /security/vulnerabilities           Security: the findings of the scope's releases
+ *       /security/vulnerabilities/$advisory one advisory across the project
+ *       /security/sboms                     each release artifact's SBOM and scan
+ *       /security                           → /security/vulnerabilities
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -60,16 +65,19 @@ import {
   forgeConsoleDashboardsSearchSchema,
   forgeConsoleDataSearchSchema,
   forgeConsoleEnvSearchSchema,
+  forgeConsoleExperimentsSearchSchema,
   forgeConsoleObsSearchSchema,
   forgeConsoleOverviewSearchSchema,
   forgeConsoleReleaseSearchSchema,
   forgeConsoleReleasesSearchSchema,
   forgeConsoleSearchSchema,
   forgeConsoleEnvironmentsSearchSchema,
+  forgeConsoleSbomsSearchSchema,
   forgeConsoleSecretsSearchSchema,
   forgeConsoleServicesSearchSchema,
   forgeConsoleStorageSearchSchema,
   forgeConsoleUsersSearchSchema,
+  forgeConsoleVulnerabilitiesSearchSchema,
   forgeConsoleWorkloadSearchSchema,
   forgeLegacyEnvSearchSchema,
   forgeLegacySearchSchema,
@@ -124,6 +132,15 @@ export interface ForgeConsoleComponents {
   analytics: RouteComponent
   /** Speed insights (U6c): web vitals per page. */
   speedInsights: RouteComponent
+  /** Experiments: the project's Forge Changes, and one change. */
+  experiments: RouteComponent
+  experiment: RouteComponent
+  /** Security › Vulnerabilities: the findings of the scope's releases. */
+  vulnerabilities: RouteComponent
+  /** One advisory in the project. */
+  vulnerability: RouteComponent
+  /** Security › SBOMs: each release artifact's SBOM and its scan. */
+  sboms: RouteComponent
   /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
@@ -404,6 +421,48 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleServicesSearchSchema,
     component: components.speedInsights,
   })
+  // Forge Changes: remote config, gradual rollouts and A/B tests
+  // (components/Forge/Experiments). The nav row is behind the web config's
+  // CHANGES_UI; the routes are always mounted.
+  const experimentsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'experiments',
+    validateSearch: forgeConsoleExperimentsSearchSchema,
+    component: components.experiments,
+  })
+  const experimentRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'experiments/$changeId',
+    validateSearch: forgeConsoleExperimentsSearchSchema,
+    component: components.experiment,
+  })
+  // Security (components/Forge/Security). The section has no page of its
+  // own: its first page is where /security lands.
+  const securityRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security',
+    beforeLoad: memberOnly(({ location }) => {
+      throw redirect({ href: `${location.pathname.replace(/\/security\/?$/, '/security/vulnerabilities')}${location.searchStr}`, replace: true })
+    }),
+  })
+  const vulnerabilitiesRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/vulnerabilities',
+    validateSearch: forgeConsoleVulnerabilitiesSearchSchema,
+    component: components.vulnerabilities,
+  })
+  const vulnerabilityRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/vulnerabilities/$advisory',
+    validateSearch: forgeConsoleSearchSchema,
+    component: components.vulnerability,
+  })
+  const sbomsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'security/sboms',
+    validateSearch: forgeConsoleSbomsSearchSchema,
+    component: components.sboms,
+  })
   // The retired "Project settings": it held only the organization's usage,
   // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
@@ -454,6 +513,12 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       analyticsRoute,
       analyticsTabRoute,
       speedInsightsRoute,
+      experimentsRoute,
+      experimentRoute,
+      securityRoute,
+      vulnerabilitiesRoute,
+      vulnerabilityRoute,
+      sbomsRoute,
     ]),
   ])
 }

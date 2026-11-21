@@ -50,6 +50,7 @@ import { AutomationDialogHost } from './components/Automations/dialog/Automation
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
+import { ClientMinimumWatch } from './components/ClientMinimumWatch'
 import { GlobalUpdateHandler } from './components/Settings/GlobalUpdateHandler'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
@@ -336,6 +337,9 @@ function RootShell() {
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
+      {/* The forced upgrade when this build is below the reliant API's
+          published minimum (lib/clientMinimum.ts). */}
+      <ClientMinimumWatch />
       {/* The desktop app's update dialog: the sidebar button, Settings and
           the app menu's "Check for Updates…" open it from any route. */}
       <GlobalUpdateHandler />
@@ -458,7 +462,7 @@ const oauthConsentRoute = createRoute({
   ),
 })
 
-// CLI login consent (`forge login`, `reliant auth login`). The control plane's
+// CLI login consent (`forge cloud login`, `reliant auth login`). The control plane's
 // /oauth/authorize validates the CLI's PKCE request and sends the browser here,
 // because this app holds the end-user session. Root-level and unguarded for the
 // same reason as /oauth/consent: the page signs the user in itself and must

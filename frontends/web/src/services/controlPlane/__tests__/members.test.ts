@@ -101,7 +101,7 @@ describe("wire mapping", () => {
 
   // A shared chat names its owner by their sign-in subject: the roster must
   // carry externalId from the wire into the model, and the lookup keyed by it
-  // must find them. An older control plane sends no externalId: nobody named.
+  // must find them. A member with no externalId is named by nobody.
   it("carries each member's sign-in subject through to the shared-chat owner lookup", async () => {
     setTransport(
       mockTransport({

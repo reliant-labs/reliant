@@ -6,12 +6,11 @@ vi.mock('@/hooks/settings-queries', () => ({
 }))
 
 vi.mock('@/lib/oauth-local', () => ({
-  startOAuthViaDaemon: vi.fn(),
   startOAuthViaLocalServer: vi.fn(),
 }))
 
 import { completeClaudeOAuth, completeCodexOAuth } from '@/hooks/settings-queries'
-import { startOAuthViaDaemon } from '@/lib/oauth-local'
+import { startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { runClaudeOAuthFlow } from '@/lib/claude-oauth'
 import { runCodexOAuthFlow } from '@/lib/codex-oauth'
 
@@ -99,7 +98,7 @@ describe.each([
     delete (window as unknown as { electronAPI?: unknown }).electronAPI
   })
 
-  it('uses the local receiver and never the daemon RPC', async () => {
+  it('uses the desktop receiver and never the browser helper', async () => {
     const { startProviderOAuth } = withLocalReceiver()
     startProviderOAuth.mockImplementation(async (template: string) => {
       captureStateFrom(template)
@@ -109,8 +108,7 @@ describe.each([
     const result = await runFlow()
 
     expect(startProviderOAuth).toHaveBeenCalledTimes(1)
-    // The whole point: no request/response RPC spans the user's browser trip.
-    expect(startOAuthViaDaemon).not.toHaveBeenCalled()
+    expect(startOAuthViaLocalServer).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
   })
 
@@ -175,21 +173,15 @@ describe.each([
     expect(exchange.mock.calls[0][0].redirectUri).toBe('http://localhost:51000/callback')
   })
 
-  it('falls back to the daemon RPC on builds without the bridge', async () => {
-    // Older shipped builds have no local receiver. They must keep the old
-    // path rather than throwing — it is degraded, not absent.
-    ;(window as unknown as { electronAPI: unknown }).electronAPI = {}
-    vi.mocked(startOAuthViaDaemon).mockImplementation(async (template: string) => {
-      captureStateFrom(template)
-      return {
-        code: 'the-code',
-        state: capturedState,
-        redirectUri: 'http://localhost:51000/callback',
-      } as never
-    })
+  it('asks for a desktop update, without crashing, when the preload predates the receiver', async () => {
+    // The desktop app loads this bundle from the server, so its preload can be
+    // older than the bundle: a build with other bridges but no receiver.
+    ;(window as unknown as { electronAPI: unknown }).electronAPI = { openExternal: vi.fn() }
 
-    await runFlow()
+    const result = await runFlow()
 
-    expect(startOAuthViaDaemon).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(false)
+    expect(result.message).toMatch(/Update the Reliant desktop app/)
+    expect(startOAuthViaLocalServer).not.toHaveBeenCalled()
   })
 })

@@ -1,33 +1,33 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * THE HEALTH STRIP — requests · error rate · p95 · alerts firing for a
- * telemetry scope, each with the change against the previous window and a
- * sparkline.
+ * THE HEALTH STRIP — the project Overview's headline: Requests as the one
+ * big number, with its window and its change against the previous window,
+ * then one chart of it; error rate, p95 and alerts firing beside it as a
+ * quiet row of smaller figures, each with its own change.
  *
- * On the project Overview. A sparkline marks only the LATEST release in the
- * window: at sparkline size several dashed rules read as hatching, and "did
- * the last deploy move this?" is the question a sparkline can answer. The
- * workload page's full charts carry every marker.
+ * The chart marks only the LATEST release in the window ("did the last deploy
+ * move this?"), and shades the stretches an alert was firing. The workload
+ * page's full charts carry every marker.
  */
 
 import { useMemo } from "react";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
 import { useAlertHistory, useAlerts, usePanelQuery } from "@/hooks/observability-queries";
 import type { ObsScope, PanelResult } from "@/services/controlPlane/observability/types";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
-import type { RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
-import { UPlotChart, type ChartMarker } from "../charts/UPlotChart";
-import type { ChartPaletteToken } from "../charts/chartPalette";
+import { UPlotChart, type ChartBand, type ChartMarker } from "../charts/UPlotChart";
 import { alertBands, rangeMs } from "../Dashboards/dashboardModel";
 import { unionTimestamps } from "../Dashboards/PanelBody";
 import { formatAgo, formatCount, formatDuration, formatPercent } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
 import { useReleaseMarkers } from "../releaseMarkers";
-import { firingCounts, ratioSeries, redPanel, seriesValues } from "./homeModel";
+import { firingCounts, redPanel, seriesValues } from "./homeModel";
 
 export interface HealthStripProps {
   /** Null until the org is known (or when the scope names an unrecorded environment): the cells show their loading state. */
@@ -83,13 +83,43 @@ function valueOf(result: PanelResult | undefined, label: string): number | null 
   return result?.series.find((s) => s.label === label)?.value ?? null;
 }
 
-function change(now: number | null, before: number | null, format: (delta: number) => string, label: string): string | null {
+/** A figure's change against the previous window: its words, and which way it went. */
+export interface Change {
+  text: string;
+  /** Null when there was no change worth a direction. */
+  direction: "up" | "down" | null;
+}
+
+function change(now: number | null, before: number | null, format: (delta: number) => string, label: string): Change | null {
   if (now === null || before === null) return null;
   const delta = now - before;
   // A change too small to show at the figure's precision ("+0pt") is no change.
   const shown = format(Math.abs(delta));
-  if (Math.abs(delta) < 1e-9 || shown === format(0)) return `no change vs ${label}`;
-  return `${delta > 0 ? "+" : "−"}${shown} vs ${label}`;
+  if (Math.abs(delta) < 1e-9 || shown === format(0)) return { text: `no change vs ${label}`, direction: null };
+  return { text: `${delta > 0 ? "+" : "−"}${shown} vs ${label}`, direction: delta > 0 ? "up" : "down" };
+}
+
+/**
+ * Whether a direction is good or bad news for the figure: requests going up
+ * is neither, so it stays muted; an error rate or a latency going up is bad.
+ */
+type Sense = "neutral" | "lower-is-better";
+
+function ChangeLine({ change: delta, sense, testId }: { change: Change | null; sense: Sense; testId?: string }) {
+  if (!delta) return <div className="min-h-4 text-meta text-ink-muted" data-testid={testId}> </div>;
+  const Icon = delta.direction === "up" ? ArrowUpRight : delta.direction === "down" ? ArrowDownRight : Minus;
+  const tone =
+    sense === "neutral" || delta.direction === null
+      ? "text-ink-muted"
+      : delta.direction === "up"
+        ? "text-danger-ink"
+        : "text-success-ink";
+  return (
+    <div className={cn("flex min-h-4 items-center gap-1 text-meta tabular-nums", tone)} data-testid={testId}>
+      <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+      <span className="truncate">{delta.text}</span>
+    </div>
+  );
 }
 
 function Strip({
@@ -125,108 +155,141 @@ function Strip({
 
   const timestamps = trend.data ? unionTimestamps(trend.data.series) : [];
   const trendRequests = trend.data ? seriesValues(trend.data.series, "requests") : [];
-  const trendErrors = trend.data ? seriesValues(trend.data.series, "errors") : [];
-  const trendP95 = trend.data ? seriesValues(trend.data.series, "p95") : [];
   const loading = totals.isLoading;
   const failed = !!totals.error && !keepsLastResult(totals.error, totals.data);
+  const charted = timestamps.length > 1 && trendRequests.some((value) => !!value);
+  const windowWords = RANGE_LABELS[range];
+  // Alerts history is drawn as a shaded stretch under the requests: when they fired, against what was asked.
+  const alertCounts = countsOf(timestamps);
 
   return (
-    // One card, four cells split by hairlines (the gap shows the border colour
-    // behind them): a strip of figures, not four cards. Two to a row on a phone.
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border xl:grid-cols-4" data-testid="observability-strip">
-      <Cell
-        label="Requests"
-        figure={loading ? null : failed ? "—" : formatCount(requests ?? 0)}
-        detail={requests !== null && prevRequests ? change(requests, prevRequests, (d) => formatPercent(d / prevRequests), label) : null}
-        spark={{ timestamps, values: trendRequests, unit: "count", color: "--chart-1" }}
-        markers={markers}
-      />
-      <Cell
-        label="Error rate"
-        figure={loading ? null : failed ? "—" : rate === null ? "—" : formatPercent(rate)}
-        tone={rate !== null && rate >= 0.05 ? "warning" : undefined}
-        detail={change(rate, prevRate, (d) => `${formatCount(d * 100)}pt`, label)}
-        spark={{ timestamps, values: ratioSeries(trendErrors, trendRequests), unit: "percent", tone: "destructive" }}
-        markers={markers}
-      />
-      <Cell
-        label="p95 latency"
-        figure={loading ? null : failed ? "—" : p95 === null ? "—" : formatDuration(p95)}
-        detail={change(p95, prevP95, (d) => formatDuration(d), label)}
-        spark={{ timestamps, values: trendP95, unit: "ms", color: "--chart-2" }}
-        markers={markers}
-      />
-      <Cell
-        label="Alerts firing"
-        figure={String(firing)}
-        tone={firing > 0 ? "warning" : undefined}
-        detail={firingDetail ?? "none in this scope"}
-        spark={{ timestamps, values: countsOf(timestamps), unit: "count", tone: "warning" }}
-        markers={markers}
-        href={alertsHref}
-      />
-    </div>
+    // The headline: one number, its window and its change, then one chart.
+    // The other figures are a quiet row beside it, not a wall of equal tiles.
+    <section className="min-w-0 space-y-5" aria-label={`Requests, errors and latency, ${windowWords.toLowerCase()}`} data-testid="observability-strip">
+      <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6">
+        <div className="min-w-0" data-testid="observability-cell-requests">
+          <div className="flex items-baseline gap-2 text-ui">
+            <span className="font-medium text-ink">Requests</span>
+            <span className="text-meta text-ink-muted">{windowWords}</span>
+          </div>
+          {loading ? (
+            <div className="mt-1 h-10 w-40 animate-pulse rounded-md bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label="Loading Requests" />
+          ) : (
+            <div className="mt-1 text-figure tabular-nums text-ink">{failed ? "—" : formatCount(requests ?? 0)}</div>
+          )}
+          <ChangeLine
+            change={requests !== null && prevRequests ? change(requests, prevRequests, (d) => formatPercent(d / prevRequests), label) : null}
+            sense="neutral"
+          />
+        </div>
+        <dl className="flex flex-wrap gap-x-10 gap-y-5">
+          <Figure
+            label="Error rate"
+            figure={loading ? null : failed ? "—" : rate === null ? "—" : formatPercent(rate)}
+            tone={rate !== null && rate >= 0.05 ? "warning" : undefined}
+            change={change(rate, prevRate, (d) => `${formatCount(d * 100)}pt`, label)}
+          />
+          <Figure
+            label="p95 latency"
+            figure={loading ? null : failed ? "—" : p95 === null ? "—" : formatDuration(p95)}
+            change={change(p95, prevP95, (d) => formatDuration(d), label)}
+          />
+          <Figure
+            label="Alerts firing"
+            figure={String(firing)}
+            tone={firing > 0 ? "warning" : undefined}
+            detail={firingDetail ?? "None in this scope"}
+            href={alertsHref}
+          />
+        </dl>
+      </div>
+      <div className={charted ? "h-[180px]" : "h-24"} data-testid="observability-strip-chart">
+        {charted ? (
+          <UPlotChart
+            height={180}
+            area="fill"
+            legend={false}
+            timestamps={timestamps}
+            series={[{ label: "Requests", values: trendRequests, color: "--chart-1" }]}
+            unit="count"
+            label={`Requests over the ${windowWords.toLowerCase()}`}
+            markers={markers}
+            bands={alertCounts.some((count) => count > 0) ? firingBands(timestamps, alertCounts) : undefined}
+          />
+        ) : (
+          // An empty window still has a shape: a flat baseline and the sentence that says why.
+          <div className="flex h-full flex-col justify-end" data-testid="observability-strip-chart-empty">
+            {!loading && (
+              <p className="pb-3 text-ui text-ink-muted">{failed ? "Requests could not be read right now." : `No requests traced in the ${windowWords.toLowerCase()}.`}</p>
+            )}
+            <div className="border-b border-border" aria-hidden="true" />
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 
-function Cell({
+/** The stretches where an alert was firing, as chart bands. */
+function firingBands(timestamps: number[], counts: number[]): ChartBand[] {
+  const bands: ChartBand[] = [];
+  let start: number | null = null;
+  timestamps.forEach((t, i) => {
+    if (counts[i] > 0 && start === null) start = t;
+    if ((counts[i] === 0 || i === timestamps.length - 1) && start !== null) {
+      bands.push({ startSec: start, endSec: counts[i] > 0 ? t : timestamps[i - 1] ?? t, label: "Alert firing", tone: "warning" });
+      start = null;
+    }
+  });
+  return bands;
+}
+
+/** A secondary figure: smaller, unboxed, its change (or what it is about) under it. */
+function Figure({
   label,
   figure,
+  change: delta,
   detail,
-  spark,
-  markers,
   tone,
   href,
 }: {
   label: string;
   /** Null while loading. */
   figure: string | null;
-  detail: string | null;
-  spark: {
-    timestamps: number[];
-    values: (number | null)[];
-    unit: "count" | "percent" | "ms";
-    /** A status colour for a trend that is one (errors, alerts); otherwise a palette colour. */
-    tone?: "destructive" | "warning";
-    color?: ChartPaletteToken;
-  };
-  markers: readonly ChartMarker[];
+  change?: Change | null;
+  detail?: string;
   tone?: "warning";
   href?: string;
 }) {
   const body = (
     <>
-      <div className="text-xs text-ink-muted">{label}</div>
-      {figure === null ? (
-        <div className="mt-1 h-6 w-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label={`Loading ${label}`} />
-      ) : (
-        <div className={cn("mt-0.5 text-lg font-semibold leading-7 tabular-nums", tone === "warning" ? "text-warning-ink" : "text-ink")}>{figure}</div>
-      )}
-      <div className="min-h-4 truncate text-xs text-ink-muted">{detail ?? " "}</div>
-      <div className="mt-1.5 h-7">
-        {spark.timestamps.length > 1 && (
-          <UPlotChart
-            compact
-            height={28}
-            timestamps={spark.timestamps}
-            series={[{ label, values: spark.values, tone: spark.tone, color: spark.color }]}
-            unit={spark.unit}
-            label={`${label} over the window`}
-            markers={markers}
-          />
+      <dt className="text-meta text-ink-muted">{label}</dt>
+      <dd>
+        {figure === null ? (
+          <div className="mt-1 h-7 w-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label={`Loading ${label}`} />
+        ) : (
+          <div className={cn("mt-0.5 text-2xl font-semibold tabular-nums", tone === "warning" ? "text-warning-ink" : "text-ink")}>{figure}</div>
         )}
-      </div>
+        {detail !== undefined ? (
+          <div className="max-w-[14rem] truncate text-meta text-ink-muted">{detail}</div>
+        ) : (
+          <ChangeLine change={delta ?? null} sense="lower-is-better" />
+        )}
+      </dd>
     </>
   );
-  return (
-    <div className="min-w-0 bg-surface px-4 py-3" data-testid={`observability-cell-${label.toLowerCase().replace(/\s+/g, "-")}`}>
-      {href ? (
-        <Link href={href} className="no-color -m-1 block rounded p-1 hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          {body}
-        </Link>
-      ) : (
-        body
-      )}
+  const testId = `observability-cell-${label.toLowerCase().replace(/\s+/g, "-")}`;
+  return href ? (
+    <Link
+      href={href}
+      className="no-color -m-2 block min-w-0 rounded-lg p-2 hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-testid={testId}
+    >
+      {body}
+    </Link>
+  ) : (
+    <div className="min-w-0" data-testid={testId}>
+      {body}
     </div>
   );
 }

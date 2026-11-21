@@ -55,13 +55,12 @@ export const sessionKeys = {
 };
 
 /**
- * Refuse rows a control plane older than the client filters answered without
- * them (it ignores unknown fields). A server that applies a browser or OS
- * filter returns only sessions whose client names that value; an older one
- * returns sessions whose client is unknown or different.
+ * Do not let sessions returned without a requested filter appear narrowed.
+ * Each row in a user- or client-filtered list must name the requested value.
  */
 function assertSessionFiltersApplied(filters: SessionFilters, result: SessionList) {
   for (const s of result.sessions) {
+    if (filters.userId && s.userId !== filters.userId) throw new FilterUnsupportedError("user", "sessions");
     if (filters.browser && s.client.browserName !== filters.browser) throw new FilterUnsupportedError("browser", "sessions");
     if (filters.os && s.client.osName !== filters.os) throw new FilterUnsupportedError("OS", "sessions");
     if (filters.frontendVersion && s.serviceVersion !== filters.frontendVersion) throw new FilterUnsupportedError("frontend version", "sessions");

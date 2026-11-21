@@ -39,7 +39,7 @@ if [ "$ZIP_COUNT" -eq 0 ] || [ "$YML_COUNT" -eq 0 ]; then
     echo "  2. The latest-mac.yml or alpha-mac.yml file"
     echo ""
     echo "These files are generated when you build the app:"
-    echo "  npm run dist:mac:dev"
+    echo "  pnpm run dist:mac:dev"
     echo ""
     echo "The build output is in: electron/dist/"
     echo ""
