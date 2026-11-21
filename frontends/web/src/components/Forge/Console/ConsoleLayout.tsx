@@ -88,7 +88,7 @@ export function ConsoleLayout() {
   // ── 1–2. The Reliant project, the roster and the environment scope: the
   // same model the shell's nav draws this app's sections from. ──
   const model = useConsoleNavModel(forgeProject, pathname, search);
-  const { page, env, listed, projectId, roster, envs: navEnvs, alertsFiring, starred, dashboardTitle, optionalViews, scope, platformWide, productAnalytics } = model;
+  const { orgId, page, env, listed, projectId, roster, envs: navEnvs, alertsFiring, starred, dashboardTitle, optionalViews, scope, platformWide, productAnalytics } = model;
   const pinnedEnv = pinnedEnvOf(page);
   const forgeShell = isForgeShell();
 
@@ -191,6 +191,10 @@ export function ConsoleLayout() {
     [listed, value]
   );
 
+  const primeMetrics = page.kind === "obs-view" && page.view === "metrics" && (
+    <PrimeMetricCatalog orgId={orgId} forgeProject={forgeProject} env={env} roster={roster} />
+  );
+
   // Inside the one shell the app's sections are rows of its nav: the console
   // is a page under a slim bar, with no column of its own (ConsoleFrame).
   if (inShell) {
@@ -205,6 +209,7 @@ export function ConsoleLayout() {
           platformWide={platformWide}
           onEnvChange={setEnv}
         >
+          {primeMetrics}
           {body}
         </ConsoleFrame>
       </LedConsoleProvider>
@@ -234,9 +239,7 @@ export function ConsoleLayout() {
       brand={brand}
       brandCollapsed={brandCollapsed}
     >
-      {page.kind === "obs-view" && page.view === "metrics" && (
-        <PrimeMetricCatalog orgId={org.orgId} forgeProject={forgeProject} env={env} roster={roster} />
-      )}
+      {primeMetrics}
       {body}
     </ConsoleShell>
     </LedConsoleProvider>

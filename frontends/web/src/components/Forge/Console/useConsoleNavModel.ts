@@ -28,6 +28,8 @@ import { consolePageOf, type ConsolePage } from "./paths";
 import { useOptionalViews } from "./useOptionalViews";
 
 export interface ConsoleNavModel extends GroupedNavInput {
+  /** The observability org (useObservabilityOrg), null until it resolves. */
+  orgId: string | null;
   /** The Reliant project list has answered (consoleHost.ts). */
   listed: boolean;
   /** The Reliant project declaring the app, once found. */
@@ -125,6 +127,7 @@ export function useConsoleNavModel(project: string, pathname: string, search: { 
   const platformWide = openDashboard.data?.spec.scope === "platform";
 
   return {
+    orgId: org.orgId,
     project,
     page,
     env,
