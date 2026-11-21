@@ -480,6 +480,26 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('usage-billing-total'),
   },
   {
+    name: 'shell-connectors',
+    path: '/connectors',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('connectors-page'),
+  },
+  {
+    name: 'shell-connectors-mcp',
+    path: '/connectors?tab=mcp',
+    on: ['desktop'],
+    ready: (page) => page.locator('[data-testid="connectors-page"][data-tab="mcp"]'),
+  },
+  {
+    // Agents with no sandbox to run a chat: ListDaemons answers empty.
+    name: 'shell-agents-no-sandbox',
+    path: '/',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('nav-drill-in'),
+    harness: { fixtures: { 'reliant.v1.DaemonRegistryService/ListDaemons': { daemons: [] } } },
+  },
+  {
     name: 'shell-settings',
     path: '/settings',
     on: ['desktop', 'mobile'],
