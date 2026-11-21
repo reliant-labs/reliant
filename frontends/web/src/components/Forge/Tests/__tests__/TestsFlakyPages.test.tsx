@@ -22,6 +22,7 @@ import { useProject } from "@/hooks/project-queries";
 import { forgeConsoleTestsFlakySearchSchema } from "@/routeSchemas";
 
 import type { AskFlakyTestSubject } from "../../Observability/AskReliant/askReliantPrompt";
+import { encodeTestIdSegment, flakyTestPath } from "../../Console/paths";
 import { AGENT_REASON } from "../testsAgent";
 
 import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTestApi, type FixtureTestApi, type TestsScenario } from "../fixtures";
@@ -52,7 +53,7 @@ vi.mock("../../Console/consoleContext", () => ({
     projectId: "proj-shopfront",
     env: "prod",
     href: (page: { kind: string; run?: string; test?: string }) =>
-      page.kind === "tests-run" ? `/forge/p/shopfront/tests/runs/${page.run}` : `/forge/p/shopfront/tests/flaky/${encodeURIComponent(page.test ?? "")}`,
+      page.kind === "tests-run" ? `/forge/p/shopfront/tests/runs/${page.run}` : `/forge/p/shopfront/tests/flaky/${encodeTestIdSegment(page.test ?? "")}`,
   }),
 }));
 
@@ -100,7 +101,7 @@ describe("Tests › Flaky tests: the full list", () => {
     // The routed page reads the wall clock; the fixture event is 14 minutes before the fixture's "now".
     expect(sync).toHaveTextContent(/\d+[smhd] ago/);
     expect(within(sync).getByRole("link", { name: /#212/ })).toHaveAttribute("href", "https://github.com/acme/shopfront/issues/212");
-    expect(within(sync).getAllByRole("link")[0]).toHaveAttribute("href", `/forge/p/shopfront/tests/flaky/${encodeURIComponent(idOf("internal/jobs", "TestSyncJob"))}`);
+    expect(within(sync).getAllByRole("link")[0]).toHaveAttribute("href", `/forge/p/shopfront/tests/flaky/${encodeTestIdSegment(idOf("internal/jobs", "TestSyncJob"))}`);
     // A test with few runs ranks low, and still says its n.
     expect(screen.getByTestId("tests-flake-rate-TestWebhookSign/rotated key")).toHaveTextContent("0.21% (22 runs)");
     expect(screen.getByTestId("tests-flake-row-TestCheckoutTimeout")).toHaveTextContent("Suspected");
@@ -326,7 +327,18 @@ describe("a test's page", () => {
     expect(await screen.findByTestId("tests-test-error")).toHaveAttribute("data-kind", "not-configured");
   });
 
-  it("reads the test named in the route, decoded", async () => {
+  it("reads the test named in the route, from its base64url segment", async () => {
+    const api = fixtureTestApi("report");
+    const id = idOf("internal/webhooks", "TestWebhookSign/rotated key");
+    const url = flakyTestPath("shopfront", id);
+    expect(url).not.toMatch(/%2F/i);
+    renderRoutedPage(api, { path: "/forge/p/$project/tests/flaky/$test", url, validateSearch: (s) => s, component: TestsFlakyTestPage });
+    expect(await screen.findByTestId("tests-test-state")).toHaveTextContent("Suspected");
+    expect(api.calls.find((call) => call.method === "getTest")!.req).toEqual({ orgId: null, project: "shopfront", testId: id });
+    expect(screen.getByTestId("console-tests-flaky-test")).toHaveTextContent(id);
+  });
+
+  it("still reads a link in the old percent-encoded form", async () => {
     const api = fixtureTestApi("report");
     const id = idOf("internal/webhooks", "TestWebhookSign/rotated key");
     renderRoutedPage(api, { path: "/forge/p/$project/tests/flaky/$test", url: `/forge/p/shopfront/tests/flaky/${encodeURIComponent(id)}`, validateSearch: (s) => s, component: TestsFlakyTestPage });

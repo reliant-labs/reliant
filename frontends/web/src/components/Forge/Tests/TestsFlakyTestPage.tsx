@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * /forge/p/:project/tests/flaky/:test — one test's record (control-plane
+ * /forge/p/:project/tests/flaky/:test — one test's record, `:test` its id as
+ * base64url (Console/paths.ts encodeTestIdSegment) (control-plane
  * TestsService.GetTest; forge docs/proposals/tests-coverage-flakes.md §3.2,
  * the flaky page's drawer, as a page of its own so it can be linked).
  *
@@ -30,6 +31,7 @@ import type { TestDetail, TestFailureSignature, TestFlake, TestFlakeEvent } from
 import { cn } from "@/lib/utils";
 
 import { useForgeConsole } from "../Console/consoleContext";
+import { decodeTestIdSegment } from "../Console/paths";
 import { CommandLine } from "../GettingStarted";
 import { formatAgo, formatDuration, formatWhen } from "../Observability/format";
 import { ObsLoadingRows } from "../Observability/ObsStates";
@@ -44,7 +46,8 @@ import { TestsError } from "./TestsStates";
 export function TestsFlakyTestPage() {
   const { forgeProject, href, projectId } = useForgeConsole();
   const { test } = useParams({ strict: false }) as { test?: string };
-  const testId = test ?? "";
+  // The segment is the id as base64url (or, in a link from before, the id itself).
+  const testId = test ? decodeTestIdSegment(test) : "";
   return (
     <TestsFrame title="Test" subtitle={testId ? <code className="break-all font-mono">{testId}</code> : undefined} testId="console-tests-flaky-test">
       <TestsFlakyTestView project={forgeProject} projectId={projectId} testId={testId} runHref={(runId) => href({ kind: "tests-run", run: runId })} />

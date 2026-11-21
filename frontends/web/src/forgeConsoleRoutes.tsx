@@ -37,7 +37,7 @@
  *       /tests                              Tests › Overview (`branch`)
  *       /tests/coverage                     coverage tree and a file's lines (`path`, `commit`, `lane`, `base`)
  *       /tests/runs[/$run]                  recorded runs (`branch`, `commit`, `release`, `lane`, `source`, `status`), and one run
- *       /tests/flaky[/$test]                flaky tests (`state`), and one test
+ *       /tests/flaky[/$test]                flaky tests (`state`), and one test (its id as base64url)
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in

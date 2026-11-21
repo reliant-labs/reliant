@@ -51,8 +51,9 @@
  *                                             flaky counts, the last run (`branch`)
  *   /forge/p/:project/tests/coverage          Tests › Coverage (`path`, `commit`, `lane`, `base`: a file
  *                                             path rides the search, never a segment)
- *   /forge/p/:project/tests/runs[/:run]       Tests › Runs, and one run
- *   /forge/p/:project/tests/flaky[/:test]     Tests › Flaky tests, and one test (its id, encoded)
+ *   /forge/p/:project/tests/runs[/:run]       Tests › Runs, and one run (a ULID: URL-safe as it is)
+ *   /forge/p/:project/tests/flaky[/:test]     Tests › Flaky tests, and one test (its id as base64url:
+ *                                             encodeTestIdSegment)
  *
  * Retired, and redirected by the route tree: `/observability` (its home was
  * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
@@ -399,7 +400,7 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
     case "tests-flaky":
       return `${base}/${TESTS_SEGMENT}/${TESTS_PAGES.flaky}`;
     case "tests-flaky-test":
-      return `${base}/${TESTS_SEGMENT}/${TESTS_PAGES.flaky}/${encodeURIComponent(page.test)}`;
+      return `${base}/${TESTS_SEGMENT}/${TESTS_PAGES.flaky}/${encodeTestIdSegment(page.test)}`;
   }
 }
 
@@ -444,6 +445,49 @@ export const testsPath = (app: string, view: TestsView = "overview", ctx?: PathC
 export const testRunPath = (app: string, runId: string, ctx?: PathContext) => consolePath(app, { kind: "tests-run", run: runId }, ctx);
 /** One test's flake record, under Tests › Flaky tests, by its TestKey id ("go:<pkg>:TestRefund"). */
 export const flakyTestPath = (app: string, testId: string, ctx?: PathContext) => consolePath(app, { kind: "tests-flaky-test", test: testId }, ctx);
+
+// ── A test id in a path segment ─────────────────────────────────────────────
+//
+// A TestKey id ("go:github.com/acme/shop/internal/billing:TestRefund/partial")
+// holds `/`, and percent-encoding it as `%2F` is not enough: many static
+// hosts, proxies and CDNs reject an encoded slash in a path (a plain "Bad
+// request") or decode it into a second segment, so a shared link or a reload
+// broke while clicking through worked. The segment is therefore opaque:
+// base64url of the id's UTF-8 bytes, unpadded, which is only [A-Za-z0-9_-].
+// These two are the only place it is made or read — the path builder above
+// and the route (consolePageOf, and the page's own `$test` param) both call them.
+
+const BASE64URL_SEGMENT = /^[A-Za-z0-9_-]+$/;
+
+/** The path segment for a test id: its UTF-8 bytes as unpadded base64url. */
+export function encodeTestIdSegment(testId: string): string {
+  let binary = "";
+  for (const byte of new TextEncoder().encode(testId)) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * The test id a `$test` segment names, given the segment already
+ * percent-decoded (as the router hands its params over). An encodeTestIdSegment
+ * segment decodes to its id. Anything else is read as the id itself: the
+ * percent-encoded form links carried before the segment went opaque. The two
+ * cannot be confused, because a TestKey id always holds a `:`
+ * ("<runner>:<package>:<name>") and base64url never does; a segment is also
+ * read as base64url only when it is canonical (re-encodes to itself) and its
+ * bytes are valid UTF-8.
+ */
+export function decodeTestIdSegment(segment: string): string {
+  if (!BASE64URL_SEGMENT.test(segment) || segment.length % 4 === 1) return segment;
+  try {
+    const padded = segment.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (segment.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+    const testId = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return encodeTestIdSegment(testId) === segment ? testId : segment;
+  } catch {
+    return segment;
+  }
+}
 
 function safeDecode(segment: string): string {
   try {
@@ -509,7 +553,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         if (dashKey) return null;
         if (sub === TESTS_PAGES.coverage) return dashKind ? null : { kind: "tests-coverage" };
         if (sub === TESTS_PAGES.runs) return dashKind ? { kind: "tests-run", run: safeDecode(dashKind) } : { kind: "tests-runs" };
-        if (sub === TESTS_PAGES.flaky) return dashKind ? { kind: "tests-flaky-test", test: safeDecode(dashKind) } : { kind: "tests-flaky" };
+        if (sub === TESTS_PAGES.flaky) return dashKind ? { kind: "tests-flaky-test", test: decodeTestIdSegment(safeDecode(dashKind)) } : { kind: "tests-flaky" };
         return null;
       default: {
         // A page registered in the nav, while it is registered.
