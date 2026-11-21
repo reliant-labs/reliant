@@ -61,6 +61,9 @@ export const ERROR_REASONS = [
   "approval_not_pending",
   /** The operator turned the forge rpc surface off (internal/grpc/forge_api_disabled.go). */
   "forge_api_disabled",
+  // ── reliant: client version floor (internal/errreason.UpgradeRequired) ──
+  /** This app is older than the minimum the server serves; it must reload or update. FailedPrecondition. */
+  "upgrade_required",
   /** A protected environment wants a fresh step-up (control-plane secret_store). */
   "step_up_required",
   // ── control-plane: daemon lifecycle and entitlement (internal/svcdaemon) ──

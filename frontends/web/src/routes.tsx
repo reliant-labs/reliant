@@ -44,6 +44,7 @@ import { AutomationDialogHost } from './components/Automations/dialog/Automation
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
+import { ClientMinimumWatch } from './components/ClientMinimumWatch'
 import { GlobalUpdateHandler } from './components/Settings/GlobalUpdateHandler'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
@@ -335,6 +336,9 @@ function RootShell() {
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
+      {/* The forced upgrade when this build is below the reliant API's
+          published minimum (lib/clientMinimum.ts). */}
+      <ClientMinimumWatch />
       {/* The desktop app's update dialog: the sidebar button, Settings and
           the app menu's "Check for Updates…" open it from any route. */}
       <GlobalUpdateHandler />
