@@ -114,3 +114,10 @@ func (l *messageLauncher) Launch(_ context.Context, _ launch.Event, spec launch.
 	l.spec = &spec
 	return &launch.Result{Chat: &core.Chat{ID: spec.NewChatID}}, nil
 }
+
+func (*messageLauncher) ResolveDefaultWorkflow(_ context.Context, _, reqWorkflow string) string {
+	if reqWorkflow != "" {
+		return reqWorkflow
+	}
+	return "builtin://agent"
+}

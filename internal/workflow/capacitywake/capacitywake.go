@@ -33,6 +33,9 @@ type Signal struct {
 	// now", and when the user switches the chat to another provider. It does
 	// not change the chat's policy.
 	UseModel string `json:"use_model,omitempty"`
+	// ManualFallback is set only by "Use <model> now" in the wait banner.
+	// Unlike a picker hint, it may temporarily override a saved provider pin.
+	ManualFallback bool `json:"manual_fallback,omitempty"`
 	// AllStopped resumes every sub-agent that stopped on a failure, not only
 	// those a provider stopped. It is set when the user pressed Resume on the
 	// chat, which asks all of the chat to go on. Account and provider changes

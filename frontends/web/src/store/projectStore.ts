@@ -24,6 +24,7 @@ import { trackEvent } from "../lib/analytics";
 import { restoreLastWorktree } from "../hooks/worktree-actions";
 import { openChatInWorkspace, beginWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { homePath, projectPath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 // Lazy router accessor — importing from ../routes at module-init time creates
 // a cycle (routes.tsx → App → ModernApp → projectStore → routes.tsx), which
@@ -67,9 +68,10 @@ export function syncProjectFilterUrl(projectId: string | null) {
   try {
     const router = getRouter();
     if (!router) return; // routes.tsx hasn't registered yet — startup window
-    const currentPath = router.state.location.pathname;
+    // Both org-less: an org page is matched as its org-less twin.
+    const currentPath = orgFreePath(router.state.location.pathname);
     if (projectId) {
-      const targetPrefix = projectPath(projectId);
+      const targetPrefix = orgFreePath(projectPath(projectId));
       if (currentPath === targetPrefix || currentPath.startsWith(`${targetPrefix}/`)) {
         return;
       }

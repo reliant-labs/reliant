@@ -12,8 +12,8 @@ import { ProvidersSection } from "./providers/ProvidersSection";
 import { OrgFundingSection } from "./providers/OrgFundingSection";
 import { SettingsTabPanel, SettingsTabs, type SettingsTabItem } from "./SettingsTabs";
 
-const TABS: ReadonlyArray<SettingsTabItem<AISettingsTab>> = [
-  { id: "providers", label: "Providers" },
+/** Models & tools' tabs; Personal accounts (the providers tab) is its own page. */
+const MODEL_TABS: ReadonlyArray<SettingsTabItem<Exclude<AISettingsTab, "providers">>> = [
   { id: "models", label: "Models" },
   { id: "local", label: "Local & custom" },
 ];
@@ -34,16 +34,20 @@ function useProviderRows() {
 }
 
 /**
- * Settings → AI, in three tabs:
- *   - Providers       the accounts your agents run on ({@link ProvidersSection}),
- *                     with the page's one "Add provider" action in the header;
- *   - Models          which model each tier uses, and which provider a tool
- *                     that picks a model for you (image generation) uses —
- *                     both answer "which model does X use";
- *   - Local & custom  models on your machines, and custom endpoints.
+ * Settings → AI: the one page behind two sidebar entries in the AI group
+ * (Organization accounts, between them, is its own section):
+ *   - Personal accounts  the accounts your agents run on that you connect
+ *                        yourself ({@link ProvidersSection}), with the page's
+ *                        one "Add provider" action, and how the active org's
+ *                        accounts and yours are ordered ({@link OrgFundingSection});
+ *   - Models & tools     which model each tier uses, and which provider a tool
+ *                        that picks a model for you (image generation) uses,
+ *                        in a Models tab; models on your machines and custom
+ *                        endpoints in a Local & custom tab.
  *
- * The tab is the URL's `?tab=` (providers | models | local), so "Default
- * models" can be linked to and survives a refresh.
+ * Which is shown is the URL's `?tab=` (providers | models | local), unchanged
+ * from when they were three tabs of one page, so every link to them still
+ * lands where it did and survives a refresh.
  *
  * Reliant's managed keys and spend live in Billing ("Reliant AI"), linked from
  * the Reliant provider card. Response streaming is a chat preference and lives
@@ -63,36 +67,37 @@ export function AISettings() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const providers = useProviderRows();
 
+  if (tab === "providers") {
+    return (
+      <>
+        <SettingsPageHeader
+          title="Personal accounts"
+          description="The AI accounts you connect yourself. Your agents run on them, and on any your organization gives you."
+          actions={
+            <Button variant="primary" size="lg" leftIcon={<Plus />} aria-expanded={pickerOpen} onClick={() => setPickerOpen(true)}>
+              Add provider
+            </Button>
+          }
+        />
+        <div className="space-y-4" data-onboarding="ai-providers-settings">
+          <OrgFundingSection />
+          <ProvidersSection pickerOpen={pickerOpen} onPickerOpenChange={setPickerOpen} />
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <SettingsPageHeader
-        title="AI providers"
-        description="Connect the AI accounts your agents run on, and choose which models they use."
-        actions={
-          <Button
-            variant="primary"
-            size="lg"
-            leftIcon={<Plus />}
-            aria-expanded={tab === "providers" && pickerOpen}
-            onClick={() => {
-              setTab("providers");
-              setPickerOpen(true);
-            }}
-          >
-            Add provider
-          </Button>
-        }
+        title="Models & tools"
+        description="Choose which models your agents and tools use, and add models on your machines or custom endpoints."
         className="mb-4 border-b-0 pb-0"
       />
-      <SettingsTabs tabs={TABS} value={tab} onChange={setTab} idPrefix="ai-settings" ariaLabel="AI settings" className="mb-6" />
+      <SettingsTabs tabs={MODEL_TABS} value={tab} onChange={setTab} idPrefix="ai-settings" ariaLabel="Models & tools" className="mb-6" />
 
-      <SettingsTabPanel idPrefix="ai-settings" tab={tab} data-onboarding="ai-providers-settings">
-        {tab === "providers" ? (
-          <div className="space-y-4">
-            <OrgFundingSection />
-            <ProvidersSection pickerOpen={pickerOpen} onPickerOpenChange={setPickerOpen} />
-          </div>
-        ) : tab === "models" ? (
+      <SettingsTabPanel idPrefix="ai-settings" tab={tab}>
+        {tab === "models" ? (
           <div className="space-y-4">
             <section aria-label="Default models" className="rounded-lg border border-border bg-card p-4">
               <h2 className="text-sm font-semibold text-foreground">Default models</h2>

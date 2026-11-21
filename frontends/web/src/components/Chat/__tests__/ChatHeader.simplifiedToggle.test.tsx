@@ -43,6 +43,8 @@ vi.mock("../MoveChatToProjectDialog", () => ({
     open ? <div role="dialog">Move {chatId}</div> : null,
 }));
 
+vi.mock("../../../hooks/useOnboardingQueries", () => ({ useDaemonList: () => ({ data: [] }) }));
+
 const { ChatHeader } = await import("../ChatHeader");
 
 async function openMenu() {

@@ -1627,7 +1627,12 @@ type Message struct {
 	// sender is set when another agent, not the human, wrote this message. Such
 	// a message keeps role USER (every provider accepts it) but must not be
 	// presented as the user's own words. Unset means the human (or the model).
-	Sender        *MessageSender `protobuf:"bytes,20,opt,name=sender,proto3" json:"sender,omitempty"`
+	Sender *MessageSender `protobuf:"bytes,20,opt,name=sender,proto3" json:"sender,omitempty"`
+	// thinking_level is the effective thinking (reasoning-effort) level the
+	// assistant turn ran at, after the model's capabilities reconciled the
+	// requested one. Unset for a message no model wrote, a model that takes no
+	// level, and a message saved before this was recorded.
+	ThinkingLevel *string `protobuf:"bytes,21,opt,name=thinking_level,json=thinkingLevel,proto3,oneof" json:"thinking_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1793,6 +1798,13 @@ func (x *Message) GetSender() *MessageSender {
 		return x.Sender
 	}
 	return nil
+}
+
+func (x *Message) GetThinkingLevel() string {
+	if x != nil && x.ThinkingLevel != nil {
+		return *x.ThinkingLevel
+	}
+	return ""
 }
 
 // MessageSender attributes a message to the agent thread that sent it.
@@ -8093,7 +8105,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\rworktree_name\x18\x02 \x01(\tH\x00R\fworktreeName\x88\x01\x01\x123\n" +
 	"\x13worktree_deleted_at\x18\x03 \x01(\tH\x01R\x11worktreeDeletedAt\x88\x01\x01B\x10\n" +
 	"\x0e_worktree_nameB\x16\n" +
-	"\x14_worktree_deleted_at\"\xd8\x06\n" +
+	"\x14_worktree_deleted_at\"\x97\a\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x10\n" +
@@ -8117,7 +8129,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\rdisplay_style\x18\x11 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x05R\fdisplayStyle\x88\x01\x01\x12'\n" +
 	"\x0fsequence_number\x18\x12 \x01(\x03R\x0esequenceNumber\x12\x1c\n" +
 	"\anode_id\x18\x13 \x01(\tH\x06R\x06nodeId\x88\x01\x01\x121\n" +
-	"\x06sender\x18\x14 \x01(\v2\x19.reliant.v1.MessageSenderR\x06senderB\b\n" +
+	"\x06sender\x18\x14 \x01(\v2\x19.reliant.v1.MessageSenderR\x06sender\x12*\n" +
+	"\x0ethinking_level\x18\x15 \x01(\tH\aR\rthinkingLevel\x88\x01\x01B\b\n" +
 	"\x06_modelB\b\n" +
 	"\x06_agentB\x0f\n" +
 	"\r_input_tokensB\x10\n" +
@@ -8125,7 +8138,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_workflow_idB\x10\n" +
 	"\x0e_display_styleB\n" +
 	"\n" +
-	"\b_node_id\"\x8e\x01\n" +
+	"\b_node_idB\x11\n" +
+	"\x0f_thinking_level\"\x8e\x01\n" +
 	"\rMessageSender\x12\x1b\n" +
 	"\tthread_id\x18\x01 \x01(\tR\bthreadId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x120\n" +

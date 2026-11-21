@@ -195,7 +195,7 @@ providers:
 
 Unknown keys, unknown providers and a `fallback` with no model are rejected when the preset loads.
 
-**Who wins.** For a sub-agent: the `providers` argument of its `spawn` call, then its preset's `providers:`, then what it inherits from its parent. Each field resolves on its own, so a spawn that only sets `prefer` keeps the preset's `on_limit`. The root of a chat takes the chat's own choice (the **If \<provider\> is rate-limited** row in the model settings), then the preset, then the Settings default (Settings → AI → Your providers). A model pinned as `<model>@<driver>` still decides which provider the run is on; the policy applies around it.
+**Who wins.** For a sub-agent: the `providers` argument of its `spawn` call, then its preset's `providers:`, then what it inherits from its parent. Each field resolves on its own, so a spawn that only sets `prefer` keeps the preset's `on_limit`. The root of a chat takes the chat's own choice (the **If \<provider\> is rate-limited** row in the model settings), then the preset, then the Settings default (Settings → AI providers → Providers). A model pinned as `<model>@<driver>` still decides which provider the run is on; the policy applies around it.
 
 ### Tool Specification
 

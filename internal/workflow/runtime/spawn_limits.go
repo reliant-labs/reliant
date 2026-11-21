@@ -15,6 +15,11 @@ import (
 // replays every spawn it started.
 const spawnConcurrencyCapChangeID = "spawn-concurrency-cap"
 
+// spawnCapSkipsStoppingChangeID gates leaving a sub-agent that was told to
+// stop out of the caps' counts (stoppingSpawn). A history recorded before it
+// counted every live spawn, and replays that count.
+const spawnCapSkipsStoppingChangeID = "spawn-cap-skips-stopping"
+
 // spawnDepthInput is the workflow input prepareSpawnInline reads a spawning
 // agent's depth from.
 const spawnDepthInput = "spawn_depth"
@@ -43,7 +48,16 @@ func withSpawnerDepth(inputs map[string]interface{}, depth int) map[string]inter
 // spawn that is both — registered live, its reservation not yet settled — is
 // counted once. Only counts are taken, so map order does not matter.
 func (t *ChildWorkflowTracker) liveSpawnCounts(parentThread string) (mine, total int) {
+	return t.spawnCounts(parentThread, false)
+}
+
+// spawnCounts is liveSpawnCounts, leaving out the spawns stoppingSpawn
+// reports when skipStopping is set.
+func (t *ChildWorkflowTracker) spawnCounts(parentThread string, skipStopping bool) (mine, total int) {
 	for _, rec := range t.liveDetachedSpawns {
+		if skipStopping && t.stoppingSpawn(rec) {
+			continue
+		}
 		total++
 		if rec.ParentThread == parentThread {
 			mine++
@@ -59,6 +73,28 @@ func (t *ChildWorkflowTracker) liveSpawnCounts(parentThread string) (mine, total
 		}
 	}
 	return mine, total
+}
+
+// stoppingSpawn reports whether rec, or a spawn above it, was told to stop
+// (spawn_stop, or cancel on its card). The stop is recorded at once — spawn_status
+// and the UI then show it cancelled, and its subtree's rows are ended — but the
+// spawn's loop observes it only at its next step boundary, so a long tool call
+// or model turn keeps it registered live for minutes. It starts no new step in
+// that time, so it no longer holds a concurrency slot: counting it refused
+// spawns while spawn_status listed fewer running agents than the cap.
+func (t *ChildWorkflowTracker) stoppingSpawn(rec *detachedSpawnRecord) bool {
+	if t.spawnCancelled == nil {
+		return false
+	}
+	// Bounded: spawn depth is small, and a malformed parent chain must not
+	// loop forever.
+	for hops := 0; rec != nil && hops < 16; hops++ {
+		if t.spawnCancelled(rec.ToolCallID, rec.ChildThread) {
+			return true
+		}
+		rec = t.liveSpawnFor(rec.ParentThread)
+	}
+	return false
 }
 
 // reserveSpawn holds a concurrency slot for a spawn admitSpawns admitted,
@@ -96,6 +132,12 @@ func (t *ChildWorkflowTracker) admitSpawns(ctx workflow.Context, parentThread st
 	}
 	limits := t.spawnLimits.Resolved()
 	mine, total := t.liveSpawnCounts(parentThread)
+	// A spawn told to stop holds no slot. Versioned only when that changes
+	// the counts, so a run with no stopping spawn records no marker.
+	if m, tot := t.spawnCounts(parentThread, true); (m != mine || tot != total) &&
+		workflow.GetVersion(ctx, spawnCapSkipsStoppingChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		mine, total = m, tot
+	}
 	gated := false
 	for _, cfg := range configs {
 		if cfg.isResumption && t.liveSpawnFor(cfg.childThread) != nil {

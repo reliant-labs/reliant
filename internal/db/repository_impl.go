@@ -2989,7 +2989,12 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 		return fmt.Errorf("workflow cannot be nil")
 	}
 
-	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	// READ COMMITTED: the write is one INSERT … ON CONFLICT DO NOTHING (the
+	// activity emit runs after commit), and its admission triggers are
+	// row-lock protocols that bump the chat's worktree rows. SERIALIZABLE
+	// failed every insert that waited on another run's admission in the same
+	// chat with SQLSTATE 40001 (threads.Service.CreateWorkflowWithThread).
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := store.InsertWorkflowIfAbsent(txCtx, r.ORM(), workflow); err != nil {
 			return err
 		}
@@ -3787,6 +3792,16 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
+}
+
+// FiringsSinceLastUnmanagedSuccess returns the legacy inbox failure episode.
+// Attention-managed actors are excluded before the success boundary and cap;
+// callers needing diagnostic health continue to use the unfiltered reads.
+func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 // GetLatestTriggerEvent returns the trigger's latest firing, optionally
