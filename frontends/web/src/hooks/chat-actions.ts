@@ -412,9 +412,6 @@ export async function listMessages(
     threadId: options?.threadId,
     // Finished calls' bodies are fetched when shown (hooks/content-block-bodies.ts).
     toolBodies: TRANSCRIPT_TOOL_BODY_MODE,
-    // Paging is by cursor (oldestSeq, hasMore); nothing reads a total, and
-    // counting a long chat cost more than the read (obs 16122d5e).
-    skipTotal: true,
   });
   return {
     messages: response.messages.map(convertProtoMessage),

@@ -9,10 +9,8 @@
  * document's HOSTNAME picks the shell, so the forge pages are the same bytes
  * in both and ship with the same release. The public demo
  * (`demo.reliantlabs.io`) is a build of its own (demo.html, the forge-demo
- * frontend of the `demo` env), which is always the demo shell
- * (`__WEB_TARGET__`). Deprecated, kept working until a future major: this
- * bundle still mounts the demo shell on the DEMO_APP_HOST host, so a
- * deployment that still points that host at reliant-web keeps its demo.
+ * frontend), which is always the demo shell (`__WEB_TARGET__`); this bundle
+ * mounts the demo shell only through the dev override below.
  *
  *   forge    the app's one route tree (routes.tsx), as the forge BRAND:
  *            the same routes, guards and pages as Reliant (U6, one shell),
@@ -50,9 +48,6 @@ const isShell = (value: string | null): value is AppShell => (SHELLS as readonly
 /** The forge app host when the runtime config names none. */
 export const DEFAULT_FORGE_APP_HOST = "forge.reliantlabs.io";
 
-/** The demo host when the runtime config names none. */
-export const DEFAULT_DEMO_APP_HOST = "demo.reliantlabs.io";
-
 /** Reliant's hosted origin when the runtime config names none (constants.ts DEFAULT_APP_URL). */
 const DEFAULT_RELIANT_APP_URL = "https://app.reliantlabs.io";
 
@@ -87,20 +82,6 @@ export function forgeAppHost(): string {
   return normalizeHost(configured) || DEFAULT_FORGE_APP_HOST;
 }
 
-/**
- * The public demo's hostname in this bundle: DEMO_APP_HOST, else the default.
- * Deprecated: the demo's own build (demo.html) is the supported path.
- */
-export function demoAppHost(): string {
-  let configured = "";
-  try {
-    configured = loadConfig().DEMO_APP_HOST;
-  } catch {
-    // An invalid config document is configGuard's to report; fall back.
-  }
-  return normalizeHost(configured) || DEFAULT_DEMO_APP_HOST;
-}
-
 /** The forge console's public origin, for Reliant's "Open Forge console" link. */
 export function forgeAppOrigin(): string {
   return `https://${forgeAppHost()}`;
@@ -126,8 +107,6 @@ export interface ShellInputs {
   search: string;
   /** The forge app host (forgeAppHost()). */
   forgeHost: string;
-  /** The demo host (demoAppHost()). */
-  demoHost: string;
   /** True in the desktop app. */
   electron: boolean;
   storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
@@ -138,7 +117,7 @@ export interface ShellInputs {
  * `storage` (that is the point of the override: it outlives the query string,
  * which the router and sign-in redirects drop).
  */
-export function resolveShell({ hostname, search, forgeHost, demoHost, electron, storage }: ShellInputs): AppShell {
+export function resolveShell({ hostname, search, forgeHost, electron, storage }: ShellInputs): AppShell {
   if (electron) return "reliant";
 
   let param: string | null = null;
@@ -166,9 +145,7 @@ export function resolveShell({ hostname, search, forgeHost, demoHost, electron, 
   }
   if (isShell(stored)) return stored;
 
-  const host = normalizeHost(hostname);
-  if (host === demoHost) return "demo";
-  return host === forgeHost ? "forge" : "reliant";
+  return normalizeHost(hostname) === forgeHost ? "forge" : "reliant";
 }
 
 let resolved: AppShell | null = null;
@@ -190,7 +167,6 @@ export function getShell(): AppShell {
     hostname: window.location.hostname,
     search: window.location.search,
     forgeHost: forgeAppHost(),
-    demoHost: demoAppHost(),
     electron: !!window.electronAPI || !!window.RELIANT_CONFIG?.isElectron,
     storage,
   });

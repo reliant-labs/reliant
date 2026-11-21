@@ -116,7 +116,11 @@ message ListPackageCommandsResponse {
 
 message RunPackageCommandRequest {
   optional string worktree_id = 1;
-  optional string path = 2; // Root project path (deprecated, use working_dir)
+  // The project checkout to run in when worktree_id is unset (the web panel
+  // sends it while it has no worktree id for the main checkout, as
+  // ListPackageCommandsRequest.path does). worktree_id wins when set;
+  // working_dir, when set, is where the command runs either way.
+  optional string path = 2;
   string command_name = 3;
   PackageType package_type = 4;
   map<string, string> env = 5;

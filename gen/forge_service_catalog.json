@@ -6969,11 +6969,6 @@
               "Name": "tool_bodies",
               "ProtoType": "enum",
               "IsOptional": true
-            },
-            {
-              "Name": "skip_total",
-              "ProtoType": "bool",
-              "IsOptional": false
             }
           ],
           "ListMessagesResponse": [
@@ -6982,11 +6977,6 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Message"
-            },
-            {
-              "Name": "total",
-              "ProtoType": "int32",
-              "IsOptional": false
             },
             {
               "Name": "count",
@@ -8677,10 +8667,6 @@
               "kind": "enum",
               "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
-            },
-            {
-              "name": "skip_total",
-              "kind": "bool"
             }
           ],
           "reliant.v1.ListMessagesResponse": [
@@ -8689,10 +8675,6 @@
               "kind": "message",
               "type_name": "reliant.v1.Message",
               "repeated": true
-            },
-            {
-              "name": "total",
-              "kind": "int32"
             },
             {
               "name": "count",
@@ -47912,12 +47894,6 @@
               "name": "capabilities",
               "kind": "message",
               "type_name": "reliant.v1.ToolCapabilities"
-            },
-            {
-              "name": "refused_tool_calls",
-              "kind": "map",
-              "map_key_kind": "string",
-              "map_value_kind": "string"
             }
           ],
           "reliant.v1.ExportWorkflowRequest": [
@@ -48252,11 +48228,6 @@
             },
             {
               "name": "display_style",
-              "kind": "message",
-              "type_name": "reliant.v1.CelString"
-            },
-            {
-              "name": "legacy_attachments",
               "kind": "message",
               "type_name": "reliant.v1.CelString"
             },
@@ -49648,11 +49619,6 @@
             },
             {
               "name": "unattended_opt_in",
-              "kind": "string",
-              "repeated": true
-            },
-            {
-              "name": "approval_required",
               "kind": "string",
               "repeated": true
             },

@@ -112,7 +112,6 @@ func TestListMessages_ThreadScoped_ReturnsOnlyThatThread(t *testing.T) {
 	}
 	require.ElementsMatch(t, f.spawnMsgIDs, gotIDs,
 		"a thread-scoped read must return exactly that thread's messages")
-	require.EqualValues(t, len(f.spawnMsgIDs), resp.Msg.Total)
 }
 
 // TestListMessages_ThreadScoped_UnaffectedByMainThreadVolume is the bug this
@@ -159,7 +158,6 @@ func TestListMessages_ThreadScoped_Bounded(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Messages, 4, "recent bounds a thread-scoped page")
 	require.True(t, resp.Msg.HasMore, "6 older messages remain on this thread")
-	require.EqualValues(t, 10, resp.Msg.Total, "total counts the whole thread, not the page")
 
 	// The page must be the NEWEST 4 of the thread.
 	require.Equal(t, f.spawnMsgIDs[len(f.spawnMsgIDs)-4:], idsOf(resp.Msg.Messages))
@@ -224,8 +222,6 @@ func TestListMessages_ThreadIDUnset_MatchesChatWideBehavior(t *testing.T) {
 	require.NoError(t, err)
 	require.ElementsMatch(t, f.mainMsgIDs, idsOf(page.Msg.Messages),
 		"a page is the main transcript: spawn-thread messages stay out, as in the snapshot")
-	require.EqualValues(t, len(f.mainMsgIDs)+len(f.spawnMsgIDs), page.Msg.Total,
-		"total stays the chat-wide count, as in the snapshot")
 
 	all, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.chatID}))
 	require.NoError(t, err)

@@ -74,7 +74,6 @@ type Repository interface {
 	// first typed message ever) once, durably, and reports whether this call
 	// did (user_first_message).
 	ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error)
-	CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error)
 	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)

@@ -236,7 +236,10 @@ export type RunPackageCommandRequest = Message<"reliant.v1.RunPackageCommandRequ
   worktreeId?: string | undefined;
 
   /**
-   * Root project path (deprecated, use working_dir)
+   * The project checkout to run in when worktree_id is unset (the web panel
+   * sends it while it has no worktree id for the main checkout, as
+   * ListPackageCommandsRequest.path does). worktree_id wins when set;
+   * working_dir, when set, is where the command runs either way.
    *
    * @generated from field: optional string path = 2;
    */
