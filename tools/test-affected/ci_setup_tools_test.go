@@ -398,12 +398,17 @@ func TestSetupInstallsCachedTools(t *testing.T) {
 					writeExec(t, filepath.Join(cache, tc.binary), cached)
 				}
 
-				script := strings.ReplaceAll(run, "${{ github.action_path }}", actionDir)
+				// The step finds its script through $GITHUB_ACTION_PATH, never
+				// ${{ github.action_path }}: in a container job (the Playwright
+				// lanes) the expression is the HOST path, which does not exist
+				// inside the container (actions/runner#716), while the env var
+				// is translated. So an expression left in the step fails here.
+				script := run
 				if strings.Contains(script, "${{") {
 					t.Fatalf("%s has an unsubstituted expression:\n%s", tc.install, script)
 				}
 				cmd := exec.CommandContext(t.Context(), "bash", "-e", "-c", script)
-				cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "HOME="+home,
+				cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "HOME="+home, "GITHUB_ACTION_PATH="+actionDir,
 					"RUNNER_TEMP="+tmp, "GITHUB_PATH="+ghPath, "GH_TOKEN=tok", "BUF_VERSION=1.50.0", "V=2.14.0")
 				if out, err := cmd.CombinedOutput(); err != nil {
 					t.Fatalf("%s: %v\n%s", tc.install, err, out)

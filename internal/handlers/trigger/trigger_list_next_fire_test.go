@@ -58,18 +58,17 @@ func TestListTriggersBoundsNextFireLookupsByOneBudget(t *testing.T) {
 	}
 	env.backend.mu.Unlock()
 
-	start := time.Now()
 	resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
-	elapsed := time.Since(start)
 
 	require.NoError(t, err, "a schedule backend that never answers must not fail the list")
 	require.Len(t, resp.Msg.GetTriggers(), n)
 	for _, tr := range resp.Msg.GetTriggers() {
 		assert.Nil(t, tr.NextFireAt, "trigger %s: a lookup that ran out of budget has no next fire time", tr.GetId())
 	}
-	// Serially, or a budget per batch of workers, this would be n/8 budgets
-	// or more; one budget plus the list's own queries is well under this.
-	assert.Less(t, elapsed, 2*time.Second, "the next-fire lookups must share one budget")
+	// Every lookup blocks until its budget runs out, so only the first
+	// nextFireWorkers are ever in flight under one shared budget. A budget per
+	// trigger, or per batch of workers, would go on asking the rest: the count
+	// is the proof, not the wall clock (which measures the machine's load).
 	assert.LessOrEqual(t, int(asked.Load()), nextFireWorkers,
 		"once the budget is spent, the remaining triggers are not asked")
 }
