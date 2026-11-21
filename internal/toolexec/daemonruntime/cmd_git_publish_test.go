@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -613,4 +614,31 @@ func pubSnapshot(t *testing.T, roots ...string) map[string]string {
 		})
 	}
 	return out
+}
+
+// The key and origin a refusal names come from the repository's config. A
+// plain one gets the removal command; one with a newline, an escape sequence
+// or invalid UTF-8 is shown escaped on the refusal's one line, with no
+// command offered for it.
+func TestDangerousConfigRefusalEscapesUntrustedOrigin(t *testing.T) {
+	plain := dangerousConfigRefusal("credential.helper", "file:/repo/.git/config")
+	require.Contains(t, plain, "git config --file '/repo/.git/config' --unset-all 'credential.helper'")
+
+	for name, tc := range map[string]struct{ key, origin string }{
+		"newline in path":       {"credential.helper", "file:/repo/.git/config\ngit config --global core.pager evil"},
+		"escape in path":        {"credential.helper", "file:/repo/\x1b[2K.git/config"},
+		"invalid utf-8 in path": {"credential.helper", "file:/repo/\xff/config"},
+		"newline in key":        {"url.x\nevil.insteadof", "file:/repo/.git/config"},
+		"newline in non-file":   {"credential.helper", "command line:\nevil"},
+		"shell metacharacters":  {"credential.helper", "file:/repo/'$(rm -rf ~)'\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			msg := dangerousConfigRefusal(tc.key, tc.origin)
+			require.NotContains(t, msg, "\n")
+			require.NotContains(t, msg, "\x1b")
+			require.True(t, utf8.ValidString(msg))
+			require.NotContains(t, msg, "--unset-all", "no command is offered for an unrepresentable value")
+			require.Contains(t, msg, "nothing was pushed")
+		})
+	}
 }

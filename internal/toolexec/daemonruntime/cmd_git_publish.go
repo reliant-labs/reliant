@@ -15,6 +15,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitpublish"
@@ -515,18 +517,47 @@ func dangerousKey(ctx context.Context, dir string, env []string) (key, origin st
 // it is set, and how to remove it when it is not needed. It never names the
 // value. The daemon removes only the credential.helper it once wrote itself;
 // anything else is the user's to keep or drop.
+//
+// The key and origin come from the repository's own config, so they are
+// untrusted: one holding a newline or a terminal control character could forge
+// more refusal text, or a command, in a log or the UI. Such a value is shown
+// escaped, and no removal command is offered for it: the user inspects it.
 func dangerousConfigRefusal(key, origin string) string {
-	msg := "the checkout's git config sets " + key
-	if file, ok := strings.CutPrefix(origin, "file:"); ok && file != "" {
+	msg := "the checkout's git config sets " + displayConfigText(key)
+	file, isFile := strings.CutPrefix(origin, "file:")
+	if isFile && file != "" && plainConfigText(file) && plainConfigText(key) {
 		msg += " in " + file + ", which could redirect the push or read the credential: nothing was pushed. " +
 			"A publish never uses a repository's own helpers, proxies or URL rewrites; if this checkout does not need it, remove it with: " +
 			"git config --file " + shellQuote(file) + " --unset-all " + shellQuote(key)
 		return msg
 	}
 	if origin != "" {
-		msg += " (from " + origin + ")"
+		msg += " (from " + displayConfigText(origin) + ")"
 	}
 	return msg + ", which could redirect the push or read the credential: nothing was pushed"
+}
+
+// plainConfigText reports whether s is valid UTF-8 of printable characters
+// only (spaces allowed), so it can be shown, and shell-quoted, as it is.
+func plainConfigText(s string) bool {
+	if !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if r != ' ' && !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// displayConfigText is s as it is when plain, otherwise Go-quoted (ASCII,
+// every control character escaped) so it cannot break out of its line.
+func displayConfigText(s string) string {
+	if plainConfigText(s) {
+		return s
+	}
+	return strconv.QuoteToASCII(s)
 }
 
 func short(sha string) string {
