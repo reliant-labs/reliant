@@ -57,7 +57,7 @@
  * FORGE COMPONENT-LIBRARY TOKEN BRIDGE
  * ═══════════════════════════════════════════════════════════════════════
  *
- * `forge component install <name> --dir .` drops component SOURCE into
+ * `forge ui component install <name> --dir .` drops component SOURCE into
  * src/. Those components are written against forge's own semantic token
  * vocabulary (`bg-surface`, `text-ink`, `bg-danger-surface`, …), which is
  * not reliant's (`bg-card`, `text-foreground`, `bg-destructive`, …).
@@ -67,7 +67,7 @@
  * This block is that bridge: forge's 28 token names re-expressed in terms
  * of reliant's EXISTING HSL theme variables. Done here, once, at the theme
  * layer, every forge component — installed today or by a future
- * `forge component install` — inherits all ten of reliant's color schemes
+ * `forge ui component install` — inherits all ten of reliant's color schemes
  * plus light/dark for free.
  *
  * ── Why here and not the two obvious alternatives ────────────────────
@@ -79,7 +79,7 @@
  * reliant does not set).
  *
  * NOT by find-replacing forge's class names inside the installed files:
- * those files are overwritten by the next `forge component install`, so
+ * those files are overwritten by the next `forge ui component install`, so
  * the edit would have to be redone on every reinstall, forever.
  *
  * ── How the plumbing works (verified against the v4 compiler) ────────

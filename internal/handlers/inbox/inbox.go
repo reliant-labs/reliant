@@ -453,6 +453,15 @@ func (r *itemReads) pending(ctx context.Context, userID string, p *core.InboxPen
 	return authz.CanReadOwn(ctx, userID, nil)
 }
 
+// incident requires live authority over both the chat and its project, even
+// when its trigger has been deleted.
+func (r *itemReads) incident(ctx context.Context, userID string, a *core.AttentionIncident) bool {
+	if a.ChatID == "" || a.ProjectID == "" {
+		return false
+	}
+	return r.chat(ctx, userID, a.ChatID) && r.project(ctx, userID, a.ProjectID)
+}
+
 func (r *itemReads) recovery(ctx context.Context, userID string, row *core.WorktreeRecovery) bool {
 	if row.ProjectID == "" {
 		return authz.CanReadOwn(ctx, userID, nil)

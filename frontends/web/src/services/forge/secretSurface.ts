@@ -77,9 +77,9 @@ import { managedSecretState } from "./secretStore";
  *   managed   the hosted store. Full versioned surface: create, set, delete,
  *             undelete, destroy, history.
  *   managed-remote  the hosted store, as forge sees it, but not readable from
- *             this console. Read-only; `forge secret set` is the write path.
+ *             this console. Read-only; `forge env secret set` is the write path.
  *   file      forge's gitignored YAML, dev/e2e only. Read-only HERE — the way
- *             you write one is `forge secret set` on your own machine, and
+ *             you write one is `forge env secret set` on your own machine, and
  *             offering a web form that cannot reach that file would be a
  *             button that lies.
  *   external  declared, provisioned out of band. No create, by design.
@@ -98,7 +98,7 @@ export function surfaceMode(
   // managed store does not make an external environment writable.
   if (kind === "external") return "external";
   // rendered resolves from the env's local file store, so it has the file
-  // surface's write path (`forge secret set`), never a browser write.
+  // surface's write path (`forge env secret set`), never a browser write.
   if (kind === "file" || kind === "rendered") return "file";
   if (kind === "hosted") return storeAvailable ? "managed" : "managed-remote";
 
@@ -144,9 +144,9 @@ export function modeExplanation(mode: SecretSurfaceMode, envKind?: string): stri
       }
       return "Values live in the managed store and are fetched at deploy time over an authenticated channel. You can set them here; you cannot read them back.";
     case "managed-remote":
-      return "Values live in this environment's managed store on its control plane. This console cannot write to it — set them with `forge secret set`.";
+      return "Values live in this environment's managed store on its control plane. This console cannot write to it — set them with `forge env secret set`.";
     case "file":
-      return "Values live in a gitignored file on your own machine, for local development only. Set them with `forge secret set` — reliant cannot reach that file from here.";
+      return "Values live in a gitignored file on your own machine, for local development only. Set them with `forge env secret set` — reliant cannot reach that file from here.";
     case "external":
       return "An external secret manager holds these values and they are provisioned out of band. Forge never sees them, so there is nothing for reliant to create or read.";
     default:

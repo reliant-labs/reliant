@@ -334,7 +334,7 @@ func TestReclaimProposalsChangeTheReportSignature(t *testing.T) {
 
 func TestWorktreeReap_RunsForgesReaperWithRemovalOverTheRootsCheckouts(t *testing.T) {
 	got := worktreeReapCommandArgs("/r")
-	want := []string{"forge", "storage", "worktrees", "--repo", "/r", "--apply", "--reliant-managed"}
+	want := []string{"forge", "machine", "storage", "worktrees", "--repo", "/r", "--apply", "--reliant-managed"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("args = %v, want %v", got, want)
 	}

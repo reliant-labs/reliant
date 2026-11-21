@@ -329,8 +329,8 @@ func (x *LogConfig) GetFormat() string {
 }
 
 // StorageReaperConfig is how the daemon schedules forge's storage reaper
-// (`forge storage auto-gc`) on its own machine. A daemon has no systemd timer
-// or cron to run `forge storage install`'s schedule, and the pass that
+// (`forge machine storage auto-gc`) on its own machine. A daemon has no systemd timer
+// or cron to run `forge machine storage install`'s schedule, and the pass that
 // `forge env up` starts in the background is rate-limited to once a day and
 // only fires after an `up`; the Go build cache grows far faster than that
 // (internal/diskwatch/reaper.go has the design). The reaper's own budgets
@@ -349,11 +349,11 @@ type StorageReaperConfig struct {
 	// How soon the reaper may run again while a watched volume is under disk
 	// pressure. A Go duration; below 1m is raised to 1m.
 	PressureInterval string `protobuf:"bytes,3,opt,name=pressure_interval,json=pressureInterval,proto3" json:"pressure_interval,omitempty"`
-	// Forge's machine storage policy, the file `forge storage` reads. FORGE_STORAGE_POLICY
+	// Forge's machine storage policy, the file `forge machine storage` reads. FORGE_STORAGE_POLICY
 	// is forge's own variable, so the daemon and the passes it starts agree on the
 	// file. Unset: forge's default, <user config dir>/forge/storage.json.
 	PolicyPath string `protobuf:"bytes,4,opt,name=policy_path,json=policyPath,proto3" json:"policy_path,omitempty"`
-	// How often the Go-cache pass (`forge storage gocache --apply`) runs between
+	// How often the Go-cache pass (`forge machine storage gocache --apply`) runs between
 	// full passes. Under agent load ~25 GiB of the shared Go build cache crosses
 	// forge's 2h safety floor every hour, so an hourly trim leaves that much
 	// removable cache on the disk. A Go duration; below 2m is raised to 2m;

@@ -131,7 +131,7 @@ When the template binds its workloads to [Reliant hosting](/hosting/overview) (`
 
 The database is created for that environment and the deploy runs your migrations against it, so a preview starts with your schema and no data. Forge copies the template's configuration, not anything from a running environment: no rows come over from staging or prod.
 
-Secrets are per environment and are **not** copied from the template. Give each instance the secrets it needs with `reliant forge secret set --env preview-pr-123 <NAME>` (see [Secrets](/hosting/secrets)), or keep previews on configuration that needs none.
+Secrets are per environment and are **not** copied from the template. Give each instance the secrets it needs with `reliant forge env secret set --env preview-pr-123 <NAME>` (see [Secrets](/hosting/secrets)), or keep previews on configuration that needs none.
 
 If the template renders onto a Kubernetes cluster you operate instead, give each preview its own namespace by deriving it from the environment name, which forge sets on every render:
 
