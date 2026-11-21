@@ -137,6 +137,10 @@ Error: refusing to stop daemon PID 241: it is a managed daemon (record /home/wor
 
 ## Join a machine pool when it starts
 
+<Note>
+`daemon start --label`, `reliant machine label` and `reliant machine pool` are new in reliant v1.23.0. An older CLI does not list them in `--help` and rejects them; check yours with `reliant --version`.
+</Note>
+
 A machine pool is a named set of your machines: those whose labels contain the pool's selector (by default `pool=<name>`). A trigger or workflow that targets the pool runs on one of its members. To make a new box a member with no one labelling it in the app, have it declare its labels when it starts:
 
 ```bash

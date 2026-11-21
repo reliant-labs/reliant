@@ -47,7 +47,7 @@ export function RescanModal({
         </div>
 
         <div className="p-4 bg-muted/30 rounded-lg border border-border space-y-3">
-          <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
+          <p className="text-xs font-semibold text-foreground">
             What happens during a rescan:
           </p>
           <ul className="text-sm text-muted-foreground space-y-2">

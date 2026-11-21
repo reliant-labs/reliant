@@ -112,7 +112,7 @@ export function DomainDetail({
       )}
 
       <section className="flex flex-col gap-2">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+        <h4 className="text-xs font-medium text-ink-muted">
           DNS records
         </h4>
         <DnsRecordsTable records={domain.requiredRecords} />
@@ -123,7 +123,7 @@ export function DomainDetail({
       </section>
 
       <section className="flex flex-col gap-2">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
+        <h4 className="text-xs font-medium text-ink-muted">
           Serving
         </h4>
         <p className="text-sm text-ink" data-testid="domain-binding">

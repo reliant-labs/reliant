@@ -43,6 +43,17 @@ describe("classifyRpcFailure", () => {
     expect(classifyRpcFailure(new ConnectError(refused.rawMessage, Code.FailedPrecondition), reliant)).toBe("expected");
   });
 
+  it("reads a worktree-recovery refusal as the machine busy for a moment, only with its reason", () => {
+    const recovering = new Headers({ "x-forge-error-reason": "worktree_recovering" });
+    const text = "daemon command exec.bg_list failed: workspace recovery finalization in progress; retry this operation";
+    expect(classifyRpcFailure(new ConnectError(text, Code.Unavailable, recovering), reliant)).toBe("machine-busy");
+    // It is not a machine that is connecting: the daemon-wait UI must not claim it.
+    expect(classifyRpcFailure(new ConnectError(text, Code.Unavailable, recovering), reliant)).not.toBe("machine-wait");
+    // The same reason on Internal, or the text without the reason, still reports.
+    expect(classifyRpcFailure(new ConnectError(text, Code.Internal, recovering), reliant)).toBe("report");
+    expect(classifyRpcFailure(new ConnectError(text, Code.Unavailable), reliant)).toBe("report");
+  });
+
   it("reads a bare 404 from the reliant API as this app being out of date", () => {
     const unrouted = new ConnectError("HTTP 404", Code.Unimplemented);
     expect(isUnroutedProcedure(unrouted)).toBe(true);

@@ -200,7 +200,12 @@ func (r *Runs) DeliverToRun(ctx context.Context, userID, chatID, thread, message
 	}
 	delivery := tools.RunDelivery{Delivered: resp.Msg.Delivered}
 	if !resp.Msg.Delivered {
-		delivery.NotDeliveredReason = resp.Header().Get(errreason.NotDeliveredHeader)
+		// The field, else the header: a server older than the field sends
+		// only the header.
+		delivery.NotDeliveredReason = resp.Msg.NotDeliveredReason
+		if delivery.NotDeliveredReason == "" {
+			delivery.NotDeliveredReason = resp.Header().Get(errreason.NotDeliveredHeader)
+		}
 	}
 	if len(resp.Msg.MessageIds) > 0 {
 		delivery.MessageID = resp.Msg.MessageIds[0]

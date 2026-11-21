@@ -179,3 +179,34 @@ func TestMetadataHandler_AdvertisesDevicePairing(t *testing.T) {
 		t.Fatalf("device endpoint = %q, %v", ep, err)
 	}
 }
+
+// ExpiresIn rides the authorization request as expires_in, whole seconds
+// (control-plane cliauth.ExpiresInParam); unset sends nothing, so an older
+// control plane sees the request it always did (north-star AW-48).
+func TestDeviceLogin_SendsTheRequestedLifetime(t *testing.T) {
+	for _, tc := range []struct {
+		expiresIn time.Duration
+		want      string
+	}{
+		{0, ""},
+		{12 * time.Hour, "43200"},
+	} {
+		srv, _, form := fakeDeviceServer(t, true, []map[string]any{
+			{"access_token": "rlat_0123456789abcdef", "scope": "runs:start", "expires_in": 43200},
+		})
+		cred, err := DeviceLogin{
+			Server: srv.URL, Scopes: []string{"runs:start"}, Name: "ci", Out: &bytes.Buffer{},
+			Sleep: noSleep, ExpiresIn: tc.expiresIn,
+		}.Run(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := form.Load().(interface{ Get(string) string })
+		if got := f.Get(ExpiresInParam); got != tc.want {
+			t.Errorf("ExpiresIn %v: %s = %q, want %q", tc.expiresIn, ExpiresInParam, got, tc.want)
+		}
+		if cred.ExpiresAt == nil {
+			t.Errorf("ExpiresIn %v: the reply's expires_in was not read into ExpiresAt", tc.expiresIn)
+		}
+	}
+}

@@ -112,7 +112,7 @@ function PresetGroup({
 }) {
   return (
     <>
-      <div className="px-4 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
+      <div className="px-4 py-1.5 text-2xs font-semibold text-muted-foreground bg-muted/30 border-t border-border/30">
         {label}
       </div>
       {presets.map((preset) => (

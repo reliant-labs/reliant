@@ -343,7 +343,7 @@ add an implementation-split wave after Y and change none of the lanes before it.
    `s.deps.Repo.X(…)` call site, and so every rpc body the P7 svcerr sweep edits, stays
    byte-identical. This rule is what makes P6 and P7 near-conflict-free.
 2. A role interface lists **only** methods the package calls, plus embedded callee roles
-   for values it forwards (§2.2.4). Prefer `forge fix narrow-deps <dir>` where it applies.
+   for values it forwards (§2.2.4). Prefer `forge lint fix narrow-deps <dir>` where it applies.
    It writes `deps.go` + `mock_gen.go`, but it skips escaping fields (§1.3), so the forwarding
    cases are by hand until F-P6a lands.
 3. Name: `Repository` in a handler's `deps.go` (matching the 20 that exist); unexported
@@ -472,7 +472,7 @@ gone. With A, the hand layer is permanent (it is the behaviour), so that step is
     case: all 7 fat handler `Deps.Repo` fields escape.
   - With the fix, a 463-method foreign interface of which the package plus its callees use
     74 is an **error**, as the rule intends (`depsSurfaceWideMethods = 10`).
-  - `forge fix narrow-deps` can then emit the union, with the callee roles embedded.
+  - `forge lint fix narrow-deps` can then emit the union, with the callee roles embedded.
   - Only escapes into a concrete type, `any`, a struct literal field or a return value keep
     the exemption.
   - Files: `internal/depsurface/depsurface.go` (`readUses`/the escape branch at :513),

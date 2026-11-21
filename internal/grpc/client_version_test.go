@@ -43,12 +43,10 @@ func testSystem(t *testing.T) testRoute {
 // floorPolicy floors the CLI at 1.9.0 and names how to upgrade it.
 func floorPolicy(enforce bool) *configv1.ClientVersionPolicy {
 	return &configv1.ClientVersionPolicy{
-		Cli: &configv1.CliClientVersionFloor{
-			MinVersion:     "1.9.0",
-			UpgradeUrl:     "https://reliantlabs.io/download",
-			UpgradeCommand: "brew upgrade --cask reliant",
-		},
-		Enforce: enforce,
+		CliMinVersion:     "1.9.0",
+		CliUpgradeUrl:     "https://reliantlabs.io/download",
+		CliUpgradeCommand: "brew upgrade --cask reliant",
+		Enforce:           enforce,
 	}
 }
 
@@ -166,8 +164,9 @@ func TestClientVersionGateObservesWithoutEnforce(t *testing.T) {
 
 func TestClientVersionGateRefusesStreams(t *testing.T) {
 	policy := &configv1.ClientVersionPolicy{
-		Web:     &configv1.WebClientVersionFloor{MinVersion: "1.9.0", UpgradeUrl: "https://app.reliantlabs.io"},
-		Enforce: true,
+		WebMinVersion: "1.9.0",
+		WebUpgradeUrl: "https://app.reliantlabs.io",
+		Enforce:       true,
 	}
 	_, baseURL := startTestServerWithClientVersions(t, policy, testStreaming(t))
 	client := reliantv1connect.NewStreamingServiceClient(h2cClient(), baseURL)
@@ -219,6 +218,12 @@ func TestRefuseUnidentified(t *testing.T) {
 		require.True(t, errors.As(err, &connectErr), "got %v", err)
 		require.Equal(t, connect.CodeUnimplemented, connectErr.Code(), "got %v", err)
 		require.Empty(t, connectErr.Meta().Get(svcerr.ReasonHeader), "a bare 404, not a Connect error")
+	})
+	t.Run("a browser-origin call with an unparseable header is served, at the edge and in the interceptor", func(t *testing.T) {
+		for _, v := range []string{"web/latest", "toaster/1.0.0", "garbage"} {
+			_, err := forge.GetTopology(context.Background(), asClient(&reliantv1.GetForgeTopologyRequest{}, v, testBrowserOrigin))
+			requireReachedHandler(t, err)
+		}
 	})
 	t.Run("a call that names itself passes, with no floor configured", func(t *testing.T) {
 		for _, v := range []string{"sdk-go/0.0.0-20261120010203-abcdef123456", "sdk-ts/0.1.0", "web/1.0.0"} {
@@ -284,6 +289,16 @@ func TestEnforceLegacyUnidentified(t *testing.T) {
 		resp := post(t, topology, testBrowserOrigin, "web/1.0.0")
 		require.NotEqual(t, http.StatusNotFound, resp.StatusCode)
 	})
+	t.Run("browser origin with an unparseable header is served, as the interceptor serves it", func(t *testing.T) {
+		for _, client := range []string{"web/latest", "toaster/1.0.0", "garbage"} {
+			resp := post(t, topology, testBrowserOrigin, client)
+			require.NotEqual(t, http.StatusNotFound, resp.StatusCode, client)
+		}
+	})
+	t.Run("browser origin with a blank header is unidentified: the 404", func(t *testing.T) {
+		resp := post(t, topology, testBrowserOrigin, "   ")
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
 	t.Run("no origin, no header (CLI, SDK, curl) is served", func(t *testing.T) {
 		resp := post(t, topology, "", "")
 		require.NotEqual(t, http.StatusNotFound, resp.StatusCode)
@@ -317,7 +332,7 @@ func TestClientVersionGateIgnoresNonReliantProcedures(t *testing.T) {
 	t.Parallel()
 	gate := newClientVersionGate(&configv1.ClientVersionPolicy{
 		Enforce: true, RefuseUnidentified: true, EnforceLegacyUnidentified: true,
-		Cli: &configv1.CliClientVersionFloor{MinVersion: "9.0.0"},
+		CliMinVersion: "9.0.0",
 	})
 	for _, procedure := range []string{"/forge.v1.Something/Do", "/grpc.health.v1.Health/Check"} {
 		require.NoError(t, gate.check(context.Background(), procedure, http.Header{}))

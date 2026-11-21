@@ -58,15 +58,16 @@ func TestVersion_ServesConfiguredClientMinimums(t *testing.T) {
 // served.
 func testPolicy() *configv1.ClientVersionPolicy {
 	return &configv1.ClientVersionPolicy{
-		Web: &configv1.WebClientVersionFloor{MinVersion: "1.9.0", UpgradeUrl: "https://app.reliantlabs.io"},
-		Desktop: &configv1.DesktopClientVersionFloor{
-			MinVersion: "1.9.0", UpgradeUrl: "https://reliantlabs.io/download",
-		},
-		Daemon: &configv1.DaemonClientVersionFloor{
-			MinVersion: "1.8.2-dev", UpgradeCommand: "reliant daemon restart", MinCommitTimeUnix: 1_763_000_000,
-		},
-		Cli:     &configv1.CliClientVersionFloor{MinVersion: "1.9.0", UpgradeCommand: "brew upgrade --cask reliant"},
-		Enforce: true,
+		WebMinVersion:           "1.9.0",
+		WebUpgradeUrl:           "https://app.reliantlabs.io",
+		DesktopMinVersion:       "1.9.0",
+		DesktopUpgradeUrl:       "https://reliantlabs.io/download",
+		DaemonMinVersion:        "1.8.2-dev",
+		DaemonUpgradeCommand:    "reliant daemon restart",
+		DaemonMinCommitTimeUnix: 1_763_000_000,
+		CliMinVersion:           "1.9.0",
+		CliUpgradeCommand:       "brew upgrade --cask reliant",
+		Enforce:                 true,
 	}
 }
 

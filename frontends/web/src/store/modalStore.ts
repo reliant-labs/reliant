@@ -55,7 +55,7 @@ export interface UpgradeRequiredData {
 
 /** Which provider the API-key setup dialog opens on; omitted: its own default. */
 export interface ApiKeySetupData {
-  provider?: "claude" | "codex" | "antigravity" | "copilot" | "anthropic" | "openai" | "gemini" | "openrouter";
+  provider?: "claude" | "codex" | "antigravity" | "copilot" | "anthropic" | "openai" | "gemini" | "vertexai" | "openrouter";
 }
 
 export interface ModalData {

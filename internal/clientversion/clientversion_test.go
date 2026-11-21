@@ -33,6 +33,12 @@ func TestParse(t *testing.T) {
 		{value: "web/latest", wantErr: true},
 		{value: "toaster/1.0.0", wantErr: true},
 		{value: "/1.0.0", wantErr: true},
+		// A numeric prerelease identifier has no leading zero (semver 2.0.0 §9),
+		// the same rule the config floors are validated by.
+		{value: "web/1.9.0-0", want: Client{Kind: KindWeb, Version: "1.9.0-0"}},
+		{value: "web/1.9.0-0rc", want: Client{Kind: KindWeb, Version: "1.9.0-0rc"}},
+		{value: "web/1.9.0-01", wantErr: true},
+		{value: "web/1.9.0-rc.01", wantErr: true},
 	} {
 		t.Run(tc.value, func(t *testing.T) {
 			t.Parallel()
@@ -84,29 +90,31 @@ func TestFloorFor(t *testing.T) {
 	t.Parallel()
 
 	policy := &configv1.ClientVersionPolicy{
-		Web:     &configv1.WebClientVersionFloor{MinVersion: "1.0.0"},
-		Desktop: &configv1.DesktopClientVersionFloor{MinVersion: "1.1.0"},
-		Daemon:  &configv1.DaemonClientVersionFloor{MinVersion: "1.2.0"},
-		Cli:     &configv1.CliClientVersionFloor{MinVersion: "1.3.0"},
-		SdkGo:   &configv1.SdkGoClientVersionFloor{MinVersion: "1.4.0"},
-		SdkTs:   &configv1.SdkTsClientVersionFloor{MinVersion: "1.5.0", UpgradeCommand: "npm i @reliantlabs/sdk"},
+		WebMinVersion:       "1.0.0",
+		DesktopMinVersion:   "1.1.0",
+		DaemonMinVersion:    "1.2.0",
+		CliMinVersion:       "1.3.0",
+		SdkGoMinVersion:     "1.4.0",
+		SdkTsMinVersion:     "1.5.0",
+		SdkTsUpgradeUrl:     "https://www.npmjs.com/package/@reliantlabs/sdk",
+		SdkTsUpgradeCommand: "npm i @reliantlabs/sdk",
 	}
 	want := map[Kind]string{
 		KindWeb: "1.0.0", KindDesktop: "1.1.0", KindDaemon: "1.2.0",
 		KindCLI: "1.3.0", KindSDKGo: "1.4.0", KindSDKTS: "1.5.0",
 	}
 	for _, k := range Kinds {
-		if got := FloorFor(policy, k).GetMinVersion(); got != want[k] {
+		if got := FloorFor(policy, k).MinVersion; got != want[k] {
 			t.Errorf("FloorFor(%s) = %q, want %q", k, got, want[k])
 		}
 	}
-	if got := FloorFor(policy, KindSDKTS).GetUpgradeCommand(); got != "npm i @reliantlabs/sdk" {
-		t.Errorf("FloorFor(sdk-ts).UpgradeCommand = %q", got)
+	if got := FloorFor(policy, KindSDKTS); got.UpgradeCommand != "npm i @reliantlabs/sdk" || got.UpgradeURL != "https://www.npmjs.com/package/@reliantlabs/sdk" {
+		t.Errorf("FloorFor(sdk-ts) = %+v", got)
 	}
-	if got := FloorFor(nil, KindWeb).GetMinVersion(); got != "" {
+	if got := FloorFor(nil, KindWeb).MinVersion; got != "" {
 		t.Errorf("FloorFor(nil policy) = %q, want no floor", got)
 	}
-	if got := FloorFor(policy, Kind("toaster")).GetMinVersion(); got != "" {
+	if got := FloorFor(policy, Kind("toaster")).MinVersion; got != "" {
 		t.Errorf("FloorFor(unknown kind) = %q, want no floor", got)
 	}
 }

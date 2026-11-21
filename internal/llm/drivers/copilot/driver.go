@@ -69,7 +69,7 @@ func NewClient(opts llm.DriverOptions) (*CopilotClient, error) {
 		opts.ReasoningEffort = "medium"
 	}
 
-	// The stored credential is a GitHub OAuth token (device flow or GitHub CLI).
+	// The stored credential is the GitHub OAuth token from the device flow.
 	// The resolver passes it via ApiKey/BearerToken.
 	githubToken, err := resolveGitHubToken(opts)
 	if err != nil {
@@ -164,9 +164,16 @@ func newAnthropicDialectAt(baseURL string, opts llm.DriverOptions, githubToken s
 // gpt-5.6-*, gpt-6-*) keep their catalog preferred_endpoint; everything else
 // (gemini, claude-via-openai) is forced to Chat Completions.
 func newOpenAIDialect(opts llm.DriverOptions, githubToken string, headers map[string]string) dialectClient {
+	return newOpenAIDialectAt(individualBaseURL, opts, githubToken, headers)
+}
+
+// newOpenAIDialectAt is newOpenAIDialect against an explicit base URL. Its
+// requests open through the OpenAI client's retry ladder, named for Copilot
+// in its logs and usage-limit errors.
+func newOpenAIDialectAt(baseURL string, opts llm.DriverOptions, githubToken string, headers map[string]string) *openai.OpenaiClient {
 	oopts := opts
 	oopts.ApiKey = githubToken
-	oopts.BaseURL = individualBaseURL
+	oopts.BaseURL = baseURL
 
 	// Merge the Copilot headers into a private copy of ExtraHeaders so we never
 	// mutate the caller's map.
@@ -179,7 +186,9 @@ func newOpenAIDialect(opts llm.DriverOptions, githubToken string, headers map[st
 	}
 	oopts.ExtraHeaders = merged
 
-	return openai.NewClient(oopts)
+	client := openai.NewClient(oopts)
+	client.RetryProvider = "GitHub Copilot"
+	return client
 }
 
 // SendMessages delegates to the per-model dialect implementation.

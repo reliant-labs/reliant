@@ -109,6 +109,10 @@ func markTextOnlyUserError(err error) error {
 	return err
 }
 
+// StreamEndedEarlyErrType is the Temporal error type of an activity failure
+// caused by drivererrors.ErrStreamEndedEarly. Always retryable.
+const StreamEndedEarlyErrType = "LLMStreamEndedEarly"
+
 // classifyError determines if an error is terminal or transient
 // Returns a Temporal-compatible error that controls retry behavior
 func classifyError(err error) error {
@@ -142,6 +146,18 @@ func classifyError(err error) error {
 		delay, retry := scheduled.RetryAfter()
 		return temporal.NewApplicationErrorWithOptions(err.Error(), scheduled.TemporalErrorType(),
 			temporal.ApplicationErrorOptions{NonRetryable: !retry, NextRetryDelay: delay, Cause: err})
+	}
+
+	// A provider stream that closed before its terminal event is a response
+	// cut short in transit: always retryable, and decided by identity before
+	// every text rule below, so no word a layer above wraps it in ("not
+	// found", "invalid") can make it terminal. This runs in the worker, where
+	// the Go error still carries its identity; it crosses to the workflow as
+	// a typed, retryable ApplicationError (flattenForTemporal keeps the type
+	// and NonRetryable=false).
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return temporal.NewApplicationErrorWithOptions(err.Error(), StreamEndedEarlyErrType,
+			temporal.ApplicationErrorOptions{NonRetryable: false, Cause: err})
 	}
 
 	// A database that did not answer is always retryable, and is decided
@@ -336,6 +352,9 @@ func categorizeError(err error) string {
 
 	if errors.Is(err, drivererrors.ErrEmptyInput) {
 		return "validation"
+	}
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return "network"
 	}
 
 	// Before "not found": a database outage is what a mislabelled lookup
@@ -569,6 +588,11 @@ func isTerminal(err error) bool {
 	var appErr *temporal.ApplicationError
 	if errors.As(err, &appErr) {
 		return appErr.NonRetryable() || appErr.Type() == "TerminalError"
+	}
+
+	// Identity beats the text rules below; see classifyError.
+	if errors.Is(err, drivererrors.ErrStreamEndedEarly) {
+		return false
 	}
 
 	if kind, _, ok := chatmarkers.Extract(err.Error()); ok {

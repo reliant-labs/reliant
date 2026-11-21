@@ -17,7 +17,7 @@ access: openable by the workspace owner (authenticated); make the port public to
 
 The URL is built on the machine from an address Reliant gives it when the machine starts, so the command makes no network call and works the same way every time. The URL goes to stdout and the note about access goes to stderr, so `URL=$(reliant preview-url 5173)` captures only the URL.
 
-By default only you can open a preview, after signing in to Reliant. To share it, open the ports menu in the app header, which appears as soon as the machine reports a listening port, and switch that port to **Public**. Anyone with the link can then open it, until you switch it back.
+By default a preview opens only for someone signed in to Reliant who owns the machine: you, for a machine of your own, or any member of the organization that owns it. To share it, open the ports menu in the app header, which appears as soon as the machine reports a listening port, and switch that port to **Public**. Anyone with the link can then open it, until you switch it back.
 
 ## On your own computer
 

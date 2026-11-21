@@ -10,7 +10,7 @@ import (
 )
 
 // forgeStartHereSkill is the catalog path of forge's own start-here skill: the
-// body `reliant forge skill load forge` prints. It is the path the delivery
+// body `reliant forge agent skill load forge` prints. It is the path the delivery
 // renderer keys the start-here's allowance on, so it is declared there once.
 const forgeStartHereSkill = tools.ForgeStartHereSkillPath
 
@@ -39,7 +39,7 @@ const forgeStartHereSkill = tools.ForgeStartHereSkillPath
 //
 // SOURCE. Only the forge-scoped entry counts. Its body was rendered on the
 // daemon from the forge linked into the reliant binary, through
-// forgecli.RenderSkill — the renderer `reliant forge skill load` itself
+// forgecli.RenderSkill — the renderer `reliant forge agent skill load` itself
 // prints through. A copy rendered to disk (.claude/skills/...) is a different
 // scope; if one shadows the forge entry, nothing is preloaded rather than the
 // possibly-stale render.

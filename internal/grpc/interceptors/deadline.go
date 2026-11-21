@@ -26,6 +26,10 @@ const UnaryTimeout = 10 * time.Second
 
 const worktreeOperationTimeout = 120 * time.Second
 
+// enableWorkflowTimeout bounds EnableWorkflow and DisableWorkflow, which write
+// one trigger after another inside a single call.
+const enableWorkflowTimeout = 60 * time.Second
+
 // ProcedureTimeouts is the per-procedure budget table (serverkit
 // Deadline.Procedures): the methods that need longer than UnaryTimeout, and
 // those that wait on a person (0, no server deadline).
@@ -81,6 +85,13 @@ func ProcedureTimeouts(owned ...map[string]time.Duration) map[string]time.Durati
 		"/reliant.v1.MCPService/RestartServer":      60 * time.Second,
 		"/reliant.v1.MCPService/UpdateServerConfig": 60 * time.Second,
 		"/reliant.v1.MCPService/UninstallServer":    60 * time.Second,
+		// Enabling or pausing a workflow's automations writes each trigger
+		// it declares in turn, and each converges (schedule, webhook,
+		// machine grant) before the next starts. That took about 3s per
+		// trigger, so a workflow with three triggers ran past UnaryTimeout,
+		// and the all-or-nothing enable undid every one of them.
+		"/reliant.v1.TriggerService/EnableWorkflow":  enableWorkflowTimeout,
+		"/reliant.v1.TriggerService/DisableWorkflow": enableWorkflowTimeout,
 		// OAuth flows — no timeout, user can take as long as needed.
 		// Cancellation is handled by the frontend AbortController.
 		"/reliant.v1.DaemonService/StartOAuthFlow":   0,
