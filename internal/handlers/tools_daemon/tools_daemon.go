@@ -208,6 +208,16 @@ type daemonConnection struct {
 	// stream to another replica, which pendingToolRequests never saw.
 	daemonToolCallsInFlight atomic.Uint32
 
+	// drainsOnRestartRequest is the daemon's
+	// DaemonRegister.drains_on_restart_request: it acts on RestartRequested
+	// (upgrade.go). Set once, at registration.
+	drainsOnRestartRequest bool
+	// upgradeState and upgradeDeadlineMs are the drain-protocol state the
+	// daemon's newest heartbeat reported (a reliantv1.DaemonUpgradeState and
+	// its deadline). Written only by the receive loop.
+	upgradeState      atomic.Int32
+	upgradeDeadlineMs atomic.Int64
+
 	// pendingCommands tracks in-flight DaemonCommandRequests awaiting responses.
 	// Key is request_id, value is a channel that receives the response.
 	pendingCommandsMu sync.Mutex

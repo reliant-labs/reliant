@@ -18,9 +18,11 @@ func newAuthServeCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Start a local OAuth helper server",
+		Short: "Start the local callback helper for Claude and Codex",
 		Long: `Starts a lightweight HTTP server on localhost that handles OAuth
-callback flows for Claude and Codex authentication.
+callback flows for Claude and Codex authentication. It does not sign in to
+Reliant or start a browser on its own. To sign in to the Reliant CLI, run
+'reliant auth login'.
 
 USUALLY YOU DO NOT NEED THIS. ` + "`reliant daemon start`" + ` serves the same
 endpoints when it runs on the machine your browser is on, so a local daemon
@@ -60,7 +62,9 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "OAuth helper server listening on http://%s\n", srv.Addr())
-	fmt.Fprintf(cmd.OutOrStdout(), "Press Ctrl+C to stop\n")
+	fmt.Fprintln(cmd.OutOrStdout(), "Waiting for the Reliant web app to start a Claude or Codex connection.")
+	fmt.Fprintln(cmd.OutOrStdout(), "To sign in to the Reliant CLI instead, stop this helper and run 'reliant auth login'.")
+	fmt.Fprintln(cmd.OutOrStdout(), "Press Ctrl+C to stop")
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
