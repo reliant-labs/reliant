@@ -44,7 +44,7 @@ vi.mock("../../../store/chatStoreHooks", () => ({
   useContextUsageByThread: () => ({}),
 }));
 vi.mock("../thread-views", () => ({ useThreads: () => [], ThreadTabs: () => null }));
-vi.mock("../../runs/ChildRunsStrip", () => ({ ChildRunsStrip: () => null }));
+vi.mock("../../../hooks/run-queries", () => ({ useChildRuns: () => ({ data: undefined }) }));
 vi.mock("../NoMachine", () => ({ NoMachinePill: () => <span>no machine</span> }));
 vi.mock("../WorkspaceRecoveryMenuItems", () => ({ WorkspaceRecoveryMenuItems: () => null }));
 vi.mock("../MoveChatToProjectDialog", () => ({ MoveChatToProjectDialog: () => null }));
@@ -109,11 +109,11 @@ describe("ChatHeader sharing", () => {
     state.chat = { ...state.chat, visibility: ResourceVisibility.ORG, viewerAccess: true, userId: "dana", noMachine: true };
     await openMenu();
     expect(screen.getByTestId("chat-shared-chip")).toHaveTextContent("Read only");
-    for (const name of ["Edit Title", "Move to project…", "Export Chat", "Archive chat"]) {
+    for (const name of ["Edit title", "Move to project…", "Export chat", "Archive chat"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
     expect(screen.queryByTestId("chat-menu-share")).not.toBeInTheDocument();
     expect(screen.queryByText("no machine")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy Chat ID" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy chat ID" })).toBeInTheDocument();
   });
 });
