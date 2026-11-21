@@ -117,6 +117,26 @@ func ListReposByProject(ctx context.Context, db orm.Context, projectID string) (
 	return out, nil
 }
 
+// ListReposByProjects returns the repos of every project in projectIDs in
+// one read, ordered by project and then relative path.
+func ListReposByProjects(ctx context.Context, db orm.Context, projectIDs []string) ([]*core.Repo, error) {
+	if len(projectIDs) == 0 {
+		return []*core.Repo{}, nil
+	}
+	rows, err := ListRepo(ctx, db,
+		orm.WhereIn(RepoFieldProjectID, projectIDs),
+		orm.WithOrderBy(RepoFieldProjectID, orm.Asc),
+		orm.WithOrderBy(RepoFieldRelativePath, orm.Asc))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list repos: %w", err)
+	}
+	out := make([]*core.Repo, len(rows))
+	for i, row := range rows {
+		out[i] = repoToCore(row)
+	}
+	return out, nil
+}
+
 // RemoveRepo deletes the repo; a missing one is not an error.
 func RemoveRepo(ctx context.Context, db orm.Context, id string) error {
 	if err := DeleteRepo(ctx, db, id); err != nil && !errors.Is(err, orm.ErrNoRows) {

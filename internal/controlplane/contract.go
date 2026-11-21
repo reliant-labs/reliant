@@ -213,6 +213,14 @@ type Service interface {
 	// otherwise a *connect.Error carrying control-plane's code
 	// (PermissionDenied: no tests:read; NotFound: not a project of the org).
 	HasCoverageBlob(ctx context.Context, token, orgID, project, blobID string) (CoverageBlob, error)
+	// ListHostedApps is an org's apps — its hosted projects, one per forge
+	// name deployed in it — with where each was deployed from
+	// (DeployService.ListApps), read as the caller: jwt is their own bearer,
+	// so control-plane's deploy:read decides what they may see. orgID "" is
+	// the caller's default org there. ErrHostedAppsDenied when the caller may
+	// not read the org's apps (or the bearer is refused); any other error is
+	// the control plane being unreachable or failing.
+	ListHostedApps(ctx context.Context, jwt, orgID string) ([]HostedApp, error)
 }
 
 // Deps configures the adapter.

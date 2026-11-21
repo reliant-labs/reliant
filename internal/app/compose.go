@@ -1283,7 +1283,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Repo:         g.Database(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		Orgs:         g.OrgResolver(),
+		// The Projects list reads the org's hosted apps as the caller; nil
+		// self-hosted, where it lists them as unavailable.
+		Apps: projectHostedApps(g.ServerProcessConfig.GetControlPlane()),
+		Orgs: g.OrgResolver(),
 		// Moving a project is off until control-plane's half is in prod and
 		// in the rollback target (orgs.project_moves_enabled).
 		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),

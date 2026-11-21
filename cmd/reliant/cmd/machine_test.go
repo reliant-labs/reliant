@@ -4,12 +4,15 @@ package cmd
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -19,8 +22,13 @@ import (
 	"github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // fakeDaemons is control-plane's DaemonService as Settings -> Machines uses it.
@@ -174,6 +182,128 @@ func (f *fakeRegistry) DeleteMachinePool(_ context.Context, req *connect.Request
 	}
 	f.deleted = append(f.deleted, req.Msg.GetName())
 	return connect.NewResponse(&reliantv1.DeleteMachinePoolResponse{}), nil
+}
+
+// personGatedRegistry is fakeRegistry for reads, and the real
+// DaemonRegistryService for the three writes, so the refusal the CLI shows is
+// the one the server sends.
+type personGatedRegistry struct {
+	*fakeRegistry
+	real *daemon_registry.Service
+}
+
+func (r personGatedRegistry) SetMachineLabels(ctx context.Context, req *connect.Request[reliantv1.SetMachineLabelsRequest]) (*connect.Response[reliantv1.SetMachineLabelsResponse], error) {
+	return r.real.SetMachineLabels(ctx, req)
+}
+
+func (r personGatedRegistry) PutMachinePool(ctx context.Context, req *connect.Request[reliantv1.PutMachinePoolRequest]) (*connect.Response[reliantv1.PutMachinePoolResponse], error) {
+	return r.real.PutMachinePool(ctx, req)
+}
+
+func (r personGatedRegistry) DeleteMachinePool(ctx context.Context, req *connect.Request[reliantv1.DeleteMachinePoolRequest]) (*connect.Response[reliantv1.DeleteMachinePoolResponse], error) {
+	return r.real.DeleteMachinePool(ctx, req)
+}
+
+// personGatedServer serves the DaemonRegistryService over fake (reads) and
+// the real service (the three writes), as the API edge installs an `rlat_`
+// access token with principal p. writes counts the writes that reached the
+// store.
+func personGatedServer(t *testing.T, fake *fakeRegistry, p *fat.Principal, writes *int) {
+	t.Helper()
+	registry, err := daemon_registry.New(daemon_registry.Deps{
+		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{},
+		Repo: &daemon_registry.MockRepository{
+			SetDaemonLabelsFunc: func(context.Context, string, string, map[string]string) (bool, error) {
+				*writes++
+				return true, nil
+			},
+			GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
+				return &db.Daemon{ID: id, UserID: "u"}, nil
+			},
+			PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool) (*core.MachinePool, error) {
+				*writes++
+				return p, nil
+			},
+			DeleteMachinePoolByNameFunc: func(context.Context, string, string) error {
+				*writes++
+				return nil
+			},
+			ListMachinePoolsForUserFunc: func(context.Context, string) ([]*core.MachinePool, error) { return nil, nil },
+			ListMachinePoolMembersFunc: func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error) {
+				return nil, nil
+			},
+			ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
+		},
+	})
+	require.NoError(t, err)
+	mux := http.NewServeMux()
+	mux.Handle(reliantv1connect.NewDaemonRegistryServiceHandler(personGatedRegistry{fakeRegistry: fake, real: registry},
+		connect.WithInterceptors(svcerr.Interceptor())))
+	edge := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, "u")
+		ctx = auth.WithMachineToken(auth.WithCredential(ctx, auth.CredentialAccessToken), p)
+		mux.ServeHTTP(w, r.WithContext(ctx))
+	})
+	srv := httptest.NewServer(edge)
+	t.Cleanup(srv.Close)
+	t.Setenv(envServerURL, srv.URL)
+	t.Setenv(envToken, "rlat_login")
+	t.Setenv(daemonpolicy.AgentShellEnv, "")
+}
+
+var machineWriteArgs = [][]string{
+	{"label", "build-box", "pool=pipeline"},
+	{"pool", "put", "pipeline", "--max-runs-per-member", "3"},
+	{"pool", "rm", "pipeline"},
+}
+
+// `reliant machine label` and `reliant machine pool put|rm` shipped (v1.23.0)
+// writing with the CLI login, so the server keeps taking those writes from it
+// (deprecated, logged): v1 never breaks a released command.
+func TestMachineLabelAndPoolWritesWithTheCLILoginStillWork(t *testing.T) {
+	isolateControlPlaneEnv(t)
+	fake := &fakeRegistry{
+		labels: map[string]map[string]string{"d-box": {"team": "ci"}},
+		pools:  map[string]*reliantv1.MachinePoolSpec{"pipeline": {Name: "pipeline", Selector: map[string]string{"pool": "pipeline"}, MemberIdleTimeout: "10m"}},
+	}
+	var writes int
+	personGatedServer(t, fake, &fat.Principal{ActingUserID: "u", Scopes: fat.SetOf(fat.ScopeReliantAPI, cliauth.ScopeMachines)}, &writes)
+
+	for _, args := range machineWriteArgs {
+		_, err := executeRoot(t, append([]string{"machine"}, args...)...)
+		require.NoError(t, err, args)
+	}
+	assert.Equal(t, 3, writes, "every CLI-login write reached the store")
+}
+
+// A machine's own credential is never a pool writer: label and pool put|rm
+// are refused with PermissionDenied (reason person_required), the message
+// says how the change can be made instead, and nothing is written.
+func TestMachineLabelAndPoolWritesWithADaemonCredentialNeedAPerson(t *testing.T) {
+	isolateControlPlaneEnv(t)
+	fake := &fakeRegistry{
+		labels: map[string]map[string]string{"d-box": {"team": "ci"}},
+		pools:  map[string]*reliantv1.MachinePoolSpec{"pipeline": {Name: "pipeline", Selector: map[string]string{"pool": "pipeline"}, MemberIdleTimeout: "10m"}},
+	}
+	var writes int
+	personGatedServer(t, fake, &fat.Principal{
+		ActingUserID: "u", AllScopes: true, Scopes: fat.SetOf(fat.ScopeDaemonConnect),
+		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-box"},
+	}, &writes)
+
+	for _, args := range machineWriteArgs {
+		_, err := executeRoot(t, append([]string{"machine"}, args...)...)
+		require.Error(t, err, args)
+		assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), args)
+		var ce *connect.Error
+		require.True(t, errors.As(err, &ce), args)
+		assert.Equal(t, auth.ReasonPersonRequired, ce.Meta().Get(svcerr.ReasonHeader), args)
+		assert.ErrorContains(t, err, "Only a person can", args)
+		assert.ErrorContains(t, err, "approve its card", args)
+		assert.ErrorContains(t, err, "reliant daemon start --label", args)
+	}
+	assert.Zero(t, writes, "a refused write reached the store")
+	assert.Equal(t, map[string]string{"team": "ci"}, fake.labels["d-box"])
 }
 
 // label and pool talk to the Reliant API (not the control plane) as the
