@@ -30,6 +30,8 @@ The scopes show what the login asks for: `reliant:api` to use Reliant as you, an
 
 Logging in again from the same computer replaces that computer's previous login token rather than adding another.
 
+`reliant auth serve` is not another way to sign in. It waits for the Reliant web app to start a Claude or Codex account connection and handles the local callback. It does not check your CLI login or sign in using a daemon credential.
+
 ## Check who you are signed in as
 
 `reliant auth status` reads only local files and makes no network call, so it is quick and safe to put in scripts. It exits `0` when a credential is available for the server, and `1` when there is none:
@@ -114,7 +116,7 @@ Running `create` again with the same `--name` replaces that token, so rotating a
 echo "rlat_…" | reliant daemon start --token
 ```
 
-An API token cannot connect a daemon, and a daemon credential cannot run commands. [Run a machine from the terminal](/cli/run-a-machine#on-a-machine-with-no-browser) covers the daemon side.
+An API token cannot connect a daemon, and a daemon credential cannot run commands. [Run a machine from the terminal](/cli/run-a-machine#with-nobody-to-approve-it) covers the daemon side.
 
 ## List and revoke API tokens
 
@@ -136,5 +138,5 @@ It stores no credentials. It only passes the authorization code back to your bro
 
 - [Scripting and CI](/cli/scripting): using `RELIANT_TOKEN` in automation
 - [Run a machine from the terminal](/cli/run-a-machine)
-- [Forge sign-in](/features/forge-sign-in): how your session becomes a short-lived deploy token
+- [Forge sign-in](/forge/sign-in): how your session becomes a short-lived deploy token
 - [CLI reference: `reliant auth`](/reference/cli#reliant-auth)

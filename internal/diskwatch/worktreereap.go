@@ -30,7 +30,7 @@ import (
 // list`, and the repositories are the ones Reliant's own workspaces were made
 // from, so the daemon finds them through the worktree root: each checkout
 // there names its repository's git dir. For each repository it runs forge's
-// worktree reaper, `<this binary> forge storage worktrees --repo <r> --apply
+// worktree reaper, `<this binary> forge machine storage worktrees --repo <r> --apply
 // --reliant-managed`, which removes a linked worktree only when it is
 // unlocked, clean, holds no ignored file that is not rebuildable output, has
 // had no activity for 24h (any file in it, build output included), has no
@@ -144,10 +144,10 @@ func (w *Watcher) worktreeApprovalTick(ctx context.Context, pressure bool) bool 
 
 // worktreeReapCommandArgs is the argument list after the binary.
 func worktreeReapCommandArgs(repo string) []string {
-	return []string{"forge", "storage", "worktrees", "--repo", repo, "--apply", "--reliant-managed"}
+	return []string{"forge", "machine", "storage", "worktrees", "--repo", repo, "--apply", "--reliant-managed"}
 }
 
-// execWorktreeReap runs `<this binary> forge storage worktrees ...` for repo.
+// execWorktreeReap runs `<this binary> forge machine storage worktrees ...` for repo.
 func execWorktreeReap(ctx context.Context, repo string) (reaperRun, error) {
 	if testing.Testing() {
 		return reaperRun{}, errReaperUnderTest

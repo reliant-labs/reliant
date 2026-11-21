@@ -36,6 +36,7 @@ vi.mock("../../../hooks/useWorkflowExecutions", () => ({
 vi.mock("../../../hooks/message-queries", () => ({
   useMessages: () => ({ data: { messages: [] } }),
 }));
+vi.mock("../../../hooks/useOnboardingQueries", () => ({ useDaemonList: () => ({ data: [] }) }));
 
 const thread = (overrides: Partial<ThreadInfo>): ThreadInfo => ({
   id: "t",

@@ -356,7 +356,7 @@ export function ToolsSelector({
             <div className="py-2 max-h-80 overflow-y-auto">
               {/* Quick expressions */}
               <div className="px-3 pb-2 border-b border-border/70">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+                <div className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3" />
                   Quick expressions
                 </div>
@@ -425,7 +425,7 @@ export function ToolsSelector({
                         e.stopPropagation();
                         toggleCategory(categoryTools);
                       }}
-                      className="w-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide bg-muted/30 sticky top-0 flex items-center gap-2 hover:bg-muted/50 transition-colors"
+                      className="w-full px-3 py-1.5 text-xs font-semibold bg-muted/30 sticky top-0 flex items-center gap-2 hover:bg-muted/50 transition-colors"
                     >
                       {selectionState === "all" ? (
                         <CheckSquare className="w-3.5 h-3.5 text-primary-ink" />

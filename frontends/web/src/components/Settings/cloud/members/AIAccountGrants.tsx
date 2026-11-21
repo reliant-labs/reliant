@@ -63,7 +63,7 @@ export function AIAccountGrants({ org, members }: { org: MyOrg; members: OrgMemb
           AI keys
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Who may use each of {org.name}'s keys that are open to selected people. Change a key's access on Settings › AI accounts.
+          Who may use each of {org.name}'s keys that are open to selected people. Change a key's access on Settings › AI › Organization accounts.
         </p>
       </div>
       {error && (

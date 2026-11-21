@@ -16,8 +16,8 @@ func TestMigrationOrderColdSetupBudget(t *testing.T) {
 	}
 	var wf struct {
 		Jobs map[string]struct {
-			// any: another job's timeout-minutes may be an expression
-			// (playwright's is per suite), which a plain int cannot hold.
+			// any: another job's timeout-minutes may be an expression,
+			// which a plain int cannot hold.
 			Timeout any      `yaml:"timeout-minutes"`
 			Steps   []ciStep `yaml:"steps"`
 		} `yaml:"jobs"`

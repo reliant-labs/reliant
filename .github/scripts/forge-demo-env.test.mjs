@@ -1,5 +1,5 @@
 // The actual hosted demo declaration, evaluated with the project's pinned forge.
-// No deploy, control-plane writes or credentials: `kcl eval` is a local render.
+// No deploy, control-plane writes or credentials: `env kcl eval` is a local render.
 //
 // Which forge: FORGE_CMD, the command `task` resolves from forge.yaml's pin
 // (Taskfile.yml's FORGE: FORGE_BIN, else scripts/forge.sh), which
@@ -17,7 +17,7 @@ const [forge, ...forgeArgs] = (process.env.FORGE_CMD || `${root}scripts/forge.sh
 
 // `go run …@<pin>` builds forge on a cold cache: allow for it.
 test("demo is exactly one fixtures-only hosted frontend, not the Reliant backend", { timeout: 660_000 }, () => {
-  const bundle = JSON.parse(execFileSync(forge, [...forgeArgs, "kcl", "eval", "deploy/kcl/demo", "--format", "json", "-S", "output"], {
+  const bundle = JSON.parse(execFileSync(forge, [...forgeArgs, "env", "kcl", "eval", "deploy/kcl/demo", "--format", "json", "-S", "output"], {
     cwd: root,
     timeout: 600_000,
     encoding: "utf8",

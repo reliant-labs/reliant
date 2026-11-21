@@ -23,6 +23,12 @@
  *    renders and retries (useDaemonWait), not a failure; the file tree
  *    reported it on every 2s retry.
  *
+ *  - WORKTREE RECOVERING (reliant-web 1ada7020, 591b1445, 2026-11-20). The
+ *    machine refused a process list or file read for a moment, while it
+ *    finalizes a worktree's recovery (a remove or reclone), and said so with
+ *    Unavailable and the worktree_recovering reason. Nothing ran, and the
+ *    poll that asked asks again; one finalization reported every poll.
+ *
  *  - DEADLINE (2026-10-10, the "[gRPC] Request error" page). The server ran
  *    out of time — most often a daemon command a busy machine did not answer
  *    before the rpc's deadline — and said so with DeadlineExceeded. The server
@@ -70,6 +76,8 @@ export type RpcFailureKind =
   | "already-absent"
   /** The user's machine is not serving yet; the UI waits on it. */
   | "machine-wait"
+  /** The machine refused work for a moment (a worktree's recovery); retryable. */
+  | "machine-busy"
   /** The server's deadline passed (a busy machine); retryable, not a defect. */
   | "deadline"
   /** This app calls an RPC the server does not route: the app is out of date. */
@@ -192,6 +200,9 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   }
   if (error.code === Code.Unavailable && isDaemonConnectingError(error)) {
     return "machine-wait";
+  }
+  if (error.code === Code.Unavailable && hasErrorReason(error, "worktree_recovering")) {
+    return "machine-busy";
   }
   if (error.code === Code.DeadlineExceeded) return "deadline";
   if (

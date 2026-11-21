@@ -77,7 +77,7 @@ export const CLAIM_INTO_ACCOUNT_COPY = {
   /** Takes the signed-in email. */
   signedInAs: (email: string) => `You're signed in as ${email}.`,
   body: "The site comes with its own organization. You'll own it, and it appears beside your other organizations; your own stays your default.",
-  freeSite: "The free plan includes one static site. If you already have one, you'll choose which stays live.",
+  freeSite: "If this claim affects sites you already host for free, we'll ask where you want free hosting to stay before you confirm.",
   button: "Claim into my account",
   switchAccount: "Not you? Use a different account",
 } as const;
@@ -89,32 +89,32 @@ export const REPLACE_ANONYMOUS_COPY = {
 } as const;
 
 /**
- * Which site keeps the one free static slot (FreeSiteDialog). Plain on purpose:
- * it is a decision about something the person built, so it names the sites and
- * says what happens to each, and nothing is preselected.
+ * The signed-in choice (FreeSiteDialog) works with both the legacy site choice
+ * and the organization allowance. The server names a site on each side, not
+ * every affected site or the names of the organizations.
  */
 export const FREE_SITE_COPY = {
-  title: "You already have a free site",
-  intro: "The free plan runs one static site. Choose which one stays live.",
-  sitesLabel: "The two sites",
+  title: "Choose where free hosting stays",
+  intro: "Claiming this site can affect which sites stay live. Review what may pause before you continue.",
+  sitesLabel: "Sites in this choice",
   previewLabel: "Open a site to check it",
   /** Takes the site's address. */
   open: (address: string) => `Open ${address}`,
-  yourSite: "Your site",
-  thisSite: "This site",
-  legend: "Which site stays live",
+  yourSite: "Your existing site",
+  thisSite: "Site you're claiming",
+  legend: "Where free hosting stays",
   keepNew: {
-    title: "Keep this new site live",
+    title: "Use free hosting for the site you’re claiming",
     /** Takes the existing site's address. */
-    detail: (existing: string) => `${existing} is paused until you subscribe or delete a site.`,
+    detail: (existing: string) => `${existing} may pause, along with other sites relying on free hosting in its organization.`,
   },
   keepExisting: {
-    title: "Keep my existing site live",
+    title: "Keep free hosting where it is",
     /** Takes the claimed site's address. */
-    detail: (claimed: string) => `${claimed} is added to your account but paused until you subscribe or delete a site.`,
+    detail: (claimed: string) => `${claimed} is added to your account but may pause because free hosting stays with your existing site.`,
   },
   subscribe: {
-    title: "Subscribe to keep both",
+    title: "Review billing before claiming",
     detail: "Go to billing. Your claim waits here and you can finish it when you come back.",
   },
   cancel: "Cancel",

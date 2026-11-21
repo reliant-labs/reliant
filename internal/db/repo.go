@@ -939,7 +939,7 @@ func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 		return nil, fmt.Errorf("failed to get content blocks: %w", err)
 	}
 
-	// Compute streaming state from blocks instead of using deprecated field
+	// Streaming state is derived from the blocks; no column stores it.
 	blockValues := make([]MessageContentBlock, len(blocks))
 	for i, block := range blocks {
 		if block != nil {

@@ -16,6 +16,11 @@ func New(cfg Config) *Limiter {
 
 func (t *Tree) prepareCgroup(*exec.Cmd, uint64) {}
 
+// cgroupVanished is false outside Linux: a tree has no cgroup to lose.
+func (t *Tree) cgroupVanished(error) bool { return false }
+
+func (t *Tree) recreateCgroup(*exec.Cmd, error) {}
+
 // prepareGoTmp gives a command no GOTMPDIR of its own outside Linux: nothing
 // there proves when its processes are gone.
 func (t *Tree) prepareGoTmp(*exec.Cmd) {}

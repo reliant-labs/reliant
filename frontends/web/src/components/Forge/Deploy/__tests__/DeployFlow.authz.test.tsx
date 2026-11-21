@@ -74,7 +74,7 @@ describe("DeployFlow — authorization is distinct from unreachability", () => {
     expect(panel).toBeInTheDocument();
     // The fix has to be the one that works HERE: signing in to Reliant
     // deposits the credential into forge's store. Telling a user to run
-    // `forge login` in a daemon they cannot open a browser in is a dead end.
+    // `forge cloud login` in a daemon they cannot open a browser in is a dead end.
     expect(panel.textContent).toMatch(/sign in/i);
     // And it must NOT claim the daemon was unreachable.
     expect(screen.queryByTestId("deploy-plan-error")).not.toBeInTheDocument();

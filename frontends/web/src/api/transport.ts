@@ -505,6 +505,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
       logger.info("[gRPC Client] Machine not serving yet", context);
       throw error;
     }
+    if (kind === "machine-busy") {
+      // The machine refused for a moment and nothing ran; the caller's next
+      // poll or retry is the remedy.
+      logger.info("[gRPC Client] Machine refused work for a moment", context);
+      throw error;
+    }
     if (kind === "network") {
       // No server answered; the SDK's fetch span records the failed request.
       logger.warn("[gRPC Client] Network failure", context);

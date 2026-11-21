@@ -21,8 +21,10 @@ import { getEventBus } from "../../../lib/events";
 import { useGlobalDataStore } from "../../../store/globalDataStore";
 import { OAuthHelperPanel } from "../../OAuthHelperPanel";
 import { CopilotDevicePanel } from "../../CopilotDevicePanel";
-import { addAnotherLabel, parseErrorMessage, providerConfig } from "./providerCatalog";
+import { addAnotherLabel, parseErrorMessage, providerConfig, usesServiceAccountKey } from "./providerCatalog";
 import { ProviderMark } from "./ProviderMark";
+import { ServiceAccountKeyField } from "./ServiceAccountKeyField";
+import { serviceAccountKeyError } from "../../../lib/serviceAccountKey";
 import { SetupHelp } from "../../SetupHelp";
 
 type Feedback = { ok: boolean; message: string } | null;
@@ -144,6 +146,8 @@ export function ConnectPanel({
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
+  const serviceAccount = usesServiceAccountKey(provider);
+  const [keyError, setKeyError] = useState<string | null>(null);
   const afterConnect = useAfterConnect(provider, onConnected);
 
   // A reconnect names its account so the server can tell "signed in again" from "signed in as
@@ -194,7 +198,17 @@ export function ConnectPanel({
     onClose();
   };
 
+  // A service-account key file is checked here first, so a paste that cannot
+  // work (half a file, a gcloud login) is named before a round trip.
+  const keyFileOk = () => {
+    if (!serviceAccount) return true;
+    const error = serviceAccountKeyError(apiKey);
+    setKeyError(error);
+    return error === null;
+  };
+
   const testKey = async () => {
+    if (!keyFileOk()) return;
     setTesting(true);
     setFeedback(null);
     try {
@@ -212,6 +226,7 @@ export function ConnectPanel({
   };
 
   const saveKey = async () => {
+    if (!keyFileOk()) return;
     setBusy(true);
     setFeedback(null);
     try {
@@ -268,48 +283,64 @@ export function ConnectPanel({
   } else {
     body = (
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-foreground" htmlFor={`new-key-${provider}`}>
-          API key
-        </label>
-        <div className="relative">
-          <input
+        {serviceAccount ? (
+          <ServiceAccountKeyField
             id={`new-key-${provider}`}
-            type={showKey ? "text" : "password"}
             value={apiKey}
-            onChange={(e) => {
-              setApiKey(e.target.value);
+            onChange={(value) => {
+              setApiKey(value);
+              setKeyError(null);
               setFeedback(null);
             }}
-            placeholder={config?.keyFormat || "Paste the key"}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            className={cn(
-              "w-full rounded-md border border-border bg-background px-3 py-2 pr-10 font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring",
-              mobile && "min-h-[44px]",
-            )}
+            error={keyError}
+            data-testid="connect-service-account-key"
           />
-          <button
-            type="button"
-            onClick={() => setShowKey((v) => !v)}
-            aria-label={showKey ? "Hide key" : "Show key"}
-            className={cn(
-              "absolute right-0 top-1/2 flex -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground",
-              mobile ? "min-h-[44px] min-w-[44px]" : "h-8 w-8",
+        ) : (
+          <>
+            <label className="block text-sm font-medium text-foreground" htmlFor={`new-key-${provider}`}>
+              API key
+            </label>
+            <div className="relative">
+              <input
+                id={`new-key-${provider}`}
+                type={showKey ? "text" : "password"}
+                value={apiKey}
+                onChange={(e) => {
+                  setApiKey(e.target.value);
+                  setFeedback(null);
+                }}
+                placeholder={config?.keyFormat || "Paste the key"}
+                autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className={cn(
+                  "w-full rounded-md border border-border bg-background px-3 py-2 pr-10 font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring",
+                  mobile && "min-h-[44px]",
+                )}
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey((v) => !v)}
+                aria-label={showKey ? "Hide key" : "Show key"}
+                className={cn(
+                  "absolute right-0 top-1/2 flex -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground",
+                  mobile ? "min-h-[44px] min-w-[44px]" : "h-8 w-8",
+                )}
+              >
+                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {config?.docsUrl && (
+              <p className="text-xs text-muted-foreground">
+                Create a key in the{" "}
+                <a href={config.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary-ink hover:underline">
+                  {config.shortName} console
+                </a>
+                .
+              </p>
             )}
-          >
-            {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
-        {config?.docsUrl && (
-          <p className="text-xs text-muted-foreground">
-            Create a key in the{" "}
-            <a href={config.docsUrl} target="_blank" rel="noopener noreferrer" className="text-primary-ink hover:underline">
-              {config.shortName} console
-            </a>
-            .
-          </p>
+          </>
         )}
         <div className={cn("flex gap-2 pt-1", mobile ? "flex-col" : "justify-end")}>
           <Button

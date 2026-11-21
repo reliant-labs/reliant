@@ -6,6 +6,10 @@ import (
 	"errors"
 	"fmt"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -64,7 +68,11 @@ func (w LaunchWorkflows) FiringDefinition(ctx context.Context, t *core.Trigger) 
 		return nil, nil
 	}
 	pin := w.CatalogPin
-	if pinner, ok := w.Repo.(catalogPinner); ok && pin == "" && t.ProjectID != "" {
+	pinner := w.Pinner
+	if pinner == nil {
+		pinner, _ = w.Repo.(catalogPinner)
+	}
+	if pinner != nil && pin == "" && t.ProjectID != "" {
 		p, err := pinner.PinProjectCatalog(ctx, db.CatalogPinScope{ProjectID: t.ProjectID, DaemonID: catalogMachine(t), UserID: t.UserID})
 		if err != nil {
 			return nil, &workflowsource.StoreError{Err: fmt.Errorf("pin the workflow catalog trigger %s fires against: %w", t.ID, err)}
@@ -86,6 +94,33 @@ func PinnedTo(workflows WorkflowResolver, def *core.TriggerEventDefinition) Work
 	}
 	lw.CatalogPin = def.CatalogPin
 	return lw
+}
+
+// firingWorkflows is what a fire reads after its definition: the snapshot
+// def was described in (PinnedTo), each workflow resolved and validated once
+// for the rest of the fire (CachedWorkflows) — its declaration, its check and
+// its capacity policy all resolve the same one. Nil when workflows is.
+func firingWorkflows(workflows WorkflowResolver, def *core.TriggerEventDefinition) WorkflowResolver {
+	pinned := PinnedTo(workflows, def)
+	if pinned == nil {
+		return nil
+	}
+	return NewCachedWorkflows(pinned)
+}
+
+// tracedFiringDefinition is firingDefinition in a span: describing and
+// validating the definition is mostly CPU (parsing and validating the
+// workflow tree), which a trace otherwise shows only as a gap between the
+// catalog reads.
+func tracedFiringDefinition(ctx context.Context, workflows WorkflowResolver, t *core.Trigger, recorded *core.TriggerEvent, resuming bool) (*core.TriggerEventDefinition, error) {
+	ctx, span := otel.Tracer("reliant.triggers").Start(ctx, "triggers.firingDefinition",
+		trace.WithAttributes(attribute.String("trigger.id", t.ID), attribute.Bool("trigger.resuming", resuming)))
+	defer span.End()
+	def, err := firingDefinition(ctx, workflows, t, recorded, resuming)
+	if err != nil {
+		span.RecordError(err)
+	}
+	return def, err
 }
 
 // TriggerDefinition implements DefinitionReader, once per workflow, project
