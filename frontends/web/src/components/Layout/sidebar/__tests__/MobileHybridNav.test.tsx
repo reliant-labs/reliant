@@ -71,6 +71,22 @@ describe("desktopPathOfMobile", () => {
 });
 
 describe("the phone's nav", () => {
+  it("draws the desktop header's order: the org, Find, the project, then the rows", () => {
+    render(
+      <MobileHybridNav
+        pathname={mobileInboxPath()}
+        search={{}}
+        onNavigate={vi.fn()}
+        org={<div data-testid="org-slot" />}
+        project={<div data-testid="project-slot" />}
+      />,
+    );
+    const order = ["org-slot", "mobile-nav-find", "project-slot", "nav-top"].map((id) => screen.getByTestId(id));
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
   it("is the hybrid top level off an area, Inbox lit on the phone's Inbox", () => {
     renderAt(mobileInboxPath());
     expect(screen.getByTestId("nav-top")).toBeInTheDocument();

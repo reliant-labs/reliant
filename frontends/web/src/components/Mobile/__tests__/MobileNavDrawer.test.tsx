@@ -6,7 +6,7 @@
  * reads the router's own location, not whatever a mock hands it.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -33,10 +33,22 @@ vi.mock("../../../hooks/useOrgs", () => ({
 
 // The nav itself (the one hybrid model) is covered in
 // Layout/sidebar/__tests__/MobileHybridNav.test.tsx; here it is a stand-in
-// with a destination and a drill-in, to pin the drawer's own mechanics.
+// with the org and project the drawer hands it (drawn in its order: org,
+// Find, project), a destination and a drill-in, to pin the drawer's own mechanics.
 vi.mock("../../Layout/sidebar/MobileHybridNav", () => ({
-  MobileHybridNav: ({ onNavigate }: { onNavigate: (href: string, options?: { drill?: boolean }) => void }) => (
+  MobileHybridNav: ({
+    onNavigate,
+    org,
+    project,
+  }: {
+    onNavigate: (href: string, options?: { drill?: boolean }) => void;
+    org?: ReactNode;
+    project?: ReactNode;
+  }) => (
     <div data-testid="mobile-hybrid-nav">
+      {org}
+      <span data-testid="mobile-nav-find">Find</span>
+      {project}
       <a
         href="/m/daemons"
         onClick={(event) => {
@@ -108,15 +120,16 @@ describe("MobileNavDrawer", () => {
     expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   });
 
-  it("draws the one nav model under the org and the project", async () => {
+  it("hands the one nav model the project, drawn under Find as on the desktop", async () => {
     renderAt("/m/chats", true, vi.fn());
     const dialog = await screen.findByRole("dialog", { name: "Navigation" });
     const nav = within(dialog).getByTestId("mobile-hybrid-nav");
     const project = screen.getByRole("link", { name: /Project/ });
     expect(project).toHaveAttribute("href", "/m/projects");
     expect(screen.getByText("reliant")).toBeInTheDocument();
-    // The switcher's place: above the nav.
-    expect(project.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Inside the nav, after Find (U6, owner: org, then Find, then the project).
+    expect(nav.contains(project)).toBe(true);
+    expect(within(nav).getByTestId("mobile-nav-find").compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("stays open through a drill-in, and closes on a destination", async () => {
