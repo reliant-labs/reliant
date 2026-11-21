@@ -37,6 +37,26 @@ import {
   DeployTier,
   DeployVerdict,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+
+/**
+ * The placement fields the control plane sends for each kind:
+ * DeployEnvironment.kind left the wire with control-plane#3095, so a test
+ * environment of a kind is built from what replaced it.
+ */
+function placement(kind: DeployEnvironmentKind) {
+  switch (kind) {
+    case DeployEnvironmentKind.LOCAL:
+      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.READABLE };
+    case DeployEnvironmentKind.PREVIEW:
+      return { lifetime: DeployEnvironmentLifetime.PREVIEW, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
+    case DeployEnvironmentKind.PERSISTENT:
+      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true };
+    case DeployEnvironmentKind.SELF_MANAGED:
+      return { lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY };
+    default:
+      return {};
+  }
+}
 import {
   DeploymentStatusSchema,
   GetDeploymentStatusResponseSchema,
@@ -70,11 +90,11 @@ describe("listProjectEnvironments", () => {
   it("drops rows for another project — an old control plane ignores the filter", async () => {
     listEnvironments.mockResolvedValue({
       environments: [
-        create(DeployEnvironmentSchema, { id: "a", name: "prod", project: "barksocial", kind: DeployEnvironmentKind.PERSISTENT }),
-        create(DeployEnvironmentSchema, { id: "b", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.PERSISTENT }),
+        create(DeployEnvironmentSchema, { id: "a", name: "prod", project: "barksocial", ...placement(DeployEnvironmentKind.PERSISTENT) }),
+        create(DeployEnvironmentSchema, { id: "b", name: "prod", project: "control-plane", ...placement(DeployEnvironmentKind.PERSISTENT) }),
         // A server predating the field sends no project at all.
-        create(DeployEnvironmentSchema, { id: "c", name: "staging", kind: DeployEnvironmentKind.PERSISTENT }),
-        create(DeployEnvironmentSchema, { id: "d", name: "dev", project: "barksocial", kind: DeployEnvironmentKind.LOCAL }),
+        create(DeployEnvironmentSchema, { id: "c", name: "staging", ...placement(DeployEnvironmentKind.PERSISTENT) }),
+        create(DeployEnvironmentSchema, { id: "d", name: "dev", project: "barksocial", ...placement(DeployEnvironmentKind.LOCAL) }),
       ],
     });
     const envs = await listProjectEnvironments("barksocial", null);
@@ -86,24 +106,12 @@ describe("listProjectEnvironments", () => {
 
   it("reads a self-managed environment as itself, not as an unknown kind", async () => {
     listEnvironments.mockResolvedValue({
-      environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.SELF_MANAGED })],
+      environments: [create(DeployEnvironmentSchema, { id: "cp", name: "prod", project: "control-plane", ...placement(DeployEnvironmentKind.SELF_MANAGED) })],
     });
     const envs = await listProjectEnvironments("control-plane", null);
     expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
   });
 
-  it("prefers a recognised kind over the placement fields, so today's server reads as it always did", async () => {
-    listEnvironments.mockResolvedValue({
-      environments: [
-        create(DeployEnvironmentSchema, {
-          id: "cp", name: "prod", project: "control-plane", kind: DeployEnvironmentKind.SELF_MANAGED,
-          lifetime: DeployEnvironmentLifetime.PERSISTENT, secretPosture: DeploySecretPosture.WRITE_ONLY, hostedSlot: true,
-        }),
-      ],
-    });
-    const envs = await listProjectEnvironments("control-plane", null);
-    expect(envs.map((e) => e.kind)).toEqual(["self_managed"]);
-  });
 
   // DeployEnvironment.kind leaves the wire with control-plane#3095; every
   // server since #1349 also sends lifetime, secret_posture and hosted_slot.
