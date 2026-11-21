@@ -79,6 +79,28 @@ func TestExportForgeConnectHint_PreservesExistingValue(t *testing.T) {
 	assert.Equal(t, "keep me", os.Getenv(forgeConnectHintEnv))
 }
 
+// A hint is for the `env deploy` it was computed for: any other forge command
+// runs without one, whether this process exported it for an earlier command
+// or inherited it.
+func TestExportForgeConnectHint_ClearsItForOtherCommands(t *testing.T) {
+	prev := exportedConnectHint
+	t.Cleanup(func() { exportedConnectHint = prev })
+
+	t.Setenv(forgeConnectHintEnv, "inherited")
+	exportForgeConnectHint([]string{"generate"})
+	_, set := os.LookupEnv(forgeConnectHintEnv)
+	assert.False(t, set, "an inherited hint is removed for a command that is not env deploy")
+
+	// One this process exported for an earlier deploy is its own, not the
+	// caller's: it is neither kept for another command nor taken as the
+	// caller's choice for the next deploy.
+	exportedConnectHint = "stale"
+	t.Setenv(forgeConnectHintEnv, "stale")
+	exportForgeConnectHint([]string{"env", "up", "dev"})
+	_, set = os.LookupEnv(forgeConnectHintEnv)
+	assert.False(t, set, "this process's own hint does not outlive its deploy")
+}
+
 type fakeProjectCreator struct {
 	calls []*reliantv1.CreateProjectRequest
 	err   error

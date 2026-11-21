@@ -88,23 +88,52 @@ func isEnvDeploy(fargs []string) bool {
 	return false
 }
 
+// exportedConnectHint is the FORGE_HOST_CONNECT_HINT value this process last
+// set, so a later forge command here can tell its own stale hint from one the
+// caller set.
+var exportedConnectHint string
+
 // exportForgeConnectHint sets FORGE_HOST_CONNECT_HINT for the forge about to
-// run fargs, when one is due. It never fails the command.
+// run fargs to exactly what that command is due, and removes it otherwise:
+// a hint never outlives the `env deploy` it was computed for, whether it was
+// exported for an earlier command in this process or inherited. Only for an
+// `env deploy` does a value the caller set (and this process did not) win.
+// It never fails the command.
 func exportForgeConnectHint(fargs []string) {
-	defaultServer, _ := buildConnectionDefaults()
-	hint := forgeConnectHint(fargs, connectHintDeps{
-		getenv: os.Getenv, //nolint:forbidigo // the hint contract and the agent-shell marker are process signals, not configuration
-		lookup: func(server string) (credentials.Credential, string, error) {
-			c, p, err := cliauth.Lookup(server)
-			if err == nil && strings.TrimSpace(c.Token) == "" {
-				err = errors.New("empty login")
-			}
-			return c, p, err
-		},
-		state:         localSandboxState,
-		defaultServer: defaultServer,
-	})
-	if hint != "" {
-		_ = os.Setenv(forgeConnectHintEnv, hint)
+	current := os.Getenv(forgeConnectHintEnv) //nolint:forbidigo // the hint contract is a process signal, not configuration
+	caller := current
+	if current == exportedConnectHint {
+		caller = ""
 	}
+	hint := ""
+	switch {
+	case !isEnvDeploy(fargs):
+	case caller != "":
+		hint = caller
+	default:
+		defaultServer, _ := buildConnectionDefaults()
+		hint = forgeConnectHint(fargs, connectHintDeps{
+			getenv: func(k string) string {
+				if k == forgeConnectHintEnv {
+					return ""
+				}
+				return os.Getenv(k) //nolint:forbidigo // the agent-shell marker is a process signal, not configuration
+			},
+			lookup: func(server string) (credentials.Credential, string, error) {
+				c, p, err := cliauth.Lookup(server)
+				if err == nil && strings.TrimSpace(c.Token) == "" {
+					err = errors.New("empty login")
+				}
+				return c, p, err
+			},
+			state:         localSandboxState,
+			defaultServer: defaultServer,
+		})
+		exportedConnectHint = hint
+	}
+	if hint == "" {
+		_ = os.Unsetenv(forgeConnectHintEnv)
+		return
+	}
+	_ = os.Setenv(forgeConnectHintEnv, hint)
 }
