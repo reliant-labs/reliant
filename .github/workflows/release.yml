@@ -902,7 +902,8 @@ jobs:
           echo "Building and publishing signed macOS apps"
           echo "Config: $CONFIG | Channel: $CHANNEL | Publish: $PUBLISH_FLAG"
 
-          npx electron-builder --config "$CONFIG" --mac --publish $PUBLISH_FLAG
+          # The one electron-builder call, shared with forge's reliant-desktop build.
+          node scripts/pack-desktop.js mac "$CONFIG" "$PUBLISH_FLAG"
 
       # A prebuild of this version on this commit (prepare's prebuilt_run): publish its
       # signed artifacts exactly where electron-builder --publish puts them (the s3
@@ -1096,7 +1097,8 @@ jobs:
           echo "Building and publishing Linux apps"
           echo "Config: $CONFIG | Channel: $CHANNEL | Publish: $PUBLISH_FLAG"
 
-          npx electron-builder --config "$CONFIG" --linux --publish $PUBLISH_FLAG
+          # The one electron-builder call, shared with forge's reliant-desktop build.
+          node scripts/pack-desktop.js linux "$CONFIG" "$PUBLISH_FLAG"
 
       # A prebuild of this version on this commit (prepare's prebuilt_run): publish its
       # signed artifacts exactly where electron-builder --publish puts them (the s3
@@ -1301,8 +1303,10 @@ jobs:
           Write-Host "Building and publishing Windows apps"
           Write-Host "Config: $CONFIG | Channel: $CHANNEL | Publish: $PUBLISH"
 
-          # Use direct path to electron-builder to avoid npx issues on Windows
-          & .\node_modules\.bin\electron-builder.cmd --config "$CONFIG" --win --publish $PUBLISH
+          # The one electron-builder call, shared with forge's reliant-desktop build.
+          # Still run from PowerShell: the script starts .\node_modules\.bin\electron-builder.cmd
+          # (not npx) through cmd.exe, as this step did, with this step's environment.
+          node scripts/pack-desktop.js win "$CONFIG" $PUBLISH
 
       # A prebuild of this version on this commit (prepare's prebuilt_run): publish its
       # signed artifacts exactly where electron-builder --publish puts them (the s3
