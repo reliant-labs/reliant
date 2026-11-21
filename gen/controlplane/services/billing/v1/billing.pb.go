@@ -330,6 +330,122 @@ func (ComputeIneligibleReason) EnumDescriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{4}
 }
 
+type StorageProduct int32
+
+const (
+	StorageProduct_STORAGE_PRODUCT_UNSPECIFIED      StorageProduct = 0
+	StorageProduct_STORAGE_PRODUCT_MACHINE_DISKS    StorageProduct = 1 // agent sandbox disks (provisioned size)
+	StorageProduct_STORAGE_PRODUCT_APP_VOLUMES      StorageProduct = 2 // hosting PVCs incl. managed databases (provisioned size)
+	StorageProduct_STORAGE_PRODUCT_CONTAINER_IMAGES StorageProduct = 3
+	StorageProduct_STORAGE_PRODUCT_STATIC_SITES     StorageProduct = 4
+	StorageProduct_STORAGE_PRODUCT_BUCKETS          StorageProduct = 5
+	StorageProduct_STORAGE_PRODUCT_TEST_REPORTS     StorageProduct = 6
+	StorageProduct_STORAGE_PRODUCT_SBOM_COPIES      StorageProduct = 7 // never counts toward the pool
+)
+
+// Enum value maps for StorageProduct.
+var (
+	StorageProduct_name = map[int32]string{
+		0: "STORAGE_PRODUCT_UNSPECIFIED",
+		1: "STORAGE_PRODUCT_MACHINE_DISKS",
+		2: "STORAGE_PRODUCT_APP_VOLUMES",
+		3: "STORAGE_PRODUCT_CONTAINER_IMAGES",
+		4: "STORAGE_PRODUCT_STATIC_SITES",
+		5: "STORAGE_PRODUCT_BUCKETS",
+		6: "STORAGE_PRODUCT_TEST_REPORTS",
+		7: "STORAGE_PRODUCT_SBOM_COPIES",
+	}
+	StorageProduct_value = map[string]int32{
+		"STORAGE_PRODUCT_UNSPECIFIED":      0,
+		"STORAGE_PRODUCT_MACHINE_DISKS":    1,
+		"STORAGE_PRODUCT_APP_VOLUMES":      2,
+		"STORAGE_PRODUCT_CONTAINER_IMAGES": 3,
+		"STORAGE_PRODUCT_STATIC_SITES":     4,
+		"STORAGE_PRODUCT_BUCKETS":          5,
+		"STORAGE_PRODUCT_TEST_REPORTS":     6,
+		"STORAGE_PRODUCT_SBOM_COPIES":      7,
+	}
+)
+
+func (x StorageProduct) Enum() *StorageProduct {
+	p := new(StorageProduct)
+	*p = x
+	return p
+}
+
+func (x StorageProduct) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StorageProduct) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_billing_v1_billing_proto_enumTypes[5].Descriptor()
+}
+
+func (StorageProduct) Type() protoreflect.EnumType {
+	return &file_services_billing_v1_billing_proto_enumTypes[5]
+}
+
+func (x StorageProduct) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use StorageProduct.Descriptor instead.
+func (StorageProduct) EnumDescriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{5}
+}
+
+type StorageBillingBasis int32
+
+const (
+	StorageBillingBasis_STORAGE_BILLING_BASIS_UNSPECIFIED StorageBillingBasis = 0
+	StorageBillingBasis_STORAGE_BILLING_BASIS_BILLED      StorageBillingBasis = 1 // billed today under its current terms
+	StorageBillingBasis_STORAGE_BILLING_BASIS_TRACKED     StorageBillingBasis = 2 // measured, not charged
+	StorageBillingBasis_STORAGE_BILLING_BASIS_NOT_COUNTED StorageBillingBasis = 3 // a platform copy; shown, never counted
+)
+
+// Enum value maps for StorageBillingBasis.
+var (
+	StorageBillingBasis_name = map[int32]string{
+		0: "STORAGE_BILLING_BASIS_UNSPECIFIED",
+		1: "STORAGE_BILLING_BASIS_BILLED",
+		2: "STORAGE_BILLING_BASIS_TRACKED",
+		3: "STORAGE_BILLING_BASIS_NOT_COUNTED",
+	}
+	StorageBillingBasis_value = map[string]int32{
+		"STORAGE_BILLING_BASIS_UNSPECIFIED": 0,
+		"STORAGE_BILLING_BASIS_BILLED":      1,
+		"STORAGE_BILLING_BASIS_TRACKED":     2,
+		"STORAGE_BILLING_BASIS_NOT_COUNTED": 3,
+	}
+)
+
+func (x StorageBillingBasis) Enum() *StorageBillingBasis {
+	p := new(StorageBillingBasis)
+	*p = x
+	return p
+}
+
+func (x StorageBillingBasis) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (StorageBillingBasis) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_billing_v1_billing_proto_enumTypes[6].Descriptor()
+}
+
+func (StorageBillingBasis) Type() protoreflect.EnumType {
+	return &file_services_billing_v1_billing_proto_enumTypes[6]
+}
+
+func (x StorageBillingBasis) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use StorageBillingBasis.Descriptor instead.
+func (StorageBillingBasis) EnumDescriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{6}
+}
+
 type GetOrganizationCostSummaryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -8263,6 +8379,281 @@ func (*UpdateBillingEmailResponse) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{105}
 }
 
+type GetStorageUsageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStorageUsageRequest) Reset() {
+	*x = GetStorageUsageRequest{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[106]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStorageUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStorageUsageRequest) ProtoMessage() {}
+
+func (x *GetStorageUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[106]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStorageUsageRequest.ProtoReflect.Descriptor instead.
+func (*GetStorageUsageRequest) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{106}
+}
+
+func (x *GetStorageUsageRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+type StorageProductUsage struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Product StorageProduct         `protobuf:"varint,1,opt,name=product,proto3,enum=controlplane.v1.StorageProduct" json:"product,omitempty"`
+	// Absent when nothing has measured it yet (never a fake 0).
+	BytesNow   *int64                 `protobuf:"varint,2,opt,name=bytes_now,json=bytesNow,proto3,oneof" json:"bytes_now,omitempty"`
+	MeasuredAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=measured_at,json=measuredAt,proto3" json:"measured_at,omitempty"`
+	// GiB-hours this period, from the hourly ledger. Absent when unmeasured.
+	GibHoursPeriodToDate *int64              `protobuf:"varint,4,opt,name=gib_hours_period_to_date,json=gibHoursPeriodToDate,proto3,oneof" json:"gib_hours_period_to_date,omitempty"`
+	CountsTowardPool     bool                `protobuf:"varint,5,opt,name=counts_toward_pool,json=countsTowardPool,proto3" json:"counts_toward_pool,omitempty"`
+	BillingBasis         StorageBillingBasis `protobuf:"varint,6,opt,name=billing_basis,json=billingBasis,proto3,enum=controlplane.v1.StorageBillingBasis" json:"billing_basis,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *StorageProductUsage) Reset() {
+	*x = StorageProductUsage{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[107]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StorageProductUsage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StorageProductUsage) ProtoMessage() {}
+
+func (x *StorageProductUsage) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[107]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StorageProductUsage.ProtoReflect.Descriptor instead.
+func (*StorageProductUsage) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{107}
+}
+
+func (x *StorageProductUsage) GetProduct() StorageProduct {
+	if x != nil {
+		return x.Product
+	}
+	return StorageProduct_STORAGE_PRODUCT_UNSPECIFIED
+}
+
+func (x *StorageProductUsage) GetBytesNow() int64 {
+	if x != nil && x.BytesNow != nil {
+		return *x.BytesNow
+	}
+	return 0
+}
+
+func (x *StorageProductUsage) GetMeasuredAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.MeasuredAt
+	}
+	return nil
+}
+
+func (x *StorageProductUsage) GetGibHoursPeriodToDate() int64 {
+	if x != nil && x.GibHoursPeriodToDate != nil {
+		return *x.GibHoursPeriodToDate
+	}
+	return 0
+}
+
+func (x *StorageProductUsage) GetCountsTowardPool() bool {
+	if x != nil {
+		return x.CountsTowardPool
+	}
+	return false
+}
+
+func (x *StorageProductUsage) GetBillingBasis() StorageBillingBasis {
+	if x != nil {
+		return x.BillingBasis
+	}
+	return StorageBillingBasis_STORAGE_BILLING_BASIS_UNSPECIFIED
+}
+
+type StoragePool struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	FreeGib         int64                  `protobuf:"varint,1,opt,name=free_gib,json=freeGib,proto3" json:"free_gib,omitempty"`                           // F, 10
+	PlanIncludedGib int64                  `protobuf:"varint,2,opt,name=plan_included_gib,json=planIncludedGib,proto3" json:"plan_included_gib,omitempty"` // sum of the org's machine plans' disk_gib
+	IncludedGib     int64                  `protobuf:"varint,3,opt,name=included_gib,json=includedGib,proto3" json:"included_gib,omitempty"`               // free_gib + plan_included_gib
+	UsedBytes       int64                  `protobuf:"varint,4,opt,name=used_bytes,json=usedBytes,proto3" json:"used_bytes,omitempty"`                     // sum of bytes_now over counts_toward_pool products that are measured
+	PeriodStart     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=period_start,json=periodStart,proto3" json:"period_start,omitempty"`
+	PeriodEnd       *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=period_end,json=periodEnd,proto3" json:"period_end,omitempty"`
+	// false until the billing cutover (P5): the pool is shown, not billed.
+	BillingActive bool `protobuf:"varint,7,opt,name=billing_active,json=billingActive,proto3" json:"billing_active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StoragePool) Reset() {
+	*x = StoragePool{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[108]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StoragePool) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StoragePool) ProtoMessage() {}
+
+func (x *StoragePool) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[108]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StoragePool.ProtoReflect.Descriptor instead.
+func (*StoragePool) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{108}
+}
+
+func (x *StoragePool) GetFreeGib() int64 {
+	if x != nil {
+		return x.FreeGib
+	}
+	return 0
+}
+
+func (x *StoragePool) GetPlanIncludedGib() int64 {
+	if x != nil {
+		return x.PlanIncludedGib
+	}
+	return 0
+}
+
+func (x *StoragePool) GetIncludedGib() int64 {
+	if x != nil {
+		return x.IncludedGib
+	}
+	return 0
+}
+
+func (x *StoragePool) GetUsedBytes() int64 {
+	if x != nil {
+		return x.UsedBytes
+	}
+	return 0
+}
+
+func (x *StoragePool) GetPeriodStart() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodStart
+	}
+	return nil
+}
+
+func (x *StoragePool) GetPeriodEnd() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PeriodEnd
+	}
+	return nil
+}
+
+func (x *StoragePool) GetBillingActive() bool {
+	if x != nil {
+		return x.BillingActive
+	}
+	return false
+}
+
+type GetStorageUsageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pool          *StoragePool           `protobuf:"bytes,1,opt,name=pool,proto3" json:"pool,omitempty"`
+	Products      []*StorageProductUsage `protobuf:"bytes,2,rep,name=products,proto3" json:"products,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStorageUsageResponse) Reset() {
+	*x = GetStorageUsageResponse{}
+	mi := &file_services_billing_v1_billing_proto_msgTypes[109]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStorageUsageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStorageUsageResponse) ProtoMessage() {}
+
+func (x *GetStorageUsageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_billing_v1_billing_proto_msgTypes[109]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStorageUsageResponse.ProtoReflect.Descriptor instead.
+func (*GetStorageUsageResponse) Descriptor() ([]byte, []int) {
+	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{109}
+}
+
+func (x *GetStorageUsageResponse) GetPool() *StoragePool {
+	if x != nil {
+		return x.Pool
+	}
+	return nil
+}
+
+func (x *GetStorageUsageResponse) GetProducts() []*StorageProductUsage {
+	if x != nil {
+		return x.Products
+	}
+	return nil
+}
+
 var File_services_billing_v1_billing_proto protoreflect.FileDescriptor
 
 const file_services_billing_v1_billing_proto_rawDesc = "" +
@@ -8950,7 +9341,33 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x0efallback_email\x18\x02 \x01(\tR\rfallbackEmail\"1\n" +
 	"\x19UpdateBillingEmailRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\"\x1c\n" +
-	"\x1aUpdateBillingEmailResponse*\xa0\x01\n" +
+	"\x1aUpdateBillingEmailResponse\"/\n" +
+	"\x16GetStorageUsageRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\x90\x03\n" +
+	"\x13StorageProductUsage\x129\n" +
+	"\aproduct\x18\x01 \x01(\x0e2\x1f.controlplane.v1.StorageProductR\aproduct\x12 \n" +
+	"\tbytes_now\x18\x02 \x01(\x03H\x00R\bbytesNow\x88\x01\x01\x12;\n" +
+	"\vmeasured_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"measuredAt\x12;\n" +
+	"\x18gib_hours_period_to_date\x18\x04 \x01(\x03H\x01R\x14gibHoursPeriodToDate\x88\x01\x01\x12,\n" +
+	"\x12counts_toward_pool\x18\x05 \x01(\bR\x10countsTowardPool\x12I\n" +
+	"\rbilling_basis\x18\x06 \x01(\x0e2$.controlplane.v1.StorageBillingBasisR\fbillingBasisB\f\n" +
+	"\n" +
+	"_bytes_nowB\x1b\n" +
+	"\x19_gib_hours_period_to_date\"\xb7\x02\n" +
+	"\vStoragePool\x12\x19\n" +
+	"\bfree_gib\x18\x01 \x01(\x03R\afreeGib\x12*\n" +
+	"\x11plan_included_gib\x18\x02 \x01(\x03R\x0fplanIncludedGib\x12!\n" +
+	"\fincluded_gib\x18\x03 \x01(\x03R\vincludedGib\x12\x1d\n" +
+	"\n" +
+	"used_bytes\x18\x04 \x01(\x03R\tusedBytes\x12=\n" +
+	"\fperiod_start\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
+	"\n" +
+	"period_end\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tperiodEnd\x12%\n" +
+	"\x0ebilling_active\x18\a \x01(\bR\rbillingActive\"\x8d\x01\n" +
+	"\x17GetStorageUsageResponse\x120\n" +
+	"\x04pool\x18\x01 \x01(\v2\x1c.controlplane.v1.StoragePoolR\x04pool\x12@\n" +
+	"\bproducts\x18\x02 \x03(\v2$.controlplane.v1.StorageProductUsageR\bproducts*\xa0\x01\n" +
 	"\x1cOrganizationUsageGranularity\x12.\n" +
 	"*ORGANIZATION_USAGE_GRANULARITY_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"ORGANIZATION_USAGE_GRANULARITY_DAY\x10\x01\x12(\n" +
@@ -8974,9 +9391,24 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"%COMPUTE_INELIGIBLE_REASON_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eCOMPUTE_INELIGIBLE_REASON_NONE\x10\x01\x12-\n" +
 	")COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION\x10\x03\x12-\n" +
-	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x042\x93,\n" +
+	")COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION\x10\x04*\x9d\x02\n" +
+	"\x0eStorageProduct\x12\x1f\n" +
+	"\x1bSTORAGE_PRODUCT_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dSTORAGE_PRODUCT_MACHINE_DISKS\x10\x01\x12\x1f\n" +
+	"\x1bSTORAGE_PRODUCT_APP_VOLUMES\x10\x02\x12$\n" +
+	" STORAGE_PRODUCT_CONTAINER_IMAGES\x10\x03\x12 \n" +
+	"\x1cSTORAGE_PRODUCT_STATIC_SITES\x10\x04\x12\x1b\n" +
+	"\x17STORAGE_PRODUCT_BUCKETS\x10\x05\x12 \n" +
+	"\x1cSTORAGE_PRODUCT_TEST_REPORTS\x10\x06\x12\x1f\n" +
+	"\x1bSTORAGE_PRODUCT_SBOM_COPIES\x10\a*\xa8\x01\n" +
+	"\x13StorageBillingBasis\x12%\n" +
+	"!STORAGE_BILLING_BASIS_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cSTORAGE_BILLING_BASIS_BILLED\x10\x01\x12!\n" +
+	"\x1dSTORAGE_BILLING_BASIS_TRACKED\x10\x02\x12%\n" +
+	"!STORAGE_BILLING_BASIS_NOT_COUNTED\x10\x032\xf9,\n" +
 	"\x0eBillingService\x12\x85\x01\n" +
-	"\x1aGetOrganizationCostSummary\x122.controlplane.v1.GetOrganizationCostSummaryRequest\x1a3.controlplane.v1.GetOrganizationCostSummaryResponse\x12v\n" +
+	"\x1aGetOrganizationCostSummary\x122.controlplane.v1.GetOrganizationCostSummaryRequest\x1a3.controlplane.v1.GetOrganizationCostSummaryResponse\x12d\n" +
+	"\x0fGetStorageUsage\x12'.controlplane.v1.GetStorageUsageRequest\x1a(.controlplane.v1.GetStorageUsageResponse\x12v\n" +
 	"\x15ListOrganizationUsage\x12-.controlplane.v1.ListOrganizationUsageRequest\x1a..controlplane.v1.ListOrganizationUsageResponse\x12a\n" +
 	"\x0eGetProjectCost\x12&.controlplane.v1.GetProjectCostRequest\x1a'.controlplane.v1.GetProjectCostResponse\x12R\n" +
 	"\tListPlans\x12!.controlplane.v1.ListPlansRequest\x1a\".controlplane.v1.ListPlansResponse\x12L\n" +
@@ -9031,332 +9463,347 @@ func file_services_billing_v1_billing_proto_rawDescGZIP() []byte {
 	return file_services_billing_v1_billing_proto_rawDescData
 }
 
-var file_services_billing_v1_billing_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_services_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 106)
+var file_services_billing_v1_billing_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_services_billing_v1_billing_proto_msgTypes = make([]protoimpl.MessageInfo, 110)
 var file_services_billing_v1_billing_proto_goTypes = []any{
 	(OrganizationUsageGranularity)(0),                          // 0: controlplane.v1.OrganizationUsageGranularity
 	(OrganizationUsageGroupBy)(0),                              // 1: controlplane.v1.OrganizationUsageGroupBy
 	(CheckoutUiMode)(0),                                        // 2: controlplane.v1.CheckoutUiMode
 	(RedeemedCouponKind)(0),                                    // 3: controlplane.v1.RedeemedCouponKind
 	(ComputeIneligibleReason)(0),                               // 4: controlplane.v1.ComputeIneligibleReason
-	(*GetOrganizationCostSummaryRequest)(nil),                  // 5: controlplane.v1.GetOrganizationCostSummaryRequest
-	(*GetOrganizationCostSummaryResponse)(nil),                 // 6: controlplane.v1.GetOrganizationCostSummaryResponse
-	(*OrganizationCostPeriod)(nil),                             // 7: controlplane.v1.OrganizationCostPeriod
-	(*OrganizationCostAllowance)(nil),                          // 8: controlplane.v1.OrganizationCostAllowance
-	(*OrganizationCostSource)(nil),                             // 9: controlplane.v1.OrganizationCostSource
-	(*ListOrganizationUsageRequest)(nil),                       // 10: controlplane.v1.ListOrganizationUsageRequest
-	(*ListOrganizationUsageResponse)(nil),                      // 11: controlplane.v1.ListOrganizationUsageResponse
-	(*OrganizationUsagePoint)(nil),                             // 12: controlplane.v1.OrganizationUsagePoint
-	(*OrganizationUsageQuantity)(nil),                          // 13: controlplane.v1.OrganizationUsageQuantity
-	(*OrganizationUsageCoverage)(nil),                          // 14: controlplane.v1.OrganizationUsageCoverage
-	(*OrganizationUsageRate)(nil),                              // 15: controlplane.v1.OrganizationUsageRate
-	(*OrganizationUsageInventoryItem)(nil),                     // 16: controlplane.v1.OrganizationUsageInventoryItem
-	(*GetProjectCostRequest)(nil),                              // 17: controlplane.v1.GetProjectCostRequest
-	(*ProjectCostAmount)(nil),                                  // 18: controlplane.v1.ProjectCostAmount
-	(*ProjectCostForecast)(nil),                                // 19: controlplane.v1.ProjectCostForecast
-	(*ProjectCostDay)(nil),                                     // 20: controlplane.v1.ProjectCostDay
-	(*ProjectCostDriver)(nil),                                  // 21: controlplane.v1.ProjectCostDriver
-	(*ProjectCostRequestedSize)(nil),                           // 22: controlplane.v1.ProjectCostRequestedSize
-	(*ProjectCostAllowance)(nil),                               // 23: controlplane.v1.ProjectCostAllowance
-	(*ProjectCostCap)(nil),                                     // 24: controlplane.v1.ProjectCostCap
-	(*GetProjectCostResponse)(nil),                             // 25: controlplane.v1.GetProjectCostResponse
-	(*ListPlansRequest)(nil),                                   // 26: controlplane.v1.ListPlansRequest
-	(*ListPlansResponse)(nil),                                  // 27: controlplane.v1.ListPlansResponse
-	(*GetPlanRequest)(nil),                                     // 28: controlplane.v1.GetPlanRequest
-	(*GetPlanResponse)(nil),                                    // 29: controlplane.v1.GetPlanResponse
-	(*GetCurrentUserSubscriptionRequest)(nil),                  // 30: controlplane.v1.GetCurrentUserSubscriptionRequest
-	(*GetCurrentUserSubscriptionResponse)(nil),                 // 31: controlplane.v1.GetCurrentUserSubscriptionResponse
-	(*CreateCurrentUserCheckoutSessionRequest)(nil),            // 32: controlplane.v1.CreateCurrentUserCheckoutSessionRequest
-	(*CreateCurrentUserCheckoutSessionResponse)(nil),           // 33: controlplane.v1.CreateCurrentUserCheckoutSessionResponse
-	(*GetCurrentUserWalletOverviewRequest)(nil),                // 34: controlplane.v1.GetCurrentUserWalletOverviewRequest
-	(*GetCurrentUserWalletOverviewResponse)(nil),               // 35: controlplane.v1.GetCurrentUserWalletOverviewResponse
-	(*GetMachinePricingReadinessRequest)(nil),                  // 36: controlplane.v1.GetMachinePricingReadinessRequest
-	(*GetMachinePricingReadinessResponse)(nil),                 // 37: controlplane.v1.GetMachinePricingReadinessResponse
-	(*AcceptNextMachinePricingRequest)(nil),                    // 38: controlplane.v1.AcceptNextMachinePricingRequest
-	(*AcceptNextMachinePricingResponse)(nil),                   // 39: controlplane.v1.AcceptNextMachinePricingResponse
-	(*PreviewMachinePlanChangeRequest)(nil),                    // 40: controlplane.v1.PreviewMachinePlanChangeRequest
-	(*MachinePlanChangeBlocker)(nil),                           // 41: controlplane.v1.MachinePlanChangeBlocker
-	(*PreviewMachinePlanChangeResponse)(nil),                   // 42: controlplane.v1.PreviewMachinePlanChangeResponse
-	(*ChangeMachinePlanRequest)(nil),                           // 43: controlplane.v1.ChangeMachinePlanRequest
-	(*ChangeMachinePlanResponse)(nil),                          // 44: controlplane.v1.ChangeMachinePlanResponse
-	(*GetCurrentUserUsageBillingRequest)(nil),                  // 45: controlplane.v1.GetCurrentUserUsageBillingRequest
-	(*UsageBillingAgreement)(nil),                              // 46: controlplane.v1.UsageBillingAgreement
-	(*HostedUsageRate)(nil),                                    // 47: controlplane.v1.HostedUsageRate
-	(*GetCurrentUserUsageBillingResponse)(nil),                 // 48: controlplane.v1.GetCurrentUserUsageBillingResponse
-	(*CreateCurrentUserUsageBillingCheckoutRequest)(nil),       // 49: controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest
-	(*CreateCurrentUserUsageBillingCheckoutResponse)(nil),      // 50: controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse
-	(*GetCurrentUserComputeSubscriptionRequest)(nil),           // 51: controlplane.v1.GetCurrentUserComputeSubscriptionRequest
-	(*GetCurrentUserComputeSubscriptionResponse)(nil),          // 52: controlplane.v1.GetCurrentUserComputeSubscriptionResponse
-	(*CreateCurrentUserComputeSubscriptionIntentRequest)(nil),  // 53: controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest
-	(*CreateCurrentUserComputeSubscriptionIntentResponse)(nil), // 54: controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse
-	(*CreateCurrentUserWalletTopupSessionRequest)(nil),         // 55: controlplane.v1.CreateCurrentUserWalletTopupSessionRequest
-	(*CreateCurrentUserWalletTopupSessionResponse)(nil),        // 56: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse
-	(*CreateCurrentUserWalletTopupPaymentIntentRequest)(nil),   // 57: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentRequest
-	(*CreateCurrentUserWalletTopupPaymentIntentResponse)(nil),  // 58: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse
-	(*GetCurrentUserWalletTopupQuoteRequest)(nil),              // 59: controlplane.v1.GetCurrentUserWalletTopupQuoteRequest
-	(*GetCurrentUserWalletTopupQuoteResponse)(nil),             // 60: controlplane.v1.GetCurrentUserWalletTopupQuoteResponse
-	(*RedeemCouponRequest)(nil),                                // 61: controlplane.v1.RedeemCouponRequest
-	(*RedeemCouponResponse)(nil),                               // 62: controlplane.v1.RedeemCouponResponse
-	(*CreateCurrentUserBillingPortalSessionRequest)(nil),       // 63: controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
-	(*CreateCurrentUserBillingPortalSessionResponse)(nil),      // 64: controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
-	(*ListOrgLimitChangesRequest)(nil),                         // 65: controlplane.v1.ListOrgLimitChangesRequest
-	(*OrgLimitChange)(nil),                                     // 66: controlplane.v1.OrgLimitChange
-	(*ListOrgLimitChangesResponse)(nil),                        // 67: controlplane.v1.ListOrgLimitChangesResponse
-	(*ListCurrentUserInvoicesRequest)(nil),                     // 68: controlplane.v1.ListCurrentUserInvoicesRequest
-	(*ListCurrentUserInvoicesResponse)(nil),                    // 69: controlplane.v1.ListCurrentUserInvoicesResponse
-	(*GetUsageSummaryRequest)(nil),                             // 70: controlplane.v1.GetUsageSummaryRequest
-	(*GetUsageSummaryResponse)(nil),                            // 71: controlplane.v1.GetUsageSummaryResponse
-	(*GetCurrentUserReliantStateRequest)(nil),                  // 72: controlplane.v1.GetCurrentUserReliantStateRequest
-	(*GetCurrentUserReliantStateResponse)(nil),                 // 73: controlplane.v1.GetCurrentUserReliantStateResponse
-	(*RepairCurrentUserReliantAccessRequest)(nil),              // 74: controlplane.v1.RepairCurrentUserReliantAccessRequest
-	(*RepairCurrentUserReliantAccessResponse)(nil),             // 75: controlplane.v1.RepairCurrentUserReliantAccessResponse
-	(*RotateCurrentUserReliantAccessRequest)(nil),              // 76: controlplane.v1.RotateCurrentUserReliantAccessRequest
-	(*RotateCurrentUserReliantAccessResponse)(nil),             // 77: controlplane.v1.RotateCurrentUserReliantAccessResponse
-	(*GetCurrentUserReliantOverviewRequest)(nil),               // 78: controlplane.v1.GetCurrentUserReliantOverviewRequest
-	(*GetCurrentUserReliantOverviewResponse)(nil),              // 79: controlplane.v1.GetCurrentUserReliantOverviewResponse
-	(*SetCurrentUserReliantEnabledRequest)(nil),                // 80: controlplane.v1.SetCurrentUserReliantEnabledRequest
-	(*SetCurrentUserReliantEnabledResponse)(nil),               // 81: controlplane.v1.SetCurrentUserReliantEnabledResponse
-	(*SetCurrentUserComputeOverageRequest)(nil),                // 82: controlplane.v1.SetCurrentUserComputeOverageRequest
-	(*SetCurrentUserComputeOverageResponse)(nil),               // 83: controlplane.v1.SetCurrentUserComputeOverageResponse
-	(*SetCurrentUserInfraOverageRequest)(nil),                  // 84: controlplane.v1.SetCurrentUserInfraOverageRequest
-	(*SetCurrentUserInfraOverageResponse)(nil),                 // 85: controlplane.v1.SetCurrentUserInfraOverageResponse
-	(*GetCurrentUserInfraOverageRequest)(nil),                  // 86: controlplane.v1.GetCurrentUserInfraOverageRequest
-	(*GetCurrentUserInfraOverageResponse)(nil),                 // 87: controlplane.v1.GetCurrentUserInfraOverageResponse
-	(*InfraDimensionUsage)(nil),                                // 88: controlplane.v1.InfraDimensionUsage
-	(*WalletAutoRecharge)(nil),                                 // 89: controlplane.v1.WalletAutoRecharge
-	(*SavedPaymentMethod)(nil),                                 // 90: controlplane.v1.SavedPaymentMethod
-	(*GetCurrentUserWalletAutoRechargeRequest)(nil),            // 91: controlplane.v1.GetCurrentUserWalletAutoRechargeRequest
-	(*GetCurrentUserWalletAutoRechargeResponse)(nil),           // 92: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse
-	(*SetCurrentUserWalletAutoRechargeRequest)(nil),            // 93: controlplane.v1.SetCurrentUserWalletAutoRechargeRequest
-	(*SetCurrentUserWalletAutoRechargeResponse)(nil),           // 94: controlplane.v1.SetCurrentUserWalletAutoRechargeResponse
-	(*CreateCurrentUserWalletPaymentMethodSetupRequest)(nil),   // 95: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupRequest
-	(*CreateCurrentUserWalletPaymentMethodSetupResponse)(nil),  // 96: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse
-	(*ConfirmCurrentUserWalletPaymentMethodRequest)(nil),       // 97: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodRequest
-	(*ConfirmCurrentUserWalletPaymentMethodResponse)(nil),      // 98: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse
-	(*GetCurrentUserComputeUsageRequest)(nil),                  // 99: controlplane.v1.GetCurrentUserComputeUsageRequest
-	(*GetCurrentUserComputeUsageResponse)(nil),                 // 100: controlplane.v1.GetCurrentUserComputeUsageResponse
-	(*SizeUsage)(nil),                                          // 101: controlplane.v1.SizeUsage
-	(*StorageUsage)(nil),                                       // 102: controlplane.v1.StorageUsage
-	(*GetCurrentUserComputeEligibilityRequest)(nil),            // 103: controlplane.v1.GetCurrentUserComputeEligibilityRequest
-	(*GetCurrentUserComputeEligibilityResponse)(nil),           // 104: controlplane.v1.GetCurrentUserComputeEligibilityResponse
-	(*GetInvoicePreviewRequest)(nil),                           // 105: controlplane.v1.GetInvoicePreviewRequest
-	(*GetInvoicePreviewResponse)(nil),                          // 106: controlplane.v1.GetInvoicePreviewResponse
-	(*GetCurrentUserBillingEmailRequest)(nil),                  // 107: controlplane.v1.GetCurrentUserBillingEmailRequest
-	(*GetCurrentUserBillingEmailResponse)(nil),                 // 108: controlplane.v1.GetCurrentUserBillingEmailResponse
-	(*UpdateBillingEmailRequest)(nil),                          // 109: controlplane.v1.UpdateBillingEmailRequest
-	(*UpdateBillingEmailResponse)(nil),                         // 110: controlplane.v1.UpdateBillingEmailResponse
-	(*timestamppb.Timestamp)(nil),                              // 111: google.protobuf.Timestamp
-	(*v1.Plan)(nil),                                            // 112: controlplane.v1.Plan
-	(*v1.DaemonPricing)(nil),                                   // 113: controlplane.v1.DaemonPricing
-	(*v1.Subscription)(nil),                                    // 114: controlplane.v1.Subscription
-	(*v1.WalletOverview)(nil),                                  // 115: controlplane.v1.WalletOverview
-	(*v1.WalletTopup)(nil),                                     // 116: controlplane.v1.WalletTopup
-	(*v1.Invoice)(nil),                                         // 117: controlplane.v1.Invoice
-	(*v1.UsageSummary)(nil),                                    // 118: controlplane.v1.UsageSummary
-	(*v1.ReliantEntitlement)(nil),                              // 119: controlplane.v1.ReliantEntitlement
-	(*v1.ManagedReliantAccess)(nil),                            // 120: controlplane.v1.ManagedReliantAccess
-	(*v1.ReliantOverview)(nil),                                 // 121: controlplane.v1.ReliantOverview
+	(StorageProduct)(0),                                        // 5: controlplane.v1.StorageProduct
+	(StorageBillingBasis)(0),                                   // 6: controlplane.v1.StorageBillingBasis
+	(*GetOrganizationCostSummaryRequest)(nil),                  // 7: controlplane.v1.GetOrganizationCostSummaryRequest
+	(*GetOrganizationCostSummaryResponse)(nil),                 // 8: controlplane.v1.GetOrganizationCostSummaryResponse
+	(*OrganizationCostPeriod)(nil),                             // 9: controlplane.v1.OrganizationCostPeriod
+	(*OrganizationCostAllowance)(nil),                          // 10: controlplane.v1.OrganizationCostAllowance
+	(*OrganizationCostSource)(nil),                             // 11: controlplane.v1.OrganizationCostSource
+	(*ListOrganizationUsageRequest)(nil),                       // 12: controlplane.v1.ListOrganizationUsageRequest
+	(*ListOrganizationUsageResponse)(nil),                      // 13: controlplane.v1.ListOrganizationUsageResponse
+	(*OrganizationUsagePoint)(nil),                             // 14: controlplane.v1.OrganizationUsagePoint
+	(*OrganizationUsageQuantity)(nil),                          // 15: controlplane.v1.OrganizationUsageQuantity
+	(*OrganizationUsageCoverage)(nil),                          // 16: controlplane.v1.OrganizationUsageCoverage
+	(*OrganizationUsageRate)(nil),                              // 17: controlplane.v1.OrganizationUsageRate
+	(*OrganizationUsageInventoryItem)(nil),                     // 18: controlplane.v1.OrganizationUsageInventoryItem
+	(*GetProjectCostRequest)(nil),                              // 19: controlplane.v1.GetProjectCostRequest
+	(*ProjectCostAmount)(nil),                                  // 20: controlplane.v1.ProjectCostAmount
+	(*ProjectCostForecast)(nil),                                // 21: controlplane.v1.ProjectCostForecast
+	(*ProjectCostDay)(nil),                                     // 22: controlplane.v1.ProjectCostDay
+	(*ProjectCostDriver)(nil),                                  // 23: controlplane.v1.ProjectCostDriver
+	(*ProjectCostRequestedSize)(nil),                           // 24: controlplane.v1.ProjectCostRequestedSize
+	(*ProjectCostAllowance)(nil),                               // 25: controlplane.v1.ProjectCostAllowance
+	(*ProjectCostCap)(nil),                                     // 26: controlplane.v1.ProjectCostCap
+	(*GetProjectCostResponse)(nil),                             // 27: controlplane.v1.GetProjectCostResponse
+	(*ListPlansRequest)(nil),                                   // 28: controlplane.v1.ListPlansRequest
+	(*ListPlansResponse)(nil),                                  // 29: controlplane.v1.ListPlansResponse
+	(*GetPlanRequest)(nil),                                     // 30: controlplane.v1.GetPlanRequest
+	(*GetPlanResponse)(nil),                                    // 31: controlplane.v1.GetPlanResponse
+	(*GetCurrentUserSubscriptionRequest)(nil),                  // 32: controlplane.v1.GetCurrentUserSubscriptionRequest
+	(*GetCurrentUserSubscriptionResponse)(nil),                 // 33: controlplane.v1.GetCurrentUserSubscriptionResponse
+	(*CreateCurrentUserCheckoutSessionRequest)(nil),            // 34: controlplane.v1.CreateCurrentUserCheckoutSessionRequest
+	(*CreateCurrentUserCheckoutSessionResponse)(nil),           // 35: controlplane.v1.CreateCurrentUserCheckoutSessionResponse
+	(*GetCurrentUserWalletOverviewRequest)(nil),                // 36: controlplane.v1.GetCurrentUserWalletOverviewRequest
+	(*GetCurrentUserWalletOverviewResponse)(nil),               // 37: controlplane.v1.GetCurrentUserWalletOverviewResponse
+	(*GetMachinePricingReadinessRequest)(nil),                  // 38: controlplane.v1.GetMachinePricingReadinessRequest
+	(*GetMachinePricingReadinessResponse)(nil),                 // 39: controlplane.v1.GetMachinePricingReadinessResponse
+	(*AcceptNextMachinePricingRequest)(nil),                    // 40: controlplane.v1.AcceptNextMachinePricingRequest
+	(*AcceptNextMachinePricingResponse)(nil),                   // 41: controlplane.v1.AcceptNextMachinePricingResponse
+	(*PreviewMachinePlanChangeRequest)(nil),                    // 42: controlplane.v1.PreviewMachinePlanChangeRequest
+	(*MachinePlanChangeBlocker)(nil),                           // 43: controlplane.v1.MachinePlanChangeBlocker
+	(*PreviewMachinePlanChangeResponse)(nil),                   // 44: controlplane.v1.PreviewMachinePlanChangeResponse
+	(*ChangeMachinePlanRequest)(nil),                           // 45: controlplane.v1.ChangeMachinePlanRequest
+	(*ChangeMachinePlanResponse)(nil),                          // 46: controlplane.v1.ChangeMachinePlanResponse
+	(*GetCurrentUserUsageBillingRequest)(nil),                  // 47: controlplane.v1.GetCurrentUserUsageBillingRequest
+	(*UsageBillingAgreement)(nil),                              // 48: controlplane.v1.UsageBillingAgreement
+	(*HostedUsageRate)(nil),                                    // 49: controlplane.v1.HostedUsageRate
+	(*GetCurrentUserUsageBillingResponse)(nil),                 // 50: controlplane.v1.GetCurrentUserUsageBillingResponse
+	(*CreateCurrentUserUsageBillingCheckoutRequest)(nil),       // 51: controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest
+	(*CreateCurrentUserUsageBillingCheckoutResponse)(nil),      // 52: controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse
+	(*GetCurrentUserComputeSubscriptionRequest)(nil),           // 53: controlplane.v1.GetCurrentUserComputeSubscriptionRequest
+	(*GetCurrentUserComputeSubscriptionResponse)(nil),          // 54: controlplane.v1.GetCurrentUserComputeSubscriptionResponse
+	(*CreateCurrentUserComputeSubscriptionIntentRequest)(nil),  // 55: controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest
+	(*CreateCurrentUserComputeSubscriptionIntentResponse)(nil), // 56: controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse
+	(*CreateCurrentUserWalletTopupSessionRequest)(nil),         // 57: controlplane.v1.CreateCurrentUserWalletTopupSessionRequest
+	(*CreateCurrentUserWalletTopupSessionResponse)(nil),        // 58: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse
+	(*CreateCurrentUserWalletTopupPaymentIntentRequest)(nil),   // 59: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentRequest
+	(*CreateCurrentUserWalletTopupPaymentIntentResponse)(nil),  // 60: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse
+	(*GetCurrentUserWalletTopupQuoteRequest)(nil),              // 61: controlplane.v1.GetCurrentUserWalletTopupQuoteRequest
+	(*GetCurrentUserWalletTopupQuoteResponse)(nil),             // 62: controlplane.v1.GetCurrentUserWalletTopupQuoteResponse
+	(*RedeemCouponRequest)(nil),                                // 63: controlplane.v1.RedeemCouponRequest
+	(*RedeemCouponResponse)(nil),                               // 64: controlplane.v1.RedeemCouponResponse
+	(*CreateCurrentUserBillingPortalSessionRequest)(nil),       // 65: controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
+	(*CreateCurrentUserBillingPortalSessionResponse)(nil),      // 66: controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
+	(*ListOrgLimitChangesRequest)(nil),                         // 67: controlplane.v1.ListOrgLimitChangesRequest
+	(*OrgLimitChange)(nil),                                     // 68: controlplane.v1.OrgLimitChange
+	(*ListOrgLimitChangesResponse)(nil),                        // 69: controlplane.v1.ListOrgLimitChangesResponse
+	(*ListCurrentUserInvoicesRequest)(nil),                     // 70: controlplane.v1.ListCurrentUserInvoicesRequest
+	(*ListCurrentUserInvoicesResponse)(nil),                    // 71: controlplane.v1.ListCurrentUserInvoicesResponse
+	(*GetUsageSummaryRequest)(nil),                             // 72: controlplane.v1.GetUsageSummaryRequest
+	(*GetUsageSummaryResponse)(nil),                            // 73: controlplane.v1.GetUsageSummaryResponse
+	(*GetCurrentUserReliantStateRequest)(nil),                  // 74: controlplane.v1.GetCurrentUserReliantStateRequest
+	(*GetCurrentUserReliantStateResponse)(nil),                 // 75: controlplane.v1.GetCurrentUserReliantStateResponse
+	(*RepairCurrentUserReliantAccessRequest)(nil),              // 76: controlplane.v1.RepairCurrentUserReliantAccessRequest
+	(*RepairCurrentUserReliantAccessResponse)(nil),             // 77: controlplane.v1.RepairCurrentUserReliantAccessResponse
+	(*RotateCurrentUserReliantAccessRequest)(nil),              // 78: controlplane.v1.RotateCurrentUserReliantAccessRequest
+	(*RotateCurrentUserReliantAccessResponse)(nil),             // 79: controlplane.v1.RotateCurrentUserReliantAccessResponse
+	(*GetCurrentUserReliantOverviewRequest)(nil),               // 80: controlplane.v1.GetCurrentUserReliantOverviewRequest
+	(*GetCurrentUserReliantOverviewResponse)(nil),              // 81: controlplane.v1.GetCurrentUserReliantOverviewResponse
+	(*SetCurrentUserReliantEnabledRequest)(nil),                // 82: controlplane.v1.SetCurrentUserReliantEnabledRequest
+	(*SetCurrentUserReliantEnabledResponse)(nil),               // 83: controlplane.v1.SetCurrentUserReliantEnabledResponse
+	(*SetCurrentUserComputeOverageRequest)(nil),                // 84: controlplane.v1.SetCurrentUserComputeOverageRequest
+	(*SetCurrentUserComputeOverageResponse)(nil),               // 85: controlplane.v1.SetCurrentUserComputeOverageResponse
+	(*SetCurrentUserInfraOverageRequest)(nil),                  // 86: controlplane.v1.SetCurrentUserInfraOverageRequest
+	(*SetCurrentUserInfraOverageResponse)(nil),                 // 87: controlplane.v1.SetCurrentUserInfraOverageResponse
+	(*GetCurrentUserInfraOverageRequest)(nil),                  // 88: controlplane.v1.GetCurrentUserInfraOverageRequest
+	(*GetCurrentUserInfraOverageResponse)(nil),                 // 89: controlplane.v1.GetCurrentUserInfraOverageResponse
+	(*InfraDimensionUsage)(nil),                                // 90: controlplane.v1.InfraDimensionUsage
+	(*WalletAutoRecharge)(nil),                                 // 91: controlplane.v1.WalletAutoRecharge
+	(*SavedPaymentMethod)(nil),                                 // 92: controlplane.v1.SavedPaymentMethod
+	(*GetCurrentUserWalletAutoRechargeRequest)(nil),            // 93: controlplane.v1.GetCurrentUserWalletAutoRechargeRequest
+	(*GetCurrentUserWalletAutoRechargeResponse)(nil),           // 94: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse
+	(*SetCurrentUserWalletAutoRechargeRequest)(nil),            // 95: controlplane.v1.SetCurrentUserWalletAutoRechargeRequest
+	(*SetCurrentUserWalletAutoRechargeResponse)(nil),           // 96: controlplane.v1.SetCurrentUserWalletAutoRechargeResponse
+	(*CreateCurrentUserWalletPaymentMethodSetupRequest)(nil),   // 97: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupRequest
+	(*CreateCurrentUserWalletPaymentMethodSetupResponse)(nil),  // 98: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse
+	(*ConfirmCurrentUserWalletPaymentMethodRequest)(nil),       // 99: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodRequest
+	(*ConfirmCurrentUserWalletPaymentMethodResponse)(nil),      // 100: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse
+	(*GetCurrentUserComputeUsageRequest)(nil),                  // 101: controlplane.v1.GetCurrentUserComputeUsageRequest
+	(*GetCurrentUserComputeUsageResponse)(nil),                 // 102: controlplane.v1.GetCurrentUserComputeUsageResponse
+	(*SizeUsage)(nil),                                          // 103: controlplane.v1.SizeUsage
+	(*StorageUsage)(nil),                                       // 104: controlplane.v1.StorageUsage
+	(*GetCurrentUserComputeEligibilityRequest)(nil),            // 105: controlplane.v1.GetCurrentUserComputeEligibilityRequest
+	(*GetCurrentUserComputeEligibilityResponse)(nil),           // 106: controlplane.v1.GetCurrentUserComputeEligibilityResponse
+	(*GetInvoicePreviewRequest)(nil),                           // 107: controlplane.v1.GetInvoicePreviewRequest
+	(*GetInvoicePreviewResponse)(nil),                          // 108: controlplane.v1.GetInvoicePreviewResponse
+	(*GetCurrentUserBillingEmailRequest)(nil),                  // 109: controlplane.v1.GetCurrentUserBillingEmailRequest
+	(*GetCurrentUserBillingEmailResponse)(nil),                 // 110: controlplane.v1.GetCurrentUserBillingEmailResponse
+	(*UpdateBillingEmailRequest)(nil),                          // 111: controlplane.v1.UpdateBillingEmailRequest
+	(*UpdateBillingEmailResponse)(nil),                         // 112: controlplane.v1.UpdateBillingEmailResponse
+	(*GetStorageUsageRequest)(nil),                             // 113: controlplane.v1.GetStorageUsageRequest
+	(*StorageProductUsage)(nil),                                // 114: controlplane.v1.StorageProductUsage
+	(*StoragePool)(nil),                                        // 115: controlplane.v1.StoragePool
+	(*GetStorageUsageResponse)(nil),                            // 116: controlplane.v1.GetStorageUsageResponse
+	(*timestamppb.Timestamp)(nil),                              // 117: google.protobuf.Timestamp
+	(*v1.Plan)(nil),                                            // 118: controlplane.v1.Plan
+	(*v1.DaemonPricing)(nil),                                   // 119: controlplane.v1.DaemonPricing
+	(*v1.Subscription)(nil),                                    // 120: controlplane.v1.Subscription
+	(*v1.WalletOverview)(nil),                                  // 121: controlplane.v1.WalletOverview
+	(*v1.WalletTopup)(nil),                                     // 122: controlplane.v1.WalletTopup
+	(*v1.Invoice)(nil),                                         // 123: controlplane.v1.Invoice
+	(*v1.UsageSummary)(nil),                                    // 124: controlplane.v1.UsageSummary
+	(*v1.ReliantEntitlement)(nil),                              // 125: controlplane.v1.ReliantEntitlement
+	(*v1.ManagedReliantAccess)(nil),                            // 126: controlplane.v1.ManagedReliantAccess
+	(*v1.ReliantOverview)(nil),                                 // 127: controlplane.v1.ReliantOverview
 }
 var file_services_billing_v1_billing_proto_depIdxs = []int32{
-	111, // 0: controlplane.v1.GetOrganizationCostSummaryResponse.generated_at:type_name -> google.protobuf.Timestamp
-	7,   // 1: controlplane.v1.GetOrganizationCostSummaryResponse.periods:type_name -> controlplane.v1.OrganizationCostPeriod
-	9,   // 2: controlplane.v1.GetOrganizationCostSummaryResponse.sources:type_name -> controlplane.v1.OrganizationCostSource
-	111, // 3: controlplane.v1.OrganizationCostPeriod.start:type_name -> google.protobuf.Timestamp
-	111, // 4: controlplane.v1.OrganizationCostPeriod.end:type_name -> google.protobuf.Timestamp
-	8,   // 5: controlplane.v1.OrganizationCostSource.allowances:type_name -> controlplane.v1.OrganizationCostAllowance
-	111, // 6: controlplane.v1.OrganizationCostSource.coverage_start:type_name -> google.protobuf.Timestamp
-	111, // 7: controlplane.v1.OrganizationCostSource.coverage_end:type_name -> google.protobuf.Timestamp
-	111, // 8: controlplane.v1.OrganizationCostSource.measured_through:type_name -> google.protobuf.Timestamp
-	111, // 9: controlplane.v1.ListOrganizationUsageRequest.start:type_name -> google.protobuf.Timestamp
-	111, // 10: controlplane.v1.ListOrganizationUsageRequest.end:type_name -> google.protobuf.Timestamp
+	117, // 0: controlplane.v1.GetOrganizationCostSummaryResponse.generated_at:type_name -> google.protobuf.Timestamp
+	9,   // 1: controlplane.v1.GetOrganizationCostSummaryResponse.periods:type_name -> controlplane.v1.OrganizationCostPeriod
+	11,  // 2: controlplane.v1.GetOrganizationCostSummaryResponse.sources:type_name -> controlplane.v1.OrganizationCostSource
+	117, // 3: controlplane.v1.OrganizationCostPeriod.start:type_name -> google.protobuf.Timestamp
+	117, // 4: controlplane.v1.OrganizationCostPeriod.end:type_name -> google.protobuf.Timestamp
+	10,  // 5: controlplane.v1.OrganizationCostSource.allowances:type_name -> controlplane.v1.OrganizationCostAllowance
+	117, // 6: controlplane.v1.OrganizationCostSource.coverage_start:type_name -> google.protobuf.Timestamp
+	117, // 7: controlplane.v1.OrganizationCostSource.coverage_end:type_name -> google.protobuf.Timestamp
+	117, // 8: controlplane.v1.OrganizationCostSource.measured_through:type_name -> google.protobuf.Timestamp
+	117, // 9: controlplane.v1.ListOrganizationUsageRequest.start:type_name -> google.protobuf.Timestamp
+	117, // 10: controlplane.v1.ListOrganizationUsageRequest.end:type_name -> google.protobuf.Timestamp
 	0,   // 11: controlplane.v1.ListOrganizationUsageRequest.granularity:type_name -> controlplane.v1.OrganizationUsageGranularity
 	1,   // 12: controlplane.v1.ListOrganizationUsageRequest.group_by:type_name -> controlplane.v1.OrganizationUsageGroupBy
-	111, // 13: controlplane.v1.ListOrganizationUsageResponse.generated_at:type_name -> google.protobuf.Timestamp
-	111, // 14: controlplane.v1.ListOrganizationUsageResponse.start:type_name -> google.protobuf.Timestamp
-	111, // 15: controlplane.v1.ListOrganizationUsageResponse.end:type_name -> google.protobuf.Timestamp
+	117, // 13: controlplane.v1.ListOrganizationUsageResponse.generated_at:type_name -> google.protobuf.Timestamp
+	117, // 14: controlplane.v1.ListOrganizationUsageResponse.start:type_name -> google.protobuf.Timestamp
+	117, // 15: controlplane.v1.ListOrganizationUsageResponse.end:type_name -> google.protobuf.Timestamp
 	0,   // 16: controlplane.v1.ListOrganizationUsageResponse.granularity:type_name -> controlplane.v1.OrganizationUsageGranularity
 	1,   // 17: controlplane.v1.ListOrganizationUsageResponse.group_by:type_name -> controlplane.v1.OrganizationUsageGroupBy
-	12,  // 18: controlplane.v1.ListOrganizationUsageResponse.points:type_name -> controlplane.v1.OrganizationUsagePoint
-	14,  // 19: controlplane.v1.ListOrganizationUsageResponse.coverage:type_name -> controlplane.v1.OrganizationUsageCoverage
-	15,  // 20: controlplane.v1.ListOrganizationUsageResponse.spend_rates:type_name -> controlplane.v1.OrganizationUsageRate
-	16,  // 21: controlplane.v1.ListOrganizationUsageResponse.inventory:type_name -> controlplane.v1.OrganizationUsageInventoryItem
-	111, // 22: controlplane.v1.OrganizationUsagePoint.bucket_start:type_name -> google.protobuf.Timestamp
-	13,  // 23: controlplane.v1.OrganizationUsagePoint.quantities:type_name -> controlplane.v1.OrganizationUsageQuantity
-	111, // 24: controlplane.v1.OrganizationUsageCoverage.coverage_start:type_name -> google.protobuf.Timestamp
-	111, // 25: controlplane.v1.OrganizationUsageCoverage.coverage_end:type_name -> google.protobuf.Timestamp
-	111, // 26: controlplane.v1.OrganizationUsageCoverage.measured_through:type_name -> google.protobuf.Timestamp
-	111, // 27: controlplane.v1.GetProjectCostRequest.period:type_name -> google.protobuf.Timestamp
-	18,  // 28: controlplane.v1.ProjectCostForecast.amount:type_name -> controlplane.v1.ProjectCostAmount
-	18,  // 29: controlplane.v1.ProjectCostForecast.list:type_name -> controlplane.v1.ProjectCostAmount
-	111, // 30: controlplane.v1.ProjectCostDay.day:type_name -> google.protobuf.Timestamp
-	18,  // 31: controlplane.v1.ProjectCostDay.list:type_name -> controlplane.v1.ProjectCostAmount
-	13,  // 32: controlplane.v1.ProjectCostDay.quantities:type_name -> controlplane.v1.OrganizationUsageQuantity
-	18,  // 33: controlplane.v1.ProjectCostDriver.list:type_name -> controlplane.v1.ProjectCostAmount
-	13,  // 34: controlplane.v1.ProjectCostDriver.quantities:type_name -> controlplane.v1.OrganizationUsageQuantity
-	22,  // 35: controlplane.v1.ProjectCostDriver.requested:type_name -> controlplane.v1.ProjectCostRequestedSize
-	18,  // 36: controlplane.v1.ProjectCostAllowance.project_credit:type_name -> controlplane.v1.ProjectCostAmount
-	111, // 37: controlplane.v1.ProjectCostCap.projected_reach_at:type_name -> google.protobuf.Timestamp
-	111, // 38: controlplane.v1.GetProjectCostResponse.generated_at:type_name -> google.protobuf.Timestamp
-	111, // 39: controlplane.v1.GetProjectCostResponse.period_start:type_name -> google.protobuf.Timestamp
-	111, // 40: controlplane.v1.GetProjectCostResponse.period_end:type_name -> google.protobuf.Timestamp
-	111, // 41: controlplane.v1.GetProjectCostResponse.measured_through:type_name -> google.protobuf.Timestamp
-	18,  // 42: controlplane.v1.GetProjectCostResponse.month_to_date:type_name -> controlplane.v1.ProjectCostAmount
-	18,  // 43: controlplane.v1.GetProjectCostResponse.month_to_date_list:type_name -> controlplane.v1.ProjectCostAmount
-	18,  // 44: controlplane.v1.GetProjectCostResponse.same_point_last_period:type_name -> controlplane.v1.ProjectCostAmount
-	19,  // 45: controlplane.v1.GetProjectCostResponse.forecast:type_name -> controlplane.v1.ProjectCostForecast
-	18,  // 46: controlplane.v1.GetProjectCostResponse.last_period:type_name -> controlplane.v1.ProjectCostAmount
-	20,  // 47: controlplane.v1.GetProjectCostResponse.daily:type_name -> controlplane.v1.ProjectCostDay
-	21,  // 48: controlplane.v1.GetProjectCostResponse.drivers:type_name -> controlplane.v1.ProjectCostDriver
-	23,  // 49: controlplane.v1.GetProjectCostResponse.allowances:type_name -> controlplane.v1.ProjectCostAllowance
-	24,  // 50: controlplane.v1.GetProjectCostResponse.caps:type_name -> controlplane.v1.ProjectCostCap
-	14,  // 51: controlplane.v1.GetProjectCostResponse.coverage:type_name -> controlplane.v1.OrganizationUsageCoverage
-	18,  // 52: controlplane.v1.GetProjectCostResponse.allowance_share:type_name -> controlplane.v1.ProjectCostAmount
-	18,  // 53: controlplane.v1.GetProjectCostResponse.last_24h:type_name -> controlplane.v1.ProjectCostAmount
-	20,  // 54: controlplane.v1.GetProjectCostResponse.last_period_daily:type_name -> controlplane.v1.ProjectCostDay
-	111, // 55: controlplane.v1.GetProjectCostResponse.last_period_start:type_name -> google.protobuf.Timestamp
-	112, // 56: controlplane.v1.ListPlansResponse.plans:type_name -> controlplane.v1.Plan
-	113, // 57: controlplane.v1.ListPlansResponse.daemon_pricing:type_name -> controlplane.v1.DaemonPricing
-	112, // 58: controlplane.v1.GetPlanResponse.plan:type_name -> controlplane.v1.Plan
-	114, // 59: controlplane.v1.GetCurrentUserSubscriptionResponse.subscription:type_name -> controlplane.v1.Subscription
+	14,  // 18: controlplane.v1.ListOrganizationUsageResponse.points:type_name -> controlplane.v1.OrganizationUsagePoint
+	16,  // 19: controlplane.v1.ListOrganizationUsageResponse.coverage:type_name -> controlplane.v1.OrganizationUsageCoverage
+	17,  // 20: controlplane.v1.ListOrganizationUsageResponse.spend_rates:type_name -> controlplane.v1.OrganizationUsageRate
+	18,  // 21: controlplane.v1.ListOrganizationUsageResponse.inventory:type_name -> controlplane.v1.OrganizationUsageInventoryItem
+	117, // 22: controlplane.v1.OrganizationUsagePoint.bucket_start:type_name -> google.protobuf.Timestamp
+	15,  // 23: controlplane.v1.OrganizationUsagePoint.quantities:type_name -> controlplane.v1.OrganizationUsageQuantity
+	117, // 24: controlplane.v1.OrganizationUsageCoverage.coverage_start:type_name -> google.protobuf.Timestamp
+	117, // 25: controlplane.v1.OrganizationUsageCoverage.coverage_end:type_name -> google.protobuf.Timestamp
+	117, // 26: controlplane.v1.OrganizationUsageCoverage.measured_through:type_name -> google.protobuf.Timestamp
+	117, // 27: controlplane.v1.GetProjectCostRequest.period:type_name -> google.protobuf.Timestamp
+	20,  // 28: controlplane.v1.ProjectCostForecast.amount:type_name -> controlplane.v1.ProjectCostAmount
+	20,  // 29: controlplane.v1.ProjectCostForecast.list:type_name -> controlplane.v1.ProjectCostAmount
+	117, // 30: controlplane.v1.ProjectCostDay.day:type_name -> google.protobuf.Timestamp
+	20,  // 31: controlplane.v1.ProjectCostDay.list:type_name -> controlplane.v1.ProjectCostAmount
+	15,  // 32: controlplane.v1.ProjectCostDay.quantities:type_name -> controlplane.v1.OrganizationUsageQuantity
+	20,  // 33: controlplane.v1.ProjectCostDriver.list:type_name -> controlplane.v1.ProjectCostAmount
+	15,  // 34: controlplane.v1.ProjectCostDriver.quantities:type_name -> controlplane.v1.OrganizationUsageQuantity
+	24,  // 35: controlplane.v1.ProjectCostDriver.requested:type_name -> controlplane.v1.ProjectCostRequestedSize
+	20,  // 36: controlplane.v1.ProjectCostAllowance.project_credit:type_name -> controlplane.v1.ProjectCostAmount
+	117, // 37: controlplane.v1.ProjectCostCap.projected_reach_at:type_name -> google.protobuf.Timestamp
+	117, // 38: controlplane.v1.GetProjectCostResponse.generated_at:type_name -> google.protobuf.Timestamp
+	117, // 39: controlplane.v1.GetProjectCostResponse.period_start:type_name -> google.protobuf.Timestamp
+	117, // 40: controlplane.v1.GetProjectCostResponse.period_end:type_name -> google.protobuf.Timestamp
+	117, // 41: controlplane.v1.GetProjectCostResponse.measured_through:type_name -> google.protobuf.Timestamp
+	20,  // 42: controlplane.v1.GetProjectCostResponse.month_to_date:type_name -> controlplane.v1.ProjectCostAmount
+	20,  // 43: controlplane.v1.GetProjectCostResponse.month_to_date_list:type_name -> controlplane.v1.ProjectCostAmount
+	20,  // 44: controlplane.v1.GetProjectCostResponse.same_point_last_period:type_name -> controlplane.v1.ProjectCostAmount
+	21,  // 45: controlplane.v1.GetProjectCostResponse.forecast:type_name -> controlplane.v1.ProjectCostForecast
+	20,  // 46: controlplane.v1.GetProjectCostResponse.last_period:type_name -> controlplane.v1.ProjectCostAmount
+	22,  // 47: controlplane.v1.GetProjectCostResponse.daily:type_name -> controlplane.v1.ProjectCostDay
+	23,  // 48: controlplane.v1.GetProjectCostResponse.drivers:type_name -> controlplane.v1.ProjectCostDriver
+	25,  // 49: controlplane.v1.GetProjectCostResponse.allowances:type_name -> controlplane.v1.ProjectCostAllowance
+	26,  // 50: controlplane.v1.GetProjectCostResponse.caps:type_name -> controlplane.v1.ProjectCostCap
+	16,  // 51: controlplane.v1.GetProjectCostResponse.coverage:type_name -> controlplane.v1.OrganizationUsageCoverage
+	20,  // 52: controlplane.v1.GetProjectCostResponse.allowance_share:type_name -> controlplane.v1.ProjectCostAmount
+	20,  // 53: controlplane.v1.GetProjectCostResponse.last_24h:type_name -> controlplane.v1.ProjectCostAmount
+	22,  // 54: controlplane.v1.GetProjectCostResponse.last_period_daily:type_name -> controlplane.v1.ProjectCostDay
+	117, // 55: controlplane.v1.GetProjectCostResponse.last_period_start:type_name -> google.protobuf.Timestamp
+	118, // 56: controlplane.v1.ListPlansResponse.plans:type_name -> controlplane.v1.Plan
+	119, // 57: controlplane.v1.ListPlansResponse.daemon_pricing:type_name -> controlplane.v1.DaemonPricing
+	118, // 58: controlplane.v1.GetPlanResponse.plan:type_name -> controlplane.v1.Plan
+	120, // 59: controlplane.v1.GetCurrentUserSubscriptionResponse.subscription:type_name -> controlplane.v1.Subscription
 	2,   // 60: controlplane.v1.CreateCurrentUserCheckoutSessionRequest.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
 	2,   // 61: controlplane.v1.CreateCurrentUserCheckoutSessionResponse.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
-	115, // 62: controlplane.v1.GetCurrentUserWalletOverviewResponse.overview:type_name -> controlplane.v1.WalletOverview
-	111, // 63: controlplane.v1.GetMachinePricingReadinessResponse.effective_period_start:type_name -> google.protobuf.Timestamp
-	111, // 64: controlplane.v1.AcceptNextMachinePricingResponse.effective_period_start:type_name -> google.protobuf.Timestamp
-	111, // 65: controlplane.v1.PreviewMachinePlanChangeResponse.proration_date:type_name -> google.protobuf.Timestamp
-	111, // 66: controlplane.v1.PreviewMachinePlanChangeResponse.period_end:type_name -> google.protobuf.Timestamp
-	41,  // 67: controlplane.v1.PreviewMachinePlanChangeResponse.blocking_machines:type_name -> controlplane.v1.MachinePlanChangeBlocker
-	111, // 68: controlplane.v1.PreviewMachinePlanChangeResponse.quote_expires_at:type_name -> google.protobuf.Timestamp
-	111, // 69: controlplane.v1.PreviewMachinePlanChangeResponse.effective_at:type_name -> google.protobuf.Timestamp
-	111, // 70: controlplane.v1.ChangeMachinePlanRequest.proration_date:type_name -> google.protobuf.Timestamp
-	111, // 71: controlplane.v1.ChangeMachinePlanResponse.effective_at:type_name -> google.protobuf.Timestamp
-	111, // 72: controlplane.v1.UsageBillingAgreement.billing_start_at:type_name -> google.protobuf.Timestamp
-	46,  // 73: controlplane.v1.GetCurrentUserUsageBillingResponse.agreement:type_name -> controlplane.v1.UsageBillingAgreement
-	47,  // 74: controlplane.v1.GetCurrentUserUsageBillingResponse.rates:type_name -> controlplane.v1.HostedUsageRate
-	114, // 75: controlplane.v1.GetCurrentUserComputeSubscriptionResponse.subscription:type_name -> controlplane.v1.Subscription
+	121, // 62: controlplane.v1.GetCurrentUserWalletOverviewResponse.overview:type_name -> controlplane.v1.WalletOverview
+	117, // 63: controlplane.v1.GetMachinePricingReadinessResponse.effective_period_start:type_name -> google.protobuf.Timestamp
+	117, // 64: controlplane.v1.AcceptNextMachinePricingResponse.effective_period_start:type_name -> google.protobuf.Timestamp
+	117, // 65: controlplane.v1.PreviewMachinePlanChangeResponse.proration_date:type_name -> google.protobuf.Timestamp
+	117, // 66: controlplane.v1.PreviewMachinePlanChangeResponse.period_end:type_name -> google.protobuf.Timestamp
+	43,  // 67: controlplane.v1.PreviewMachinePlanChangeResponse.blocking_machines:type_name -> controlplane.v1.MachinePlanChangeBlocker
+	117, // 68: controlplane.v1.PreviewMachinePlanChangeResponse.quote_expires_at:type_name -> google.protobuf.Timestamp
+	117, // 69: controlplane.v1.PreviewMachinePlanChangeResponse.effective_at:type_name -> google.protobuf.Timestamp
+	117, // 70: controlplane.v1.ChangeMachinePlanRequest.proration_date:type_name -> google.protobuf.Timestamp
+	117, // 71: controlplane.v1.ChangeMachinePlanResponse.effective_at:type_name -> google.protobuf.Timestamp
+	117, // 72: controlplane.v1.UsageBillingAgreement.billing_start_at:type_name -> google.protobuf.Timestamp
+	48,  // 73: controlplane.v1.GetCurrentUserUsageBillingResponse.agreement:type_name -> controlplane.v1.UsageBillingAgreement
+	49,  // 74: controlplane.v1.GetCurrentUserUsageBillingResponse.rates:type_name -> controlplane.v1.HostedUsageRate
+	120, // 75: controlplane.v1.GetCurrentUserComputeSubscriptionResponse.subscription:type_name -> controlplane.v1.Subscription
 	2,   // 76: controlplane.v1.CreateCurrentUserWalletTopupSessionRequest.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
-	116, // 77: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse.topup:type_name -> controlplane.v1.WalletTopup
+	122, // 77: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse.topup:type_name -> controlplane.v1.WalletTopup
 	2,   // 78: controlplane.v1.CreateCurrentUserWalletTopupSessionResponse.ui_mode:type_name -> controlplane.v1.CheckoutUiMode
-	116, // 79: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse.topup:type_name -> controlplane.v1.WalletTopup
+	122, // 79: controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse.topup:type_name -> controlplane.v1.WalletTopup
 	3,   // 80: controlplane.v1.RedeemCouponResponse.kind:type_name -> controlplane.v1.RedeemedCouponKind
-	111, // 81: controlplane.v1.OrgLimitChange.at:type_name -> google.protobuf.Timestamp
-	66,  // 82: controlplane.v1.ListOrgLimitChangesResponse.changes:type_name -> controlplane.v1.OrgLimitChange
-	117, // 83: controlplane.v1.ListCurrentUserInvoicesResponse.invoices:type_name -> controlplane.v1.Invoice
-	118, // 84: controlplane.v1.GetUsageSummaryResponse.summaries:type_name -> controlplane.v1.UsageSummary
-	119, // 85: controlplane.v1.GetCurrentUserReliantStateResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	120, // 86: controlplane.v1.GetCurrentUserReliantStateResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	119, // 87: controlplane.v1.RepairCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	120, // 88: controlplane.v1.RepairCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	119, // 89: controlplane.v1.RotateCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	120, // 90: controlplane.v1.RotateCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	121, // 91: controlplane.v1.GetCurrentUserReliantOverviewResponse.overview:type_name -> controlplane.v1.ReliantOverview
-	119, // 92: controlplane.v1.SetCurrentUserReliantEnabledResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	114, // 93: controlplane.v1.SetCurrentUserComputeOverageResponse.subscription:type_name -> controlplane.v1.Subscription
-	114, // 94: controlplane.v1.SetCurrentUserInfraOverageResponse.subscription:type_name -> controlplane.v1.Subscription
-	88,  // 95: controlplane.v1.GetCurrentUserInfraOverageResponse.dimensions:type_name -> controlplane.v1.InfraDimensionUsage
-	111, // 96: controlplane.v1.GetCurrentUserInfraOverageResponse.period_start:type_name -> google.protobuf.Timestamp
-	111, // 97: controlplane.v1.GetCurrentUserInfraOverageResponse.period_end:type_name -> google.protobuf.Timestamp
-	111, // 98: controlplane.v1.InfraDimensionUsage.over_since:type_name -> google.protobuf.Timestamp
-	89,  // 99: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse.auto_recharge:type_name -> controlplane.v1.WalletAutoRecharge
-	90,  // 100: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
-	89,  // 101: controlplane.v1.SetCurrentUserWalletAutoRechargeResponse.auto_recharge:type_name -> controlplane.v1.WalletAutoRecharge
-	90,  // 102: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
-	90,  // 103: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
-	111, // 104: controlplane.v1.GetCurrentUserComputeUsageResponse.period_start:type_name -> google.protobuf.Timestamp
-	111, // 105: controlplane.v1.GetCurrentUserComputeUsageResponse.period_end:type_name -> google.protobuf.Timestamp
-	111, // 106: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_from:type_name -> google.protobuf.Timestamp
-	111, // 107: controlplane.v1.GetCurrentUserComputeUsageResponse.exhausts_at:type_name -> google.protobuf.Timestamp
-	101, // 108: controlplane.v1.GetCurrentUserComputeUsageResponse.by_size:type_name -> controlplane.v1.SizeUsage
-	111, // 109: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
-	102, // 110: controlplane.v1.GetCurrentUserComputeUsageResponse.storage:type_name -> controlplane.v1.StorageUsage
+	117, // 81: controlplane.v1.OrgLimitChange.at:type_name -> google.protobuf.Timestamp
+	68,  // 82: controlplane.v1.ListOrgLimitChangesResponse.changes:type_name -> controlplane.v1.OrgLimitChange
+	123, // 83: controlplane.v1.ListCurrentUserInvoicesResponse.invoices:type_name -> controlplane.v1.Invoice
+	124, // 84: controlplane.v1.GetUsageSummaryResponse.summaries:type_name -> controlplane.v1.UsageSummary
+	125, // 85: controlplane.v1.GetCurrentUserReliantStateResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	126, // 86: controlplane.v1.GetCurrentUserReliantStateResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	125, // 87: controlplane.v1.RepairCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	126, // 88: controlplane.v1.RepairCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	125, // 89: controlplane.v1.RotateCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	126, // 90: controlplane.v1.RotateCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	127, // 91: controlplane.v1.GetCurrentUserReliantOverviewResponse.overview:type_name -> controlplane.v1.ReliantOverview
+	125, // 92: controlplane.v1.SetCurrentUserReliantEnabledResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	120, // 93: controlplane.v1.SetCurrentUserComputeOverageResponse.subscription:type_name -> controlplane.v1.Subscription
+	120, // 94: controlplane.v1.SetCurrentUserInfraOverageResponse.subscription:type_name -> controlplane.v1.Subscription
+	90,  // 95: controlplane.v1.GetCurrentUserInfraOverageResponse.dimensions:type_name -> controlplane.v1.InfraDimensionUsage
+	117, // 96: controlplane.v1.GetCurrentUserInfraOverageResponse.period_start:type_name -> google.protobuf.Timestamp
+	117, // 97: controlplane.v1.GetCurrentUserInfraOverageResponse.period_end:type_name -> google.protobuf.Timestamp
+	117, // 98: controlplane.v1.InfraDimensionUsage.over_since:type_name -> google.protobuf.Timestamp
+	91,  // 99: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse.auto_recharge:type_name -> controlplane.v1.WalletAutoRecharge
+	92,  // 100: controlplane.v1.GetCurrentUserWalletAutoRechargeResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
+	91,  // 101: controlplane.v1.SetCurrentUserWalletAutoRechargeResponse.auto_recharge:type_name -> controlplane.v1.WalletAutoRecharge
+	92,  // 102: controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
+	92,  // 103: controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse.payment_method:type_name -> controlplane.v1.SavedPaymentMethod
+	117, // 104: controlplane.v1.GetCurrentUserComputeUsageResponse.period_start:type_name -> google.protobuf.Timestamp
+	117, // 105: controlplane.v1.GetCurrentUserComputeUsageResponse.period_end:type_name -> google.protobuf.Timestamp
+	117, // 106: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_from:type_name -> google.protobuf.Timestamp
+	117, // 107: controlplane.v1.GetCurrentUserComputeUsageResponse.exhausts_at:type_name -> google.protobuf.Timestamp
+	103, // 108: controlplane.v1.GetCurrentUserComputeUsageResponse.by_size:type_name -> controlplane.v1.SizeUsage
+	117, // 109: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
+	104, // 110: controlplane.v1.GetCurrentUserComputeUsageResponse.storage:type_name -> controlplane.v1.StorageUsage
 	4,   // 111: controlplane.v1.GetCurrentUserComputeEligibilityResponse.reason:type_name -> controlplane.v1.ComputeIneligibleReason
-	5,   // 112: controlplane.v1.BillingService.GetOrganizationCostSummary:input_type -> controlplane.v1.GetOrganizationCostSummaryRequest
-	10,  // 113: controlplane.v1.BillingService.ListOrganizationUsage:input_type -> controlplane.v1.ListOrganizationUsageRequest
-	17,  // 114: controlplane.v1.BillingService.GetProjectCost:input_type -> controlplane.v1.GetProjectCostRequest
-	26,  // 115: controlplane.v1.BillingService.ListPlans:input_type -> controlplane.v1.ListPlansRequest
-	28,  // 116: controlplane.v1.BillingService.GetPlan:input_type -> controlplane.v1.GetPlanRequest
-	30,  // 117: controlplane.v1.BillingService.GetCurrentUserSubscription:input_type -> controlplane.v1.GetCurrentUserSubscriptionRequest
-	32,  // 118: controlplane.v1.BillingService.CreateCurrentUserCheckoutSession:input_type -> controlplane.v1.CreateCurrentUserCheckoutSessionRequest
-	63,  // 119: controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession:input_type -> controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
-	68,  // 120: controlplane.v1.BillingService.ListCurrentUserInvoices:input_type -> controlplane.v1.ListCurrentUserInvoicesRequest
-	65,  // 121: controlplane.v1.BillingService.ListOrgLimitChanges:input_type -> controlplane.v1.ListOrgLimitChangesRequest
-	34,  // 122: controlplane.v1.BillingService.GetCurrentUserWalletOverview:input_type -> controlplane.v1.GetCurrentUserWalletOverviewRequest
-	55,  // 123: controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession:input_type -> controlplane.v1.CreateCurrentUserWalletTopupSessionRequest
-	57,  // 124: controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent:input_type -> controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentRequest
-	59,  // 125: controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote:input_type -> controlplane.v1.GetCurrentUserWalletTopupQuoteRequest
-	61,  // 126: controlplane.v1.BillingService.RedeemCoupon:input_type -> controlplane.v1.RedeemCouponRequest
-	72,  // 127: controlplane.v1.BillingService.GetCurrentUserReliantState:input_type -> controlplane.v1.GetCurrentUserReliantStateRequest
-	74,  // 128: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:input_type -> controlplane.v1.RepairCurrentUserReliantAccessRequest
-	76,  // 129: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:input_type -> controlplane.v1.RotateCurrentUserReliantAccessRequest
-	78,  // 130: controlplane.v1.BillingService.GetCurrentUserReliantOverview:input_type -> controlplane.v1.GetCurrentUserReliantOverviewRequest
-	80,  // 131: controlplane.v1.BillingService.SetCurrentUserReliantEnabled:input_type -> controlplane.v1.SetCurrentUserReliantEnabledRequest
-	51,  // 132: controlplane.v1.BillingService.GetCurrentUserComputeSubscription:input_type -> controlplane.v1.GetCurrentUserComputeSubscriptionRequest
-	82,  // 133: controlplane.v1.BillingService.SetCurrentUserComputeOverage:input_type -> controlplane.v1.SetCurrentUserComputeOverageRequest
-	84,  // 134: controlplane.v1.BillingService.SetCurrentUserInfraOverage:input_type -> controlplane.v1.SetCurrentUserInfraOverageRequest
-	86,  // 135: controlplane.v1.BillingService.GetCurrentUserInfraOverage:input_type -> controlplane.v1.GetCurrentUserInfraOverageRequest
-	53,  // 136: controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent:input_type -> controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest
-	36,  // 137: controlplane.v1.BillingService.GetMachinePricingReadiness:input_type -> controlplane.v1.GetMachinePricingReadinessRequest
-	38,  // 138: controlplane.v1.BillingService.AcceptNextMachinePricing:input_type -> controlplane.v1.AcceptNextMachinePricingRequest
-	40,  // 139: controlplane.v1.BillingService.PreviewMachinePlanChange:input_type -> controlplane.v1.PreviewMachinePlanChangeRequest
-	43,  // 140: controlplane.v1.BillingService.ChangeMachinePlan:input_type -> controlplane.v1.ChangeMachinePlanRequest
-	45,  // 141: controlplane.v1.BillingService.GetCurrentUserUsageBilling:input_type -> controlplane.v1.GetCurrentUserUsageBillingRequest
-	49,  // 142: controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout:input_type -> controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest
-	91,  // 143: controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge:input_type -> controlplane.v1.GetCurrentUserWalletAutoRechargeRequest
-	93,  // 144: controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge:input_type -> controlplane.v1.SetCurrentUserWalletAutoRechargeRequest
-	95,  // 145: controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup:input_type -> controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupRequest
-	97,  // 146: controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod:input_type -> controlplane.v1.ConfirmCurrentUserWalletPaymentMethodRequest
-	99,  // 147: controlplane.v1.BillingService.GetCurrentUserComputeUsage:input_type -> controlplane.v1.GetCurrentUserComputeUsageRequest
-	103, // 148: controlplane.v1.BillingService.GetCurrentUserComputeEligibility:input_type -> controlplane.v1.GetCurrentUserComputeEligibilityRequest
-	70,  // 149: controlplane.v1.BillingService.GetUsageSummary:input_type -> controlplane.v1.GetUsageSummaryRequest
-	105, // 150: controlplane.v1.BillingService.GetInvoicePreview:input_type -> controlplane.v1.GetInvoicePreviewRequest
-	107, // 151: controlplane.v1.BillingService.GetCurrentUserBillingEmail:input_type -> controlplane.v1.GetCurrentUserBillingEmailRequest
-	109, // 152: controlplane.v1.BillingService.UpdateBillingEmail:input_type -> controlplane.v1.UpdateBillingEmailRequest
-	6,   // 153: controlplane.v1.BillingService.GetOrganizationCostSummary:output_type -> controlplane.v1.GetOrganizationCostSummaryResponse
-	11,  // 154: controlplane.v1.BillingService.ListOrganizationUsage:output_type -> controlplane.v1.ListOrganizationUsageResponse
-	25,  // 155: controlplane.v1.BillingService.GetProjectCost:output_type -> controlplane.v1.GetProjectCostResponse
-	27,  // 156: controlplane.v1.BillingService.ListPlans:output_type -> controlplane.v1.ListPlansResponse
-	29,  // 157: controlplane.v1.BillingService.GetPlan:output_type -> controlplane.v1.GetPlanResponse
-	31,  // 158: controlplane.v1.BillingService.GetCurrentUserSubscription:output_type -> controlplane.v1.GetCurrentUserSubscriptionResponse
-	33,  // 159: controlplane.v1.BillingService.CreateCurrentUserCheckoutSession:output_type -> controlplane.v1.CreateCurrentUserCheckoutSessionResponse
-	64,  // 160: controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession:output_type -> controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
-	69,  // 161: controlplane.v1.BillingService.ListCurrentUserInvoices:output_type -> controlplane.v1.ListCurrentUserInvoicesResponse
-	67,  // 162: controlplane.v1.BillingService.ListOrgLimitChanges:output_type -> controlplane.v1.ListOrgLimitChangesResponse
-	35,  // 163: controlplane.v1.BillingService.GetCurrentUserWalletOverview:output_type -> controlplane.v1.GetCurrentUserWalletOverviewResponse
-	56,  // 164: controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession:output_type -> controlplane.v1.CreateCurrentUserWalletTopupSessionResponse
-	58,  // 165: controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent:output_type -> controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse
-	60,  // 166: controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote:output_type -> controlplane.v1.GetCurrentUserWalletTopupQuoteResponse
-	62,  // 167: controlplane.v1.BillingService.RedeemCoupon:output_type -> controlplane.v1.RedeemCouponResponse
-	73,  // 168: controlplane.v1.BillingService.GetCurrentUserReliantState:output_type -> controlplane.v1.GetCurrentUserReliantStateResponse
-	75,  // 169: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:output_type -> controlplane.v1.RepairCurrentUserReliantAccessResponse
-	77,  // 170: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:output_type -> controlplane.v1.RotateCurrentUserReliantAccessResponse
-	79,  // 171: controlplane.v1.BillingService.GetCurrentUserReliantOverview:output_type -> controlplane.v1.GetCurrentUserReliantOverviewResponse
-	81,  // 172: controlplane.v1.BillingService.SetCurrentUserReliantEnabled:output_type -> controlplane.v1.SetCurrentUserReliantEnabledResponse
-	52,  // 173: controlplane.v1.BillingService.GetCurrentUserComputeSubscription:output_type -> controlplane.v1.GetCurrentUserComputeSubscriptionResponse
-	83,  // 174: controlplane.v1.BillingService.SetCurrentUserComputeOverage:output_type -> controlplane.v1.SetCurrentUserComputeOverageResponse
-	85,  // 175: controlplane.v1.BillingService.SetCurrentUserInfraOverage:output_type -> controlplane.v1.SetCurrentUserInfraOverageResponse
-	87,  // 176: controlplane.v1.BillingService.GetCurrentUserInfraOverage:output_type -> controlplane.v1.GetCurrentUserInfraOverageResponse
-	54,  // 177: controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent:output_type -> controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse
-	37,  // 178: controlplane.v1.BillingService.GetMachinePricingReadiness:output_type -> controlplane.v1.GetMachinePricingReadinessResponse
-	39,  // 179: controlplane.v1.BillingService.AcceptNextMachinePricing:output_type -> controlplane.v1.AcceptNextMachinePricingResponse
-	42,  // 180: controlplane.v1.BillingService.PreviewMachinePlanChange:output_type -> controlplane.v1.PreviewMachinePlanChangeResponse
-	44,  // 181: controlplane.v1.BillingService.ChangeMachinePlan:output_type -> controlplane.v1.ChangeMachinePlanResponse
-	48,  // 182: controlplane.v1.BillingService.GetCurrentUserUsageBilling:output_type -> controlplane.v1.GetCurrentUserUsageBillingResponse
-	50,  // 183: controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout:output_type -> controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse
-	92,  // 184: controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge:output_type -> controlplane.v1.GetCurrentUserWalletAutoRechargeResponse
-	94,  // 185: controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge:output_type -> controlplane.v1.SetCurrentUserWalletAutoRechargeResponse
-	96,  // 186: controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup:output_type -> controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse
-	98,  // 187: controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod:output_type -> controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse
-	100, // 188: controlplane.v1.BillingService.GetCurrentUserComputeUsage:output_type -> controlplane.v1.GetCurrentUserComputeUsageResponse
-	104, // 189: controlplane.v1.BillingService.GetCurrentUserComputeEligibility:output_type -> controlplane.v1.GetCurrentUserComputeEligibilityResponse
-	71,  // 190: controlplane.v1.BillingService.GetUsageSummary:output_type -> controlplane.v1.GetUsageSummaryResponse
-	106, // 191: controlplane.v1.BillingService.GetInvoicePreview:output_type -> controlplane.v1.GetInvoicePreviewResponse
-	108, // 192: controlplane.v1.BillingService.GetCurrentUserBillingEmail:output_type -> controlplane.v1.GetCurrentUserBillingEmailResponse
-	110, // 193: controlplane.v1.BillingService.UpdateBillingEmail:output_type -> controlplane.v1.UpdateBillingEmailResponse
-	153, // [153:194] is the sub-list for method output_type
-	112, // [112:153] is the sub-list for method input_type
-	112, // [112:112] is the sub-list for extension type_name
-	112, // [112:112] is the sub-list for extension extendee
-	0,   // [0:112] is the sub-list for field type_name
+	5,   // 112: controlplane.v1.StorageProductUsage.product:type_name -> controlplane.v1.StorageProduct
+	117, // 113: controlplane.v1.StorageProductUsage.measured_at:type_name -> google.protobuf.Timestamp
+	6,   // 114: controlplane.v1.StorageProductUsage.billing_basis:type_name -> controlplane.v1.StorageBillingBasis
+	117, // 115: controlplane.v1.StoragePool.period_start:type_name -> google.protobuf.Timestamp
+	117, // 116: controlplane.v1.StoragePool.period_end:type_name -> google.protobuf.Timestamp
+	115, // 117: controlplane.v1.GetStorageUsageResponse.pool:type_name -> controlplane.v1.StoragePool
+	114, // 118: controlplane.v1.GetStorageUsageResponse.products:type_name -> controlplane.v1.StorageProductUsage
+	7,   // 119: controlplane.v1.BillingService.GetOrganizationCostSummary:input_type -> controlplane.v1.GetOrganizationCostSummaryRequest
+	113, // 120: controlplane.v1.BillingService.GetStorageUsage:input_type -> controlplane.v1.GetStorageUsageRequest
+	12,  // 121: controlplane.v1.BillingService.ListOrganizationUsage:input_type -> controlplane.v1.ListOrganizationUsageRequest
+	19,  // 122: controlplane.v1.BillingService.GetProjectCost:input_type -> controlplane.v1.GetProjectCostRequest
+	28,  // 123: controlplane.v1.BillingService.ListPlans:input_type -> controlplane.v1.ListPlansRequest
+	30,  // 124: controlplane.v1.BillingService.GetPlan:input_type -> controlplane.v1.GetPlanRequest
+	32,  // 125: controlplane.v1.BillingService.GetCurrentUserSubscription:input_type -> controlplane.v1.GetCurrentUserSubscriptionRequest
+	34,  // 126: controlplane.v1.BillingService.CreateCurrentUserCheckoutSession:input_type -> controlplane.v1.CreateCurrentUserCheckoutSessionRequest
+	65,  // 127: controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession:input_type -> controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
+	70,  // 128: controlplane.v1.BillingService.ListCurrentUserInvoices:input_type -> controlplane.v1.ListCurrentUserInvoicesRequest
+	67,  // 129: controlplane.v1.BillingService.ListOrgLimitChanges:input_type -> controlplane.v1.ListOrgLimitChangesRequest
+	36,  // 130: controlplane.v1.BillingService.GetCurrentUserWalletOverview:input_type -> controlplane.v1.GetCurrentUserWalletOverviewRequest
+	57,  // 131: controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession:input_type -> controlplane.v1.CreateCurrentUserWalletTopupSessionRequest
+	59,  // 132: controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent:input_type -> controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentRequest
+	61,  // 133: controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote:input_type -> controlplane.v1.GetCurrentUserWalletTopupQuoteRequest
+	63,  // 134: controlplane.v1.BillingService.RedeemCoupon:input_type -> controlplane.v1.RedeemCouponRequest
+	74,  // 135: controlplane.v1.BillingService.GetCurrentUserReliantState:input_type -> controlplane.v1.GetCurrentUserReliantStateRequest
+	76,  // 136: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:input_type -> controlplane.v1.RepairCurrentUserReliantAccessRequest
+	78,  // 137: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:input_type -> controlplane.v1.RotateCurrentUserReliantAccessRequest
+	80,  // 138: controlplane.v1.BillingService.GetCurrentUserReliantOverview:input_type -> controlplane.v1.GetCurrentUserReliantOverviewRequest
+	82,  // 139: controlplane.v1.BillingService.SetCurrentUserReliantEnabled:input_type -> controlplane.v1.SetCurrentUserReliantEnabledRequest
+	53,  // 140: controlplane.v1.BillingService.GetCurrentUserComputeSubscription:input_type -> controlplane.v1.GetCurrentUserComputeSubscriptionRequest
+	84,  // 141: controlplane.v1.BillingService.SetCurrentUserComputeOverage:input_type -> controlplane.v1.SetCurrentUserComputeOverageRequest
+	86,  // 142: controlplane.v1.BillingService.SetCurrentUserInfraOverage:input_type -> controlplane.v1.SetCurrentUserInfraOverageRequest
+	88,  // 143: controlplane.v1.BillingService.GetCurrentUserInfraOverage:input_type -> controlplane.v1.GetCurrentUserInfraOverageRequest
+	55,  // 144: controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent:input_type -> controlplane.v1.CreateCurrentUserComputeSubscriptionIntentRequest
+	38,  // 145: controlplane.v1.BillingService.GetMachinePricingReadiness:input_type -> controlplane.v1.GetMachinePricingReadinessRequest
+	40,  // 146: controlplane.v1.BillingService.AcceptNextMachinePricing:input_type -> controlplane.v1.AcceptNextMachinePricingRequest
+	42,  // 147: controlplane.v1.BillingService.PreviewMachinePlanChange:input_type -> controlplane.v1.PreviewMachinePlanChangeRequest
+	45,  // 148: controlplane.v1.BillingService.ChangeMachinePlan:input_type -> controlplane.v1.ChangeMachinePlanRequest
+	47,  // 149: controlplane.v1.BillingService.GetCurrentUserUsageBilling:input_type -> controlplane.v1.GetCurrentUserUsageBillingRequest
+	51,  // 150: controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout:input_type -> controlplane.v1.CreateCurrentUserUsageBillingCheckoutRequest
+	93,  // 151: controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge:input_type -> controlplane.v1.GetCurrentUserWalletAutoRechargeRequest
+	95,  // 152: controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge:input_type -> controlplane.v1.SetCurrentUserWalletAutoRechargeRequest
+	97,  // 153: controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup:input_type -> controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupRequest
+	99,  // 154: controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod:input_type -> controlplane.v1.ConfirmCurrentUserWalletPaymentMethodRequest
+	101, // 155: controlplane.v1.BillingService.GetCurrentUserComputeUsage:input_type -> controlplane.v1.GetCurrentUserComputeUsageRequest
+	105, // 156: controlplane.v1.BillingService.GetCurrentUserComputeEligibility:input_type -> controlplane.v1.GetCurrentUserComputeEligibilityRequest
+	72,  // 157: controlplane.v1.BillingService.GetUsageSummary:input_type -> controlplane.v1.GetUsageSummaryRequest
+	107, // 158: controlplane.v1.BillingService.GetInvoicePreview:input_type -> controlplane.v1.GetInvoicePreviewRequest
+	109, // 159: controlplane.v1.BillingService.GetCurrentUserBillingEmail:input_type -> controlplane.v1.GetCurrentUserBillingEmailRequest
+	111, // 160: controlplane.v1.BillingService.UpdateBillingEmail:input_type -> controlplane.v1.UpdateBillingEmailRequest
+	8,   // 161: controlplane.v1.BillingService.GetOrganizationCostSummary:output_type -> controlplane.v1.GetOrganizationCostSummaryResponse
+	116, // 162: controlplane.v1.BillingService.GetStorageUsage:output_type -> controlplane.v1.GetStorageUsageResponse
+	13,  // 163: controlplane.v1.BillingService.ListOrganizationUsage:output_type -> controlplane.v1.ListOrganizationUsageResponse
+	27,  // 164: controlplane.v1.BillingService.GetProjectCost:output_type -> controlplane.v1.GetProjectCostResponse
+	29,  // 165: controlplane.v1.BillingService.ListPlans:output_type -> controlplane.v1.ListPlansResponse
+	31,  // 166: controlplane.v1.BillingService.GetPlan:output_type -> controlplane.v1.GetPlanResponse
+	33,  // 167: controlplane.v1.BillingService.GetCurrentUserSubscription:output_type -> controlplane.v1.GetCurrentUserSubscriptionResponse
+	35,  // 168: controlplane.v1.BillingService.CreateCurrentUserCheckoutSession:output_type -> controlplane.v1.CreateCurrentUserCheckoutSessionResponse
+	66,  // 169: controlplane.v1.BillingService.CreateCurrentUserBillingPortalSession:output_type -> controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
+	71,  // 170: controlplane.v1.BillingService.ListCurrentUserInvoices:output_type -> controlplane.v1.ListCurrentUserInvoicesResponse
+	69,  // 171: controlplane.v1.BillingService.ListOrgLimitChanges:output_type -> controlplane.v1.ListOrgLimitChangesResponse
+	37,  // 172: controlplane.v1.BillingService.GetCurrentUserWalletOverview:output_type -> controlplane.v1.GetCurrentUserWalletOverviewResponse
+	58,  // 173: controlplane.v1.BillingService.CreateCurrentUserWalletTopupSession:output_type -> controlplane.v1.CreateCurrentUserWalletTopupSessionResponse
+	60,  // 174: controlplane.v1.BillingService.CreateCurrentUserWalletTopupPaymentIntent:output_type -> controlplane.v1.CreateCurrentUserWalletTopupPaymentIntentResponse
+	62,  // 175: controlplane.v1.BillingService.GetCurrentUserWalletTopupQuote:output_type -> controlplane.v1.GetCurrentUserWalletTopupQuoteResponse
+	64,  // 176: controlplane.v1.BillingService.RedeemCoupon:output_type -> controlplane.v1.RedeemCouponResponse
+	75,  // 177: controlplane.v1.BillingService.GetCurrentUserReliantState:output_type -> controlplane.v1.GetCurrentUserReliantStateResponse
+	77,  // 178: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:output_type -> controlplane.v1.RepairCurrentUserReliantAccessResponse
+	79,  // 179: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:output_type -> controlplane.v1.RotateCurrentUserReliantAccessResponse
+	81,  // 180: controlplane.v1.BillingService.GetCurrentUserReliantOverview:output_type -> controlplane.v1.GetCurrentUserReliantOverviewResponse
+	83,  // 181: controlplane.v1.BillingService.SetCurrentUserReliantEnabled:output_type -> controlplane.v1.SetCurrentUserReliantEnabledResponse
+	54,  // 182: controlplane.v1.BillingService.GetCurrentUserComputeSubscription:output_type -> controlplane.v1.GetCurrentUserComputeSubscriptionResponse
+	85,  // 183: controlplane.v1.BillingService.SetCurrentUserComputeOverage:output_type -> controlplane.v1.SetCurrentUserComputeOverageResponse
+	87,  // 184: controlplane.v1.BillingService.SetCurrentUserInfraOverage:output_type -> controlplane.v1.SetCurrentUserInfraOverageResponse
+	89,  // 185: controlplane.v1.BillingService.GetCurrentUserInfraOverage:output_type -> controlplane.v1.GetCurrentUserInfraOverageResponse
+	56,  // 186: controlplane.v1.BillingService.CreateCurrentUserComputeSubscriptionIntent:output_type -> controlplane.v1.CreateCurrentUserComputeSubscriptionIntentResponse
+	39,  // 187: controlplane.v1.BillingService.GetMachinePricingReadiness:output_type -> controlplane.v1.GetMachinePricingReadinessResponse
+	41,  // 188: controlplane.v1.BillingService.AcceptNextMachinePricing:output_type -> controlplane.v1.AcceptNextMachinePricingResponse
+	44,  // 189: controlplane.v1.BillingService.PreviewMachinePlanChange:output_type -> controlplane.v1.PreviewMachinePlanChangeResponse
+	46,  // 190: controlplane.v1.BillingService.ChangeMachinePlan:output_type -> controlplane.v1.ChangeMachinePlanResponse
+	50,  // 191: controlplane.v1.BillingService.GetCurrentUserUsageBilling:output_type -> controlplane.v1.GetCurrentUserUsageBillingResponse
+	52,  // 192: controlplane.v1.BillingService.CreateCurrentUserUsageBillingCheckout:output_type -> controlplane.v1.CreateCurrentUserUsageBillingCheckoutResponse
+	94,  // 193: controlplane.v1.BillingService.GetCurrentUserWalletAutoRecharge:output_type -> controlplane.v1.GetCurrentUserWalletAutoRechargeResponse
+	96,  // 194: controlplane.v1.BillingService.SetCurrentUserWalletAutoRecharge:output_type -> controlplane.v1.SetCurrentUserWalletAutoRechargeResponse
+	98,  // 195: controlplane.v1.BillingService.CreateCurrentUserWalletPaymentMethodSetup:output_type -> controlplane.v1.CreateCurrentUserWalletPaymentMethodSetupResponse
+	100, // 196: controlplane.v1.BillingService.ConfirmCurrentUserWalletPaymentMethod:output_type -> controlplane.v1.ConfirmCurrentUserWalletPaymentMethodResponse
+	102, // 197: controlplane.v1.BillingService.GetCurrentUserComputeUsage:output_type -> controlplane.v1.GetCurrentUserComputeUsageResponse
+	106, // 198: controlplane.v1.BillingService.GetCurrentUserComputeEligibility:output_type -> controlplane.v1.GetCurrentUserComputeEligibilityResponse
+	73,  // 199: controlplane.v1.BillingService.GetUsageSummary:output_type -> controlplane.v1.GetUsageSummaryResponse
+	108, // 200: controlplane.v1.BillingService.GetInvoicePreview:output_type -> controlplane.v1.GetInvoicePreviewResponse
+	110, // 201: controlplane.v1.BillingService.GetCurrentUserBillingEmail:output_type -> controlplane.v1.GetCurrentUserBillingEmailResponse
+	112, // 202: controlplane.v1.BillingService.UpdateBillingEmail:output_type -> controlplane.v1.UpdateBillingEmailResponse
+	161, // [161:203] is the sub-list for method output_type
+	119, // [119:161] is the sub-list for method input_type
+	119, // [119:119] is the sub-list for extension type_name
+	119, // [119:119] is the sub-list for extension extendee
+	0,   // [0:119] is the sub-list for field type_name
 }
 
 func init() { file_services_billing_v1_billing_proto_init() }
@@ -9408,13 +9855,14 @@ func file_services_billing_v1_billing_proto_init() {
 	file_services_billing_v1_billing_proto_msgTypes[92].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[94].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[98].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[107].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_billing_v1_billing_proto_rawDesc), len(file_services_billing_v1_billing_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   106,
+			NumEnums:      7,
+			NumMessages:   110,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

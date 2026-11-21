@@ -163,6 +163,10 @@ const FINDING_CODE_OF: Record<WireFindingCode, ReleaseFindingCode | null> = {
   [WireFindingCode.REGRESSED_ISSUE]: "regressed_issue",
   [WireFindingCode.ALERT_FIRING]: "alert_firing",
   [WireFindingCode.WORKLOAD_RESTARTS]: "workload_restarts",
+  // Browser findings are newer than this client's views: read as unknown codes until one renders them.
+  [WireFindingCode.BROWSER_ERRORS]: null,
+  [WireFindingCode.BROWSER_FAILED_REQUESTS]: null,
+  [WireFindingCode.BROWSER_PAGE_LOAD]: null,
 };
 
 function windowOf(r: WireTimeRange | undefined): TimeWindow | null {

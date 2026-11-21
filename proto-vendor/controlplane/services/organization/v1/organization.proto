@@ -565,6 +565,10 @@ message MyOrganization {
   google.protobuf.Timestamp created_at = 7;
   // When the caller joined the org.
   google.protobuf.Timestamp joined_at = 8;
+  // Whether this caller may create a hosted project owned by this org.
+  // Requires owner/admin membership AND the live deploy:write grant.
+  // Absent on older servers; clients must not infer permission from role.
+  optional bool can_create_hosted_project = 9;
 }
 
 message ListMyOrganizationsRequest {}
