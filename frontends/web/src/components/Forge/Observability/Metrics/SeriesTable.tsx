@@ -71,7 +71,7 @@ export function SeriesTable({ series, unit, hidden, onHidden }: SeriesTableProps
             type="button"
             onClick={() => onHidden(soloed(s.label) ? [] : labels.filter((l) => l !== s.label))}
             aria-pressed={soloed(s.label)}
-            className="rounded px-1.5 py-0.5 text-2xs text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded px-1.5 py-0.5 text-meta text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={soloed(s.label) ? `Show every series again` : `Show only ${s.label}`}
             data-testid="metrics-series-solo"
           >

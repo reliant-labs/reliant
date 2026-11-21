@@ -23,6 +23,7 @@ const FORWARDED: [path: string, landsAt: string][] = [
   ["/workflows/runs", "/o/acme/workflows/runs"],
   ["/workflows/automations", "/o/acme/workflows/automations"],
   ["/workflow/new", "/o/acme/workflow/new"],
+  ["/new", "/o/acme/new"],
   ["/forge/observability", "/o/acme/observability"],
   ["/forge/observability/logs", "/o/acme/observability/logs"],
 ];
@@ -35,6 +36,8 @@ const STAYS: [path: string, why: string, search?: Record<string, unknown>][] = [
   ["/workflow/fix-my-pr", "the builder by name: a saved workflow's, or a built-in's bare name, indistinguishable (R7)"],
   ["/project/p-1", "a project by id: the resolver (U4) finds its org"],
   ["/workflows/runs/c-1", "a run by id: the resolver (U4)"],
+  ["/c/c-1", "a chat by id: it names its org, and its route's loader goes there (U5), never the tab's"],
+  ["/c/c-1/t/t-1", "a thread of a chat: the chat's org (U5)"],
   ["/workflows/automations/t-1", "an automation by id: the resolver (U4)"],
   ["/forge/p/shop", "an app by name: ResolveAppOrgs (U4)"],
   ["/forge/p/shop/releases", "an app by name: ResolveAppOrgs (U4)"],

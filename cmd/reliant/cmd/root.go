@@ -102,9 +102,9 @@ Reliant server components.`,
 
 	// Register subcommand groups. The end-user groups carry CLIConfig.
 	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
-	machineCmd, githubCmd, providersCmd, chatCmd, integrationsCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd(), newChatCmd(), newIntegrationsCmd()
+	machineCmd, githubCmd, providersCmd, previewCmd, chatCmd, integrationsCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd(), newPreviewCmd(), newChatCmd(), newIntegrationsCmd()
 	mcpCmd, modelsCmd, worktreeCmd := newMCPCmd(), newModelsCmd(), newWorktreeCmd(deps)
-	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, chatCmd, mcpCmd, integrationsCmd, modelsCmd, worktreeCmd)
+	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, previewCmd, chatCmd, mcpCmd, integrationsCmd, modelsCmd, worktreeCmd)
 	// `reliant auth` also carries AuthConfig (RELIANT_DAEMON_TYPE).
 	config.RegisterAuthConfigFlags(authCmd)
 	for _, c := range rootCommands(deps) {
@@ -124,6 +124,7 @@ Reliant server components.`,
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())
+	root.AddCommand(previewCmd)
 	root.AddCommand(chatCmd)
 	root.AddCommand(worktreeCmd)
 

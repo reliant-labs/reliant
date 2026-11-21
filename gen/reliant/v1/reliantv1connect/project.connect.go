@@ -134,6 +134,9 @@ const (
 	// ProjectServiceListProjectOrgMovesProcedure is the fully-qualified name of the ProjectService's
 	// ListProjectOrgMoves RPC.
 	ProjectServiceListProjectOrgMovesProcedure = "/reliant.v1.ProjectService/ListProjectOrgMoves"
+	// ProjectServiceListProjectsWithAppsProcedure is the fully-qualified name of the ProjectService's
+	// ListProjectsWithApps RPC.
+	ProjectServiceListProjectsWithAppsProcedure = "/reliant.v1.ProjectService/ListProjectsWithApps"
 )
 
 // ProjectServiceClient is a client for the reliant.v1.ProjectService service.
@@ -321,6 +324,13 @@ type ProjectServiceClient interface {
 	// With no org_id, the caller's own moves.
 	// forge:custom — an org's ledger, for its admins and owners; else the caller's own moves
 	ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error)
+	// ListProjectsWithApps is the Projects list (unified-shell-and-projects.md
+	// §8.3): every project the caller may read in one org, each with the forge
+	// apps its code holds linked to the org's hosted apps, plus the org's apps
+	// that no listed project contains. The link is computed here, under
+	// reliant's project authorization and control-plane's app authorization.
+	// forge:custom — joins caller-visible projects with the org's hosted apps
+	ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error)
 }
 
 // NewProjectServiceClient constructs a client for the reliant.v1.ProjectService service. By
@@ -536,6 +546,13 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		listProjectsWithApps: connect.NewClient[v1.ListProjectsWithAppsRequest, v1.ListProjectsWithAppsResponse](
+			httpClient,
+			baseURL+ProjectServiceListProjectsWithAppsProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("ListProjectsWithApps")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -574,6 +591,7 @@ type projectServiceClient struct {
 	moveProjectToOrg            *connect.Client[v1.MoveProjectToOrgRequest, v1.MoveProjectToOrgResponse]
 	getProjectOrgMove           *connect.Client[v1.GetProjectOrgMoveRequest, v1.GetProjectOrgMoveResponse]
 	listProjectOrgMoves         *connect.Client[v1.ListProjectOrgMovesRequest, v1.ListProjectOrgMovesResponse]
+	listProjectsWithApps        *connect.Client[v1.ListProjectsWithAppsRequest, v1.ListProjectsWithAppsResponse]
 }
 
 // CreateProject calls reliant.v1.ProjectService.CreateProject.
@@ -739,6 +757,11 @@ func (c *projectServiceClient) GetProjectOrgMove(ctx context.Context, req *conne
 // ListProjectOrgMoves calls reliant.v1.ProjectService.ListProjectOrgMoves.
 func (c *projectServiceClient) ListProjectOrgMoves(ctx context.Context, req *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error) {
 	return c.listProjectOrgMoves.CallUnary(ctx, req)
+}
+
+// ListProjectsWithApps calls reliant.v1.ProjectService.ListProjectsWithApps.
+func (c *projectServiceClient) ListProjectsWithApps(ctx context.Context, req *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error) {
+	return c.listProjectsWithApps.CallUnary(ctx, req)
 }
 
 // ProjectServiceHandler is an implementation of the reliant.v1.ProjectService service.
@@ -926,6 +949,13 @@ type ProjectServiceHandler interface {
 	// With no org_id, the caller's own moves.
 	// forge:custom — an org's ledger, for its admins and owners; else the caller's own moves
 	ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error)
+	// ListProjectsWithApps is the Projects list (unified-shell-and-projects.md
+	// §8.3): every project the caller may read in one org, each with the forge
+	// apps its code holds linked to the org's hosted apps, plus the org's apps
+	// that no listed project contains. The link is computed here, under
+	// reliant's project authorization and control-plane's app authorization.
+	// forge:custom — joins caller-visible projects with the org's hosted apps
+	ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error)
 }
 
 // NewProjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1137,6 +1167,13 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServiceListProjectsWithAppsHandler := connect.NewUnaryHandler(
+		ProjectServiceListProjectsWithAppsProcedure,
+		svc.ListProjectsWithApps,
+		connect.WithSchema(projectServiceMethods.ByName("ListProjectsWithApps")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ProjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProjectServiceCreateProjectProcedure:
@@ -1205,6 +1242,8 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceGetProjectOrgMoveHandler.ServeHTTP(w, r)
 		case ProjectServiceListProjectOrgMovesProcedure:
 			projectServiceListProjectOrgMovesHandler.ServeHTTP(w, r)
+		case ProjectServiceListProjectsWithAppsProcedure:
+			projectServiceListProjectsWithAppsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1344,4 +1383,8 @@ func (UnimplementedProjectServiceHandler) GetProjectOrgMove(context.Context, *co
 
 func (UnimplementedProjectServiceHandler) ListProjectOrgMoves(context.Context, *connect.Request[v1.ListProjectOrgMovesRequest]) (*connect.Response[v1.ListProjectOrgMovesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListProjectOrgMoves is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListProjectsWithApps is not implemented"))
 }

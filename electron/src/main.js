@@ -60,6 +60,7 @@ const {
   resolveMenuAccelerators,
 } = require("./menu-accelerators");
 const { createMenuShortcutDelivery, menuShortcutItems } = require("./menu-shortcuts");
+const { parseDeepLink } = require("./deep-link");
 const WindowManager = require("./window-manager");
 const {
   createWindowSurfacer,
@@ -3811,33 +3812,31 @@ if (gotTheLock) {
 }
 
 // Handle deep links - MUST be defined before app.whenReady()
+// Parsed by deep-link.js: `open?path=<dir>` opens a project, `open?url=<app
+// path>` opens a page of the app (a chat, the web app's "Open in desktop").
 function handleDeepLink(url) {
-  try {
-    const urlObj = new URL(url);
-    log.info("[DeepLink] Handling deep link", { hostname: urlObj.hostname });
+  const link = parseDeepLink(url);
+  log.info("[DeepLink] Handling deep link", { kind: link.kind });
 
-    if (urlObj.hostname === "open") {
-      const projectPath = decodeURIComponent(
-        urlObj.searchParams.get("path") || ""
-      );
-
-      if (projectPath) {
-        if (mainWindow && mainWindow.webContents) {
-          log.info("[DeepLink] Sending open-project event");
-          mainWindow.webContents.send("open-project", projectPath);
-          if (mainWindow.isMinimized()) mainWindow.restore();
-          mainWindow.focus();
-        } else {
-          log.info("[DeepLink] No mainWindow, storing as pending");
-          pendingProjectPath = projectPath;
-        }
-      }
-    } else {
-      log.warn("[DeepLink] Unknown deep link hostname:", urlObj.hostname);
-    }
-  } catch (error) {
-    log.error("[DeepLink] Error parsing URL:", error?.message);
+  if (link.kind === "route") {
+    // The window the user is in, brought forward, once its page has loaded:
+    // its router navigates there (preload onOpenRoute).
+    sendToSurfacedWindow("open-route", link.route);
+    return;
   }
+  if (link.kind === "project") {
+    if (mainWindow && mainWindow.webContents) {
+      log.info("[DeepLink] Sending open-project event");
+      mainWindow.webContents.send("open-project", link.path);
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    } else {
+      log.info("[DeepLink] No mainWindow, storing as pending");
+      pendingProjectPath = link.path;
+    }
+    return;
+  }
+  log.warn("[DeepLink] Ignored deep link:", link.reason);
 }
 
 // Check if app was launched with a URL (macOS)

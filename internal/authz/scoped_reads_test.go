@@ -37,9 +37,6 @@ const (
 	// capacity accounting), shown to no caller; a launch it leads to is
 	// decided by authz in the launcher.
 	readBackground = "background owner work, shown to no caller"
-	// readUnused: nothing outside internal/db calls it yet. Classify it
-	// again before the first caller.
-	readUnused = "no caller outside internal/db"
 )
 
 // userScopedReads classifies every exported *Repo read in internal/db that
@@ -122,7 +119,6 @@ var userScopedReads = map[string]string{
 
 	"GetAnalyticsEnabled":         readPersonal,
 	"GetAutomationToken":          readPersonal,
-	"GetIntegrationAccessRefresh": readPersonal,
 	"GetIntegrationAccessSubject": readPersonal,
 	// Whether the caller's own grants reach a repository: PullRequestRecordService's gate.
 	"HasFreshIntegrationAccess":       readPersonal,
@@ -135,7 +131,6 @@ var userScopedReads = map[string]string{
 	"GetProviderAccountWithSecrets":   readPersonal,
 	"GetSetting":                      readPersonal,
 	"GetSettingValue":                 readPersonal,
-	"GetVisibilityOverride":           readPersonal,
 	"ListAccountLimits":               readPersonal,
 	"ListCommandFavorites":            readPersonal,
 	"ListDismissedInboxItemIDs":       readPersonal,
@@ -147,13 +142,10 @@ var userScopedReads = map[string]string{
 	"ListProviderAccountsWithSecrets": readPersonal,
 	"ListSettings":                    readPersonal,
 	"ListSettingsByKey":               readPersonal,
-	"ListUserPresets":                 readUnused,
-	"ListUserPresetsGlobal":           readUnused,
 	"ListVisibilityOverrides":         readPersonal,
 
 	"IsDaemonAttached":                  readOrgless,
 	"ListAttachedDaemonIDsForUser":      readOrgless,
-	"ListBackgroundProcesses":           readUnused,
 	"ListDaemonLocalModels":             readOrgless,
 	"ListDaemonStorageState":            readOrgless,
 	"ListDaemonsByUserID":               readOrgless,

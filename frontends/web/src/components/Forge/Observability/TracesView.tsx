@@ -610,7 +610,7 @@ function TraceTable({
                 />
               </span>
               {info.row.original.durationMs > info.getValue() * 1.05 && (
-                <span className="shrink-0 text-2xs tabular-nums text-ink-muted" aria-hidden="true" title="Whole trace, including work after the root span returned">
+                <span className="shrink-0 text-meta tabular-nums text-ink-muted" aria-hidden="true" title="Whole trace, including work after the root span returned">
                   {formatDuration(info.row.original.durationMs)} total
                 </span>
               )}
@@ -637,7 +637,7 @@ function TraceTable({
                 ) : (
                   <span className="text-xs text-ink-muted">—</span>
                 )}
-                <Place geo={trace} className="text-2xs text-ink-muted" />
+                <Place geo={trace} className="text-meta text-ink-muted" />
               </span>
             );
           },
@@ -665,12 +665,12 @@ function TraceTable({
             return (
               <span className="flex min-w-0 flex-col leading-tight" data-testid="obs-trace-versions">
                 {builds.slice(0, 2).map((b) => (
-                  <span key={`${b.service}@${b.version}`} className="truncate text-2xs" title={`${b.service} ${b.version}`}>
+                  <span key={`${b.service}@${b.version}`} className="truncate text-meta" title={`${b.service} ${b.version}`}>
                     <span className="text-ink-muted">{b.service}</span> <span className="font-mono text-ink">{b.version}</span>
                   </span>
                 ))}
                 {builds.length > 2 && (
-                  <span className="text-2xs text-ink-muted" title={builds.slice(2).map((b) => `${b.service} ${b.version}`).join("\n")}>
+                  <span className="text-meta text-ink-muted" title={builds.slice(2).map((b) => `${b.service} ${b.version}`).join("\n")}>
                     +{builds.length - 2} more
                   </span>
                 )}

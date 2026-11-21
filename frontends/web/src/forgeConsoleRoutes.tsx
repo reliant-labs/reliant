@@ -22,6 +22,7 @@
  *       /users                              who can sign in to the scope (its managed identity)
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
+ *       /experiments, /experiments/$changeId  Forge Changes (remote config, rollouts, A/B tests)
  *       /security/vulnerabilities           Security: the findings of the scope's releases
  *       /security/vulnerabilities/$advisory one advisory across the project
  *       /security/sboms                     each release artifact's SBOM and scan
@@ -56,6 +57,7 @@ import {
   forgeConsoleDashboardsSearchSchema,
   forgeConsoleDataSearchSchema,
   forgeConsoleEnvSearchSchema,
+  forgeConsoleExperimentsSearchSchema,
   forgeConsoleObsSearchSchema,
   forgeConsoleOverviewSearchSchema,
   forgeConsoleReleaseSearchSchema,
@@ -98,6 +100,9 @@ export interface ForgeConsoleComponents {
   secrets: RouteComponent
   domains: RouteComponent
   activity: RouteComponent
+  /** Experiments: the project's Forge Changes, and one change. */
+  experiments: RouteComponent
+  experiment: RouteComponent
   /** Security › Vulnerabilities: the findings of the scope's releases. */
   vulnerabilities: RouteComponent
   /** One advisory in the project. */
@@ -316,6 +321,21 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleActivitySearchSchema,
     component: components.activity,
   })
+  // Forge Changes: remote config, gradual rollouts and A/B tests
+  // (components/Forge/Experiments). The nav row is behind the web config's
+  // CHANGES_UI; the routes are always mounted.
+  const experimentsRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'experiments',
+    validateSearch: forgeConsoleExperimentsSearchSchema,
+    component: components.experiments,
+  })
+  const experimentRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'experiments/$changeId',
+    validateSearch: forgeConsoleExperimentsSearchSchema,
+    component: components.experiment,
+  })
   // Security (components/Forge/Security). The section has no page of its
   // own: its first page is where /security lands.
   const securityRoute = createRoute({
@@ -384,6 +404,8 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       monitoringRoute,
       settingsRoute,
       activityRoute,
+      experimentsRoute,
+      experimentRoute,
       securityRoute,
       vulnerabilitiesRoute,
       vulnerabilityRoute,

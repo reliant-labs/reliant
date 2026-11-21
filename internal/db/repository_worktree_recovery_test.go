@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/stretchr/testify/require"
 )
@@ -64,7 +65,7 @@ func TestRecoveryClaimReceiptAndAdmission(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, repo.ClaimWorktreeRecovery(ctx, r.OwnerUserID, r.ID, r.ActivityGeneration))
 	require.ErrorIs(t, repo.UnarchiveWorktree(ctx, r.SourceWorktreeID), core.ErrWorktreeFinalizing)
-	require.ErrorIs(t, repo.RecordWorktreeActivity(ctx, r.SourceWorktreeID), core.ErrWorktreeFinalizing)
+	require.ErrorIs(t, store.RecordWorktreeActivity(ctx, repo.ORM(), r.SourceWorktreeID), core.ErrWorktreeFinalizing)
 	chat := &Chat{ID: "bound", ProjectID: r.ProjectID, UserID: r.OwnerUserID, WorktreeID: &r.SourceWorktreeID, State: ChatStateIdle, CreatedAt: time.Now(), UpdatedAt: time.Now(), LastActive: time.Now()}
 	require.ErrorIs(t, repo.CreateChat(ctx, chat), core.ErrWorktreeFinalizing)
 	require.ErrorIs(t, repo.AuthorizeWorktreeRecovery(ctx, r.OwnerUserID, r.ID, time.Now().Add(time.Minute)), core.ErrRecoveryConflict, "no receipt no delete")
@@ -152,10 +153,10 @@ func TestRecoveryClaimAfterReceiptAndCrashCancellation(t *testing.T) {
 	require.NoError(t, repo.CancelWorktreeRecovery(ctx, r.OwnerUserID, r.ID, "expired"))
 	require.NoError(t, repo.ClaimWorktreeRecovery(ctx, r.OwnerUserID, r.ID, r.ActivityGeneration))
 	// Simulate a worker dying after the claim commit, before authorization.
-	require.ErrorIs(t, repo.RecordWorktreeActivity(ctx, r.SourceWorktreeID), core.ErrWorktreeFinalizing)
+	require.ErrorIs(t, store.RecordWorktreeActivity(ctx, repo.ORM(), r.SourceWorktreeID), core.ErrWorktreeFinalizing)
 	require.NoError(t, repo.CancelWorktreeRecovery(ctx, r.OwnerUserID, r.ID, "preauthorization claim expired"))
 	require.ErrorIs(t, repo.AuthorizeWorktreeRecovery(ctx, r.OwnerUserID, r.ID, time.Now().Add(time.Minute)), core.ErrRecoveryConflict, "delayed worker cannot resurrect canceled claim")
-	require.NoError(t, repo.RecordWorktreeActivity(ctx, r.SourceWorktreeID))
+	require.NoError(t, store.RecordWorktreeActivity(ctx, repo.ORM(), r.SourceWorktreeID))
 	require.NoError(t, repo.UnarchiveWorktree(ctx, r.SourceWorktreeID), "conversation can continue after crashed claim")
 }
 

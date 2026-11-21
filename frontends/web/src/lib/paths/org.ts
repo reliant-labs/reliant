@@ -140,13 +140,14 @@ export function orgFreeRouteId(routeId: string): string {
 
 /**
  * The page the org switcher opens: `pathname`'s page in the org `segment`
- * names, minus what belongs to the old org (a project, an app, a run, a saved
+ * names, minus what belongs to the old org (a chat, a project, an app, a run, a saved
  * workflow, an automation), whose list it lands on instead. Always the org
  * form: the switcher is only offered this target on a page under `/o/<org>`.
  */
 export function orgSwitchPath(pathname: string, segment: string): string {
   const path = orgFreePath(pathname);
-  if (path.startsWith("/project/")) return inOrg(segment, "/");
+  // A chat (and its thread) is the old org's. The new-chat view stays, without its draft context (the search).
+  if (path.startsWith("/project/") || path.startsWith("/c/")) return inOrg(segment, "/");
   if (path.startsWith(CONSOLE_PREFIX)) return inOrg(segment, "/apps");
   if (path.startsWith("/workflows/runs/")) return inOrg(segment, "/workflows/runs");
   // A built-in's page belongs to no org: it stays. A saved workflow is the old org's.

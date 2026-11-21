@@ -236,6 +236,8 @@ function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, req
     secrets: probe("secrets"),
     domains: probe("domains"),
     activity: probe("activity"),
+    experiments: probe("experiments"),
+    experiment: probe("experiment"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,

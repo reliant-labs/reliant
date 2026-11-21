@@ -141,6 +141,8 @@ export interface ElectronAPI {
   onProjectInfo: (callback: (data: { id?: string; name?: string; path?: string }) => void) => void;
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => () => void;
   onOpenProject: (callback: (projectPath: string) => void) => () => void;
+  /** An app page (a chat) a `reliant://open?url=` link named; absent before the desktop release that added it. */
+  onOpenRoute?: (callback: (route: string) => void) => () => void;
 
   // OAuth
   //

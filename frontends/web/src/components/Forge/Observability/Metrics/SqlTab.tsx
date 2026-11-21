@@ -83,9 +83,9 @@ function Explain({ panel, scope, range, onOpenSql, subject }: SqlTabProps) {
                 Open as SQL panel
               </button>
             </div>
-            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-2xs text-ink">{statement.sql}</pre>
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-meta text-ink">{statement.sql}</pre>
             {Object.keys(statement.params).length > 0 && (
-              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 border-t border-border/60 px-3 py-2 font-mono text-2xs">
+              <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 border-t border-border/60 px-3 py-2 font-mono text-meta">
                 {Object.entries(statement.params)
                   .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
                   .map(([name, value]) => (

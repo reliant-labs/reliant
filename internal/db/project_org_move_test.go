@@ -232,12 +232,12 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	assert.Equal(t, 4, f.count(`SELECT count(*) FROM trigger_changes WHERE operation = $1 AND user_id = $2`, core.TriggerChangeOrgMoved, moveOwner))
 
 	// The cleared shares, recorded in the org that lost them.
-	events, err := f.repo.ListShareEvents(ctx, core.ShareKindProject, "p-move")
+	events, err := store.ListShareEvents(ctx, f.repo.ORM(), core.ShareKindProject, "p-move")
 	require.NoError(t, err)
 	require.NotEmpty(t, events)
 	assert.Equal(t, core.ShareActionMoved, events[0].Action)
 	assert.Equal(t, moveSrc, events[0].OrgID)
-	events, err = f.repo.ListShareEvents(ctx, core.ShareKindChat, "c-shared")
+	events, err = store.ListShareEvents(ctx, f.repo.ORM(), core.ShareKindChat, "c-shared")
 	require.NoError(t, err)
 	require.NotEmpty(t, events)
 	assert.Equal(t, core.ShareActionMoved, events[0].Action)
@@ -353,7 +353,9 @@ func TestMoveProjectOrg_RefusesUnlessQuiescent(t *testing.T) {
 	}, {
 		name: "a running background process",
 		setup: func(f *moveFixture) {
-			require.NoError(f.t, f.repo.CreateBackgroundProcess(context.Background(), &BackgroundProcess{
+			now := time.Now()
+			require.NoError(f.t, store.InsertBackgroundProcess(context.Background(), f.repo.ORM(), &BackgroundProcess{
+				ID: generateID(), CreatedAt: now, UpdatedAt: now, StartedAt: now,
 				Command: "npm run dev", WorkingDir: "/tmp", ProjectID: strp("p-busy"), UserID: moveOwner,
 				Status: reliantv1.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_RUNNING,
 			}))

@@ -114,13 +114,13 @@ export function HeatmapChart({
   return (
     <figure data-testid="obs-panel-heatmap" aria-label={label} role="group">
       <div className="flex gap-2">
-        <div className="flex w-14 shrink-0 flex-col justify-between text-right text-2xs tabular-nums text-ink-muted" style={{ height }} aria-hidden="true">
+        <div className="flex w-14 shrink-0 flex-col justify-between text-right text-meta tabular-nums text-ink-muted" style={{ height }} aria-hidden="true">
           <span>{formatValue(buckets[buckets.length - 1]?.high ?? null, unit)}</span>
           <span>{formatValue(buckets[0]?.low ?? null, unit)}</span>
         </div>
         {plot}
       </div>
-      <div className="ml-16 mt-1 flex justify-between text-2xs tabular-nums text-ink-muted" aria-hidden="true">
+      <div className="ml-16 mt-1 flex justify-between text-meta tabular-nums text-ink-muted" aria-hidden="true">
         <span>{times.length ? at(times[0]) : ""}</span>
         <span className="inline-flex items-center gap-1.5">
           fewer
