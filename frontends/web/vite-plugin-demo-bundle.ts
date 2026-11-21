@@ -82,7 +82,20 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   // Settings, billing, orgs, projects: account pages.
   { match: "src/components/Settings/", why: "Reliant settings", except: ["src/components/Settings/providers/accountFormat.ts"] },
   { match: "src/components/Billing/", why: "billing" },
-  { match: "src/components/Projects/", why: "Reliant projects", except: ["src/components/Projects/cloneTargets.ts"] },
+  {
+    match: "src/components/Projects/",
+    why: "Reliant projects",
+    // The one project selector (U7) is the forge console's app switcher too.
+    // Its data hooks have demo twins (hooks/project-catalog-queries.demo.ts,
+    // hooks/sidebar-project-queries.demo.ts, Apps/startBuilding.demo.ts), so
+    // in the demo it lists the demo's apps and reaches no Reliant code.
+    except: [
+      "src/components/Projects/cloneTargets.ts",
+      "src/components/Projects/ProjectSelector.tsx",
+      "src/components/Projects/AppChip.tsx",
+      "src/components/Projects/ProjectRowSummary.tsx",
+    ],
+  },
   { match: "src/components/Claim/", why: "the forge shell's claim flow" },
 ];
 
