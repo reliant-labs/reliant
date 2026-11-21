@@ -28,7 +28,7 @@ import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
-import { GettingStarted } from "@/components/Forge/GettingStarted";
+import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
 import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
 import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
 import { cn } from "@/lib/utils";
@@ -409,22 +409,21 @@ function RoutesTable({ rows, pct, loading, failed }: { rows: VitalsRow[]; pct: P
 
 function SpeedInsightsEmpty({ windowWords }: { windowWords: string }) {
   return (
-    <GettingStarted
+    <ProjectEmptyCta
       testId="speed-insights-empty"
       icon={<Gauge />}
       title={`No page has been measured in the ${windowWords}`}
-      agent={<DeployWithAgentButton env={null} />}
-      about={
-        <>
-          Speed insights scores how real visitors experience every page of your frontend: how fast it loads (LCP, FCP), how quickly it responds to a tap or click (INP),
-          how much it shifts as it loads (CLS) and how long the server takes to answer (TTFB), on desktop and on mobile.
-        </>
-      }
+      deploy={<DeployWithAgentButton env={null} />}
+      learn="speed-insights"
     >
+      <p>
+        Speed insights scores how real visitors experience every page of your frontend: how fast it loads (LCP, FCP), how quickly it responds to a tap or click (INP),
+        how much it shifts as it loads (CLS) and how long the server takes to answer (TTFB), on desktop and on mobile.
+      </p>
       <p>
         A forge frontend measures them already: the browser runtime (<code className="font-mono text-code">@reliantlabs/forge-web-runtime</code>) sends them with its
         telemetry. Deploy a frontend, open it, and the first figures appear within a minute.
       </p>
-    </GettingStarted>
+    </ProjectEmptyCta>
   );
 }

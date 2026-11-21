@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
+import { LearnLink, type LearnSection } from "@/lib/learnLinks";
 import { cn } from "@/lib/utils";
 
 /**
@@ -34,6 +35,8 @@ export interface SettingsPageHeaderProps {
   actions?: ReactNode;
   /** Optional row under the description — context chips, a scope note. */
   meta?: ReactNode;
+  /** The section's guide (lib/learnLinks.tsx): a Learn link after the description. */
+  learn?: LearnSection;
   className?: string;
 }
 
@@ -42,6 +45,7 @@ export function SettingsPageHeader({
   description,
   actions,
   meta,
+  learn,
   className,
 }: SettingsPageHeaderProps) {
   const Heading = useContext(SettingsHeadingLevelContext) === 2 ? "h2" : "h1";
@@ -58,6 +62,12 @@ export function SettingsPageHeader({
         </Heading>
         <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground text-pretty">
           {description}
+          {learn && (
+            <>
+              {" "}
+              <LearnLink section={learn} className="align-baseline" />
+            </>
+          )}
         </p>
         {meta && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

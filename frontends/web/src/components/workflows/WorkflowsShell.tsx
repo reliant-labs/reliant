@@ -57,6 +57,7 @@ import {
   type WorkflowsTab,
 } from "@/lib/workflowsArea";
 import { ShellPageHeader, useShellFrame } from "../Layout/shell/shellFrame";
+import { LearnLink } from "@/lib/learnLinks";
 import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 import { ProjectSelector } from "../Projects/ProjectSelector";
@@ -136,9 +137,12 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
         <ShellPageHeader
           testId="workflows-header"
           actions={
-            <div className="flex min-w-0 max-w-xs items-center max-md:max-w-48">
-              <ProjectSwitcher />
-            </div>
+            <>
+              <LearnLink section="workflows" />
+              <div className="flex min-w-0 max-w-xs items-center max-md:max-w-48">
+                <ProjectSwitcher />
+              </div>
+            </>
           }
         >
           <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-ui text-muted-foreground">

@@ -11,7 +11,8 @@
  *                                 cloud sizes, with the plan behind them)
  *
  * Both open the one Add sandbox sheet (Machines/AddMachineSheet), on the
- * matching choice, so there is still a single place a sandbox is added.
+ * matching choice, so there is still a single place a sandbox is added. Then
+ * the guide (lib/learnLinks.tsx "sandboxes").
  *
  * `variant`: "nav" is the narrow version for the nav column (stacked, small
  * type); "page" (default) is for a page body.
@@ -21,6 +22,7 @@ import { useState } from "react";
 import { Cloud, Laptop } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
+import { LearnLink } from "@/lib/learnLinks";
 import { cn } from "@/lib/utils";
 
 import { AddMachineSheet, type ReadyMachine } from "../Machines/AddMachineSheet";
@@ -81,6 +83,7 @@ export function ConnectSandboxCta({ variant = "page", onReady, className }: Conn
           Provision a Reliant sandbox
         </Button>
       </div>
+      <LearnLink section="sandboxes" label="How agent sandboxes work" />
       <AddMachineSheet
         open={open}
         initialKind={kind}
