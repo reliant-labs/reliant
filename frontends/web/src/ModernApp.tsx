@@ -1,6 +1,7 @@
 // ModernApp - Main application component
 import { useSearch, useNavigate, useLocation } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
+import type { IndexSearch } from './routeSchemas';
 import { GITHUB_CREDENTIAL_QUERY_KEY } from './hooks/useGitHubCredential';
 import { ChatState } from "./gen/reliant/v1/chat_pb";
 import type { Chat } from "./api/client";
@@ -111,7 +112,9 @@ function App() {
   // onboarding OAuth callers (GitHubSyncStatus, AddRepoModal) return to /
   // or /project/$id and we want a toast + credential cache refresh at the
   // route they came back to. Settings has its own local handler.
-  const { github_connected, github_installed, github_error, github_error_msg } = useSearch({ from: '/_app' });
+  // Not strict: the workspace is mounted at `/_app` and, in the org tree, at
+  // `/o/$org/_app` (routes.tsx); both validate this search (indexSearchSchema).
+  const { github_connected, github_installed, github_error, github_error_msg } = useSearch({ strict: false }) as IndexSearch;
   const navigate = useNavigate();
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
   const queryClient = useQueryClient();

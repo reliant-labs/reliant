@@ -1,6 +1,6 @@
 ---
 title: "Gmail"
-description: "Send, search and read email, and start a run when new mail arrives"
+description: "Gmail integration for Reliant workflows: send, search and read email as one connected mailbox, and start a run when new mail reaches the inbox."
 ---
 
 The Gmail integration works on one mailbox, as the Google account you connect.
@@ -50,7 +50,7 @@ nodes:
     uses: slack/message.post@1
     with:
       channel: C0123ABCD
-      text: "Invoice mail from {{ nodes.read.from }}: {{ nodes.read.subject }}"
+      text: "Invoice mail from {{ nodes.read.data.from }}: {{ nodes.read.data.subject }}"
 
 edges:
   - from: read

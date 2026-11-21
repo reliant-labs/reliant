@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/lineage"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
@@ -511,4 +512,36 @@ func TestDispatch_LaunchCarriesTheTriggersOrg(t *testing.T) {
 		launch.Event{DedupeKey: "d-org"}, Spec{}, triggerspec.Scope{})
 	require.NoError(t, err)
 	assert.Equal(t, "acme", spec.OrgID)
+}
+
+// An activation of a declared trigger starts from its declaration's prompt,
+// as every other trigger kind does (triggers.SeedPrompt). This path read the
+// activation's own message only, so an activation that left it to the
+// declaration launched with no user message and failed "at least one user
+// message is required" (north-star AW-50). With no prompt anywhere, the run
+// starts from the default seed.
+func TestDispatch_SeedsTheDeclaredPrompt(t *testing.T) {
+	f := newFixture(t)
+	tr := f.addTrigger(f.userID, f.projectID, "on-review-done-prompt", "builtin://agent",
+		Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
+	tr.Message = ""
+	ev := &core.RunEvent{WorkflowName: "code-review", Outcome: core.RunEventFinished}
+
+	spec, err := f.dispatcher.buildSpec(tr, ev, launch.Event{DedupeKey: "d-prompt"},
+		Spec{Declaration: &triggers.Declaration{Prompt: "Summarise the review."}}, triggerspec.Scope{})
+	require.NoError(t, err)
+	require.NotEmpty(t, spec.Messages)
+	assert.Equal(t, "Summarise the review.", spec.Messages[0].Content)
+
+	spec, err = f.dispatcher.buildSpec(tr, ev, launch.Event{DedupeKey: "d-noprompt"},
+		Spec{Declaration: &triggers.Declaration{}}, triggerspec.Scope{})
+	require.NoError(t, err)
+	assert.Equal(t, triggers.DefaultSeedPrompt(tr), spec.Messages[0].Content)
+	assert.NotEmpty(t, spec.Messages[0].Content)
+
+	tr.Message = "The activation's own words."
+	spec, err = f.dispatcher.buildSpec(tr, ev, launch.Event{DedupeKey: "d-own"},
+		Spec{Declaration: &triggers.Declaration{Prompt: "Summarise the review."}}, triggerspec.Scope{})
+	require.NoError(t, err)
+	assert.Equal(t, "The activation's own words.", spec.Messages[0].Content, "an activation's message overrides the declaration")
 }

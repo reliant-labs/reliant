@@ -1,4 +1,6 @@
-IMPORTANT: Reliant has launched and follows real semver, with the major locked at 1 (owner, 2026-11-05). Users and their daemons, Electron apps, SDKs and workflows run older releases than the server, so **a change must stay backwards compatible**. Never break a public surface within v1. The public surfaces are proto/RPCs, the CLI, config and workflow YAML, the DB schema, and the SDK. To replace something, add the new path beside the old one, mark the old one deprecated, and keep it working. It is removed only in a future major, which only the owner decides. A `feat` PR makes the next release a minor, and anything else makes it a patch. A `!` title or a `BREAKING CHANGE:` footer is refused at the release cut. The merge gate fails a `buf breaking` proto change, and a migration that declares `forge:breaks-rollback`, unless the owner applied `breaking:approved` / `migration:breaks-rollback-approved`.
+IMPORTANT: Reliant has launched and follows real semver, with the major locked at 1 (owner, 2026-11-05). Users and their daemons, Electron apps, SDKs and workflows run older releases than the server, so **a change must stay backwards compatible**. Never break a public surface within v1. The public surfaces are proto/RPCs, the CLI, config and workflow YAML, the DB schema, and the SDK. To replace something, add the new path beside the old one, mark the old one deprecated, and keep it working. It is removed only in a future major, which only the owner decides. A `feat` PR makes the next release a minor, and anything else makes it a patch. A `!` title or a `BREAKING CHANGE:` footer is refused at the release cut. The merge gate fails a `buf breaking` proto change, and a migration that declares `forge:breaks-rollback`, unless the owner accepted it with `breaking:approved` / `migration:breaks-rollback-approved`, applied by the owner or by the Reliant bot on the owner's instruction (owner, 2026-11-19); no other account's label counts.
+
+Forge-compliance work follows the same v1 compatibility rules: retain compatibility paths while adopting native shapes. The approval labels above are gate exceptions, not permission to break v1 compatibility; never add them yourself. Server-declared minimum client versions and upgrade/reload notices do not make an incompatible change backwards compatible. Any proposal to remove a public compatibility path must wait for the owner's decision on a future major release, not a breaking window on v1.
 
 IMPORTANT: **we always** need to recover gracefully, to allow conversations to continue.
 
@@ -49,7 +51,10 @@ commit that lands is the commit that was tested. **Review first:** a PR push run
 nothing heavy (`CI result` is green on the PR in about a minute); the merge gate
 runs once, in the queue, after `pr-review` passes the PR; the full suite runs on
 main after the merge and gates the release, never the merge. Label a PR `ci:run`
-(then push) to run the merge gate on it before review.
+(then push) to run the merge gate on it before review. **Approval is a check,
+never a label** (owner, 2026-11-20): merging requires the required checks (`CI
+result`, `Reliant review`); the `review:*` and `merge:*` labels are markers only,
+and no label turns a check green.
 
 **GitHub identity (owner, 2026-10-30):** implementation is yours: commit, push
 and open PRs as the user, with plain `git` and `gh`. Every review, label, comment

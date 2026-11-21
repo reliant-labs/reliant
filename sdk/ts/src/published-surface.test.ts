@@ -8,10 +8,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
+import { SDK_CLIENT_ID, SDK_VERSION } from "./client/version.js";
 
 const pkgDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")) as {
   name: string;
+  version: string;
   license: string;
   files: string[];
   exports: Record<string, { types: string; default: string } | string>;
@@ -77,10 +79,27 @@ describe("the manifest", () => {
   });
 });
 
+describe("the client's identity", () => {
+  // The server compares Reliant-Client's version with its minimum for this
+  // SDK, so the version sent must be the version published.
+  it("sends sdk-ts/<the package.json version>", () => {
+    expect(SDK_VERSION).toBe(pkg.version);
+    expect(SDK_CLIENT_ID).toBe(`sdk-ts/${pkg.version}`);
+  });
+
+  it("publishes the upgrade refusal and the version from /client", () => {
+    const dts = readFileSync(join(outDir, "client", "index.d.ts"), "utf8");
+    for (const name of ["UpgradeRequiredError", "isUpgradeRequired", "SDK_VERSION", "SDK_CLIENT_ID", "RELIANT_CLIENT_HEADER"]) {
+      expect(dts, `${name} is not exported from /client`).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+  });
+});
+
 describe("the built /client", () => {
   const allowedBare = new Set([
     "@bufbuild/protobuf",
     "@bufbuild/protobuf/codegenv2",
+    "@bufbuild/protobuf/wire",
     "@bufbuild/protobuf/wkt",
     "@connectrpc/connect",
     "@reliantlabs/forge-web-runtime/interceptors",

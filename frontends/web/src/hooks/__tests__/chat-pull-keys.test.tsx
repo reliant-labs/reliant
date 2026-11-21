@@ -25,6 +25,7 @@ import {
   ChatState,
   WorkflowExecutionView,
   type GetWorkflowExecutionsRequest,
+  type ListArchivedChatsRequest,
   type ListQueuedAgentMessagesRequest,
   type ListQueuedAgentMessagesResponse,
 } from "@/gen/reliant/v1/chat_pb";
@@ -39,7 +40,13 @@ import { useProjectStore } from "@/store/projectStore";
 import { triggerRefetch } from "@/store/refetchStore";
 import { STREAM_INVALIDATED_SCOPES } from "@/store/streamInvalidatedScopes";
 import type { UserUpdate } from "@/types/streaming";
-import { chatKeys, useArchiveChat, useArchivedChats, useUnarchiveChat } from "../chat-queries";
+import {
+  ARCHIVED_CHATS_PAGE_SIZE,
+  chatKeys,
+  useArchiveChat,
+  useArchivedChats,
+  useUnarchiveChat,
+} from "../chat-queries";
 import { useChatSearch } from "../chat-pull-queries";
 import { chatServiceKeys, useListStepExecutions } from "../chat-service-hooks_gen";
 import { clearAllMessagesCache, messageKeys, useMessages } from "../message-queries";
@@ -169,6 +176,57 @@ describe("the archived list (chatServiceKeys.archivedChat)", () => {
     await waitFor(() => expect(result.current.data).toHaveLength(1));
     expect(result.current.data![0]).toMatchObject({ id: CHAT, title: "old work", worktreeName: "feature-x" });
     expect(result.current.data![0]).not.toHaveProperty("$typeName");
+  });
+
+  it("reads a page at a time, and the next page continues from the token", async () => {
+    server.listArchivedChats.mockImplementation((req: ListArchivedChatsRequest) =>
+      req.pageToken
+        ? { chats: [{ chat: { id: "older", title: "older" } }] }
+        : { chats: [{ chat: { id: CHAT, title: "newest" } }], nextPageToken: "after-newest" },
+    );
+    const { result } = renderHook(() => useArchivedChats(), { wrapper });
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    const first = server.listArchivedChats.mock.calls[0]![0] as ListArchivedChatsRequest;
+    expect(first.pageSize).toBe(ARCHIVED_CHATS_PAGE_SIZE);
+    expect(first.pageToken).toBeUndefined();
+    expect(result.current.hasNextPage).toBe(true);
+
+    await act(() => result.current.fetchNextPage().then(() => undefined));
+    await waitFor(() => expect(result.current.data?.map((c) => c.id)).toEqual([CHAT, "older"]));
+    const second = server.listArchivedChats.mock.calls[1]![0] as ListArchivedChatsRequest;
+    expect(second.pageToken).toBe("after-newest");
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it("is not read while disabled, and nothing that invalidates it reads it then", async () => {
+    vi.spyOn(useChatStore.getState(), "evictChat").mockImplementation(() => {});
+    const { rerender } = renderHook(({ enabled }) => useArchivedChats({ enabled }), {
+      wrapper,
+      initialProps: { enabled: false },
+    });
+    await settle();
+    expect(calls(server.listArchivedChats)).toBe(0);
+
+    // A generated mutation (chatServiceKeys.all), a hand archive, and a
+    // streamed archive each reach the archived scope.
+    const adopt = renderHook(() => useAdoptRun(), { wrapper });
+    await act(() => adopt.result.current.mutateAsync({ chatId: CHAT }).then(() => undefined));
+    const archive = renderHook(() => useArchiveChat(), { wrapper });
+    await act(() => archive.result.current.mutateAsync(CHAT).then(() => undefined));
+    act(() => useGlobalUpdatesStore.getState().handleUpdate([stateChange("archived", "idle")]));
+    await new Promise((r) => setTimeout(r, 50));
+    await settle();
+    expect(calls(server.listArchivedChats)).toBe(0);
+
+    // Opening the tab reads it.
+    rerender({ enabled: true });
+    await waitFor(() => expect(calls(server.listArchivedChats)).toBe(1));
+
+    // Closing it again: an invalidation marks it stale and reads nothing.
+    rerender({ enabled: false });
+    await act(() => adopt.result.current.mutateAsync({ chatId: CHAT }).then(() => undefined));
+    await settle();
+    expect(calls(server.listArchivedChats)).toBe(1);
   });
 });
 
