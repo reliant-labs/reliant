@@ -120,6 +120,49 @@ if [[ "$sweep" -eq 1 ]]; then
   exit 0
 fi
 
+# The rerun-and-file path: reliant dogfoods forge's port of it when the
+# pinned forge has one (v1.10.0 and later). `forge test flakes confirm` reads
+# the same sources (--log-failed, the *gate-logs* artifacts, or --logs),
+# attributes failures the same ways, never retries a race, reruns each
+# failing test once, alone, under -race at this commit (Go through
+# scripts/go-test.sh), and records the reruns as lane confirm of forge's test
+# record. `forge test flakes --issues` then files or comments on one
+# flake:suspected issue per confirmed test, under this script's title
+# (`flake:suspected: <Test> (<package>)`) and comment wording ("Failed then
+# passed on retry again"), so the issues it filed are the ones updated, a
+# closed one is reopened, and --sweep above still reads them.
+#
+# What the port changed, on purpose (`forge test flakes confirm --help`):
+#   - a failure matching a host signature (network, rate limits, disk, ports,
+#     docker, a timeout under load) is host health: not rerun, not filed;
+#   - more than MAX_TESTS failures no longer means "a broad break, rerun
+#     nothing": 3+ failures sharing a package, harness or signature are one
+#     infra event (not rerun), and the first MAX_TESTS of the rest are rerun;
+#   - every retry runs under -race: FLAKE_RACE is no longer read;
+#   - --issues also closes the open issue of a test the record saw go quiet.
+# A pinned forge without it runs the script below, unchanged, as does
+# FLAKE_REPORT_LEGACY=1 (scripts/test-flake-report.sh pins its verdicts).
+forge_sh="$(cd "$(dirname "$0")" && pwd)/forge.sh"
+if [[ "${FLAKE_REPORT_LEGACY:-}" != 1 ]] && "$forge_sh" test flakes confirm --help >/dev/null 2>&1; then
+  cf=()
+  if [[ -n "$logs_dir" ]]; then
+    cf=(--logs "$logs_dir")
+    [[ -n "$sha" ]] && cf+=(--sha "$sha")
+    [[ -n "$run_url" ]] && cf+=(--run-url "$run_url")
+  else
+    cf=(--run "$run_id")
+  fi
+  [[ -n "$repo" ]] && cf+=(--repo "$repo")
+  [[ "$list_only" -eq 1 ]] && cf+=(--list)
+  "$forge_sh" test flakes confirm "${cf[@]}" --max "$max_tests" -- "$(dirname "$forge_sh")/go-test.sh" || say "forge test flakes confirm exited $?"
+  [[ "$list_only" -eq 1 ]] && exit 0
+  issues=(--issues)
+  [[ -n "$repo" ]] && issues+=(--repo "$repo")
+  [[ "$dry_run" -eq 1 ]] && issues+=(--dry-run)
+  "$forge_sh" test flakes "${issues[@]}" || say "forge test flakes --issues exited $?"
+  exit 0
+fi
+
 mkdir -p "$work/art"
 art_dir="$work/art"
 if [[ -n "$logs_dir" ]]; then

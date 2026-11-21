@@ -82,6 +82,12 @@ lint:
         forgeconv-no-getenv: error
         forge-config-deps: error
         forge-optional-deps-guard: error
+        # TODO(P1, forge v1.10.0): `flake-check: error`, the owner's policy
+        # for this repo (a test the change adds or edits that fails one of its
+        # three runs blocks). The pinned forge has no flake-check rule, and
+        # lint.rules refuses a key the pinned forge cannot grade, so it lands
+        # with the pin bump that ships `forge test flakes gate`. Until then
+        # scripts/test-flake.sh blocks on its own exit status, as it always has.
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them
@@ -94,6 +100,21 @@ lint:
             - call: github.com/reliant-labs/reliant/internal/logging.Error
             - call: github.com/reliant-labs/reliant/internal/logging.Trace
             - call: github.com/reliant-labs/reliant/internal/logging.Log
+# reliant records its own test runs (the merge gate's affected lanes, the
+# release gate's `task test` / `test:web` / `test:integration` / `test:e2e`,
+# and the flake gate, through `forge test capture`; scripts/test-capture.sh)
+# and acts on its flakes as the owner's policy says: flaky = delete
+# immediately, so a suspected flake files a flake:suspected issue
+# (scripts/flake-report.sh) and opens a quarantine PR rather than only
+# suggesting one. coverage: true also builds the dev stack's air servers
+# instrumented (`forge env up dev`, scripts/air-build.sh's
+# $FORGE_GO_BUILD_FLAGS); persistent envs never are. Upload stays at its
+# default (in CI): ci.yml's main runs upload, best effort (Tests D3b).
+tests:
+    coverage: true
+    flakes:
+        issues: true
+        quarantine: pr
 database:
     # Prod's Postgres major (Cloud SQL reliant-pg is POSTGRES_16). forge's
     # pgtest boots its embedded test server at this major, so a test run

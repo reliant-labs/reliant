@@ -376,9 +376,14 @@ tasks:
     # -timeout 300s per package (the retired Makefile's budget); P8 moves it
     # toward forge's 120s once the overruns are measured and gated. It stops
     # nothing: other agents' environments are not this task's to touch.
+    #
+    # Recorded: the Go tests as lane `unit` of a forge test run (results and
+    # coverage under .forge/tests/runs/), the web tests as lane `frontend`
+    # (scripts/test-capture.sh); `forge test report` summarises them. The
+    # verdict is the tests' own; FORGE_TESTS=off records nothing.
     desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
     cmds:
-      - '{{.SLOT}} go test {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - '{{.SLOT}} ./scripts/test-capture.sh go unit {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
       - task: test:sdk:full
         if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:web
@@ -396,15 +401,16 @@ tasks:
         pkgs="{{.CLI_ARGS}}"
         [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
         if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
-        {{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
+        {{.SLOT}} ./scripts/test-capture.sh go integration {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
     # ephemeral Temporal dev server (the test starts it) + a scripted LLM.
-    # `--` args replace the default package.
+    # `--` args replace the default package. Recorded as lane `e2e`
+    # (scripts/test-capture.sh), its -v output printed as before.
     desc: Run the hermetic story e2e tests (-tags e2e, ./e2e/stories/)
     cmds:
-      - go test -tags e2e -count=1 -timeout=10m -v {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/stories/{{end}}
+      - ./scripts/test-capture.sh go e2e -tags e2e -count=1 -timeout=10m -v {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/stories/{{end}}
 
   test:all:
     desc: Run the unit (Go + web + electron) and integration suites (e2e has its own task)
@@ -459,7 +465,9 @@ tasks:
     desc: Run the web unit tests (vitest, every file — prefer task test:affected LANES=web)
     dir: frontends/web
     cmds:
-      - '{{.SLOT}} npm test -- --run'
+      # Recorded as lane `frontend`, with v8 coverage (vite.config.ts reads
+      # FORGE_TEST_LANE_DIR; scripts/test-capture.sh).
+      - '{{.SLOT}} ../../scripts/test-capture.sh vitest frontend npm test -- --run'
 
   test:web:coverage:
     desc: Run the web unit tests with coverage

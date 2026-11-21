@@ -79,6 +79,7 @@ func main() {
 	budgetFlag := fs.String("test-budget", "", "with run: fail a Go test this change adds or edits that runs longer than this (a duration; \"auto\" is 10s scaled by the load per core; empty or 0 is off), and report every other test over it")
 	webFullFlag := fs.String("web-full", webFullAll, "with run: what a FULL web lane runs: all (the whole vitest suite) or reached (only the vitest files the diff's own web modules reach, at -reach's cut; the merge gate's choice, dev-docs/testing-affected.md)")
 	webShardFlag := fs.String("web-shard", "", "with run: run only shard i of n of the web lane's vitest files (i/n, vitest --shard): the merge queue's vitest job splits the SAME selected file list across n runners, one leg each")
+	captureFlag := fs.Bool("capture", false, "with run: record the Go and web steps through scripts/test-capture.sh (`forge test capture`, lanes "+captureLaneGo+" and "+captureLaneWeb+"): results and coverage under .forge/tests/runs/, the verdict unchanged; the merge gate's choice")
 	reachFlag := fs.String("reach", "", "Go and web lane fan-out: all (every package whose test binary, every vitest file whose import closure, contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers; the vitest files that import a changed module or a module importing it: the merge tier)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
@@ -139,7 +140,7 @@ func main() {
 	}
 	if cmd == "run" {
 		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs, webFull: *webFullFlag, webShard: *webShardFlag,
-			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT"))}
+			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT")), capture: *captureFlag}
 		if err := r.setBudget(ctx, *budgetFlag, pl.Base); err != nil {
 			fmt.Fprintln(os.Stderr, "test-affected:", err)
 			os.Exit(2)
@@ -612,6 +613,41 @@ type runner struct {
 	// webShard is -web-shard: "i/n" runs vitest's shard i of n over the
 	// web step's files; empty runs them all.
 	webShard string
+	// capture is -capture: the root module's Go step and the web step run
+	// through scripts/test-capture.sh, which records them with `forge test
+	// capture` (lanes captureLaneGo and captureLaneWeb) and exits with the
+	// command's own status.
+	capture bool
+}
+
+// The lanes -capture records the merge tier's steps as.
+const (
+	captureLaneGo  = "short"
+	captureLaneWeb = "web-affected"
+)
+
+// captureScript is scripts/test-capture.sh (its header says what it adds to
+// a lane's command).
+func (r *runner) captureScript() string {
+	return filepath.Join(r.root, "scripts", "test-capture.sh")
+}
+
+// goTest is a Go step's command: `go test <args>`, or under -capture the
+// same lane through scripts/test-capture.sh, which adds -json and the cover
+// flags and prints what `go test` prints. raw puts the -json stream on
+// stdout instead, for the budget filter.
+func (r *runner) goTest(args []string, raw bool) []string {
+	if !r.capture {
+		if raw {
+			return append([]string{"go", "test", "-json"}, args...)
+		}
+		return append([]string{"go", "test"}, args...)
+	}
+	argv := []string{r.captureScript()}
+	if raw {
+		argv = append(argv, "--raw")
+	}
+	return append(append(argv, "go", captureLaneGo), args...)
 }
 
 // -web-full values.
@@ -636,6 +672,9 @@ func validShard(s string) bool {
 // files than shards), which is a pass, not vitest's "No test files found".
 func (r *runner) vitest(files []string) []string {
 	argv := []string{"npx", "vitest", "run"}
+	if r.capture {
+		argv = append([]string{r.captureScript(), "vitest", captureLaneWeb}, argv...)
+	}
 	if r.webShard != "" {
 		argv = append(argv, "--shard="+r.webShard, "--passWithNoTests")
 	}
@@ -782,27 +821,43 @@ func (r *runner) goSteps(pl *Plan) []step {
 func (r *runner) rootGoSteps(pl *Plan) []step {
 	// -timeout is per package binary and matches task test:short's (5m): the
 	// DB-backed packages run under -short too (sized in Taskfile.yml).
-	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "5m"}
+	base := []string{"-buildvcs=false", "-short", "-timeout", "5m"}
 	if r.goP > 0 {
 		base = append(base, "-p", fmt.Sprint(r.goP))
 	}
 	switch {
 	case pl.Go.Full:
-		return []step{{name: "go (full)", dir: r.root, argv: r.heavy(append(append([]string{}, base...), "./..."))}}
+		return []step{{name: "go (full)", dir: r.root, argv: r.heavy(r.goTest(append(append([]string{}, base...), "./..."), false))}}
 	case len(pl.Go.Packages) == 0:
 		return nil
 	}
-	s := step{name: "go", dir: r.root, argv: append(append([]string{}, base...), pl.Go.Packages...)}
+	args := append(append([]string{}, base...), pl.Go.Packages...)
+	s := step{name: "go", dir: r.root, argv: r.goTest(args, false)}
 	if r.budget > 0 {
 		// -json right after "test": the filter turns it back into plain
 		// go test output and times each test.
-		s.argv = append([]string{"go", "test", "-json"}, s.argv[2:]...)
+		s.argv = r.goTest(args, true)
 		s.budget = newBudgetFilter(r.budget, r.owned, nil)
 	}
 	return []step{s}
 }
 
 func (r *runner) webSteps(pl *Plan) []step {
+	steps := r.webStepsOf(pl)
+	if r.capture {
+		// The merge tier records the web step's results, not its coverage:
+		// v8 coverage cost 100 selected files +45% wall time and the whole
+		// suite +50-140% (paired runs, 2026-11-21), so the release gate's
+		// `task test:web` (lane frontend) alone measures it.
+		// frontends/web/vite.config.ts reads FORGE_TEST_COVERAGE.
+		for i := range steps {
+			steps[i].env = append(steps[i].env, "FORGE_TEST_COVERAGE=off")
+		}
+	}
+	return steps
+}
+
+func (r *runner) webStepsOf(pl *Plan) []step {
 	web := filepath.Join(r.root, "frontends", "web")
 	switch {
 	case pl.Web.Full && r.webFull == webFullReached:

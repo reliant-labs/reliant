@@ -7,6 +7,11 @@
 #     race detector's report it is not retried, and when it does not, the retry
 #     runs under -race (as main's lanes do) and fails again.
 #
+# It pins the script's own rerun-and-file path (FLAKE_REPORT_LEGACY=1): with a
+# pinned forge that has `forge test flakes confirm`, flake-report.sh hands
+# those verdicts to forge, whose own tests hold them (the same two cases are
+# forge's internal/testflakes confirm tests).
+#
 # Needs go with cgo (the race detector). Run it from anywhere.
 set -euo pipefail
 src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/flake-report.sh"
@@ -49,7 +54,7 @@ logs="$fx/logs"
 mkdir -p "$logs"
 run() { # <log body> -> the script's output
   printf '%b' "$1" >"$logs/test.log"
-  (cd "$mod" && GITHUB_REPOSITORY=fx/fx GOFLAGS= bash "$src" --logs "$logs" --sha deadbeef --dry-run 2>&1)
+  (cd "$mod" && FLAKE_REPORT_LEGACY=1 GITHUB_REPOSITORY=fx/fx GOFLAGS= bash "$src" --logs "$logs" --sha deadbeef --dry-run 2>&1)
 }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -88,7 +93,7 @@ gh_run() { # <issues json> <args...> -> the script's output; calls in $fx/gh.log
   printf '%s' "$1" >"$fx/issues.json"
   shift
   : >"$fx/gh.log"
-  (cd "$mod" && PATH="$bin:$PATH" GH_LOG="$fx/gh.log" GH_ISSUES="$fx/issues.json" GITHUB_REPOSITORY=fx/fx GOFLAGS='' \
+  (cd "$mod" && FLAKE_REPORT_LEGACY=1 PATH="$bin:$PATH" GH_LOG="$fx/gh.log" GH_ISSUES="$fx/issues.json" GITHUB_REPOSITORY=fx/fx GOFLAGS='' \
     FLAKE_SWEEP_NOW=1793491200 bash "$src" "$@" 2>&1) # now = 2026-11-01T00:00:00Z
 }
 

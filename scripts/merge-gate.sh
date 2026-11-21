@@ -63,7 +63,9 @@
 #              files the diff's own web modules reach (-web-full reached), and
 #              the whole vitest suite in the release gate. A Go
 #              test this change adds or edits that runs over the per-test budget
-#              fails it (-test-budget auto)
+#              fails it (-test-budget auto). Recorded (-capture) as lanes short
+#              and web-affected of one forge test run, which never changes
+#              the verdict (scripts/test-capture.sh)
 #   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
 #              gen, node configs), incremental on state this checkout wrote,
 #              when the web lane is selected or anything under
@@ -208,6 +210,17 @@ forge=("$PWD/scripts/forge.sh")
 gen_re='^gen/|^generated/|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|^frontends/web/src/gen/|^\.forge/|^deploy/observability/|_gen(_test)?\.(go|json|ndjson|ts|k)$|^frontends/web/src/store/shortcutsData\.generated\.ts$|^internal/workflow/runtime/schema/field_descriptions\.go$|^internal/skills/catalog/builtin/workflow-builder/SKILL\.md$'
 
 rows=() notes=() fail=0
+# The test phase's lanes are recorded as ONE run of forge's test record
+# (scripts/test-capture.sh, via tools/test-affected run -capture): lane short
+# (the affected Go tests, with coverage) and lane web-affected (the selected
+# vitest files). The record never changes a verdict, and FORGE_TESTS=off (or
+# a pinned forge without `forge test`) runs every lane unrecorded. Begun here
+# so the run carries this gate's diff base; .forge/ is gitignored, so it is
+# not a change the generators' no-op judgment or the plan sees.
+if [ "${FORGE_TESTS:-}" != off ] && test_run=$("${forge[@]}" test begin --base "$base" 2>/dev/null) && [ -d "$test_run" ]; then
+  export FORGE_TEST_RUN=$test_run
+  notes+=("tests: recorded as run $test_run (forge test report $(basename "$test_run"))")
+fi
 # phase <name> <cmd>...: run one phase, timed, output to $L/<name>.log.
 # Each phase is recorded in $L/expected BEFORE it launches and leaves its .row
 # only when it finishes, so a phase that was started and cut off (queued past a
@@ -551,7 +564,7 @@ demo_build() {
 if [ "$fail" = 0 ]; then
   phase build build_check & pids+=($!)
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
-    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
+    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" -capture & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
