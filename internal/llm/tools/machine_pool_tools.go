@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -29,7 +30,9 @@ import (
 // and the approved hash covers exactly that result. An unattended run can do
 // neither. The writes go through the same DaemonRegistryService rpcs the app
 // uses (MachineController), as the user, and machinepool's rules are checked
-// before the card so an approved change is not then refused.
+// before the card so an approved change is not then refused. Those rpcs take
+// a write only from a person: the tool marks the ctx with the approved card
+// (auth.WithApprovedCard) once the approved hash matches, and never before.
 
 const ToolManageMachinePool = "manage_machine_pool"
 
@@ -217,7 +220,7 @@ func (t *machineTool) prepareLabel(ctx context.Context, userID, id string, p Man
 // label applies an approved label call: the label set approved is the one
 // written, and a machine whose labels, or the pools they put it in, changed
 // since the card needs a new one.
-func (t *machineTool) label(ctx *rctx.ToolContext, userID, id string, p ManageMachineParams, approved string) ToolResponse {
+func (t *machineTool) label(ctx *rctx.ToolContext, userID, id string, p ManageMachineParams, callID, approved string) ToolResponse {
 	machine, err := t.ownedMachine(ctx.Context, userID, id)
 	if err != nil {
 		return NewTextErrorResponse(err.Error() + ". Nothing changed.")
@@ -240,7 +243,9 @@ func (t *machineTool) label(ctx *rctx.ToolContext, userID, id string, p ManageMa
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Labelling machine %s requires the user's approval card in an interactive chat, for exactly the resulting labels (they may have changed since a card was approved). It was not run.", id))
 	}
-	if err := t.controller.SetMachineLabels(ctx.Context, userID, id, next); err != nil {
+	// The card a person approved covers exactly this write: the registry
+	// takes it as theirs (auth.RequirePersonOrApprovedCard).
+	if err := t.controller.SetMachineLabels(auth.WithApprovedCard(ctx.Context, callID), userID, id, next); err != nil {
 		return NewTextErrorResponse("Could not set the labels of machine " + id + ": " + err.Error())
 	}
 	return NewTextResponse(fmt.Sprintf("Machine %s now has labels: %s.", id, orNone(formatLabels(next))))
@@ -566,13 +571,16 @@ func (t *machinePoolTypedTool) Execute(ctx *rctx.ToolContext, p ManageMachinePoo
 		}
 		return NewTextErrorResponse("Changing a machine pool requires the user's approval card in an interactive chat, for exactly this definition (the pool may have changed since a card was approved). It was not run."), nil
 	}
+	// The card a person approved covers exactly this write: the registry
+	// takes it as theirs (auth.RequirePersonOrApprovedCard).
+	approvedCtx := auth.WithApprovedCard(ctx.Context, callID)
 	if c.action == "delete" {
-		if err := o.controller.DeleteMachinePool(ctx.Context, caller.userID, c.current.Spec.Name); err != nil {
+		if err := o.controller.DeleteMachinePool(approvedCtx, caller.userID, c.current.Spec.Name); err != nil {
 			return NewTextErrorResponse("Could not delete machine pool " + c.current.Spec.Name + ": " + err.Error()), nil
 		}
 		return NewTextResponse(fmt.Sprintf("Deleted machine pool %s (id %s); its machines and their labels are untouched.", c.current.Spec.Name, c.current.ID)), nil
 	}
-	stored, err := o.controller.PutMachinePool(ctx.Context, caller.userID, c.next)
+	stored, err := o.controller.PutMachinePool(approvedCtx, caller.userID, c.next)
 	if err != nil {
 		return NewTextErrorResponse("Could not write machine pool " + c.next.Name + ": " + err.Error()), nil
 	}

@@ -38,9 +38,6 @@ func (r *Repo) CancelWorktreeRecovery(ctx context.Context, owner, id, detail str
 func (r *Repo) BeginWorktreeRecoveryOperation(ctx context.Context, owner, id, operation, key, targetDaemonID string) error {
 	return store.BeginWorktreeRecoveryOperation(ctx, r.ORM(), owner, id, operation, key, targetDaemonID)
 }
-func (r *Repo) RecordWorktreeActivity(ctx context.Context, id string) error {
-	return store.RecordWorktreeActivity(ctx, r.ORM(), id)
-}
 func (r *Repo) ArchiveWorktreeForRecovery(ctx context.Context, owner, id string, generation int64) error {
 	return store.ArchiveWorktreeForRecovery(ctx, r.ORM(), owner, id, generation)
 }

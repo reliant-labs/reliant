@@ -8,9 +8,8 @@
  * started no run (Skipped, Couldn't start), so a run that never happened
  * is in the log too.
  *
- * One Card for the whole list, never a card per section: sections are rows
- * inside one surface, separated by the section-label rung of the heading
- * ladder (forge-ui/card.tsx).
+ * On the page, not in a card: a header rule, then quiet rules between rows,
+ * sections separated by their label rather than a box (forge-ui/card.tsx).
  */
 
 import { useMemo, useState, type ReactNode } from "react";
@@ -19,7 +18,6 @@ import { ChevronRight } from "lucide-react";
 import type { RunSummary, UnlaunchedEventSummary } from "@/hooks/run-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
-import Card from "../forge-ui/card";
 import { LaunchKindIcon, RunListHeader, RunRow, UnlaunchedEventRow } from "./RunRow";
 import { groupRuns, sectionRuns, type RunListItem } from "./runSections";
 
@@ -110,22 +108,22 @@ export function RunList({ runs, events = NO_EVENTS, groupRepeats, projectNames, 
   );
   if (bare) return body;
   return (
-    <Card padding="none" className="overflow-hidden bg-card">
+    <div className="border-t border-border">
       {body}
-    </Card>
+    </div>
   );
 }
 
 function RunSection({ label, id, children }: { label: string; id: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="border-b border-border/60 last:border-b-0">
+    <section aria-labelledby={id} className="border-b border-border-subtle last:border-b-0">
       <h2
         id={id}
-        className="px-4 pb-1 pt-3 text-xs font-semibold text-muted-foreground"
+        className="px-3 pb-1.5 pt-5 text-meta font-medium text-muted-foreground"
       >
         {label}
       </h2>
-      <ul aria-label={`${label} runs`} className="divide-y divide-border/60">
+      <ul aria-label={`${label} runs`} className="divide-y divide-border-subtle">
         {children}
       </ul>
     </section>
@@ -152,7 +150,7 @@ function RepeatGroup({
         aria-expanded={expanded}
         aria-controls={listId}
         onClick={() => setExpanded((open) => !open)}
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="flex min-h-[41px] w-full items-center gap-3 px-3 py-2.5 text-left text-ui text-muted-foreground transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         <ChevronRight
           className={cn("h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none", expanded && "rotate-90")}
@@ -162,7 +160,7 @@ function RepeatGroup({
         <span className="min-w-0 truncate">{summary}</span>
       </button>
       {expanded && (
-        <ul id={listId} aria-label={`${item.triggerName} runs`} className="divide-y divide-border/60 border-t border-border/60">
+        <ul id={listId} aria-label={`${item.triggerName} runs`} className="divide-y divide-border-subtle border-t border-border-subtle">
           {item.runs.map((run) => (
             <RunRow key={run.chatId} run={run} projectName={projectName(run)} className="pl-11" />
           ))}

@@ -21,6 +21,8 @@ import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from ".
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
 import { isBucketName, isSendableKey, MAX_TOKEN_LENGTH, type StorageSearch } from "./components/Forge/Storage/storageUrl-model";
 import { DATA_PAGE_SIZES, MAX_OFFSET, type DataSearch } from "./components/Forge/Data/dataUrl-model";
+import type { VulnSearch } from "./components/Forge/Security/vulnModel";
+import { MIN_SEVERITIES } from "./services/controlPlane/vulnerabilities/types";
 import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTypes";
 import { ISSUE_PLATFORMS, ISSUE_SORTS } from "./services/controlPlane/observability/issuesTypes";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
@@ -499,6 +501,49 @@ export const settingsSearchSchema = z.object({
 // `/m/new` accepts an optional `worktreeId` so the chat-list group header's
 // "new chat in this workspace" action can target a non-main workspace —
 // without it, every mobile chat could only ever be created against main.
+// ── The chat shell's own search (control-plane docs/design/unified-shell-and-projects.md §9 R1–R3) ──
+//
+// Only view state a person would expect a refresh or a Back to keep, and
+// nothing else: scroll position, drafts and the file and diff tabs stay
+// client state. Each value is optional and an unknown one is dropped (never
+// a route error), so a link from a newer build opens on an older one.
+
+/** The right panel's tabs (store/workspaceStateStore.ts RightSidebarTab; held equal by hooks/useChatRoute.ts). */
+export const CHAT_PANELS = ["files", "changes", "processes", "tasks", "browser"] as const;
+export type ChatPanel = (typeof CHAT_PANELS)[number];
+
+/** How the transcript shows a turn (Chat/thread-views/useChatThreadMode.ts). */
+export const CHAT_VIEWS = ["detailed", "simplified"] as const;
+export type ChatView = (typeof CHAT_VIEWS)[number];
+
+/**
+ * `/c/<chatId>[/t/<threadId>]`:
+ *   panel  the right panel, open on this tab (absent: as this workspace last had it)
+ *   view   Detailed or Simplified transcript (absent: the person's preference)
+ * The open thread is the path's `/t/<threadId>`, not a search value.
+ */
+export const chatViewSearchSchema = z.object({
+  panel: z.enum(CHAT_PANELS).optional().catch(undefined),
+  view: z.enum(CHAT_VIEWS).optional().catch(undefined),
+});
+export type ChatViewSearch = z.infer<typeof chatViewSearchSchema>;
+
+// An id arrives JSON-parsed (a numeric-looking id as a number): read it back as text.
+const idParam = z.preprocess((value) => (typeof value === "number" ? String(value) : value), z.string().min(1).optional()).catch(undefined);
+
+/**
+ * `/new`: the draft's context, so a refresh keeps it and "new chat in X" is a link.
+ *   project  the project it starts in
+ *   machine  the machine it runs on (a daemon id)
+ *   ws       the workspace (worktree id); absent: the project's main checkout
+ */
+export const newChatSearchSchema = z.object({
+  project: idParam,
+  machine: idParam,
+  ws: idParam,
+});
+export type NewChatSearch = z.infer<typeof newChatSearchSchema>;
+
 export const mobileNewChatSearchSchema = z.object({
   worktreeId: z.string().optional(),
 });
@@ -612,6 +657,33 @@ export const forgeConsoleStorageSearchSchema = z.object({
 /** Every StorageSearch key has a schema entry and vice versa. */
 export type _StorageSchemaCoversSearch = AssertNoDrift<Exclude<keyof StorageSearch, keyof z.output<typeof forgeConsoleStorageSearchSchema>>>;
 export type _StorageSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleStorageSearchSchema>, "env">, keyof StorageSearch>>;
+
+/**
+ * Security › Vulnerabilities (components/Forge/Security): the scope, and the
+ * findings filters — a release instead of the scope's current one, a minimum
+ * severity, fixable or not, KEV-listed only, exempt ones too. Every filtered
+ * view is a link someone can send ("the fixable criticals in prod"). The
+ * environment is the console's one scope (`env`), never a second key.
+ */
+const flagParam = z.union([z.literal("1"), z.literal(1).transform(() => "1" as const)]).optional().catch(undefined);
+export const forgeConsoleVulnerabilitiesSearchSchema = z.object({
+  env: envScopeParam,
+  release: z.union([z.string().min(1).max(256), z.number().transform(String)]).optional().catch(undefined),
+  severity: z.enum(MIN_SEVERITIES).optional().catch(undefined),
+  fixable: z.enum(["yes", "no"]).optional().catch(undefined),
+  kev: flagParam,
+  exempt: flagParam,
+});
+
+/** Every VulnSearch key has a schema entry and vice versa. */
+export type _VulnSchemaCoversSearch = AssertNoDrift<Exclude<keyof VulnSearch, keyof z.output<typeof forgeConsoleVulnerabilitiesSearchSchema>>>;
+export type _VulnSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleVulnerabilitiesSearchSchema>, "env">, keyof VulnSearch>>;
+
+/** Security › SBOMs: the scope, and one release instead of the scope's current ones. */
+export const forgeConsoleSbomsSearchSchema = z.object({
+  env: envScopeParam,
+  release: z.union([z.string().min(1).max(256), z.number().transform(String)]).optional().catch(undefined),
+});
 /**
  * Data (components/Forge/Data): the scope, and the browser's view — which
  * database, which table, its filters, sort, visible columns, the first row
@@ -883,6 +955,15 @@ export const forgeConsoleUsersSearchSchema = z.object({
   env: envScopeParam,
   user: identitySubjectParam.refine((v) => v === undefined || v.length <= 128).catch(undefined),
   q: identitySubjectParam,
+});
+
+/**
+ * Experiments (components/Forge/Experiments): the scope, and on one change
+ * the "Who gets it?" answer it opens on (a new change, from its form).
+ */
+export const forgeConsoleExperimentsSearchSchema = z.object({
+  env: envScopeParam,
+  who: z.enum(["everyone", "some", "compare"]).optional().catch(undefined),
 });
 
 /** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */

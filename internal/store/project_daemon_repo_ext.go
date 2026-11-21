@@ -226,6 +226,23 @@ func ListProjectDaemonsForProject(ctx context.Context, db orm.Context, projectID
 	return projectDaemonsToCore(rows), nil
 }
 
+// ListProjectDaemonsForProjects returns where every project in projectIDs is
+// (or is being) installed, in one read, by project and then oldest clone
+// first.
+func ListProjectDaemonsForProjects(ctx context.Context, db orm.Context, projectIDs []string) ([]*core.ProjectDaemon, error) {
+	if len(projectIDs) == 0 {
+		return []*core.ProjectDaemon{}, nil
+	}
+	rows, err := ListProjectDaemon(ctx, db,
+		orm.WhereIn(ProjectDaemonFieldProjectID, projectIDs),
+		orm.WithOrderBy(ProjectDaemonFieldProjectID, orm.Asc),
+		orm.WithOrderBy(ProjectDaemonFieldClonedAt, orm.Asc))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list project_daemons for projects: %w", err)
+	}
+	return projectDaemonsToCore(rows), nil
+}
+
 // ListProjectDaemonsForDaemon returns every project installed (or being
 // installed) on the daemon, oldest clone first.
 func ListProjectDaemonsForDaemon(ctx context.Context, db orm.Context, daemonID string) ([]*core.ProjectDaemon, error) {

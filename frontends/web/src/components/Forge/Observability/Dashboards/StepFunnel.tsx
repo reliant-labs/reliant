@@ -51,7 +51,7 @@ export function StepFunnel({ steps: raw, label = "entrants", compact = false }: 
           <li key={`${step.event}-${index}`} className="flex min-w-0 flex-1 items-stretch gap-1" data-step={step.event}>
             {index > 0 && (
               <div
-                className={cn("flex w-14 shrink-0 flex-col items-center justify-center text-center text-2xs tabular-nums text-ink-muted", index === worst && "text-warning-ink")}
+                className={cn("flex w-14 shrink-0 flex-col items-center justify-center text-center text-meta tabular-nums text-ink-muted", index === worst && "text-warning-ink")}
                 data-testid="obs-step-funnel-rate"
               >
                 <ChevronRight className="h-4 w-4" aria-hidden="true" />
@@ -68,7 +68,7 @@ export function StepFunnel({ steps: raw, label = "entrants", compact = false }: 
               </p>
               <p className="text-sm font-semibold tabular-nums text-ink">
                 {formatCount(step.count)}
-                {index > 0 && <span className="ml-1.5 text-2xs font-normal text-ink-muted">{formatPercent(step.rateFromFirst)}</span>}
+                {index > 0 && <span className="ml-1.5 text-meta font-normal text-ink-muted">{formatPercent(step.rateFromFirst)}</span>}
               </p>
             </div>
           </li>

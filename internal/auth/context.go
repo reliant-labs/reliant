@@ -91,6 +91,8 @@ func WithUser(ctx context.Context, userID, role, email string) context.Context {
 }
 
 // GetUserIDFromContext extracts the user ID from the context
+//
+//forge:resolves-caller
 func GetUserIDFromContext(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(UserIDContextKey).(string)
 	return userID, ok
@@ -98,6 +100,8 @@ func GetUserIDFromContext(ctx context.Context) (string, bool) {
 
 // MustGetUserID extracts user ID from context and panics if not found
 // Use this in authenticated handlers where user_id is guaranteed to exist
+//
+//forge:resolves-caller
 func MustGetUserID(ctx context.Context) string {
 	userID, ok := GetUserIDFromContext(ctx)
 	if !ok {
@@ -107,6 +111,8 @@ func MustGetUserID(ctx context.Context) string {
 }
 
 // GetUserEmailFromContext extracts the user email from the context.
+//
+//forge:resolves-caller
 func GetUserEmailFromContext(ctx context.Context) (string, bool) {
 	email, ok := ctx.Value(UserEmailContextKey).(string)
 	return email, ok
@@ -114,6 +120,8 @@ func GetUserEmailFromContext(ctx context.Context) (string, bool) {
 
 // GetDaemonIDFromContext extracts the PAT-bound daemon ID from the context.
 // Returns empty string if the PAT is not bound to a daemon.
+//
+//forge:resolves-caller
 func GetDaemonIDFromContext(ctx context.Context) string {
 	daemonID, _ := ctx.Value(DaemonIDContextKey).(string)
 	return daemonID
@@ -124,6 +132,8 @@ func GetDaemonIDFromContext(ctx context.Context) string {
 // introspection), or "" when it names none: an unbound credential, a machine
 // with no recorded org, a self-hosted authority, or a control plane that
 // predates the field.
+//
+//forge:resolves-caller
 func GetDaemonOrgIDFromContext(ctx context.Context) string {
 	orgID, _ := ctx.Value(DaemonOrgIDContextKey).(string)
 	return orgID
@@ -134,6 +144,8 @@ func GetDaemonOrgIDFromContext(ctx context.Context) string {
 // GetDaemonOrgIDFromContext it is set for an unbound credential too: a
 // self-paired machine's credential acts in the org chosen at pairing before
 // any machine row records an org.
+//
+//forge:resolves-caller
 func GetCredentialOrgFromContext(ctx context.Context) string {
 	orgID, _ := ctx.Value(CredentialOrgContextKey).(string)
 	return orgID

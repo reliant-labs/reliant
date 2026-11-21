@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -19,7 +20,7 @@ const (
 	GetRunToolName    = "get_run"
 	getRunDescription = `Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
-The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. An ended run also has an outcome: succeeded, failed, or failure_handled when it completed only because a node failed and its failure path ran. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.`
 
@@ -59,6 +60,12 @@ type RunDetail struct {
 	// status. For a run that failed before any node ran it is the only
 	// account there is.
 	Failure string `json:"failure,omitempty"`
+	// Outcome is how an ended run ended for whoever judges whether it
+	// worked: succeeded, failed, or failure_handled — completed, but a node
+	// in it failed and its failure path ran (reliant#2753). Empty while it
+	// runs, when it was cancelled, and for a run that ended before outcomes
+	// were recorded.
+	Outcome string `json:"outcome,omitempty"`
 	// Waiting is what a live run is blocked on outside itself ("waiting for
 	// usage limit", "waiting for machine", "needs input"); empty otherwise.
 	Waiting             string `json:"waiting,omitempty"`
@@ -119,13 +126,16 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 
 	detail.Nodes = []*pb.RunNodeExecution{}
 	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		if detail.State == "failed" {
+		if detail.State == "failed" || detail.State == "completed" {
 			root, err := g.repo.GetWorkflow(rctx.Context, *chat.WorkflowID)
 			if err != nil {
-				return NewTextErrorResponse("Could not read why the run failed: " + err.Error()), nil
+				return NewTextErrorResponse("Could not read how the run ended: " + err.Error()), nil
 			}
-			if root != nil && root.FailureDetail != nil {
+			if root != nil && root.FailureDetail != nil && detail.State == "failed" {
 				detail.Failure = *root.FailureDetail
+			}
+			if root != nil && root.RunOutcome != nil {
+				detail.Outcome = *root.RunOutcome
 			}
 		}
 		rows, err := g.repo.ListRunNodeExecutions(rctx.Context, *chat.WorkflowID, rundiagnostics.RecordLimit+1)
@@ -152,6 +162,11 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 		} else {
 			sb.WriteString("Failure: no reason was recorded on the run.\n")
 		}
+	}
+	if detail.Outcome == core.RunOutcomeFailureHandled {
+		sb.WriteString("Outcome: failure_handled: the run completed, but a node in it failed and its failure path ran. Look for the failed node below.\n")
+	} else if detail.Outcome != "" {
+		fmt.Fprintf(&sb, "Outcome: %s\n", detail.Outcome)
 	}
 	if detail.Waiting != "" {
 		fmt.Fprintf(&sb, "Waiting: %s", detail.Waiting)

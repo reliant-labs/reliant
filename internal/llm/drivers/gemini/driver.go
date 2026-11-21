@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -280,11 +279,10 @@ func (g *GeminiClient) convertTools(tools []tools.Tool) []*genai.Tool {
 	geminiTool.FunctionDeclarations = make([]*genai.FunctionDeclaration, 0, len(tools))
 
 	for _, tool := range tools {
-		schema := tool.ParamSchema()
 		declaration := &genai.FunctionDeclaration{
 			Name:        tool.Name(),
 			Description: tool.Description(),
-			Parameters:  convertToSchema(schema),
+			Parameters:  geminiwire.ToolParameters(tool),
 		}
 
 		geminiTool.FunctionDeclarations = append(geminiTool.FunctionDeclarations, declaration)
@@ -323,7 +321,47 @@ func (g *GeminiClient) finishReason(reason genai.FinishReason) message.FinishRea
 	return geminiwire.FinishReason(geminiwire.SourceGemini, string(reason))
 }
 
+// prepareSignatures readies the thought signatures of a converted request.
+// Normally that is stamping the documented stand-in on steps that have no
+// signature at all, on the models that validate them. With standIns — the
+// one retry after Gemini rejected a signature — every signature is replaced
+// by the stand-in. See geminiwire.RecoverSignatureRejection.
+func (g *GeminiClient) prepareSignatures(ctx context.Context, contents []*genai.Content, standIns bool) {
+	if standIns {
+		removed := geminiwire.ReplaceSignaturesWithStandIns(contents)
+		logging.DebugContext(ctx, "[GEMINI] Replaced thought signatures with the stand-in", "removed", removed)
+		return
+	}
+	if !geminiwire.ValidatesThoughtSignatures(g.options.Model.APIModel) {
+		return
+	}
+	if stamped := geminiwire.StampUnsignedSteps(contents); stamped > 0 {
+		logging.DebugContext(ctx, "[GEMINI] Replaying unsigned function calls with the documented stand-in signature",
+			"steps", stamped)
+	}
+}
+
+// candidateStopFailure is the error a response must end with instead of
+// completing, when its candidate stopped with a failure that can be retried
+// (geminiwire.StopFailure), or nil. A candidate that produced tool calls
+// completes with them.
+func candidateStopFailure(resp *genai.GenerateContentResponse, toolCalls int) error {
+	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0] == nil || toolCalls > 0 {
+		return nil
+	}
+	cand := resp.Candidates[0]
+	return geminiwire.StopFailure(geminiwire.SourceGemini, string(cand.FinishReason), cand.FinishMessage)
+}
+
+// SendMessages returns a complete response, retried once with stand-in
+// thought signatures if Gemini rejects one.
 func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (*llm.DriverResponse, error) {
+	return geminiwire.RecoverSignatureRejectionSync(ctx, geminiwire.SourceGemini, func(standIns bool) (*llm.DriverResponse, error) {
+		return g.sendMessages(ctx, prompts, messages, tools, standIns)
+	})
+}
+
+func (g *GeminiClient) sendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool, standIns bool) (*llm.DriverResponse, error) {
 	var remaining time.Duration
 	deadline, ok := ctx.Deadline()
 	if ok {
@@ -377,6 +415,7 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 			"originalCount", len(messages))
 		return nil, fmt.Errorf("message conversion resulted in zero messages (received %d messages)", len(messages))
 	}
+	g.prepareSignatures(ctx, geminiMessages, standIns)
 
 	systemParts := []*genai.Part{}
 	for _, prompt := range prompts {
@@ -492,6 +531,9 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 	logging.DebugContext(ctx, "[GEMINI] Response received",
 		"contentLength", len(content),
 		"toolCallCount", len(toolCalls))
+	if stopErr := candidateStopFailure(resp, len(toolCalls)); stopErr != nil {
+		return nil, stopErr
+	}
 	finishReason := message.FinishReasonEndTurn
 	if len(resp.Candidates) > 0 {
 		finishReason = g.finishReason(resp.Candidates[0].FinishReason)
@@ -508,7 +550,15 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 	}, nil
 }
 
+// StreamResponse streams a response, retried once with stand-in thought
+// signatures if Gemini rejects one before streaming anything.
 func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
+	return geminiwire.RecoverSignatureRejection(ctx, geminiwire.SourceGemini, func(standIns bool) <-chan llm.DriverEvent {
+		return g.streamResponse(ctx, prompts, messages, tools, standIns)
+	})
+}
+
+func (g *GeminiClient) streamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool, standIns bool) <-chan llm.DriverEvent {
 	eventChan := make(chan llm.DriverEvent)
 
 	go func() {
@@ -570,6 +620,7 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 			}
 			return
 		}
+		g.prepareSignatures(ctx, geminiMessages, standIns)
 
 		// Build system instruction
 		systemParts := []*genai.Part{}
@@ -689,6 +740,15 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 				logging.ErrorContext(ctx, "[GEMINI] Stream error", "error", streamErr)
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: streamErr}
 			}
+			return
+		}
+
+		// A candidate that stopped with a retryable failure (a malformed tool
+		// call, a missing signature) ends the stream with that error, not a
+		// completed turn. The deferred fallback still sends the usage.
+		if stopErr := candidateStopFailure(finalResp, len(toolCalls)); stopErr != nil {
+			logging.WarnContext(ctx, "[GEMINI] Candidate stopped with a failure", "error", stopErr)
+			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: stopErr}
 			return
 		}
 
@@ -844,18 +904,14 @@ func (g *GeminiClient) processStreamResponses(
 	return nil
 }
 
-// usage returns token usage from Gemini's response.
-// usage returns token usage from Gemini's response.
-// Gemini's TotalTokenCount is the total of prompt + response + tool tokens.
+// usage returns token usage from Gemini's response, with the cached prefix
+// split out of the prompt and thoughts counted as output; see
+// geminiwire.Usage.TokenUsage.
 func (g *GeminiClient) usage(resp *genai.GenerateContentResponse) llm.TokenUsage {
-	if resp == nil || resp.UsageMetadata == nil {
+	if resp == nil {
 		return llm.TokenUsage{}
 	}
-
-	// TokenCount = TotalTokenCount (prompt + response + tool tokens)
-	return llm.TokenUsage{
-		TokenCount: int64(resp.UsageMetadata.TotalTokenCount),
-	}
+	return geminiwire.UsageFromGenAI(resp.UsageMetadata).TokenUsage()
 }
 
 func (g *GeminiClient) Model() models.Model {
@@ -895,43 +951,6 @@ func parseJsonToMap(jsonStr string) (map[string]interface{}, error) {
 	var result map[string]interface{}
 	err := json.Unmarshal([]byte(jsonStr), &result)
 	return result, err
-}
-
-func convertToSchema(param *jsonschema.Schema) *genai.Schema {
-	schema := &genai.Schema{
-		Type:        genai.Type(param.Type),
-		Description: param.Description,
-	}
-
-	// Handle enum values
-	if len(param.Enum) > 0 {
-		schema.Enum = make([]string, len(param.Enum))
-		for i, v := range param.Enum {
-			schema.Enum[i] = fmt.Sprint(v)
-		}
-	}
-
-	switch param.Type {
-	case "array":
-		if param.Items != nil {
-			schema.Items = convertToSchema(param.Items)
-		}
-	case "object":
-		if param.Properties != nil {
-			schema.Properties = make(map[string]*genai.Schema)
-			for pair := param.Properties.Oldest(); pair != nil; pair = pair.Next() {
-				key := pair.Key
-				value := pair.Value
-				schema.Properties[key] = convertToSchema(value)
-			}
-		}
-		// CRITICAL: Set required fields for Gemini
-		if len(param.Required) > 0 {
-			schema.Required = param.Required
-		}
-	}
-
-	return schema
 }
 
 // buildThinkingConfig creates appropriate thinking configuration based on model version

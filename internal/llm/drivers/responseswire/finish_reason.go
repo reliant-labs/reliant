@@ -19,7 +19,7 @@
 // from it would be an import cycle. A leaf package next to the drivers is the
 // nearest home both can reach.
 //
-//forge:exclude-contract: pure wire conversions and a value-type gate; no service, nothing to mock
+//forge:exclude-contract: pure Responses wire-format helpers over caller-supplied values; no I/O, state or time
 package responseswire
 
 import (

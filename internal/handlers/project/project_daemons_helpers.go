@@ -366,14 +366,19 @@ func (s *Service) newMachineNames() *machineNames {
 
 // proto is row as the wire carries it, its machine named.
 func (m *machineNames) proto(ctx context.Context, row *core.ProjectDaemon) *reliantv1.ProjectDaemon {
-	name, ok := m.names[row.DaemonID]
-	if !ok {
-		name = strings.Trim(m.s.machineName(ctx, row.DaemonID), `"`)
-		m.names[row.DaemonID] = name
-	}
 	out := projectDaemonToProto(row)
-	out.DaemonName = name
+	out.DaemonName = m.name(ctx, row.DaemonID)
 	return out
+}
+
+// name is what to call daemonID, looked up once per response.
+func (m *machineNames) name(ctx context.Context, daemonID string) string {
+	name, ok := m.names[daemonID]
+	if !ok {
+		name = strings.Trim(m.s.machineName(ctx, daemonID), `"`)
+		m.names[daemonID] = name
+	}
+	return name
 }
 
 // installStateToProto maps the stored state onto the wire enum. An empty

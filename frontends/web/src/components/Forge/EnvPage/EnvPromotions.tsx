@@ -63,7 +63,7 @@ export function EnvPromotions({ project, env, releaseHref, releasesHref }: EnvPr
       title="Promotions"
       description={`Every release put on ${env.name}, newest first: who, when, the checks and the health it recorded.`}
       actions={
-        <Link href={releasesHref} className={`${INK_LINK} text-sm`} data-testid="env-promotions-releases">
+        <Link href={releasesHref} className={`${INK_LINK} text-ui`} data-testid="env-promotions-releases">
           Releases
         </Link>
       }
@@ -75,7 +75,7 @@ export function EnvPromotions({ project, env, releaseHref, releasesHref }: EnvPr
           <SkeletonLoader variant="list-item" count={3} />
         </div>
       ) : ledger?.error && !ledger.data ? (
-        <p className="text-sm text-ink-muted" role="status" data-testid="env-promotions-failed">
+        <p className="text-ui text-ink-muted" role="status" data-testid="env-promotions-failed">
           {env.name}&apos;s promotion ledger could not be read right now. It retries on its own; the{" "}
           <Link href={releasesHref} className={INK_LINK}>
             Releases page
@@ -83,23 +83,23 @@ export function EnvPromotions({ project, env, releaseHref, releasesHref }: EnvPr
           reads the same ledger.
         </p>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-ink-muted" data-testid="env-promotions-empty">
+        <p className="text-ui text-ink-muted" data-testid="env-promotions-empty">
           Nothing has been promoted to {env.name} yet. <code className="font-mono text-ink">forge env deploy {env.name}</code> records the first promotion.
         </p>
       ) : (
         <div className="space-y-3">
           {!!releases.error && !releases.data && (
-            <p className="text-xs text-ink-muted" data-testid="env-promotions-unranked">
+            <p className="text-meta text-ink-muted" data-testid="env-promotions-unranked">
               Rollbacks are not marked: the release list, whose cut order judges them, could not be read.
             </p>
           )}
-          <ol className="divide-y divide-border" aria-label={`Promotions in ${env.name}`}>
+          <ol className="divide-y divide-border-subtle" aria-label={`Promotions in ${env.name}`}>
             {shown.map((row) => (
               <EnvPromotionItem key={row.id} row={row} releaseHref={releaseHref} />
             ))}
           </ol>
           {(rows.length > shown.length || loaded >= PROMOTIONS_PAGE) && (
-            <p className="text-xs text-ink-muted" data-testid="env-promotions-more">
+            <p className="text-meta text-ink-muted" data-testid="env-promotions-more">
               {rows.length > shown.length && (
                 <>
                   The {shown.length} newest of {rows.length} loaded.{" "}

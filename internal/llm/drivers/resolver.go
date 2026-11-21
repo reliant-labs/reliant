@@ -54,6 +54,7 @@ func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, message
 	ctx, span := llm.StartGenAISpan(ctx, p.client.Name(), p.model, false)
 	defer span.End()
 	resp, err := p.client.SendMessages(ctx, prompts, p.forRequest(ctx, messages), tools)
+	err = markContextOverflow(err)
 	span.RecordResponse(resp, "")
 	span.RecordError(err)
 	return resp, err
@@ -77,6 +78,11 @@ func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, message
 // And it is where a request's history is made one the provider accepts
 // (forRequest), so no driver can send a history the provider would refuse on
 // every later turn.
+//
+// And where a provider's context-window refusal is marked as
+// drivererrors.ErrContextOverflow (markContextOverflow), so every driver's
+// overflow is recognised by identity rather than each consumer re-reading
+// provider text.
 func (p *baseDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
 	ch := make(chan llm.DriverEvent)
 	ctx, span := llm.StartGenAISpan(ctx, p.client.Name(), p.model, true)
@@ -91,6 +97,9 @@ func (p *baseDriver) StreamResponse(ctx context.Context, prompts []string, messa
 		for event := range in {
 			// Enrich the event with the model used
 			event.Model = p.model
+			if event.Type == llm.EventError {
+				event.Error = markContextOverflow(event.Error)
+			}
 			span.Observe(event)
 			if !deliverEvent(ctx, ch, event) {
 				span.RecordError(ctx.Err())

@@ -23,6 +23,24 @@ var ErrEmptyInput = fmt.Errorf("llm request has no input")
 // and never reaches Sentry, whichever error wraps it.
 var ErrNoServableProvider = svcerr.WithClass(errors.New("no servable provider"), svcerr.ClassUser)
 
+// ErrMalformedModelOutput matches a response the provider itself reported as
+// malformed model output: Gemini's MALFORMED_FUNCTION_CALL,
+// UNEXPECTED_TOOL_CALL and MALFORMED_RESPONSE finish reasons, where the model
+// emitted a tool call (or response) the server could not parse. Nothing is
+// wrong with the request, and sampling again usually produces a well-formed
+// one, so opencode classifies these as a retryable incomplete stream
+// (packages/ai/src/protocols/gemini.ts) rather than ending the turn.
+//
+// CallLLM recognises it by identity and retries the turn ONCE (see
+// handlers.malformedOutputError): a model that keeps producing the same
+// malformed call would otherwise loop. It lives here, in a leaf package, for
+// the same reason as ErrStreamEndedEarly: the drivers wrap it and the workflow
+// runtime recognises it, and neither can import the other. Its text says
+// "malformed", which the runtime's text rules treat as terminal, so a copy
+// that reaches a classifier without CallLLM's wrapper is never retried
+// without bound.
+var ErrMalformedModelOutput = errors.New("the model produced a malformed response")
+
 // ErrStreamEndedEarly matches a stream that closed cleanly — no transport
 // error — before the provider sent the event that terminates a response
 // (`response.completed` / `response.incomplete` / `response.failed` on the

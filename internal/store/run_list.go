@@ -50,6 +50,7 @@ const runRowsSQL = `
         rw.completed_at AS completed_at,
         COALESCE(rw.workflow_name, c.workflow_name, '')::text AS workflow_name,
         rw.outcome AS outcome,
+        rw.run_outcome AS run_outcome,
         rw.state AS root_state,
         rw.stop_reason AS root_stop_reason,
         c.activity,
@@ -335,6 +336,7 @@ type runRow struct {
 	CompletedAt     *time.Time               `bun:"completed_at"`
 	WorkflowName    string                   `bun:"workflow_name"`
 	Outcome         *string                  `bun:"outcome"`
+	RunOutcome      *string                  `bun:"run_outcome"`
 	RootState       *core.WorkflowState      `bun:"root_state"`
 	RootStopReason  *core.WorkflowStopReason `bun:"root_stop_reason"`
 	Activity        int32                    `bun:"activity"`
@@ -363,6 +365,7 @@ func runItems(rows []runRow) []*core.RunListItem {
 			LastActive:      row.LastActive,
 			CompletedAt:     row.CompletedAt,
 			Outcome:         deref(row.Outcome),
+			RunOutcome:      deref(row.RunOutcome),
 			Activity:        int(row.Activity),
 			DisplayState:    core.RunDisplayState(row.DisplayState),
 			LaunchKind:      deref(row.LaunchKind),

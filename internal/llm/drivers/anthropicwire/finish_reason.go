@@ -47,7 +47,8 @@ const (
 // The vocabulary is closed and small — anthropic-sdk-go types StopReason as
 // exactly "end_turn", "max_tokens", "stop_sequence", "tool_use", "pause_turn"
 // and "refusal" — so every value the provider can send has a case here, and
-// anything else is a provider change we have not caught up with yet.
+// anything else is a provider change we have not caught up with yet. The one
+// addition the SDK does not type yet is "model_context_window_exceeded".
 //
 // An unrecognised value is reported rather than silently absorbed. Unknown is
 // the reason the runtime treats as "nothing to say about this turn", so a
@@ -60,6 +61,17 @@ func FinishReason(src Source, stopReason string) message.FinishReason {
 		return message.FinishReasonEndTurn
 
 	case "max_tokens":
+		return message.FinishReasonMaxTokens
+
+	case "model_context_window_exceeded":
+		// Generation stopped because prompt plus output filled the model's
+		// context window (newer models, and older ones behind the
+		// model-context-window-exceeded beta). The output so far is valid and
+		// was cut off by a token budget, which is what MaxTokens says; opencode
+		// maps it to "length" the same way. The prompt was accepted, so this is
+		// not the request-time overflow refusal (drivererrors.ErrContextOverflow):
+		// a turn that continues and outgrows the window gets that refusal next,
+		// and call_llm recovers from it.
 		return message.FinishReasonMaxTokens
 
 	case "tool_use":

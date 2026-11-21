@@ -74,3 +74,11 @@ func TestFinishReason_KnownReasonsAreNeverUnknown(t *testing.T) {
 		})
 	}
 }
+
+// model_context_window_exceeded is sent by the API but not typed by the SDK.
+// Output stopped because the window filled: a token-budget cut, like
+// max_tokens, never Unknown (opencode maps it to "length" the same way).
+func TestFinishReason_ContextWindowExceededIsMaxTokens(t *testing.T) {
+	assert.Equal(t, message.FinishReasonMaxTokens, FinishReason(SourceAnthropic, "model_context_window_exceeded"))
+	assert.Equal(t, message.FinishReasonMaxTokens, FinishReason(SourceVertexAI, "model_context_window_exceeded"))
+}

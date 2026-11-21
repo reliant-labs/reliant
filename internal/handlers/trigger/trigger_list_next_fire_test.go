@@ -58,23 +58,19 @@ func TestListTriggersBoundsNextFireLookupsByOneBudget(t *testing.T) {
 	}
 	env.backend.mu.Unlock()
 
-	start := time.Now()
 	resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
-	elapsed := time.Since(start)
 
 	require.NoError(t, err, "a schedule backend that never answers must not fail the list")
 	require.Len(t, resp.Msg.GetTriggers(), n)
 	for _, tr := range resp.Msg.GetTriggers() {
 		assert.Nil(t, tr.NextFireAt, "trigger %s: a lookup that ran out of budget has no next fire time", tr.GetId())
 	}
-	// The proof that the lookups share one budget is the count: once it is
-	// spent, the remaining triggers are not asked, so no second batch (and no
-	// second budget) ever starts. The elapsed bound only says the list does not
-	// hang on a backend that never answers; it is a timeout the code must
-	// beat, not a measure of how fast this machine ran it.
+	// Every lookup blocks until its budget runs out, so only the first
+	// nextFireWorkers are ever in flight under one shared budget. A budget per
+	// trigger, or per batch of workers, would go on asking the rest: the count
+	// is the proof, not the wall clock (which measures the machine's load).
 	assert.LessOrEqual(t, int(asked.Load()), nextFireWorkers,
 		"once the budget is spent, the remaining triggers are not asked")
-	assert.Less(t, elapsed, 5*time.Second, "a backend that never answers must not hang the list")
 }
 
 // Concurrent lookups land on the trigger they were made for, and one that

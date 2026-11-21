@@ -352,3 +352,7 @@ secrets/
 # reads it, and never committed (commitpolicy: only what the compiler needs is
 # committed). Added by `forge generate`.
 /gen/forge_descriptor/
+
+# Merge-tool leftovers (git mergetool, patch): never source. #3070 committed two.
+*.orig
+*.rej
