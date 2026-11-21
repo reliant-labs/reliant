@@ -40,6 +40,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import type { z } from "zod";
+import type { forgeConsoleEnvSearchSchema } from "@/routeSchemas";
 
 import { cn } from "@/lib/utils";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
@@ -79,8 +81,11 @@ import Link from "@/components/forge-ui/link";
 
 export function ForgeEnvPage() {
   const navigate = useNavigate();
-  const { env: envName } = useParams({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
-  const { secret: secretParam, tab: tabSearch } = useSearch({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
+  // Not strict: the page is mounted at `/forge/p/$project/environments/$env`
+  // and, in the org tree, at `/o/$org/apps/$project/environments/$env`
+  // (forgeConsoleRoutes.tsx); both validate this search (forgeConsoleEnvSearchSchema).
+  const { env: envName = "" } = useParams({ strict: false }) as { env?: string };
+  const { secret: secretParam, tab: tabSearch } = useSearch({ strict: false }) as z.output<typeof forgeConsoleEnvSearchSchema>;
   // The console says which project this is (consoleContext.ts): the forge
   // project the URL names, and the Reliant project that declares it — null
   // when none here does, and then there is no daemon to ask.
@@ -255,7 +260,9 @@ export function ForgeEnvPage() {
             <EnvLifecycleControls
               environmentId={liveEnv.id}
               envName={envName}
+              project={forgeProject}
               status={cloudStatus.data}
+              onManageDomains={openDomainsScreen}
               onDeleted={() => void navigate({ href: href({ kind: "environments" }) })}
             />
           ) : null

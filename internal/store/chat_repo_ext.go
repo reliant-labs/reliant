@@ -60,6 +60,26 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 	return id, err
 }
 
+// ListChatsForWorktree lists userID's chats bound to worktreeID, archived ones
+// included, most recently active first, at most limit. It reads the base
+// table by its indexed binding, like GetLiveChatIDForWorktree.
+func ListChatsForWorktree(ctx context.Context, db orm.Context, userID, worktreeID string, limit int) ([]core.WorktreeChat, error) {
+	var rows []struct {
+		ID         string    `bun:"id"`
+		Title      string    `bun:"title"`
+		State      int32     `bun:"state"`
+		LastActive time.Time `bun:"last_active"`
+	}
+	if err := db.Bun().NewRaw(`SELECT id, title, state, last_active FROM chats WHERE worktree_id = ? AND user_id = ? ORDER BY last_active DESC, id LIMIT ?`, worktreeID, userID, limit).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("list chats bound to worktree: %w", err)
+	}
+	chats := make([]core.WorktreeChat, len(rows))
+	for i, row := range rows {
+		chats[i] = core.WorktreeChat{ChatID: row.ID, Title: row.Title, State: core.ChatState(row.State), LastActive: row.LastActive}
+	}
+	return chats, nil
+}
+
 // ListWorktreeIDsWithRunningChat reports which of worktreeIDs have a run going
 // in them: a run of a chat bound to the worktree, or of a thread bound to it
 // (a sub-agent spawned into it) and that thread's own descendants, including
@@ -732,6 +752,9 @@ func chatToRow(chat *core.Chat) *Chat {
 		NoMachine:       chat.NoMachine,
 		MachinePoolID:   chat.MachinePoolID,
 		Origin:          origin,
+		// Insert only: chatUpdateColumns never names app_name, so a chat's
+		// app tag is fixed at creation.
+		AppName: chat.AppName,
 	}
 	return row
 }

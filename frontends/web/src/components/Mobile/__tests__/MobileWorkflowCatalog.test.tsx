@@ -46,7 +46,7 @@ describe("MobileWorkflowCatalog", () => {
   it("links each row to its workflow detail route", () => {
     render(<MobileWorkflowCatalog />);
     const link = screen.getByText("Agent").closest("a");
-    expect(link).toHaveAttribute("to", "/m/workflows/$workflowName");
+    expect(link).toHaveAttribute("to", "/m/workflows/builtin%3A%2F%2Fagent");
   });
 
   it("leads the second line with the description, not the step count", () => {

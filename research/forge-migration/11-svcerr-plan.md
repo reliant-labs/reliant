@@ -38,7 +38,7 @@ commands in §8.
      uses privately.
   2. `tdd.AssertConnectError` should read `svcerr.Code`.
   3. The proto-mock template should use svcerr.
-  4. A `forge fix connect-errors` codemod.
+  4. A `forge lint fix connect-errors` codemod.
   5. The lint fix.
 - Risk: **medium**. The wire-identical half is low risk. The semantic half
   deliberately changes codes (Internal → NotFound / DeadlineExceeded / Canceled, and
@@ -348,7 +348,7 @@ a side effect, user-class errors stop logging at ERROR.
 | F-P7a-1d (nit) | The generated store's NotFound label is the lowercased type name (`"accesstoken not found"`, `"chatswithactivity not found"`) | `internal/store/store_gen.go:36,594` | humanize the label (`"access token"`), or use the table's singular | nicer passthrough text |
 | **F-P7a-2a** | `forgeconv-no-handler-error-mapping` is **suppressed for any file importing svcerr** (`importsSvcerr`), so a codemod adding the import silences the 11 findings without fixing them | `forge/internal/linter/forgeconv/no_handler_error_mapping.go:180` | drop the suppression; a real mapper beside `svcerr.Wrap` is still a mapper | gating |
 | **F-P7a-2b** | Nothing flags the leak class: `connect.NewError(code, <an error value>)` in a handler publishes `err.Error()` and bypasses redaction | B = 246 sites | new rule `forgeconv-handler-connect-error` (warn → error): any `connect.NewError` in a `handlers/` tree, with the remediation table of §2.1 | gating |
-| **F-P7a-2c** | No codemod | §3 | `forge fix connect-errors` | the A pass |
+| **F-P7a-2c** | No codemod | §3 | `forge lint fix connect-errors` | the A pass |
 
 Not a gap: context errors (handled by `codeForRecognized`), sentinels for every code
 (all 16), `WithMessage` for NotFound prose, `WithDetail` / `WithReason` / `WithClass`,
@@ -359,13 +359,13 @@ Not a gap: context errors (handled by `codeForRecognized`), sentinels for every 
 **Recommendation: one forge codemod for the wire-identical half, and hand lanes,
 following §2.1, for the semantic half.**
 
-`forge fix` already hosts release codemods (`forge/internal/codemod`:
+`forge lint fix` already hosts release codemods (`forge/internal/codemod`:
 `composition-graph`, `operatorkit`, `tx-isolation`, plus `narrow-deps`), with
 `--dry-run`, a clean-tree guard and a `Blocked` report. A `connect-errors` codemod
 fits that shape, and **it serves every forge project**: control-plane still has 182
 sites, 72 of them in handlers. It ships as forge PR F-P7a-2.
 
-`forge fix connect-errors` spec (type-checked via `go/packages`, handler and
+`forge lint fix connect-errors` spec (type-checked via `go/packages`, handler and
 non-handler packages alike):
 
 - **Rewrites** `connect.NewError(connect.Code<X>, E)` when `E` is one of:
@@ -415,7 +415,7 @@ Ordering and file ownership. "Owns" means a lane is the only one editing those f
 
 ```
 F-P7a-1 (forge pkg) ─┐
-F-P7a-2 (forge fix + lint) ─┴─► forge release + reliant pin ─┐
+F-P7a-2 (forge lint fix + lint) ─┴─► forge release + reliant pin ─┐
 R6 (in flight) ──────────────────────────────────────────────┼─► L0 ─► C0 (codemod PR) ─► L1 ∥ L2 ∥ L3 ∥ L4 ∥ L5 ─► Z (gate flip)
 ```
 
@@ -435,7 +435,7 @@ store label (1d).
 at warn.
 - Tests: codemod corpus under `internal/codemod/testdata`; lint fixtures for both
   rules.
-- e2e: a scaffold + `forge fix connect-errors --dry-run` smoke.
+- e2e: a scaffold + `forge lint fix connect-errors --dry-run` smoke.
 
 Then: forge release, and a reliant pin bump (one PR, `make test-affected`).
 
@@ -457,7 +457,7 @@ only), `internal/db/repository_impl.go:1094,1825-1901,3459`, `internal/daemonerr
   - `go test ./internal/handlers/{file_system,terminal,worktree,daemon,background,forge}/...`
     unchanged
 
-**C0 — run the codemod.** One agent, one PR: `forge fix connect-errors` over
+**C0 — run the codemod.** One agent, one PR: `forge lint fix connect-errors` over
 reliant, review, `go build ./...`, `make test-affected`, and a full
 `go test ./internal/handlers/...` with an own `DATABASE_URL`. The diff must be
 wire-identical, so **no test expectation may change** except the `CodeOf →

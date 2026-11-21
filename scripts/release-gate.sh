@@ -90,6 +90,10 @@ NOTES_REF=refs/notes/release-gate
 die() { printf 'release-gate: %s\n' "$*" >&2; exit 2; }
 
 cd "$(git rev-parse --show-toplevel)" || exit 2
+# This gate's own forge resolver (FORGE_BIN, a forge on PATH at the pin,
+# `reliant forge`, or `go run …@<pin>`), run in the private checkout: the pin
+# is that commit's, the resolver this one, which a checkout older than it lacks.
+forge_sh=$PWD/scripts/forge.sh
 common=$(cd "$(git rev-parse --git-common-dir)" && pwd)
 records="$common/release-gate"
 mkdir -p "$records"
@@ -228,9 +232,11 @@ cmd_run() {
     echo "release-gate: $(git rev-parse --short "$sha") already has a green record (--force re-runs it)"; return 0
   fi
   # One heavy slot for the whole run; every step nests inside it.
-  local slotforge=${FORGE_BIN:-forge}
-  if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${RG_IN_SLOT:-}" ] && "$slotforge" slot status --class heavy >/dev/null 2>&1; then
-    RG_SLOT_T0=$(date +%s) RG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" run $([ "$force" = 1 ] && echo --force) ${part:+--part "$part"} ${shard:+--shard "$shard"} "$sha"
+  # Any forge will do (scripts/forge.sh --machine): slots are machine-wide.
+  local slotforge
+  read -r -a slotforge <<<"$("$forge_sh" --machine --which 2>/dev/null || true)"
+  if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${RG_IN_SLOT:-}" ] && "${slotforge[@]}" machine slot status --class heavy >/dev/null 2>&1; then
+    RG_SLOT_T0=$(date +%s) RG_IN_SLOT=1 exec "${slotforge[@]}" machine slot run --class heavy -- "$0" run $([ "$force" = 1 ] && echo --force) ${part:+--part "$part"} ${shard:+--shard "$shard"} "$sha"
   fi
   t0=$(date +%s); slot_wait=$(( t0 - ${RG_SLOT_T0:-$t0} ))
   snap=${RELEASE_GATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/reliant-release-gate/$(echo "$common" | md5sum | cut -c1-8)}/snap
@@ -396,11 +402,7 @@ run_step() {
       done ;;
     generate) task generate:check ;;
     docs) task generate:docs:check ;;
-    lint)
-      local pin
-      pin=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml | head -1)
-      if [ -n "${FORGE_BIN:-}" ]; then "$FORGE_BIN" lint --quiet --no-fix
-      else env GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@$pin" lint --quiet --no-fix; fi ;;
+    lint) "$forge_sh" lint --quiet --no-fix ;;
     build) go build ./... ;;
     webbuild) task build:web:verify ;;
     typecheck) npm --prefix frontends/web run --silent typecheck ;;

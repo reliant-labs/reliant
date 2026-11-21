@@ -98,7 +98,7 @@
 # checkouts beside the other phases, except on a host under 32 GiB (a hosted
 # runner), where forge generate runs first and alone (the memory budget below).
 #
-# The whole gate holds ONE host heavy slot (forge slot run), taken here; every
+# The whole gate holds ONE host heavy slot (forge machine slot run), taken here; every
 # phase nests inside it and never queues again. Its phases share a CPU budget
 # (MG_CPUS) instead of each spawning one thread per core of a host whose other
 # slots are busy too. MG_LOGDIR=<dir> keeps the
@@ -134,11 +134,12 @@ export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" GOPRIVATE="${GOPRIVATE:-github.c
 export FORGE_NO_MERGE_DRIVER=1
 
 # ── one heavy slot for the whole gate ─────────────────────────────────────
-# Slots are machine-wide, so any forge with `forge slot` will do: FORGE_BIN
-# (the pin) when set, else the forge on PATH.
-slotforge=${FORGE_BIN:-forge}
-if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "$slotforge" slot status --class heavy >/dev/null 2>&1; then
-  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$queue" = 1 ] && echo --queue)
+# Slots are machine-wide, so any forge with `forge machine slot` will do: FORGE_BIN
+# (the pin) when set, else the forge on PATH, else `reliant forge`
+# (scripts/forge.sh --machine; never a `go run`).
+read -r -a slotforge <<<"$(scripts/forge.sh --machine --which 2>/dev/null || true)"
+if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "${slotforge[@]}" machine slot status --class heavy >/dev/null 2>&1; then
+  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "${slotforge[@]}" machine slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$queue" = 1 ] && echo --queue)
 fi
 t0=$(date +%s)
 slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
@@ -192,8 +193,9 @@ echo "$slot_wait" >"$L/slot_wait"
 # (changed) job beside the gate runs golangci, so the gate is not obliged to.
 if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"; elif [ "$queue" = 1 ]; then echo queue >"$L/tier"; fi
 [ "$skip_golangci" = 1 ] && echo "a golangci (changed) job beside the gate runs it" >"$L/golangci-elsewhere"
-pin=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml | head -1)
-if [ -n "${FORGE_BIN:-}" ]; then forge=("$FORGE_BIN"); else forge=(env GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@$pin"); fi
+# The pinned forge of the checkout it runs in: FORGE_BIN, a forge on PATH at
+# the pin, `reliant forge`, or `go run …@<pin>` (scripts/forge.sh).
+forge=("$PWD/scripts/forge.sh")
 # Paths generators write. A regenerate in --amend mode may change only these.
 gen_re='^gen/|^generated/|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|^frontends/web/src/gen/|^\.forge/|^deploy/observability/|_gen(_test)?\.(go|json|ndjson|ts|k)$|^frontends/web/src/store/shortcutsData\.generated\.ts$|^internal/workflow/runtime/schema/field_descriptions\.go$|^internal/skills/catalog/builtin/workflow-builder/SKILL\.md$'
 
@@ -320,6 +322,9 @@ load_selection() {
   jq -e . "$run_plan" >/dev/null || return 1
   gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
   elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full) webdemo=$(j '.web_demo.full // false')
+  # The renderer's release build (tools/test-affected's web-build lane): a
+  # dependency, lockfile or vite config change (reliant#2850).
+  webbuild=$(j '.web_build.full // false')
   hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
   [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
   files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
@@ -328,7 +333,7 @@ load_selection() {
   if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
 }
 load_selection || exit 1
-notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
+notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; web-build $webbuild; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
 # npm_install <dir>: npm ci in <dir> unless its install is current; pnpm's
@@ -359,7 +364,7 @@ npm_install() {
 prepare_dependencies() {
   local d p
   local -a need=() npm_pids=()
-  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ]; then need+=(. frontends/web); fi
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ] || [ "$webbuild" = true ]; then need+=(. frontends/web); fi
   if [ "$elec" = true ]; then need+=(. electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
   for d in $(printf '%s\n' ${need[@]+"${need[@]}"} | sort -u); do
@@ -530,6 +535,11 @@ if [ "$fail" = 0 ]; then
   if [ "$webdemo" = true ]; then
     phase demo demo_build & pids+=($!)
   fi
+  # The renderer's release bundle: what vitest and tsc -b cannot judge, a
+  # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
+  if [ "$webbuild" = true ]; then
+    phase webbuild scripts/web-release-build.sh & pids+=($!)
+  fi
   # The changed files' directories, minus nested Go modules (sdk/go): see
   # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.
   scope=$(echo "$files" | scripts/lint-scope.sh)
@@ -567,8 +577,9 @@ if [ "$fail" = 0 ]; then
   fi
   if [ "$queue" != 1 ] || echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$'; then
     # buf lint, then buf breaking against the diff base: semver at major 1 (owner,
-    # 2026-11-05), so a wire break fails unless the owner applied breaking:approved
-    # (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
+    # 2026-11-05), so a wire break fails unless the owner accepted it with
+    # breaking:approved, applied by the owner or by the Reliant bot on the owner's
+    # instruction (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
     # CI_QUEUE_ENTRY judges only this entry's squash, against its own PR's labels.
     phase proto env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c 'task proto:lint && scripts/check-compat.sh proto' & pids+=($!)
   fi
@@ -582,7 +593,8 @@ if [ "$fail" = 0 ]; then
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     # A migration declaring forge:breaks-rollback also needs the owner's
-    # migration:breaks-rollback-approved label (scripts/check-compat.sh).
+    # migration:breaks-rollback-approved label, applied by the owner or by the
+    # Reliant bot on the owner's instruction (scripts/check-compat.sh).
     phase migsafety env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
   # A migration below main's newest is never applied and reliant's migrator

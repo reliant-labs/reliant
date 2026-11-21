@@ -4,7 +4,7 @@
  * The forge → reliant token bridge (the @theme block in src/index.css).
  *
  * Forge's component library is installed as SOURCE via
- * `forge component install`, and is written against forge's own semantic
+ * `forge ui component install`, and is written against forge's own semantic
  * token vocabulary (bg-surface, text-ink, bg-danger-surface, …). Reliant's
  * vocabulary is different (bg-card, text-foreground, bg-destructive, …).
  * The bridge maps one onto the other so every installed component inherits
@@ -80,20 +80,14 @@ function declaredTokens(css: string): Set<string> {
 }
 
 /**
- * Files authored by forge — i.e. the ones `forge component install` writes
- * and overwrites. Anything hand-written alongside them (the sandbox, the
- * probe) legitimately uses RELIANT's vocabulary, which is declared in
- * tailwind.config.js rather than in the bridge, so scanning it would report
- * `bg-card` as an undeclared forge token.
+ * Color-token names referenced by the installed forge components. Every .tsx
+ * in the components dir is one `forge ui component install` wrote: hand-written
+ * harnesses live in components/DesignSandbox, so one that strays in here and
+ * uses reliant's vocabulary (`bg-card`) fails this as an undeclared token.
  */
-const HAND_WRITTEN = new Set(["ForgeTokenSandbox.tsx", "S2Sandbox.tsx", "R5Sandbox.tsx", "__tokenprobe.tsx"]);
-
-/** Color-token names referenced by the installed forge components. */
 function referencedTokens(): Map<string, string[]> {
   const refs = new Map<string, string[]>();
-  const files = readdirSync(FORGE_UI_DIR).filter(
-    (f) => f.endsWith(".tsx") && !HAND_WRITTEN.has(f),
-  );
+  const files = readdirSync(FORGE_UI_DIR).filter((f) => f.endsWith(".tsx"));
   const pattern = new RegExp(
     // Not preceded by `-`: `bg-border-strong` is the token border-strong,
     // not a `border-` utility whose colour is "strong".

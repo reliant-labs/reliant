@@ -59,6 +59,14 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
+	m.ListAttentionIncidentsFunc = func(ctx context.Context, _ string) ([]*core.AttentionIncident, error) {
+		r.enter(ctx, hold)
+		return nil, nil
+	}
+	m.AttentionManagedChatsFunc = func(ctx context.Context, _ string, _ []string) (map[string]bool, error) {
+		r.enter(ctx, hold)
+		return nil, nil
+	}
 	m.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
 		r.enter(ctx, hold)
 		return nil, nil
@@ -73,6 +81,7 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 	}
 	m.RecentTriggerOutcomesFunc = firings
 	m.FiringsSinceLastSuccessFunc = firings
+	m.FiringsSinceLastUnmanagedSuccessFunc = firings
 	m.ListTriggerRegistrationsFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
 		r.enter(ctx, hold)
 		return nil, nil
@@ -98,8 +107,9 @@ func userCtx() context.Context {
 }
 
 // ListInbox's reads run together, so a request costs its longest chain of
-// round trips, not their sum; and never more than inboxReadConcurrency at
-// once, so a burst of requests cannot each take a handful of the pool.
+// round trips, not their sum; and never more than inboxReadConcurrency plus
+// inboxHealthReadConcurrency at once, so a burst of requests cannot each take
+// a handful of the pool.
 func TestListInbox_ReadsRunConcurrentlyWithinTheBound(t *testing.T) {
 	const hold = 40 * time.Millisecond
 	repo := newInflightRepo(hold)
@@ -110,9 +120,56 @@ func TestListInbox_ReadsRunConcurrentlyWithinTheBound(t *testing.T) {
 
 	// The peak in flight is what proves the reads overlap. A wall-clock bound
 	// on the call was removed as flaky under load (flake:removed).
-	assert.EqualValues(t, inboxReadConcurrency, repo.peak.Load(), "reads overlap, up to the bound and no further")
+	assert.GreaterOrEqual(t, repo.peak.Load(), int32(inboxReadConcurrency), "reads overlap")
+	assert.LessOrEqual(t, repo.peak.Load(), int32(inboxReadConcurrency+inboxHealthReadConcurrency), "up to the bound and no further")
 	// The triggers are read once for both automation sections.
 	assert.Len(t, repo.Calls("ListTriggers"), 1)
+}
+
+// The two firing reads run together, on a budget of their own, even while the
+// slow reads hold the rest: in prod (trace ed2301a0…, 2026-11-18) they waited
+// for whichever token the pending read and the declaration loop left free and
+// ran one after the other, a second each. Here the pending read and the
+// recoveries hold their tokens until both firing reads are in flight at once,
+// which on one shared budget never happens.
+func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
+	repo := newInflightRepo(0)
+	bothIn := make(chan struct{})
+	var inFlight atomic.Int32
+	waitForBoth := func(ctx context.Context) {
+		select {
+		case <-bothIn:
+		case <-ctx.Done():
+		case <-time.After(5 * time.Second): // only when the reads queue: the test then fails
+		}
+	}
+	firing := func(ctx context.Context, _ string, _ []string, _ int) (map[string][]*core.TriggerEventWithRun, error) {
+		if inFlight.Add(1) == 2 {
+			close(bothIn)
+		}
+		defer inFlight.Add(-1)
+		waitForBoth(ctx)
+		return nil, nil
+	}
+	repo.RecentTriggerOutcomesFunc = firing
+	repo.FiringsSinceLastSuccessFunc = firing
+	repo.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
+		waitForBoth(ctx)
+		return nil, nil
+	}
+	repo.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
+		waitForBoth(ctx)
+		return nil, nil
+	}
+	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+
+	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
+	require.NoError(t, err)
+	select {
+	case <-bothIn:
+	default:
+		t.Fatal("the two firing reads never ran at the same time")
+	}
 }
 
 // Concurrent ListInbox calls of one user share one read: a burst costs one
@@ -170,7 +227,7 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 			m.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) { return nil, errors.New("boom") }
 		}},
 		{"automation health", func(m *MockRepository) {
-			m.FiringsSinceLastSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
+			m.FiringsSinceLastUnmanagedSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
 				return nil, errors.New("boom")
 			}
 		}},
@@ -203,7 +260,7 @@ func TestListInbox_AnAdvisoryReadFailingStillAnswers(t *testing.T) {
 // A user shaped like prod's heaviest (2026-10-23): six enabled automations,
 // one of them 250 firings into a failure episode, every firing carrying a
 // ~7 KB webhook body. ListInbox reads the episode to count it and never shows
-// a body, so it reads none (RecentTriggerOutcomes, FiringsSinceLastSuccess):
+// a body, so it reads none (RecentTriggerOutcomes, FiringsSinceLastUnmanagedSuccess):
 // in prod the bodies were 1.8 MB of JSON per call, decoded into maps, and the
 // RPC took 3-4 s. The timing is logged, not asserted (shared CI machines).
 func TestListInbox_HeavyAutomationUser(t *testing.T) {

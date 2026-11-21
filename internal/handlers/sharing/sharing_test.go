@@ -211,6 +211,36 @@ func TestListShared(t *testing.T) {
 	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &other})
 	require.NoError(t, err)
 	assert.Empty(t, chats)
+	// Several projects are the union of project_id and project_ids.
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectIds: []string{other, f.ProjectID}})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1)
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &f.ProjectID, ProjectIds: []string{other}})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1)
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectIds: []string{other}})
+	require.NoError(t, err)
+	assert.Empty(t, chats, "a project with nothing shared narrows to nothing, never to every project")
+	// An unset project_id lists every project; a present-but-empty one
+	// lists nothing, as it did before project_ids existed. With project_ids
+	// set, an empty project_id adds nothing to the list.
+	empty := ""
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1, "project_id unset")
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &empty})
+	require.NoError(t, err)
+	assert.Empty(t, chats, "project_id present and empty never broadens to every project")
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &empty, ProjectIds: []string{f.ProjectID}})
+	require.NoError(t, err)
+	assert.Len(t, chats, 1, "an empty project_id with project_ids is just project_ids")
+	chats, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectId: &empty, ProjectIds: []string{other}})
+	require.NoError(t, err)
+	assert.Empty(t, chats)
+	_, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectIds: make([]string, core.MaxListProjectIDs+1)})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "too many ids")
+	_, err = listChats(f.Viewer, &pb.ListSharedChatsRequest{ProjectIds: []string{f.ProjectID, ""}})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an empty id")
 
 	chats, err = listChats(f.Owner, &pb.ListSharedChatsRequest{})
 	require.NoError(t, err)
@@ -247,4 +277,27 @@ func TestListSharedWithoutOrgs(t *testing.T) {
 	resp, err := svc.ListSharedChats(f.Viewer, connect.NewRequest(&pb.ListSharedChatsRequest{}))
 	require.NoError(t, err)
 	assert.Empty(t, resp.Msg.Chats)
+}
+
+// ListSharedChats with app_name is the shared half of an app's chat list,
+// and each chat carries its app tag in the viewer's shape.
+func TestListSharedChatsByApp(t *testing.T) {
+	svc, f := sharingFixture(t)
+	_, err := f.Repo.ORM().Bun().NewRaw(`UPDATE chats SET app_name = 'storefront' WHERE id = ?`, f.ChatID).Exec(context.Background())
+	require.NoError(t, err)
+	list := func(app *string) []*pb.Chat {
+		t.Helper()
+		resp, err := svc.ListSharedChats(f.Viewer, connect.NewRequest(&pb.ListSharedChatsRequest{AppName: app}))
+		require.NoError(t, err)
+		return resp.Msg.Chats
+	}
+	storefront, blog, empty := "storefront", "blog", ""
+	chats := list(&storefront)
+	require.Len(t, chats, 1)
+	assert.Equal(t, f.ChatID, chats[0].GetId())
+	assert.Equal(t, "storefront", chats[0].GetAppName())
+	assert.True(t, chats[0].GetViewerAccess())
+	assert.Empty(t, list(&blog), "another app's list holds none of it")
+	assert.Len(t, list(&empty), 1, "an empty app_name is unset")
+	assert.Len(t, list(nil), 1)
 }

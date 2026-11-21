@@ -62,6 +62,7 @@ import { integrationDisplayName } from "../workflow/inputs/inputTypeNouns";
 import { RowMenu } from "../workflows/RowMenu";
 import { WorkflowBadge } from "../workflows/WorkflowSourceBadge";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { settingsPath } from "@/lib/paths";
 
 /** The automations that name a connection, by connection id. */
 export function automationsByConnection(triggers: readonly Trigger[]): Map<string, Trigger[]> {
@@ -95,7 +96,7 @@ export function usedBySentence(automations: readonly Trigger[]): string {
 }
 
 /** Where OAuth returns to, and where a run's "no <integration> connection" error points. */
-export const INTEGRATIONS_SETTINGS_PATH = "/settings/integrations";
+export const INTEGRATIONS_SETTINGS_PATH = settingsPath("integrations");
 
 /** The integrations someone can connect here: they take a credential of some kind. */
 export function connectableIntegrations(integrations: readonly Integration[]): Integration[] {

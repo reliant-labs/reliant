@@ -13,9 +13,12 @@
   to that version, building it once; where it cannot, it says so and prints the
   `go run github.com/reliant-labs/forge/cmd/forge@<pin> …` to run instead.
 
-Every task runs the forge `forge.yaml` pins (`go run
-github.com/reliant-labs/forge/cmd/forge@<pin>`), whatever `forge` is on your
-`PATH`. `task --list` names every task.
+Every task runs the forge `forge.yaml` pins, through `scripts/forge.sh`:
+`FORGE_BIN` when set, else a `forge` on your `PATH` (or in `.tools/bin`) only
+when it is the pin, else `reliant forge` (which hands the command to the pin),
+else `go run github.com/reliant-labs/forge/cmd/forge@<pin>`. So a machine with
+only `reliant` installed needs no `forge` at all. `task --list` names every
+task.
 
 ## Development Setup
 

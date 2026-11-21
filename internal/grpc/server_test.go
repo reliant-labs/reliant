@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
 )
@@ -102,6 +103,20 @@ func TestUserChainDeadlineIsReliants(t *testing.T) {
 	require.Equal(t, interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines()), d.Procedures)
 	for procedure, budget := range forge.ForgeRPCDeadlines() {
 		require.Equal(t, budget, d.Procedures[procedure], procedure)
+	}
+}
+
+// Bug report a5d5de15: enabling builtin://autopilot-review-responder's three
+// triggers at once ran past the 10s every unnamed rpc gets ("deadline
+// exceeded" on the third), and the enable undid the other two. The calls that
+// write a workflow's triggers one after another get a budget for several.
+func TestUserChainGivesWorkflowTriggerWritesTimeForSeveralTriggers(t *testing.T) {
+	d := userChainDeadline(t)
+	for _, procedure := range []string{
+		reliantv1connect.TriggerServiceEnableWorkflowProcedure,
+		reliantv1connect.TriggerServiceDisableWorkflowProcedure,
+	} {
+		require.GreaterOrEqual(t, d.Procedures[procedure], 60*time.Second, procedure)
 	}
 }
 

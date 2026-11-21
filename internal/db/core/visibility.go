@@ -96,9 +96,20 @@ type SharedChatFilters struct {
 	ViewerUserID string
 	// ProjectID narrows the list to one project's shared chats.
 	ProjectID *string
-	Limit     int
-	Offset    int
+	// ProjectIDs narrows the list to several projects' shared chats; with
+	// ProjectID, to their union (Projects).
+	ProjectIDs []string
+	// AppName narrows the list to chats tagged with that app (chats.app_name).
+	AppName *string
+	Limit   int
+	Offset  int
 }
+
+// Projects is the set of projects the list is narrowed to: ProjectID and
+// ProjectIDs together, each once. Nil narrows nothing; a present-but-empty
+// ProjectID with no ProjectIDs narrows to project "" and lists nothing, as
+// it always did (projectUnion).
+func (f SharedChatFilters) Projects() []string { return projectUnion(f.ProjectID, f.ProjectIDs) }
 
 // SharedProjectFilters lists the projects shared with an org that a viewer
 // did not create.

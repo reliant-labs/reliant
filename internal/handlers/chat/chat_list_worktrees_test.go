@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -152,6 +153,66 @@ func TestListChats_DoesNotLeakAnotherUsersMainWorktree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, resp.Msg.Chats)
 	assert.Empty(t, resp.Msg.MainWorktrees, "another user's project must not disclose its main workspace")
+}
+
+// projectReadCounter is the real repository, counting the project reads a
+// chat list makes.
+type projectReadCounter struct {
+	*db.Repo
+	gets, lists atomic.Int32
+}
+
+func (r *projectReadCounter) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	r.gets.Add(1)
+	return r.Repo.GetProject(ctx, id)
+}
+
+func (r *projectReadCounter) ListProjectsByIDs(ctx context.Context, ids []string) ([]*db.Project, error) {
+	r.lists.Add(1)
+	return r.Repo.ListProjectsByIDs(ctx, ids)
+}
+
+// The "All projects" list names the main workspace of every project the
+// caller has, and reads those projects in one query however many there are:
+// prod trace 0c768027fe97ec8721d215100311c27f made one GetProject per project
+// (19 of them) on every sidebar refresh.
+func TestListChats_ReadsTheMainWorkspacesProjectsInOneQuery(t *testing.T) {
+	t.Parallel()
+
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	counter := &projectReadCounter{Repo: repo}
+	svc := &Service{deps: Deps{Repo: counter}}
+
+	const projects = 12
+	wantMains := map[string]string{}
+	for i := 0; i < projects; i++ {
+		projectID, mainID := newInvariantTestProject(t, ctx, repo, true)
+		seedListChatsChat(t, ctx, repo, projectID, &mainID, fmt.Sprintf("chat %d", i))
+		wantMains[mainID] = projectID
+	}
+	// A project scheduled for deletion is not the caller's to read, so its
+	// main workspace is left out, exactly as one GetProject per project did.
+	doomed, doomedMain := newInvariantTestProject(t, ctx, repo, true)
+	doomedProject, err := repo.GetProject(ctx, doomed)
+	require.NoError(t, err)
+	_, err = repo.ScheduleProjectDeletion(ctx, doomed, "test-user", time.Now().Add(time.Hour), doomedProject.Decision())
+	require.NoError(t, err)
+
+	resp, err := svc.ListChats(ctx, connect.NewRequest(&reliantv1.ListChatsRequest{}))
+	require.NoError(t, err)
+
+	gotMains := map[string]string{}
+	for _, w := range resp.Msg.MainWorktrees {
+		gotMains[w.Id] = w.ProjectId
+	}
+	assert.Equal(t, wantMains, gotMains, "every readable project's main workspace, and no other")
+	assert.NotContains(t, gotMains, doomedMain)
+	assert.Len(t, resp.Msg.Chats, projects)
+
+	assert.Equal(t, int32(0), counter.gets.Load(), "no project is read one at a time")
+	assert.Equal(t, int32(1), counter.lists.Load(), "the projects are read in one query")
 }
 
 // An empty project_id is the sidebar's "All projects" view: every chat and

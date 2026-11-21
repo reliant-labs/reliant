@@ -30,7 +30,7 @@ func worktreeSummaryToProto(w *db.Worktree) *reliantv1.WorktreeSummary {
 }
 
 // attachWorktrees fills each chat's worktree summary and returns the main
-// workspace of every project in scope (projectID, or all of the user's when it
+// workspace of every project in scope (projects, or all of the user's when it
 // is empty), in two queries however many chats, projects and workspaces there
 // are.
 // The client groups the sidebar from this, so it never has to page the whole
@@ -41,7 +41,7 @@ func worktreeSummaryToProto(w *db.Worktree) *reliantv1.WorktreeSummary {
 // caller's; a main workspace is listed only when the caller may read its
 // project (authz, so not one of an org they have left or a credential's
 // other org) and the project is in the list's org scope.
-func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string, scope *core.OrgScope, chats []*db.Chat, protoChats []*reliantv1.Chat) []*reliantv1.WorktreeSummary {
+func (s *Service) attachWorktrees(ctx context.Context, userID string, projects []string, scope *core.OrgScope, chats []*db.Chat, protoChats []*reliantv1.Chat) []*reliantv1.WorktreeSummary {
 	seen := make(map[string]struct{}, len(chats))
 	ids := make([]string, 0, len(chats))
 	for _, c := range chats {
@@ -58,7 +58,7 @@ func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string,
 	if len(ids) > 0 {
 		rows, err := s.deps.Repo.ListWorktreesByIDs(ctx, ids)
 		if err != nil {
-			logging.WarnContext(ctx, "Failed to load the workspaces of a chat list", "error", err, "projectID", projectID)
+			logging.WarnContext(ctx, "Failed to load the workspaces of a chat list", "error", err, "projects", projects)
 		} else {
 			byID := make(map[string]*reliantv1.WorktreeSummary, len(rows))
 			for _, w := range rows {
@@ -74,29 +74,48 @@ func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string,
 
 	// The query checks ownership itself: a project id that is not the
 	// caller's gets no main workspace.
-	var inProject *string
-	if projectID != "" {
-		inProject = &projectID
-	}
-	mains, err := s.deps.Repo.ListMainWorktreesForUser(ctx, userID, inProject)
+	mains, err := s.deps.Repo.ListMainWorktreesForUser(ctx, userID, projects)
 	if err != nil {
-		logging.WarnContext(ctx, "Failed to load the main workspaces of a chat list", "error", err, "projectID", projectID)
+		logging.WarnContext(ctx, "Failed to load the main workspaces of a chat list", "error", err, "projects", projects)
 		return nil
 	}
-	readable := map[string]bool{}
+	readable := s.readableProjects(ctx, userID, scope, mains)
 	out := make([]*reliantv1.WorktreeSummary, 0, len(mains))
 	for _, w := range mains {
-		ok, seen := readable[w.ProjectID]
-		if !seen {
-			project, err := s.deps.Repo.GetProject(ctx, w.ProjectID)
-			ok = err == nil && authz.CanReadProject(ctx, userID, project) && scope.Includes(project.OrgID)
-			readable[w.ProjectID] = ok
-		}
-		if ok {
+		if readable[w.ProjectID] {
 			out = append(out, worktreeSummaryToProto(w))
 		}
 	}
 	return out
+}
+
+// readableProjects reads the projects of these workspaces in one query and
+// reports which the caller may read within scope. A project that is missing,
+// or a failed read, is not readable: the main workspace is then left out, as
+// a chat list with no main workspaces still lists.
+func (s *Service) readableProjects(ctx context.Context, userID string, scope *core.OrgScope, worktrees []*db.Worktree) map[string]bool {
+	seen := make(map[string]struct{}, len(worktrees))
+	ids := make([]string, 0, len(worktrees))
+	for _, w := range worktrees {
+		if _, dup := seen[w.ProjectID]; dup {
+			continue
+		}
+		seen[w.ProjectID] = struct{}{}
+		ids = append(ids, w.ProjectID)
+	}
+	readable := make(map[string]bool, len(ids))
+	if len(ids) == 0 {
+		return readable
+	}
+	projects, err := s.deps.Repo.ListProjectsByIDs(ctx, ids)
+	if err != nil {
+		logging.WarnContext(ctx, "Failed to load the projects of a chat list's main workspaces", "error", err)
+		return readable
+	}
+	for _, p := range projects {
+		readable[p.ID] = authz.CanReadProject(ctx, userID, p) && scope.Includes(p.OrgID)
+	}
+	return readable
 }
 
 // attachWorktree fills the workspace summary of a single chat, so the chat a

@@ -48,7 +48,9 @@ func TestUnpinnedChatStaysOnTheMachineThatHasTheProjectWhenALaptopConnects(t *te
 	vm := e.daemon(t, "test-user")
 	laptop := e.daemon(t, "test-user")
 	require.NoError(t, e.repo.UpsertProjectDaemon(context.Background(), e.projectID, vm, "/work/project", nil))
-	require.NoError(t, e.repo.MarkProjectDaemonInstalled(context.Background(), e.projectID, vm))
+	installed, err := e.repo.MarkProjectDaemonInstalledInScope(context.Background(), e.projectID, vm, nil)
+	require.NoError(t, err)
+	require.True(t, installed)
 
 	router := &placingRouter{wakeRecordingRouter: e.router, defaultID: laptop, known: map[string]bool{vm: true, laptop: true}}
 	e.svc.deps.Router = router
@@ -86,7 +88,9 @@ func TestSendMessageToALegacyUnpinnedChatPinsItToTheMachineWithTheProject(t *tes
 		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: "test-user"}))
 	}
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, chat.ProjectID, vm, "/work/project", nil))
-	require.NoError(t, repo.MarkProjectDaemonInstalled(ctx, chat.ProjectID, vm))
+	installed, err := repo.MarkProjectDaemonInstalledInScope(ctx, chat.ProjectID, vm, nil)
+	require.NoError(t, err)
+	require.True(t, installed)
 
 	auth.SetUserJWT("test-user", "user-jwt")
 	t.Cleanup(func() { auth.SetUserJWT("test-user", "") })

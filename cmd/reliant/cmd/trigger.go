@@ -72,6 +72,7 @@ proceed.`,
 		newTriggerEventsCmd(),
 		newTriggerActivateCmd(),
 		newTriggerDeactivateCmd(),
+		newTriggerRotateCmd(),
 	)
 	cmd.PersistentFlags().Bool("daemon-session", false, "Use this server's existing signed-in daemon account without widening its permissions")
 	return cmd
@@ -400,7 +401,8 @@ func newTriggerGetCmd() *cobra.Command {
 			if err != nil {
 				return conn.annotate(triggerLookupError(args[0], err))
 			}
-			printTriggerDetail(cmd.OutOrStdout(), trigger)
+			label := describeTriggerConnection(cmd.Context(), newConnectionServiceClient(conn), trigger)
+			printTriggerDetailWith(cmd.OutOrStdout(), trigger, label)
 			return nil
 		},
 	}
@@ -480,6 +482,52 @@ it started are real and still exist.`,
 	}
 }
 
+// newTriggerRotateCmd replaces a webhook trigger's token, as the app's Rotate
+// token does. It is refused in an agent's shell: a new token is a new way in,
+// and the person who will hand it to the sender runs it.
+func newTriggerRotateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "rotate <id-or-name>",
+		PreRunE: refuseFromAgentShell,
+		Short:   "Replace a webhook trigger's token",
+		Long: `Replace a webhook trigger's token, and print the new one once.
+
+The old token stops working at once, so give the new one to the sender. A
+webhook Reliant delivers to itself (a managed webhook, such as alerting) has
+no token to print: rotating re-provisions its sender with a new one.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := resolveConnection(cmd)
+			if err != nil {
+				return err
+			}
+			client := newTriggerServiceClient(conn)
+			trigger, err := resolveTrigger(cmd.Context(), client, args[0])
+			if err != nil {
+				return conn.annotate(err)
+			}
+			resp, err := client.RotateWebhookToken(cmd.Context(),
+				connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: trigger.GetId()}))
+			if err != nil {
+				return conn.annotate(fmt.Errorf("rotating the token of trigger %q: %w", trigger.GetName(), err))
+			}
+			out := cmd.OutOrStdout()
+			rotated := resp.Msg.GetTrigger()
+			if rotated == nil {
+				rotated = trigger
+			}
+			if cred := resp.Msg.GetWebhook(); cred.GetToken() != "" {
+				fmt.Fprintf(out, "Rotated the token of trigger %q (%s); the old token no longer works.\n", rotated.GetName(), rotated.GetId())
+				printWebhookCredential(out, rotated.GetName(), rotated.GetId(), rotated.GetWebhookUrl(), cred)
+				return nil
+			}
+			fmt.Fprintf(out, "Rotated the token of trigger %q (%s). Reliant delivers to this webhook itself, so the new token went to its sender and there is nothing to configure.\n",
+				rotated.GetName(), rotated.GetId())
+			return nil
+		},
+	}
+}
+
 func newTriggerFireCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "fire <id-or-name>",
@@ -519,11 +567,25 @@ asynchronous — use ` + "`trigger events`" + ` to see what it did.`,
 
 func newTriggerEventsCmd() *cobra.Command {
 	var limit int32
+	var outcomeFlags []string
 	cmd := &cobra.Command{
 		Use:   "events <id-or-name>",
 		Short: "List a trigger's firings, newest first",
-		Args:  cobra.ExactArgs(1),
+		Long: `Prints one page: at most --limit firings.
+
+--outcome keeps only firings with that outcome: ` + triggerEventOutcomeNames + `.
+Repeat it, or separate values with commas, to keep several. The server filters
+before it applies --limit, so "--outcome pending --limit 20" is the 20 newest
+pending firings however long the trigger's history is.`,
+		Example: `  reliant trigger events nightly
+  reliant trigger events nightly --outcome pending
+  reliant trigger events nightly --outcome failed,skipped --limit 10`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			outcomes, err := parseTriggerEventOutcomes(outcomeFlags)
+			if err != nil {
+				return err
+			}
 			conn, err := resolveConnection(cmd)
 			if err != nil {
 				return err
@@ -542,16 +604,79 @@ func newTriggerEventsCmd() *cobra.Command {
 				limit = defaultTriggerEventLimit
 			}
 			events, err := client.Triggers.Events(cmd.Context(), trigger.GetId(),
-				reliant.EventFilter{PageSize: int(limit), Limit: int(limit)}).All()
+				reliant.EventFilter{Outcomes: outcomes, PageSize: int(limit), Limit: int(limit)}).All()
 			if err != nil {
 				return conn.annotate(fmt.Errorf("listing trigger events: %w", sdkCause(err)))
+			}
+			// Every v1 server filters by outcome (the request field shipped in
+			// #415), but a server that ignored it would return a page that only
+			// looks filtered. Keep the matches and say so rather than print it.
+			events, dropped := keepTriggerEventOutcomes(events, outcomes)
+			if dropped > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: the server ignored --outcome and returned %d other firing(s); "+
+					"showing only the matches from its page, which may leave out older matching firings\n", dropped)
+			}
+			if len(events) == 0 && len(outcomes) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No firings with that outcome.")
+				return nil
 			}
 			printTriggerEventTable(cmd.OutOrStdout(), events)
 			return nil
 		},
 	}
 	cmd.Flags().Int32Var(&limit, "limit", 0, "Maximum firings to return (0 applies the server default)")
+	cmd.Flags().StringSliceVar(&outcomeFlags, "outcome", nil,
+		"Only firings with this outcome: "+triggerEventOutcomeNames+" (repeatable or comma-separated)")
 	return cmd
+}
+
+// triggerEventOutcomes maps the words --outcome takes to the outcomes
+// ListTriggerEvents filters on; the words are the ones the OUTCOME column prints.
+var triggerEventOutcomes = map[string]reliantv1.TriggerEventOutcome{
+	"pending":  reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING,
+	"launched": reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_LAUNCHED,
+	"skipped":  reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_SKIPPED,
+	"failed":   reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_FAILED,
+}
+
+const triggerEventOutcomeNames = "pending, launched, skipped, failed"
+
+// parseTriggerEventOutcomes turns --outcome values into the request's outcome
+// filter, rejecting an unknown word before any request is made. Duplicates
+// collapse; no values is no filter.
+func parseTriggerEventOutcomes(values []string) ([]reliantv1.TriggerEventOutcome, error) {
+	var out []reliantv1.TriggerEventOutcome
+	seen := map[reliantv1.TriggerEventOutcome]bool{}
+	for _, v := range values {
+		word := strings.ToLower(strings.TrimSpace(v))
+		o, ok := triggerEventOutcomes[word]
+		if !ok {
+			return nil, fmt.Errorf("invalid --outcome %q: want one of %s", v, triggerEventOutcomeNames)
+		}
+		if !seen[o] {
+			seen[o] = true
+			out = append(out, o)
+		}
+	}
+	return out, nil
+}
+
+// keepTriggerEventOutcomes keeps the events whose outcome is one of outcomes
+// (all of them when outcomes is empty) and counts the ones it dropped.
+func keepTriggerEventOutcomes(events []*reliantv1.TriggerEvent, outcomes []reliantv1.TriggerEventOutcome) ([]*reliantv1.TriggerEvent, int) {
+	if len(outcomes) == 0 {
+		return events, 0
+	}
+	kept := events[:0:0]
+	for _, ev := range events {
+		for _, o := range outcomes {
+			if ev.GetOutcome() == o {
+				kept = append(kept, ev)
+				break
+			}
+		}
+	}
+	return kept, len(events) - len(kept)
 }
 
 // defaultTriggerEventLimit is how many firings the server returns when asked for
@@ -707,13 +832,26 @@ func printTriggerTable(out io.Writer, list []*reliantv1.Trigger) {
 }
 
 func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
+	printTriggerDetailWith(out, t, "")
+}
+
+// printTriggerDetailWith is printTriggerDetail with the connection described
+// as connection says (describeTriggerConnection); "" describes it from the
+// trigger alone.
+func printTriggerDetailWith(out io.Writer, t *reliantv1.Trigger, connection string) {
 	if t == nil {
 		return
+	}
+	if connection == "" {
+		connection = triggerConnectionLabel(t, nil)
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "Name:\t%s\n", t.GetName())
 	fmt.Fprintf(w, "ID:\t%s\n", t.GetId())
 	fmt.Fprintf(w, "State:\t%s\n", triggerStateLabel(t))
+	if reason := pausedReasonLabel(t); reason != "" {
+		fmt.Fprintf(w, "Paused by Reliant:\t%s\n", reason)
+	}
 	fmt.Fprintf(w, "Health:\t%s\n", triggerHealthLabel(t))
 	if detail := t.GetHealth().GetLastFailureDetail(); detail != "" {
 		fmt.Fprintf(w, "Health detail:\t%s\n", detail)
@@ -725,6 +863,9 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 	fmt.Fprintf(w, "Daemon:\t%s\n", orDash(t.GetDaemonId()))
 	fmt.Fprintf(w, "Workflow:\t%s\n", orDash(t.GetWorkflow()))
 	fmt.Fprintf(w, "Acting as:\t%s\n", actingIdentityLabel(t.GetActingIdentity()))
+	if connection != "" {
+		fmt.Fprintf(w, "Connection:\t%s\n", connection)
+	}
 	if org := t.GetOrgId(); org != "" {
 		fmt.Fprintf(w, "Organization:\t%s\n", org)
 		fmt.Fprintf(w, "Unattended funding:\t%s\n", unattendedFundingLabel(t.GetUnattendedFunding()))
@@ -740,6 +881,16 @@ func printTriggerDetail(out io.Writer, t *reliantv1.Trigger) {
 		fmt.Fprintf(w, "Timezone:\t%s\n", orDash(sched.GetTimezone()))
 		fmt.Fprintf(w, "Overlap:\t%s\n", overlapLabel(sched.GetOverlap()))
 		fmt.Fprintf(w, "Catchup window:\t%s\n", orDash(sched.GetCatchupWindow()))
+	}
+	if u := t.GetWebhookUrl(); u != "" && t.GetWebhook() != nil {
+		// The token is never readable again; rotate issues a new one.
+		fmt.Fprintf(w, "Webhook URL:\t%s (token: shown once at enable; `reliant trigger rotate` issues a new one)\n", u)
+	} else if u != "" {
+		// An integration whose provider the user points at Reliant per
+		// resource (Twilio's number webhook): no token of the trigger's.
+		fmt.Fprintf(w, "Webhook URL:\t%s\n", u)
+	} else if t.GetWebhookManaged() {
+		fmt.Fprintf(w, "Webhook URL:\tnone to configure: Reliant delivers to this webhook itself\n")
 	}
 	fmt.Fprintf(w, "Next fire:\t%s\n", orDash(t.GetNextFireAt()))
 	for group, name := range t.GetPresets() {
@@ -903,7 +1054,16 @@ func resolveTriggerDaemon(ctx context.Context, client triggerDaemonLister, idOrH
 	}
 	switch len(matches) {
 	case 0:
-		return "", fmt.Errorf("no daemon with id or hostname %q", idOrHostname)
+		// Name the machines there are: no other command lists daemon ids
+		// with a plain login (TL-59).
+		var known []string
+		for _, d := range daemons {
+			known = append(known, fmt.Sprintf("%s  %s (%s)", d.GetDaemonId(), d.GetHostname(), d.GetDaemonType()))
+		}
+		if len(known) == 0 {
+			return "", fmt.Errorf("no daemon with id or hostname %q: you have no machines", idOrHostname)
+		}
+		return "", fmt.Errorf("no daemon with id or hostname %q; your machines:\n  %s", idOrHostname, strings.Join(known, "\n  "))
 	case 1:
 		return matches[0].GetDaemonId(), nil
 	default:

@@ -65,6 +65,15 @@ type Daemon struct {
 	// false leaves an existing reservation in place and is refused on a
 	// reserved row (ErrDaemonRequiresBoundToken).
 	RequiresBoundToken bool
+
+	// OrgID is the organization the machine belongs to, mirrored from
+	// control-plane (its daemons.org_id) when the machine connects with a
+	// daemon-bound credential whose introspection names it. nil when it has
+	// not been told: the machine then matches its owner's projects of every
+	// org, as before machines had orgs (authz.MachineProjectScope).
+	//
+	// On UpsertDaemon nil keeps the stored org; a value replaces it.
+	OrgID *string
 }
 
 // DaemonLifecycleUpdate is one control-plane lifecycle observation, as applied

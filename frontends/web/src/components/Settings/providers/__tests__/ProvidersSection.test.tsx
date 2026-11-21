@@ -153,14 +153,28 @@ afterEach(() => {
 const picker = () => screen.getByRole("region", { name: "Add a provider" });
 
 describe("Settings → AI", () => {
-  it("has three tabs, and Models holds the tier defaults and the tool models", async () => {
+  it("opens on Personal accounts: the providers and Add provider, with no tab strip", async () => {
     mocks.listAccounts.mockResolvedValue([claudeAccount]);
     renderWithQuery(<AISettings />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "AI providers" })).toBeInTheDocument();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Providers", "Models", "Local & custom"]);
+    expect(screen.getByRole("heading", { level: 1, name: "Personal accounts" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Claude" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add provider" })).toBeInTheDocument();
+    // Models & tools is its own sidebar entry, not a tab beside the accounts.
+    expect(screen.queryAllByRole("tab")).toEqual([]);
+    expect(screen.queryByTestId("model-preferences")).not.toBeInTheDocument();
+  });
 
-    await userEvent.click(screen.getByRole("tab", { name: "Models" }));
+  it("Models & tools has two tabs, and Models holds the tier defaults and the tool models", async () => {
+    mocks.listAccounts.mockResolvedValue([claudeAccount]);
+    mocks.search.value = { tab: "models" };
+    renderWithQuery(<AISettings />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Models & tools" })).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Models", "Local & custom"]);
+    // Adding an account is Personal accounts' action, not this page's.
+    expect(screen.queryByRole("button", { name: "Add provider" })).not.toBeInTheDocument();
+
     expect(screen.getByTestId("model-preferences")).toBeInTheDocument();
     expect(screen.getByTestId("tool-preferences")).toBeInTheDocument();
     // Streaming is a chat preference now; it is not on this page.
@@ -180,7 +194,7 @@ describe("Settings → AI", () => {
     const models = screen.getByRole("tab", { name: "Models" });
     expect(models).toHaveAttribute("aria-selected", "true");
     expect(models).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("tab", { name: "Providers" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("tab", { name: "Local & custom" })).toHaveAttribute("tabindex", "-1");
     expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", models.id);
     expect(models).toHaveAttribute("aria-controls", screen.getByRole("tabpanel").id);
 
@@ -188,10 +202,10 @@ describe("Settings → AI", () => {
     await userEvent.keyboard("{ArrowRight}");
     expect(screen.getByRole("tab", { name: "Local & custom" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Local & custom" })).toHaveFocus();
+    expect(mocks.search.value.tab).toBe("local");
     await userEvent.keyboard("{Home}");
-    expect(screen.getByRole("tab", { name: "Providers" })).toHaveAttribute("aria-selected", "true");
-    // Providers is the default: it leaves no `?tab=` behind.
-    expect(mocks.search.value.tab).toBeUndefined();
+    expect(screen.getByRole("tab", { name: "Models" })).toHaveAttribute("aria-selected", "true");
+    expect(mocks.search.value.tab).toBe("models");
   });
 
   it("lists connected providers as cards with a scoped 'Add another' in each header", async () => {
@@ -344,8 +358,7 @@ describe("Reliant, once", () => {
     expect(within(card).queryByRole("button", { name: /Add another/ })).not.toBeInTheDocument();
     await userEvent.click(within(card).getByRole("button", { name: "Keys & spend" }));
     expect(mocks.navigate).toHaveBeenCalledWith({
-      to: "/settings/$section",
-      params: { section: "billing" },
+      to: "/settings/billing",
       search: { tab: "ai" },
     });
     // No "Reliant AI" tab on this page any more.

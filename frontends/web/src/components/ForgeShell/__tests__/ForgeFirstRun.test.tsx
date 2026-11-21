@@ -33,13 +33,13 @@ describe("the forge first-run steps", () => {
 
   it("shows the signed-in first deploy with npx, so no install is needed", () => {
     expect(signedInDeployCommands().map((c) => c.command)).toEqual([
-      "npx -y @reliantlabs/forge login",
+      "npx -y @reliantlabs/forge cloud login",
       "npx -y @reliantlabs/forge project new --in-place --kind site",
       "npx -y @reliantlabs/forge env deploy prod",
     ]);
     render(<ForgeFirstRun />);
     const step = within(screen.getByTestId("forge-first-run-step-2"));
-    expect(step.getAllByText("npx -y @reliantlabs/forge login")).toHaveLength(1);
+    expect(step.getAllByText("npx -y @reliantlabs/forge cloud login")).toHaveLength(1);
     expect(step.getAllByText("npx -y @reliantlabs/forge env deploy prod")).toHaveLength(1);
   });
 
@@ -54,7 +54,7 @@ describe("the forge first-run steps", () => {
 
   it("leads with the agent prompt, the landing page's words, and copies it whole", async () => {
     expect(AGENT_PROMPT).toBe(
-      "Deploy this app with forge, no account needed. Run `npx -y @reliantlabs/forge@latest start` and follow it (use `npx -y @reliantlabs/forge@latest` wherever it says `forge`). When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.",
+      "Deploy this app with forge, no account needed. Run `npx -y @reliantlabs/forge@latest project start` and follow it (use `npx -y @reliantlabs/forge@latest` wherever it says `forge`). When the site is live, give me its URL and the claim link, and remind me it goes offline in 72 hours unless I open the claim link.",
     );
     render(<ForgeFirstRun />);
     const step = within(screen.getByTestId("forge-first-run-step-1"));
@@ -67,7 +67,7 @@ describe("the forge first-run steps", () => {
   it("offers the MCP install command and the Cursor and VS Code links", () => {
     render(<ForgeFirstRun />);
     expect(screen.getByText(CLAUDE_MCP_COMMAND)).toBeInTheDocument();
-    expect(CLAUDE_MCP_COMMAND).toBe("claude mcp add forge -- npx -y @reliantlabs/forge mcp");
+    expect(CLAUDE_MCP_COMMAND).toBe("claude mcp add forge -- npx -y @reliantlabs/forge agent mcp");
     expect(screen.getByTestId("forge-first-run-cursor").getAttribute("href")).toMatch(/^https:\/\/cursor\.com\/en\/install-mcp\?name=forge&config=/);
     expect(screen.getByTestId("forge-first-run-vscode").getAttribute("href")).toMatch(/^https:\/\/insiders\.vscode\.dev\/redirect\/mcp\/install\?name=forge/);
   });

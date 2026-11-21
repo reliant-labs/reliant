@@ -663,8 +663,44 @@ func (m *MocklistTasksStore) GetThread(ctx context.Context, id string) (*db.Thre
 // Compile-time check.
 var _ listTasksStore = (*MocklistTasksStore)(nil)
 
+// forge:section MocktaskScopeStore
+// forge:hash=65d1952c32896310dfa410265d6ff7927f838131e3e3269942a43f456253892b
+
+// MocktaskScopeStore is a test mock for the taskScopeStore interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MocktaskScopeStore.<Method>Func not set" error.
+type MocktaskScopeStore struct {
+	contractkit.Recorder
+	GetPlanFunc   func(context.Context, string) (*db.Plan, error)
+	GetThreadFunc func(context.Context, string) (*db.Thread, error)
+}
+
+// GetPlan records the call and delegates to GetPlanFunc when set.
+func (m *MocktaskScopeStore) GetPlan(ctx context.Context, id string) (*db.Plan, error) {
+	m.Recorder.Record("GetPlan", ctx, id)
+	if m.GetPlanFunc != nil {
+		return m.GetPlanFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MocktaskScopeStore", "GetPlan")
+}
+
+// GetThread records the call and delegates to GetThreadFunc when set.
+func (m *MocktaskScopeStore) GetThread(ctx context.Context, id string) (*db.Thread, error) {
+	m.Recorder.Record("GetThread", ctx, id)
+	if m.GetThreadFunc != nil {
+		return m.GetThreadFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MocktaskScopeStore", "GetThread")
+}
+
+// Compile-time check.
+var _ taskScopeStore = (*MocktaskScopeStore)(nil)
+
 // forge:section MockupdateTaskStore
-// forge:hash=61f3e8ecda7bea1f6a9e9a5d5eee8e06f3e3f44f3f4194f27970683b9e5af203
+// forge:hash=1907e6b22b12b017b6eb6c5d2b7fdc13992ede73ec022a656c7244a15f2e5c00
 
 // MockupdateTaskStore is a test mock for the updateTaskStore interface.
 //
@@ -674,6 +710,8 @@ var _ listTasksStore = (*MocklistTasksStore)(nil)
 // "MockupdateTaskStore.<Method>Func not set" error.
 type MockupdateTaskStore struct {
 	contractkit.Recorder
+	GetPlanFunc            func(context.Context, string) (*db.Plan, error)
+	RunTxFunc              func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	EmitChatRefetchFunc    func(context.Context, string, db.RefetchType) error
 	GetTaskFunc            func(context.Context, string) (*db.Task, error)
 	GetTaskByPositionFunc  func(context.Context, string, int) (*db.Task, error)
@@ -681,6 +719,24 @@ type MockupdateTaskStore struct {
 	UpdateTaskFunc         func(context.Context, *db.Task) error
 	GetPlanByThreadIDFunc  func(context.Context, string) (*db.Plan, error)
 	GetThreadFunc          func(context.Context, string) (*db.Thread, error)
+}
+
+// GetPlan records the call and delegates to GetPlanFunc when set.
+func (m *MockupdateTaskStore) GetPlan(ctx context.Context, id string) (*db.Plan, error) {
+	m.Recorder.Record("GetPlan", ctx, id)
+	if m.GetPlanFunc != nil {
+		return m.GetPlanFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockupdateTaskStore", "GetPlan")
+}
+
+// RunTx records the call and delegates to RunTxFunc when set.
+func (m *MockupdateTaskStore) RunTx(p0 context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error {
+	m.Recorder.Record("RunTx", p0, policy, f)
+	if m.RunTxFunc != nil {
+		return m.RunTxFunc(p0, policy, f)
+	}
+	return contractkit.MockNotSet("MockupdateTaskStore", "RunTx")
 }
 
 // EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
@@ -750,7 +806,7 @@ func (m *MockupdateTaskStore) GetThread(ctx context.Context, id string) (*db.Thr
 var _ updateTaskStore = (*MockupdateTaskStore)(nil)
 
 // forge:section MockcreateSubtaskStore
-// forge:hash=6f0831a7b0758280d5e7c6e891f8ea983045ef5745cd70dc55aa3b2a280b01ff
+// forge:hash=384a2f1505243da71a9ba481365732bb0ed0fecd8b29c34086a91ade4a812cf1
 
 // MockcreateSubtaskStore is a test mock for the createSubtaskStore interface.
 //
@@ -763,6 +819,8 @@ type MockcreateSubtaskStore struct {
 	CreateTaskFunc      func(context.Context, *db.Task) error
 	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
 	GetTaskFunc         func(context.Context, string) (*db.Task, error)
+	GetPlanFunc         func(context.Context, string) (*db.Plan, error)
+	GetThreadFunc       func(context.Context, string) (*db.Thread, error)
 }
 
 // CreateTask records the call and delegates to CreateTaskFunc when set.
@@ -790,6 +848,24 @@ func (m *MockcreateSubtaskStore) GetTask(ctx context.Context, id string) (*db.Ta
 		return m.GetTaskFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockcreateSubtaskStore", "GetTask")
+}
+
+// GetPlan records the call and delegates to GetPlanFunc when set.
+func (m *MockcreateSubtaskStore) GetPlan(ctx context.Context, id string) (*db.Plan, error) {
+	m.Recorder.Record("GetPlan", ctx, id)
+	if m.GetPlanFunc != nil {
+		return m.GetPlanFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockcreateSubtaskStore", "GetPlan")
+}
+
+// GetThread records the call and delegates to GetThreadFunc when set.
+func (m *MockcreateSubtaskStore) GetThread(ctx context.Context, id string) (*db.Thread, error) {
+	m.Recorder.Record("GetThread", ctx, id)
+	if m.GetThreadFunc != nil {
+		return m.GetThreadFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockcreateSubtaskStore", "GetThread")
 }
 
 // Compile-time check.
@@ -3080,7 +3156,7 @@ func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=e9c63573c29739275f38799d1c8ab9e79397bb99d29fb632bd1f23fd4d2d325f
+// forge:hash=6e47510c5fb7e1854d94d59a05eb527fd43fff6fe6781088e010da922c6b5763
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -3103,6 +3179,7 @@ type MockworktreeStore struct {
 	GetProjectFunc               func(context.Context, string) (*db.Project, error)
 	EmitUserRefetchFunc          func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	GetLiveChatIDForWorktreeFunc func(context.Context, string) (string, error)
+	ListChatsForWorktreeFunc     func(context.Context, string, string, int) ([]db.WorktreeChat, error)
 	ListWorktreesFunc            func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 	GetWorktreeFunc              func(context.Context, string) (*db.Worktree, error)
 }
@@ -3222,6 +3299,15 @@ func (m *MockworktreeStore) GetLiveChatIDForWorktree(ctx context.Context, worktr
 		return m.GetLiveChatIDForWorktreeFunc(ctx, worktreeID)
 	}
 	return "", contractkit.MockNotSet("MockworktreeStore", "GetLiveChatIDForWorktree")
+}
+
+// ListChatsForWorktree records the call and delegates to ListChatsForWorktreeFunc when set.
+func (m *MockworktreeStore) ListChatsForWorktree(ctx context.Context, userID string, worktreeID string, limit int) ([]db.WorktreeChat, error) {
+	m.Recorder.Record("ListChatsForWorktree", ctx, userID, worktreeID, limit)
+	if m.ListChatsForWorktreeFunc != nil {
+		return m.ListChatsForWorktreeFunc(ctx, userID, worktreeID, limit)
+	}
+	return nil, contractkit.MockNotSet("MockworktreeStore", "ListChatsForWorktree")
 }
 
 // ListWorktrees records the call and delegates to ListWorktreesFunc when set.

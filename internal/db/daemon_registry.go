@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -94,6 +95,16 @@ func (r *Repo) UpsertDaemonIdentity(ctx context.Context, id DaemonIdentity) (boo
 	}
 	if id.UserID == "" {
 		return false, fmt.Errorf("daemon user ID cannot be empty")
+	}
+	if strings.EqualFold(strings.TrimSpace(id.Name), id.DaemonID) {
+		// The control plane names a self-hosted machine that connected with
+		// neither a name nor a hostname by its own id — a placeholder that
+		// keeps its per-owner unique name index satisfied, not a name anyone
+		// chose. Recorded here, it was every sentence's name for the machine
+		// ("reliant-labs isn't on \"46e3682b-…\""). No name is written
+		// instead, so the readers fall back to the hostname or a short tag,
+		// and a real name already on the row is kept.
+		id.Name = ""
 	}
 	now := time.Now().UTC()
 	createdAt := id.CreatedAt

@@ -134,10 +134,45 @@ message Approval {
   // can still be decided on its own.
   optional string batch_id = 23;
 
+  // Set when an agent's propose_connection call raised this approval: it
+  // asks the person to set up a connection to an integration. It is decided
+  // by completing the connection dialog (Approve with connection_id), never
+  // by Approve alone or with others in a batch.
+  optional ConnectionProposal connection_proposal = 24;
+
   // Tool approvals (the removed APPROVAL_TYPE_TOOL) asked about one call to an
   // integration action, and described it with these.
   reserved 13, 14, 20, 21, 22;
   reserved "tool_name", "tool_call_id", "tool_input", "integration_name", "integration_icon";
+}
+
+// ConnectionProposalScope is whose connection an agent proposed.
+enum ConnectionProposalScope {
+  // The approver chooses: their own connection, or (an owner or admin of
+  // the chat's organization) the organization's.
+  CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED = 0;
+  // The approver's own connection.
+  CONNECTION_PROPOSAL_SCOPE_PERSONAL = 1;
+  // The chat's organization's connection; only its owners and admins may
+  // make one.
+  CONNECTION_PROPOSAL_SCOPE_ORG = 2;
+}
+
+// ConnectionProposal is an agent's request that a person connect an
+// integration (the propose_connection tool). It carries no credential: the
+// person enters one in the connection dialog, and the agent learns only
+// whether a connection was made, and its id and name.
+message ConnectionProposal {
+  // The catalog integration to connect: github, slack, gmail, twilio or http.
+  string integration_id = 1;
+  // Its display name ("Slack").
+  string integration_name = 2;
+  ConnectionProposalScope scope = 3;
+  // The chat's organization: the one an org connection is made in. Unset
+  // when the chat has none, and then only a personal connection is offered.
+  optional string org_id = 4;
+  // Why the agent asks, in its words, flattened to one line.
+  string reason = 5;
 }
 
 // ListApprovalsByChatRequest lists pending approvals for a chat
@@ -155,6 +190,10 @@ message ListApprovalsByChatResponse {
 message ApproveRequest {
   string request_id = 1;
   optional string action_taken = 2; // Which action button was clicked (e.g., "Deploy Now")
+  // The connection the approver made for a connection proposal
+  // (Approval.connection_proposal): required to approve one, and checked
+  // against it (integration, owner, scope). Ignored for any other approval.
+  optional string connection_id = 3;
 }
 
 // ApproveResponse confirms the approval

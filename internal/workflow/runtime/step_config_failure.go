@@ -7,6 +7,8 @@ import (
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // stepConfigFailedChangeID gates ending the run when a step's own config
@@ -24,7 +26,7 @@ const stepConfigFailedChangeID = "step-config-failure-ends-run"
 // decided by the definition and the data it reads, so no resume or retry
 // can change it: the run fails, its on_failure handler runs, and an
 // automation's capacity slot is freed.
-const stepConfigFailedErrType = "StepConfigFailed"
+const stepConfigFailedErrType = types.StepConfigFailedErrType
 
 // failStepActivityName is the activity StepExecutor dispatches for a step
 // whose config cannot run (startFailedStep, executeFailActivity).

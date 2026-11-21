@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskguard"
@@ -203,6 +204,10 @@ type daemonClient struct {
 	// (session_liveness.go). Zero in production, meaning the defaults; tests
 	// shorten it.
 	timing sessionTiming
+
+	// upgrade is the drain protocol's state: a restart the platform asked
+	// for (upgrade_drain.go).
+	upgrade upgradeDrain
 }
 
 // currentDaemonID is the daemon's id as the gateway last assigned it.
@@ -344,6 +349,18 @@ func Start(ctx context.Context, opts StartOptions) error {
 		}
 	}()
 
+	// Credentialed scratch directories moved aside more than a day ago have
+	// been kept for inspection long enough (#2823). In the background: there
+	// can be hundreds, and nothing waits on them.
+	go func() {
+		removed, err := credsandbox.PruneMovedAside()
+		if err != nil {
+			logging.WarnContext(ctx, logPrefix+" Could not prune every moved-aside credentialed scratch directory", "removed", removed, "error", err)
+		} else if removed > 0 {
+			logging.InfoContext(ctx, logPrefix+" Pruned moved-aside credentialed scratch directories", "removed", removed)
+		}
+	}()
+
 	// Background-process records outlive the daemon: restore what the last
 	// one journaled, then journal this one's (shell/background_journal.go).
 	// Only after the claim above, so a second daemon that is about to be
@@ -368,6 +385,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// And when its process table stays full even after the self-heal stopped
 	// its largest command (fork_heal.go).
 	client.forkHeal.arm(client.cancelAllRequests, stopRuntime)
+	// And when it drained for a restart the platform asked for, and the
+	// platform did not restart it (upgrade_drain.go).
+	client.armUpgrade(stopRuntime, opts.BootstrapConfig.DataDir, os.Exit)
 	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
@@ -391,6 +411,15 @@ func Start(ctx context.Context, opts StartOptions) error {
 		logging.WarnContext(ctx, logPrefix+" Failed to write daemon runtime state", "error", stateErr)
 	}
 	defer func() {
+		// An upgrade exit leaves the record, marked, so a supervisor that
+		// polls it (Electron) reads "exited to update", not a daemon that
+		// vanished.
+		if client.upgrade.exitRequested() {
+			if markErr := daemonstate.MarkUpgradeExit(opts.BootstrapConfig.DataDir, ErrUpgradeExit.Error()); markErr != nil {
+				logging.WarnContext(ctx, logPrefix+" Failed to record the upgrade exit in the daemon runtime state", "error", markErr)
+			}
+			return
+		}
 		if clearErr := daemonstate.Clear(opts.BootstrapConfig.DataDir); clearErr != nil {
 			logging.WarnContext(ctx, logPrefix+" Failed to clear daemon runtime state", "error", clearErr)
 		}
@@ -501,6 +530,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 		if full := client.forkHeal.gaveUp(); full != nil {
 			return full
 		}
+		if client.upgrade.exitRequested() {
+			return ErrUpgradeExit
+		}
 		if err != nil && !errors.Is(err, context.Canceled) {
 			return fmt.Errorf("tools daemon server stopped: %w", err)
 		}
@@ -519,6 +551,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 	if full := client.forkHeal.gaveUp(); full != nil {
 		return full
+	}
+	if client.upgrade.exitRequested() {
+		return ErrUpgradeExit
 	}
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("tools daemon runtime stopped: %w", err)
@@ -565,6 +600,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// (e.g. "kata", "gvisor"); absent for local/self-hosted daemons.
 	runtimeType := strings.TrimSpace(host.RuntimeType)
 
+	// The daemon runs in the user's environment, so the ${VAR} references in
+	// their MCP configs resolve from it (mcp/expand.go). Explicit, because a
+	// manager resolves nothing by default.
+	mcpOpts = append([]mcp.ManagerOption{mcp.WithEnvLookup(os.LookupEnv)}, mcpOpts...) //nolint:forbidigo // resolves the user's ${VAR} references from the daemon's (the user's) environment, by design
 	mcpManager := mcp.NewManager(mcp.RoleDaemon, mcpOpts...)
 	storedConfigProvider := config.NewStoredConfigProvider(&filesystemConfigStore{})
 	mcpManager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {
@@ -578,7 +617,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// would describe the wrong machine entirely.
 	toolsFactory := newDaemonToolsFactory(host)
 
+	// Registration lists the tools this machine runs, then the command
+	// features a server must not assume of an older daemon (daemonFeatures).
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
+	caps = append(caps, daemonFeatures...)
 	sort.Strings(caps)
 
 	// The disk guard acts on a filling disk: past its reclaim threshold it
@@ -888,17 +930,36 @@ func (d *daemonClient) foreignDaemonIDFailure(err error) error {
 		bootstrap.DaemonIDPath(d.bootCfg.DataDir), err)
 }
 
-// registerLabels builds the daemon-registration label map. It advertises the
-// daemon's runtime/sandbox type when known so the server can surface runtime
-// capability limits to the model. Returns nil when there is nothing to report,
-// keeping the registration message unchanged for local daemons.
+// registerLabels builds the daemon-registration label map: the labels this
+// connection is selected by (a workflow's `daemon: labels:`). It carries the
+// machine labels the daemon declares, so a selector matches what the machine
+// was started with, and the daemon's runtime/sandbox type when known (that
+// one wins over a declared key of the same name: it is the platform's fact)
+// so the server can surface runtime capability limits to the model. Returns
+// nil when there is nothing to report, keeping the registration message
+// unchanged for local daemons.
 func (d *daemonClient) registerLabels() map[string]string {
-	if strings.TrimSpace(d.runtimeType) == "" {
+	runtimeType := strings.TrimSpace(d.runtimeType)
+	if runtimeType == "" && len(d.bootCfg.MachineLabels) == 0 {
 		return nil
 	}
-	return map[string]string{
-		config.DaemonRuntimeTypeLabelKey: d.runtimeType,
+	out := make(map[string]string, len(d.bootCfg.MachineLabels)+1)
+	for k, v := range d.bootCfg.MachineLabels {
+		out[k] = v
 	}
+	if runtimeType != "" {
+		out[config.DaemonRuntimeTypeLabelKey] = d.runtimeType
+	}
+	return out
+}
+
+// machineLabels are the durable labels this daemon declares for its machine
+// (DaemonRegister.machine_labels); nil for none.
+func (d *daemonClient) machineLabels() map[string]string {
+	if len(d.bootCfg.MachineLabels) == 0 {
+		return nil
+	}
+	return d.bootCfg.MachineLabels
 }
 
 // recordStream publishes a gateway-stream transition to the daemon's on-disk
@@ -1248,6 +1309,9 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// resolveDaemonType.
 			DaemonType: resolveDaemonType(d.host.DaemonType, "local"),
 			Labels:     d.registerLabels(),
+			// Declared on every registration, reconnects included: the
+			// server merges them into the machine's durable labels.
+			MachineLabels: d.machineLabels(),
 			// Re-assert our persisted stable identity (empty on first-ever
 			// registration). The gateway trusts it for unbound PATs so identity
 			// survives restarts and hostname changes instead of being re-derived
@@ -1257,6 +1321,9 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// and holds tool results until they are acknowledged
 			// (gateway_session.go).
 			MovesOnDrain: true,
+			// This daemon acts on RestartRequested: it reports its upgrade
+			// state on the heartbeat and drains (upgrade_drain.go).
+			DrainsOnRestartRequest: true,
 		}},
 	}
 	stampBuildIdentity(register.GetRegister())
@@ -1391,6 +1458,12 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 	switch m := msg.Message.(type) {
 	case *reliantv1.ServerMessage_ToolRequest:
 		if m.ToolRequest == nil {
+			return nil
+		}
+		// Draining for a restart: refused unrun, before it is recorded, so
+		// the same request id runs normally once the daemon is back.
+		if d.upgrade.refusing() {
+			d.refuseForUpgrade(s, m.ToolRequest)
 			return nil
 		}
 		// Recorded before the goroutine starts, so a status question that
@@ -1610,6 +1683,12 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 
 	case *reliantv1.ServerMessage_LocalModelRefresh:
 		d.handleLocalModelRefresh()
+		return nil
+
+	case *reliantv1.ServerMessage_RestartRequested:
+		if m.RestartRequested != nil {
+			d.handleRestartRequested(ctx, m.RestartRequested)
+		}
 		return nil
 
 	default:
@@ -1950,6 +2029,8 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
+		// Where a restart the platform asked for stands (nil while none is).
+		hb.Upgrade = d.upgrade.heartbeatStatus(int(hb.ToolCallsInFlight))
 		// Whether this machine can start processes (nil before the first
 		// probe, which the gateway reads as healthy).
 		hb.Health = d.forkWatch.Health()
@@ -1960,6 +2041,17 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		}
 		liveness.heartbeatSent(hb.Timestamp, time.Now())
 		return nil
+	}
+
+	// A stream that registers while a restart is in progress (a reconnect
+	// mid-drain) says so at once, not a heartbeat interval later: until it
+	// does, its gateway routes tool calls here.
+	upgradeChanged := d.upgrade.changedCh()
+	if d.upgrade.active() {
+		if err := sendHeartbeat(time.Now()); err != nil {
+			logSendFailure(logPrefix+" Failed to send upgrade-state heartbeat", err)
+			return
+		}
 	}
 
 	for {
@@ -2015,6 +2107,13 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			// dev-server starts without a heartbeat-interval lag.
 			if err := sendHeartbeat(time.Now()); err != nil {
 				logSendFailure(logPrefix+" Failed to send port-change heartbeat", err)
+				return
+			}
+		case <-upgradeChanged:
+			// A requested restart moved on (upgrade_drain.go): the gateway
+			// stops or resumes routing tool calls here on this heartbeat.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logSendFailure(logPrefix+" Failed to send upgrade-state heartbeat", err)
 				return
 			}
 		}
@@ -2133,14 +2232,15 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		contextMap,
 	)
 
-	if isMCPToolName(req.ToolName) && isMCPAuthError(result) {
+	if isMCPToolName(req.ToolName) {
 		serverName := parseMCPServerName(req.ToolName)
-		if serverName != "" {
+		if restartsMCPServerOnAuthError(serverName, result) {
 			if projectPath == "" {
 				projectPath = resolveProjectPathFromContext(contextMap, "", d.cwd)
 			}
 			if projectPath != "" {
-				if err := d.mcpManager.RemoveProjectServer(projectPath, serverName); err != nil {
+				if err := d.mcpManager.RemoveProjectServer(projectPath, serverName,
+					"restart to reload credentials: the tool result read as an authentication failure"); err != nil {
 					logging.Warn(logPrefix+" Failed removing MCP server before auth retry", "projectPath", projectPath, "server", serverName, "error", err)
 				}
 				d.mcpManager.EnsureProjectServersLoaded(execCtx, projectPath)
@@ -3192,6 +3292,27 @@ func parseMCPServerName(toolName string) string {
 		return ""
 	}
 	return strings.TrimSpace(parts[1])
+}
+
+// restartsMCPServerOnAuthError reports whether a tool result calls for
+// restarting its MCP server so it reloads its credentials.
+//
+// Only a FAILED call qualifies: a successful result is the server answering,
+// so its credentials work, and its text is the tool's output — a web page, a
+// file, a query result — which can say "authentication failed" about anything.
+// And never a server that keeps caller state (the chrome-devtools browser): it
+// holds no credentials to reload, its error text is the page's own, and the
+// restart removes the server for every chat sharing it, taking each one's
+// pages and sign-ins. That is how an agent testing a login form restarted
+// every browser on the machine every minute or two (#2818).
+func restartsMCPServerOnAuthError(serverName string, result *toolexec.ExecutionResult) bool {
+	if serverName == "" || result == nil || mcp.KeepsCallerState(serverName) {
+		return false
+	}
+	if result.Success && !result.IsError {
+		return false
+	}
+	return isMCPAuthError(result)
 }
 
 func isMCPAuthError(result *toolexec.ExecutionResult) bool {

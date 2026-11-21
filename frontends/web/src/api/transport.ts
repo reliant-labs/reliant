@@ -65,7 +65,7 @@ import {
   errorNormalizeInterceptor,
   traceInterceptor,
 } from "@reliantlabs/forge-web-runtime/interceptors";
-import { reportError, reportFailure } from "../lib/errorReporting";
+import { reportError, reportFailure, reportTypedFailure } from "../lib/errorReporting";
 import { noteRpcFailureDecided } from "../lib/handledRpcFailures";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
@@ -73,7 +73,7 @@ import { upgradeInterceptor } from "./upgradeInterceptor";
 import { orgInterceptor } from "./orgInterceptor";
 import { signupAttributionInterceptor } from "./signupAttribution";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
-import { createDeadlineInterceptor } from "./rpcDeadline";
+import { createDeadlineInterceptor, type StalledCalls } from "./rpcDeadline";
 import { writeOwnerInterceptor } from "./writeOwner";
 import { isReadSlotProcedure } from "../services/controlPlane/observability/readSlots";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
@@ -90,6 +90,7 @@ import {
   OAUTH_EXCHANGE_TIMEOUT_MS,
   PROVIDER_VALIDATION_TIMEOUT_MS,
 } from "../lib/constants";
+import { authPath } from "@/lib/paths";
 
 // Re-export the upgrade interceptor through this module so tests / callers
 // have one obvious place to look.
@@ -337,10 +338,54 @@ function reportRpcTimeout(
   // control-plane prod, 2026-11-03..05, one slow ListWorkloads/GetServiceOverview
   // read was seven issues and seven NewIssue alerts, four firing at once. It
   // travels as an attribute on the event, where the console still shows it.
-  reportFailure(`rpc-timeout: ${method} after ${timeoutMs}ms`, {
+  //
+  // THE TYPE IS THE CLASS: RpcTimeout tells the control plane this is a
+  // client-side timeout, whose issue pages only once a second browser session
+  // has hit it (owner decision, 2026-11-18). One slow tab is latency the
+  // server already records, or a dead connection.
+  reportTypedFailure(RPC_TIMEOUT_TYPE, `rpc-timeout: ${method} after ${timeoutMs}ms`, {
     "rpc.method": method,
     "rpc.timeout_ms": timeoutMs,
     "rpc.in_flight": diagnostics,
+    "rpc.classification": "client_timeout",
+  });
+}
+
+// Exception types of the client-side timeouts: the control plane recognises
+// them by these names (control-plane internal/alerting/issues_client_timeout.go).
+export const RPC_TIMEOUT_TYPE = "RpcTimeout";
+export const RPC_STALL_TYPE = "RpcStall";
+/** A stall's message, and so its issue's identity: no method, count or age in it. */
+export const RPC_STALL_MESSAGE = "connection stalled";
+
+// Stalls are rate-limited like timeouts, separately: a stall is a different
+// incident from a lone slow call a moment before it.
+let _lastRpcStallReportAt = 0;
+
+/**
+ * One report for calls that hung together (rpcDeadline's stall grouping):
+ * the connection under them stalled, so no one method is to blame. Prod,
+ * 2026-11-18: four calls of one tab hung together and the first to run out of
+ * budget, ListDeployAttempts, was blamed though the server answered it in 22ms.
+ */
+function reportRpcStall(stall: StalledCalls): void {
+  logger.error(
+    `[gRPC Client] connection stalled: ${stall.methods.length} calls hung together (${stall.methods.join(", ")}); ` +
+      `${stall.method} ran out of its ${stall.budgetMs}ms first — ${stall.diagnostics}`,
+  );
+  const now = Date.now();
+  if (now - _lastRpcStallReportAt < RPC_TIMEOUT_REPORT_INTERVAL_MS) return;
+  _lastRpcStallReportAt = now;
+  // One issue for every stall, whichever calls it caught: the methods are the
+  // event's attributes, never its message.
+  reportTypedFailure(RPC_STALL_TYPE, RPC_STALL_MESSAGE, {
+    "rpc.stalled_methods": stall.methods.join(","),
+    "rpc.stalled_count": stall.methods.length,
+    "rpc.first_timeout_method": stall.method,
+    "rpc.timeout_ms": stall.budgetMs,
+    "rpc.longest_silent_ms": Math.round(stall.longestSilentMs),
+    "rpc.in_flight": stall.diagnostics,
+    "rpc.classification": "client_stall",
   });
 }
 
@@ -348,6 +393,7 @@ const deadline = createDeadlineInterceptor({
   timeoutFor: timeoutForProcedure,
   activity: pageActivity,
   onTimeout: reportRpcTimeout,
+  onStall: reportRpcStall,
   onReplace: (method, why, diagnostics) => {
     logger.warn(
       `[gRPC Client] ${method} replaced with a fresh request (${why}) — ${diagnostics}`,
@@ -431,6 +477,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     if (kind === "machine-wait") {
       logger.info("[gRPC Client] Machine not serving yet", context);
+      throw error;
+    }
+    if (kind === "machine-busy") {
+      // The machine refused for a moment and nothing ran; the caller's next
+      // poll or retry is the remedy.
+      logger.info("[gRPC Client] Machine refused work for a moment", context);
       throw error;
     }
     if (kind === "network") {
@@ -648,7 +700,7 @@ async function runRecovery(
     typeof window !== "undefined" &&
     !window.location.pathname.startsWith("/auth")
   ) {
-    window.location.href = "/auth";
+    window.location.href = authPath();
     // If the navigation lands, this page (and timer) are gone. If something
     // cancels it, forget this recovery after a while so a later 401 can try
     // again, at a bounded rate.

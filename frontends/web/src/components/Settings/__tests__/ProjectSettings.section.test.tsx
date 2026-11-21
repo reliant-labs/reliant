@@ -154,7 +154,7 @@ describe("Settings → Projects", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Open beta" }));
     await waitFor(() => expect(state.store.setProjectFilter).toHaveBeenCalledWith("p-beta"));
     expect(state.navigate).toHaveBeenCalledWith(
-      expect.objectContaining({ to: "/project/$projectId", params: { projectId: "p-beta" } }),
+      expect.objectContaining({ to: "/project/p-beta" }),
     );
   });
 

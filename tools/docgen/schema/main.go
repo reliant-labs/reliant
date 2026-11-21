@@ -58,13 +58,15 @@ var toolHints = map[string]string{
 	"hidden": "A building block other workflows ref: true keeps it out of every picker and default listing while it " +
 		"stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. " +
 		"Unset means the workflow is listed.",
+	"attention": "Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.",
 	"concurrency": "Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} " +
-		"(K per machine of the trigger's pool), or both, optionally waiting: latest (only the newest waiting firing " +
-		"per key survives; older ones are recorded skipped, \"superseded\", never failed) and key (a template over " +
-		"`trigger` grouping the firings that replace each other). See WorkflowConcurrency below.",
+		"(K per machine of the trigger's pool), {max_running_per_key: N, key: ...} (N per key, e.g. one run per pull " +
+		"request), or a combination, optionally waiting: latest (only the newest waiting firing per key survives; older " +
+		"ones are recorded skipped, \"superseded\", never failed), key (a template over `trigger` grouping firings) and " +
+		"priority (a CEL integer over `trigger`: waiting firings run highest first). See WorkflowConcurrency below.",
 	// WorkflowConcurrency's fields (the generated descriptors carry no comments).
 	"max_running": "How many trigger-launched runs of the workflow run at once; later firings wait. Set it, " +
-		"per_member, or both; with per_member it is a ceiling over the scaled cap. A run waiting on a provider " +
+		"per_member, max_running_per_key, or a combination; with per_member it is a ceiling over the scaled cap. A run waiting on a provider " +
 		"(a usage limit, provider capacity, no provider that can serve it) with nothing else executing does not " +
 		"count: it gives its slot back, and takes one again before its next step, ahead of every waiting firing " +
 		"but never above the cap.",
@@ -74,10 +76,19 @@ var toolHints = map[string]string{
 	"waiting": "What happens to waiting firings: `fifo` (the default) keeps every one, oldest first; `latest` keeps " +
 		"only the newest waiting firing per key, and each older one it replaces is recorded skipped with the detail " +
 		"\"superseded\" (never failed). Running runs are never touched.",
-	"key": "With `waiting: latest` only: a template over `trigger`, like a webhook dedupe_key, naming the group of " +
-		"waiting firings that replace each other, e.g. `'{{ trigger.payload.attributes.repository }}'`. Unset: one " +
-		"group for the whole workflow. max_running still bounds the whole workflow. A firing whose key does not " +
-		"render waits FIFO and is never superseded.",
+	"key": "With `waiting: latest` or `max_running_per_key`: a template over `trigger`, like a webhook dedupe_key, " +
+		"naming a group of firings, e.g. `'{{ trigger.payload.attributes.repository }}#{{ trigger.payload.pull_request.number }}'`. " +
+		"Under waiting: latest its waiting firings replace each other (unset: one group for the whole workflow); with " +
+		"max_running_per_key its running runs are capped (required). max_running still bounds the whole workflow. A " +
+		"firing whose key does not render waits, is never superseded, and counts only against max_running.",
+	"max_running_per_key": "How many runs of one key (`key`, required) run at once, e.g. 1 for one run per pull " +
+		"request; the key's later firings wait. A firing whose key is at its cap does not hold back firings of other " +
+		"keys behind it. With max_running or per_member too, both caps apply; alone, only this one does. A run " +
+		"waiting on a provider gives back its max_running slot but keeps its key's.",
+	"priority": "A CEL expression over `trigger` (no `{{ }}`) yielding an integer, evaluated once when a firing " +
+		"starts waiting, e.g. `\"'main-red' in trigger.payload.labels ? 10 : 0\"`. Waiting firings are admitted highest " +
+		"priority first, then in arrival order; running runs are never preempted. Unset, or a firing whose expression " +
+		"fails: 0. A low-priority firing can wait behind higher ones until it expires, a day after it arrived.",
 	"check": "A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: " +
 		"queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending " +
 		"(success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, " +
@@ -144,12 +155,20 @@ func extractTypesFromProto() []TypeInfo {
 				"workflow; manual trigger fires participate, chat starts do not. It bounds runs that are running: "+
 				"a run waiting on a provider holds no slot until it resumes. Example, one release at a time with "+
 				"only the newest waiting merge per repository: `concurrency: {max_running: 1, waiting: latest, key: "+
-				"'{{ trigger.payload.attributes.repository }}'}`.", 4),
+				"'{{ trigger.payload.attributes.repository }}'}`. Another, at most six reviews at once and one per "+
+				"pull request, main-red fixes first: `concurrency: {max_running: 6, max_running_per_key: 1, key: "+
+				"'{{ trigger.payload.attributes.repository }}#{{ trigger.payload.pull_request.number }}', priority: "+
+				"\"'main-red' in trigger.payload.labels ? 10 : 0\"}`.", 4),
+		extractTypeFromMessage("WorkflowAttention",
+			(&reliantv1.WorkflowAttention{}).ProtoReflect().Descriptor(),
+			"Correlates incidents within one owner and project, never across them. Failures remain failed and emit failure events. "+
+				"Only explicit on_success: resolved closes an incident; a key-only observer's success does not. "+
+				"Example: `attention: {key: 'repo:{{ inputs.repo }}:pr:{{ inputs.pr }}', on_start: recovering, recovery_timeout: 30m, on_success: resolved}`.", 5),
 		extractTypeFromMessage("WorkflowCheck",
 			(&reliantv1.WorkflowCheck{}).ProtoReflect().Descriptor(),
 			"A GitHub check run whose lifecycle the engine owns (`check:`): one per firing, posted as the Reliant "+
 				"App on the event's head commit, details_url the run's page. Example: `check: {name: reliant/ci, "+
-				"output: '{{ nodes.report.check }}', timeout: 2h}`.", 5),
+				"output: '{{ nodes.report.check }}', timeout: 2h}`.", 6),
 	}
 }
 
@@ -173,14 +192,24 @@ func extractTypeFromMessage(name string, md protoreflect.MessageDescriptor, desc
 		fieldType := simplifyProtoType(fd)
 		fieldDesc := getFieldComment(fd)
 
-		// Check for tool hints
+		// Hints are message-specific: attention.key/on_failure deliberately
+		// have different semantics from concurrency.key/Workflow.on_failure.
 		toolHint := toolHints[fieldName]
+		if name == "WorkflowAttention" {
+			toolHint = map[string]string{
+				"key":              "Required literal or template over finalized inputs only. Evaluated once before graph execution; must produce a nonempty string of at most 512 bytes. Invalid dynamic keys fail visibly with legacy attention as a fail-safe.",
+				"on_start":         "Absent, recovering, or action_required. Recovering requires recovery_timeout. Only an actually started recovery run suppresses attention.",
+				"recovery_timeout": "Go duration in [1s, 24h], allowed only with on_start: recovering. Fixed from run start; retries never extend it. Expiry escalates through the durable inbox read, without a push notification.",
+				"on_success":       "Absent, resolved, or action_required. No implicit resolution on success. A recovery finishing without explicit successful resolution escalates.",
+				"on_failure":       "Absent (defaults to action_required), or action_required. Crashes, cancellation, and unsuccessful outcomes never resolve an incident.",
+			}[fieldName]
+		}
 
 		info.Fields = append(info.Fields, FieldInfo{
 			Name:        fieldName,
 			Type:        fieldType,
 			JSONName:    fieldName,
-			Required:    fieldName == "name" || fieldName == "from",
+			Required:    fieldName == "name" || fieldName == "from" || (name == "WorkflowAttention" && fieldName == "key"),
 			Description: fieldDesc,
 			ToolHint:    toolHint,
 		})

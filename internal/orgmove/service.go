@@ -1,5 +1,5 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file
-// Service implementation; canonical pattern in `forge skill load service-layer`.
+// Service implementation; canonical pattern in `forge agent skill load service-layer`.
 package orgmove
 
 import (
@@ -38,6 +38,10 @@ const (
 	DetailOrgChanged = "org_changed"
 	// DetailProjectGone: the project was deleted.
 	DetailProjectGone = "project_gone"
+	// DetailTargetHasProject: the owner already has a project at the same
+	// path, or of the same repository, in the target org (projects are
+	// unique per org, user and path or repository).
+	DetailTargetHasProject = "target_has_project"
 	// DetailControlPlaneUnavailable: this deployment's control plane cannot
 	// take a move (no service, or no identity to call it with).
 	DetailControlPlaneUnavailable = "control_plane_unavailable"
@@ -142,6 +146,8 @@ func (s *service) Commit(ctx context.Context, moveID string) (Outcome, error) {
 		return Outcome{Abort: true, Detail: DetailOrgChanged}, nil
 	case errors.Is(err, core.ErrProjectNotFound):
 		return Outcome{Abort: true, Detail: DetailProjectGone}, nil
+	case errors.Is(err, store.ErrOrgMoveTargetHasProject):
+		return Outcome{Abort: true, Detail: DetailTargetHasProject}, nil
 	case errors.Is(err, core.ErrProjectOrgMoveState):
 		m, getErr := s.deps.Store.GetProjectOrgMove(ctx, moveID)
 		if getErr != nil {

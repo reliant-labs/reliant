@@ -26,14 +26,12 @@ import { monacoFileSync } from "../monacoFileSync";
 
 function createMonacoMock() {
   return {
-    languages: {
-      typescript: {
-        typescriptDefaults: {
-          addExtraLib: vi.fn(),
-        },
-        javascriptDefaults: {
-          addExtraLib: vi.fn(),
-        },
+    typescript: {
+      typescriptDefaults: {
+        addExtraLib: vi.fn(),
+      },
+      javascriptDefaults: {
+        addExtraLib: vi.fn(),
       },
     },
   } as any;
@@ -64,7 +62,7 @@ describe("monacoFileSync", () => {
 
     expect(fileSystemMocks.getFilePreviewInfo).toHaveBeenCalledWith("/workspace/photo.png", "wt-1");
     expect(fileSystemMocks.getFileContent).not.toHaveBeenCalled();
-    expect(monaco.languages.typescript.typescriptDefaults.addExtraLib).not.toHaveBeenCalled();
+    expect(monaco.typescript.typescriptDefaults.addExtraLib).not.toHaveBeenCalled();
     expect(monacoFileSync.isFileSynced("/workspace/photo.png")).toBe(false);
   });
 
@@ -87,7 +85,7 @@ describe("monacoFileSync", () => {
     await monacoFileSync.syncFile("/workspace/example.ts");
 
     expect(fileSystemMocks.getFileContent).toHaveBeenCalledWith("/workspace/example.ts", "wt-1");
-    expect(monaco.languages.typescript.typescriptDefaults.addExtraLib).toHaveBeenCalledWith(
+    expect(monaco.typescript.typescriptDefaults.addExtraLib).toHaveBeenCalledWith(
       "export const answer = 42;",
       "file:///workspace/example.ts"
     );

@@ -41,8 +41,8 @@ const fileSystemMocks = vi.hoisted(() => ({
   getFilePreviewBlob: vi.fn(),
 }));
 
-vi.mock("@monaco-editor/react", () => ({
-  default: ({ value, options, onChange }: {
+vi.mock("../shared/MonacoEditor", () => ({
+  MonacoEditor: ({ value, options, onChange }: {
     value?: string;
     options?: { readOnly?: boolean };
     onChange?: (value: string) => void;

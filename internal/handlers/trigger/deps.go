@@ -81,6 +81,9 @@ type Repository interface {
 	// The machine pool a pool-bound trigger names, and its members (each gets
 	// the trigger's automation grant).
 	GetMachinePoolForUser(ctx context.Context, userID, id string) (*core.MachinePool, error)
+	// GetMachinePoolByName resolves the pool an agent names by name
+	// (create/update_trigger_activation's machine_pool).
+	GetMachinePoolByName(ctx context.Context, userID, name string) (*core.MachinePool, error)
 	ListMachinePoolMembers(ctx context.Context, pool *core.MachinePool, projectID string) ([]core.MachinePoolMemberRow, error)
 
 	// ListTriggers is called directly too; TriggerLister declares it.

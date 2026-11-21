@@ -983,6 +983,11 @@
               "Name": "action_taken",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "connection_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ApproveResponse": [
@@ -1192,6 +1197,12 @@
               "name": "batch_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "connection_proposal",
+              "kind": "message",
+              "type_name": "reliant.v1.ConnectionProposal",
+              "optional": true
             }
           ],
           "reliant.v1.ApproveRequest": [
@@ -1201,6 +1212,11 @@
             },
             {
               "name": "action_taken",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "connection_id",
               "kind": "string",
               "optional": true
             }
@@ -1280,6 +1296,30 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.ConnectionProposal": [
+            {
+              "name": "integration_id",
+              "kind": "string"
+            },
+            {
+              "name": "integration_name",
+              "kind": "string"
+            },
+            {
+              "name": "scope",
+              "kind": "enum",
+              "type_name": "reliant.v1.ConnectionProposalScope"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.DenyRequest": [
             {
               "name": "request_id",
@@ -1336,6 +1376,7 @@
           "reliant.v1.BatchApproveResponse": "reliant/v1/approval.proto",
           "reliant.v1.BatchDenyRequest": "reliant/v1/approval.proto",
           "reliant.v1.BatchDenyResponse": "reliant/v1/approval.proto",
+          "reliant.v1.ConnectionProposal": "reliant/v1/approval.proto",
           "reliant.v1.DenyRequest": "reliant/v1/approval.proto",
           "reliant.v1.DenyResponse": "reliant/v1/approval.proto",
           "reliant.v1.ListApprovalsByChatRequest": "reliant/v1/approval.proto",
@@ -1354,6 +1395,11 @@
             "APPROVAL_TYPE_UNSPECIFIED",
             "APPROVAL_TYPE_WORKFLOW_STEP",
             "APPROVAL_TYPE_TOOL_CALL"
+          ],
+          "reliant.v1.ConnectionProposalScope": [
+            "CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED",
+            "CONNECTION_PROPOSAL_SCOPE_PERSONAL",
+            "CONNECTION_PROPOSAL_SCOPE_ORG"
           ]
         },
         "EnumNumbers": {
@@ -1369,6 +1415,11 @@
             0,
             2,
             3
+          ],
+          "reliant.v1.ConnectionProposalScope": [
+            0,
+            1,
+            2
           ]
         },
         "EnumGoRefs": {
@@ -1379,6 +1430,10 @@
           "reliant.v1.ApprovalType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ApprovalType"
+          },
+          "reliant.v1.ConnectionProposalScope": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ConnectionProposalScope"
           }
         }
       }
@@ -6759,6 +6814,16 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": true
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListArchivedChatsResponse": [
@@ -6771,6 +6836,11 @@
             {
               "Name": "total",
               "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
               "IsOptional": false
             }
           ],
@@ -6829,6 +6899,16 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListChatsResponse": [
@@ -6880,6 +6960,11 @@
               "Name": "tool_bodies",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "skip_total",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "ListMessagesResponse": [
@@ -7433,6 +7518,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "StartChatResponse": [
@@ -7909,6 +7999,11 @@
             },
             {
               "name": "shared_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "app_name",
               "kind": "string",
               "optional": true
             }
@@ -8427,6 +8522,16 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "page_size",
+              "kind": "int32",
+              "optional": true
+            },
+            {
+              "name": "page_token",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ListArchivedChatsResponse": [
@@ -8439,6 +8544,10 @@
             {
               "name": "total",
               "kind": "int32"
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
             }
           ],
           "reliant.v1.ListBranchesRequest": [
@@ -8497,6 +8606,16 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "app_name",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListChatsResponse": [
@@ -8549,6 +8668,10 @@
               "kind": "enum",
               "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
+            },
+            {
+              "name": "skip_total",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ListMessagesResponse": [
@@ -8743,6 +8866,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -9241,6 +9369,11 @@
             },
             {
               "name": "org_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "app_name",
               "kind": "string",
               "optional": true
             }
@@ -19706,6 +19839,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -30375,6 +30513,11 @@
               "Name": "message_ids",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "not_delivered_reason",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ],
           "StartRunRequest": [
@@ -30868,6 +31011,10 @@
               "name": "message_ids",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "not_delivered_reason",
+              "kind": "string"
             }
           ],
           "reliant.v1.StartRunRequest": [
@@ -35728,6 +35875,16 @@
               "Name": "offset",
               "ProtoType": "int32",
               "IsOptional": false
+            },
+            {
+              "Name": "app_name",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "project_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "ListSharedChatsResponse": [
@@ -35979,6 +36136,11 @@
               "name": "shared_at",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "app_name",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ChatSelection": [
@@ -36030,6 +36192,16 @@
               "validate": {
                 "gte": "0"
               }
+            },
+            {
+              "name": "app_name",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "project_ids",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ListSharedChatsResponse": [
@@ -36620,6 +36792,11 @@
               "Name": "tool_bodies",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "skip_total",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "StreamOrgUpdatesRequest": [
@@ -36998,6 +37175,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -37189,6 +37371,10 @@
               "kind": "enum",
               "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
+            },
+            {
+              "name": "skip_total",
+              "kind": "bool"
             }
           ],
           "reliant.v1.StreamOrgUpdatesRequest": [
@@ -40585,6 +40771,12 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ToolResultAck"
+            },
+            {
+              "Name": "restart_requested",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.RestartRequested"
             }
           ],
           "WhoAmIRequest": null,
@@ -40763,6 +40955,11 @@
               "name": "health",
               "kind": "message",
               "type_name": "reliant.v1.MachineHealth"
+            },
+            {
+              "name": "upgrade",
+              "kind": "message",
+              "type_name": "reliant.v1.DaemonUpgradeStatus"
             }
           ],
           "reliant.v1.DaemonKillProcessRequest": [
@@ -40931,6 +41128,43 @@
             },
             {
               "name": "forge_version",
+              "kind": "string"
+            },
+            {
+              "name": "machine_labels",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "string"
+            },
+            {
+              "name": "drains_on_restart_request",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.DaemonUpgradeStatus": [
+            {
+              "name": "state",
+              "kind": "enum",
+              "type_name": "reliant.v1.DaemonUpgradeState"
+            },
+            {
+              "name": "deadline_unix_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "rollout_id",
+              "kind": "string"
+            },
+            {
+              "name": "target_version",
+              "kind": "string"
+            },
+            {
+              "name": "tool_calls_running",
+              "kind": "uint32"
+            },
+            {
+              "name": "detail",
               "kind": "string"
             }
           ],
@@ -41700,6 +41934,37 @@
               "kind": "bool"
             }
           ],
+          "reliant.v1.RestartRequested": [
+            {
+              "name": "target_version",
+              "kind": "string"
+            },
+            {
+              "name": "target_commit",
+              "kind": "string"
+            },
+            {
+              "name": "commit_time_unix",
+              "kind": "int64"
+            },
+            {
+              "name": "urgency",
+              "kind": "enum",
+              "type_name": "reliant.v1.RestartUrgency"
+            },
+            {
+              "name": "deadline_unix_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "rollout_id",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ServerHeartbeat": [
             {
               "name": "timestamp",
@@ -41835,6 +42100,12 @@
               "name": "tool_result_ack",
               "kind": "message",
               "type_name": "reliant.v1.ToolResultAck",
+              "oneof": "message"
+            },
+            {
+              "name": "restart_requested",
+              "kind": "message",
+              "type_name": "reliant.v1.RestartRequested",
               "oneof": "message"
             }
           ],
@@ -42172,6 +42443,7 @@
           "reliant.v1.DaemonKillProcessResponse": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DaemonRegister": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.DaemonUpgradeStatus": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiscoveredProject": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiskConsumer": "reliant/v1/tools_daemon.proto",
           "reliant.v1.DiskReport": "reliant/v1/tools_daemon.proto",
@@ -42204,6 +42476,7 @@
           "reliant.v1.RegistrationAck": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ReportToolResultRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ReportToolResultResponse": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.RestartRequested": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ServerHeartbeat": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ServerMessage": "reliant/v1/tools_daemon.proto",
           "reliant.v1.SyncedRepoState": "reliant/v1/tools_daemon.proto",
@@ -42226,6 +42499,14 @@
           "reliant.v1.WorktreeReclaimProposals": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
+          "reliant.v1.DaemonUpgradeState": [
+            "DAEMON_UPGRADE_STATE_UNSPECIFIED",
+            "DAEMON_UPGRADE_STATE_CURRENT",
+            "DAEMON_UPGRADE_STATE_UPDATING",
+            "DAEMON_UPGRADE_STATE_DRAINED",
+            "DAEMON_UPGRADE_STATE_AWAITING_OWNER",
+            "DAEMON_UPGRADE_STATE_FAILED"
+          ],
           "reliant.v1.DiskGuardState": [
             "DISK_GUARD_STATE_UNSPECIFIED",
             "DISK_GUARD_STATE_RECLAIMING",
@@ -42242,6 +42523,13 @@
             "MACHINE_HEALTH_STATE_OK",
             "MACHINE_HEALTH_STATE_DEGRADED"
           ],
+          "reliant.v1.RestartUrgency": [
+            "RESTART_URGENCY_UNSPECIFIED",
+            "RESTART_URGENCY_ROUTINE",
+            "RESTART_URGENCY_NORMAL",
+            "RESTART_URGENCY_SECURITY",
+            "RESTART_URGENCY_EMERGENCY"
+          ],
           "reliant.v1.TerminalSessionEvent.EventType": [
             "EVENT_TYPE_UNSPECIFIED",
             "EVENT_TYPE_CREATED",
@@ -42250,6 +42538,14 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.DaemonUpgradeState": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
           "reliant.v1.DiskGuardState": [
             0,
             1,
@@ -42266,6 +42562,13 @@
             1,
             2
           ],
+          "reliant.v1.RestartUrgency": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.TerminalSessionEvent.EventType": [
             0,
             1,
@@ -42274,6 +42577,10 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.DaemonUpgradeState": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "DaemonUpgradeState"
+          },
           "reliant.v1.DiskGuardState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "DiskGuardState"
@@ -42285,6 +42592,10 @@
           "reliant.v1.MachineHealthState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "MachineHealthState"
+          },
+          "reliant.v1.RestartUrgency": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "RestartUrgency"
           },
           "reliant.v1.TerminalSessionEvent.EventType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -44472,6 +44783,11 @@
               "map_key_kind": "string",
               "map_value_kind": "message",
               "map_value_type_name": "google.protobuf.Value"
+            },
+            {
+              "name": "webhook_hmac_secret",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.WorkflowTriggerResult": [
@@ -46940,6 +47256,11 @@
               "name": "author_email",
               "kind": "message",
               "type_name": "reliant.v1.CelString"
+            },
+            {
+              "name": "force_with_lease",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.GroupInputConfig": [
@@ -48057,6 +48378,10 @@
             {
               "name": "resolved_provider_account_id",
               "kind": "string"
+            },
+            {
+              "name": "resolved_thinking_level",
+              "kind": "string"
             }
           ],
           "reliant.v1.SaveWorkflowRequest": [
@@ -48848,6 +49173,14 @@
             },
             {
               "name": "per_member",
+              "kind": "uint32"
+            },
+            {
+              "name": "priority",
+              "kind": "string"
+            },
+            {
+              "name": "max_running_per_key",
               "kind": "uint32"
             }
           ],
@@ -54075,6 +54408,17 @@
       "candidates": [],
       "providers": [],
       "resolution": "unresolved"
+    },
+    {
+      "consumer": "Approval",
+      "field": "Connections",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.ProposalConnections",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "APIConnections"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Approval",

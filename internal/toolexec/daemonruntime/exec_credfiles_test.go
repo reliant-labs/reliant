@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
@@ -58,6 +59,7 @@ func credHome(t *testing.T) string {
 }
 
 func TestExecRun_CredentialsNone_CannotReadTheDaemonsCredentialFiles(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces through the daemon's exec handler; load-sensitive in the -short merge gate (obs df494f19, 29173b5f, 5283c29f)")
 	home := credHome(t)
 
 	script := `
@@ -82,6 +84,7 @@ echo "can still read: $(cat $HOME/project/main.go) $(cat $HOME/.config/forge/sto
 }
 
 func TestExecRun_CredentialsNone_CannotReachTheContainerEngine(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces through the daemon's exec handler; load-sensitive in the -short merge gate (obs df494f19, 29173b5f, 5283c29f)")
 	credHome(t)
 	sock := "/var/run/docker.sock"
 	if _, err := os.Lstat(sock); err != nil {
@@ -103,6 +106,7 @@ EOF`,
 }
 
 func TestExecBGStart_CredentialsNone_CannotReadTheDaemonsCredentialFiles(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces through the daemon's exec handler; load-sensitive in the -short merge gate (obs df494f19, 29173b5f, 5283c29f)")
 	home := credHome(t)
 
 	payload, _ := json.Marshal(daemon.RunCommandRequest{
@@ -179,6 +183,10 @@ func TestFileTools_RefuseTheDaemonsCredentialFiles(t *testing.T) {
 }
 
 func TestFileTools_SearchAndGlobNeverListTheDaemonsCredentialFiles(t *testing.T) {
+	// fs.search runs ripgrep; a host without it cannot run this test.
+	if _, err := cmdutil.FindRipgrep(); err != nil {
+		t.Skipf("ripgrep (rg) is not installed on this host: %v", err)
+	}
 	home := credHome(t)
 	ctx := context.Background()
 

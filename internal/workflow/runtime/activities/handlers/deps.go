@@ -330,9 +330,11 @@ type GenerateTitleStore interface {
 	CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error
 }
 
-// GitPublishStore is what GitPublishActivity reads.
+// GitPublishStore is what GitPublishActivity reads. GetDaemon is the
+// machine's registration, whose capabilities say whether it enforces a lease.
 type GitPublishStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	WorktreeOwnerReader
 }
 
@@ -447,6 +449,7 @@ type WorkflowCheckpointStore interface {
 // the transition to the next workflow. It forwards the store to
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
+	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
 	MarkDeclaredFailureNode(ctx context.Context, workflowID, nodeID string) (bool, error)
 	SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error

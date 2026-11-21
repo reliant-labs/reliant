@@ -19,6 +19,14 @@
  * route tree to find out.
  */
 
+import { automationPath, automationsPath, runsPath, workflowBuilderPath, workflowDetailPath, workflowLibraryPath } from "./paths";
+import { orgFreePath } from "./paths/org";
+
+// The constants below are the area's paths as a pathname is MATCHED against
+// them (which tab, is this a workflow page). A link builds its target with
+// lib/paths instead, which is where the org segment goes. The matchers below
+// read a pathname in its org-less form (orgFreePath), so `/o/<org>/workflows/…`
+// is the same page as `/workflows/…`.
 export const WORKFLOWS_AREA_PATH = "/workflows";
 /** The Workflows tab's list; a workflow's page is `${this}/<ref>`. */
 export const WORKFLOWS_LIBRARY_PATH = "/workflows/library";
@@ -36,16 +44,18 @@ export type WorkflowsTab = "workflows" | "runs";
 export interface WorkflowsTabInfo {
   key: WorkflowsTab;
   label: string;
-  /** The tab's list path; everything below it is one of its detail pages. */
+  /** The tab's list path; everything below it is one of its detail pages. For matching a pathname. */
   path: string;
+  /** The tab's list, to link to. */
+  href: () => string;
   /** What a detail page's exit returns to. */
   listLabel: string;
 }
 
 /** The tabs, in the order the tab bar renders them. */
 export const WORKFLOWS_TABS: readonly WorkflowsTabInfo[] = [
-  { key: "workflows", label: "Workflows", path: WORKFLOWS_LIBRARY_PATH, listLabel: "All workflows" },
-  { key: "runs", label: "Runs", path: WORKFLOWS_RUNS_PATH, listLabel: "All runs" },
+  { key: "workflows", label: "Workflows", path: WORKFLOWS_LIBRARY_PATH, href: () => workflowLibraryPath(), listLabel: "All workflows" },
+  { key: "runs", label: "Runs", path: WORKFLOWS_RUNS_PATH, href: () => runsPath(), listLabel: "All runs" },
 ];
 
 function isAtOrBelow(pathname: string, path: string): boolean {
@@ -54,21 +64,23 @@ function isAtOrBelow(pathname: string, path: string): boolean {
 
 /** Which tab a pathname belongs to; null outside the area. */
 export function workflowsTabForPath(pathname: string): WorkflowsTab | null {
-  return WORKFLOWS_TABS.find((tab) => isAtOrBelow(pathname, tab.path))?.key ?? null;
+  const path = orgFreePath(pathname);
+  return WORKFLOWS_TABS.find((tab) => isAtOrBelow(path, tab.path))?.key ?? null;
 }
 
 /** A tab's detail page (`/workflows/runs/<id>`), as opposed to its list. */
 export function isWorkflowsDetailPath(pathname: string): boolean {
-  return WORKFLOWS_TABS.some((tab) => pathname.startsWith(`${tab.path}/`));
+  const path = orgFreePath(pathname);
+  return WORKFLOWS_TABS.some((tab) => path.startsWith(`${tab.path}/`));
 }
 
 export function isWorkflowsAreaPath(pathname: string): boolean {
-  return isAtOrBelow(pathname, WORKFLOWS_AREA_PATH);
+  return isAtOrBelow(orgFreePath(pathname), WORKFLOWS_AREA_PATH);
 }
 
 /** The builder: `/workflow/$workflowName` and `/workflow/new`. Unchanged by the merge. */
 export function isWorkflowBuilderPath(pathname: string): boolean {
-  return pathname.startsWith("/workflow/");
+  return orgFreePath(pathname).startsWith("/workflow/");
 }
 
 /**
@@ -93,18 +105,27 @@ export function isWorkflowSurfacePath(pathname: string): boolean {
  *                                 → the automation redirect, which looks the
  *                                   trigger up and opens its workflow's page
  *                                   (automationRedirectPath)
+ *
+ * The retired paths are MATCHED as literals; every destination is built by
+ * lib/paths, with the rest of the retired path (an id, as the URL carried
+ * it) appended byte for byte. A destination that names a run or an
+ * automation keeps today's org-less form (`{ org: null }`): its own org
+ * decides where it opens (the resolver, U4), not the tab's.
  */
 export function legacyWorkflowsPath(pathname: string): string | null {
-  if (pathname === "/workflow") return WORKFLOWS_LIBRARY_PATH;
-  if (isAtOrBelow(pathname, "/runs")) return `/workflows${pathname}`;
-  if (pathname === RETIRED_AUTOMATIONS_PATH || pathname === "/automations") return ON_WORKFLOWS_HREF;
+  if (pathname === "/workflow") return workflowLibraryPath();
+  if (pathname === "/runs") return runsPath();
+  if (pathname.startsWith("/runs/")) return `${runsPath({ org: null })}${pathname.slice("/runs".length)}`;
+  if (pathname === RETIRED_AUTOMATIONS_PATH || pathname === "/automations") return onWorkflowsHref();
   // /workflows/automations/<id> is the resolving redirect itself.
-  if (pathname.startsWith("/automations/")) return `/workflows${pathname}`;
+  if (pathname.startsWith("/automations/")) return `${automationsPath({ org: null })}${pathname.slice("/automations".length)}`;
   return null;
 }
 
 /** The Workflows tab narrowed to what runs by itself, in every project. */
-export const ON_WORKFLOWS_HREF = `${WORKFLOWS_LIBRARY_PATH}?show=on&allProjects=true`;
+export function onWorkflowsHref(): string {
+  return `${workflowLibraryPath()}?show=on&allProjects=true`;
+}
 
 /**
  * The redirect an automation id resolves through: the trigger is looked up
@@ -112,7 +133,7 @@ export const ON_WORKFLOWS_HREF = `${WORKFLOWS_LIBRARY_PATH}?show=on&allProjects=
  * automationHref(trigger). Old links and notifications carry only the id.
  */
 export function automationRedirectPath(triggerId: string): string {
-  return `${RETIRED_AUTOMATIONS_PATH}/${encodeURIComponent(triggerId)}`;
+  return automationPath(triggerId);
 }
 
 /** The DOM id of one project's group on a workflow page's Triggers card. */
@@ -134,7 +155,7 @@ export function workflowPageHref(
   projectId?: string,
   options: { automation?: boolean; triggerId?: string } = {},
 ): string {
-  const path = `${WORKFLOWS_LIBRARY_PATH}/${encodeURIComponent(workflowRef)}`;
+  const path = workflowDetailPath(workflowRef);
   const query = projectId ? `?${new URLSearchParams({ project: projectId }).toString()}` : "";
   const hash = options.triggerId
     ? `#${triggerAnchorId(options.triggerId)}`
@@ -157,5 +178,5 @@ export function automationHref(trigger: { id: string; workflow?: string; project
 
 /** The builder for a workflow; a built-in opens read-only there. */
 export function workflowEditHref(workflow: string): string {
-  return `/workflow/${encodeURIComponent(workflow.startsWith("builtin://") ? workflow.slice("builtin://".length) : workflow)}`;
+  return workflowBuilderPath(workflow.startsWith("builtin://") ? workflow.slice("builtin://".length) : workflow);
 }

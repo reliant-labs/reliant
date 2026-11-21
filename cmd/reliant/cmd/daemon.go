@@ -704,6 +704,11 @@ func daemonCredentialRefused(err error) bool {
 // credential is re-minted (reRegister). Everything else is reported as is.
 func daemonStartFailure(err error, useToken bool, conn *connection) (failure error, reRegister bool) {
 	switch {
+	case errors.Is(err, daemonruntime.ErrUpgradeExit):
+		// Not a failure: the daemon drained and exited so it is restarted
+		// for an update. It carries its own exit code (75).
+		logging.Info("tools-daemon exited to be restarted for an update")
+		return err, false
 	case bootstrap.IsForeignDaemonIDError(err), bootstrap.IsReservedDaemonIDError(err):
 		return fmt.Errorf("tools-daemon stopped: %w", err), false
 	case !daemonCredentialRefused(err):
@@ -721,7 +726,7 @@ func daemonStartFailure(err error, useToken bool, conn *connection) (failure err
 //
 // The URL is the --grpc-url flag, else the credential's gateway, else a local
 // gateway on --port; grpc:// and grpcs:// are normalized first because the TLS
-// inference below keys off the scheme (`forge cluster urls` prints grpc://).
+// inference below keys off the scheme (`forge dev cluster urls` prints grpc://).
 // TLS mode is the explicit flag, else TLS when a cert and key are given (which
 // also points an unflagged URL at the local TLS listener), else TLS for an
 // https:// URL, else h2c.
@@ -801,6 +806,8 @@ func newDaemonStartCmd() *cobra.Command {
 	var (
 		useToken   bool
 		daemonName string
+		attachDir  string
+		labelFlag  = &labelsFlag{name: "label"}
 	)
 
 	cmd := &cobra.Command{
@@ -839,13 +846,34 @@ identity (under ~/.reliant/instances/<server>/<account>/<workspace>/): with
 that account; otherwise --account, else the most recently connected account,
 applies. Two accounts can run side by side, even in the same workspace.
 To switch back to an account whose token is already stored:
-  reliant daemon start --account <user-id>`,
+  reliant daemon start --account <user-id>
+
+--label key=value declares a durable label for this machine (repeat it, or
+separate pairs with commas). On every connect the server merges the declared
+labels into the machine's labels: each key is set to its value, and labels
+you did not declare are left alone. Labels decide machine-pool membership, so
+a box started with
+  reliant daemon start --label pool=pipeline --label gate=yes
+joins the pool "pipeline" as soon as it connects, with no one labelling it.
+RELIANT_DAEMON_LABELS (comma-separated) declares the same without the flag.
+
+--attach <dir> links a checkout to Reliant once the daemon is connected: the
+folder becomes a project on this machine. When it is a checkout of an existing
+project's git remote (say, an app you just deployed), that project is attached
+here; otherwise a local project is created. It prints one line naming the
+project. Re-running is harmless, and a failure is only a warning: the daemon
+keeps running.
+  reliant daemon start --attach .`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base, err := loadRootConfig(cmd)
 			if err != nil {
 				return err
 			}
 			dcfg, err := loadDaemonConfig(cmd)
+			if err != nil {
+				return err
+			}
+			machineLabels, err := daemonMachineLabels(cmd, dcfg, labelFlag)
 			if err != nil {
 				return err
 			}
@@ -949,6 +977,10 @@ To switch back to an account whose token is already stored:
 			if err != nil {
 				return err
 			}
+			// Before this daemon writes anything into the directory.
+			if err := refuseHeldDataDir(dataDir); err != nil {
+				return err
+			}
 
 			// Keep the foreground stdout stream used by Electron/task while also
 			// persisting an independently rotated tools-daemon log. Do not share
@@ -984,17 +1016,24 @@ To switch back to an account whose token is already stored:
 					StorageReaper:   storageReaperConfig(base, host.Managed()),
 					WorktreeReclaim: worktreeReclaimConfig(base),
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-						ServerMode: true,
-						ListenPort: listenPort,
-						DataDir:    dataDir,
-						Name:       daemonName,
-						Verbose:    verbose,
+						ServerMode:    true,
+						ListenPort:    listenPort,
+						DataDir:       dataDir,
+						Name:          daemonName,
+						MachineLabels: machineLabels,
+						Verbose:       verbose,
 					},
 					Host:               host,
 					ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
 					Guards:             daemonGuards(dcfg),
 					OAuthHelperOrigins: webOrigins,
 				})
+				if errors.Is(err, daemonruntime.ErrUpgradeExit) {
+					// Drained and exited to be restarted for an update; the
+					// error carries its own exit code (75).
+					logging.Info("tools-daemon exited to be restarted for an update")
+					return err
+				}
 				if err != nil && !errors.Is(err, context.Canceled) {
 					return fmt.Errorf("tools-daemon exited with error: %w", err)
 				}
@@ -1038,7 +1077,10 @@ To switch back to an account whose token is already stored:
 						TLSMode:   parsedTLSMode,
 						DataDir:   dataDir,
 						Name:      daemonName,
-						ServerURL: conn.ServerURL,
+						// Declared on every registration; the server merges
+						// them into the machine's durable labels.
+						MachineLabels: machineLabels,
+						ServerURL:     conn.ServerURL,
 						// Per-instance identity, read from this instance's own
 						// data directory. Keyed by origin it was shared by
 						// every worktree on the machine, and the gateway —
@@ -1054,6 +1096,20 @@ To switch back to an account whose token is already stored:
 					Guards:             daemonGuards(dcfg),
 					OAuthHelperOrigins: webOrigins,
 				})
+			}
+
+			if attachDir != "" {
+				// The daemon's own credential, read once connected (a
+				// re-registration replaces it): it is the account this
+				// machine serves, so the project lands where its agents run.
+				account := instance.account
+				go attachCheckoutWhenConnected(ctx, cmd.ErrOrStderr(), dataDir, attachDir, func() (projectCreator, error) {
+					c, err := auth.ReadDaemonCredentials(conn.ServerURL, account)
+					if err != nil || c == nil || strings.TrimSpace(c.PAT) == "" {
+						return nil, errors.New("no daemon credential for this server")
+					}
+					return newProjectServiceClient(&connection{ServerURL: conn.ServerURL, skipTLSVerify: conn.skipTLSVerify, Token: c.PAT}), nil
+				}, daemonAttachPoll)
 			}
 
 			logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL)
@@ -1105,6 +1161,10 @@ To switch back to an account whose token is already stored:
 
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin and use it as the daemon credential")
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: <instance-id>@<hostname>)")
+	cmd.Flags().StringVar(&attachDir, "attach", "", "Once connected, link this folder (a checkout) as a project on this machine")
+	// Hand-registered: the generated flag of DaemonConfig.labels (a repeated
+	// field) would keep only its last use. It replaces that field's value.
+	cmd.Flags().Var(labelFlag, "label", "Durable machine label key=value, merged into this machine's labels on every connect (repeatable, or comma-separated; replaces RELIANT_DAEMON_LABELS). pool=<name> joins that machine pool")
 
 	return cmd
 }
@@ -1173,6 +1233,20 @@ func printDaemonRuntimeRecord(w io.Writer, state daemonstate.State, recordPath s
 	if state.StreamDetail != "" {
 		fmt.Fprintf(w, "  Error:    %s\n", state.StreamDetail)
 	}
+	if up := state.Upgrade; up != nil {
+		// A restart the platform asked for (the drain protocol).
+		line := fmt.Sprintf("%s for %s", up.State, now.Sub(up.Since).Round(time.Second))
+		if up.TargetVersion != "" {
+			line += ", to " + up.TargetVersion
+		}
+		if !up.Deadline.IsZero() {
+			line += ", deadline " + up.Deadline.Local().Format(time.RFC3339)
+		}
+		fmt.Fprintf(w, "  Restart:  %s\n", line)
+		if up.Detail != "" {
+			fmt.Fprintf(w, "            %s\n", up.Detail)
+		}
+	}
 	fmt.Fprintf(w, "  Record:   %s\n", recordPath)
 }
 
@@ -1230,17 +1304,16 @@ stream is not established.`,
 			}
 			recordPath := daemonstate.Path(dataDir)
 
-			state, err := daemonstate.Read(dataDir)
+			state, status, err := readDaemonRecord(dataDir)
 			if err != nil {
-				if os.IsNotExist(err) {
-					fmt.Fprintln(out, "No daemon running (no runtime record found)")
-					fmt.Fprintf(out, "  Record:   %s\n", recordPath)
-					return fmt.Errorf("daemon not running")
-				}
 				return fmt.Errorf("reading daemon runtime record: %w", err)
 			}
-
-			if !daemonProcessAlive(state.PID) {
+			if status == daemonRecordMissing {
+				fmt.Fprintln(out, "No daemon running (no runtime record found)")
+				fmt.Fprintf(out, "  Record:   %s\n", recordPath)
+				return fmt.Errorf("daemon not running")
+			}
+			if status == daemonRecordStale {
 				fmt.Fprintf(out, "Daemon PID %d is not running (stale runtime record)\n", state.PID)
 				fmt.Fprintf(out, "  Record:   %s\n", recordPath)
 				return fmt.Errorf("daemon not running")
@@ -1432,6 +1505,35 @@ func refuseToStop(state daemonstate.State, dataDir string) error {
 			state.PID, daemonstate.Path(dataDir))
 	}
 	return nil
+}
+
+// refuseHeldDataDir is `daemon start`'s check that no live daemon holds
+// dataDir, made before the new daemon logs into the directory or touches its
+// runtime record.
+//
+// The runtime claims the directory too (daemonstate.Acquire), but only once it
+// starts, and `daemon start` writes first: its log, and the awaiting-credentials
+// record while it waits to sign in. So a second daemon pointed at a running
+// one's directory overwrote that daemon's record with awaiting_credentials
+// while it was still connected (#2823). The probe is not a claim, so the
+// runtime's Acquire still settles a race between two starting daemons; a probe
+// that cannot run is logged and left to that Acquire.
+func refuseHeldDataDir(dataDir string) error {
+	locked, err := daemonstate.ProbeLocked(dataDir)
+	if err != nil {
+		logging.Warn("Could not check whether another daemon holds the data directory", "data_dir", dataDir, "error", err)
+		return nil
+	}
+	if !locked {
+		return nil
+	}
+	who := "a running daemon"
+	if state, readErr := daemonstate.Read(dataDir); readErr == nil && state.PID != 0 {
+		who = fmt.Sprintf("daemon PID %d", state.PID)
+	}
+	return fmt.Errorf("refusing to start: %s already runs in data directory %s (%w). "+
+		"Stop it with `reliant daemon stop` first, or start this daemon in a directory of its own with --data-dir",
+		who, dataDir, daemonstate.ErrLocked)
 }
 
 // clearDaemonRecord removes the runtime record of a process confirmed dead.

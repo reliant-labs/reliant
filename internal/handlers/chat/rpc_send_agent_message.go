@@ -213,7 +213,7 @@ func (s *Service) SendAgentMessage(
 	toThread := req.Msg.ThreadId
 	routedToGraphAgent := false
 	if isMainThread && !restartMainRun && !resumeStoppedAgent {
-		recipient, err := s.resolveRunRecipient(ctx, chat, chat.MainThreadID(), chat.MainThreadID(), "")
+		recipient, err := s.resolveRunRecipient(ctx, chat, chat.MainThreadID(), chat.MainThreadID(), "", owningWorkflow)
 		if err != nil {
 			if errors.Is(err, core.ErrRunNoListeningAgent) || errors.Is(err, core.ErrRunRecipientAmbiguous) {
 				return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: false, Message: err.Error()}), nil

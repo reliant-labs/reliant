@@ -381,6 +381,11 @@ export type ConnectionStatus =
   | "error";
 
 export interface MessagePaginationInfo {
+  /**
+   * @deprecated The chat's message count, or 0 when the stream asked the
+   * server not to count (`ChatStreamOptions.skipTotal`, which `ChatSession`
+   * sets). Page with `hasMore` and `oldestSeq`.
+   */
   total: number;
   hasMore: boolean;
   oldestSeq: number;

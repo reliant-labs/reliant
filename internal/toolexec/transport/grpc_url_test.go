@@ -53,7 +53,7 @@ func startStubGateway(t *testing.T) (string, chan *reliantv1.DaemonMessage) {
 }
 
 // TestDaemonDialsGatewayByURLScheme pins the schemes a daemon may be pointed
-// at. `forge cluster urls` prints the gateway as grpc://host:port, so that form
+// at. `forge dev cluster urls` prints the gateway as grpc://host:port, so that form
 // must connect — silently failing to connect while `daemon status` still claims
 // the daemon is up is the worst possible outcome.
 func TestDaemonDialsGatewayByURLScheme(t *testing.T) {

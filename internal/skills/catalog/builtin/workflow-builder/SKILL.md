@@ -120,10 +120,23 @@ credential. Pair it with `credentials: none` on the editing shell.
 
 Refused (the node completes with `refused: true` and a `refusal`, it does not fail): the default branch, protected
 branches, `main`, `master`, `release/*`, names that are not plain branches, branches outside `allow`, a pull
-request head in a fork. Never forces: a diverged remote is refused. No changes means `pushed: false` and no error.
-Outputs: `pushed`, `sha`, `branch`, `base_sha`, `files_changed`, `insertions`, `deletions`, `refused`, `refusal`. Route on
-them: `condition: nodes.publish.pushed == true`. The push is recorded in the write ledger with its sha, so its events
+request head in a fork. Never forces unless `force_with_lease` (below) names a sha: a diverged remote is refused. No changes
+means `pushed: false` and no error. Outputs: `pushed`, `sha`, `branch`, `base_sha`, `files_changed`, `insertions`, `deletions`, `refused`, `refusal`, `lease_refused`, `remote_sha`, `lease_unsupported`.
+Route on them: `condition: nodes.publish.pushed == true`. The push is recorded in the write ledger with its sha, so its events
 carry `trigger.origin`. In a scenario, mock the node's outputs like any activity.
+
+To replace a branch you checked out (a fix that merged or rebased a pull request head), name the commit you built on
+in `force_with_lease`: the full sha the remote branch must still be at. The push may then be a non-fast-forward, as
+`git push --force-with-lease=refs/heads/<branch>:<sha>`: one compare-and-swap on the remote. If someone pushed
+meanwhile (or the branch is gone) nothing is pushed and the node is refused with `lease_refused: true`, `remote_sha`
+holding the branch's actual head and both commits named in `refusal`; it is not retried. Only a sha is accepted, never
+`true`; every other refusal above still applies. The machine's daemon must be new enough to enforce the lease: an
+older one is refused with `lease_unsupported: true` before anything is committed or pushed (upgrade its reliant).
+
+```yaml
+    pr_head_of: "{{ inputs.pr }}"
+    force_with_lease: "{{ nodes.pr.head_sha }}"   # the head the worktree was made from
+```
 
 ### Shells without credentials
 
@@ -267,12 +280,15 @@ Use create_trigger_activation, update_trigger_activation, enable_trigger or paus
 activation. The owner's automation-approvals setting (Settings > Automations) decides which changes raise an approval
 card: by default a new activation, or a change that widens its power (a new connection or scope, a different acting
 identity, a new machine, new secrets, a production deploy step); other edits and resumes apply and are recorded.
-Pausing never needs a card. An unattended run reaches these tools only when its step names them, and a change that
+Pausing never needs a card; delete_trigger always does, because deleting cannot be undone. An unattended run reaches these tools only when its step names them, and a change that
 needs a card is refused there. Do not bypass approval through the CLI, HTTP or a script. To change several
 activations, call the tools together in ONE turn: every card the turn needs is raised at once as one batch, which the
 owner approves in one click (or one by one), instead of one card per turn. Enabling says AS WHOM and WHERE:
 their project, the machine whose tools the runs use, and for an integration trigger which of their connected
 accounts it listens through. One declaration can have many activations (one per user or project).
+When the connection it needs does not exist yet, call propose_connection (provider, scope, reason): the owner connects
+it in Reliant's connection dialog from an approval card, and you get back only its status and connection id, never
+the credential.
 
 ```yaml
 name: triage-new-issues
@@ -432,8 +448,8 @@ test its filter and inputs with `cel_eval` and its graph with `run_scenario` →
 **When the workflow is ready**, say it is saved and validated. If asked to activate it in an interactive chat,
 use create_trigger_activation with its declared trigger name, typed params, project_id, explicit machine_id (or
 no_machine) and connection_id. The approval card shows the resolved workflow, identity, machine and privileges.
-Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, and pause_trigger
-to pause. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
+Use update_trigger_activation to re-point an existing activation, enable_trigger to resume, pause_trigger
+to pause, and delete_trigger to remove one for good. Never claim success before approval and a successful tool result. list_triggers shows the result and health.
 The app remains an alternative: **Workflows → Library → open the workflow → Enable** turns on all declared triggers.
 Unattended runs are refused: they cannot grant themselves standing privileges.
 
@@ -606,7 +622,7 @@ triggers:
 
 ### Response tools
 - Force structured LLM output for routing/classification
-- `builtin://agent` returns when no tool calls remain (use `ask: true` to prompt for user feedback first)
+- `builtin://agent` returns when no tool calls remain (use `ask: true` to prompt for user feedback first). `args.max_turns` bounds it (0, the default, is no limit; set it in any unattended or `max_running` workflow) and `args.tool_params` binds tool parameters the model cannot see, e.g. `{shell: {credentials: none}}` (with `spawn_presets: []`, since a spawned sub-agent's tools are not bound)
 - `builtin://structured-agent` returns when the response tool is called (use `ask: true` to prompt for user feedback first)
 - Access structured output via `nodes.<execute_tools_id>.response_data.<tool_name>`
 
@@ -837,7 +853,7 @@ condition: "nodes.check.exit_code == 0"
 | `compute` | Named values from CEL expressions: no model, no shell, no worker round trip. Each output is {{ expr }} (or a literal); a value that is exactly one {{ }} keeps its type. Read them as nodes.<id>.<name>. Outputs cannot read each other: chain two compute nodes when one feeds the next. A failing expression fails the node. Use it for deterministic logic (labels, sizes, expiry, parsing a node's JSON stdout) instead of a script |
 | `create_worktree` | Create a git worktree for isolated development |
 | `execute_tools` | Run the tool calls an upstream Call LLM step returned |
-| `git_publish` | Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none |
+| `git_publish` | Commit a worktree's changes and push them to a feature branch. Refuses the default branch, protected branches, main, master and release/*, and any branch outside the allow list; refuses a fork head; never force-pushes, unless force_with_lease names the exact commit the remote branch must still be at. Nothing to commit is not an error (pushed is false). The credential is used for this one push and never reaches a shell, a file or the environment. Pair it with shell credentials: none |
 | `invoke_tool` | Run one tool you pick, with parameters you set; no LLM involved |
 | `join` | Wait for parallel branches to complete before continuing |
 | `loop` | Execute a sub-workflow in a loop with conditions |
@@ -898,13 +914,13 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `title` | string | No | - |
 | `hidden` | boolean | No | *A building block other workflows ref: true keeps it out of every picker and default listing while it stays resolvable by ref. With automation_only too, it is an automation's internal step and is listed nowhere. Unset means the workflow is listed.* |
 | `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it. Its triggers start it, and so does a deliberate start by hand: Run now, `reliant workflow run`, an agent's start_run, or a builder test run. Unset means a chat can start it.* |
-| `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} (K per machine of the trigger's pool), or both, optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed) and key (a template over `trigger` grouping the firings that replace each other). See WorkflowConcurrency below.* |
+| `concurrency` | WorkflowConcurrency | No | *Bounds trigger-launched runs: {max_running: N} (later firings wait, FIFO), {per_member: K} (K per machine of the trigger's pool), {max_running_per_key: N, key: ...} (N per key, e.g. one run per pull request), or a combination, optionally waiting: latest (only the newest waiting firing per key survives; older ones are recorded skipped, "superseded", never failed), key (a template over `trigger` grouping firings) and priority (a CEL integer over `trigger`: waiting firings run highest first). See WorkflowConcurrency below.* |
 | `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive. To release something however the run ends, cancel included, use `finally`.* |
 | `finally` | Workflow | No | *A handler for however a run ends: an inline graph ({entry, nodes, edges}) that runs once when a run completes, fails (after on_failure) or is cancelled. Never when it pauses or hands off to a successor run. Its nodes read `run.status` ('completed' \| 'failed' \| 'cancelled'), `failure.*` (empty unless the run failed), `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). It cannot change how the run ended; an error in it is logged and never recursive. Release leases, claims and labels here.* |
 | `requires` | WorkflowRequirements | No | - |
 | `secrets` | map[string]SecretDeclaration | No | - |
 | `permissions` | string[] | No | - |
-| `attention` | WorkflowAttention | No | - |
+| `attention` | WorkflowAttention | No | *Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.* |
 | `check` | WorkflowCheck | No | *A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending (success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, head_sha, output, timeout}. See WorkflowCheck below.* |
 
 ## Edge

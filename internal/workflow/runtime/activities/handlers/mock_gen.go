@@ -3583,7 +3583,7 @@ func (m *MockGenerateTitleStore) RecordLLMCallUsage(ctx context.Context, rec db.
 var _ GenerateTitleStore = (*MockGenerateTitleStore)(nil)
 
 // forge:section MockGitPublishStore
-// forge:hash=3945e607b46624eead247f683338e923c1dc71fa666cc34f3ac2f909a0e993e4
+// forge:hash=67a70134576cc160bb98a11b911daae8b768306fcb85ba495a35f08b94e8fff5
 
 // MockGitPublishStore is a test mock for the GitPublishStore interface.
 //
@@ -3594,6 +3594,7 @@ var _ GenerateTitleStore = (*MockGenerateTitleStore)(nil)
 type MockGitPublishStore struct {
 	contractkit.Recorder
 	GetChatFunc     func(context.Context, string) (*db.Chat, error)
+	GetDaemonFunc   func(context.Context, string) (*db.Daemon, error)
 	GetWorktreeFunc func(context.Context, string) (*db.Worktree, error)
 }
 
@@ -3604,6 +3605,15 @@ func (m *MockGitPublishStore) GetChat(ctx context.Context, id string) (*db.Chat,
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockGitPublishStore", "GetChat")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockGitPublishStore) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockGitPublishStore", "GetDaemon")
 }
 
 // GetWorktree records the call and delegates to GetWorktreeFunc when set.
@@ -5191,7 +5201,7 @@ func (m *MockWorkflowCheckpointStore) UpsertWorkflowCheckpoint(ctx context.Conte
 var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=a26c0d5522052c43bbbcc9caa76971894aba0c3eab24e6f62ad02fa4c458a1b4
+// forge:hash=df3e026cf3a696acf8718651a3755182e8ff431b773c74473d4cf82603384c27
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -5201,6 +5211,7 @@ var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 // "MockWorkflowStatusStore.<Method>Func not set" error.
 type MockWorkflowStatusStore struct {
 	contractkit.Recorder
+	ApplyAttentionUpdateFunc                                 func(context.Context, core.AttentionUpdate) (core.AttentionResult, error)
 	ListRunNodeExecutionsFunc                                func(context.Context, string, int) ([]*db.StepExecution, error)
 	MarkDeclaredFailureNodeFunc                              func(context.Context, string, string) (bool, error)
 	SetLaunchEventRunFailureDetailFunc                       func(context.Context, string, string) error
@@ -5283,6 +5294,15 @@ type MockWorkflowStatusStore struct {
 	GetPinnedProjectCatalogFunc                              func(context.Context, string) (*db.PinnedCatalog, bool, error)
 	PinProjectCatalogFunc                                    func(context.Context, db.CatalogPinScope) (string, error)
 	SaveMessageToThreadFunc                                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
+}
+
+// ApplyAttentionUpdate records the call and delegates to ApplyAttentionUpdateFunc when set.
+func (m *MockWorkflowStatusStore) ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error) {
+	m.Recorder.Record("ApplyAttentionUpdate", ctx, update)
+	if m.ApplyAttentionUpdateFunc != nil {
+		return m.ApplyAttentionUpdateFunc(ctx, update)
+	}
+	return *new(core.AttentionResult), contractkit.MockNotSet("MockWorkflowStatusStore", "ApplyAttentionUpdate")
 }
 
 // ListRunNodeExecutions records the call and delegates to ListRunNodeExecutionsFunc when set.

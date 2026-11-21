@@ -46,7 +46,7 @@ type Repository interface {
 	// The chat with its activity-derived fields, for a handler that reads one.
 	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
 	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope) ([]*db.ArchivedChatInfo, error)
+	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error)
 	DeleteChat(ctx context.Context, id string) error
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
@@ -121,7 +121,9 @@ type Repository interface {
 
 	// Worktrees a chat list resolves and a branch un-archives.
 	ListWorktreesByIDs(ctx context.Context, ids []string) ([]*db.Worktree, error)
-	ListMainWorktreesForUser(ctx context.Context, userID string, projectID *string) ([]*db.Worktree, error)
+	ListMainWorktreesForUser(ctx context.Context, userID string, projects []string) ([]*db.Worktree, error)
+	// The projects of a chat list's main workspaces, read at once.
+	ListProjectsByIDs(ctx context.Context, ids []string) ([]*db.Project, error)
 	UnarchiveWorktree(ctx context.Context, id string) error
 
 	// The durable state a resumed run is rebuilt from. The callees that

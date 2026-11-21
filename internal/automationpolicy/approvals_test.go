@@ -46,6 +46,8 @@ func TestDecide(t *testing.T) {
 		{name: "never applies widening", mode: ApprovalNever, op: OperationUpdate, base: saved, next: caps("identity:owner", "deploy:prod"), added: []string{"deploy:prod", "identity:owner"}, removed: []string{"connection:github/c1", "identity:app", "machine:d1", "scope:github/repo"}, how: "auto:never"},
 		{name: "never applies create", mode: ApprovalNever, op: OperationCreate, next: saved, added: saved.Sorted(), how: "auto:never"},
 		{name: "pause under always", mode: ApprovalAlways, op: OperationPause, how: "auto:pause"},
+		{name: "delete under on_capability_change", mode: ApprovalOnCapabilityChange, op: OperationDelete, card: true, how: "card"},
+		{name: "delete even under never", mode: ApprovalNever, op: OperationDelete, card: true, how: "card"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			d := Decide(tc.mode, tc.op, tc.base, tc.next)

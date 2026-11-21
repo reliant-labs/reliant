@@ -14,8 +14,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -96,10 +98,17 @@ func (a *InvokeToolActivity) Execute(ctx context.Context, input ActivityInput) (
 	// catches the authoring mistake; this catches a tool whose exposure was
 	// withdrawn after a workflow was written, and refuses rather than running
 	// something the palette no longer offers.
+	//
+	// The refusal is the definition's, so it is final: non-retryable, and a
+	// step config failure, which ends the run instead of pausing it. As a
+	// plain error it was retried, then paused the run, and an unattended run
+	// self-resumed into it for 33 minutes before giving up (prod 23295ad3).
+	// Benign: the workflow is the user's, not a platform fault.
 	if !tools.IsNodeExposedTool(toolName) {
-		return nil, fmt.Errorf(
+		return nil, temporal.NewApplicationErrorWithOptions(fmt.Sprintf(
 			"invoke_tool node %s: tool %q is not exposed as a node; exposed tools: %v",
-			rtx.StepID, toolName, nodeExposedToolNames())
+			rtx.StepID, toolName, nodeExposedToolNames()), activitytypes.StepConfigFailedErrType,
+			temporal.ApplicationErrorOptions{NonRetryable: true, Category: temporal.ApplicationErrorCategoryBenign})
 	}
 
 	toolInput, err := toolInputFromParams(args.GetParams())

@@ -26,6 +26,9 @@
  * ── LOADING IS A SKELETON OF THE TABLE, NOT A SENTENCE ──────────────────────
  *
  * The skeleton holds the table's shape so nothing jumps when the rows land.
+ *
+ * Last, the databases this app's deleted environments kept (Keep data), with
+ * Purge (RetainedDatabases.tsx); absent when there are none.
  */
 
 import { useCallback, useMemo } from "react";
@@ -52,6 +55,7 @@ import { CloudNotice } from "../SourceNotices";
 import { jobRows, OVERVIEW_RANGE } from "../Workloads/workloadModel";
 import { EnvironmentList, type EnvironmentRow, type EnvLinks } from "./EnvironmentList";
 import { currentPromotion, summarizeEnvironment } from "./environmentSummary";
+import { RetainedDatabases } from "./RetainedDatabases";
 
 /**
  * The list's rows for `envs`: the platform's observation for each PLACED
@@ -185,6 +189,8 @@ export function EnvironmentsPage() {
       )}
 
       {checkoutEnvs.length > 0 && <UnregisteredEnvs envs={checkoutEnvs} onOpen={openEnv} />}
+
+      <RetainedDatabases project={forgeProject} />
     </div>
   );
 }

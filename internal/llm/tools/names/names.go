@@ -90,6 +90,9 @@ const (
 	// Defect reporting: an agent files a Reliant or forge bug with engineering
 	ToolReportBug = "report_bug"
 
+	// Media tools
+	ToolGenerateImage = "generate_image"
+
 	// Component tools
 	ToolComponentLibrary = "component_library"
 
@@ -115,6 +118,7 @@ const (
 	ToolUpdateTriggerActivation = "update_trigger_activation"
 	ToolEnableTrigger           = "enable_trigger"
 	ToolPauseTrigger            = "pause_trigger"
+	ToolDeleteTrigger           = "delete_trigger"
 	ToolListTriggerEvents       = "list_trigger_events"
 
 	// Integration discovery tools
@@ -131,16 +135,22 @@ const (
 
 	// Machine tools
 	ToolWaitForMachine = "wait_for_machine"
-	// The user's own machines: list them; start, stop or resize one.
-	ToolListMachines  = "list_machines"
-	ToolManageMachine = "manage_machine"
+	// The user's own machines: list them; start, stop, resize or label one;
+	// define or delete a machine pool.
+	ToolListMachines      = "list_machines"
+	ToolManageMachine     = "manage_machine"
+	ToolManageMachinePool = "manage_machine_pool"
+
+	// Ask a person to connect an integration, on an approval card.
+	ToolProposeConnection = "propose_connection"
 )
 
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
-	ToolWaitForMachine, ToolListMachines, ToolManageMachine,
+	ToolWaitForMachine, ToolListMachines, ToolManageMachine, ToolManageMachinePool,
+	ToolProposeConnection,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
@@ -167,7 +177,7 @@ var AllToolNames = []string{
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef, ToolCELEval,
 	// Trigger tools
 	ToolListTriggers, ToolFireTrigger, ToolListTriggerEvents,
-	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger,
+	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger, ToolDeleteTrigger,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests: every exposed action in internal/integrations/catalog.
@@ -180,9 +190,11 @@ var AllToolNames = []string{
 	"github__pr_review_comment_reply",
 	"github__repo_list_for_user", "github__repo_get", "github__branch_get", "github__repo_get_content", "github__repo_get_tree",
 	"github__code_search", "github__workflow_dispatch", "github__check_run_list",
+	"github__branch_rules", "github__compare", "github__commit_statuses",
 	"gmail__message_send", "gmail__message_list", "gmail__message_get", "gmail__label_list",
 	"slack__message_post", "slack__message_reply", "slack__message_update", "slack__reaction_add",
 	"slack__user_lookup_by_email", "slack__conversations_list", "slack__conversations_history",
+	"slack__conversations_replies",
 	"twilio__message_send", "twilio__message_get", "twilio__message_list", "twilio__phone_number_list",
 	"sentry__project_list", "sentry__issue_list", "sentry__issue_get", "sentry__event_get", "sentry__issue_update",
 	// Scenarios
@@ -209,6 +221,23 @@ var AllToolTags = []string{
 	"readonly", "file", "search", "execution", "shell", "web",
 	"planning", "analysis", "workflow", "mcp", "media", "runs", "integration",
 	"coding:default", "coding:plan",
+}
+
+// NodeExposedToolNames are the tools an invoke_tool node may name, for the
+// workflow validator. It is a MIRROR of tools.NodeExposedTools
+// (node_exposure.go), which owns the opt-in and each tool's output type but
+// cannot be imported here. TestNodeExposedToolNamesMatchTable in the tools
+// package holds the two equal; if it fails, node_exposure.go is authoritative.
+var NodeExposedToolNames = []string{ToolGenerateImage, ToolGetRun, ToolReportBug, ToolSendToRun}
+
+// IsNodeExposedToolName reports whether an invoke_tool node may name tool.
+func IsNodeExposedToolName(tool string) bool {
+	for _, name := range NodeExposedToolNames {
+		if name == tool {
+			return true
+		}
+	}
+	return false
 }
 
 // toolNameSet for O(1) lookup

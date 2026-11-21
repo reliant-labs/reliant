@@ -23,6 +23,7 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { roleName, type InvitationPreview } from "@/services/controlPlane/members";
 
 import { useAcceptInvite, type InviteRefusal } from "./useAcceptInvite";
+import { homePath } from "@/lib/paths";
 
 const REFUSAL_COPY: Record<InviteRefusal, { title: string; body: string }> = {
   expired: {
@@ -42,7 +43,7 @@ const REFUSAL_COPY: Record<InviteRefusal, { title: string; body: string }> = {
 export function AcceptInvitePage() {
   const { view, accept, signIn, signingIn, retry } = useAcceptInvite();
   const navigate = useNavigate();
-  const goHome = () => void navigate({ to: "/" });
+  const goHome = () => void navigate({ to: homePath() });
 
   return (
     <AuthLayout>

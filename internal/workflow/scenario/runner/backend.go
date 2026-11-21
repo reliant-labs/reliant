@@ -247,6 +247,10 @@ type recorder struct {
 	// implicitApprovals are approval nodes resolved as approved because the
 	// scenario gave them no status.
 	implicitApprovals []string
+
+	// unmockedRefs are black-boxed workflow-ref nodes that ran with no event
+	// aimed at them, so they returned no outputs (see unmockedRefWarnings).
+	unmockedRefs []string
 }
 
 func newRecorder() *recorder {
@@ -405,6 +409,48 @@ func (r *recorder) implicitApprovalWarnings() []string {
 		out = append(out, fmt.Sprintf("approval %q had no status in the scenario and was resolved as "+
 			"approved; production waits for a person (approved or denied) or its timeout — add an event "+
 			"with status: approved to make this the tested path on purpose", id))
+	}
+	return out
+}
+
+func (r *recorder) recordUnmockedRef(path string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, seen := range r.unmockedRefs {
+		if seen == path {
+			return
+		}
+	}
+	r.unmockedRefs = append(r.unmockedRefs, path)
+}
+
+// unmockedRefWarnings names each workflow-ref node the run reached that the
+// scenario did not mock, when the workflow it refs declares outputs. Such a
+// node returns NO outputs — deliberately, as an unmocked node always has — so
+// the first symptom would otherwise be a later CEL "no such key" on
+// nodes.<node>.<output>, far from the cause. refs maps each black-boxed ref
+// node's path to its ref.
+func (r *recorder) unmockedRefWarnings(refs map[string]string, load WorkflowLoader) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, path := range r.unmockedRefs {
+		ref, ok := refs[path]
+		if !ok {
+			continue
+		}
+		sub, err := load(ref)
+		if err != nil || sub == nil || len(sub.GetOutputs()) == 0 {
+			continue
+		}
+		names := make([]string, 0, len(sub.GetOutputs()))
+		for k := range sub.GetOutputs() {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		out = append(out, fmt.Sprintf("node %q (%s) was not mocked, so it returned no outputs: a read of "+
+			"nodes.%s.%s fails with \"no such key\" — mock it with an event {node: %s, output: {%s: ...}}, "+
+			"or aim events at its inner nodes to run it", path, ref, path, names[0], path, names[0]))
 	}
 	return out
 }
@@ -705,6 +751,13 @@ func (t *eventTable) next(nodeID string) map[string]interface{} {
 	return map[string]interface{}{}
 }
 
+// targets reports whether the scenario has an event aimed at nodeID.
+func (t *eventTable) targets(nodeID string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.byNode[nodeID]) > 0
+}
+
 // nextAt returns the index-th event for nodeID. It answers the iterations of a
 // PARALLEL loop: they run concurrently, so "the next event" would hand them
 // out in whatever order their activities happened to start — a race. The
@@ -793,7 +846,8 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		}
 	}()
 
-	if validation := scenario.ValidateScenario(sc, r.workflow); !validation.Valid {
+	validation := scenario.ValidateScenario(sc, r.workflow)
+	if !validation.Valid {
 		res := errorResult(sc, fmt.Errorf("validation failed: %s", strings.Join(validation.Errors, "; ")), start)
 		res.Mismatches = validation.Errors
 		return res
@@ -833,14 +887,20 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	// what ChatService.buildWorkflowInputs injects, and preset loading fails
 	// terminally without it. A scenario may override it like any other input.
 	inputs := map[string]interface{}{"project_path": scenarioProjectPath}
+	trigger := r.launchedBy
+	var triggerWarnings []string
 	if sc.Trigger != nil {
-		fired, err := triggerInputs(r.workflow, sc.Trigger)
+		fired, event, warnings, err := triggerInputs(r.workflow, sc.Trigger)
 		if err != nil {
 			return errorResult(sc, err, start)
 		}
 		for k, v := range fired {
 			inputs[k] = v
 		}
+		if trigger == nil {
+			trigger = event
+		}
+		triggerWarnings = warnings
 	}
 	for k, v := range sc.Inputs {
 		inputs[k] = v
@@ -869,7 +929,7 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 			ChatID:       "scenario-chat",
 			WorkflowName: r.workflow.GetName(),
 			Inputs:       inputs,
-			Trigger:      r.launchedBy,
+			Trigger:      trigger,
 			Resume:       resumeInput(sc),
 			ExecContext: &runtime.ExecutionContext{
 				WorkflowID:   "scenario-wf",
@@ -1074,6 +1134,14 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 		result.Warnings = append(result.Warnings, w)
 	}
 	result.Warnings = append(result.Warnings, rec.implicitApprovalWarnings()...)
+	result.Warnings = append(result.Warnings, rec.unmockedRefWarnings(
+		blackBoxedRefPaths(r.workflow, transparentRefPaths(r.workflow, sc.Events, r.loadRef), r.loadRef), r.loadRef)...)
+	// What validation found but did not refuse: an output key the node's
+	// type has no field for (a typo'd `exitcode:` on a run node is an empty
+	// mock, which silently takes the exit-0 path), an input the workflow
+	// does not declare.
+	result.Warnings = append(result.Warnings, validation.Warnings...)
+	result.Warnings = append(result.Warnings, triggerWarnings...)
 
 	switch {
 	case len(mismatches) > 0:
@@ -1456,13 +1524,13 @@ func blackBoxWorkflow(wf *reliantv1.Workflow, outputKeys []string) *reliantv1.Wo
 
 // blackBoxedRefPaths returns the node paths of every `workflow` ref the run will
 // replace with a black box — i.e. the ref nodes a scenario is entitled to mock
-// as a UNIT, addressing the ref node itself.
+// as a UNIT, addressing the ref node itself — each mapped to the ref it names.
 //
 // It walks exactly as transparentRefs does, and for the same reason: a ref two
 // levels down is only reachable through the graph of the ref above it, and a
 // node inside a ref is addressed from the REFERRING node's path.
-func blackBoxedRefPaths(wf *reliantv1.Workflow, openPaths map[string]bool, load WorkflowLoader) map[string]bool {
-	paths := map[string]bool{}
+func blackBoxedRefPaths(wf *reliantv1.Workflow, openPaths map[string]bool, load WorkflowLoader) map[string]string {
+	paths := map[string]string{}
 	visited := map[string]bool{}
 
 	var walk func(nodes []*reliantv1.Node, prefix string)
@@ -1478,7 +1546,7 @@ func blackBoxedRefPaths(wf *reliantv1.Workflow, openPaths map[string]bool, load 
 				continue
 			}
 			if !openPaths[nodePath] {
-				paths[nodePath] = true
+				paths[nodePath] = ref
 				continue
 			}
 			name := bareWorkflowName(ref)
@@ -1511,7 +1579,7 @@ func blackBoxOutputKeys(
 	seen := map[string]bool{}
 	var keys []string
 	for _, e := range events {
-		if e.Node == "" || !refPaths[e.Node] {
+		if _, blackBoxed := refPaths[e.Node]; e.Node == "" || !blackBoxed {
 			continue
 		}
 		for k := range scenario.EventOutput(e) {
@@ -2281,12 +2349,16 @@ func (r *Runner) registerActivities(
 					return out, nil
 				}
 				var out map[string]interface{}
+				mocked := events.targets(refPath)
 				if parallelLoops[refPath] {
 					// Iterations of a parallel ref loop: event i answers
 					// iteration i (see nextAt).
 					out = events.nextAt(refPath, in.Runtime.LoopIteration)
 				} else {
 					out = events.next(refPath)
+				}
+				if !mocked && len(out) == 0 {
+					rec.recordUnmockedRef(refPath)
 				}
 				rec.recordCompleted(refPath, out)
 				return out, nil

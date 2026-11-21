@@ -35,7 +35,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Loader2, Lock } from "lucide-react";
+import { AlertTriangle, Check, Copy, Loader2, Lock } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Tag from "@/components/forge-ui/tag";
@@ -93,7 +93,7 @@ const ADMIN_PERMISSION = "token:write";
 // a role change (Members tab), not a grant edit, so their rows are read-only.
 const PRESET_ROLES = new Set(["owner", "admin"]);
 
-// What `forge login` and the credential helper ask for (forge
+// What `forge cloud login` and the credential helper ask for (forge
 // internal/cloud LoginScopes). A token that resolves to nothing org-wide is
 // refused when it is minted (orggrants.CarriesNothingOrgWide), so someone
 // whose permissions are ALL environment-bound needs one of these org-wide to
@@ -174,6 +174,17 @@ function OrgMemberPermissions({ orgId, embedded }: { orgId: string | null; embed
   const [environmentScopes, setEnvironmentScopes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  const copyOrganizationId = async () => {
+    if (!orgId) return;
+    try {
+      await navigator.clipboard.writeText(orgId);
+      if (isCurrent()) setCopyState("copied");
+    } catch {
+      if (isCurrent()) setCopyState("failed");
+    }
+  };
   const [saving, setSaving] = useState<Record<string, number>>({});
 
   const fetchMembers = useCallback(async () => {
@@ -288,6 +299,32 @@ function OrgMemberPermissions({ orgId, embedded }: { orgId: string | null; embed
           title="Members"
           description="Control what each member of your organization is allowed to do, across the organization or on one environment. A token acting on someone's behalf can never carry more permissions than that person holds."
         />
+      )}
+
+      {orgId && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Organization ID</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <code className="select-all break-all text-sm text-muted-foreground">{orgId}</code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={copyOrganizationId}
+              aria-label="Copy organization ID"
+              leftIcon={copyState === "copied" ? <Check /> : <Copy />}
+            >
+              {copyState === "copied" ? "Copied" : "Copy ID"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Use this ID with <code>forge env deploy &lt;env&gt; --org &lt;id&gt;</code> to select this organization for a new app.
+          </p>
+          {copyState === "failed" && (
+            <p role="status" className="text-xs text-destructive-ink">
+              Could not copy the organization ID. Select the ID above to copy it manually.
+            </p>
+          )}
+        </div>
       )}
 
       {error && (

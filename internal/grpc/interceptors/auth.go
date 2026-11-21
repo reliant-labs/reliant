@@ -338,7 +338,7 @@ func credentialMismatch(ctx context.Context, err error) error {
 	}
 	return svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
 		"this credential acts in organization %s only, and this belongs to organization %s; "+
-			"to act there, sign in for it: `reliant auth login` (or `forge login --org %s`)",
+			"to act there, sign in for it: `reliant auth login` (or `forge cloud login --org %s`)",
 		bound, refused, refused)), orgs.ReasonOrgMismatch))
 }
 

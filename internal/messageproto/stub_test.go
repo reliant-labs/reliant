@@ -223,24 +223,27 @@ func TestStubToolResultPolicy(t *testing.T) {
 func TestStubThinkingAndOtherBlocks(t *testing.T) {
 	t.Parallel()
 	thought := strings.Repeat("hmm ", 10)
-	for _, typ := range []reliantv1.ContentBlockType{
-		reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING,
-		reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING,
-	} {
-		b := &db.MessageContentBlock{ID: "t", BlockType: typ, Content: ptr.Of(thought)}
-		got := contentBlockToProto(b, &Options{ToolBodies: stub})
-		assert.Nil(t, got.Content, "%v: thinking of any size is elided", typ)
-		assert.True(t, got.GetBodyElided())
-		assert.Equal(t, int64(len(thought)), got.GetBodySize())
-		assert.Equal(t, thought, *b.Content)
-		assert.Equal(t, thought, contentBlockToProto(b, &Options{}).GetContent(), "FULL sends thinking whole")
-	}
+	b := &db.MessageContentBlock{ID: "t", BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING, Content: ptr.Of(thought)}
+	got := contentBlockToProto(b, &Options{ToolBodies: stub})
+	assert.Nil(t, got.Content, "thinking of any size is elided")
+	assert.True(t, got.GetBodyElided())
+	assert.Equal(t, int64(len(thought)), got.GetBodySize())
+	assert.Equal(t, thought, *b.Content)
+	assert.Equal(t, thought, contentBlockToProto(b, &Options{}).GetContent(), "FULL sends thinking whole")
+
+	// Redacted thinking is sealed ciphertext, blank in every mode, so there
+	// is nothing to elide (TestRedactedThinkingIsSentBlank).
+	sealed := &db.MessageContentBlock{ID: "s", BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING, Content: ptr.Of(thought)}
+	got = contentBlockToProto(sealed, &Options{ToolBodies: stub})
+	assert.Equal(t, ptr.Of(""), got.Content)
+	assert.Nil(t, got.BodyElided)
+	assert.Nil(t, got.BodySize)
 
 	empty := &db.MessageContentBlock{ID: "t", BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING, ThoughtSignature: ptr.Of("sig")}
 	assert.Nil(t, contentBlockToProto(empty, &Options{ToolBodies: stub}).BodyElided, "nothing to elide")
 
 	text := &db.MessageContentBlock{ID: "x", BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: ptr.Of(strings.Repeat("words ", 5000))}
-	got := contentBlockToProto(text, &Options{ToolBodies: stub})
+	got = contentBlockToProto(text, &Options{ToolBodies: stub})
 	assert.Equal(t, *text.Content, got.GetContent(), "text is never elided")
 	assert.Nil(t, got.BodyElided)
 }

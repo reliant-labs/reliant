@@ -25,7 +25,7 @@ func TestBootHostedWithoutKeyFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("hosted boot without key succeeded")
 	}
-	for _, want := range []string{"RELIANT_VAULT_KEY", "forge secret set --env"} {
+	for _, want := range []string{"RELIANT_VAULT_KEY", "forge env secret set --env"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}

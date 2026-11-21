@@ -199,7 +199,7 @@ func (s *Service) ListMessages(
 
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{
 		Messages:  protoMessages,
-		Total:     int32(totalCount),
+		Total:     int32(totalCount), //nolint:staticcheck // SA1019: deprecated for clients; the server still fills it when skip_total is unset
 		Count:     int32(len(protoMessages)),
 		HasMore:   hasMore,
 		OldestSeq: oldestSeq,
@@ -357,9 +357,11 @@ func (s *Service) listThreadMessages(
 //     CW-chain-resolved count -- the DISPLAY resolution, matching the
 //     transcript this page is a window into; the LLM count stops at a
 //     compaction summary and would undercount a compacted chat by its whole
-//     summarized history. The chat's messages on every other thread are one
-//     COUNT (siblings don't inherit from elsewhere, so their own chat_id-scoped
-//     rows are their whole count).
+//     summarized history. The chat's messages on every other thread are the
+//     chat's total less the main thread's own rows, both read from the
+//     trigger-maintained per-thread counts (one row per thread, not a COUNT
+//     over the chat's messages; siblings don't inherit from elsewhere, so
+//     their own chat_id-scoped rows are their whole count).
 //   - HasMore: the main thread's own hasMoreOlder. seq is a chat-global order
 //     (the chat's seq counter, which a branch's fork raises past its
 //     inherited history), and the oldest page (no older main message) takes

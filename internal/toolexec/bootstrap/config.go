@@ -82,6 +82,12 @@ type DaemonBootstrapConfig struct {
 	DataDir   string
 	Name      string // Human-friendly daemon name (default: hostname)
 
+	// MachineLabels are the durable labels this machine declares
+	// (`reliant daemon start --label k=v`, DaemonConfig.labels), sent on every
+	// registration. The server merges them into the machine's labels, which
+	// decide machine-pool membership. Nil declares none.
+	MachineLabels map[string]string
+
 	// ServerURL is the API server origin (scheme://host:port) these
 	// credentials belong to. Empty in server mode (the gateway dials in and
 	// already knows our identity).
@@ -124,7 +130,7 @@ type DaemonBootstrapConfig struct {
 // be handed onto the two schemes the daemon's HTTP/2 transport can actually
 // dial.
 //
-// `forge cluster urls` prints the daemon gateway as grpc://host:port, which is
+// `forge dev cluster urls` prints the daemon gateway as grpc://host:port, which is
 // the natural thing to paste into --grpc-url. golang.org/x/net/http2 rejects
 // any scheme other than http/https ("http2: unsupported scheme"), and
 // connect-go surfaces that on a bidi stream as `write envelope: EOF` — so the

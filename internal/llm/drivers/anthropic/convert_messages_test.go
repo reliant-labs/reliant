@@ -27,8 +27,8 @@ func newTestClient() *AnthropicClient {
 }
 
 // toolMsg builds a message.Tool message with the given ToolResult parts.
-// It also inserts a preceding assistant message with matching tool_use IDs so
-// that validateToolResultReferences doesn't strip the results.
+// It also inserts a preceding assistant message with matching tool_use IDs, so
+// the history is a valid one.
 func toolMsgWithAssistant(results ...message.ToolResult) []message.Message {
 	// Build assistant message with one tool_use block per result
 	assistantParts := make([]message.ContentPart, len(results))

@@ -31,6 +31,7 @@ type ReliantConfig struct {
 	StorageReaper   *StorageReaperConfig   `protobuf:"bytes,3,opt,name=storage_reaper,json=storageReaper,proto3" json:"storage_reaper,omitempty"`
 	Transcript      *TranscriptConfig      `protobuf:"bytes,4,opt,name=transcript,proto3" json:"transcript,omitempty"`
 	WorktreeReclaim *WorktreeReclaimConfig `protobuf:"bytes,5,opt,name=worktree_reclaim,json=worktreeReclaim,proto3" json:"worktree_reclaim,omitempty"`
+	MachineOrg      *MachineOrgConfig      `protobuf:"bytes,6,opt,name=machine_org,json=machineOrg,proto3" json:"machine_org,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -100,6 +101,67 @@ func (x *ReliantConfig) GetWorktreeReclaim() *WorktreeReclaimConfig {
 	return nil
 }
 
+func (x *ReliantConfig) GetMachineOrg() *MachineOrgConfig {
+	if x != nil {
+		return x.MachineOrg
+	}
+	return nil
+}
+
+// MachineOrgConfig is how the gateway keeps a machine's project checkouts in
+// the machine's organization. Only the gateway acts on it (the connect
+// reconcile, internal/handlers/tools_daemon).
+type MachineOrgConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The kill switch for the connect reconcile's cleanup: on detaches, from a
+	// machine whose org control-plane named, the checkout records of other
+	// orgs' projects (each one recorded in project_daemon_org_cleanups first,
+	// so it can be restored); off detaches nothing. Neither value touches a
+	// project or a file, and neither stops the reconcile from keeping new
+	// records to the machine's org. Only on and off: a kill switch must not
+	// fail open on a typo. dev-docs/machine-org-rollout.md.
+	CrossOrgCleanup string `protobuf:"bytes,1,opt,name=cross_org_cleanup,json=crossOrgCleanup,proto3" json:"cross_org_cleanup,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MachineOrgConfig) Reset() {
+	*x = MachineOrgConfig{}
+	mi := &file_reliant_config_v1_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MachineOrgConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MachineOrgConfig) ProtoMessage() {}
+
+func (x *MachineOrgConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MachineOrgConfig.ProtoReflect.Descriptor instead.
+func (*MachineOrgConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *MachineOrgConfig) GetCrossOrgCleanup() string {
+	if x != nil {
+		return x.CrossOrgCleanup
+	}
+	return ""
+}
+
 // TranscriptConfig is how the transcript read paths (ListMessages,
 // GetMessage, the chat stream, GetChatUpdates) send a chat's messages. The
 // handlers that serve them read it through their Deps.Config, so it is on the
@@ -120,7 +182,7 @@ type TranscriptConfig struct {
 
 func (x *TranscriptConfig) Reset() {
 	*x = TranscriptConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -132,7 +194,7 @@ func (x *TranscriptConfig) String() string {
 func (*TranscriptConfig) ProtoMessage() {}
 
 func (x *TranscriptConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -145,7 +207,7 @@ func (x *TranscriptConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TranscriptConfig.ProtoReflect.Descriptor instead.
 func (*TranscriptConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{1}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *TranscriptConfig) GetToolBodyStubs() string {
@@ -172,7 +234,7 @@ type RuntimeConfig struct {
 
 func (x *RuntimeConfig) Reset() {
 	*x = RuntimeConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -184,7 +246,7 @@ func (x *RuntimeConfig) String() string {
 func (*RuntimeConfig) ProtoMessage() {}
 
 func (x *RuntimeConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -197,7 +259,7 @@ func (x *RuntimeConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeConfig.ProtoReflect.Descriptor instead.
 func (*RuntimeConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{2}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *RuntimeConfig) GetEnvironment() string {
@@ -224,7 +286,7 @@ type LogConfig struct {
 
 func (x *LogConfig) Reset() {
 	*x = LogConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -236,7 +298,7 @@ func (x *LogConfig) String() string {
 func (*LogConfig) ProtoMessage() {}
 
 func (x *LogConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -249,7 +311,7 @@ func (x *LogConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogConfig.ProtoReflect.Descriptor instead.
 func (*LogConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{3}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *LogConfig) GetLevel() string {
@@ -267,8 +329,8 @@ func (x *LogConfig) GetFormat() string {
 }
 
 // StorageReaperConfig is how the daemon schedules forge's storage reaper
-// (`forge storage auto-gc`) on its own machine. A daemon has no systemd timer
-// or cron to run `forge storage install`'s schedule, and the pass that
+// (`forge machine storage auto-gc`) on its own machine. A daemon has no systemd timer
+// or cron to run `forge machine storage install`'s schedule, and the pass that
 // `forge env up` starts in the background is rate-limited to once a day and
 // only fires after an `up`; the Go build cache grows far faster than that
 // (internal/diskwatch/reaper.go has the design). The reaper's own budgets
@@ -287,11 +349,11 @@ type StorageReaperConfig struct {
 	// How soon the reaper may run again while a watched volume is under disk
 	// pressure. A Go duration; below 1m is raised to 1m.
 	PressureInterval string `protobuf:"bytes,3,opt,name=pressure_interval,json=pressureInterval,proto3" json:"pressure_interval,omitempty"`
-	// Forge's machine storage policy, the file `forge storage` reads. FORGE_STORAGE_POLICY
+	// Forge's machine storage policy, the file `forge machine storage` reads. FORGE_STORAGE_POLICY
 	// is forge's own variable, so the daemon and the passes it starts agree on the
 	// file. Unset: forge's default, <user config dir>/forge/storage.json.
 	PolicyPath string `protobuf:"bytes,4,opt,name=policy_path,json=policyPath,proto3" json:"policy_path,omitempty"`
-	// How often the Go-cache pass (`forge storage gocache --apply`) runs between
+	// How often the Go-cache pass (`forge machine storage gocache --apply`) runs between
 	// full passes. Under agent load ~25 GiB of the shared Go build cache crosses
 	// forge's 2h safety floor every hour, so an hourly trim leaves that much
 	// removable cache on the disk. A Go duration; below 2m is raised to 2m;
@@ -303,7 +365,7 @@ type StorageReaperConfig struct {
 
 func (x *StorageReaperConfig) Reset() {
 	*x = StorageReaperConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[4]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -315,7 +377,7 @@ func (x *StorageReaperConfig) String() string {
 func (*StorageReaperConfig) ProtoMessage() {}
 
 func (x *StorageReaperConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[4]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -328,7 +390,7 @@ func (x *StorageReaperConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageReaperConfig.ProtoReflect.Descriptor instead.
 func (*StorageReaperConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{4}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StorageReaperConfig) GetMode() string {
@@ -399,7 +461,7 @@ type WorktreeReclaimConfig struct {
 
 func (x *WorktreeReclaimConfig) Reset() {
 	*x = WorktreeReclaimConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[5]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +473,7 @@ func (x *WorktreeReclaimConfig) String() string {
 func (*WorktreeReclaimConfig) ProtoMessage() {}
 
 func (x *WorktreeReclaimConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[5]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +486,7 @@ func (x *WorktreeReclaimConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorktreeReclaimConfig.ProtoReflect.Descriptor instead.
 func (*WorktreeReclaimConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{5}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *WorktreeReclaimConfig) GetMode() string {
@@ -459,7 +521,7 @@ var File_reliant_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xf3\x02\n" +
+	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xb9\x03\n" +
 	"\rReliantConfig\x12.\n" +
 	"\x03log\x18\x01 \x01(\v2\x1c.reliant.config.v1.LogConfigR\x03log\x12:\n" +
 	"\aruntime\x18\x02 \x01(\v2 .reliant.config.v1.RuntimeConfigR\aruntime\x12M\n" +
@@ -467,8 +529,13 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\n" +
 	"transcript\x18\x04 \x01(\v2#.reliant.config.v1.TranscriptConfigR\n" +
 	"transcript\x12S\n" +
-	"\x10worktree_reclaim\x18\x05 \x01(\v2(.reliant.config.v1.WorktreeReclaimConfigR\x0fworktreeReclaim:\r\xca\xc1\x18\t\n" +
-	"\areliant\"\xe8\x01\n" +
+	"\x10worktree_reclaim\x18\x05 \x01(\v2(.reliant.config.v1.WorktreeReclaimConfigR\x0fworktreeReclaim\x12D\n" +
+	"\vmachine_org\x18\x06 \x01(\v2#.reliant.config.v1.MachineOrgConfigR\n" +
+	"machineOrg:\r\xca\xc1\x18\t\n" +
+	"\areliant\"\xe7\x01\n" +
+	"\x10MachineOrgConfig\x12\xd2\x01\n" +
+	"\x11cross_org_cleanup\x18\x01 \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
+	"\x1bRELIANT_MACHINE_ORG_CLEANUP\x1a\x02on*tThe connect reconcile detaches other orgs' checkout records from a machine of a known org (on), or leaves them (off)J\x02onJ\x03offR\x0fcrossOrgCleanup\"\xe8\x01\n" +
 	"\x10TranscriptConfig\x12\xd3\x01\n" +
 	"\x0ftool_body_stubs\x18\x01 \x01(\tB\xaa\x01\x82\xce\x18\xa5\x01\n" +
 	"\"RELIANT_TRANSCRIPT_TOOL_BODY_STUBS\x1a\x02on*rTranscript reads may leave finished tool calls' bodies out when a client asks (on) or always send them whole (off)J\x02onJ\x03offR\rtoolBodyStubs\"\x96\x01\n" +
@@ -519,26 +586,28 @@ func file_reliant_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_reliant_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_reliant_config_v1_config_proto_goTypes = []any{
 	(*ReliantConfig)(nil),         // 0: reliant.config.v1.ReliantConfig
-	(*TranscriptConfig)(nil),      // 1: reliant.config.v1.TranscriptConfig
-	(*RuntimeConfig)(nil),         // 2: reliant.config.v1.RuntimeConfig
-	(*LogConfig)(nil),             // 3: reliant.config.v1.LogConfig
-	(*StorageReaperConfig)(nil),   // 4: reliant.config.v1.StorageReaperConfig
-	(*WorktreeReclaimConfig)(nil), // 5: reliant.config.v1.WorktreeReclaimConfig
+	(*MachineOrgConfig)(nil),      // 1: reliant.config.v1.MachineOrgConfig
+	(*TranscriptConfig)(nil),      // 2: reliant.config.v1.TranscriptConfig
+	(*RuntimeConfig)(nil),         // 3: reliant.config.v1.RuntimeConfig
+	(*LogConfig)(nil),             // 4: reliant.config.v1.LogConfig
+	(*StorageReaperConfig)(nil),   // 5: reliant.config.v1.StorageReaperConfig
+	(*WorktreeReclaimConfig)(nil), // 6: reliant.config.v1.WorktreeReclaimConfig
 }
 var file_reliant_config_v1_config_proto_depIdxs = []int32{
-	3, // 0: reliant.config.v1.ReliantConfig.log:type_name -> reliant.config.v1.LogConfig
-	2, // 1: reliant.config.v1.ReliantConfig.runtime:type_name -> reliant.config.v1.RuntimeConfig
-	4, // 2: reliant.config.v1.ReliantConfig.storage_reaper:type_name -> reliant.config.v1.StorageReaperConfig
-	1, // 3: reliant.config.v1.ReliantConfig.transcript:type_name -> reliant.config.v1.TranscriptConfig
-	5, // 4: reliant.config.v1.ReliantConfig.worktree_reclaim:type_name -> reliant.config.v1.WorktreeReclaimConfig
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	4, // 0: reliant.config.v1.ReliantConfig.log:type_name -> reliant.config.v1.LogConfig
+	3, // 1: reliant.config.v1.ReliantConfig.runtime:type_name -> reliant.config.v1.RuntimeConfig
+	5, // 2: reliant.config.v1.ReliantConfig.storage_reaper:type_name -> reliant.config.v1.StorageReaperConfig
+	2, // 3: reliant.config.v1.ReliantConfig.transcript:type_name -> reliant.config.v1.TranscriptConfig
+	6, // 4: reliant.config.v1.ReliantConfig.worktree_reclaim:type_name -> reliant.config.v1.WorktreeReclaimConfig
+	1, // 5: reliant.config.v1.ReliantConfig.machine_org:type_name -> reliant.config.v1.MachineOrgConfig
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_config_proto_init() }
@@ -552,7 +621,7 @@ func file_reliant_config_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_config_proto_rawDesc), len(file_reliant_config_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
