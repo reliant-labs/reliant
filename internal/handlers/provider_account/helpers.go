@@ -17,7 +17,7 @@ import (
 
 // apiKeyProviders are the providers whose accounts are pasted keys. Subscription providers sign
 // in through SettingsService.Complete*OAuth, and the managed Reliant key is minted by the server.
-var apiKeyProviders = map[string]bool{"anthropic": true, "openai": true, "gemini": true, "openrouter": true}
+var apiKeyProviders = map[string]bool{"anthropic": true, "openai": true, "gemini": true, "openrouter": true, "vertexai": true}
 
 func callerID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)

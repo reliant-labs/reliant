@@ -16,7 +16,8 @@ type Settings struct {
 	// ReliantBaseURL is the Reliant LLM gateway (RELIANT_API_BASE_URL).
 	ReliantBaseURL string
 	// VertexProject and VertexLocation place Vertex AI calls
-	// (VERTEXAI_PROJECT, VERTEXAI_LOCATION).
+	// (VERTEXAI_PROJECT, VERTEXAI_LOCATION). An empty project is the
+	// connected account's key's project.
 	VertexProject  string
 	VertexLocation string
 	// DebugOpenAIResponsesInput and DebugOpenAIToolSchemas log the OpenAI

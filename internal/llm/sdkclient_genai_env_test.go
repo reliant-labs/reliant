@@ -7,10 +7,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
+	"cloud.google.com/go/auth"
 	"google.golang.org/genai"
 )
 
@@ -61,9 +64,26 @@ func TestGenAISDKClientIgnoresProcessEnvironment(t *testing.T) {
 	})
 
 	t.Run("a Vertex AI client with no placement is refused", func(t *testing.T) {
-		_, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{Backend: genai.BackendVertexAI})
+		_, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{Backend: genai.BackendVertexAI, Credentials: staticCredentials("tok")})
 		if !errors.Is(err, errVertexPlacementRequired) {
 			t.Fatalf("err = %v, want errVertexPlacementRequired", err)
+		}
+	})
+
+	t.Run("a Vertex AI client without the account's credentials is refused", func(t *testing.T) {
+		// The server's own Google credentials, where ADC would find them.
+		keyFile := filepath.Join(t.TempDir(), "adc.json")
+		if err := os.WriteFile(keyFile, []byte(`{"type":"authorized_user","client_id":"x","client_secret":"`+genAIEnvSentinel+`","refresh_token":"`+genAIEnvSentinel+`"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", keyFile)
+		for _, cfg := range []*genai.ClientConfig{
+			{Backend: genai.BackendVertexAI, Project: "p", Location: "us-central1"},
+			{Backend: genai.BackendVertexAI, Project: "p", Location: "us-central1", APIKey: "express-key"},
+		} {
+			if _, err := NewGenAISDKClient(context.Background(), cfg); !errors.Is(err, errVertexCredentialsRequired) {
+				t.Errorf("NewGenAISDKClient(%+v): err = %v, want errVertexCredentialsRequired", cfg, err)
+			}
 		}
 	})
 
@@ -85,39 +105,52 @@ func TestGenAISDKClientIgnoresProcessEnvironment(t *testing.T) {
 	})
 
 	t.Run("a Vertex AI client with only a project defaults to us-central1", func(t *testing.T) {
-		client, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{Backend: genai.BackendVertexAI, Project: "platform-project"})
+		client, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{Backend: genai.BackendVertexAI, Project: "account-project", Credentials: staticCredentials("tok")})
 		if err != nil {
-			t.Skipf("no Application Default Credentials on this host: %v", err)
+			t.Fatal(err)
 		}
 		if cc := client.ClientConfig(); cc.Location != DefaultVertexLocation || cc.HTTPOptions.BaseURL != "https://us-central1-aiplatform.googleapis.com/" {
 			t.Fatalf("resolved location %q base %q, want us-central1 and its endpoint", cc.Location, cc.HTTPOptions.BaseURL)
 		}
 	})
 
-	t.Run("a Vertex AI client goes to its own location's endpoint", func(t *testing.T) {
-		client, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{
-			Backend: genai.BackendVertexAI, Project: "platform-project", Location: "us-central1",
-		})
-		if err != nil {
-			t.Skipf("no Application Default Credentials on this host: %v", err)
-		}
-		cc := client.ClientConfig()
-		if cc.HTTPOptions.BaseURL != "https://us-central1-aiplatform.googleapis.com/" || cc.Project != "platform-project" ||
-			cc.Location != "us-central1" || cc.APIKey != "" {
-			t.Fatalf("resolved config = base %q project %q location %q api key set %v, want the caller's placement and no key",
-				cc.HTTPOptions.BaseURL, cc.Project, cc.Location, cc.APIKey != "")
-		}
-	})
+	t.Run("a Vertex AI request is signed with the account's token only", func(t *testing.T) {
+		var mu sync.Mutex
+		var seen []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var rec strings.Builder
+			rec.WriteString(r.URL.String())
+			for name, values := range r.Header {
+				rec.WriteString("\n" + name + ": " + strings.Join(values, ","))
+			}
+			mu.Lock()
+			seen = append(seen, rec.String())
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]}}]}`)
+		}))
+		t.Cleanup(srv.Close)
 
-	t.Run("a Vertex API key uses Google's express endpoint, not the process endpoint", func(t *testing.T) {
 		client, err := NewGenAISDKClient(context.Background(), &genai.ClientConfig{
-			Backend: genai.BackendVertexAI, APIKey: "account-key", Project: "account-project", Location: "us-central1",
+			Backend: genai.BackendVertexAI, Project: "account-project", Location: "us-central1",
+			Credentials: staticCredentials("account-token"), HTTPOptions: genai.HTTPOptions{BaseURL: srv.URL},
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := client.ClientConfig().HTTPOptions.BaseURL; got != "https://aiplatform.googleapis.com/" {
-			t.Fatalf("resolved base URL = %q, want the Google Vertex express endpoint", got)
+		if _, err := client.Models.GenerateContent(context.Background(), "gemini-test", genai.Text("hi"), nil); err != nil {
+			t.Fatalf("GenerateContent: %v", err)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(seen) != 1 {
+			t.Fatalf("the account's endpoint received %d requests, want 1", len(seen))
+		}
+		if strings.Contains(seen[0], genAIEnvSentinel) {
+			t.Errorf("the request carried a credential or placement of the server process:\n%s", seen[0])
+		}
+		if !strings.Contains(seen[0], "Authorization: Bearer account-token") || !strings.Contains(seen[0], "projects/account-project/locations/us-central1") {
+			t.Errorf("the request is not the account's (token, project, region):\n%s", seen[0])
 		}
 	})
 
@@ -171,4 +204,16 @@ func TestGenAISDKClientIgnoresProcessEnvironment(t *testing.T) {
 			t.Fatalf("base URL = %q, want %q", got, genAIGeminiBaseURL)
 		}
 	})
+}
+
+// staticCredentials are account credentials that always answer token.
+func staticCredentials(token string) *auth.Credentials {
+	return auth.NewCredentials(&auth.CredentialsOptions{TokenProvider: staticToken(token)})
+}
+
+// staticToken is an auth.TokenProvider that always answers its token.
+type staticToken string
+
+func (s staticToken) Token(context.Context) (*auth.Token, error) {
+	return &auth.Token{Value: string(s), Type: "Bearer"}, nil
 }

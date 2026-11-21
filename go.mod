@@ -6,6 +6,7 @@ toolchain go1.27.4
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
+	cloud.google.com/go/auth v0.24.4
 	codeberg.org/readeck/go-readability/v2 v2.1.3
 	connectrpc.com/connect v1.21.1
 	connectrpc.com/otelconnect v0.12.0
@@ -59,7 +60,6 @@ require (
 	golang.org/x/image v0.48.0
 	golang.org/x/mod v0.43.0
 	golang.org/x/net v0.63.0
-	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/term v0.48.0
@@ -105,7 +105,6 @@ require (
 	cel.dev/cel-go v0.33.4 // indirect
 	cel.dev/expr v0.26.0 // indirect
 	cloud.google.com/go v0.123.0 // indirect
-	cloud.google.com/go/auth v0.24.4 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.3.1 // indirect
 	cloud.google.com/go/compute/metadata v0.10.0 // indirect
 	cloud.google.com/go/iam v1.15.1 // indirect
@@ -353,6 +352,7 @@ require (
 	golang.org/x/arch v0.33.0 // indirect
 	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/exp v0.0.0-20261117202309-7a49493bfd90 // indirect
+	golang.org/x/oauth2 v0.38.0 // indirect
 	golang.org/x/telemetry v0.0.0-20261116191925-e77a43154acb // indirect
 	google.golang.org/api v0.316.0 // indirect
 	google.golang.org/genproto v0.0.0-20261116203732-fd2c7689a808 // indirect
