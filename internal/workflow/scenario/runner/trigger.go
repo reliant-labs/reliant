@@ -11,7 +11,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/celeval"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario"
-	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // triggerInputs are the inputs a scenario's trigger firing starts the run
@@ -26,8 +25,8 @@ import (
 // that is what would make the run a capacity-slot holder and a check
 // reporter, which only a real launch is.
 //
-// The warnings name payload fields the run read that only the generated sample
-// set (see sampleFilledWarnings).
+// The warnings name statically referenced payload fields that only the
+// generated sample set (see sampleFilledWarnings).
 func triggerInputs(wf *reliantv1.Workflow, t *scenario.TriggerFiring) (map[string]any, *runtime.TriggerInfo, []string, error) {
 	var wt *reliantv1.WorkflowTrigger
 	for _, candidate := range wf.GetTriggers() {
@@ -56,7 +55,7 @@ func triggerInputs(wf *reliantv1.Workflow, t *scenario.TriggerFiring) (map[strin
 }
 
 // sampleFilledWarnings names each field of an integration trigger's payload
-// that the workflow reads (its text names trigger.payload.<path>) but that
+// that a workflow expression statically references but that
 // only the generated sample set: the scenario left it out, the event's
 // declared payload does not require it, and the sample filled it with a
 // placeholder. A Slack app_mention scenario that sets no thread_ts reads
@@ -68,17 +67,14 @@ func sampleFilledWarnings(wf *reliantv1.Workflow, run celeval.TriggerRun) []stri
 	if len(run.SampleFilled) == 0 {
 		return nil
 	}
-	text, err := protojson.Marshal(wf)
-	if err != nil {
-		return nil
-	}
+	refs := triggerPayloadReferences(wf, run.Trigger)
 	var out []string
 	for _, f := range run.SampleFilled {
-		if !strings.Contains(string(text), "payload."+f.Path) {
+		if !refs[f.Path] {
 			continue
 		}
 		value, _ := json.Marshal(f.Value)
-		out = append(out, fmt.Sprintf("trigger %q: the workflow reads trigger.payload.%s, which this scenario's payload does not set, "+
+		out = append(out, fmt.Sprintf("trigger %q: a workflow expression references trigger.payload.%s, which this scenario's payload does not set, "+
 			"so it holds the generated sample's %s; a real event may leave it out (the event's payload does not require it) — "+
 			"set it in trigger.payload (\"\" or null for an absent value) so the run takes the branch you mean", run.Trigger, f.Path, value))
 	}

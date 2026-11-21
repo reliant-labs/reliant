@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/workflow/scenario"
+	workflowyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -143,4 +144,83 @@ nodes:
 	set := fire(map[string]any{"text": "hi", "thread_ts": ""})
 	assert.Equal(t, []string{"top level"}, savedContent(set, "reply"))
 	assert.False(t, anyContains(set.Warnings, "thread_ts"), "%v", set.Warnings)
+}
+
+func TestSampleFilledWarningRequiresAnActualCELReference(t *testing.T) {
+	const workflow = `
+name: slackbot
+description: 'Documentation only: {{ trigger.payload.data.thread_ts }}'
+triggers:
+- name: mention
+  integration:
+    integration: slack
+    events: [app_mention]
+entry: [reply]
+nodes:
+- id: reply
+  type: save_message
+  args:
+    role: assistant
+    content: CONTENT
+`
+	for _, tt := range []struct {
+		name, content string
+		wantWarn      bool
+	}{
+		{"description is not evaluated", `hello`, false},
+		{"literal text", `'See trigger.payload.data.thread_ts'`, false},
+		{"CEL string literal", `'{{ "trigger.payload.data.thread_ts" }}'`, false},
+		{"another CEL namespace", `'{{ {"payload": {"data": {"thread_ts": "other"}}}.payload.data.thread_ts }}'`, false},
+		{"static keys", `'before {{ "label" }} {{ trigger["payload"].data["thread_ts"] }}'`, true},
+		{"optional select", `'{{ trigger.payload.data.?thread_ts.orValue("") }}'`, true},
+		{"presence test", `'{{ string(has(trigger.payload.data.thread_ts)) }}'`, true},
+		{"shadowed trigger", `'{{ string([{"payload": {"data": {"thread_ts": "other"}}}].exists(trigger, trigger.payload.data.thread_ts == "other")) }}'`, false},
+		{"similar field names", `'{{ trigger.payload.data[?"thread_ts_extra"].orValue("") }}'`, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			wf := strings.Replace(workflow, "CONTENT", tt.content, 1)
+			// Only the first case has the intentionally unevaluated description.
+			if tt.name != "description is not evaluated" {
+				wf = strings.Replace(wf, `description: 'Documentation only: {{ trigger.payload.data.thread_ts }}'`, "", 1)
+			}
+			res := runYAMLScenario(t, wf, &scenario.Scenario{
+				Name: "mention",
+				Trigger: &scenario.TriggerFiring{Name: "mention", Payload: map[string]any{
+					"data": map[string]any{"text": "hi"},
+				}},
+			})
+			require.Equal(t, "completed", res.Execution.Outcome, "%+v", res.Execution.Error)
+			assert.Equal(t, tt.wantWarn, anyContains(res.Warnings, "trigger.payload.data.thread_ts"), "%v", res.Warnings)
+		})
+	}
+}
+
+func TestTriggerPayloadReferencesUsesExecutableFieldsOnly(t *testing.T) {
+	wf, err := workflowyaml.ParseWorkflow([]byte(`
+name: warning-references
+description: '{{ trigger.payload.description }}'
+triggers:
+- name: fired
+  webhook: {}
+  filter: 'has(trigger.payload.filter_field)'
+  inputs: { value: '{{ trigger.payload.mapped }}' }
+- name: other
+  webhook: {}
+  filter: 'has(trigger.payload.other_filter)'
+entry: [collect]
+nodes:
+- id: collect
+  type: compute
+  condition: 'has(trigger.payload.condition_field)'
+  args:
+    outputs:
+      detail: { values: ['{{ trigger.payload[?"indexed"].orValue("") }}'] }
+outputs:
+  result: '{{ trigger.payload.result_field }}'
+`))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]bool{
+		"filter_field": true, "mapped": true, "condition_field": true,
+		"indexed": true, "result_field": true,
+	}, triggerPayloadReferences(wf, "fired"))
 }
