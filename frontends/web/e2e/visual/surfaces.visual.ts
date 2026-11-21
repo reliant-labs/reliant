@@ -14,7 +14,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { IDS } from './fixtures/base'
 import { CHAT_IDS, chatWithoutFailedSend } from './fixtures/chat'
 import { stagingDatabaseFixtures } from './fixtures/data'
-import { FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
+import { appCodeCardFixtures, FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
 type Viewport = 'desktop' | 'mobile'
@@ -196,6 +196,24 @@ const SURFACES: Surface[] = [
     path: '/forge/p/shopfront',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('worker', { exact: true }).first(),
+  },
+  {
+    // The overview's Code card (AppCodeCard, U13): shopfront deployed from two
+    // repositories (the D5 warning), held by two of the person's projects
+    // (deployed from here, same name) and a teammate's shared one. Scrolled to,
+    // so the phone shows it.
+    name: 'app-code-card',
+    path: '/forge/p/shopfront',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByTestId('app-code-sources'),
+    act: async (page) => {
+      // The rail fills in above the card (Recent releases), so scroll once everything has landed.
+      await expect(page.getByTestId('app-code-sources')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('overview-recent-releases').getByText('live in prod').first()).toBeVisible({ timeout: 20_000 })
+      await settle(page)
+      await page.getByTestId('app-code-card').evaluate((el) => el.scrollIntoView({ block: 'start' }))
+    },
+    harness: { fixtures: appCodeCardFixtures },
   },
   {
     name: 'observability-errors',

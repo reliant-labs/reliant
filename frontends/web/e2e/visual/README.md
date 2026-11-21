@@ -7,9 +7,9 @@ touched nothing else.
 
 | Project | Viewport | Surfaces |
 |---|---|---|
-| `desktop-dark` | 1440×900, dark | home + sidebar, chat (simplified and detailed), app overview, observability errors, environment, the project selector, Projects, a project's page, billing, usage |
+| `desktop-dark` | 1440×900, dark | home + sidebar, chat (simplified and detailed), app overview, app code card, observability errors, environment, the project selector, Projects, a project's page, billing, usage |
 | `desktop-light` | 1440×900, light | the same |
-| `mobile-dark` | 390×844, dark, touch | chat list, chat, app overview, observability errors, environment, the project selector (the console's app switcher), Projects, a project's page |
+| `mobile-dark` | 390×844, dark, touch | chat list, chat, app overview, app code card, observability errors, environment, the project selector (the console's app switcher), Projects, a project's page |
 
 The surface list is `SURFACES` in `surfaces.visual.ts`. The chat uses every
 tool renderer the timeline has (`fixtures/chat.ts`). The project catalog

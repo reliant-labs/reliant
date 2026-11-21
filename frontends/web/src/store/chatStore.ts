@@ -934,6 +934,8 @@ interface ChatStoreState {
     // Where it runs: a machine (daemonId), no machine by design (noMachine),
     // or neither for default resolution. See lib/chatMachine.ts.
     machine?: { daemonId?: string; noMachine?: boolean },
+    // The app the chat is about (Chat.app_name), when it starts from one.
+    about?: { appName?: string },
   ) => Promise<Chat>;
   // First send of an existing PENDING chat (e.g. a branch): StartChat with chatId.
   startExistingChat: (
@@ -1355,6 +1357,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     workflow?: string | null,
     selectedPresets?: Record<string, string>,
     machine?: { daemonId?: string; noMachine?: boolean },
+    about?: { appName?: string },
   ) => {
     const projectId = useProjectStore.getState().currentProject?.id;
     if (!projectId) {
@@ -1398,6 +1401,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           : undefined,
       selectedPresets: selectedPresets,
       client_message_id: attemptIdFor(attemptKey),
+      app_name: about?.appName || undefined,
     });
     endAttempt(attemptKey);
 

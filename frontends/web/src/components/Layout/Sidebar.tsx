@@ -119,6 +119,7 @@ import {
 
 import { archiveWorktree } from "../../hooks/worktree-actions";
 import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
+import { ChatAppTag } from "../Projects/ChatAppTag";
 
 interface SidebarProps {
   /** The page on screen (the router's): which row is current, which app is open. */
@@ -386,7 +387,14 @@ const ChatItem = memo(function ChatItem({
         </>
       }
       suffix={where}
-      glyph={isRun(chat) ? <AutomationOriginGlyph chat={chat} /> : undefined}
+      glyph={
+        isRun(chat) || chat.appName ? (
+          <>
+            {chat.appName && <ChatAppTag name={chat.appName} interactive={false} compact className="ml-1" />}
+            {isRun(chat) && <AutomationOriginGlyph chat={chat} />}
+          </>
+        ) : undefined
+      }
       editor={editor}
       isTabStop={isTabStop}
       onClick={() => onChatClick(chat)}
