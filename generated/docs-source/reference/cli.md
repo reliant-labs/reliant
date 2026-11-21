@@ -497,7 +497,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
 | [`reliant integrations`](#reliant-integrations) | Show the integration connections your steps and automations act through |
 | [`reliant integrations list`](#reliant-integrations-list) | List your integration connections |
-| [`reliant machine`](#reliant-machine) | List, start, stop, resize, rename and label your machines, and manage machine pools |
+| [`reliant machine`](#reliant-machine) | Create, list, start, stop, resize, rename, delete and label your machines, and manage machine pools |
+| [`reliant machine create`](#reliant-machine-create) | Create a cloud machine |
+| [`reliant machine delete`](#reliant-machine-delete) | Delete a machine and its workspace |
+| [`reliant machine grow-disk`](#reliant-machine-grow-disk) | Grow a cloud machine's disk |
 | [`reliant machine label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
 | [`reliant machine pool`](#reliant-machine-pool) | List, define and delete machine pools |
@@ -518,6 +521,12 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant models endpoint list`](#reliant-models-endpoint-list) | List each machine's local model servers, and your custom endpoints |
 | [`reliant models endpoint remove`](#reliant-models-endpoint-remove) | Stop a machine looking for a local model server you added |
 | [`reliant models list`](#reliant-models-list) | List the models you can use |
+| [`reliant preview`](#reliant-preview) | Control who may open your cloud machines' preview URLs |
+| [`reliant preview access`](#reliant-preview-access) | List and change who may open a machine's preview URLs |
+| [`reliant preview access default`](#reliant-preview-access-default) | Set who may open the ports that have no rule of their own |
+| [`reliant preview access list`](#reliant-preview-access-list) | List a machine's port access rules and its default |
+| [`reliant preview access remove`](#reliant-preview-access-remove) | Remove one port's rule, so it follows the machine's default |
+| [`reliant preview access set`](#reliant-preview-access-set) | Set who may open one port's preview URL |
 | [`reliant preview-url`](#reliant-preview-url) | Print the shareable preview URL for a local port |
 | [`reliant project`](#reliant-project) | Manage Reliant projects |
 | [`reliant project create`](#reliant-project-create) | Create a project and print its ID |
@@ -21644,7 +21653,7 @@ reliant integrations list [flags]
 
 ## reliant machine
 
-List, start, stop, resize, rename and label your machines, and manage machine pools
+Create, list, start, stop, resize, rename, delete and label your machines, and manage machine pools
 
 Manage your own machines, exactly as Settings -> Machines does.
 
@@ -21652,7 +21661,8 @@ A machine is billed while it runs. start wakes a suspended machine; stop
 suspends a running one; resize changes a SUSPENDED machine's size (s1, s2,
 m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
 running machine: stop, resize, start. rename changes what a machine is
-called, and nothing else.
+called, and nothing else. create makes a cloud machine, delete removes one
+(its disk too: --yes), and grow-disk grows a cloud machine's disk.
 
 label sets a machine's durable labels, and pool defines machine pools: a
 pool is the set of your machines whose labels contain its selector, and a
@@ -21661,8 +21671,8 @@ also declare its own labels when it starts ('reliant daemon start --label').
 
 start, stop, resize and rename need a login made by this release ('reliant
 auth login'): it carries the daemon:manage permission, which only a person's
-login can hold. An agent's shell is refused start, stop, resize, label and
-the pool changes.
+login can hold. An agent's shell is refused create, delete, start, stop,
+resize, grow-disk, label and the pool changes.
 
 ```
 reliant machine
@@ -21672,6 +21682,9 @@ reliant machine
 
 | Command | Description |
 |---------|-------------|
+| [`create`](#reliant-machine-create) | Create a cloud machine |
+| [`delete`](#reliant-machine-delete) | Delete a machine and its workspace |
+| [`grow-disk`](#reliant-machine-grow-disk) | Grow a cloud machine's disk |
 | [`label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`list`](#reliant-machine-list) | List your machines |
 | [`pool`](#reliant-machine-pool) | List, define and delete machine pools |
@@ -21686,6 +21699,68 @@ reliant machine
 |------|------|---------|-------------|
 | `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
 | `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant machine create
+
+Create a cloud machine
+
+Create a Reliant cloud machine (a managed machine) of the given size, as
+Settings -> Machines -> Add machine does. It is billed while it runs, and starts
+at once. --idle-timeout suspends it after that long with nothing to do.
+
+To connect a computer of your own instead, run 'reliant daemon start' on it.
+
+```
+reliant machine create <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--idle-timeout` | `string` | - | Suspend the machine after this long idle, e.g. 30m (default: your plan's) |
+| `--size` | `string` | `s1` | Machine size: s1, s2, m, l, xl, 2xl or 3xl |
+
+---
+
+### reliant machine delete
+
+Delete a machine and its workspace
+
+Delete one of your machines. A cloud machine's disk is deleted with it: every
+checkout, branch workspace and file on it, including work that was never
+pushed: push it, or copy it off, first. A computer of your own is only
+disconnected from your account; nothing on it is deleted.
+
+It needs --yes: there is no undo.
+
+```
+reliant machine delete <name|id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--snapshot` | `bool` | - | Not supported yet: refused, because deleting a machine does not snapshot its disk |
+| `--yes` | `bool` | - | Confirm the deletion |
+
+---
+
+### reliant machine grow-disk
+
+Grow a cloud machine's disk
+
+Grow a cloud machine's disk to the given size in GiB (a multiple of 10, larger
+than it is now). Disks only grow. A running machine uses the space after its
+next restart ('reliant machine stop', then 'start'). Disk above your plan's
+allowance is billed as storage, and your plan caps the size.
+
+```
+reliant machine grow-disk <name|id> <GiB>
+```
 
 ---
 
@@ -22110,6 +22185,105 @@ reliant models list [flags]
 | `--json` | `bool` | - | Print JSON |
 | `--local` | `bool` | - | Only the local models your machines serve, with the machine serving each |
 | `--org` | `string` | - | List what a chat of this organization may run on (its accounts and policy) |
+
+---
+
+## reliant preview
+
+Control who may open your cloud machines' preview URLs
+
+A cloud machine serves each listening port at a preview URL ('reliant
+preview-url <port>' prints it). By default only you, signed in, may open one.
+'reliant preview access' changes that, per port or for the whole machine.
+
+```
+reliant preview
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`access`](#reliant-preview-access) | List and change who may open a machine's preview URLs |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant preview access
+
+List and change who may open a machine's preview URLs
+
+Who may open a cloud machine's preview URLs, per port:
+
+  authenticated  you, signed in to Reliant (the default)
+  public         anyone with the URL
+
+A port shared by bearer token is set up in the app (the machine's Ports
+panel), which shows the token once; list shows such a port as token. A port
+with no rule of its own follows the machine's default, which is
+authenticated or public ('reliant preview access default').
+
+```
+reliant preview access
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`default`](#reliant-preview-access-default) | Set who may open the ports that have no rule of their own |
+| [`list`](#reliant-preview-access-list) | List a machine's port access rules and its default |
+| [`remove`](#reliant-preview-access-remove) | Remove one port's rule, so it follows the machine's default |
+| [`set`](#reliant-preview-access-set) | Set who may open one port's preview URL |
+
+---
+
+#### reliant preview access default
+
+Set who may open the ports that have no rule of their own
+
+Set the machine's default: who may open a port that has no rule of its own.
+public makes every such listening port reachable by anyone with its URL.
+
+```
+reliant preview access default <machine> <authenticated|public>
+```
+
+---
+
+#### reliant preview access list
+
+List a machine's port access rules and its default
+
+```
+reliant preview access list <machine>
+```
+
+---
+
+#### reliant preview access remove
+
+Remove one port's rule, so it follows the machine's default
+
+```
+reliant preview access remove <machine> <port>
+```
+
+---
+
+#### reliant preview access set
+
+Set who may open one port's preview URL
+
+```
+reliant preview access set <machine> <port> <public|authenticated>
+```
 
 ---
 
