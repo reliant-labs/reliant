@@ -22,25 +22,12 @@ import type { Attachment } from "../../types/chat";
 import { cn } from "../../lib/utils";
 import { ImagePreviewModal } from "./ImagePreviewModal";
 import { isImageMimeType, useAttachmentBlobUrls } from "./useAttachmentBlobUrls";
-import { toolBaseName } from "../../lib/toolAction";
 
 interface MessageGeneratedImagesProps {
   attachments: Attachment[];
   /** One line under the image(s): what the user is looking at. */
   caption?: string;
   className?: string;
-}
-
-/** present_image: the agent showing the user an image file from the machine. */
-export function isPresentImageTool(toolName: string): boolean {
-  return toolBaseName(toolName).toLowerCase() === "present_image";
-}
-
-/** The caption a present_image call asked for, if any. */
-export function presentImageCaption(input: unknown): string | undefined {
-  if (typeof input !== "object" || input === null) return undefined;
-  const caption = (input as { caption?: unknown }).caption;
-  return typeof caption === "string" && caption.trim() !== "" ? caption.trim() : undefined;
 }
 
 /**
