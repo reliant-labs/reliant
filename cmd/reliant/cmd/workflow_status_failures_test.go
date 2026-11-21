@@ -55,7 +55,7 @@ func TestRetryUntilWorkflowsSync(t *testing.T) {
 
 	pending := errors.New("starting workflow: failed_precondition: " + workflowSyncPending + "; connect a machine")
 	calls := 0
-	got, err := retryUntilWorkflowsSync(cmd, time.Minute, func() (string, error) {
+	got, err := retryUntilWorkflowsSync(cmd, time.Minute, "", pending, func() (string, error) {
 		calls++
 		if calls < 3 {
 			return "", pending
@@ -66,12 +66,18 @@ func TestRetryUntilWorkflowsSync(t *testing.T) {
 	assert.Equal(t, "chat-1", got)
 	assert.Contains(t, stderr.String(), "Waiting up to 1m0s")
 
-	// It gives up at the deadline with the last refusal, and never retries
-	// another error.
-	_, err = retryUntilWorkflowsSync(cmd, 0, func() (string, error) { return "", pending })
-	assert.True(t, awaitingWorkflowSync(err))
+	// A wait that has passed, or that the next poll would overrun, starts
+	// nothing more: it returns the refusal it was given.
+	for _, wait := range []time.Duration{0, workflowSyncPoll / 2} {
+		calls = 0
+		_, err = retryUntilWorkflowsSync(cmd, wait, "", pending, func() (string, error) { calls++; return "", pending })
+		assert.True(t, awaitingWorkflowSync(err))
+		assert.Equal(t, 0, calls, "no start after the --sync-wait deadline (wait %s)", wait)
+	}
+
+	// It never retries another error.
 	calls = 0
-	_, err = retryUntilWorkflowsSync(cmd, time.Minute, func() (string, error) { calls++; return "", errors.New("permission denied") })
+	_, err = retryUntilWorkflowsSync(cmd, time.Minute, "", pending, func() (string, error) { calls++; return "", errors.New("permission denied") })
 	assert.EqualError(t, err, "permission denied")
 	assert.Equal(t, 1, calls)
 }

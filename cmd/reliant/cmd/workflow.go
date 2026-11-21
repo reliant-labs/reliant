@@ -452,7 +452,7 @@ format, exit codes, and --hook).`,
 			// so the first run in a new folder was refused (TL-11). Wait for
 			// the sync rather than make every caller sleep and retry.
 			if err != nil && projectID == "" && projectPath != "" && syncWait > 0 && awaitingWorkflowSync(err) {
-				resp, err = retryUntilWorkflowsSync(cmd, syncWait, func() (*connect.Response[reliantv1.StartChatResponse], error) {
+				resp, err = retryUntilWorkflowsSync(cmd, syncWait, resp, err, func() (*connect.Response[reliantv1.StartChatResponse], error) {
 					return chatClient.StartChat(cmd.Context(), connect.NewRequest(createReq))
 				})
 			}
@@ -1794,27 +1794,31 @@ func awaitingWorkflowSync(err error) bool {
 }
 
 // retryUntilWorkflowsSync retries start until it no longer fails for want of a
-// sync, or wait has passed, and returns its last result.
-func retryUntilWorkflowsSync[T any](cmd *cobra.Command, wait time.Duration, start func() (T, error)) (T, error) {
+// sync, or wait has passed, and returns its last result: (resp, err), the
+// refusal that sent the caller here, when it never tries again. It never calls
+// start at or after the deadline, so --sync-wait bounds when a workflow can be
+// started, not only how long the command waits: an attempt whose poll would
+// land past it is not made, and one whose sleep overran it is dropped.
+func retryUntilWorkflowsSync[T any](cmd *cobra.Command, wait time.Duration, resp T, err error, start func() (T, error)) (T, error) {
 	fmt.Fprintf(cmd.ErrOrStderr(), "Waiting up to %s for a machine to sync this project's workflows (--sync-wait)...\n", wait)
 	deadline := time.Now().Add(wait)
-	var (
-		resp T
-		err  error
-	)
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	for {
+	for awaitingWorkflowSync(err) {
+		if time.Now().Add(workflowSyncPoll).After(deadline) {
+			return resp, err
+		}
 		select {
 		case <-ctx.Done():
 			return resp, ctx.Err()
 		case <-time.After(workflowSyncPoll):
 		}
-		resp, err = start()
-		if !awaitingWorkflowSync(err) || time.Now().After(deadline) {
+		if !time.Now().Before(deadline) {
 			return resp, err
 		}
+		resp, err = start()
 	}
+	return resp, err
 }
