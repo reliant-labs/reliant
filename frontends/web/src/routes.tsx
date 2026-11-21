@@ -217,6 +217,10 @@ const ForgeConsoleDataPage = lazyRoute(
   () => import('./components/Forge/Data/DataPage'), 'DataPage')
 const ForgeConsoleUsersPage = lazyRoute(
   () => import('./components/Forge/Users/UsersPage'), 'UsersPage')
+const ForgeConsoleExperimentsPage = lazyRoute(
+  () => import('./components/Forge/Experiments/ExperimentsPage'), 'ExperimentsPage')
+const ForgeConsoleExperimentPage = lazyRoute(
+  () => import('./components/Forge/Experiments/ExperimentsPage'), 'ExperimentPage')
 const ForgeConsoleVulnerabilitiesPage = lazyRoute(
   () => import('./components/Forge/Security/VulnerabilitiesPage'), 'VulnerabilitiesPage')
 const ForgeConsoleVulnerabilityPage = lazyRoute(
@@ -800,6 +804,8 @@ const forgeConsolePageComponents = {
   secrets: gated(ForgeConsoleSecretsPage),
   domains: gated(ForgeDomainsPage),
   activity: gated(ForgeConsoleActivityPage),
+  experiments: gated(ForgeConsoleExperimentsPage),
+  experiment: gated(ForgeConsoleExperimentPage),
   orgLayout: gated(ForgeOrgLayout),
   orgObservability: gated(ForgeOrgObservabilityRoute),
   landing: gated(ForgeLandingRoute),
