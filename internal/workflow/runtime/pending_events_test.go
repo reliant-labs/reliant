@@ -66,18 +66,21 @@ func TestDynamicWorkflow_SkippedNodeRoutesWithoutWaitingForAParallelBranch(t *te
 		return map[string]interface{}{"success": true}, nil
 	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
 
-	// beat stands for the heartbeat: it returns when `after` has run, or
-	// after a bound. Which came first is the verdict.
+	// beat stands for the heartbeat: it returns only once `after` has run.
+	// Under the old order `after` waits for beat, so the run never ends and
+	// the test environment's timeout fails it; no assertion reads a clock.
 	var mu sync.Mutex
 	var order []string
 	afterRan := make(chan struct{})
-	env.RegisterActivityWithOptions(func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
+	env.SetTestTimeout(2 * time.Minute)
+	env.RegisterActivityWithOptions(func(ctx context.Context, input types.ActivityInput) (map[string]interface{}, error) {
 		id := input.Node.GetId()
 		switch id {
 		case "beat":
 			select {
 			case <-afterRan:
-			case <-time.After(3 * time.Second):
+			case <-ctx.Done():
+				return nil, ctx.Err()
 			}
 			id = "beat-done"
 		case "after":
