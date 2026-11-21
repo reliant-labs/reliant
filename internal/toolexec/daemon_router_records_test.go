@@ -4,6 +4,7 @@ package toolexec
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -197,6 +198,89 @@ func TestDaemonRecords_SelectorMatchesTypeAndName(t *testing.T) {
 
 	_, err := router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Type: "cloud", Name: "mbp"})
 	require.Error(t, err, "a selector no record satisfies must not fall back to some other daemon")
+}
+
+// A `daemon: labels:` selector routes only to a machine whose durable labels
+// carry every one of them. The record fallback used to ignore labels, so with
+// no labelled machine the step ran on whichever machine the user had.
+func TestDaemonRecords_LabelSelectorFailsClosed(t *testing.T) {
+	records := &fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: "laptop", UserID: "u", DaemonType: strPtr("self_hosted"), Hostname: strPtr("mbp")},
+		{ID: "gpu", UserID: "u", DaemonType: strPtr("managed"), Name: "gpu-box", Labels: map[string]string{"gpu": "yes", "zone": "eu"}},
+	}, attached: []string{"laptop", "gpu"}}
+	router := recordsRouter(records)
+
+	id, err := router.resolveDaemonID(context.Background(), "u", &DaemonSelector{Labels: map[string]string{"gpu": "yes"}})
+	require.NoError(t, err)
+	assert.Equal(t, "gpu", id, "the labelled machine, never the unlabelled one")
+
+	for _, sel := range []*DaemonSelector{
+		{Labels: map[string]string{"gpu": "no"}},
+		{Labels: map[string]string{"gpu": "yes", "zone": "us"}},
+		{Name: "mbp", Labels: map[string]string{"gpu": "yes"}},
+	} {
+		_, err := router.resolveDaemonID(context.Background(), "u", sel)
+		require.Error(t, err, "%+v", sel)
+		assert.True(t, IsNoDaemon(err), "no machine carries the labels: a terminal error, not some other machine: %v", err)
+		assert.False(t, IsDaemonPending(err), "nothing is starting that would satisfy it: %v", err)
+	}
+
+	online, err := router.IsDaemonOnline(context.Background(), "u", &DaemonSelector{Labels: map[string]string{"gpu": "no"}})
+	require.NoError(t, err)
+	assert.False(t, online, "liveness for a label selector counts only labelled machines")
+
+	state, err := router.MachineState(context.Background(), "u", &DaemonSelector{Labels: map[string]string{"gpu": "no"}})
+	require.NoError(t, err)
+	assert.False(t, state.Exists, "a waiting run must learn no machine will ever match")
+}
+
+// A sleeping machine keeps its durable labels, so a label selector that only
+// it satisfies waits for it (and wakes it) rather than failing.
+func TestDaemonRecords_LabelSelectorWaitsForSleepingLabelledMachine(t *testing.T) {
+	resumer := &fakeResumer{}
+	router := NewNATSDaemonRouter(nil, WithDatabase(&fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: "laptop", UserID: "u", DaemonType: strPtr("self_hosted")},
+		{ID: "gpu", UserID: "u", DaemonType: strPtr("managed"), LifecyclePhase: strPtr("suspended"), Labels: map[string]string{"gpu": "yes"}},
+	}, attached: []string{"laptop"}}), WithDaemonResumer(resumer), WithControlPlaneCredentials(credFunc(
+		func(context.Context, string, string) (string, error) { return "jwt", nil })))
+	sel := &DaemonSelector{Labels: map[string]string{"gpu": "yes"}}
+
+	_, err := router.resolveDaemonID(context.Background(), "u", sel)
+	assert.True(t, IsDaemonSuspended(err), "got: %v", err)
+
+	id, err := router.EnsureAwake(context.Background(), "u", sel)
+	require.NoError(t, err)
+	assert.Equal(t, "gpu", id)
+	assert.Equal(t, []resumeCall{{token: "jwt", daemonID: "gpu"}}, resumer.calls)
+}
+
+// The error for a selector that matches no machine names what the author
+// wrote — name, type, labels — and never an id the server may have filled in.
+func TestNoMatchingMachine_ErrorNamesTheSelector(t *testing.T) {
+	router := recordsRouter(&fakeDaemonRecords{daemons: []*db.Daemon{
+		{ID: "laptop", UserID: "u", DaemonType: strPtr("self_hosted"), Hostname: strPtr("mbp")},
+	}, attached: []string{"laptop"}})
+
+	for _, tc := range []struct {
+		selector *DaemonSelector
+		want     []string
+	}{
+		{&DaemonSelector{Name: "gpu-box"}, []string{`name "gpu-box"`}},
+		{&DaemonSelector{Type: "cloud"}, []string{"type cloud"}},
+		{&DaemonSelector{Labels: map[string]string{"zone": "eu", "gpu": "yes"}}, []string{
+			"labels gpu=yes zone=eu", "reliant machine label <machine> gpu=yes zone=eu"}},
+		{&DaemonSelector{ID: "11111111-2222-3333-4444-555555555555", Type: "managed"}, []string{"type cloud"}},
+		{&DaemonSelector{ID: "11111111-2222-3333-4444-555555555555"}, []string{"the machine this request asked for is not connected"}},
+	} {
+		_, err := router.resolveDaemonID(context.Background(), "u", tc.selector)
+		require.Error(t, err, "%+v", tc.selector)
+		assert.True(t, IsNoDaemon(err), "%v", err)
+		assert.True(t, strings.HasPrefix(err.Error(), ErrNoDaemon.Error()), "the marker leads: %v", err)
+		for _, w := range tc.want {
+			assert.Contains(t, err.Error(), w, "%+v", tc.selector)
+		}
+		assert.NotContains(t, err.Error(), "11111111", "an id is never shown")
+	}
 }
 
 // A workflow's `daemon:` shorthand puts whatever the author wrote in Name. A

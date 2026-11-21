@@ -76,16 +76,16 @@ function render(...dirs) {
   }
 }
 
-test("with only reliant installed, `reliant forge kcl eval` renders it", () => {
+test("with only reliant installed, `reliant forge env kcl eval` renders it", () => {
   const got = render("reliant", "kcl");
   assert.deepEqual(got, { config: { env: "rendered" } });
-  assert.match(readFileSync(log, "utf8"), new RegExp(`^reliant forge kcl eval ${KCL_ENTRYPOINT} -D env=prod -S release_config\\n$`));
+  assert.match(readFileSync(log, "utf8"), new RegExp(`^reliant forge env kcl eval ${KCL_ENTRYPOINT} -D env=prod -S release_config\\n$`));
 });
 
 test("forge on PATH is preferred to reliant", () => {
   const got = render("forge", "reliant", "kcl");
   assert.deepEqual(got, { config: { env: "rendered" } });
-  assert.match(readFileSync(log, "utf8"), /^forge kcl eval /);
+  assert.match(readFileSync(log, "utf8"), /^forge env kcl eval /);
   assert.doesNotMatch(readFileSync(log, "utf8"), /reliant/);
 });
 

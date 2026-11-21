@@ -182,7 +182,7 @@ func accepts(kind string, types map[string]bool) bool {
 		return true
 	}
 	switch kind {
-	case "string":
+	case "string", "markers":
 		return types["string"]
 	case "integer":
 		return types["integer"] || types["number"]

@@ -84,7 +84,7 @@ export function SidebarSection({
           )}
           <span
             className={cn(
-              "text-xs font-bold uppercase tracking-[0.06em]",
+              "text-xs font-bold",
               variant === "highlighted"
                 ? "text-primary-ink"
                 : "text-muted-foreground/80"

@@ -5,8 +5,6 @@ description: "How a forge API refuses unauthenticated calls, finds RPCs that nev
 keywords: ["secure by default api", "fail closed authentication", "idor bola detection", "multi-tenant row scoping go", "write-only secrets", "secrets ai agents never see", "scoped api tokens", "sbom cosign signed images", "gitleaks pre-commit", "least privilege database role"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · run in guides-scratch/security-model/shop (copy of add-table-crud-api-pages/shop): project audit --json (.categories.unscoped_auth), lint --db-grants (fail, then pass after forge:secret), generate (readonly grants row), env up dev + curl ListProducts with no token and a malformed token (401) + /healthz (200), lint --graph, env down dev, .pre-commit-config.yaml and build-images.yml read · sources: forge pkg/authn/authn.go (modes, AnonymousOK, ExternalAuth), pkg/auth/auth.go, scaffold pkg/middleware/middleware.go + procedures_gen.go, internal/app/providers.go (NewUserAuth AnonymousOK:false, //forge:audience user), internal/cli/annotations.go (forge:owner, forge:auth-unscoped-ok), skills/forge/audit-json/SKILL.md (unscoped_auth status rules), pkg/svcerr/svcerr.go + interceptor.go, pkg/dbgrants, pkg/accesstoken/token.go + scope.go + grant.go (Covers, resource bindings), internal/generator/dx_files.go (pre-commit config, git hooks), scaffold .github/workflows/build-images.yml + pre-commit.yml, install.sh; control-plane docs/secret-step-up.md, docs/hosted-http-use.md; reliant docs hosting/secrets.mdx, integrations/http.mdx, sdk/overview.mdx, forge/sign-in.mdx, forge/concepts/middleware-and-request-path.mdx, deep-dives/daemon-security-model.mdx, deep-dives/safe-migrations.mdx */}
-
 **In short**
 
 - Every RPC of a forge API needs a valid credential unless its proto says `auth_required: false`. A server with no validator refuses to start, and no environment variable turns authentication off.
@@ -41,7 +39,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    P["Org admin<br/>console or forge secret set"] -->|"write only<br/>step-up if protected"| STORE[("Hosted secret store<br/>per environment, versioned")]
+    P["Org admin<br/>console or forge env secret set"] -->|"write only<br/>step-up if protected"| STORE[("Hosted secret store<br/>per environment, versioned")]
     STORE -->|"at deploy, as env vars"| W["Your workload"]
     STORE -->|"one step attempt,<br/>if on the access list"| WK["Reliant worker"]
     WK -->|"written into the request header"| API["The API the secret belongs to"]
@@ -59,7 +57,7 @@ A forge service builds its interceptor chain from slots, and authentication is t
 
 The allow-list isn't maintained by hand. Forge projects it from the protos into `pkg/middleware/procedures_gen.go`, and an RPC is listed only because its proto says `option (forge.v1.method) = { auth_required: false }`. Matching is exact and uses Connect's generated procedure constants, so a renamed RPC breaks the build instead of leaving a stale string behind. The probes (`/healthz`, `/readyz`, `/metrics`) sit in front of the chain and need no credential. [Middleware and the request path](/forge/concepts/middleware-and-request-path#auth-fails-closed) walks the whole chain and its order.
 
-A credential reaches the validator by its shape. A bearer JWT goes to the validator `SetupAuth` builds, an `fk_` API key goes to a validator over your own table (hashed and compared in constant time), and the native sign-in session cookie is read last. After validation, an enrich hook you own (`enrichClaims` in `pkg/middleware`, or a component that implements `ClaimsEnricher`) can add roles, an org or a tenant to the claims before any handler runs. If it returns an error, the request is rejected. {/* defer:/guides/forge/add-sign-in-passkeys */}Add sign-in with passkeys, magic links or social login{/* /defer */} covers the sign-in side.
+A credential reaches the validator by its shape. A bearer JWT goes to the validator `SetupAuth` builds, an `fk_` API key goes to a validator over your own table (hashed and compared in constant time), and the native sign-in session cookie is read last. After validation, an enrich hook you own (`enrichClaims` in `pkg/middleware`, or a component that implements `ClaimsEnricher`) can add roles, an org or a tenant to the claims before any handler runs. If it returns an error, the request is rejected. [Add sign-in with passkeys, magic links or social login](/guides/forge/add-sign-in-passkeys) covers the sign-in side.
 
 ### 2. You write the access rules, and the audit finds the gaps
 
@@ -78,7 +76,7 @@ func (s *Service) ListPlans(...)
 
 The reason is required, and the audit echoes it back in `acknowledged_rpcs` so a reviewer reads it. There is no lint flag for this check. It is part of the audit.
 
-On its own, the category is a warning. A fresh scaffold is unscoped by construction, so failing it would fail every new project. The gate arms when you declare where a table's owner lives, by marking the column `forge:owner`. Declare it as `// forge:owner` on the proto field before you scaffold the entity, and forge writes `COMMENT ON COLUMN … IS 'forge:owner'` into the migration and scaffolds CRUD shims that resolve the claims, add the owner predicate to Get, List, Update and Delete, and stamp the column from the caller on Create and Update. It leaves one marked expression for you: how a caller's claims map onto the owner value. Declared later, the shims already exist, so `forge project audit` prints each wrapper for you to paste. From then on, an authenticated CRUD RPC over that table whose handler never reads the caller is an error, and `forge project audit` fails. The gate arms per table, so an owned `orders` table doesn't fail an unscoped RPC over a global `products` catalog. Forge never injects a `WHERE` clause at runtime: the scoping is code in your repository that you can read and change. {/* defer:/guides/forge/scope-rows-to-owner */}Scope rows to their owner{/* /defer */} and {/* defer:/guides/forge/find-endpoints-missing-auth-checks */}Find endpoints missing auth checks{/* /defer */} walk through both steps.
+On its own, the category is a warning. A fresh scaffold is unscoped by construction, so failing it would fail every new project. The gate arms when you declare where a table's owner lives, by marking the column `forge:owner`. Declare it as `// forge:owner` on the proto field before you scaffold the entity, and forge writes `COMMENT ON COLUMN … IS 'forge:owner'` into the migration and scaffolds CRUD shims that resolve the claims, add the owner predicate to Get, List, Update and Delete, and stamp the column from the caller on Create and Update. It leaves one marked expression for you: how a caller's claims map onto the owner value. Declared later, the shims already exist, so `forge project audit` prints each wrapper for you to paste. From then on, an authenticated CRUD RPC over that table whose handler never reads the caller is an error, and `forge project audit` fails. The gate arms per table, so an owned `orders` table doesn't fail an unscoped RPC over a global `products` catalog. Forge never injects a `WHERE` clause at runtime: the scoping is code in your repository that you can read and change. [Scope rows to their owner](/guides/forge/scope-rows-to-owner) and [Find endpoints missing auth checks](/guides/forge/find-endpoints-missing-auth-checks) walk through both steps.
 
 ### 3. One listener, one audience
 
@@ -88,7 +86,7 @@ A service that serves end users and one that serves daemons or operators shouldn
 
 Handlers return `svcerr.Wrap(err)`, and an interceptor next to the handler applies the same mapping to anything a handler returns. An error your code built, like `svcerr.NotFound("order")`, reaches the client with its code and your text. An error your code never wrote, from a driver, an SDK or the standard library, becomes `CodeInternal` with the fixed message `internal server error`, and the original is kept as a cause that reaches the log. Context you add with `fmt.Errorf("… %w", err)` is for the operator and never reaches the client either. `svcerr` is an ordinary Go package, so a service that doesn't use the rest of forge can import it too.
 
-The one exception is a hand-built `*connect.Error`. It is a handler's explicit verdict and passes through as written, so `connect.NewError(code, err)` publishes `err.Error()`. [`forgeconv-handler-connect-error`](/forge/linting/rules-conventions#forgeconv-handler-connect-error) flags each one in a handler package, and `reliant forge fix connect-errors` rewrites the fixed-text ones. [The error path](/forge/concepts/middleware-and-request-path#the-error-path) covers reasons and error classes.
+The one exception is a hand-built `*connect.Error`. It is a handler's explicit verdict and passes through as written, so `connect.NewError(code, err)` publishes `err.Error()`. [`forgeconv-handler-connect-error`](/forge/linting/rules-conventions#forgeconv-handler-connect-error) flags each one in a handler package, and `reliant forge lint fix connect-errors` rewrites the fixed-text ones. [The error path](/forge/concepts/middleware-and-request-path#the-error-path) covers reasons and error classes.
 
 ### 5. The database role agents read through
 
@@ -96,15 +94,15 @@ A forge-managed Postgres has a read-only role, `forge_ro`, and `reliant forge db
 
 ### 6. Hosted secrets are write-only
 
-A hosted environment's secrets live in Reliant's managed store, one store per environment. You set a value in the console or with `reliant forge secret set --env prod NAME`, which reads the value from stdin so it never lands in shell history. Nothing reads it back: the credential Reliant's servers hold may read secret metadata but not secret data, so the storage layer refuses the request. Every write is a new version, and values reach workloads at deploy time as environment variables. Setting a secret needs the org admin role, or an automation token with `secret:write`.
+A hosted environment's secrets live in Reliant's managed store, one store per environment. You set a value in the console or with `reliant forge env secret set --env prod NAME`, which reads the value from stdin so it never lands in shell history. Nothing reads it back: the credential Reliant's servers hold may read secret metadata but not secret data, so the storage layer refuses the request. Every write is a new version, and values reach workloads at deploy time as environment variables. Setting a secret needs the org admin role, or an automation token with `secret:write`.
 
-An environment marked **protected** adds a step-up before any change. To set, delete, undelete or destroy a value, an admin requests a one-time code emailed to their verified address. The code is good for 10 minutes and 5 attempts, and opens a 15-minute window for that person in that environment. Listing secrets is never gated. An org automation token has no person behind it, so it can't change a protected environment at all. Every write, step-up and refused write leaves an audit row naming the actor, secret and version, never the value. Without the step-up machinery, a protected environment is read-only, not open. [Secrets](/hosting/secrets) is the reference, and {/* defer:/guides/hosting/manage-production-secrets */}Manage production secrets per environment{/* /defer */} is the task guide.
+An environment marked **protected** adds a step-up before any change. To set, delete, undelete or destroy a value, an admin requests a one-time code emailed to their verified address. The code is good for 10 minutes and 5 attempts, and opens a 15-minute window for that person in that environment. Listing secrets is never gated. An org automation token has no person behind it, so it can't change a protected environment at all. Every write, step-up and refused write leaves an audit row naming the actor, secret and version, never the value. Without the step-up machinery, a protected environment is read-only, not open. [Secrets](/hosting/secrets) is the reference, and [Manage production secrets per environment](/guides/hosting/manage-production-secrets) is the task guide.
 
 ### 7. Secrets a workflow uses but never sees
 
 A workflow declares the secrets it needs and puts one in a credential slot: an `http/request@1` header such as `"Bearer {{ secrets.TRADER_KEY }}"`, or `credential: { secret: NAME }` on an integration action. Anywhere else, a secret reference is a validation error, and a `run` step never receives one, because a command can print its own environment. For one step attempt, the worker fetches the value through the control plane and writes it only into the outgoing request. It never becomes a step input, so it isn't in the run's state, its history, logs, spans, outputs or the UI. The request goes over HTTPS only, and redirects are followed only within the starting host.
 
-Which workflows may use a secret is the secret's access list. An org owner or admin edits it with `reliant forge secret allow NAME --env <env> --workflow <name>`, and a protected environment asks for the step-up here too. [HTTP requests: secrets](/integrations/http#secrets) has the full rules, and {/* defer:/guides/workflows/call-api-without-exposing-key */}Call any API from a workflow without exposing the key{/* /defer */} walks through one.
+Which workflows may use a secret is the secret's access list. An org owner or admin edits it with `reliant forge env secret allow NAME --env <env> --workflow <name>`, and a protected environment asks for the step-up here too. [HTTP requests: secrets](/integrations/http#secrets) has the full rules, and [Call any API from a workflow without exposing the key](/guides/workflows/call-api-without-exposing-key) walks through one.
 
 ### 8. One machine credential, closed scopes
 
@@ -225,18 +223,30 @@ Find the secret-scanning hook in a new API project:
 ## Guides
 
 <CardGroup cols={2}>
-{/* defer-card:/guides/forge/find-endpoints-missing-auth-checks ICA8Q2FyZCB0aXRsZT0iRmluZCBlbmRwb2ludHMgbWlzc2luZyBhdXRoIGNoZWNrcyIgaWNvbj0idXNlci1zaGllbGQiIGhyZWY9Ii9ndWlkZXMvZm9yZ2UvZmluZC1lbmRwb2ludHMtbWlzc2luZy1hdXRoLWNoZWNrcyI+CiAgICBSZWFkIHRoZSB1bnNjb3BlZC1hdXRoIGF1ZGl0LCBmaXggZWFjaCBSUEMgb3IgYWNrbm93bGVkZ2UgaXQgd2l0aCBhIHJlYXNvbi4KICA8L0NhcmQ+ */}
-{/* defer-card:/guides/forge/scope-rows-to-owner ICA8Q2FyZCB0aXRsZT0iU2NvcGUgcm93cyB0byB0aGVpciBvd25lciIgaWNvbj0idXNlcnMiIGhyZWY9Ii9ndWlkZXMvZm9yZ2Uvc2NvcGUtcm93cy10by1vd25lciI+CiAgICBEZWNsYXJlIGEgYGZvcmdlOm93bmVyYCBjb2x1bW4gYW5kIGZpbHRlciBldmVyeSBxdWVyeSBieSB0aGUgY2FsbGVyLgogIDwvQ2FyZD4= */}
-{/* defer-card:/guides/forge/add-sign-in-passkeys ICA8Q2FyZCB0aXRsZT0iQWRkIHNpZ24taW4gd2l0aCBwYXNza2V5cyIgaWNvbj0ia2V5IiBocmVmPSIvZ3VpZGVzL2ZvcmdlL2FkZC1zaWduLWluLXBhc3NrZXlzIj4KICAgIFBhc3NrZXlzLCBtYWdpYyBsaW5rcyBvciBzb2NpYWwgbG9naW4sIGFuZCB0aGUgUlBDcyBhbmQgcGFnZXMgdGhhdCBzdGF5IHB1YmxpYy4KICA8L0NhcmQ+ */}
+  <Card title="Find endpoints missing auth checks" icon="shield-user" href="/guides/forge/find-endpoints-missing-auth-checks">
+    Read the unscoped-auth audit, fix each RPC or acknowledge it with a reason.
+  </Card>
+  <Card title="Scope rows to their owner" icon="users" href="/guides/forge/scope-rows-to-owner">
+    Declare a `forge:owner` column and filter every query by the caller.
+  </Card>
+  <Card title="Add sign-in with passkeys" icon="key" href="/guides/forge/add-sign-in-passkeys">
+    Passkeys, magic links or social login, and the RPCs and pages that stay public.
+  </Card>
   <Card title="Let agents query production data" icon="database" href="/guides/forge/let-agents-query-production-data">
     Read-only, audited queries through a role that can't see secret columns.
   </Card>
-{/* defer-card:/guides/hosting/manage-production-secrets ICA8Q2FyZCB0aXRsZT0iTWFuYWdlIHByb2R1Y3Rpb24gc2VjcmV0cyIgaWNvbj0ibG9jayIgaHJlZj0iL2d1aWRlcy9ob3N0aW5nL21hbmFnZS1wcm9kdWN0aW9uLXNlY3JldHMiPgogICAgU2V0IHdyaXRlLW9ubHkgc2VjcmV0cyBwZXIgZW52aXJvbm1lbnQgYW5kIHZlcmlmeSB0aGVtIHdpdGhvdXQgcmVhZGluZyB0aGVtLgogIDwvQ2FyZD4= */}
-{/* defer-card:/guides/workflows/call-api-without-exposing-key ICA8Q2FyZCB0aXRsZT0iQ2FsbCBhbiBBUEkgd2l0aG91dCBleHBvc2luZyB0aGUga2V5IiBpY29uPSJwbHVnIiBocmVmPSIvZ3VpZGVzL3dvcmtmbG93cy9jYWxsLWFwaS13aXRob3V0LWV4cG9zaW5nLWtleSI+CiAgICBVc2UgYSBzdG9yZWQgc2VjcmV0IGluIGEgd29ya2Zsb3cncyBIVFRQIHJlcXVlc3QgaGVhZGVyLgogIDwvQ2FyZD4= */}
-  <Card title="Sandbox agent commands" icon="shield-halved" href="/guides/machines/sandbox-agent-commands-credentials-none">
+  <Card title="Manage production secrets" icon="lock" href="/guides/hosting/manage-production-secrets">
+    Set write-only secrets per environment and verify them without reading them.
+  </Card>
+  <Card title="Call an API without exposing the key" icon="plug" href="/guides/workflows/call-api-without-exposing-key">
+    Use a stored secret in a workflow's HTTP request header.
+  </Card>
+  <Card title="Sandbox agent commands" icon="shield-half" href="/guides/machines/sandbox-agent-commands-credentials-none">
     Run commands that read untrusted text with `credentials: none`.
   </Card>
-{/* defer-card:/guides/forge/scan-dependencies-vulnerabilities ICA8Q2FyZCB0aXRsZT0iU2NhbiBkZXBlbmRlbmNpZXMgZm9yIHZ1bG5lcmFiaWxpdGllcyIgaWNvbj0iYnVnIiBocmVmPSIvZ3VpZGVzL2ZvcmdlL3NjYW4tZGVwZW5kZW5jaWVzLXZ1bG5lcmFiaWxpdGllcyI+CiAgICBHbywgbnBtIGFuZCBjb250YWluZXIgc2NhbnMgd2l0aCByZXZpZXdlZCBleGVtcHRpb25zIHRoYXQgZXhwaXJlLgogIDwvQ2FyZD4= */}
+  <Card title="Scan dependencies for vulnerabilities" icon="bug" href="/guides/forge/scan-dependencies-vulnerabilities">
+    Go, npm and container scans with reviewed exemptions that expire.
+  </Card>
 </CardGroup>
 
 ## Reference

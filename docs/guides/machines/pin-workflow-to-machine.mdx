@@ -5,8 +5,6 @@ description: "Send a whole workflow, or one step of it, to a machine you choose 
 keywords: ["run workflow on specific machine", "reliant daemon selector", "workflow daemon field", "pin workflow node to machine", "run step on build server", "machine labels selector"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · L/S steps run in scratch: yes (guides-scratch/pin-workflow-to-machine/guides-sandbox-pin): reliant workflow validate on nightly-suite.yaml (exit 0) and on a selector with a misspelled field (exit 1) · H steps: run in Reliant Labs org (project guides-sandbox-pin 007e62b4, run nodes only, no model calls): `reliant workflow run where-it-runs --project-path … --daemon ns1023237 --follow` first refused ("no machine has synced this project's workflows yet"), then three runs with --project-id 007e62b4 (the project --project-path resolves to) — f667c79e (node daemon: a name that matches nothing → failed), f350dc83 (selector type cloud against a self-hosted machine → failed), 6301986f (type local → completed, both steps on ns1023237); project left (no CLI delete verb) · sources: internal/workflow/yaml/cel.go:338-399 (shorthand + selector fields), internal/toolexec/daemon_resolver.go:76-110 (connected match), internal/toolexec/daemon_router_nats.go:468-593 (records fallback, canonicalDaemonType, error texts), internal/workflow/runtime/activities/handlers/run_executor.go:371 + internal/projectcheckout/machine.go:186 (the step's checkout), call_llm.go:4134 (toolDaemonSelector), docs/machines/choosing.mdx, docs/automations/no-machine-runs.mdx · unverified: the label selector (setting machine labels needs reliant v1.23.0; the installed CLI is v1.21.3), `daemon: cloud` live (not run, to avoid routing to another of the account's machines) */}
-
 By the end of this guide a workflow runs where you tell it: the whole thing on one machine, and any step on a different one. Use it to run a slow test suite on an always-on server while you work on your laptop, or to send one step to a machine with a GPU.
 
 A workflow, or any node in it, takes a `daemon:` field. When a run has to choose, the most specific instruction wins: the node's `daemon:`, then the workflow's, then the machine the chat or automation runs on, then your default machine ([choosing a machine in workflows](/machines/choosing)).
@@ -95,13 +93,13 @@ A workflow, or any node in it, takes a `daemon:` field. When a run has to choose
   </Step>
 
   <Step title="Check where each step ran">
-    Run a workflow whose steps record their hostname. Replace `ns1023237` with your machine's name; the node uses the selector form to show that every field must match:
+    Run a workflow whose steps record their hostname. Replace `build-box` with your machine's name; the node uses the selector form to show that every field must match:
 
     ```yaml .reliant/workflows/where-it-runs.yaml
     name: where-it-runs
     description: Record which machine each step runs on
     entry: [default_step]
-    daemon: ns1023237
+    daemon: build-box
 
     nodes:
       - id: default_step
@@ -112,7 +110,7 @@ A workflow, or any node in it, takes a `daemon:` field. When a run has to choose
       - id: pinned_step
         type: run
         daemon:
-          name: ns1023237
+          name: build-box
           type: local
         command: echo "pinned_step ran on $(hostname)" | tee -a ran-on.txt
         timeout: 1m
@@ -125,7 +123,7 @@ A workflow, or any node in it, takes a `daemon:` field. When a run has to choose
     `--daemon` sets the run's own machine, the level below the workflow's `daemon:`:
 
     ```bash terminal
-    reliant workflow run where-it-runs --project-path "$PWD" --daemon ns1023237 --follow
+    reliant workflow run where-it-runs --project-path "$PWD" --daemon build-box --follow
     cat ran-on.txt
     ```
 
@@ -133,8 +131,8 @@ A workflow, or any node in it, takes a `daemon:` field. When a run has to choose
     {"event":"node_completed",...,"node_id":"default_step",...,"exit_code":0}
     {"event":"node_completed",...,"node_id":"pinned_step",...,"exit_code":0}
     {"event":"workflow_completed",...,"workflow_name":"where-it-runs",...}
-    default_step ran on ns1023237
-    pinned_step ran on ns1023237
+    default_step ran on build-box
+    pinned_step ran on build-box
     ```
 
     The same run with `type: cloud` failed the step, because that machine is `local` (see Troubleshooting).
@@ -168,10 +166,10 @@ A workflow, or any node in it, takes a `daemon:` field. When a run has to choose
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Choosing a machine in workflows" icon="sitemap" href="/machines/choosing">
+  <Card title="Choosing a machine in workflows" icon="network" href="/machines/choosing">
     The resolution order, automations, and machine status.
   </Card>
-  <Card title="Fix an offline machine" icon="plug-circle-xmark" href="/guides/machines/troubleshoot-offline-machine">
+  <Card title="Fix an offline machine" icon="unplug" href="/guides/machines/troubleshoot-offline-machine">
     When the machine a step needs isn't connected.
   </Card>
   <Card title="Run the daemon on your own server" icon="server" href="/guides/machines/run-agents-on-your-own-server">

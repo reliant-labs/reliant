@@ -5,8 +5,6 @@ description: "Ship a Forge Go API, its migrations and a managed Postgres to prod
 keywords: ["deploy Go API Postgres", "deploy Go API", "managed Postgres hosting", "forge env deploy", "Go API production deploy"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L steps run in scratch: yes (guides-scratch/deploy-go-api-managed-postgres/shop, a copy of the build-go-react-app-connect-rpc shop renamed guides-sandbox-goapi: env render prod --list, env build prod --release --plan) · H steps: run in Reliant Labs org sandbox (guides-sandbox-goapi/prod: env build prod --release v0.1.0 (refused, CutRelease 404, report 10a2ad1b) and v0.2.0, env deploy prod v0.2.0 --yes, curl healthz/readyz/ListProducts, env status, obs workloads --all --jobs all, db query prod, obs check prod --wait --json (exit 2 thin_baseline), obs check --threshold require_baseline=none (exit 0), env delete prod --yes, curl 404; torn down, project record and release images left in place) — unverified: exit 7 (the org has billing), --plan-only/--approve (covered by releases-and-promotion) */}
-
 You will ship the `shop` app from [Build a Go and React app](/guides/forge/build-go-react-app-connect-rpc) to production on [Reliant hosting](/hosting/overview): the Go API, a migration job, a managed Postgres and the frontend, as one release. At the end the API answers on a public URL and `forge obs check` has judged it.
 
 The environment declares the database, and the platform fills `DATABASE_URL` in each workload at deploy time, so you never handle a connection string. [Managed Postgres](/hosting/managed-postgres) covers backups and restore.

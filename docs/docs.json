@@ -286,6 +286,8 @@
                 "pages": [
                   "deep-dives/how-workflows-run",
                   "deep-dives/sub-agents-and-threads",
+                  "deep-dives/how-automations-fire",
+                  "deep-dives/integrations-and-credentials",
                   "deep-dives/agents-in-production"
                 ]
               },
@@ -295,7 +297,9 @@
                   "guides/workflows/review-pull-requests-with-ai",
                   "guides/workflows/github-issues-to-pull-requests",
                   "guides/workflows/production-alerts-to-github-issues",
-                  "guides/workflows/production-error-to-fix"
+                  "guides/workflows/production-error-to-fix",
+                  "guides/workflows/ai-security-review-pull-requests",
+                  "guides/workflows/agent-addresses-review-comments"
                 ]
               },
               {
@@ -303,13 +307,31 @@
                 "pages": [
                   "guides/workflows/first-multi-agent-workflow",
                   "guides/workflows/run-tests-until-they-pass",
-                  "guides/workflows/require-human-approval"
+                  "guides/workflows/require-human-approval",
+                  "guides/workflows/parallel-agents-git-worktrees",
+                  "guides/workflows/delegate-to-sub-agents",
+                  "guides/workflows/choose-model-per-step",
+                  "guides/workflows/test-workflows-with-scenarios",
+                  "guides/workflows/give-agents-tools-mcp-server",
+                  "guides/workflows/lint-unattended-workflows",
+                  "guides/workflows/pause-and-steer-a-run"
                 ]
               },
               {
                 "group": "Triggers & integrations",
                 "pages": [
-                  "guides/workflows/run-an-agent-on-a-schedule"
+                  "guides/workflows/run-an-agent-on-a-schedule",
+                  "guides/workflows/nightly-dependency-security-sweep",
+                  "guides/workflows/daily-slack-digest",
+                  "guides/workflows/slack-bot-agent",
+                  "guides/workflows/start-agent-from-webhook",
+                  "guides/workflows/call-api-without-exposing-key",
+                  "guides/workflows/run-workflow-from-github-actions",
+                  "guides/workflows/chain-workflows-on-finish",
+                  "guides/workflows/triage-email-with-an-agent",
+                  "guides/workflows/sms-whatsapp-agent",
+                  "guides/workflows/start-runs-from-go",
+                  "guides/workflows/stream-run-events-typescript"
                 ]
               }
             ]
@@ -338,6 +360,13 @@
                   "guides/machines/run-several-daemons-one-computer",
                   "guides/machines/reclaim-restore-worktrees"
                 ]
+              },
+              {
+                "group": "Models",
+                "pages": [
+                  "guides/machines/use-local-models",
+                  "guides/machines/use-claude-or-chatgpt-subscription"
+                ]
               }
             ]
           },
@@ -359,13 +388,23 @@
                   "guides/forge/build-go-react-app-connect-rpc",
                   "guides/forge/build-app-from-one-prompt",
                   "guides/forge/deploy-static-site-cdn",
-                  "guides/forge/bring-existing-app-any-language"
+                  "guides/forge/bring-existing-app-any-language",
+                  "guides/forge/adopt-existing-vite-nextjs",
+                  "guides/forge/port-codebase-to-forge",
+                  "guides/forge/add-expo-mobile-app"
                 ]
               },
               {
                 "group": "Build features",
                 "pages": [
-                  "guides/forge/add-table-crud-api-pages"
+                  "guides/forge/add-table-crud-api-pages",
+                  "guides/forge/add-custom-rpc",
+                  "guides/forge/background-worker-cron-job",
+                  "guides/forge/add-sign-in-passkeys",
+                  "guides/forge/scope-rows-to-owner",
+                  "guides/forge/call-llm-from-deployed-app",
+                  "guides/forge/rest-and-openapi-from-connect",
+                  "guides/forge/build-ui-before-backend-mock-mode"
                 ]
               },
               {
@@ -373,7 +412,21 @@
                 "pages": [
                   "guides/forge/zero-downtime-postgres-migrations",
                   "guides/forge/measure-migration-locks",
-                  "guides/forge/let-agents-query-production-data"
+                  "guides/forge/let-agents-query-production-data",
+                  "guides/forge/seed-realistic-dev-data"
+                ]
+              },
+              {
+                "group": "Quality & security",
+                "pages": [
+                  "guides/forge/gate-prs-forge-lint-tests",
+                  "guides/forge/test-go-api-real-postgres",
+                  "guides/forge/find-endpoints-missing-auth-checks",
+                  "guides/forge/scan-dependencies-vulnerabilities",
+                  "guides/forge/connect-claude-code-cursor-mcp",
+                  "guides/forge/keep-test-suite-fast",
+                  "guides/forge/debug-go-service-delve-cli",
+                  "guides/forge/upgrade-forge-version"
                 ]
               }
             ]
@@ -382,10 +435,22 @@
             "group": "Hosting",
             "pages": [
               {
+                "group": "How it works",
+                "pages": [
+                  "deep-dives/inside-reliant-hosting"
+                ]
+              },
+              {
                 "group": "Deploy",
                 "pages": [
                   "guides/hosting/deploy-go-api-managed-postgres",
-                  "guides/hosting/preview-environment-every-pull-request"
+                  "guides/hosting/preview-environment-every-pull-request",
+                  "guides/hosting/custom-domain-https",
+                  "guides/hosting/manage-production-secrets",
+                  "guides/hosting/deploy-to-your-own-kubernetes",
+                  "guides/hosting/keep-helm-fly-cloud-run",
+                  "guides/hosting/call-hosted-api-from-frontend-elsewhere",
+                  "guides/hosting/stop-hosted-environment"
                 ]
               },
               {
@@ -393,7 +458,16 @@
                 "pages": [
                   "guides/hosting/promote-release-staging-to-production",
                   "guides/hosting/gate-production-deploy-release-health",
-                  "guides/hosting/recover-from-bad-deploy"
+                  "guides/hosting/recover-from-bad-deploy",
+                  "guides/hosting/deploy-from-github-actions",
+                  "guides/hosting/detect-config-drift"
+                ]
+              },
+              {
+                "group": "Data & users",
+                "pages": [
+                  "guides/hosting/restore-postgres-point-in-time",
+                  "guides/hosting/manage-app-users-cli"
                 ]
               }
             ]
@@ -410,14 +484,23 @@
               {
                 "group": "Monitor",
                 "pages": [
-                  "guides/observability/send-opentelemetry-from-any-app"
+                  "guides/observability/send-opentelemetry-from-any-app",
+                  "guides/observability/find-slowest-rpcs",
+                  "guides/observability/route-alerts-slack-pagerduty",
+                  "guides/observability/custom-alert-rules-as-code",
+                  "guides/observability/dashboard-ui-to-code",
+                  "guides/observability/add-custom-metric",
+                  "guides/observability/active-users-from-product-events"
                 ]
               },
               {
                 "group": "Debug",
                 "pages": [
                   "guides/observability/find-release-that-caused-error",
-                  "guides/observability/debug-production-with-ai-agent"
+                  "guides/observability/debug-production-with-ai-agent",
+                  "guides/observability/debug-frontend-errors-session-timelines",
+                  "guides/observability/find-cpu-hotspots-continuous-profiling",
+                  "guides/observability/browser-and-backend-logs-locally"
                 ]
               }
             ]

@@ -22,7 +22,14 @@ func ParseWorkflow(data []byte) (*reliantv1.Workflow, error) {
 		return nil, fmt.Errorf("v2yaml: expected document node")
 	}
 
-	wf, err := unmarshalWorkflow(doc.Content[0])
+	// Aliases and merge keys read as the text they point to, so their
+	// templates expand like any other field's (expandYAMLAliases).
+	root, err := expandYAMLAliases(doc.Content[0])
+	if err != nil {
+		return nil, err
+	}
+
+	wf, err := unmarshalWorkflow(root)
 	if err != nil {
 		return nil, withVersionSkewHint(err)
 	}
@@ -121,6 +128,12 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 
 		case "concurrency":
 			wf.Concurrency, err = unmarshalWorkflowConcurrency(val)
+
+		case "attention":
+			if wf.Attention != nil {
+				return nil, fmt.Errorf("workflow.attention is set twice")
+			}
+			wf.Attention, err = unmarshalWorkflowAttention(val)
 
 		case "check":
 			wf.Check, err = unmarshalWorkflowCheck(val)
@@ -426,6 +439,13 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 			return nil, err
 		}
 		m.Content = append(m.Content, scalarNode("concurrency", ""), policy)
+	}
+	if wf.Attention != nil {
+		policy, err := marshalWorkflowAttention(wf.Attention)
+		if err != nil {
+			return nil, err
+		}
+		m.Content = append(m.Content, scalarNode("attention", ""), policy)
 	}
 	if wf.Check != nil {
 		m.Content = append(m.Content, scalarNode("check", ""), marshalWorkflowCheck(wf.Check))

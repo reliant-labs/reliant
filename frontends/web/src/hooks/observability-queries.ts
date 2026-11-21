@@ -54,7 +54,7 @@ import type {
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { rangeMs, readRange, resolveWindow, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
-import { keepPreviousInOrgSegment } from "@/lib/orgScope";
+import { keepPreviousInOrgSegment, useRouteOrgIdOverride } from "@/lib/orgScope";
 
 // Presentation never changes QueryPanel's computation: two dashboard tiles
 // with different ids/titles/layout but the same query share one in-flight read.
@@ -166,12 +166,16 @@ interface PageParam {
  */
 export function useObservabilityOrg() {
   const api = useObservabilityApi();
+  // On an org page, the route's org (lib/orgScope.ts); the query only outside the org tree.
+  const routeOrg = useRouteOrgIdOverride();
   const org = useQuery({
     queryKey: obsKeys.org(),
     queryFn: () => api.currentOrgId(),
     staleTime: 5 * 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
+    enabled: routeOrg === undefined,
   });
+  if (routeOrg !== undefined) return { orgId: routeOrg, isLoading: routeOrg === null, error: null, refetch: org.refetch };
   return { orgId: org.data ?? null, isLoading: org.isLoading, error: org.error, refetch: org.refetch };
 }
 

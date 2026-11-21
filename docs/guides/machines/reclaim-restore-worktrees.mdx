@@ -5,8 +5,6 @@ description: "Free the disk idle git worktrees hold on a Reliant machine, decide
 keywords: ["reclaim git worktree disk space", "reliant worktree reclaim", "restore deleted git worktree", "refs/reliant/reclaimed", "RELIANT_WORKTREE_RECLAIM", "clean up old worktrees", "agent worktrees filling disk"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 (27d7aff) · forge: not used · L steps run in scratch: yes (guides-scratch/reclaim: scratch HOME and git config, a bare origin, a clone, one clean pushed worktree and one with uncommitted work, both backdated 6 days; nothing on this machine's real worktrees): reliant worktree reclaim scan --roots, reclaim report --class needs_approval, reclaim proposals, reclaim approve (refused), reclaimed --repo, restore of an unrecorded path (error), git for-each-ref refs/reliant/reclaimed (empty); read only on this machine: worktree reclaimed, reclaim report, and its self-hosted daemon's log line "Storage reaper schedule disabled" · H steps: none · sources: reliant worktree --help and every subcommand's --help, proto/reliant/config/v1/config.proto (WorktreeReclaimConfig, StorageReaperConfig defaults), internal/worktreereclaim/sweep_config.go (default dry-run, idle floors), internal/diskwatch/reaper.go:121-134 (RELIANT_STORAGE_REAPER auto = managed daemons only) + :222-271 and worktreereap.go:60-66,163-171 (the sweep rides the storage reaper: 6h, 30m under disk pressure), internal/worktreereclaim/approval_command.go:141 (approval refused in dry-run), internal/worktreereclaim/capture.go (capture layout, never expired), capture_restore.go (ApplyCapture via worktree.ensure), cmd/reliant/cmd/worktree.go (restore output), frontends/web/src/components/inbox/WorktreeReclaimAction.tsx + InboxPage.tsx:73 · unverified: a real reclaim, the capture it leaves and `reliant worktree restore` of it (a reclaim runs only inside a connected daemon's pass in mode on, which also runs the machine-wide storage reaper, so it was not run on this shared machine; restore output is quoted from cmd/reliant/cmd/worktree.go), the Inbox approval, starting a connected daemon with the mode set, and the scheduled dry-run pass on a cloud machine (from code; no managed machine was inspected) */}
-
 This guide frees the disk that idle git worktrees take up on one of your machines, and brings one back when you want its work again. Agents create many worktrees, each with its own `node_modules` and build output.
 
 Each machine's daemon does the reclaiming, on that machine only. Before it deletes a worktree it commits everything git can see of it into a local ref, `refs/reliant/reclaimed/<key>/<time>`, so a wrong call costs a restore, not lost work ([chats, workspaces and machines](/deep-dives/chats-worktrees-machines)). Archiving a workspace in the app is a separate cleanup path, covered in [Workspaces](/features/worktrees#cleaning-up).
@@ -133,13 +131,13 @@ Each machine's daemon does the reclaiming, on that machine only. Before it delet
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Chats, workspaces and machines" icon="diagram-project" href="/deep-dives/chats-worktrees-machines">
+  <Card title="Chats, workspaces and machines" icon="workflow" href="/deep-dives/chats-worktrees-machines">
     Why a workspace lives on one machine, and what deleting a machine releases.
   </Card>
-  <Card title="Run several daemons on one computer" icon="layer-group" href="/guides/machines/run-several-daemons-one-computer">
+  <Card title="Run several daemons on one computer" icon="layers" href="/guides/machines/run-several-daemons-one-computer">
     One daemon per checkout or account, and how to address each one.
   </Card>
-  <Card title="Workspaces" icon="code-branch" href="/features/worktrees">
+  <Card title="Workspaces" icon="git-branch" href="/features/worktrees">
     Create, archive and restore workspaces in the app.
   </Card>
   <Card title="CLI reference" icon="terminal" href="/reference/cli">

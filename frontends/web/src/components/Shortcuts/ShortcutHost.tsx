@@ -57,6 +57,7 @@ import { lazyRoute } from "../../lib/lazyRoute";
 import { logger } from "../../lib/logger";
 import { SequenceHint } from "../Layout/SequenceHint";
 import { homePath, projectPath, settingsPath, workflowsPath } from "@/lib/paths";
+import { orgFreeRouteId } from "@/lib/paths/org";
 
 // Loaded on first open (and warmed once the host is live): they would
 // otherwise ride in the entry chunk to every unauthenticated page.
@@ -109,12 +110,14 @@ export function shortcutScope({
   pathname: string;
   signedIn: boolean;
 }): ShortcutScope {
+  // The org tree mounts the same layouts under `/o/$org` (routes.tsx).
+  const ids = routeIds.map(orgFreeRouteId);
   const enabled =
     signedIn &&
     surfaceForPath(pathname) === "desktop" &&
-    routeIds.some((id) => id === WORKSPACE_LAYOUT || id === APP_LAYOUT) &&
-    !routeIds.some((id) => EXCLUDED_ROUTES.has(id));
-  return { enabled, workspace: enabled && routeIds.includes(WORKSPACE_LAYOUT) };
+    ids.some((id) => id === WORKSPACE_LAYOUT || id === APP_LAYOUT) &&
+    !ids.some((id) => EXCLUDED_ROUTES.has(id));
+  return { enabled, workspace: enabled && ids.includes(WORKSPACE_LAYOUT) };
 }
 
 type Overlay =
