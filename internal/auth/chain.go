@@ -72,10 +72,11 @@ type TokenChain struct {
 // validator that cannot verify anything refuses to start, unless a fresh
 // snapshot of the identity's keys was delivered).
 func NewTokenChain(ctx context.Context, s Settings) (*TokenChain, error) {
+	chain := &TokenChain{}
 	if s.ModeName() == ModeAPIKey {
-		if s.Identity.Configured() {
-			return nil, errors.New("AUTH_MODE=apikey accepts the shared key alone; unset JWT_ISSUER, or run AUTH_MODE=supabase to accept the managed identity's tokens")
-		}
+		// The shared key, and the managed identity beside it when one is
+		// configured (the dev stack signs in with both). A key is never a
+		// JWT naming the identity's issuer, so the two cannot be confused.
 		if s.APIKey == "" {
 			return nil, fmt.Errorf("AUTH_MODE=apikey requires AUTH_API_KEY to be set")
 		}
@@ -83,10 +84,13 @@ func NewTokenChain(ctx context.Context, s Settings) (*TokenChain, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create API key validator: %w", err)
 		}
-		return &TokenChain{legacy: key, sharedKey: true}, nil
+		chain.legacy, chain.sharedKey = key, true
+		if err := chain.addIdentity(s.Identity); err != nil {
+			return nil, err
+		}
+		return chain, nil
 	}
 
-	chain := &TokenChain{}
 	var supabase TokenValidator
 	switch {
 	case s.PublicKeyPEM != "":
@@ -115,18 +119,27 @@ func NewTokenChain(ctx context.Context, s Settings) (*TokenChain, error) {
 		chain.legacy = legacy
 	}
 
-	if s.Identity.Configured() {
-		identity, err := newIdentityValidator(s.Identity)
-		if err != nil {
-			return nil, err
-		}
-		chain.identity, chain.identityIssuer = identity, s.Identity.Issuer
+	if err := chain.addIdentity(s.Identity); err != nil {
+		return nil, err
 	}
 
 	if chain.legacy == nil && chain.identity == nil {
 		return nil, ErrInvalidPublicKey
 	}
 	return chain, nil
+}
+
+// addIdentity adds the managed identity's validator when s names one.
+func (c *TokenChain) addIdentity(s IdentitySettings) error {
+	if !s.Configured() {
+		return nil
+	}
+	identity, err := newIdentityValidator(s)
+	if err != nil {
+		return err
+	}
+	c.identity, c.identityIssuer = identity, s.Issuer
+	return nil
 }
 
 // newIdentityValidator is forge's JWT validator for the managed identity:

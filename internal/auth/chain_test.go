@@ -304,10 +304,28 @@ func TestTokenChainRefusesAnIdentityWithoutAudience(t *testing.T) {
 	if _, err := NewAuthenticator(context.Background(), s); err == nil {
 		t.Fatal("NewAuthenticator accepted JWT_ISSUER without JWT_AUDIENCE")
 	}
-	s.Mode, s.APIKey = ModeAPIKey, "shared-key"
-	s.Identity.Audience = testIdentityAud
-	if _, err := NewAuthenticator(context.Background(), s); err == nil {
-		t.Fatal("NewAuthenticator accepted a managed identity in AUTH_MODE=apikey")
+}
+
+// TestSharedKeyBesideTheIdentity: AUTH_MODE=apikey (the dev stack) accepts
+// the shared key and, when configured, the managed identity; each is what it
+// is, and neither verifies the other's credential.
+func TestSharedKeyBesideTheIdentity(t *testing.T) {
+	s, supabase, ti, _ := newChainFixture(t)
+	s.Mode, s.APIKey = ModeAPIKey, "rdev_shared-key"
+	a := mustAuthenticator(t, s)
+	v, err := a.Verify(context.Background(), "rdev_shared-key", authn.ChannelAuthorization)
+	if err != nil || v.Claims.Credential != CredentialSharedKey {
+		t.Fatalf("shared key: %v, %+v", err, v)
+	}
+	v, err = a.Verify(context.Background(), ti.sign(t, nil), authn.ChannelAuthorization)
+	if err != nil || v.Claims.Credential != CredentialIdentityToken {
+		t.Fatalf("identity token: %v, %+v", err, v)
+	}
+	if _, err := a.Verify(context.Background(), supabase(nil), authn.ChannelAuthorization); err == nil {
+		t.Fatal("a Supabase token was accepted in AUTH_MODE=apikey")
+	}
+	if _, err := a.Verify(context.Background(), ti.sign(t, map[string]any{"iss": "rdev_shared-key"}), authn.ChannelAuthorization); err == nil {
+		t.Fatal("a token naming another issuer was accepted")
 	}
 }
 
