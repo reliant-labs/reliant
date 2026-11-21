@@ -221,6 +221,7 @@ Send a prompt to a language model and get a response
 | `capabilities` | object | - |
 | `provider_account_id` | string | - |
 | `trace_parent` | string | - |
+| `thinking_level` | string | - |
 
 ---
 

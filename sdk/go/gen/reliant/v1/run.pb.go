@@ -669,7 +669,21 @@ func (x *StartRunResponse) GetRun() *Run {
 type SignalRunRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	RunId string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	// Thread targets a specific thread of the run. Defaults to its root thread.
+	// Thread targets a specific thread of the run: a thread id, or the node name
+	// of an agent running in it ("implement", or a full node path such as
+	// "implement.agent_loop").
+	//
+	// Unset, the message goes to the run's running (listening) agent: the root
+	// thread when an agent reads it (an agent chat), else the run's one running
+	// agent. With several agents running in parallel the call is refused
+	// (FailedPrecondition, reason run_recipient_ambiguous) with a message that
+	// lists them, so the caller resends naming one. With none running it
+	// reports delivered=false with not_delivered_reason run_no_listening_agent
+	// and queues nothing, except for a paused builtin agent, whose root thread
+	// reads the message once the run resumes. A sub-agent's run keeps its own
+	// thread as the default. When the run cannot say which threads its agents
+	// read (an older worker, Temporal unreachable), the message goes to the
+	// root thread.
 	Thread string `protobuf:"bytes,2,opt,name=thread,proto3" json:"thread,omitempty"`
 	// Messages are appended to the thread before the run is woken.
 	Messages      []*InputMessage `protobuf:"bytes,3,rep,name=messages,proto3" json:"messages,omitempty"`
@@ -736,9 +750,18 @@ type SignalRunResponse struct {
 	Delivered bool `protobuf:"varint,1,opt,name=delivered,proto3" json:"delivered,omitempty"`
 	// MessageIds are the ids of any messages persisted by this call. They are
 	// saved even when delivery fails, so the next run reads them.
-	MessageIds    []string `protobuf:"bytes,2,rep,name=message_ids,json=messageIds,proto3" json:"message_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	MessageIds []string `protobuf:"bytes,2,rep,name=message_ids,json=messageIds,proto3" json:"message_ids,omitempty"`
+	// NotDeliveredReason says why a live run did not take the message, as an
+	// error reason (run_no_listening_agent: no agent of the run is running to
+	// read it, and nothing was queued). Empty when the message was delivered,
+	// and when the run was not live (delivered=false with no reason).
+	//
+	// The X-Reliant-Not-Delivered-Reason response header carries the same
+	// value for older clients; read this field, and fall back to the header
+	// only against a server that predates it.
+	NotDeliveredReason string `protobuf:"bytes,3,opt,name=not_delivered_reason,json=notDeliveredReason,proto3" json:"not_delivered_reason,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SignalRunResponse) Reset() {
@@ -783,6 +806,13 @@ func (x *SignalRunResponse) GetMessageIds() []string {
 		return x.MessageIds
 	}
 	return nil
+}
+
+func (x *SignalRunResponse) GetNotDeliveredReason() string {
+	if x != nil {
+		return x.NotDeliveredReason
+	}
+	return ""
 }
 
 type GetRunRequest struct {
@@ -2042,11 +2072,12 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\x10SignalRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x16\n" +
 	"\x06thread\x18\x02 \x01(\tR\x06thread\x124\n" +
-	"\bmessages\x18\x03 \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\"R\n" +
+	"\bmessages\x18\x03 \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\"\x84\x01\n" +
 	"\x11SignalRunResponse\x12\x1c\n" +
 	"\tdelivered\x18\x01 \x01(\bR\tdelivered\x12\x1f\n" +
 	"\vmessage_ids\x18\x02 \x03(\tR\n" +
-	"messageIds\"&\n" +
+	"messageIds\x120\n" +
+	"\x14not_delivered_reason\x18\x03 \x01(\tR\x12notDeliveredReason\"&\n" +
 	"\rGetRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\x90\x01\n" +
 	"\x0eGetRunResponse\x12!\n" +

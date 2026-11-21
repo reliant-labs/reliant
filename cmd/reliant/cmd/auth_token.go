@@ -345,12 +345,7 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 				return conn.annotate(err)
 			}
 
-			var matches []*reliantv1.TokenInfo
-			for _, t := range listResp.Msg.GetTokens() {
-				if t.GetId() == target || t.GetName() == target {
-					matches = append(matches, t)
-				}
-			}
+			matches := tokensToRevoke(listResp.Msg.GetTokens(), target)
 			switch len(matches) {
 			case 0:
 				return fmt.Errorf("no active token named %q (check 'reliant auth token list')", target)
@@ -369,6 +364,31 @@ func newAuthTokenRevokeCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// cliTokenNamePrefix is what the control plane puts before the --name that
+// 'reliant auth token create' sends: --name ci is stored as reliant-cli@ci.
+const cliTokenNamePrefix = "reliant-cli@"
+
+// tokensToRevoke is the tokens 'reliant auth token revoke <target>' means: an
+// id or a stored name, else the name 'token create --name' took (ci for
+// reliant-cli@ci), so a token is revoked by the name it was created with.
+func tokensToRevoke(tokens []*reliantv1.TokenInfo, target string) []*reliantv1.TokenInfo {
+	var matches []*reliantv1.TokenInfo
+	for _, t := range tokens {
+		if t.GetId() == target || t.GetName() == target {
+			matches = append(matches, t)
+		}
+	}
+	if len(matches) > 0 || strings.HasPrefix(target, cliTokenNamePrefix) {
+		return matches
+	}
+	for _, t := range tokens {
+		if t.GetName() == cliTokenNamePrefix+target {
+			matches = append(matches, t)
+		}
+	}
+	return matches
 }
 
 // minTokenLifetime is the shortest lifetime the control plane mints

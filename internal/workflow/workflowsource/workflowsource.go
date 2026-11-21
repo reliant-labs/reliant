@@ -104,35 +104,15 @@ type PinnedStore interface {
 	GetPinnedProjectCatalog(ctx context.Context, pin string) (*db.PinnedCatalog, bool, error)
 }
 
-type pinnedDeliveryCatalogsKey struct{}
-
-// WithPinnedDeliveryCatalogs shares immutable snapshot contents across one
-// delivery's sequential attempts to resolve its matching workflow definitions.
-func WithPinnedDeliveryCatalogs(ctx context.Context) context.Context {
-	return context.WithValue(ctx, pinnedDeliveryCatalogsKey{}, make(map[string]*db.PinnedCatalog))
-}
-
 // pinnedCatalog reads a pin, refusing a store that cannot and a pin that is
 // gone: the run asked for the definitions it started with, and running any
 // other version in their place is exactly what the pin prevents.
-func ReadPinnedCatalog(ctx context.Context, store PinnedStore, pin string) (*db.PinnedCatalog, bool, error) {
-	cache, _ := ctx.Value(pinnedDeliveryCatalogsKey{}).(map[string]*db.PinnedCatalog)
-	if catalog, ok := cache[pin]; ok {
-		return catalog, true, nil
-	}
-	catalog, found, err := store.GetPinnedProjectCatalog(ctx, pin)
-	if err == nil && found && cache != nil {
-		cache[pin] = catalog
-	}
-	return catalog, found, err
-}
-
 func pinnedCatalog(ctx context.Context, store any, pin string) (*db.PinnedCatalog, error) {
 	pinned, ok := store.(PinnedStore)
 	if !ok {
 		return nil, &StoreError{Err: fmt.Errorf("this store cannot read the run's pinned workflow catalog %s", pin)}
 	}
-	catalog, found, err := ReadPinnedCatalog(ctx, pinned, pin)
+	catalog, found, err := pinned.GetPinnedProjectCatalog(ctx, pin)
 	if err != nil {
 		return nil, &StoreError{Err: fmt.Errorf("read the run's pinned workflow catalog %s: %w", pin, err)}
 	}

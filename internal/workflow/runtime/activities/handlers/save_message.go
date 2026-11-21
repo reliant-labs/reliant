@@ -194,6 +194,7 @@ func (a *SaveMessageActivity) WriteMessage(
 		TokenCount:        int(protoArgs.GetTokenCount()),
 		Cost:              protoArgs.GetCost(),
 		Model:             protoArgs.GetResolvedModel(),
+		ThinkingLevel:     protoArgs.GetResolvedThinkingLevel(),
 		ProviderAccountID: protoArgs.GetResolvedProviderAccountId(),
 		Agent:             protoArgs.GetResolvedAgent(),
 		Phase:             protoArgs.GetResolvedPhase(),

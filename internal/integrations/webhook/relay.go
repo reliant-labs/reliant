@@ -111,7 +111,7 @@ func (r *Relay) ProcessOne(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	d := rows[0]
-	res, processErr := r.process(triggers.WithDeliveryCatalogCache(ctx), d)
+	res, processErr := r.process(ctx, d)
 	if ctx.Err() != nil || errors.Is(processErr, errInboxLeaseLost) {
 		return true, processErr
 	}
@@ -177,7 +177,7 @@ func (r *Relay) routeIntegration(ctx context.Context, d core.TriggerDelivery) er
 		for _, route := range body.Verified {
 			allowed[route] = struct{}{}
 		}
-		readCtx, cancel := context.WithTimeout(ctx, recordTimeout)
+		readCtx, cancel := r.router.step(ctx)
 		routes, err := r.store.ListIntegrationTriggers(readCtx, d.Provider)
 		cancel()
 		if err != nil {

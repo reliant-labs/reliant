@@ -1114,6 +1114,10 @@ message SaveMessageNodeArgs {
   // completion, forwarded from CallLLMOutput.provider_account_id and persisted
   // onto messages.provider_account_id.
   string resolved_provider_account_id = 33 [(reliant) = {hidden: true}];
+  // ResolvedThinkingLevel is the effective thinking level the completion ran
+  // at, forwarded from CallLLMOutput.thinking_level and persisted onto
+  // messages.thinking_level.
+  string resolved_thinking_level = 34 [(reliant) = {hidden: true}];
 }
 
 // InjectFileMsg carries binary file data for inject file attachments.
@@ -1893,6 +1897,13 @@ message CallLLMOutput {
   // span under the turn that asked for it (internal/telemetry/ai_spans.go).
   // Empty when the turn was not traced.
   string trace_parent = 21 [(reliant) = {visibility_contexts: "advanced"}];
+
+  // ThinkingLevel is the effective thinking (reasoning-effort) level this
+  // completion was requested at, after the model's capabilities reconciled
+  // the requested one: what the step actually ran at. Empty when the model
+  // takes no level (it cannot reason, or runs at its driver's default). The
+  // inline save_message persists it onto messages.thinking_level.
+  string thinking_level = 22 [(reliant) = {visibility_contexts: "advanced"}];
 }
 
 // ToolCapabilities is one agent turn's tool capability set: resolved once by

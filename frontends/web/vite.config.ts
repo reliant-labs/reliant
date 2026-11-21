@@ -442,6 +442,12 @@ const appConfig: ViteUserConfig = {
     // nothing (v1.24.0-rc.3..rc.5's release gate). The alias sends it to the
     // SDK itself, as the bundle does.
     server: { deps: { inline: ["@reliantlabs/forge-web-runtime", "@hyperdx/otel-web"] } },
+    // The runtime loads the SDK through its package.json import map
+    // ("#hyperdx-otel-web", forge-web-runtime >= 0.13.20): `browser` gets
+    // @hyperdx/otel-web, `node` a copy of the SDK pre-bundled into the
+    // runtime's dist. Vitest resolves with `node`, so without the second alias
+    // the runtime starts that copy, not the instance a test stubs, and every
+    // `Rum.init` spy sees no call. Resolve it as the browser bundle does.
     ...(process.env.VITEST
       ? {
           alias: [

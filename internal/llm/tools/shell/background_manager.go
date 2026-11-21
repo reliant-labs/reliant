@@ -1825,18 +1825,22 @@ func (m *BackgroundManager) ProcessOutcomes(processIDs []string) (map[string]Pro
 	return outcomes, unknown
 }
 
-// GetProcessStatus returns the current status and completion state of a process
+// GetProcessStatus returns the current status and completion state of a process.
+//
+// It reads lifecycle state only, through ProcessOutcomes, and so never
+// refreshes ports. It used to go through GetProcess, which runs a whole-host
+// `ps` + `lsof` scan for a running process; a caller polling for completion
+// (the daemon's process-output stream) paid that scan on every poll and
+// threw the ports away.
 func (m *BackgroundManager) GetProcessStatus(processID string) (status string, isComplete bool, exitCode *int, err error) {
-	process, err := m.GetProcess(processID)
-	if err != nil {
-		return "", false, nil, err
+	outcomes, _ := m.ProcessOutcomes([]string{processID})
+	outcome, ok := outcomes[processID]
+	if !ok {
+		return "", false, nil, fmt.Errorf("process %s not found", processID)
 	}
 
-	process.outputMu.RLock()
-	defer process.outputMu.RUnlock()
-
-	isComplete = process.Status != "running"
-	return process.Status, isComplete, process.ExitCode, nil
+	isComplete = outcome.Status != "running"
+	return outcome.Status, isComplete, outcome.ExitCode, nil
 }
 
 // noSpaceScanBytes bounds how much of a finished background process's output

@@ -67,6 +67,9 @@ type AcceptOptions struct {
 	// Manual is a human's "run now": it bypasses the filter, the enabled
 	// flag and nothing else.
 	Manual bool
+	// Batch, when set, is shared by every Accept of one routing attempt that
+	// reaches several triggers so each catalog scope is pinned and read once.
+	Batch *Batch
 	// Receipt links a targeted durable receipt to its first event atomically.
 	Receipt *IntakeReceipt
 }
@@ -193,8 +196,9 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	// one refuses it before any filter, so a broken file never reads as
 	// "did not match".
 	var (
-		decl *Declaration
-		def  *core.TriggerEventDefinition
+		decl      *Declaration
+		def       *core.TriggerEventDefinition
+		workflows = opts.Batch.workflows(in.workflows)
 	)
 	switch {
 	case err != nil:
@@ -202,10 +206,10 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		err = &DeclarationError{Workflow: trigger.Workflow, Name: triggerName(trigger), Reason: wait}
 	default:
 		trigger = bound
-		if def, err = DefinitionOf(ctx, in.workflows, trigger); err != nil {
+		if def, err = DefinitionOf(ctx, workflows, trigger); err != nil {
 			return nil, err
 		}
-		decl, err = activationFor(ctx, PinnedTo(in.workflows, def), trigger)
+		decl, err = activationFor(ctx, PinnedTo(workflows, def), trigger)
 	}
 	// Who caused the event is resolved BEFORE any filter, because the filters
 	// read it, and is frozen on the row so the history can explain a skip.

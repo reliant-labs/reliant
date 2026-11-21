@@ -8857,6 +8857,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -19825,6 +19830,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -30494,6 +30504,11 @@
               "Name": "message_ids",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "not_delivered_reason",
+              "ProtoType": "string",
+              "IsOptional": false
             }
           ],
           "StartRunRequest": [
@@ -30987,6 +31002,10 @@
               "name": "message_ids",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "not_delivered_reason",
+              "kind": "string"
             }
           ],
           "reliant.v1.StartRunRequest": [
@@ -37137,6 +37156,11 @@
               "name": "sender",
               "kind": "message",
               "type_name": "reliant.v1.MessageSender"
+            },
+            {
+              "name": "thinking_level",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.MessageSender": [
@@ -48334,6 +48358,10 @@
             },
             {
               "name": "resolved_provider_account_id",
+              "kind": "string"
+            },
+            {
+              "name": "resolved_thinking_level",
               "kind": "string"
             }
           ],
