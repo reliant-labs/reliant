@@ -18,7 +18,8 @@ import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { fetchFullToolBodies } from "../../hooks/tool-result-queries";
-import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
+import { isReadOnlyTool, isRequestMachineTool, isSpawnTool } from "../../lib/toolFormatters";
+import { SubAgentGroup } from "./SubAgentGroup";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
 import { DraftAutomationCard, isDraftAutomationTool } from "./tool-renderers/DraftAutomationToolRenderer";
 import { AskUserCard } from "./AskUserCard";
@@ -689,12 +690,26 @@ function ChatMessageComponent({
     // (`ungrouped`): the fold is already the group. Each group sits where its
     // first call ran; a lone call is its own quiet row. Rows sit tight: the
     // prose around gets the space.
-    const readOnly = executions.filter((exec) => isReadOnlyTool(exec.call.name));
-    const others = executions.filter((exec) => !isReadOnlyTool(exec.call.name));
+    // Sub-agents started together (2+) are one SubAgentGroup, wherever the
+    // first of them ran: "12 agents · 8 done · 3 running · 1 failed".
+    const agents = executions.filter((exec) => isSpawnTool(exec.call.name));
+    const groupAgents = agents.length > 1;
+    const rest = groupAgents ? executions.filter((exec) => !isSpawnTool(exec.call.name)) : executions;
+    const readOnly = rest.filter((exec) => isReadOnlyTool(exec.call.name));
+    const others = rest.filter((exec) => !isReadOnlyTool(exec.call.name));
     const groupReadOnly = readOnly.length > 1;
     const groupOthers = shouldGroup && others.length > 1 && !slice?.ungrouped;
     const nodes: JSX.Element[] = [];
     executions.forEach((exec, idx) => {
+      if (groupAgents && isSpawnTool(exec.call.name)) {
+        if (exec === agents[0]) {
+          nodes.push(
+            <SubAgentGroup key={`${keyPrefix}-agents`} executions={agents} messageId={message.id}
+              chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} />,
+          );
+        }
+        return;
+      }
       const readOnlyCall = isReadOnlyTool(exec.call.name);
       if (readOnlyCall ? !groupReadOnly : !groupOthers) {
         nodes.push(row(exec, idx));
