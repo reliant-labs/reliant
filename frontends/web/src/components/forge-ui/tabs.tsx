@@ -65,9 +65,9 @@ export default function Tabs({
     // the accent marks the primary action and focus, and a tab strip in
     // accent competes with the page's one primary button.
     underline: {
-      container: "flex gap-5 border-b border-border",
+      container: "flex gap-6 border-b border-border",
       tab: (isActive: boolean, disabled: boolean) =>
-        `relative -mb-px border-b-2 pb-2.5 pt-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        `relative -mb-px border-b-2 pb-3 pt-1 text-ui transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
           disabled
             ? "cursor-not-allowed border-transparent text-ink-subtle"
             : isActive
@@ -76,25 +76,25 @@ export default function Tabs({
         }`,
     },
     pills: {
-      container: "flex gap-1 rounded-lg bg-surface-muted p-1",
+      container: "flex gap-1 rounded-lg border border-border p-1",
       tab: (isActive: boolean, disabled: boolean) =>
         `rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
           disabled
             ? "cursor-not-allowed text-ink-subtle"
             : isActive
-              ? "bg-surface text-ink ring-1 ring-border"
+              ? "bg-ink/8 text-ink"
               : "text-ink-muted hover:text-ink"
         }`,
     },
     boxed: {
-      container: "flex gap-0 rounded-lg border border-border overflow-hidden",
+      container: "flex gap-1 rounded-lg border border-border p-1",
       tab: (isActive: boolean, disabled: boolean) =>
-        `px-4 py-2 text-sm font-medium border-r border-border last:border-r-0 transition-colors ${
+        `rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
           disabled
-            ? "cursor-not-allowed text-ink-subtle bg-surface-muted"
+            ? "cursor-not-allowed text-ink-subtle"
             : isActive
-              ? "bg-accent-surface text-accent-ink"
-              : "bg-surface text-ink-muted hover:bg-surface-muted"
+              ? "bg-ink/8 text-ink"
+              : "text-ink-muted hover:bg-ink/5 hover:text-ink"
         }`,
     },
   };

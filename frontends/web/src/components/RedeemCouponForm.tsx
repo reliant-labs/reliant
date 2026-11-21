@@ -191,7 +191,7 @@ export function RedeemCouponForm({
         htmlFor="coupon-code"
         className={cn(
           "block font-medium text-foreground",
-          small ? "text-xs" : "text-xs uppercase tracking-wide text-muted-foreground",
+          small ? "text-xs" : "text-xs text-muted-foreground",
         )}
       >
         Coupon code

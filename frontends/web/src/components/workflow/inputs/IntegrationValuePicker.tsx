@@ -798,7 +798,7 @@ function PickerPanel(p: PickerPanelProps) {
             if (!section.heading) return <div key={`s${sectionIndex}`}>{body}</div>;
             return (
               <div key={`s${sectionIndex}`} role="group" aria-labelledby={headingId}>
-                <div id={headingId} className="px-3 pb-0.5 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <div id={headingId} className="px-3 pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">
                   {section.heading}
                 </div>
                 {body}

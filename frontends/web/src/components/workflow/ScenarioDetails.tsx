@@ -95,7 +95,7 @@ export function EventSequence({ events }: { events: SimulatedEvent[] }) {
                   {event.node}
                 </span>
               ) : (
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                <span className="text-xs font-medium text-muted-foreground">
                   Event
                 </span>
               )}
@@ -220,7 +220,7 @@ export function InputsView({ inputsJson }: { inputsJson: string | undefined }) {
   if (formatted.split('\n').length <= 5) {
     return (
       <div>
-        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+        <div className="text-xs font-medium text-muted-foreground mb-1">
           Inputs
         </div>
         <pre className="text-xs font-mono bg-muted/50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre">
@@ -234,7 +234,7 @@ export function InputsView({ inputsJson }: { inputsJson: string | undefined }) {
     <div>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1 hover:text-foreground transition-colors"
+        className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-1 hover:text-foreground transition-colors"
       >
         {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         Inputs
@@ -351,7 +351,7 @@ export function ScenarioDetailView({ scenario, projectId }: { scenario: Scenario
         <div className="space-y-4">
           {/* Events */}
           <div>
-            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+            <div className="text-xs font-medium text-muted-foreground mb-2">
               Events ({scenario.events?.length ?? 0})
             </div>
             <EventSequence events={scenario.events ?? []} />
@@ -360,7 +360,7 @@ export function ScenarioDetailView({ scenario, projectId }: { scenario: Scenario
           {/* Expectations */}
           {scenario.expect && (
             <div>
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+              <div className="text-xs font-medium text-muted-foreground mb-1.5">
                 Expectations
               </div>
               <ExpectationsView expect={scenario.expect} />
