@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -56,6 +57,11 @@ type Deps struct {
 	// the gateway logs as machine health lines (tools_daemon_machine_stats.go).
 	// The zero value selects none.
 	MachineStats MachineStatsSelection
+	// ClientVersions is the client version policy
+	// (ServerProcessConfig.client_versions); the gateway holds registering
+	// daemons to its daemon floor (version_floor.go). nil is no floor.
+	// forge:optional-dep
+	ClientVersions *configv1.ClientVersionPolicy
 }
 
 // ToolResultPublisher publishes a tool result to the worker waiting for it.

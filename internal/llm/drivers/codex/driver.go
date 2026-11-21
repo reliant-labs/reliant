@@ -971,6 +971,13 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				finalResp = &v.Response
 
 			case responses.ResponseFailedEvent:
+				// The Codex backend refuses an oversized prompt here, not with
+				// an HTTP 400: an error, so call_llm can shrink the request.
+				if err := responseswire.ContextOverflowFailure(&v.Response); err != nil {
+					logging.WarnContext(ctx, "[Codex] Response failed: prompt exceeds the context window", "error", err)
+					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
+					return
+				}
 				// Likewise terminal. Ignoring it reported a failed response as
 				// a clean end of turn.
 				finalResp = &v.Response

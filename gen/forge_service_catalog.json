@@ -42076,6 +42076,14 @@
             {
               "name": "reason",
               "kind": "string"
+            },
+            {
+              "name": "upgrade_command",
+              "kind": "string"
+            },
+            {
+              "name": "upgrade_url",
+              "kind": "string"
             }
           ],
           "reliant.v1.ServerHeartbeat": [
