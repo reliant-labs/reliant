@@ -104,6 +104,9 @@ import { useShellProject } from "./sidebar/shellProject";
 import { FindBox } from "./sidebar/FindBox";
 import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
 import { ShellNavBody } from "./sidebar/ShellNavBody";
+import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
+import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta";
+import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { isAtOrBelow } from "./sidebar/navLocation";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
 import { chatRowChip } from "./chatRowStatus";
@@ -1114,9 +1117,19 @@ function SidebarComponent({
     return ordered[0]?.id ?? null;
   }, [chatListTab, filteredArchivedChats, viewMode, flatList, projectFilterId, activeGroups, projectGroups, activeChatId]);
 
+  // Whether chats can run yet (OnboardingFlow/onboardingGate.ts, ChatSetup).
+  // Until they can, the Chats section is the Set up chats card, and New chat
+  // goes where the card does.
+  const setup = useChatSetup();
+  const setupNeeded = chatSetupNeeded(setup);
+
   // New chat: in the shell's project, else the open chat's, else the last one
   // used (openNewChat).
   const handleNewChat = () => {
+    if (setupNeeded) {
+      go(chatSetupPath(setup));
+      return;
+    }
     void openNewChat(projectFilterId ? { projectId: projectFilterId } : undefined);
   };
 
@@ -1794,7 +1807,7 @@ function SidebarComponent({
   const chatsNeedYou = [...needsYouByProject.values()].reduce((total, count) => total + count, 0);
 
   // The chat list's controls: the machine filter and the list's menu (sort, view, archived, show all).
-  const chatListActions = !noChatsHere && (
+  const chatListActions = !setupNeeded && !noChatsHere && (
     <>
       {showMachineFilter && (
         // At rest only on hover, like the menu; filtered, it names what it shows and stays.
@@ -1833,14 +1846,15 @@ function SidebarComponent({
   // What the nav config's slots are (Layout/sidebar/navConfig): the live pieces only the chat shell can draw.
   const slots: NavSlots = {
     "new-chat": ({ depth }) => (
+      // While chats cannot run, New chat sets them up first (handleNewChat).
       <SidebarSubRow
         label="New chat"
         ariaLabel="New chat"
         depth={depth}
         icon={<SquarePen className="size-4" />}
-        href={newChatHref}
+        href={setupNeeded ? chatSetupPath(setup) : newChatHref}
         onClick={handleNewChat}
-        trail={newChatShortcut ? <kbd className="font-sans">{newChatShortcut}</kbd> : undefined}
+        trail={!setupNeeded && newChatShortcut ? <kbd className="font-sans">{newChatShortcut}</kbd> : undefined}
         testId="create-chat-button"
       />
     ),
@@ -1862,7 +1876,7 @@ function SidebarComponent({
             {/* "· 3 projects ×" while the list is a choice of several (#3027). */}
             <ChatProjectFilterScope filter={chatProjectFilter} clearClassName={SIDEBAR_ICON_BUTTON} />
           </span>
-          {!noChatsHere && (
+          {!setupNeeded && !noChatsHere && (
             // The project filter, choose N of M (#3027); at rest only on hover unless it filters.
             <span className={cn("flex", chatProjectFilter.mode === "all" && SIDEBAR_HEADING_HOVER_ACTION)}>
               <ChatProjectFilterButton filter={chatProjectFilter} needsYouByProject={needsYouByProject} className={SIDEBAR_ICON_BUTTON} />
@@ -1870,11 +1884,15 @@ function SidebarComponent({
           )}
           {chatListActions}
         </div>
-        {/* The one element that bounds the chats: the rest of a drill-in's column, or 45% of the window in an accordion. */}
-        <div
-          className={cn("overflow-y-auto overscroll-contain", place === "fill" ? "min-h-0 flex-1" : "max-h-[45dvh]")}
-          data-testid="sidebar-scroller"
-        >
+        {/* No agent sandbox can run a chat yet: connect one (your machine, or a Reliant sandbox), in place of the list. */}
+        {setupNeeded ? (
+          <ConnectSandboxCta variant="nav" />
+        ) : (
+          // The one element that bounds the chats: the rest of a drill-in's column, or 45% of the window in an accordion.
+          <div
+            className={cn("overflow-y-auto overscroll-contain", place === "fill" ? "min-h-0 flex-1" : "max-h-[45dvh]")}
+            data-testid="sidebar-scroller"
+          >
                   {chatListTab === "archived" && (
                     <div className="flex h-7 items-center gap-2 pl-8 pr-2 text-meta text-muted-foreground">
                       <span className="min-w-0 flex-1 truncate">Archived</span>
@@ -2051,6 +2069,7 @@ function SidebarComponent({
                     )}
                   </div>
           </div>
+        )}
       </div>
     ),
     "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />,

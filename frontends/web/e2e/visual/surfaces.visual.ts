@@ -505,6 +505,17 @@ const SURFACES: Surface[] = [
     path: '/',
     on: ['desktop'],
     ready: (page) => page.getByTestId('nav-drill-in'),
+    // The daemonless home (U6 3/4): an onboarded person whose daemon list is
+    // empty. The desktop home sends them to Projects, with the Set up chats
+    // card there and in place of the nav's chat list. The phone keeps its chat
+    // list (its home rule is unchanged; a phone opening `/` lands on /m/chats).
+    name: 'shell-daemonless-home',
+    path: '/',
+    on: ['desktop', 'mobile'],
+    ready: (page) =>
+      page.viewportSize()!.width > 768
+        ? page.getByRole('heading', { name: 'Projects' }).first()
+        : page.getByText('Write the webhooks guide').first(),
     harness: { fixtures: { 'reliant.v1.DaemonRegistryService/ListDaemons': { daemons: [] } } },
   },
   {

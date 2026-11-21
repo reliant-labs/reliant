@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   projects: [] as unknown[],
   navigate: vi.fn(),
   search: {} as Record<string, unknown>,
+  setup: "ready" as string,
   several: null as "all" | "many" | null,
 }));
 
@@ -22,6 +23,7 @@ vi.mock("@tanstack/react-router", () => ({ useNavigate: () => state.navigate, us
 vi.mock("@/hooks/project-queries", () => ({
   useProjects: () => ({ projects: state.projects, isLoading: false }),
 }));
+vi.mock("../../OnboardingFlow/useChatSetup", () => ({ useChatSetup: () => state.setup }));
 const startBuilding = vi.fn();
 vi.mock("../../Apps/startBuilding", () => ({ useStartBuildingApp: () => startBuilding }));
 // The summary of several projects (the project shell's Home) has its own tests.
@@ -50,6 +52,7 @@ beforeEach(() => {
   ];
   state.navigate.mockReset();
   state.search = {};
+  state.setup = "ready";
   state.several = null;
 });
 
@@ -122,5 +125,31 @@ describe("ProjectsPage's Build an app", () => {
     state.search = { show: "sites" };
     render(<ProjectsPage />);
     expect(screen.queryByRole("button", { name: "Build an app" })).toBeNull();
+  });
+});
+
+/**
+ * The daemonless home (U6): a person who cannot run a chat yet lands here,
+ * and the way to set chats up leads the page.
+ */
+describe("ProjectsPage's Set up chats card", () => {
+  it.each([
+    ["onboard", "/onboarding"],
+    ["connect-machine", "/settings/machines"],
+  ])("leads the page for %s, linking to %s", (setup, href) => {
+    state.setup = setup;
+    render(<ProjectsPage />);
+    const card = screen.getByTestId("set-up-chats-card");
+    expect(card).toHaveTextContent("Chats run your agents in an agent sandbox");
+    const link = within(card).getByRole("link", { name: "Set up" });
+    expect(link).toHaveAttribute("href", href);
+    fireEvent.click(link);
+    expect(state.navigate).toHaveBeenCalledWith({ href });
+  });
+
+  it.each(["ready", "checking", "unknown"])("is not there for %s", (setup) => {
+    state.setup = setup;
+    render(<ProjectsPage />);
+    expect(screen.queryByTestId("set-up-chats-card")).toBeNull();
   });
 });
