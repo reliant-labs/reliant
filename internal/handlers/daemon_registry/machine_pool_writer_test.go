@@ -38,8 +38,10 @@ func asCredential(c auth.Credential, p *fat.Principal) func(*testing.T) context.
 }
 
 // credentialCases is every kind of caller the three pool writes can see, and
-// whether it may write. Owning the machine or pool is not enough: only a
-// person, or an agent's call a person approved on its card, writes.
+// whether it may write. Owning the machine or pool is not enough: a person,
+// an agent's call a person approved on its card, or (deprecated, kept for the
+// CLI released in v1.23.0) the user's own access token writes; a machine's
+// credential never does.
 var credentialCases = []struct {
 	name string
 	ctx  func(*testing.T) context.Context
@@ -52,14 +54,21 @@ var credentialCases = []struct {
 		// no request credential, and the card the tool verified.
 		return auth.WithApprovedCard(context.WithValue(context.Background(), auth.UserIDContextKey, "test-user"), "call-1")
 	}, true},
-	{"cli login or api token", asCredential(auth.CredentialAccessToken, &fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI)}), false},
+	// Deprecated, kept working: `reliant machine label|pool` shipped writing
+	// with the CLI login.
+	{"cli login (deprecated)", asCredential(auth.CredentialAccessToken, &fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI, "daemon:manage")}), true},
+	{"api token (deprecated)", asCredential(auth.CredentialAccessToken, &fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI)}), true},
 	{"the machine's own daemon credential", asCredential(auth.CredentialAccessToken, &fat.Principal{
 		Scopes: fat.SetOf(fat.ScopeDaemonConnect), AllScopes: true, Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"},
 	}), false},
+	{"a machine's registration token", asCredential(auth.CredentialAccessToken, &fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI, fat.ScopeDaemonConnect)}), false},
+	{"access token with no principal", asCredential(auth.CredentialAccessToken, nil), false},
 	{"oauth client", asCredential(auth.CredentialOAuthClient, nil), false},
 	{"agent or run with no approved card (unclassified)", asCredential(auth.CredentialUnknown, nil), false},
-	{"cli login claiming an empty card", func(t *testing.T) context.Context {
-		return auth.WithApprovedCard(asCredential(auth.CredentialAccessToken, &fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI)})(t), "")
+	{"daemon credential claiming an empty card", func(t *testing.T) context.Context {
+		return auth.WithApprovedCard(asCredential(auth.CredentialAccessToken, &fat.Principal{
+			Scopes: fat.SetOf(fat.ScopeDaemonConnect), Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"},
+		})(t), "")
 	}, false},
 }
 

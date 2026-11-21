@@ -22,7 +22,7 @@ func (s *Service) DeleteMachinePool(
 	if !ok {
 		return nil, svcerr.ErrUnauthenticated
 	}
-	if err := requirePoolWriter(ctx, "delete a machine pool"); err != nil {
+	if err := s.requirePoolWriter(ctx, "delete a machine pool"); err != nil {
 		return nil, err
 	}
 	if req.Msg.GetName() == "" {

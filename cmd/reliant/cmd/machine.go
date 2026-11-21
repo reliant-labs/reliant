@@ -38,10 +38,11 @@ import (
 // pools, which the Reliant API owns (DaemonRegistryService), not the control
 // plane. Reading them needs only the CLI login. Writing them is a person's
 // call — a label decides which pool, and so which runs, a machine takes — so
-// the server takes a write only from a person signed in to the app (or a
-// self-host deployment's shared key), never from the CLI login, which every
-// agent shell inherits, nor a daemon's credential (auth.RequirePerson, reason
-// person_required). An agent's shell is refused the writes here as well
+// the server takes a write from a person signed in to the app (or a self-host
+// deployment's shared key) or an agent's approved card, and never from a
+// daemon's credential (reason person_required). The CLI login's writes, which
+// shipped in v1.23.0, keep working but are deprecated: every agent shell
+// inherits that login. An agent's shell is refused the writes here as well
 // (refuseLabelsFromAgentShell), with a message that points it at its tool.
 
 var errAgentCannotManageMachines = errors.New("an agent cannot start, stop or resize machines from its shell: use the manage_machine tool (start and resize need the user's approval card in chat), or ask the user to do it in Settings -> Machines")
@@ -190,11 +191,10 @@ auth login'): it carries the daemon:manage permission, which only a person's
 login can hold. An agent's shell is refused start, stop, resize, label and
 the pool changes.
 
-Changing labels and pools is a person's decision: with a sign-in, the server
-accepts it only from someone signed in to the Reliant app (ask the agent in a
-chat, and approve its card), not from the CLI login, which any agent's shell
-inherits. A self-hosted deployment with a shared API key accepts it from the
-CLI.`,
+Changing labels and pools is a person's decision. The preferred way is to ask
+the agent in a Reliant chat and approve its card. Writing them with the CLI
+login still works but is deprecated: the CLI login is inherited by every
+agent's shell. A machine's own credential is never accepted.`,
 	}
 	cmd.AddCommand(newMachineListCmd(), newMachineStartCmd(), newMachineStopCmd(), newMachineResizeCmd(), newMachineRenameCmd(),
 		newMachineLabelCmd(), newMachinePoolCmd())
