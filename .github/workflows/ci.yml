@@ -589,18 +589,26 @@ jobs:
     name: E2E Frontend (Playwright, ${{ matrix.suite }})
     needs: lanes
     if: needs.lanes.outputs.playwright == 'true'
-    # Not ubuntu-latest: it resolves to ubuntu 26.04, which Playwright 1.58
-    # refuses at `playwright install --with-deps`.
+    # In Playwright's own image, at the exact @playwright/test version
+    # frontends/web resolves (pnpm-lock.yaml): the browsers and their system
+    # packages are baked in, so no step installs anything from the Ubuntu
+    # mirror (reliant#2880). The mirror cost the responsive leg 6.5 minutes,
+    # then 14+ on 2026-11-18 (control-plane main-red #2909), and a .deb cache
+    # keyed on the runner image missed on every image rollout and lockfile
+    # change. TestPlaywrightRunsInThePinnedImage (tools/test-affected) fails
+    # when the tag and the lockfile disagree: bump them together. The host's
+    # Ubuntu no longer matters; 24.04 is kept because it is what the job
+    # already ran on.
     runs-on: ubuntu-24.04
-    # Two parallel jobs, split by install cost (Taskfile test:web:e2e:desktop
-    # and :responsive): WebKit's apt packages alone once took 6.5 minutes,
-    # which pushed the combined lane past this budget. The responsive leg gets
-    # 30 minutes: on a system-package cache miss it installs WebKit's set from
-    # the Ubuntu mirror, which took 14+ minutes on 2026-11-18 (reliant main
-    # a03a070e8, control-plane main-red #2909), and a leg cancelled there never
-    # seeds the cache, so every later run on that runner image missed too. A
-    # pinned mirror or a prebuilt image is the real fix for mirror speed.
-    timeout-minutes: ${{ matrix.suite == 'responsive' && 30 || 15 }}
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.0-noble
+      # The runner's uid, as Playwright's CI docs run it: the workspace and
+      # $HOME the runner mounts are owned by it.
+      options: --user 1001
+    # Two parallel jobs (Taskfile test:web:e2e:desktop and :responsive), so
+    # one suite's failure or slowness never hides the other's. 20 minutes:
+    # the suites' 15 before the mirror trouble, plus the image pull.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -611,76 +619,15 @@ jobs:
         with:
           go: "false"
           node: "true"
-      - name: Restore Playwright browsers
-        id: browsers
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/ms-playwright
-          # Per suite: the desktop job installs Chromium only.
-          key: playwright-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
-      # The browsers' system packages (WebKit's GStreamer/GTK set is ~114 MB),
-      # as the .deb files a main run downloaded. On 2026-11-09 the runner's
-      # Ubuntu mirror served ~100 KB/s and the responsive job was cancelled at
-      # its timeout still inside `playwright install --with-deps` (reliant
-      # main 74127457b, control-plane main-red #2372). Keyed on the exact
-      # runner image: the cached set is the packages THAT image lacks, and
-      # scripts/playwright-os-deps.sh installs it with dpkg, no mirror. No
-      # restore-keys: another image's set could downgrade its libraries.
-      # Rollback and rollout checks: dev-docs/responsive-ui-standards.md,
-      # "System-package cache". Repository variable PLAYWRIGHT_OS_DEPS_CACHE=off
-      # turns the cache off (back to --with-deps); PLAYWRIGHT_OS_DEPS_CACHE_VERSION
-      # moves every run off a bad entry.
-      - name: Read the runner image
-        id: runner-image
-        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
-        run: echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
-      - name: Restore Playwright system packages
-        id: os-deps
-        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/playwright-os-deps
-          key: playwright-os-deps-${{ vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION || 'v1' }}-${{ matrix.suite }}-${{ steps.runner-image.outputs.image }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
       - name: task deps:web
         run: task deps:web
-      # The system packages are installed, and on a main miss saved, in steps
-      # of their own BEFORE the suite runs: a failing or timed-out suite then
-      # cannot keep the cache from being seeded. The browser list is the
-      # suite's Taskfile BROWSERS (pinned by tools/test-affected); the suite
-      # step re-runs the script, which is a no-op cache hit by then.
-      - name: Install Playwright system packages
-        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
-        run: scripts/playwright-os-deps.sh "$HOME/.cache/playwright-os-deps" ${{ matrix.suite == 'responsive' && 'chromium webkit' || 'chromium' }}
-      # The script writes the cache only after the packages installed, so a
-      # failed install leaves nothing to save. (hashFiles cannot see ~.)
-      - name: Were the system packages recorded
-        id: os-deps-recorded
-        if: ${{ !cancelled() && vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' && github.ref == 'refs/heads/main' && steps.os-deps.outputs.cache-hit != 'true' }}
-        run: if [ -f "$HOME/.cache/playwright-os-deps/browsers" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; fi
-      - name: Save Playwright system packages (main only)
-        if: ${{ !cancelled() && steps.os-deps-recorded.outputs.yes == 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/playwright-os-deps
-          key: ${{ steps.os-deps.outputs.cache-primary-key }}
       # desktop: the Chromium suite (which also runs the responsive journeys
       # with mouse input). responsive: the required production-route
-      # assertions in Chromium touch and WebKit phone/tablet.
+      # assertions in Chromium touch and WebKit phone/tablet. The image's
+      # browsers are the ones this @playwright/test expects, so the task's
+      # `playwright install` finds them in /ms-playwright and downloads none.
       - name: Browser guardrails (${{ matrix.suite }})
-        env:
-          OS_DEPS_CACHE: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE }}
-        run: |
-          if [ "$OS_DEPS_CACHE" = off ]; then
-            task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS=--with-deps
-          else
-            task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS_CACHE="$HOME/.cache/playwright-os-deps"
-          fi
-      - name: Save Playwright browsers (main only)
-        if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.browsers.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ steps.browsers.outputs.cache-primary-key }}
+        run: task test:web:e2e:${{ matrix.suite }}
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

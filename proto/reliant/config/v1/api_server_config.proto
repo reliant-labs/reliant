@@ -155,6 +155,20 @@ message ApiServerConfig {
     env_var: "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM"
     description: "A JWT without an email_verified claim carries no email"
   }];
+  // DEV ONLY: an HS256 secret whose tokens the API server accepts as sessions
+  // BESIDE the Supabase key above, never instead of it (internal/auth
+  // WithDevSigner dispatches on the token's alg). control-plane's dev stack
+  // sets it to the secret its `control-plane auth mint-dev-token` signs with,
+  // so the web app's dev sign-in (VITE_DEV_SIGN_IN) works without a real
+  // Supabase login. Fail closed: the process refuses to start with it set
+  // outside the dev tier (RELIANT_ENV), and control-plane's KCL refuses to
+  // render it for any environment but dev.
+  string auth_dev_jwt_secret = 39 [(forge.v1.config) = {
+    env_var: "AUTH_DEV_JWT_SECRET"
+    sensitive: true
+    optional: true
+    description: "DEV ONLY: HS256 secret of locally minted session tokens; refused outside the dev tier"
+  }];
 
   // The PUBLIC base URL of the control plane that issues this deployment's
   // tokens: the issuer TokenService names, published as RFC 8414 metadata so

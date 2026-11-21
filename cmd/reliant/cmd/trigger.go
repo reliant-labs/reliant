@@ -1054,7 +1054,16 @@ func resolveTriggerDaemon(ctx context.Context, client triggerDaemonLister, idOrH
 	}
 	switch len(matches) {
 	case 0:
-		return "", fmt.Errorf("no daemon with id or hostname %q", idOrHostname)
+		// Name the machines there are: no other command lists daemon ids
+		// with a plain login (TL-59).
+		var known []string
+		for _, d := range daemons {
+			known = append(known, fmt.Sprintf("%s  %s (%s)", d.GetDaemonId(), d.GetHostname(), d.GetDaemonType()))
+		}
+		if len(known) == 0 {
+			return "", fmt.Errorf("no daemon with id or hostname %q: you have no machines", idOrHostname)
+		}
+		return "", fmt.Errorf("no daemon with id or hostname %q; your machines:\n  %s", idOrHostname, strings.Join(known, "\n  "))
 	case 1:
 		return matches[0].GetDaemonId(), nil
 	default:

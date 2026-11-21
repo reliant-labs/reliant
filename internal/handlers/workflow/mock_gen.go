@@ -101,7 +101,7 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockRepository
-// forge:hash=1fb266c80546c716e63a10fa79913911d206afd7ee80e9df67ff6506e1d0ba06
+// forge:hash=ca188c18ce7a1f792d387409ecd8170daa0f65cac0fb62934362648edf8e25df
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -132,6 +132,7 @@ type MockRepository struct {
 	ListWorkflowDraftsByUserFunc     func(context.Context, string) ([]*db.WorkflowDraft, error)
 	GetUsableWorkflowBySlugFunc      func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetProjectWorkflowsJSONFunc      func(context.Context, string) (*string, error)
+	GetMachinePoolByNameFunc         func(context.Context, string, string) (*core.MachinePool, error)
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
@@ -323,6 +324,15 @@ func (m *MockRepository) GetProjectWorkflowsJSON(ctx context.Context, projectID 
 		return m.GetProjectWorkflowsJSONFunc(ctx, projectID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWorkflowsJSON")
+}
+
+// GetMachinePoolByName records the call and delegates to GetMachinePoolByNameFunc when set.
+func (m *MockRepository) GetMachinePoolByName(ctx context.Context, userID string, name string) (*core.MachinePool, error) {
+	m.Recorder.Record("GetMachinePoolByName", ctx, userID, name)
+	if m.GetMachinePoolByNameFunc != nil {
+		return m.GetMachinePoolByNameFunc(ctx, userID, name)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetMachinePoolByName")
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.

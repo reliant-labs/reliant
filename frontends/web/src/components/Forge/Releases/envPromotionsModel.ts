@@ -21,7 +21,7 @@ import type { ReleaseGate, ReleasePromotion } from "@/services/forge/releases";
 import { checksOf, promoterOf, type ChecksSummary } from "./releaseModel";
 
 /**
- * The gate `forge obs check <env> --gate-json` writes and `forge gate record`
+ * The gate `forge obs check <env> --gate-json` writes and `forge release gate record`
  * puts on the promotion (forge internal/cli/obs_check.go, writeCheckGate):
  * passed is PASS, failed is FAIL, error is INCONCLUSIVE or could not look.
  */

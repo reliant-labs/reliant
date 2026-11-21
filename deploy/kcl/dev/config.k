@@ -91,6 +91,13 @@ server_process_config: config_gen.ServerProcessConfig = {
     network = {
         allow_private_egress = True
     }
+    # No client floors in dev: every build, however old, is served, and
+    # nothing is refused (client_version_config.proto).
+    client_versions = {
+        enforce = False
+        enforce_legacy_unidentified = False
+        refuse_unidentified = False
+    }
 }
 
 # The `reliant server worker` process.
