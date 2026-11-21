@@ -202,6 +202,8 @@ func (s *MachineBlipRunSuite) TestToleratedAgentEndedByTheBreaker_RecordsItsFail
 	s.NotEmpty(rec["workflow_id"])
 	s.Contains(rec["error"], "failed 3 times in a row with the same error")
 	s.NotContains(rec, "chat_id", "a tolerated failure is not reported to the chat as an error")
+	s.NotEmpty(extractActivityInputInfo(rec).RunID,
+		"the row names the run it belongs to, so the run's outcome reads it as its own and the next run's does not")
 }
 
 // A tolerated failure that an activity reported already has its failed

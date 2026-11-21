@@ -144,7 +144,7 @@ describe("CliLogin", () => {
     expect(JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string).org_id).toBe("org-b");
   });
 
-  it("starts on the org the CLI asked for (forge login --org) when the person is in it", async () => {
+  it("starts on the org the CLI asked for (forge cloud login --org) when the person is in it", async () => {
     listMyOrganizations.mockResolvedValue(TWO_ORGS);
     getSession.mockResolvedValue({ data: { session: { access_token: "jwt-1", user: { email: "a@example.test" } } } });
     Object.defineProperty(window, "location", {
@@ -166,7 +166,7 @@ describe("CliLogin", () => {
     expect(await screen.findByRole("radio", { name: /Acme/ })).toHaveAttribute("aria-checked", "true");
   });
 
-  // `forge login` asks for a human identity, which the control plane mints
+  // `forge cloud login` asks for a human identity, which the control plane mints
   // bound to no org and refuses an org_id for ("human login takes no
   // organization"). The page must not offer a choice nor send one.
   it("sends no org and shows no picker for a human login (credential_kind=human)", async () => {

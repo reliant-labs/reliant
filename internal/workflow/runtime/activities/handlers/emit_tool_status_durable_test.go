@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,7 +85,7 @@ func TestEmitToolCallStatus_SpawnLifecycleIsDurable(t *testing.T) {
 	require.NotNil(t, call.StartedAt, "the executing transition's started_at must survive")
 
 	// Still exactly one row for the whole lifecycle.
-	calls, err := h.Repo().ListToolCallsByChat(ctx, chatID)
+	calls, err := store.ListToolCallsByChat(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Len(t, calls, 1)
 }
@@ -179,7 +180,7 @@ func TestEmitToolCallStatus_RetryIsIdempotent(t *testing.T) {
 		require.NoError(t, h.ExecuteActivity(activityInstance.Execute, input, &out))
 	}
 
-	calls, err := h.Repo().ListToolCallsByChat(ctx, chatID)
+	calls, err := store.ListToolCallsByChat(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Len(t, calls, 1, "a retried activity must converge on one row")
 	assert.Equal(t, core.ToolCallStatusCompleted, calls[0].Status)
@@ -202,7 +203,7 @@ func TestEmitToolCallStatus_UnknownStatusWritesNothing(t *testing.T) {
 		ChatID: chatID, ToolCallID: toolCallID, ToolName: "spawn", Status: "who-knows",
 	}, &out))
 
-	calls, err := h.Repo().ListToolCallsByChat(ctx, chatID)
+	calls, err := store.ListToolCallsByChat(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Empty(t, calls, "an uninterpretable status must not create a row")
 }

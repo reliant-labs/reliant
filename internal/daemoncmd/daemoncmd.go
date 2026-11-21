@@ -23,6 +23,8 @@ func New(deps Deps) Service {
 
 // UserID pulls the authenticated user id from the request context, returning a
 // Connect Unauthenticated error when absent.
+//
+//forge:resolves-caller
 func UserID(ctx context.Context) (string, error) {
 	uid, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
@@ -44,7 +46,7 @@ func (f forwarder) Dispatch(
 
 	respBytes, err := f.sender.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	if err != nil {
-		return daemonerr.DispatchConnectError(commandType, err)
+		return daemonerr.Error(fmt.Sprintf("daemon command %s", commandType), err)
 	}
 
 	if err := json.Unmarshal(respBytes, resp); err != nil {

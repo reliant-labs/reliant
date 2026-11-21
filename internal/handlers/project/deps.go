@@ -18,6 +18,9 @@ import (
 type OrgResolver interface {
 	ActingOrg(ctx context.Context, userID, requested string) (string, error)
 	ListScope(ctx context.Context, userID, requested string, stamp orgs.Backfill) (*core.OrgScope, error)
+	// DefaultOrg is the org the caller acts in when a request names none:
+	// "" when they have none or the deployment has no orgs.
+	DefaultOrg(ctx context.Context, userID string) (string, error)
 }
 
 // Repository is the slice of *db.Repo the project handlers use.
@@ -87,6 +90,15 @@ type Repository interface {
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
+	// ListReposByProjects, ListRepoForgeAppsByProjects and
+	// ListProjectDaemonsForProjects read a whole project list's repos, forge
+	// apps and checkouts in one round trip each (ListProjectsWithApps).
+	ListReposByProjects(ctx context.Context, projectIDs []string) ([]*core.Repo, error)
+	ListRepoForgeAppsByProjects(ctx context.Context, projectIDs []string) ([]core.RepoForgeApp, error)
+	ListProjectDaemonsForProjects(ctx context.Context, projectIDs []string) ([]*core.ProjectDaemon, error)
+	// ListSharedProjects is the projects others shared with an org the
+	// caller is in (the sharing service's list; ListProjectsWithApps).
+	ListSharedProjects(ctx context.Context, f core.SharedProjectFilters) ([]*core.Project, error)
 	// SetRepoForgeApps records the forge apps a daemon found in a repo
 	// (projectfacts.RecordForgeApps).
 	SetRepoForgeApps(ctx context.Context, repoID string, apps []core.RepoForgeApp, complete bool) error
@@ -148,6 +160,12 @@ type TriggerSchedules interface {
 // the caller's daemons. controlplane.Service implements it.
 type CloneDispatcher interface {
 	CloneRepoOntoDaemon(ctx context.Context, jwt string, req controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error)
+}
+
+// HostedApps reads an org's hosted apps from the control plane as the caller,
+// with their own bearer (ListProjectsWithApps). controlplane.Service is one.
+type HostedApps interface {
+	ListHostedApps(ctx context.Context, jwt, orgID string) ([]controlplane.HostedApp, error)
 }
 
 // MoveStarter starts a project move's saga, keyed by the move id: starting a

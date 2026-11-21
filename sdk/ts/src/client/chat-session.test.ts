@@ -379,7 +379,6 @@ describe("chat stream sync hooks", () => {
       onSnapshotReceived: vi.fn(),
       onReplayStarted: vi.fn(),
       onCaughtUp: vi.fn(),
-      onSnapshotApplied: vi.fn(),
     };
     const client = createReliantClient({ transport: server.transport, wake: noWake });
     const session = client.chat({ chatId: CHAT, sleep: async () => {}, hooks }).start();
@@ -392,8 +391,6 @@ describe("chat stream sync hooks", () => {
     first.push(updatesFrame([messageData(11, "m-2", "done")], 11));
     await flush();
     expect(hooks.onSnapshotReceived).toHaveBeenCalledWith({ chatId: CHAT, messages: 1, otherUpdates: 0 });
-    // Deprecated, still reported for existing consumers.
-    expect(hooks.onSnapshotApplied).toHaveBeenCalledOnce();
     expect(hooks.onReplayStarted).not.toHaveBeenCalled();
     expect(hooks.onCaughtUp).toHaveBeenCalledExactlyOnceWith({
       chatId: CHAT,

@@ -9,6 +9,11 @@ import { connectAppUpdates, useAppUpdateStore } from "../../store/appUpdateStore
  * Updates…", and a download the user started finishing. A background check
  * that finds an update only lights up the sidebar button; it does not
  * interrupt.
+ *
+ * The exception is a forced update (the server requires a newer version,
+ * AppOutOfDateModal → appUpdateStore.forceUpdate): the dialog opens by
+ * itself, follows the check, download and restart the main process runs, and
+ * cannot be dismissed. A failure offers to try again.
  */
 export function GlobalUpdateHandler() {
   const status = useAppUpdateStore((s) => s.status);
@@ -18,6 +23,9 @@ export function GlobalUpdateHandler() {
   const closeDialog = useAppUpdateStore((s) => s.closeDialog);
   const downloadUpdate = useAppUpdateStore((s) => s.downloadUpdate);
   const installUpdate = useAppUpdateStore((s) => s.installUpdate);
+  const forced = useAppUpdateStore((s) => s.forced);
+  const isForcing = useAppUpdateStore((s) => s.isForcing);
+  const forceUpdate = useAppUpdateStore((s) => s.forceUpdate);
 
   useEffect(() => connectAppUpdates(), []);
 
@@ -34,6 +42,8 @@ export function GlobalUpdateHandler() {
       onInstall={() => void installUpdate()}
       isDownloading={isDownloading}
       isInstalling={isInstalling}
+      forced={forced}
+      onRetryForced={forced && !isForcing ? () => void forceUpdate(forced.minVersion) : undefined}
     />
   );
 }

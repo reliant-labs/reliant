@@ -64,31 +64,32 @@ beforeEach(() => {
 })
 
 describe('buildInterceptors factory', () => {
-  it('produces a 13-stage authed chain in the documented order', async () => {
+  it('produces a 14-stage authed chain in the documented order', async () => {
     const { buildInterceptors, traceStage } = await import('../transport')
     const { writeOwnerInterceptor } = await import('../writeOwner')
     const chain = buildInterceptors({ withAuth: true })
-    // error-normalize → timeout → auth → missing-token → org → daemon-last-seen →
-    // trace → error-log → upgrade → machine-wake → unauth → write-owner → request-sent
-    expect(chain).toHaveLength(13)
+    // error-normalize → org → timeout → auth → missing-token → client-version →
+    // daemon-last-seen → trace → error-log → upgrade → machine-wake → unauth →
+    // write-owner → request-sent
+    expect(chain).toHaveLength(14)
     // The trace stage (the forge runtime's traceInterceptor) is at its documented position.
-    expect(chain[6]).toBe(traceStage)
+    expect(chain[7]).toBe(traceStage)
     // The write-owner check is the innermost stage that can refuse: only the
     // request-sent observer, which changes nothing, runs inside it, so it sees
     // the header that leaves, retries included.
-    expect(chain[11]).toBe(writeOwnerInterceptor)
+    expect(chain[12]).toBe(writeOwnerInterceptor)
     // Every entry must be a function (Connect Interceptor shape).
     for (const entry of chain) {
       expect(typeof entry).toBe('function')
     }
   })
 
-  it('produces an 8-stage unauthed chain that omits auth, missing-token, 401-signout + write-owner', async () => {
+  it('produces a 9-stage unauthed chain that omits auth, missing-token, 401-signout + write-owner', async () => {
     const { buildInterceptors } = await import('../transport')
     const authed = buildInterceptors({ withAuth: true })
     const unauthed = buildInterceptors({ withAuth: false })
-    // 13 - 5 (auth, missing-token, org, unauth, write-owner) = 8
-    expect(unauthed).toHaveLength(8)
+    // 14 - 5 (auth, missing-token, org, unauth, write-owner) = 9
+    expect(unauthed).toHaveLength(9)
     // The unauthed chain is a subset of the authed chain — every entry in
     // unauthed must also appear in authed at the same relative ordering. If
     // someone reorders authentication into the unauthed path the lengths
@@ -100,16 +101,16 @@ describe('buildInterceptors factory', () => {
 
   it('defaults withAuth to true when no option object is passed', async () => {
     const { buildInterceptors } = await import('../transport')
-    expect(buildInterceptors()).toHaveLength(13)
-    expect(buildInterceptors({})).toHaveLength(13)
+    expect(buildInterceptors()).toHaveLength(14)
+    expect(buildInterceptors({})).toHaveLength(14)
   })
 
-  it('swaps one stage (daemon-last-seen for forge-via) and adds signup attribution in the control-plane chain', async () => {
+  it('swaps two stages (client-version + daemon-last-seen) for forge-via and adds signup attribution in the control-plane chain', async () => {
     const { buildInterceptors } = await import('../transport')
     const { signupAttributionInterceptor } = await import('../signupAttribution')
     const reliantApi = buildInterceptors({ withAuth: true })
     const controlPlane = buildInterceptors({ withAuth: true, backend: 'control-plane' })
-    expect(controlPlane).toHaveLength(reliantApi.length + 1)
+    expect(controlPlane).toHaveLength(reliantApi.length)
     expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(2)
     expect(controlPlane).toContain(signupAttributionInterceptor)
     expect(reliantApi).not.toContain(signupAttributionInterceptor)
@@ -177,6 +178,26 @@ describe('x-daemon-last-seen scoping', () => {
   it('names the console to the control plane in Forge-Via, and only there', async () => {
     expect((await headersSent('control-plane')).get('Forge-Via')).toBe('console')
     expect((await headersSent('reliant-api')).has('Forge-Via')).toBe(false)
+  })
+
+  // The reliant api-server compares Reliant-Client with its minimum. The
+  // control plane's CORS allow-list does not name it, so it never goes there.
+  it('names this build to the reliant API in Reliant-Client, and only there', async () => {
+    const sent = (await headersSent('reliant-api')).get('Reliant-Client')
+    expect(sent).toMatch(/^web\/[0-9A-Za-z][0-9A-Za-z.+_-]*$/)
+    expect((await headersSent('control-plane')).has('Reliant-Client')).toBe(false)
+  })
+
+  it('names the desktop app by its own version inside Electron', async () => {
+    const w = window as unknown as { electronAPI?: unknown; forgeDesktop?: unknown }
+    w.electronAPI = {}
+    w.forgeDesktop = { appVersion: '1.9.2' }
+    try {
+      expect((await headersSent('reliant-api')).get('Reliant-Client')).toBe('desktop/1.9.2')
+    } finally {
+      delete w.electronAPI
+      delete w.forgeDesktop
+    }
   })
 })
 

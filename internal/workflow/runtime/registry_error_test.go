@@ -140,6 +140,21 @@ func TestClassifyError_KeepsRunStepTypes(t *testing.T) {
 	}
 }
 
+// A released run step (its worker stopped while the command ran) stays
+// retryable whatever its cause's text says: the retry is what reattaches to
+// the command (run_step.go, runStepReleased).
+func TestClassifyError_KeepsARetryableRunStepRetryable(t *testing.T) {
+	t.Parallel()
+	in := temporal.NewApplicationErrorWithOptions("this attempt was released before the command's result came back",
+		"RunStepReleased", temporal.ApplicationErrorOptions{Cause: errors.New("machine e164d47d not found")})
+	out := flattenForTemporal(classifyError(in))
+	var app *temporal.ApplicationError
+	require.ErrorAs(t, out, &app)
+	assert.Equal(t, "RunStepReleased", app.Type())
+	assert.False(t, app.NonRetryable())
+	assert.False(t, isTerminal(out))
+}
+
 func TestProviderCreditExhaustionIsTerminal(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

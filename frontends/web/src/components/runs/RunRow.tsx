@@ -39,7 +39,7 @@ export { LaunchKindIcon };
  * its label. Below md a row folds to two lines and the header hides.
  */
 export const RUN_ROW_GRID =
-  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 md:grid-cols-[1rem_minmax(0,1fr)_11rem_7rem_4.5rem]";
+  "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-3 md:grid-cols-[1rem_minmax(0,1fr)_11rem_7rem_4.5rem]";
 
 /** Column labels over the run rows, on the rows' own grid. */
 export function RunListHeader() {
@@ -48,7 +48,7 @@ export function RunListHeader() {
       aria-hidden="true"
       className={cn(
         RUN_ROW_GRID,
-        "hidden border-b border-border/60 bg-background py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground md:grid",
+        "hidden h-10 border-b border-border py-0 text-meta text-muted-foreground md:grid",
       )}
     >
       <span />
@@ -80,7 +80,7 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
 
   return (
     <li
-      className={cn(RUN_ROW_GRID, "py-2.5 transition-colors hover:bg-muted/40", className)}
+      className={cn(RUN_ROW_GRID, "min-h-[52px] py-2.5 transition-colors hover:bg-muted/40", className)}
       data-testid={`run-row-${run.chatId}`}
     >
       <RunStatusDot status={status} />
@@ -88,18 +88,18 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
       <div className="min-w-0">
         <Link
           to={runPath(run.chatId)}
-          className="block truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="no-color block truncate rounded-sm text-ui font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {run.title || "Untitled run"}
         </Link>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+        <p className="mt-0.5 truncate text-meta text-muted-foreground">
           <span className="text-foreground/80">{status.label}</span>
           {run.archived && <ArchivedTag />}
           {detail.length > 0 && ` · ${detail.join(" · ")}`}
         </p>
       </div>
 
-      <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground md:col-start-auto md:row-start-auto">
+      <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1.5 text-meta text-muted-foreground md:col-start-auto md:row-start-auto">
         <span className="sr-only">Started by: </span>
         <LaunchKindIcon kind={launch.kind} />
         {/* Any automation's run names and links it; only automations set a trigger. */}
@@ -115,14 +115,14 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
         )}
       </div>
 
-      <div className="col-start-3 row-start-1 truncate text-right text-xs text-muted-foreground md:col-start-auto md:row-start-auto md:text-left">
+      <div className="col-start-3 row-start-1 truncate text-right text-meta text-muted-foreground md:col-start-auto md:row-start-auto md:text-left">
         <span className="sr-only">Started </span>
         <time dateTime={startedIso} title={formatAbsoluteTime(startedIso)}>
           {formatRelativeTime(startedIso)}
         </time>
       </div>
 
-      <div className="col-start-3 row-start-2 text-right text-xs tabular-nums text-muted-foreground md:col-start-auto md:row-start-auto">
+      <div className="col-start-3 row-start-2 text-right text-meta tabular-nums text-muted-foreground md:col-start-auto md:row-start-auto">
         <span className="sr-only">Duration </span>
         <RunDuration startedAt={run.createdAt} completedAt={run.completedAt} live={live} />
       </div>
@@ -148,7 +148,7 @@ export function UnlaunchedEventRow({ event, projectName, className }: { event: U
 
   return (
     <li
-      className={cn(RUN_ROW_GRID, "py-2.5 text-muted-foreground transition-colors hover:bg-muted/40", className)}
+      className={cn(RUN_ROW_GRID, "min-h-[52px] py-2.5 text-muted-foreground transition-colors hover:bg-muted/40", className)}
       data-testid={`run-event-row-${event.id}`}
       data-event-outcome={event.outcome}
     >
@@ -163,19 +163,19 @@ export function UnlaunchedEventRow({ event, projectName, className }: { event: U
       <div className="min-w-0">
         <a
           href={href}
-          className="block truncate rounded-sm text-sm text-foreground/80 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="no-color block truncate rounded-sm text-ui text-foreground/80 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title={event.outcomeDetail || undefined}
         >
           {outcome.label}
           {event.outcomeDetail ? `: ${event.outcomeDetail}` : ""}
         </a>
-        <p className="mt-0.5 truncate text-xs">
+        <p className="mt-0.5 truncate text-meta">
           <span>No run</span>
           {detail.length > 0 && ` · ${detail.join(" · ")}`}
         </p>
       </div>
 
-      <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1.5 text-xs md:col-start-auto md:row-start-auto">
+      <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1.5 text-meta md:col-start-auto md:row-start-auto">
         <span className="sr-only">Started by: </span>
         <LaunchKindIcon kind={launch.kind} />
         <a
@@ -186,14 +186,14 @@ export function UnlaunchedEventRow({ event, projectName, className }: { event: U
         </a>
       </div>
 
-      <div className="col-start-3 row-start-1 truncate text-right text-xs md:col-start-auto md:row-start-auto md:text-left">
+      <div className="col-start-3 row-start-1 truncate text-right text-meta md:col-start-auto md:row-start-auto md:text-left">
         <span className="sr-only">At </span>
         <time dateTime={atIso} title={formatAbsoluteTime(atIso)}>
           {formatRelativeTime(atIso)}
         </time>
       </div>
 
-      <div className="col-start-3 row-start-2 text-right text-xs md:col-start-auto md:row-start-auto">
+      <div className="col-start-3 row-start-2 text-right text-meta md:col-start-auto md:row-start-auto">
         <span aria-hidden="true">—</span>
       </div>
     </li>
@@ -208,7 +208,7 @@ export function UnlaunchedEventRow({ event, projectName, className }: { event: U
 function ArchivedTag() {
   return (
     <span
-      className="ml-1.5 inline-flex items-center gap-1 rounded border border-border/60 px-1 py-0.5 align-middle text-xs font-medium uppercase leading-none tracking-wide text-muted-foreground"
+      className="ml-1.5 inline-flex items-center gap-1 align-middle font-medium text-muted-foreground"
       title="Archived. Successful automation runs are archived automatically."
     >
       <Archive className="h-2.5 w-2.5" aria-hidden="true" />

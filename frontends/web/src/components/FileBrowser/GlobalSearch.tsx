@@ -242,7 +242,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       data-modal-open="true"
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" />
+      <div className="absolute inset-0 bg-scrim" />
       
       {/* Modal */}
       <div 

@@ -33,8 +33,12 @@ type LLMConfig struct {
 	// The Reliant LLM gateway (control-plane's LLM proxy). Unset is a
 	// misconfigured server: it falls back to loopback, never to production.
 	ReliantApiBaseUrl string `protobuf:"bytes,1,opt,name=reliant_api_base_url,json=reliantApiBaseUrl,proto3" json:"reliant_api_base_url,omitempty"`
-	VertexaiProject   string `protobuf:"bytes,2,opt,name=vertexai_project,json=vertexaiProject,proto3" json:"vertexai_project,omitempty"`
-	VertexaiLocation  string `protobuf:"bytes,3,opt,name=vertexai_location,json=vertexaiLocation,proto3" json:"vertexai_location,omitempty"`
+	// The project every Vertex AI call targets. Unset: each connected account's
+	// calls go to its service-account key's project. Either way the call is
+	// signed only by the connected account's key, never the server's Google
+	// credentials, so the key must be granted Vertex AI in this project.
+	VertexaiProject  string `protobuf:"bytes,2,opt,name=vertexai_project,json=vertexaiProject,proto3" json:"vertexai_project,omitempty"`
+	VertexaiLocation string `protobuf:"bytes,3,opt,name=vertexai_location,json=vertexaiLocation,proto3" json:"vertexai_location,omitempty"`
 	// The stream guards (internal/llm transport.go, stream_stall.go). Each is
 	// positive; the defaults are argued from measured streams there.
 	StreamIdleTimeout         *durationpb.Duration `protobuf:"bytes,4,opt,name=stream_idle_timeout,json=streamIdleTimeout,proto3" json:"stream_idle_timeout,omitempty"`
@@ -145,14 +149,14 @@ var File_reliant_config_v1_llm_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_llm_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/llm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd6\v\n" +
+	"\"reliant/config/v1/llm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x9f\f\n" +
 	"\tLLMConfig\x12i\n" +
 	"\x14reliant_api_base_url\x18\x01 \x01(\tB8\x82\xce\x184\n" +
-	"\x14RELIANT_API_BASE_URL*\x1cReliant LLM gateway base URLR\x11reliantApiBaseUrl\x12x\n" +
-	"\x10vertexai_project\x18\x02 \x01(\tBM\x82\xce\x18I\n" +
-	"\x10VERTEXAI_PROJECT*5Vertex AI project (required to call Vertex AI models)R\x0fvertexaiProject\x12c\n" +
-	"\x11vertexai_location\x18\x03 \x01(\tB6\x82\xce\x182\n" +
-	"\x11VERTEXAI_LOCATION\x1a\vus-central1*\x10Vertex AI regionR\x10vertexaiLocation\x12\xad\x01\n" +
+	"\x14RELIANT_API_BASE_URL*\x1cReliant LLM gateway base URLR\x11reliantApiBaseUrl\x12\x9e\x01\n" +
+	"\x10vertexai_project\x18\x02 \x01(\tBs\x82\xce\x18o\n" +
+	"\x10VERTEXAI_PROJECT*[Vertex AI project every call targets (default: the connected service-account key's project)R\x0fvertexaiProject\x12\x84\x01\n" +
+	"\x11vertexai_location\x18\x03 \x01(\tBW\x82\xce\x18S\n" +
+	"\x11VERTEXAI_LOCATION\x1a\vus-central1*1Vertex AI region for connected Vertex AI accountsR\x10vertexaiLocation\x12\xad\x01\n" +
 	"\x13stream_idle_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationBb\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18V\n" +
 	"\x1fRELIANT_LLM_STREAM_IDLE_TIMEOUT\x1a\x0390s*.Cut a stream that sends no bytes for this longR\x11streamIdleTimeout\x12\xe1\x01\n" +
 	"\x1cstream_content_stall_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationB\x84\x01\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18x\n" +

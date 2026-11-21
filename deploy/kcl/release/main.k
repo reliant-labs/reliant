@@ -18,6 +18,14 @@ declared in deploy/kcl/workloads.k:
 
   * reliant-image — the production server image: the root Dockerfile, as a
     DockerBuild.
+  * reliant-cli — the standalone CLI, cross-compiled for goreleaser's five
+    platforms as GoBuild variants: bin/reliant-cli-<goos>-<goarch>[.exe].
+    Built by `forge env build release --target reliant-cli`; goreleaser and
+    release.yml's build-backend still build what ships.
+  * reliant-desktop — the packaged desktop app for this machine's platform,
+    unpublished: electron/scripts/pack-desktop.js, the electron-builder call
+    release.yml's desktop jobs run. Its prerequisites (backend binaries, the
+    renderer, the build config) are listed beside it in workloads.k.
 
 WHAT SHIPS TODAY IS UNCHANGED. This env declares the builds; it publishes
 nothing on its own and no workflow calls it yet. The server image prod runs is
@@ -50,6 +58,7 @@ apt's logs differ per run), whoever runs the build.
 
 import forge
 import ..workloads as wl
+import ..dev_sign_in as dsi
 
 # ── The version stamp (render options) ──────────────────────────────────────
 # Defaults are the Dockerfile's ARG defaults.
@@ -70,10 +79,17 @@ _server_image = wl.server_image | {
     build = wl.server_image_build(_stamp)
 }
 
-output = forge.render(forge.Bundle {
+# The standalone CLI, stamped like the image.
+_cli = wl.reliant_cli | {
+    runtime = forge.BuildOnly {build_variants = wl.reliant_cli_variants(_stamp)}
+}
+
+output = forge.render(dsi.only_in_dev("release", forge.Bundle {
     project = "reliant"
     env = "release"
     workloads = [
         _server_image
+        _cli
+        wl.desktop_app
     ]
-})
+}))

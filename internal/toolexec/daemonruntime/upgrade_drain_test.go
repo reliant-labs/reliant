@@ -42,6 +42,40 @@ func upgradeState(d *daemonClient) reliantv1.DaemonUpgradeState {
 	return d.upgrade.heartbeatStatus(d.results.runningCount()).GetState()
 }
 
+// drainProbe records the drain loop's passes and its return, so a test that
+// asserts something does NOT happen waits on the drain having looked N times
+// (the loop re-reads the state on every pass) instead of on elapsed time.
+// Install it before the drain starts.
+type drainProbe struct {
+	polls    atomic.Int64
+	returned chan struct{}
+}
+
+func probeDrain(d *daemonClient) *drainProbe {
+	p := &drainProbe{returned: make(chan struct{})}
+	d.upgrade.onPoll = func() { p.polls.Add(1) }
+	d.upgrade.onReturn = func() { close(p.returned) }
+	return p
+}
+
+// waitForPolls returns once the drain loop has made n more passes than it had
+// when called.
+func (p *drainProbe) waitForPolls(t *testing.T, n int64) {
+	t.Helper()
+	target := p.polls.Load() + n
+	require.Eventually(t, func() bool { return p.polls.Load() >= target }, 5*time.Second, time.Millisecond,
+		"the drain loop never made %d passes", n)
+}
+
+func (p *drainProbe) waitForReturn(t *testing.T) {
+	t.Helper()
+	select {
+	case <-p.returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the drain never returned")
+	}
+}
+
 func waitForUpgradeState(t *testing.T, d *daemonClient, want reliantv1.DaemonUpgradeState) *reliantv1.DaemonUpgradeStatus {
 	t.Helper()
 	require.Eventually(t, func() bool { return upgradeState(d) == want }, 5*time.Second, time.Millisecond,
@@ -79,6 +113,7 @@ func TestDrainWaitsForRunningCallsThenReportsDrained(t *testing.T) {
 	d := managedTestDaemon(time.Hour, time.Hour)
 	useTestSession(d, 16)
 	d.results.start("running-1")
+	probe := probeDrain(d)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -89,8 +124,10 @@ func TestDrainWaitsForRunningCallsThenReportsDrained(t *testing.T) {
 	assert.Equal(t, "roll-1", st.GetRolloutId())
 	assert.Equal(t, "v1.2.3", st.GetTargetVersion())
 
-	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a drain that wrongly ended with a call running would show as DRAINED here, and there is no event to wait for when it correctly keeps going
-	time.Sleep(20 * time.Millisecond)
+	// Each pass re-checks the running count: after several passes with the
+	// call still running, a drain that wrongly ended would have published
+	// DRAINED.
+	probe.waitForPolls(t, 5)
 	require.Equal(t, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING, upgradeState(d),
 		"a running call keeps the drain going until its deadline")
 
@@ -149,27 +186,68 @@ func TestDrainedDaemonNotRestartedMakesAnUpgradeExit(t *testing.T) {
 // upgrade exit's backstop (and daemon.go's 10s signal grace, which never arms
 // for a drain) neither stops nor exits the daemon. A stop of the runtime
 // mid-drain ends the drain quietly: a stop wins.
+//
+// The backstop is the only shutdown watchdog the drain could reach, and only
+// through upgradeExit, so the test makes its deadline immediate instead of
+// waiting it out: an armed backstop fires at once, synchronously, in the
+// goroutine that armed it. The drain loop's probe runs in that same goroutine,
+// so each pass it reports happens after anything the drain did before it. A
+// drain that armed the backstop (or stopped the runtime) at any point before
+// a pass is caught by the assertions after that pass, whatever the scheduler
+// did with wall time.
 func TestDrainIsNotBoundedByTheShutdownWatchdog(t *testing.T) {
 	d := managedTestDaemon(time.Hour, time.Hour)
-	d.upgrade.backstop = time.Millisecond
-	var stopped atomic.Bool
-	var exited atomic.Bool
+	var armed, stopped, exited atomic.Bool
+	d.upgrade.afterFunc = func(_ time.Duration, f func()) {
+		armed.Store(true)
+		f() // the backstop's deadline, reached now
+	}
 	d.armUpgrade(func() { stopped.Store(true) }, "", func(int) { exited.Store(true) })
 	d.results.start("running-1")
+	probe := probeDrain(d)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	d.handleRestartRequested(ctx, restartRequest(time.Time{}).GetRestartRequested())
-	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — 50x the backstop: a watchdog that wrongly bounded the drain would have stopped or exited the daemon by now, and there is no event to wait for when it correctly does not
-	time.Sleep(50 * time.Millisecond)
+	// Several passes of the drain loop with a running call: the drain is
+	// draining, and has neither armed the watchdog nor stopped or exited.
+	probe.waitForPolls(t, 3)
 	assert.Equal(t, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_UPDATING, upgradeState(d))
+	assert.False(t, armed.Load(), "a drain must not arm the shutdown watchdog")
 	assert.False(t, stopped.Load())
 	assert.False(t, exited.Load())
 
 	cancel() // a signal's stop
-	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a stop wrongly taken for an upgrade exit would request one here, and there is no event to wait for when it correctly does not
-	time.Sleep(20 * time.Millisecond)
+	// The drain has returned, so nothing later can turn the stop into an
+	// upgrade exit.
+	probe.waitForReturn(t)
+	assert.False(t, armed.Load(), "a stop during a drain does not arm the watchdog")
 	assert.False(t, d.upgrade.exitRequested(), "a stop during a drain is a stop, not an upgrade exit")
 	assert.False(t, exited.Load())
+}
+
+// The seam itself: the upgrade exit arms the backstop through afterFunc with
+// its configured duration, and the backstop force-exits with the upgrade exit
+// code. Without this, a drain test that never sees afterFunc called would pass
+// against an upgradeExit that bypassed it.
+func TestUpgradeExitArmsTheBackstopThroughTheSeam(t *testing.T) {
+	d := managedTestDaemon(time.Hour, time.Hour)
+	d.upgrade.backstop = 7 * time.Second
+	var armedFor time.Duration
+	d.upgrade.afterFunc = func(dur time.Duration, f func()) {
+		armedFor = dur
+		f()
+	}
+	exitCode := make(chan int, 1)
+	d.armUpgrade(func() {}, "", func(code int) { exitCode <- code })
+
+	d.upgrade.upgradeExit()
+	assert.Equal(t, 7*time.Second, armedFor)
+	select {
+	case code := <-exitCode:
+		assert.Equal(t, UpgradeExitCode, code)
+	default:
+		t.Fatal("the backstop did not force-exit")
+	}
 }
 
 // A person's machine is never blocked (D6): the daemon reports AWAITING_OWNER
@@ -190,6 +268,36 @@ func TestDaemonOnAPersonsMachineNeverDrains(t *testing.T) {
 	d.results.begin("run-1") // stands in for running it
 	require.NoError(t, d.handleServerMessage(ctx, s, toolRequestMessage("run-1")))
 	noToolResponse(t, s, "a request on a person's machine is not refused")
+}
+
+// A person's daemon tells its owner how to upgrade: the server's command,
+// else its URL, else its own advice; `reliant daemon status` shows it.
+func TestDaemonOnAPersonsMachineSaysHowToUpgrade(t *testing.T) {
+	cases := map[string]struct {
+		command, url, want string
+	}{
+		"server command":    {command: "brew upgrade --cask reliant", url: "https://reliantlabs.io/download", want: "brew upgrade --cask reliant"},
+		"server url":        {url: "https://reliantlabs.io/download", want: "https://reliantlabs.io/download"},
+		"neither (default)": {want: defaultUpgradeAdvice},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			d := newTestDaemonClient("d-laptop", "u-laptop")
+			req := restartRequest(time.Time{}).GetRestartRequested()
+			req.Reason = "below the server's minimum supported version; upgrade to the latest version"
+			req.UpgradeCommand, req.UpgradeUrl = tc.command, tc.url
+
+			d.handleRestartRequested(context.Background(), req)
+			st := d.upgrade.heartbeatStatus(0)
+			require.Equal(t, reliantv1.DaemonUpgradeState_DAEMON_UPGRADE_STATE_AWAITING_OWNER, st.GetState())
+			assert.Contains(t, st.GetDetail(), "Upgrade: "+tc.want)
+			assert.True(t, d.upgrade.awaitingOwner(), "a repeat is not printed again")
+
+			notice := awaitingOwnerNotice(req.GetReason(), upgradeAdvice(req))
+			assert.Contains(t, notice, req.GetReason())
+			assert.Contains(t, notice, tc.want)
+		})
+	}
 }
 
 // A repeated request can bring a drain's deadline forward, never push it

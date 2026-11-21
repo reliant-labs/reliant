@@ -50,8 +50,20 @@ type GatewayConfig struct {
 	// deployment's contract with its probes, not an operator knob.
 	LivenessPaths  string `protobuf:"bytes,21,opt,name=liveness_paths,json=livenessPaths,proto3" json:"liveness_paths,omitempty"`
 	ReadinessPaths string `protobuf:"bytes,22,opt,name=readiness_paths,json=readinessPaths,proto3" json:"readiness_paths,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Machine stats for self-hosted machines the platform runs (its pipeline
+	// boxes). A machine is watched when it belongs to one of these orgs, is not
+	// a managed workspace (whose pod logs reach tenant zero already) and
+	// carries machine_stats_label among its durable labels; the gateway then
+	// logs its heartbeat's load, memory and disk as `machine health` /
+	// `machine volume` lines once a minute (internal/machinehealth has the
+	// attribute contract control-plane's alerts read). Empty: no machine is
+	// watched.
+	MachineStatsOrgs []string `protobuf:"bytes,23,rep,name=machine_stats_orgs,json=machineStatsOrgs,proto3" json:"machine_stats_orgs,omitempty"`
+	// The durable machine label, key=value, that opts a machine in those orgs
+	// into machine stats (a bare key matches any value).
+	MachineStatsLabel string `protobuf:"bytes,24,opt,name=machine_stats_label,json=machineStatsLabel,proto3" json:"machine_stats_label,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GatewayConfig) Reset() {
@@ -140,11 +152,25 @@ func (x *GatewayConfig) GetReadinessPaths() string {
 	return ""
 }
 
+func (x *GatewayConfig) GetMachineStatsOrgs() []string {
+	if x != nil {
+		return x.MachineStatsOrgs
+	}
+	return nil
+}
+
+func (x *GatewayConfig) GetMachineStatsLabel() string {
+	if x != nil {
+		return x.MachineStatsLabel
+	}
+	return ""
+}
+
 var File_reliant_config_v1_gateway_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_gateway_config_proto_rawDesc = "" +
 	"\n" +
-	"&reliant/config/v1/gateway_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xda\t\n" +
+	"&reliant/config/v1/gateway_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x8f\r\n" +
 	"\rGatewayConfig\x12~\n" +
 	"\vdaemon_port\x18\x0e \x01(\x05B]\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18N\n" +
 	"\x11TOOLS_DAEMON_PORT\x12\vdaemon-port\x1a\x049190*&Daemon bidi-streaming gRPC listen portR\n" +
@@ -166,7 +192,11 @@ const file_reliant_config_v1_gateway_config_proto_rawDesc = "" +
 	"\x0eliveness_paths\x18\x15 \x01(\tBa\x82\xce\x18]\n" +
 	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
 	"\x0freadiness_paths\x18\x16 \x01(\tBa\x82\xce\x18]\n" +
-	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths:\x1e\xca\xc1\x18\x1a\n" +
+	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths\x12\xdc\x01\n" +
+	"\x12machine_stats_orgs\x18\x17 \x03(\tB\xad\x01\x82\xce\x18\xa8\x01\n" +
+	"\x12MACHINE_STATS_ORGS*\x91\x01Comma-separated org ids whose labelled self-hosted machines' heartbeat stats the gateway logs as machine health/machine volume lines (empty: off)R\x10machineStatsOrgs\x12\xd3\x01\n" +
+	"\x13machine_stats_label\x18\x18 \x01(\tB\xa2\x01\x82\xce\x18\x9d\x01\n" +
+	"\x13MACHINE_STATS_LABEL\x1a\x10monitor=platform*tDurable machine label (key=value) that opts a self-hosted machine in MACHINE_STATS_ORGS into heartbeat machine statsR\x11machineStatsLabel:\x1e\xca\xc1\x18\x1a\n" +
 	"\areliant\x12\x06server\x12\agatewayJ\x04\b\x01\x10\x02J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x11\x10\x12J\x04\b2\x103R\rcontrol_planeR\bdatabaseR\x04natsR\x03tlsR\x05drainR\bdata_dirR\robservabilityB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 

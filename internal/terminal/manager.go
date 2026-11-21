@@ -53,7 +53,8 @@ func NewManager() *Manager {
 }
 
 // CreateSession creates a new terminal session owned by the given user.
-// If userID is empty the session is unscoped (for backward compatibility).
+// If userID is empty the session is unscoped: the daemon's sessions are, since
+// each daemon stream already serves exactly one user (cmd_terminal.go).
 //
 // At the session cap, the least-recently-active session is closed to make
 // room. See defaultMaxSessions.
@@ -358,7 +359,7 @@ func (m *Manager) Read(sessionID string, buf []byte) (int, error) {
 	return n, err
 }
 
-// ListSessions returns all active sessions (internal use / backward compatibility).
+// ListSessions returns all active sessions.
 func (m *Manager) ListSessions() []*Session {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

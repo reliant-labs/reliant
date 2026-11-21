@@ -404,6 +404,13 @@ message GetIssueRequest {
     (buf.validate.field).repeated.items.string.min_len = 1,
     (buf.validate.field).repeated.items.string.max_len = 320
   ];
+  // Answer with the issue's stored state alone (status, version, environment,
+  // first and last seen), served from the control plane's database with no
+  // telemetry read, so it spends none of the org's hourly observability query
+  // quota. The response says telemetry_omitted. A triage client reads this
+  // before a write, for the version it sends as expected_version.
+  // time_range, incident_window_seconds and the instance narrowing are ignored.
+  bool state_only = 6;
 }
 
 message GetIssueResponse {
@@ -428,6 +435,14 @@ message GetIssueResponse {
   // and instance_users, echoed exactly. Unset when the request named none
   // (controlplane.v1.InstanceScope).
   controlplane.v1.InstanceScope instance_scope = 8;
+  // True when the answer is the issue's stored state alone: the request said
+  // state_only, or the org's hourly observability query quota was used up.
+  // The state (status, version, environment, first and last seen) is served
+  // from the control plane's database, and everything read from telemetry is
+  // absent (latest_event, frames, by_version, the co-occurring and incident
+  // ids, and the issue's windowed counts and trend). The state alone is what a
+  // triage write needs, so a spent quota never blocks triage.
+  bool telemetry_omitted = 9;
 }
 
 // IssueEvent is one occurrence of an issue.

@@ -116,7 +116,7 @@ func TestDaemonRecordsStreamEstablishedOnRegistrationAck(t *testing.T) {
 	require.Empty(t, state.StreamDetail)
 }
 
-// `forge cluster urls` prints the gateway as grpc://host:port. A daemon pointed
+// `forge dev cluster urls` prints the gateway as grpc://host:port. A daemon pointed
 // at that form must connect, not run forever without a stream.
 func TestDaemonConnectsToGRPCSchemeGateway(t *testing.T) {
 	dataDir := t.TempDir()

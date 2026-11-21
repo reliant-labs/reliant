@@ -9,6 +9,7 @@
  *   Performance       ▾     Traces · RPC explorer
  *   Sessions
  *   Product analytics       the Users · Product · Acquisition hub, when the project has it
+ *   Experiments             Forge Changes, behind the web config's CHANGES_UI until the control plane serves them
  *   Releases
  *   Data · Users
  *   More tools        ▸     Dashboards (and up to three stars) · Logs · Metrics · Profiles · Service graph · Storage
@@ -21,11 +22,11 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, CircleAlert, Database, LayoutDashboard, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, CircleAlert, Database, FlaskConical, LayoutDashboard, PlayCircle, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
-import { configureNavRows, NAV_STARRED_MAX, type ConsoleNavDashboard, type ConsoleNavInput } from "./ConsoleShell";
+import { configureNavRows, experimentsListed, NAV_STARRED_MAX, type ConsoleNavDashboard, type ConsoleNavInput } from "./ConsoleShell";
 import { consolePath, OBS_NAV_LABELS, withSearch, type ConsolePage, type ObsNavView } from "./paths";
 
 const icon = (Icon: typeof Activity) => <Icon className="h-4 w-4" aria-hidden="true" />;
@@ -45,6 +46,7 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   profiles: "Where your code spends its CPU time",
   graph: "Which services call which, and how healthy each call is",
   dashboards: "Saved charts, yours and the ones Forge made",
+  experiments: "Turn things on for some people, and compare versions",
 };
 
 /** The Product analytics hub: the dashboard its row opens, and every dashboard key that is one of its tabs. */
@@ -76,7 +78,7 @@ const GROUP_OF: Partial<Record<ObsNavView, string>> = {
 const isHubPage = (page: ConsolePage, hub: ProductAnalyticsHub | undefined) => !!hub && page.kind === "dashboard" && hub.keys.includes(page.key);
 
 export function buildGroupedConsoleNav(input: GroupedNavInput): { items: SidebarNavItem[]; footer: SidebarNavItem[] } {
-  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, linkTo, productAnalytics, hostPageActive = false } = input;
+  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, experiments = false, linkTo, productAnalytics, hostPageActive = false } = input;
   const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   // On a host page, every console row is a way out, none the current one.
   const lit = (active: boolean) => !hostPageActive && active;
@@ -126,6 +128,9 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
     { label: "Performance", icon: icon(Timer), defaultExpanded: true, children: [obs("traces"), obs("rpc")] },
     row("Sessions", { kind: "obs-view", view: "sessions" }, icon(PlayCircle), isObs("sessions")),
     ...(productAnalytics ? [row("Product analytics", productAnalytics.open, icon(BarChart3), onHub)] : []),
+    ...(experimentsListed(page, experiments)
+      ? [row("Experiments", { kind: "experiments" }, icon(FlaskConical), page.kind === "experiments" || page.kind === "experiment")]
+      : []),
     row("Releases", { kind: "releases" }, icon(TagIcon), page.kind === "releases" || page.kind === "release"),
     row("Data", { kind: "data" }, icon(Database), page.kind === "data"),
     row("Users", { kind: "users" }, icon(Users), page.kind === "users"),

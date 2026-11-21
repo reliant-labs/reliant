@@ -35,3 +35,19 @@ func TestReleaseScript(t *testing.T) {
 		t.Fatalf("scripts/test-release.sh: %v\n%s", err, out)
 	}
 }
+
+// TestReleaseHotfixScript runs scripts/test-release-hotfix.sh, the hermetic test of the
+// hotfix release path control-plane's rc-train hotfix lane drives: a hotfix gate record
+// passes release-gate.sh check only on a green base that is its ancestor, release-gate.sh
+// hotfix refuses any other base, release-tag.sh --hotfix tags the RC head's own version
+// (above every release it contains) on a release branch, and hotfix-bump.sh writes only
+// the version, the notes and the changelog.
+func TestReleaseHotfixScript(t *testing.T) {
+	testkit.Slow(t, "runs scripts/test-release-hotfix.sh (git, node and jq subprocesses over a throwaway repository)",
+		testkit.Inputs("scripts/release-gate.sh", "scripts/release-tag.sh", "scripts/release-lock.sh", "scripts/rc-shape.sh",
+			"scripts/hotfix-bump.sh", "scripts/test-release-hotfix.sh"))
+	cmd := exec.Command("bash", filepath.Join(repoRoot, "scripts", "test-release-hotfix.sh"))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("scripts/test-release-hotfix.sh: %v\n%s", err, out)
+	}
+}

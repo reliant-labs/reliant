@@ -2,10 +2,9 @@
 package antigravity
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/invopop/jsonschema"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
@@ -51,7 +50,7 @@ func convertTools(list []toolsPkg.Tool) []*toolDecls {
 		decls = append(decls, &functionDeclaration{
 			Name:        prefixedToolName(tool.Name()),
 			Description: tool.Description(),
-			Parameters:  convertToSchema(tool.ParamSchema()),
+			Parameters:  geminiwire.ToolParameters(tool),
 		})
 	}
 	return []*toolDecls{{FunctionDeclarations: decls}}
@@ -83,42 +82,4 @@ func buildToolConfig(forceToolChoice string, list []toolsPkg.Tool) *toolConfig {
 			AllowedFunctionNames: []string{prefixedToolName(forceToolChoice)},
 		},
 	}
-}
-
-// convertToSchema projects a jsonschema.Schema onto the Gemini schema subset.
-// Ported from the gemini driver, whose inner payload shape is identical.
-func convertToSchema(param *jsonschema.Schema) *schema {
-	if param == nil {
-		return nil
-	}
-	out := &schema{
-		Type:        param.Type,
-		Description: param.Description,
-	}
-
-	if len(param.Enum) > 0 {
-		out.Enum = make([]string, len(param.Enum))
-		for i, v := range param.Enum {
-			out.Enum[i] = fmt.Sprint(v)
-		}
-	}
-
-	switch param.Type {
-	case "array":
-		if param.Items != nil {
-			out.Items = convertToSchema(param.Items)
-		}
-	case "object":
-		if param.Properties != nil {
-			out.Properties = make(map[string]*schema)
-			for pair := param.Properties.Oldest(); pair != nil; pair = pair.Next() {
-				out.Properties[pair.Key] = convertToSchema(pair.Value)
-			}
-		}
-		if len(param.Required) > 0 {
-			out.Required = param.Required
-		}
-	}
-
-	return out
 }

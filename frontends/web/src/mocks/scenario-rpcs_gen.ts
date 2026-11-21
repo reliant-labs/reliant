@@ -375,6 +375,13 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProviderAccountService/ResolvePersonalFundingChoice"?: (req: import("@/gen/reliant/v1/provider_account_pb").ResolvePersonalFundingChoiceRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/provider_account_pb").ResolvePersonalFundingChoiceResponseSchema>>;
   }
 
+  // forge:section reliant.v1.PullRequestRecordService
+  // forge:hash=6bd9315370c0d4daa99adb73a182a624c5519d421cd8713db68fc6eac8fc66d2
+  & {
+    "reliant.v1.PullRequestRecordService/GetPullRequestRecord"?: (req: import("@/gen/reliant/v1/pull_request_record_pb").GetPullRequestRecordRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pull_request_record_pb").GetPullRequestRecordResponseSchema>>;
+    "reliant.v1.PullRequestRecordService/ListPullRequestRecords"?: (req: import("@/gen/reliant/v1/pull_request_record_pb").ListPullRequestRecordsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/pull_request_record_pb").ListPullRequestRecordsResponseSchema>>;
+  }
+
   // forge:section reliant.v1.QuestionService
   // forge:hash=72f1d88bea52126b9d0a64378e691be1975a7b541172f16b590fa0558ec91d34
   & {

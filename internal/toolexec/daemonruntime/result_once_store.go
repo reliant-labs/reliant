@@ -12,8 +12,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // Run-step tombstones on disk (result_once.go).
@@ -26,14 +24,10 @@ import (
 // set afterwards, so a crash can lose the whole tombstone only before the
 // command could have started, and never its expiry alone.
 //
-// Tombstones written before the expiry moved into the contents are empty
-// files whose modification time was set to the expiry after they were synced,
-// a change a crash could lose. They are still honoured: the expiry is taken as
-// the modification time plus runStepSeenFloor. If the time was set, that keeps
-// the tombstone a floor longer than it needed; if a crash reset it to the
-// file's creation, that is still the floor every tombstone lasts. A file whose
-// contents cannot be read as either is honoured the same way: a tombstone is
-// only ever kept too long, never forgotten too soon.
+// A file whose contents cannot be read as a tombstone is still honoured: its
+// expiry is taken as its modification time plus runStepSeenFloor, the floor
+// every tombstone lasts. A tombstone is only ever kept too long, never
+// forgotten too soon.
 
 // seenMagic opens a tombstone's contents; the trailing digit is the format.
 const seenMagic = "RLNTSEN1"
@@ -46,14 +40,12 @@ func encodeSeen(expires time.Time) []byte {
 }
 
 // decodeSeen is a tombstone's expiry from its contents and modification time:
-// the expiry it carries, or for a legacy (empty) or unreadable one,
-// modTime + runStepSeenFloor. ok is false for the latter, so a caller can say
-// which it was.
-func decodeSeen(data []byte, modTime time.Time) (expires time.Time, ok bool) {
+// the expiry it carries, or for an unreadable one, modTime + runStepSeenFloor.
+func decodeSeen(data []byte, modTime time.Time) time.Time {
 	if len(data) == seenFileLen && bytes.HasPrefix(data, []byte(seenMagic)) {
-		return time.Unix(0, int64(binary.BigEndian.Uint64(data[len(seenMagic):]))), true
+		return time.Unix(0, int64(binary.BigEndian.Uint64(data[len(seenMagic):])))
 	}
-	return modTime.Add(runStepSeenFloor), false
+	return modTime.Add(runStepSeenFloor)
 }
 
 // markSeen durably records that a run step's request id began here, until
@@ -92,7 +84,6 @@ func (s *outboxStore) loadSeen(now time.Time) (seen map[string]time.Time, expire
 	if err != nil {
 		return seen, 0
 	}
-	legacy := 0
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || strings.Contains(name, tempInfix) || !strings.HasSuffix(name, seenFileExt) {
@@ -111,20 +102,13 @@ func (s *outboxStore) loadSeen(now time.Time) (seen map[string]time.Time, expire
 		if err != nil {
 			data = nil // unreadable: honoured by its modification time
 		}
-		expires, current := decodeSeen(data, info.ModTime())
-		if !current {
-			legacy++
-		}
+		expires := decodeSeen(data, info.ModTime())
 		if !now.Before(expires) {
 			expired++
 			_ = os.Remove(full)
 			continue
 		}
 		seen[id] = expires
-	}
-	if legacy > 0 {
-		logging.Info(logPrefix+" Reloaded run-step tombstones without a recorded expiry; each kept a floor past its modification time",
-			"count", legacy, "floor", runStepSeenFloor)
 	}
 	return seen, expired
 }

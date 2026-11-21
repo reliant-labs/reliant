@@ -481,7 +481,7 @@ describe("invoices fold into usage without losing a surface", () => {
   it("offers invoices inside usage, and Reliant AI's keys and spend as their own tab", () => {
     renderSection();
     const tabs = screen.getAllByRole("tab").map((t) => t.textContent?.trim());
-    expect(tabs).toEqual(["Overview", "Change plan", "Usage & invoices", "Reliant AI"]);
+    expect(tabs).toEqual(["Overview", "Change plan", "Usage & invoices", "App hosting", "Reliant AI"]);
   });
 
   /**

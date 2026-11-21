@@ -168,13 +168,13 @@ function BarChart({ panel, data, unit, keys, onDrill, dataRowHref, height, compa
                 ? columns.map((_, column) => segment(row, column, "height"))
                 : columns.map((_, column) => (
                     <span key={column} className="flex h-full min-w-0 max-w-12 flex-1 flex-col justify-end">
-                      {showValues && <span className="mb-0.5 truncate text-center text-3xs tabular-nums text-ink-muted">{formatValue(row.values[column] ?? null, unit)}</span>}
+                      {showValues && <span className="mb-0.5 truncate text-center text-meta tabular-nums text-ink-muted">{formatValue(row.values[column] ?? null, unit)}</span>}
                       {segment(row, column, "height")}
                     </span>
                   ))}
             </BarAction>
             {!compact && (
-              <span className="truncate text-center text-2xs text-ink-muted" title={labelOf(row)}>
+              <span className="truncate text-center text-meta text-ink-muted" title={labelOf(row)}>
                 {labelOf(row)}
               </span>
             )}
@@ -264,7 +264,7 @@ function PieChart({ panel, data, unit, keys, onDrill, height, compact, donut }: 
         {donut && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
             <span className="text-base font-semibold tabular-nums text-ink">{formatValue(total, unit)}</span>
-            <span className="text-2xs text-ink-muted">total</span>
+            <span className="text-meta text-ink-muted">total</span>
           </div>
         )}
       </div>

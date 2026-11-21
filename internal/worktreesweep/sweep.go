@@ -31,6 +31,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -543,21 +544,13 @@ func (s *Sweeper) due(wt *core.Worktree, guardSince time.Time) bool {
 // holdBackoff grows with how long a worktree has stayed held: an hour at
 // first, up to a day.
 func holdBackoff(meta *core.CleanupMetadata) time.Duration {
-	d := holdBackoffMin
-	for i := 0; i < meta.Rechecks && d < holdBackoffMax; i++ {
-		d *= 2
-	}
-	return min(d, holdBackoffMax)
+	return retry.Backoff{Initial: holdBackoffMin, Max: holdBackoffMax}.Delay(meta.Rechecks + 1)
 }
 
 // transientBackoff grows with how many times in a row the last non-answer
 // repeated.
 func transientBackoff(meta *core.CleanupMetadata) time.Duration {
-	d := transientBackoffMin
-	for i := 0; i < meta.Rechecks && d < transientBackoffMax; i++ {
-		d *= 2
-	}
-	return min(d, transientBackoffMax)
+	return retry.Backoff{Initial: transientBackoffMin, Max: transientBackoffMax}.Delay(meta.Rechecks + 1)
 }
 
 func (s *Sweeper) reconcileGroup(ctx context.Context, t target, group []*core.ReclaimCandidate, live []core.WorktreePath) {

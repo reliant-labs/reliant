@@ -28,12 +28,12 @@
  *   view   Detailed or Simplified (absent: the person's preference)
  */
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMatch, useRouter, useRouterState } from "@tanstack/react-router";
 
 import { useChatViewOverride } from "@/components/Chat/thread-views/useChatThreadMode";
 import { getChatFromCache } from "@/hooks/chat-queries";
-import { chatShellRouteOf, latestPathname, navigateToChatUrl, patchNewChatUrl, type ChatShellRoute } from "@/lib/chatRoute";
+import { chatShellRouteOf, latestPathname, navigateToChatUrl, newChatAppliedShown, patchNewChatUrl, type ChatShellRoute } from "@/lib/chatRoute";
 import { takeMovedChatNotice, type ChatRouteData } from "@/lib/chatRouteResolve";
 import { followActiveChat } from "@/lib/chatUrlFollow";
 import { isElectron } from "@/lib/constants";
@@ -122,6 +122,12 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
     if (notice) toast.info(notice);
   }, [routeChat]);
   useEffect(() => {
+    // Left the chat's page: the shell stays mounted, so a Back to it (the
+    // same match) opens it again, over whatever the page in between showed.
+    if (route?.kind !== "chat") {
+      openedFor.current = null;
+      return;
+    }
     if (!ready || !routeChat || openedFor.current === match.id) return;
     openedFor.current = match.id;
     if (useChatStore.getState().activeChatId === routeChat.id) return;
@@ -132,7 +138,7 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
     openChatInWorkspace(routeChat, { navigate: true, openEntry: "deep_link" }).catch((error) => {
       void toast.error(error);
     });
-  }, [ready, routeChat, match.id]);
+  }, [ready, route?.kind, routeChat, match.id]);
 
   // ── The new-chat view ─────────────────────────────────────────────────────
   const newSearch: NewChatSearch | null =
@@ -144,23 +150,50 @@ export function useChatRoute({ ready, panelOpen, setPanelOpen, projectId, worktr
         }
       : null;
   const appliedFor = useRef<string | null>(null);
+  // The URL whose draft context the view shows: set once its apply finished,
+  // in state so the render that reads it already has that context's
+  // project and workspace. Until then the mirror below writes nothing.
+  const [shownFor, setShownFor] = useState<string | null>(null);
+  // The latest apply: one superseded (another URL, the page left) settles nothing.
+  const application = useRef(0);
   useEffect(() => {
+    if (route?.kind !== "new") {
+      // Left the new-chat view: a Back to it (the same URL) applies it again.
+      appliedFor.current = null;
+      application.current += 1;
+      setShownFor(null);
+      return;
+    }
     if (!ready || !newSearch || appliedFor.current === locationKey) return;
     appliedFor.current = locationKey;
-    if (isNewChatApplied(newSearch)) return;
-    applyNewChat({ projectId: newSearch.project, daemonId: newSearch.machine, worktreeId: newSearch.ws }).catch((error) => {
-      void toast.error(error);
-    });
+    const generation = ++application.current;
+    const key = locationKey;
+    const settle = (shown: boolean) => {
+      if (shown && application.current === generation) setShownFor(key);
+    };
+    if (isNewChatApplied(newSearch)) {
+      // Applied by the move that navigated here (openNewChat), which may still be on its way.
+      void newChatAppliedShown().then(settle);
+      return;
+    }
+    applyNewChat({ projectId: newSearch.project, daemonId: newSearch.machine, worktreeId: newSearch.ws }).then(
+      () => settle(true),
+      (error) => {
+        void toast.error(error);
+      },
+    );
     // newSearch is derived from locationKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, locationKey]);
+  }, [ready, route?.kind, locationKey]);
   // The draft's project and workspace as the view shows them (the project
-  // chip, the workspace picker), so a refresh keeps them.
+  // chip, the workspace picker), so a refresh keeps them. Only once the
+  // URL's own context is on screen: before that the view still shows the
+  // last one, which is not what the URL asked for.
   useEffect(() => {
-    if (!ready || route?.kind !== "new" || activeChatId !== null || !projectId) return;
+    if (!ready || route?.kind !== "new" || shownFor !== locationKey || activeChatId !== null || !projectId) return;
     if (newSearch?.project === projectId && (newSearch.ws ?? null) === worktreeId) return;
     patchNewChatUrl({ project: projectId, ws: worktreeId ?? undefined });
-  }, [ready, route?.kind, activeChatId, projectId, worktreeId, newSearch?.project, newSearch?.ws]);
+  }, [ready, route?.kind, shownFor, locationKey, activeChatId, projectId, worktreeId, newSearch?.project, newSearch?.ws]);
 
   // ── The home: the restored chat's URL ─────────────────────────────────────
   const routerStatus = useRouterState({ select: (state) => state.status });

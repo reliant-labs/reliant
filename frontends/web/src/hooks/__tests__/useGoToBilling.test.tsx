@@ -104,9 +104,48 @@ describe("useGoToBilling", () => {
 
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        search: expect.objectContaining({ tab: "usage", from: "forge", returnTo: "/forge/env/prod?project=proj-1" }),
+        search: expect.objectContaining({ tab: "hosting", from: "forge", returnTo: "/forge/env/prod?project=proj-1" }),
       }),
     );
+  });
+
+  it("sends a queued deploy to the hosting tab's agreement card, for the env's org", () => {
+    // A deploy queued on billing is waiting on app hosting billing, which is
+    // the org's: the link names the org the environment was read in, so
+    // billing asks before acting in any other (BillingOrgGate).
+    window.history.pushState({}, "", "/forge/p/shop/environments/prod");
+
+    const { result } = renderHook(() => useGoToBilling("forge", { orgId: "org-b" }));
+    act(() => result.current());
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/settings/billing",
+      search: { tab: "hosting", from: "forge", returnTo: "/forge/p/shop/environments/prod", org: "org-b" },
+      hash: "app-hosting",
+    });
+  });
+
+  it("carries an explicit tab and org from any surface", () => {
+    window.history.pushState({}, "", "/chat/c1");
+
+    const { result } = renderHook(() => useGoToBilling("chat", { tab: "hosting", orgId: "org-a" }));
+    act(() => result.current());
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/settings/billing",
+      search: { tab: "hosting", from: "chat", returnTo: "/chat/c1", org: "org-a" },
+      hash: "app-hosting",
+    });
+  });
+
+  it("names no org when it does not know one", () => {
+    // The org scope is null before it resolves (or with no control plane):
+    // a link that names none acts in the active org, as before.
+    const { result } = renderHook(() => useGoToBilling("forge", { orgId: null }));
+    act(() => result.current());
+
+    const call = mockNavigate.mock.calls.at(-1)?.[0] as { search: Record<string, unknown> };
+    expect(call.search).not.toHaveProperty("org");
   });
 
   it("always carries the way back, from every surface", () => {

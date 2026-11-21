@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Settings › API tokens › CLI logins in the forge shell: every `forge login`
+ * Settings › API tokens › CLI logins in the forge shell: every `forge cloud login`
  * the person holds, on which device, when it was last used and when it ends,
  * with Revoke to end one at once (services/controlPlane/cliLogins.ts).
  *
@@ -32,7 +32,7 @@ export function CliLoginsSection() {
       <div className="border-b border-border px-4 py-3">
         <h3 className="text-sm font-medium">CLI logins</h3>
         <p className="text-xs text-muted-foreground">
-          Each <code>forge login</code> acts as you on that device until it expires. Revoke one you no longer use or do not
+          Each <code>forge cloud login</code> acts as you on that device until it expires. Revoke one you no longer use or do not
           recognise: its next request is refused.
         </p>
       </div>

@@ -270,7 +270,7 @@ function AppPicker({ apps, selected, onChange }: { apps: string[]; selected: str
       }
     >
       <fieldset>
-        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Apps</legend>
+        <legend className="px-1 pb-1 text-meta font-medium text-ink-muted">Apps</legend>
         <button
           type="button"
           onClick={() => onChange([])}
@@ -321,7 +321,7 @@ function EnvPicker({ environments, selected, onChange }: { environments: ObsEnvi
       }
     >
       <fieldset>
-        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Environments</legend>
+        <legend className="px-1 pb-1 text-meta font-medium text-ink-muted">Environments</legend>
         <button
           type="button"
           onClick={() => onChange([])}
@@ -344,7 +344,7 @@ function EnvPicker({ environments, selected, onChange }: { environments: ObsEnvi
           </label>
         ))}
       </fieldset>
-      <p className="px-2 pt-2 text-2xs text-ink-muted">
+      <p className="px-2 pt-2 text-meta text-ink-muted">
         To compare environments side by side, group by Environment.
       </p>
     </Popover>
@@ -375,7 +375,7 @@ function KeyList({ query, used, onPick, suggestions }: { query: string; used?: s
         data-testid={`obs-key-${key}`}
       >
         <span className="text-ink">{label}</span>
-        <span className="truncate font-mono text-2xs text-ink-muted">{key}</span>
+        <span className="truncate font-mono text-meta text-ink-muted">{key}</span>
       </button>
     </li>
   );
@@ -385,13 +385,13 @@ function KeyList({ query, used, onPick, suggestions }: { query: string; used?: s
       {custom && <ul className="pb-1">{option(typed, `Use "${typed}"`)}</ul>}
       {first.length > 0 && (
         <section>
-          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Common</h4>
+          <h4 className="px-2 pb-0.5 pt-1 text-meta font-medium text-ink-muted">Common</h4>
           <ul>{first.map((a) => option(a.key, a.label))}</ul>
         </section>
       )}
       {sections.map(({ cls, keys }) => (
         <section key={cls}>
-          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">{CLASS_LABELS[cls]}</h4>
+          <h4 className="px-2 pb-0.5 pt-1 text-meta font-medium text-ink-muted">{CLASS_LABELS[cls]}</h4>
           <ul>{keys.map((a) => option(a.key, a.label))}</ul>
         </section>
       ))}
@@ -526,7 +526,7 @@ function ValueStep({
         <button type="button" onClick={onBack} className="rounded-sm text-xs text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           ← Attributes
         </button>
-        <span className="truncate font-mono text-2xs text-ink-muted">{attributeKey}</span>
+        <span className="truncate font-mono text-meta text-ink-muted">{attributeKey}</span>
       </div>
       <p className="text-sm font-medium text-ink">{attributeLabel(attributeKey)}</p>
       <div className="flex gap-2">
@@ -582,13 +582,13 @@ function ValueStep({
                     data-testid={`obs-value-${v.value}`}
                   >
                     <span className="truncate font-mono text-ink">{v.value || "(empty)"}</span>
-                    <span className="shrink-0 text-2xs tabular-nums text-ink-muted">{formatCount(v.count)}</span>
+                    <span className="shrink-0 text-meta tabular-nums text-ink-muted">{formatCount(v.count)}</span>
                   </button>
                 </li>
               ))}
             </ul>
           )}
-          {values.data?.truncated && <p className="px-2 pt-1 text-2xs text-ink-muted">Showing the most frequent; type to narrow.</p>}
+          {values.data?.truncated && <p className="px-2 pt-1 text-meta text-ink-muted">Showing the most frequent; type to narrow.</p>}
         </div>
       )}
       <div className="flex justify-end">

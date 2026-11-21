@@ -151,7 +151,7 @@ Each environment has its own key, shared by every workload in it that reads `for
 
 - It does not put a key in your frontend. Call the model from the backend only; the browser calls your RPC.
 - It does not work on an unclaimed claimable deploy, where the variables stay blank. Write the feature so a missing `ANTHROPIC_API_KEY` returns "unavailable" instead of crashing at startup.
-- It does not trace the call for you. Neither SDK emits spans; `reliant forge skill load llm` shows how to wrap a call in a `pkg/observe/genai` span.
+- It does not trace the call for you. Neither SDK emits spans; `reliant forge agent skill load llm` shows how to wrap a call in a `pkg/observe/genai` span.
 - It is not an agent runtime. Multi-step or tool-using work belongs in a [Reliant workflow](/guides/workflows/first-multi-agent-workflow) that calls your API.
 
 ## Troubleshooting

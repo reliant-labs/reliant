@@ -11,7 +11,7 @@ Use the standard Tailwind + CSS variable token path for UI styling:
 - **Exception: `frontends/web/src/components/Forge/**` (the Apps console) speaks forge-ui's vocabulary** — `text-ink`, `text-ink-muted`, `bg-surface`, `bg-surface-sunken`, `*-danger-*` — not reliant's `text-foreground` / `bg-card` / `bg-background` / `*-destructive*` / `bg-muted`. `components/Forge/__tests__/tokenVocabulary.test.ts` fails on the reliant names there. `primary`, `ring` and `accent` stay as they are (a portalled dialog leaves the `.forge-ui` scope that remaps `accent`).
 - Use `cn()` for conditional classes; do not mutate DOM styles in hover/focus handlers when Tailwind state variants can express the state.
 - Theme palettes are controlled by `data-color-scheme`; light/dark mode is controlled by the `.dark` class. Do not add new `data-theme` selectors.
-- Reach for forge's component library first: installed components live in `frontends/web/src/components/forge-ui/` (`forge component install <name>` writes there, per the `"forge"` block in `frontends/web/package.json`), are kept verbatim, and render inside a `.forge-ui` ancestor — outside it forge's `accent` paints as reliant's muted tint (see the ACCENT COLLISION note in `frontends/web/src/index.css`). Every primitive the app uses is a forge-ui install (`components/ui/` is gone: Tooltip, ContextMenu, Combobox and Popover were the last, in R5); a composition over them that only one feature uses lives in that feature's directory (`workflow/HelpPopover.tsx`), and a primitive forge lacks is built in forge first. Keep new shared styling there or in token variables in CSS, not deep ad-hoc selector chains.
+- Reach for forge's component library first: installed components live in `frontends/web/src/components/forge-ui/` (`forge ui component install <name>` writes there, per the `"forge"` block in `frontends/web/package.json`), are kept verbatim, and render inside a `.forge-ui` ancestor — outside it forge's `accent` paints as reliant's muted tint (see the ACCENT COLLISION note in `frontends/web/src/index.css`). Every primitive the app uses is a forge-ui install (`components/ui/` is gone: Tooltip, ContextMenu, Combobox and Popover were the last, in R5); a composition over them that only one feature uses lives in that feature's directory (`workflow/HelpPopover.tsx`), and a primitive forge lacks is built in forge first. Keep new shared styling there or in token variables in CSS, not deep ad-hoc selector chains.
 - For workflow config panel styles, add explicit `cpv2-*` ownership classes at the rendered component boundary instead of overriding shared primitives or targeting nested generated markup.
 - Inline styles are acceptable for runtime geometry, Electron drag regions (`WebkitAppRegion`), dynamic SVG/data colors, and third-party APIs that require style objects.
 - Avoid broad `!important`, magic negative margins, incidental parent selectors, hardcoded brand colors, and arbitrary CSS values unless the exception is documented near the use.
@@ -115,15 +115,20 @@ moved yet. New and restyled UI uses the roles.
   edge. Never `bg-card`, `bg-accent` or `bg-muted/NN` on shell chrome. (Today's
   shell predates this; it moves onto it when it is rebuilt.)
 - Every bar is `h-[var(--shell-bar-h)]`, so their bottom edges are one line.
-- Widths: conversation `max-w-[var(--chat-column)]` (768px), dashboards and
+- Widths: the conversation is fluid up to `--chat-column` (1200px) of
+  content, with `--chat-gutter` (15px, 22.5px from 640px, 30px from 1280px)
+  outside it: the transcript, composer, status band and permissions panel
+  all share that edge (`px-[var(--chat-gutter)]` around
+  `max-w-[var(--chat-column)]`). Answer prose keeps a ~80ch measure inside
+  it; code, tables, tool rows and cards take the whole column. Dashboards and
   lists `max-w-[var(--page-max)]` (1200px), settings and forms
   `max-w-[var(--form-max)]` (720px).
 - One filled primary button per view. A region shows at most 5 controls at
   rest, and no action has two homes.
 - The layout tokens (`--shell-bar-h`, `--sidebar-w`, `--right-panel-w`,
   `--row-h`, `--control-h`, `--table-row-h`, `--table-head-h`,
-  `--chat-column`, `--page-max`, `--form-max`) are declared once, in the
-  LAYOUT TOKENS block of `frontends/web/src/index.css`.
+  `--chat-column`, `--chat-gutter`, `--page-max`, `--form-max`) are declared
+  once, in the LAYOUT TOKENS block of `frontends/web/src/index.css`.
 - Radius has three tiers plus pills: control `rounded-md` (buttons, inputs,
   rows, badges), container `rounded-xl` (cards, menus, popovers, dialogs),
   hero `rounded-2xl` (composer, user bubble, onboarding cards), and

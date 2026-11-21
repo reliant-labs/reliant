@@ -43,7 +43,7 @@ instead of `/`.
 The forge host (forge.reliantlabs.io) mounts the same route tree
 (`routes.tsx`) as the forge brand (`isForgeShell()`). On that brand a home
 (`/`, `/o/<org>`, the phone's chat list) sends a person who has not onboarded
-to `/apps` instead of the wizard (`forgeBrandHomeTarget`): `forge login`, claim
+to `/apps` instead of the wizard (`forgeBrandHomeTarget`): `forge cloud login`, claim
 links and every console link forge prints land on non-chat pages anyway, and a
 forge signup is onboarded only when they open a chat. (#2866 sent new forge
 accounts through "Choose your machine" before /apps and was reverted; the

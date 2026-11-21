@@ -16,20 +16,20 @@ import (
 )
 
 // errReaperUnderTest refuses to start the real reaper from a test binary:
-// os.Executable is the test binary there, so `forge storage auto-gc` would
+// os.Executable is the test binary there, so `forge machine storage auto-gc` would
 // re-run the whole suite. Tests inject their own runner.
 var errReaperUnderTest = errors.New("refusing to run the storage reaper under `go test` (inject a reaperRunner)")
 
 // reaperCommandArgs is the argument list after the binary: the reliant binary
-// embeds forge's CLI, so this is `reliant forge storage auto-gc --policy <path>`.
+// embeds forge's CLI, so this is `reliant forge machine storage auto-gc --policy <path>`.
 func reaperCommandArgs(policyPath string) []string {
-	return []string{"forge", "storage", "auto-gc", "--policy", policyPath}
+	return []string{"forge", "machine", "storage", "auto-gc", "--policy", policyPath}
 }
 
 // goCacheCommandArgs is the Go-cache pass:
-// `reliant forge storage gocache --apply --budget <b> --policy <path>`.
+// `reliant forge machine storage gocache --apply --budget <b> --policy <path>`.
 func goCacheCommandArgs(policyPath string) []string {
-	return []string{"forge", "storage", "gocache", "--apply", "--budget", goCachePassBudget.String(), "--policy", policyPath}
+	return []string{"forge", "machine", "storage", "gocache", "--apply", "--budget", goCachePassBudget.String(), "--policy", policyPath}
 }
 
 // execGoCacheReaper runs the Go-cache pass the same way execReaper runs the
@@ -48,7 +48,7 @@ func execGoCacheReaper(ctx context.Context, policyPath string) (reaperRun, error
 	return runReaperProcess(ctx, self, goCacheCommandArgs(policyPath))
 }
 
-// execReaper runs `<this binary> forge storage auto-gc --policy <path>`.
+// execReaper runs `<this binary> forge machine storage auto-gc --policy <path>`.
 //
 // It re-executes THIS binary rather than a `forge` found on PATH, as every
 // other forge call the daemon makes does (daemonruntime.runForgeSelfExec — not

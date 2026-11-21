@@ -139,7 +139,7 @@ export function WorkflowStatusChip({
         >
           {errors.length > 0 && (
             <>
-              <p className="px-2 pb-1 pt-0.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="px-2 pb-1 pt-0.5 text-xs font-semibold text-muted-foreground">
                 Problems ({errors.length})
               </p>
               <p className="px-2 pb-2 text-xs text-muted-foreground">
@@ -150,7 +150,7 @@ export function WorkflowStatusChip({
           )}
           {warnings.length > 0 && (
             <>
-              <p className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <p className="px-2 pb-1 pt-2 text-xs font-semibold text-muted-foreground">
                 Warnings ({warnings.length})
               </p>
               <ul className="space-y-0.5">{warnings.map((finding, index) => renderFinding(finding, errors.length + index))}</ul>

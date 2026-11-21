@@ -68,8 +68,13 @@ identical frames. A capture may differ from its baseline by at most
 100 pixels past the default per-pixel threshold (measured noise: under 110
 pixels, each at most 10/255 off, all inside the threshold). The pointer is
 parked off the page so no row shows its hover state. The build's version
-string (settings footer) is masked, so a baseline does not depend on the
-commit that built it.
+string (settings footer) is pinned and masked, so a baseline does not depend
+on the commit that built it: `task test:web:visual` builds with
+`RELEASE_VERSION=0.0.0-visual`, `scripts/visual-docker.sh` refuses a `dist/`
+built with any other version, and the footer never wraps (a long version is
+truncated). The composer's example prompt is a function of the chat id
+(`src/components/Chat/examplePrompt.ts`), not of `Math.random`, so it does
+not move when a change reorders the seeded random draws.
 
 This harness is a port of the November UX review's fake network
 (`dev-docs/design/app-ux-review-2026-11/HARNESS.md`), with its fixtures

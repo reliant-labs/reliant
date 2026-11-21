@@ -161,7 +161,7 @@ export function ComputeSubscriptionCheckout({
       )}
     >
       <section className="space-y-3 p-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           Choose your machine
         </h3>
         <PlanTiles
@@ -174,7 +174,7 @@ export function ComputeSubscriptionCheckout({
       </section>
 
       <section className="space-y-3 border-t border-border p-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           {currentPlanId ? "Change plan" : "Pay with card"}
         </h3>
         {selected ? (
@@ -218,7 +218,7 @@ export function ComputeSubscriptionCheckout({
           direction on light ones — see the elevation note in
           forge-ui/card.tsx. `bg-background` recesses in both. */}
       <section className="space-y-2 border-t border-border bg-background p-5">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-xs font-semibold text-muted-foreground">
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">

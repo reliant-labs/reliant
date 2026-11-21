@@ -120,7 +120,7 @@ The same works for Django, Rails, Spring or Go, because Forge deploys the image 
     `secret set` reads the value from stdin and creates the hosted env on first use ([Secrets](/hosting/secrets)). `--yes` approves the plan the deploy prints:
 
     ```bash terminal
-    openssl rand -hex 16 | reliant forge secret set --env staging SESSION_SECRET
+    openssl rand -hex 16 | reliant forge env secret set --env staging SESSION_SECRET
     reliant forge env deploy staging --yes
     ```
 
