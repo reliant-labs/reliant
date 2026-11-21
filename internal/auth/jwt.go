@@ -65,9 +65,40 @@ type JWTClaims struct {
 	// server adds it to the tokens it issues third-party clients; a session
 	// from signing in to the app has none.
 	ClientID string `json:"client_id,omitempty"`
+	// Iss and Aud are the token's issuer and audience. JWTValidator checks
+	// them against ExpectIssuer and ExpectAudience when those are set.
+	Iss string   `json:"iss,omitempty"`
+	Aud audience `json:"aud,omitempty"`
 	// Credential is the kind of credential these claims were verified from,
 	// set by the validator that verified them — never read from the token.
 	Credential Credential `json:"-"`
+}
+
+// audience is a JWT aud claim, which RFC 7519 §4.1.3 allows as one string or
+// an array of them.
+type audience []string
+
+func (a *audience) UnmarshalJSON(b []byte) error {
+	var one string
+	if err := json.Unmarshal(b, &one); err == nil {
+		*a = audience{one}
+		return nil
+	}
+	var many []string
+	if err := json.Unmarshal(b, &many); err != nil {
+		return err
+	}
+	*a = many
+	return nil
+}
+
+func (a audience) contains(want string) bool {
+	for _, v := range a {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }
 
 // JWTHeader represents the JWT header
@@ -91,6 +122,10 @@ type JWTValidator struct {
 	// carries no email. Set at construction (RequireEmailVerifiedClaim); see
 	// verifiedEmailClaim.
 	requireEmailVerifiedClaim bool
+	// issuer and audience, when set, are the exact iss and an aud the token
+	// must carry (ExpectIssuer, ExpectAudience).
+	issuer   string
+	audience string
 }
 
 // ValidatorOption configures a JWTValidator at construction.
@@ -105,6 +140,20 @@ type ValidatorOption func(*JWTValidator)
 // "Supabase email_verified hook").
 func RequireEmailVerifiedClaim(require bool) ValidatorOption {
 	return func(v *JWTValidator) { v.requireEmailVerifiedClaim = require }
+}
+
+// ExpectIssuer makes the validator refuse a token whose iss is not exactly
+// issuer (SUPABASE_JWT_ISSUER: https://<project>.supabase.co/auth/v1, or the
+// project's custom domain). Empty checks nothing, as before.
+func ExpectIssuer(issuer string) ValidatorOption {
+	return func(v *JWTValidator) { v.issuer = issuer }
+}
+
+// ExpectAudience makes the validator refuse a token whose aud does not name
+// audience (SUPABASE_JWT_AUDIENCE: "authenticated" for a Supabase session).
+// Empty checks nothing, as before.
+func ExpectAudience(audience string) ValidatorOption {
+	return func(v *JWTValidator) { v.audience = audience }
 }
 
 func (v *JWTValidator) apply(opts []ValidatorOption) *JWTValidator {
@@ -346,6 +395,15 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 	// Check expiration
 	if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
 		return nil, ErrExpiredToken
+	}
+	// The issuer and audience the deployment expects, when it names them:
+	// a token signed with the right key for another issuer or audience is
+	// still not a session of this one.
+	if v.issuer != "" && claims.Iss != v.issuer {
+		return nil, fmt.Errorf("%w: issuer %q is not the expected issuer", ErrInvalidToken, claims.Iss)
+	}
+	if v.audience != "" && !claims.Aud.contains(v.audience) {
+		return nil, fmt.Errorf("%w: audience is not %q", ErrInvalidToken, v.audience)
 	}
 
 	// The email rule reads claims JWTClaims does not model, and must not

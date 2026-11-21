@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	forgeauth "github.com/reliant-labs/forge/pkg/auth"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -154,6 +155,20 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
 			DevJWTSecret:              api.GetAuthDevJwtSecret(),
+			SupabaseIssuer:            api.GetSupabaseJwtIssuer(),
+			SupabaseAudience:          api.GetSupabaseJwtAudience(),
+			Identity: auth.IdentitySettings{
+				Issuer:        api.GetJwtIssuer(),
+				Audience:      api.GetJwtAudience(),
+				JWKSURL:       api.GetJwtJwksUrl(),
+				SigningMethod: api.GetJwtSigningMethod(),
+				RolesClaim:    api.GetJwtRolesClaim(),
+				Snapshot: forgeauth.JWKSSnapshot{
+					File:   api.GetJwtJwksSnapshotFile(),
+					Inline: api.GetJwtJwksSnapshot(),
+					MaxAge: api.GetJwtJwksSnapshotMaxAge().AsDuration(),
+				},
+			},
 		},
 		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
 		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
@@ -172,6 +187,7 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
 		"auth_mode", s.Auth.ModeName(),
+		"managed_identity", s.Auth.Identity.Issuer,
 	)
 	return s, nil
 }

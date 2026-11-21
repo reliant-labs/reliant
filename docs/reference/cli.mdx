@@ -24099,8 +24099,15 @@ reliant server api [flags]
 | `--grpc-port` | `int32` | `9090` | gRPC/ConnectRPC listen port [env: GRPC_PORT] |
 | `--health-port` | `int32` | `8081` | Health/readiness HTTP endpoint port [env: HEALTH_PORT] |
 | `--jwks-url` | `string` | - | JWKS endpoint URL for JWT validation (alternative to PEM key) [env: RELIANT_JWKS_URL] |
+| `--jwt-audience` | `string` | - | An aud the managed identity's tokens must carry: its project id. Required with jwt_issuer [env: JWT_AUDIENCE] |
+| `--jwt-issuer` | `string` | - | The managed identity's issuer: the exact iss of its tokens (empty: not accepted) [env: JWT_ISSUER] |
+| `--jwt-jwks-snapshot-file` | `string` | - | A delivered snapshot of the managed identity's JWKS, to start on while its issuer is down [env: JWT_JWKS_SNAPSHOT_FILE] |
+| `--jwt-jwks-snapshot-max-age` | `string` | `168h` | How old a JWKS snapshot may be and still be used [env: JWT_JWKS_SNAPSHOT_MAX_AGE] |
+| `--jwt-jwks-url` | `string` | - | The managed identity's JWKS endpoint; empty discovers it from jwt_issuer's OpenID configuration [env: JWT_JWKS_URL] |
 | `--jwt-public-key` | `string` | - | JWT public key PEM for token validation [env: JWT_PUBLIC_KEY] |
 | `--jwt-public-key-file` | `string` | - | Path to JWT public key PEM file [env: JWT_PUBLIC_KEY_FILE] |
+| `--jwt-roles-claim` | `string` | `auto` | The claim the managed identity's roles are read from (auto: roles, else Zitadel's project roles map) [env: JWT_ROLES_CLAIM] |
+| `--jwt-signing-method` | `string` | `RS256` | The alg the managed identity signs its tokens with [env: JWT_SIGNING_METHOD] |
 | `--pprof-port` | `int32` | `6060` | pprof debug server port [env: PPROF_PORT] |
 
 ---
