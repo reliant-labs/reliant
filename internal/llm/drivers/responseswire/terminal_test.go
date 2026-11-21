@@ -35,6 +35,17 @@ func TestGateToolCalls(t *testing.T) {
 			allow: map[string]bool{"fc_done": true, "fc_half": false, "call_noid": true, "fc_streamed_only": false},
 		},
 		{
+			// Not proof of completion: gated like incomplete.
+			name:  "in_progress allows only items it lists as completed",
+			raw:   `{"id":"r","status":"in_progress",` + twoCalls + `}`,
+			allow: map[string]bool{"fc_done": true, "fc_half": false, "call_noid": true, "fc_streamed_only": false},
+		},
+		{
+			name:  "an unknown status allows only items it lists as completed",
+			raw:   `{"id":"r","status":"some_future_status",` + twoCalls + `}`,
+			allow: map[string]bool{"fc_done": true, "fc_half": false, "fc_streamed_only": false},
+		},
+		{
 			name:  "failed allows nothing",
 			raw:   `{"id":"r","status":"failed",` + twoCalls + `}`,
 			allow: map[string]bool{"fc_done": false, "fc_half": false, "call_noid": false},
