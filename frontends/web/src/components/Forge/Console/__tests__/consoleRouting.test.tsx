@@ -235,6 +235,12 @@ function renderAt(
     storage: probe("storage"),
     data: probe("data"),
     auth: probe("auth"),
+    tests: probe("tests"),
+    testsCoverage: probe("tests-coverage"),
+    testsRuns: probe("tests-runs"),
+    testsRun: probe("tests-run"),
+    testsFlaky: probe("tests-flaky"),
+    testsFlakyTest: probe("tests-flaky-test"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -542,6 +548,32 @@ describe("the environment scope", () => {
 
     const redirected = renderAt("/forge/p/alpha/users?env=e2e&user=u-1");
     await landsOn(redirected, "/forge/p/alpha/auth", { env: "e2e", user: "u-1" });
+  });
+
+  it.each([
+    ["/forge/p/alpha/tests?env=e2e&branch=main", "tests", "/forge/p/alpha/tests", { env: "e2e", branch: "main" }],
+    [
+      "/forge/p/alpha/tests/coverage?env=e2e&path=internal/billing/refund.go&commit=9f3c&lane=unit&base=77e0c1d",
+      "tests-coverage",
+      "/forge/p/alpha/tests/coverage",
+      { env: "e2e", path: "internal/billing/refund.go", commit: "9f3c", lane: "unit", base: "77e0c1d" },
+    ],
+    ["/forge/p/alpha/tests/runs?env=e2e", "tests-runs", "/forge/p/alpha/tests/runs", { env: "e2e" }],
+    ["/forge/p/alpha/tests/runs/01JD7Q?env=e2e", "tests-run", "/forge/p/alpha/tests/runs/01JD7Q", { env: "e2e" }],
+    ["/forge/p/alpha/tests/flaky?env=e2e", "tests-flaky", "/forge/p/alpha/tests/flaky", { env: "e2e" }],
+    ["/forge/p/alpha/tests/flaky/dGVzdA?env=e2e", "tests-flaky-test", "/forge/p/alpha/tests/flaky/dGVzdA", { env: "e2e" }],
+  ])("routes the Tests page %s", async (url, page, path, search) => {
+    const router = renderAt(url);
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", page);
+    await landsOn(router, path, search);
+    // The Tests pages narrow by their own `environment`: the bar draws no env picker (useRouteUsesEnvScope).
+    expect(router.state.matches.some((match) => match.staticData?.envScope === false)).toBe(true);
+  });
+
+  it("keeps the env scope on the pages that read it", async () => {
+    const router = renderAt("/forge/p/alpha/releases?env=e2e");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "releases");
+    expect(router.state.matches.some((match) => match.staticData?.envScope === false)).toBe(false);
   });
 
   it("reads a numeric-looking key back as the text it is", async () => {

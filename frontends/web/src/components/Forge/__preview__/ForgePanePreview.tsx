@@ -62,6 +62,12 @@ import { ObsOverviewPage } from "../Observability/ObsOverview/ObsOverviewPage";
 import { AuthPage } from "../Users/AuthPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
+import { TestsOverviewPage } from "../Tests/TestsOverviewPage";
+import { TestsFlakyPage } from "../Tests/TestsFlakyPage";
+import { TestsFlakyTestPage } from "../Tests/TestsFlakyTestPage";
+import { TestsCoveragePage } from "../Tests/TestsPlaceholderPages";
+import { TestsRunPage } from "../Tests/TestsRunPage";
+import { TestsRunsPage } from "../Tests/TestsRunsPage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
@@ -449,6 +455,12 @@ function buildRouter(path: string) {
     storage: StoragePage,
     data: DataPage,
     auth: AuthPage,
+    tests: TestsOverviewPage,
+    testsCoverage: TestsCoveragePage,
+    testsRuns: TestsRunsPage,
+    testsRun: TestsRunPage,
+    testsFlaky: TestsFlakyPage,
+    testsFlakyTest: TestsFlakyTestPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,
