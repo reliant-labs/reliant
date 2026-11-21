@@ -2,14 +2,17 @@
 package lint
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // checkGraph runs the per-node and per-edge rules over one graph. slotBound
@@ -44,6 +47,8 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 					fmt.Sprintf("branch on nodes.%s.exit_code (an edge case, or a condition downstream)", id))
 			}
 			c.checkFetch(path, n, cmd)
+		case model.NodeTypeAskQuestion:
+			c.checkAskQuestionType(path, n)
 		case model.NodeTypeAction:
 			c.checkApprovalDecider(path, n)
 			if !g.onFailure && !c.reads.reads(id, "is_error") {
@@ -53,12 +58,10 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 		case model.NodeTypeWorkflow:
 			if timed {
 				c.add(RuleTimeoutIgnored, path, "timeout: on a workflow node bounds nothing: the runtime applies a node's timeout to the activity the node dispatches, and a workflow node dispatches none (its child's nodes run on their own timeouts)",
-					"remove it, and bound the child's own steps (run timeouts, the agent's max_turns)")
+					"remove it, and bound the child's own steps (timeouts on its run nodes, args.max_turns on an agent)")
 			}
 			if slotBound {
-				if ref := childRef(n); ref != "" {
-					c.checkChildBounded(path, ref)
-				}
+				c.checkChildBounded(path, n)
 			}
 			c.checkTurnBudget(path, n)
 		case model.NodeTypeLoop:
@@ -66,8 +69,8 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 				c.add(RuleTimeoutIgnored, path, "timeout: on a loop node bounds nothing: the runtime applies a node's timeout to the activity the node dispatches, and a loop node dispatches none",
 					"remove it, and bound the loop with iter.iteration in while")
 			}
-			if ref := childRef(n); slotBound && ref != "" {
-				c.checkChildBounded(path, ref)
+			if slotBound {
+				c.checkChildBounded(path, n)
 			}
 			la := model.GetLoopArgs(n)
 			while := model.DirectCelExpr(la.GetWhile())
@@ -114,13 +117,21 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 // long as it runs, so the child's own waits must be bounded too. It is read
 // through LoadRef, every ref it reaches in turn; a ref that does not resolve
 // statically (a template) or a loader error is skipped, never guessed.
-func (c *checker) checkChildBounded(path, ref string) {
-	if c.in.LoadRef == nil || strings.Contains(ref, "{{") {
+//
+// A child loop bounded by one of its own inputs, where 0 means no limit
+// (builtin://agent's `inputs.max_turns == 0 || iter.iteration <
+// inputs.max_turns`), is bounded only when the node that runs it sets that
+// input. Left unset, it is reported as a warning naming the arg to set: the
+// error this rule gives an unbounded loop predates such inputs, and a stricter
+// verdict warns before it gates.
+func (c *checker) checkChildBounded(path string, node *reliantv1.Node) {
+	ref := childRef(node)
+	if c.in.LoadRef == nil || ref == "" || strings.Contains(ref, "{{") {
 		return
 	}
 	visited := map[string]bool{}
-	var walk func(ref, via string)
-	walk = func(ref, via string) {
+	var walk func(ref, via string, caller *reliantv1.Node)
+	walk = func(ref, via string, caller *reliantv1.Node) {
 		if visited[ref] {
 			return
 		}
@@ -143,18 +154,95 @@ func (c *checker) checkChildBounded(path, ref string) {
 					}
 				case model.NodeTypeLoop:
 					la := model.GetLoopArgs(n)
-					if !model.CelStringIsSet(la.GetItems()) && !strings.Contains(model.DirectCelExpr(la.GetWhile()), "iteration") {
+					if model.CelStringIsSet(la.GetItems()) {
+						break
+					}
+					unconditional, optIn := loopBound(model.DirectCelExpr(la.GetWhile()))
+					switch {
+					case unconditional:
+					case len(optIn) > 0:
+						if !setsAnyNonZero(caller, optIn) && !defaultsAnyNonZero(child, optIn) {
+							c.addAt(SeverityWarning, RuleSlotUnboundedWait, path, fmt.Sprintf("the child's loop %s is bounded only by its %s input, which this node leaves at 0 (no limit), holding this workflow's max_running slot", where, strings.Join(optIn, "/")),
+								fmt.Sprintf("set args.%s to the budget this task needs", optIn[0]))
+						}
+					default:
 						c.add(RuleSlotUnboundedWait, path, fmt.Sprintf("the child's loop %s has no iteration bound, holding this workflow's max_running slot", where),
 							"bound it with iter.iteration in while")
 					}
 				}
 				if r := childRef(n); r != "" && !strings.Contains(r, "{{") {
-					walk(r, where)
+					walk(r, where, n)
 				}
 			}
 		}
 	}
-	walk(ref, ref)
+	walk(ref, ref, node)
+}
+
+// optInBoundPattern is a loop bound its workflow's caller switches on: `inputs.X
+// == 0 || iter.iteration < inputs.X`, where X = 0 means no limit. Both names
+// are captured (Go regexp has no backreference) and must agree.
+var optInBoundPattern = regexp.MustCompile(`\(?\s*inputs\.(\w+)\s*==\s*0\s*\|\|\s*iter\.iteration\s*<=?\s*inputs\.(\w+)\s*\)?`)
+
+// loopBound reads a while condition: unconditional when iter.iteration bounds
+// it whatever the inputs, else the inputs that bound it once a caller sets one
+// to a non-zero value (none: nothing bounds it).
+func loopBound(while string) (unconditional bool, optIn []string) {
+	rest := optInBoundPattern.ReplaceAllStringFunc(while, func(m string) string {
+		sub := optInBoundPattern.FindStringSubmatch(m)
+		if sub[1] != sub[2] {
+			return m
+		}
+		optIn = append(optIn, sub[1])
+		return ""
+	})
+	return strings.Contains(rest, "iteration"), optIn
+}
+
+// defaultsAnyNonZero reports whether wf declares one of names with a non-zero
+// default: a caller that leaves it unset then runs the loop bounded by that
+// default, as builtin://agent's max_turns (default 0) is not.
+func defaultsAnyNonZero(wf *reliantv1.Workflow, names []string) bool {
+	for _, name := range names {
+		in := wf.GetInputs()[name]
+		if in.GetIntegerInput().GetDefault() != 0 || in.GetNumberInput().GetDefault() != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// setsAnyNonZero reports whether a workflow or loop node gives its child one of
+// names: an arg that is not the literal 0, or a passthrough of that name. A
+// template counts as set; lint cannot know its value.
+func setsAnyNonZero(n *reliantv1.Node, names []string) bool {
+	var args map[string]*structpb.Value
+	var passthrough []string
+	if swa := model.GetSubWorkflowArgs(n); swa != nil {
+		args, passthrough = swa.GetArgs(), swa.GetPassthrough()
+	} else if la := model.GetLoopArgs(n); la != nil {
+		args = la.GetArgs()
+	}
+	for _, name := range names {
+		if slices.Contains(passthrough, name) {
+			return true
+		}
+		v, ok := args[name]
+		if !ok {
+			continue
+		}
+		switch k := v.GetKind().(type) {
+		case *structpb.Value_NumberValue:
+			if k.NumberValue != 0 {
+				return true
+			}
+		case *structpb.Value_StringValue:
+			if s := strings.TrimSpace(k.StringValue); s != "" && s != "0" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // comparisonPattern is `<operand> == <value>` or `<operand> != <value>`, the
@@ -198,7 +286,10 @@ var trivialCommandPattern = regexp.MustCompile(`^\s*(sleep\s+[0-9.]+[smhd]?|true
 func trivialCommand(cmd string) bool { return trivialCommandPattern.MatchString(cmd) }
 
 // checkTurnBudget: an agent child (one that declares max_turns) whose node
-// leaves it unset runs on the child's default.
+// leaves it unset runs on the child's default. A default of 0 is no limit
+// (builtin://agent, builtin://structured-agent): such an agent never runs out
+// of turns, so leaving it is not this finding (an unattended workflow that
+// needs the bound is told by slot-unbounded-wait).
 func (c *checker) checkTurnBudget(path string, n *reliantv1.Node) {
 	ref := childRef(n)
 	if ref == "" || strings.Contains(ref, "{{") || c.in.LoadRef == nil {
@@ -221,11 +312,11 @@ func (c *checker) checkTurnBudget(path string, n *reliantv1.Node) {
 	if args["max_turns"] {
 		return
 	}
-	def := ""
-	if d := in.GetIntegerInput().GetDefault(); d != 0 {
-		def = fmt.Sprintf(" (%d)", d)
+	d := in.GetIntegerInput().GetDefault()
+	if d == 0 {
+		return
 	}
-	c.add(RuleAgentTurnBudget, path, fmt.Sprintf("the agent runs on %s's default max_turns%s; an agent that runs out of turns submits nothing", ref, def),
+	c.add(RuleAgentTurnBudget, path, fmt.Sprintf("the agent runs on %s's default max_turns (%d); an agent that runs out of turns submits nothing", ref, d),
 		"set args.max_turns to the budget this task needs, and say it in the prompt")
 }
 
@@ -493,4 +584,25 @@ func sortedKeys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// checkAskQuestionType: the app and `reliant workflow answer` read an
+// ask_question's metadata as a question card only when it says
+// "type": "ask_user"; without it the gate shows no options and nothing can
+// answer it, while validate and scenarios pass. Only metadata written as a
+// literal JSON object is judged: an expression's value does not exist yet.
+func (c *checker) checkAskQuestionType(path string, n *reliantv1.Node) {
+	raw := strings.TrimSpace(model.CelStringRaw(n.GetAskQuestion().GetMetadata()))
+	if raw == "" {
+		return
+	}
+	var meta map[string]any
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		return
+	}
+	if t, _ := meta["type"].(string); t == "ask_user" {
+		return
+	}
+	c.add(RuleAskQuestionType, path, `metadata has no "type": "ask_user", so the app shows the question with no options and `+"`reliant workflow answer`"+` cannot answer it`,
+		`add "type": "ask_user" to the metadata JSON, beside "questions"`)
 }

@@ -62,9 +62,11 @@ func TestMarkTextOnlyUserError(t *testing.T) {
 	usageLimit := errors.New("AI provider usage limit reached [RELIANT_PROVIDER_USAGE_LIMIT:2026-10-10T18:00:00Z]: 429")
 	creditOut := errors.New("insufficient_quota: you exceeded your current quota")
 	promptRefused := errors.New(`failed to stream LLM response: received error while streaming: {"message":"Invalid prompt: your prompt was flagged as potentially violating our usage policy.","type":"invalid_request_error","param":null,"code":"invalid_prompt"}`)
+	cyberRefused := errors.New(`received error while streaming: {"message":"This content was flagged for possible cybersecurity risk. If this seems wrong, try rephrasing your request.","type":"invalid_request","param":null,"code":"cyber_policy"}`)
 	plain := errors.New("pq: connection refused")
 
-	for name, err := range map[string]error{"usage limit": usageLimit, "credit exhausted": creditOut, "prompt refused": promptRefused} {
+	for name, err := range map[string]error{"usage limit": usageLimit, "credit exhausted": creditOut, "prompt refused": promptRefused,
+		"cyber policy refusal (c1ef7abd)": cyberRefused} {
 		marked := markTextOnlyUserError(err)
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(marked), name)
 		assert.ErrorIs(t, marked, err, "%s: the original must stay reachable", name)
