@@ -93,4 +93,31 @@ describe("ConnectPanel", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("That's alice@example.com, already connected.");
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("takes a Vertex AI service-account key file and checks its shape before adding it", async () => {
+    addApiKey.mockReset();
+    renderPanel("vertexai");
+    expect(screen.getByText("Add your Vertex AI key")).toBeInTheDocument();
+    const field = screen.getByLabelText("Service-account key (JSON)");
+    expect(field.tagName).toBe("TEXTAREA");
+
+    await userEvent.click(field);
+    await userEvent.paste('{"type": "service_account", "project_id": "acme"');
+    await userEvent.click(screen.getByRole("button", { name: /add key/i }));
+    expect(await screen.findByTestId("service-account-key-error")).toHaveTextContent(/not valid JSON/);
+    expect(addApiKey).not.toHaveBeenCalled();
+
+    const key = JSON.stringify({
+      type: "service_account",
+      project_id: "acme",
+      private_key: "fake-private-key-material",
+      client_email: "reliant@acme.iam.gserviceaccount.com",
+    });
+    addApiKey.mockResolvedValue({ created: true });
+    await userEvent.clear(field);
+    await userEvent.paste(key);
+    expect(screen.queryByTestId("service-account-key-error")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /add key/i }));
+    await waitFor(() => expect(addApiKey).toHaveBeenCalledWith("vertexai", key));
+  });
 });

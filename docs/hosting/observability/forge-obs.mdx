@@ -102,7 +102,7 @@ release_health = forge.ReleaseHealth {
 }
 ```
 
-Latency and workload restarts are findings too, but they warn by default instead of failing. `--fail-on` changes the failing set for one call, and the document says where each effective threshold came from: the release, a default, or your request. `--gate-json FILE` writes the evidence in a form `forge gate record --from FILE` attaches to the promotion.
+Latency and workload restarts are findings too, but they warn by default instead of failing. `--fail-on` changes the failing set for one call, and the document says where each effective threshold came from: the release, a default, or your request. `--gate-json FILE` writes the evidence in a form `forge release gate record --from FILE` attaches to the promotion.
 
 For an environment on Reliant hosting, the platform also judges every promotion itself once the after window closes and stores that verdict once, append-only. A failing verdict raises a `ReleaseRegressed` alert. The optional promotion health gate (`delivery_policy.health_gate`) reads that stored verdict, so a release can be held until staging's verdict for it is `pass`. The gate is opt-in and off by default, and you choose which environment's verdict a release must have before it moves on. The CLI exit code tells you what the gate will see, and loosening it locally with `--threshold` or `--allow-inconclusive` changes nothing on the server.
 
@@ -181,7 +181,7 @@ Across every verb, exit 1 means you asked for something wrong (a bad query, a re
 
 ## Credentials
 
-A CI token reads telemetry with the `obs:read` scope (`forge cloud token create --env prod --scopes obs:read`). Triage needs `obs:triage`, and `forge env releases` against a hosted environment also needs `deploy:read`. Under Reliant, the credential helper grants these from the signed-in person's own authority and you never run `forge login`. A hosted `db query` on an audited environment is for people only; an organization automation token is refused.
+A CI token reads telemetry with the `obs:read` scope (`forge cloud token create --env prod --scopes obs:read`). Triage needs `obs:triage`, and `forge env releases` against a hosted environment also needs `deploy:read`. Under Reliant, the credential helper grants these from the signed-in person's own authority and you never run `forge cloud login`. A hosted `db query` on an audited environment is for people only; an organization automation token is refused.
 
 ## Related topics
 

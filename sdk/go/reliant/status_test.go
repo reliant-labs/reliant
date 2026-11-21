@@ -105,3 +105,28 @@ func TestStatusOfARunWithNoExecutionIsNotFound(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
+
+// TL-12: node threads were named by the workflow they ran, so every spawned
+// sub-agent read "builtin://agent" and a node whose spawned_by_node_id was
+// unset read as the run's own workflow name.
+func TestStatusNodeLabel_NamesTheNodeThenTheTitle(t *testing.T) {
+	str := func(s string) *string { return &s }
+	cases := []struct {
+		wf   *reliantv1.WorkflowExecution
+		want string
+	}{
+		{&reliantv1.WorkflowExecution{WorkflowName: "builtin://agent", SpawnedByNodeId: str("review")}, "review"},
+		{&reliantv1.WorkflowExecution{WorkflowName: "model-per-step", OriginNodeId: str("spot")}, "spot"},
+		{&reliantv1.WorkflowExecution{WorkflowName: "builtin://agent", Origin: "spawn", ThreadTitle: str("auth researcher")}, "auth researcher"},
+		{&reliantv1.WorkflowExecution{WorkflowName: "builtin://agent"}, "builtin://agent"},
+	}
+	for _, c := range cases {
+		if got := statusNodeLabel(c.wf); got != c.want {
+			t.Errorf("statusNodeLabel(%v) = %q, want %q", c.wf, got, c.want)
+		}
+		n := buildStatusNode(c.wf, nil)
+		if n.NodeID != c.want || n.Title != c.wf.GetThreadTitle() || n.Origin != c.wf.GetOrigin() {
+			t.Errorf("buildStatusNode = %+v", n)
+		}
+	}
+}

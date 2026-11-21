@@ -6,7 +6,7 @@
  * Sibling of services/forge/secrets.ts and deliberately NOT a replacement for
  * it. The two answer different questions about different stores:
  *
- *   secrets.ts      `forge secret list --json`, via the DAEMON. Answers "what
+ *   secrets.ts      `forge env secret list --json`, via the DAEMON. Answers "what
  *                   does this environment DECLARE, and does forge's own store
  *                   hold a value" — for the file/external/none providers forge
  *                   ships today.
@@ -91,7 +91,7 @@ export interface ManagedSecretSummary {
  * Who wrote a version, from the control plane's audit trail. An identity,
  * never a value.
  *
- *   user      a person — the console, or `forge secret set` with a personal
+ *   user      a person — the console, or `forge env secret set` with a personal
  *             token. `email` is their address when the session carried one.
  *   token     an org automation token, with no person behind it.
  *   platform  the platform, minting a generated secret at promotion.
@@ -330,7 +330,7 @@ export function availabilityExplanation(availability: ManagedStoreAvailability):
     case "not-ensured":
       return "This hosted environment hasn't been built yet, so nothing is stored for it. Run `forge env build` for it, or open Preview with your daemon online — after that its secrets can be set here, with your daemon offline.";
     case "other-control-plane":
-      return "This environment is hosted on a different control plane from the one you are signed in to, so its store cannot be read from here. Set values with `forge secret set`.";
+      return "This environment is hosted on a different control plane from the one you are signed in to, so its store cannot be read from here. Set values with `forge env secret set`.";
     case "unreachable":
       return "The managed store could not be reached, so what it holds is not known right now. This is a connection problem, not a statement about your secrets.";
     // No sentence of their own: `available` has nothing to explain, and the
