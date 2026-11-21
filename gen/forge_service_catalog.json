@@ -47021,6 +47021,10 @@
               "kind": "map",
               "map_key_kind": "string",
               "map_value_kind": "string"
+            },
+            {
+              "name": "pool",
+              "kind": "string"
             }
           ],
           "reliant.v1.DeleteWorkflowRequest": [

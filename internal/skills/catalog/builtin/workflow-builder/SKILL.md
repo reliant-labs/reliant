@@ -907,7 +907,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `presets` | PresetsConfig | No | - |
 | `entry` | string[] | No | - |
 | `api_version` | string | No | - |
-| `daemon` | CelDaemonSelector | No | - |
+| `daemon` | CelDaemonSelector | No | *Which machine runs the workflow's tools: a kind (`local`, `cloud`, `any`), a machine name, a DaemonSelector, or a CEL template producing either. A node's own `daemon:` wins over this, and this wins over the chat's or automation's machine. `{pool: <name>}` places the run once on one member of a machine pool instead of pinning one machine. See DaemonSelector below.* |
 | `resume_node` | string | No | - |
 | `transition_to` | string | No | - |
 | `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of {name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over `trigger`: the message each run starts from)}. Declaring one fires nothing; the user enables it in the app. See the workflow-builder skill's Triggers section.* |

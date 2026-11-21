@@ -72,7 +72,7 @@ const SIZES: Array<[string, number, string, number]> = [
 ]
 const PLANS = SIZES.map(([size, cents, , disk], i) => ({
   id: `plan_compute_${size}`, productId: 'prod_compute', name: `Compute ${size.toUpperCase()}`, tier: 'PLAN_TIER_STARTER',
-  stripePriceId: `price_visual_${size}`, limits: '{}', createdAt: iso(30 * DAY), priceCents: String(cents), displayOrder: i + 1,
+  stripePriceId: `price_visual_${size}`, createdAt: iso(30 * DAY), priceCents: String(cents), displayOrder: i + 1,
   structuredLimits: {
     maxSeats: 1, maxWorkspaces: 5, maxLlmKeys: 1, maxLlmSpendMonthly: 25,
     allowedDaemonSizes: SIZES.slice(0, i + 1).map(([s]) => s), machineSize: size, machineIncludedHours: '160',
