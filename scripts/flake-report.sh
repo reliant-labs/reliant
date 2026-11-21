@@ -143,7 +143,9 @@ fi
 # A pinned forge without it runs the script below, unchanged, as does
 # FLAKE_REPORT_LEGACY=1 (scripts/test-flake-report.sh pins its verdicts).
 forge_sh="$(cd "$(dirname "$0")" && pwd)/forge.sh"
-if [[ "${FLAKE_REPORT_LEGACY:-}" != 1 ]] && "$forge_sh" test flakes confirm --help >/dev/null 2>&1; then
+# (Whether it has one: its help names the verb. An older forge answers
+# `forge test flakes confirm --help` with `forge test`'s own help, and exit 0.)
+if [[ "${FLAKE_REPORT_LEGACY:-}" != 1 ]] && "$forge_sh" test flakes confirm --help 2>/dev/null | grep -q 'forge test flakes confirm'; then
   cf=()
   if [[ -n "$logs_dir" ]]; then
     cf=(--logs "$logs_dir")

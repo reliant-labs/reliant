@@ -70,7 +70,10 @@ changed_tests() {
   go run ./tools/test-affected changed-tests -base "$base" || { echo "test-flake: tools/test-affected changed-tests failed" >&2; return 2; }
 }
 
-if scripts/forge.sh test flakes gate --help >/dev/null 2>&1; then
+# Whether the pinned forge has the gate: its help names the verb. (An older
+# forge answers `forge test flakes gate --help` with `forge test`'s own help,
+# and exit 0.)
+if scripts/forge.sh test flakes gate --help 2>/dev/null | grep -q 'forge test flakes gate'; then
   log=$(mktemp)
   trap 'rm -f "$log"' EXIT
   rc=0
