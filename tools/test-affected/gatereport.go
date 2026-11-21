@@ -97,7 +97,7 @@ func runGateReport(args []string, out, errOut io.Writer) int {
 	}
 	rows, _ := filepath.Glob(filepath.Join(*dir, "*.row"))
 	var failed []string
-	unnamed := map[string]bool{}
+	unnamed, killed := map[string]bool{}, map[string]bool{}
 	for _, p := range rows {
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -118,39 +118,44 @@ func runGateReport(args []string, out, errOut io.Writer) int {
 			logPath := filepath.Join(*dir, name+".log")
 			fmt.Fprintf(out, "failed phase: %s (rc %d); complete log: %s\n", name, rc, logPath)
 			failed = append(failed, name)
+			killed[name] = endedByKill(logPath, rc)
 			if tail := unnamedFailureTail(logPath); tail != "" {
 				unnamed[name] = true
 				fmt.Fprintf(out, "last lines of %s.log (it names no failure):\n%s", name, tail)
 			}
 		}
 	}
-	for _, m := range oomMarkers(len(failures) > 0, failed, unnamed, *memPeak, *memLimit, readOOMKills(*dir, failed)) {
+	for _, m := range oomMarkers(len(failures) > 0, failed, unnamed, killed, *memPeak, *memLimit, readOOMKills(*dir, failed)) {
 		fmt.Fprintln(out, m)
 	}
 	return 0
 }
 
 // oomPeakPercent is how close to the memory limit the gate's peak must come
-// for a failed phase that names no failure to count as killed for memory.
+// for it to corroborate a kill.
 const oomPeakPercent = 95
 
 // oomMarkers returns one "!! GATE-INFRA: oom <phase> (...)" line per failed
-// phase the runner's memory killed rather than the change: every failed phase
-// names no failure, and either the gate's cgroup peak reached oomPeakPercent
-// of its limit or the kernel's oom_kill count rose while that phase ran.
+// phase the runner's memory killed rather than the change. A phase qualifies
+// only on evidence attributable to it: its log names no failure, its own
+// process was ended by SIGKILL (endedByKill), and either the kernel's
+// oom_kill count rose while it ran or the gate's cgroup peak reached
+// oomPeakPercent of its limit. A gate-wide peak or a shared oom_kill count is
+// never enough alone: an ordinary compiler or lint failure after (or beside)
+// a memory-heavy phase is not killed, so it does not qualify.
 // control-plane's pr-fix reads the marker from the job log and spends the one
 // automatic re-run per head on it instead of blaming the PR (control-plane
 // #2862), so it is all or nothing: a named failure anywhere, or a failed
 // phase that does not qualify, prints no marker at all. peak and limit are
-// bytes, 0 when unknown; oomKills is per phase.
-func oomMarkers(named bool, failed []string, unnamed map[string]bool, peak, limit int64, oomKills map[string]int64) []string {
+// bytes, 0 when unknown; killed and oomKills are per phase.
+func oomMarkers(named bool, failed []string, unnamed, killed map[string]bool, peak, limit int64, oomKills map[string]int64) []string {
 	if named || len(failed) == 0 {
 		return nil
 	}
 	nearLimit := peak > 0 && limit > 0 && peak*100 >= limit*oomPeakPercent
 	var out []string
 	for _, name := range failed {
-		if !unnamed[name] {
+		if !unnamed[name] || !killed[name] {
 			return nil
 		}
 		var why []string
@@ -163,9 +168,24 @@ func oomMarkers(named bool, failed []string, unnamed map[string]bool, peak, limi
 		if len(why) == 0 {
 			return nil
 		}
-		out = append(out, fmt.Sprintf("!! GATE-INFRA: oom %s (%s; its log names no failure): the runner ran out of memory, NOT PR blame.", name, strings.Join(why, ", ")))
+		out = append(out, fmt.Sprintf("!! GATE-INFRA: oom %s (%s; killed, and its log names no failure): the runner ran out of memory, NOT PR blame.", name, strings.Join(why, ", ")))
 	}
 	return out
+}
+
+// killedLine is how a SIGKILLed child shows in a phase's log: go and
+// os/exec print "signal: killed", a shell prints "Killed".
+var killedLine = regexp.MustCompile(`(?m)signal: killed|^(\S+: line \d+: \d+ )?Killed\b`)
+
+// endedByKill reports whether a failed phase's own process, or a child whose
+// failure ended it, was killed by SIGKILL: rc 137 (128+9), or a kill line in
+// its log. The OOM killer sends SIGKILL; a compiler or lint diagnostic does not.
+func endedByKill(logPath string, rc int) bool {
+	if rc == 137 {
+		return true
+	}
+	b, err := os.ReadFile(logPath)
+	return err == nil && killedLine.Match(ansiEscape.ReplaceAll(b, nil))
 }
 
 // readOOMKills reads <dir>/<phase>.oom, the rise in the cgroup's

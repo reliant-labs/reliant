@@ -205,9 +205,12 @@ rows=() notes=() fail=0
 # only when it finishes, so a phase that was started and cut off (queued past a
 # timeout, cancelled, killed) has no row and fails the gate (gate-verify below).
 # A rise in the cgroup's oom_kill count while it ran goes to $L/<name>.oom:
-# gate-report marks a failed phase the kernel's OOM killer ended, which names
-# no failure in its log, as infrastructure (GATE-INFRA: oom, control-plane
-# #2862), so the merge queue re-runs it once rather than blaming the PR.
+# gate-report marks a failed phase the kernel's OOM killer ended (its own
+# process SIGKILLed, its log naming no failure, and this rise or the gate's
+# memory peak to corroborate it) as infrastructure (GATE-INFRA: oom,
+# control-plane #2862), so the merge queue re-runs it once rather than
+# blaming the PR. The count is the whole cgroup's, so it never qualifies a
+# phase alone.
 cg_dir="/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup 2>/dev/null | head -n1)"
 oom_kills() { awk '$1 == "oom_kill" { print $2 }' "$cg_dir/memory.events" 2>/dev/null || true; }
 phase() {
