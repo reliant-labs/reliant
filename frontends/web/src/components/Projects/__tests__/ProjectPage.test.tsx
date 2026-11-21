@@ -1,9 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * A project's page (design §8.4): the owner's overview (apps into their
- * consoles, repos with the apps found in each, checkouts per machine, recent
- * chats and "New chat"), its tabs, the read-only shape a viewer of a shared
+ * A project's page (design §8.4): the owner's overview (the way to deploy it,
+ * apps into their consoles, repos with the apps found in each, checkouts per
+ * machine, the shell's chats card and "New chat"), its tabs, the read-only shape a viewer of a shared
  * project gets, and "not in this organization" for a project the org's
  * catalog does not hold.
  */
@@ -19,10 +19,8 @@ import { catalogFromResponse, type ProjectCatalog, type WireHostedApp, type Wire
 const state = vi.hoisted(() => ({
   params: { projectId: "shop" } as { projectId?: string },
   catalog: undefined as ProjectCatalog | undefined,
-  chats: [] as { id: string; projectId: string; title: string; lastActive: string }[],
   navigate: vi.fn(),
   openNewChat: vi.fn(() => Promise.resolve()),
-  openChat: vi.fn(() => Promise.resolve()),
   currentProjectId: "shop" as string | null,
   selectProject: vi.fn(() => Promise.resolve()),
 }));
@@ -41,12 +39,11 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 vi.mock("@/hooks/project-catalog-queries", () => ({
   useProjectCatalog: () => ({ catalog: state.catalog, isLoading: false, error: null, refetch: vi.fn() }),
 }));
-vi.mock("@/hooks/chat-queries", () => ({ useChatList: () => ({ data: state.chats, isLoading: false, isError: false }) }));
 vi.mock("@/hooks/useOrgs", () => ({ useActiveOrg: () => ({ active: { name: "Acme" }, canSwitch: false }) }));
 vi.mock("@/hooks/sidebar-project-queries", () => ({
   useSidebarProjectPrefs: () => ({ prefs: { pinned: new Set(), hidden: new Set(), showAll: false }, writable: true, setHidden: vi.fn() }),
 }));
-vi.mock("@/store/openChat", () => ({ openChat: state.openChat, openNewChat: state.openNewChat }));
+vi.mock("@/store/openChat", () => ({ openNewChat: state.openNewChat }));
 vi.mock("@/store/projectStore", () => ({
   useProjectStore: (select: (s: unknown) => unknown) =>
     select({
@@ -59,6 +56,11 @@ vi.mock("@/store/projectStore", () => ({
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("../../Settings/BranchesSection", () => ({ WorkspacesBody: () => <div data-testid="workspaces-body" /> }));
 vi.mock("../../Settings/projects/ProjectMachines", () => ({ ProjectMachines: () => <div data-testid="project-machines" /> }));
+// The shell's chats card and its deploy empty state have their own tests: here, where they show.
+vi.mock("../ProjectChats", () => ({ ProjectChats: ({ projectId }: { projectId: string }) => <div data-testid="project-landing-chats" data-project={projectId} /> }));
+vi.mock("../../Forge/Console/AppSectionEmptyState", () => ({
+  AppSectionEmptyState: ({ title, projectId }: { title: string; projectId: string }) => <div data-testid="app-section-empty" data-project={projectId}>{title}</div>,
+}));
 
 import { ProjectPageBody } from "../ProjectPage";
 
@@ -87,10 +89,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.params = { projectId: "shop" };
   state.currentProjectId = "shop";
-  state.chats = [
-    { id: "c1", projectId: "shop", title: "Fix the cart", lastActive: "2026-03-01T00:00:00Z" },
-    { id: "c2", projectId: "shop", title: "Add a webhook", lastActive: "2026-03-02T00:00:00Z" },
-  ];
   state.catalog = catalogFromResponse({
     orgId: "org-1",
     hostedAppsState: HostedAppsState.OK,
@@ -127,15 +125,11 @@ describe("a project's page", () => {
     expect(screen.getAllByTestId("project-checkout").map((c) => c.textContent)).toEqual(["cloud-machineChecked out", "laptopCloning…"]);
   });
 
-  it("lists recent chats, opens one, and starts a new one in this project", async () => {
+  it("offers the way to deploy it, its chats card, and a new chat in this project", () => {
     render(<ProjectPageBody tab="overview" />);
-    const chats = screen.getAllByTestId("project-chat");
-    expect(chats.map((c) => c.textContent?.startsWith("Add a webhook") || c.textContent?.startsWith("Fix the cart"))).toEqual([true, true]);
-    expect(chats[0]).toHaveTextContent("Add a webhook");
-    fireEvent.click(chats[0]);
-    // openChat goes to the chat's own URL; the page adds no navigation of its own.
-    await waitFor(() => expect(state.openChat).toHaveBeenCalledWith(expect.objectContaining({ id: "c2" })));
-    expect(state.navigate).not.toHaveBeenCalled();
+    expect(screen.getByTestId("app-section-empty")).toHaveTextContent("isn't deployed yet");
+    expect(screen.getByTestId("app-section-empty")).toHaveAttribute("data-project", "shop");
+    expect(screen.getByTestId("project-landing-chats")).toHaveAttribute("data-project", "shop");
     fireEvent.click(screen.getByTestId("project-new-chat"));
     expect(state.openNewChat).toHaveBeenCalledWith({ projectId: "shop" });
   });
@@ -161,7 +155,8 @@ describe("a project's page", () => {
     expect(screen.getByTestId("project-shared-badge")).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Project" })).toBeNull();
     expect(screen.queryByTestId("project-settings")).toBeNull();
-    expect(screen.queryByTestId("project-chats")).toBeNull();
+    expect(screen.queryByTestId("project-landing-chats")).toBeNull();
+    expect(screen.queryByTestId("app-section-empty")).toBeNull();
     expect(screen.queryByTestId("project-checkout")).toBeNull();
     expect(screen.queryByTestId("project-new-chat")).toBeNull();
     expect(screen.getByTestId("project-repo")).toHaveTextContent("Remote not shared");

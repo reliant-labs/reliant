@@ -14,7 +14,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 import { IDS } from './fixtures/base'
 import { CHAT_IDS, chatWithoutFailedSend } from './fixtures/chat'
 import { stagingDatabaseFixtures } from './fixtures/data'
-import { FILTER_PROJECT_IDS, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
+import { FILTER_PROJECT_IDS, NO_APP_PROJECT_ID, projectsPageSurfaceFixtures, selectorSurfaceFixtures } from './fixtures/projects'
 import { installHarness, settle, SHOT, type HarnessOptions } from './harness'
 
 type Viewport = 'desktop' | 'mobile'
@@ -278,12 +278,13 @@ const SURFACES: Surface[] = [
     harness: { fixtures: projectsPageSurfaceFixtures },
   },
   {
-    // A project's page (§8.4): its apps with their chips, its code and
-    // machines, and its recent chats.
+    // A project's page (§8.4) for a project with nothing deployed (a deployed
+    // one lands on its app's Overview): the way to deploy it, its code and
+    // machines, and its chats.
     name: 'projects-project-page',
-    path: `/projects/${IDS.project}`,
+    path: `/projects/${NO_APP_PROJECT_ID}`,
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByTestId('project-chat').first(),
+    ready: (page) => page.getByTestId('project-repo').first(),
     harness: { fixtures: projectsPageSurfaceFixtures },
   },
   {

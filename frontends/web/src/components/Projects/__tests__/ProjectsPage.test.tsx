@@ -61,7 +61,6 @@ vi.mock("@/hooks/sidebar-project-queries", () => ({
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({ useDaemonStatus: () => ({ daemons: state.daemons }) }));
 vi.mock("@/store/addProjectDialogStore", () => ({ openAddProject: state.openAddProject }));
-vi.mock("@/lib/forgeFeature", () => ({ isForgeUIEnabled: () => true }));
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("../../OnboardingFlow/useChatSetup", () => ({ useChatSetup: () => state.setup }));
 vi.mock("../../Apps/startBuilding", () => ({ useStartBuildingApp: () => state.startBuilding }));

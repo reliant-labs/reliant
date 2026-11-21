@@ -5,11 +5,12 @@
  * docs/design/unified-shell-and-projects.md §8.4, R6, R7, R9): what the
  * project is and what it runs.
  *
- *   Overview     Apps — each app its code holds, into its console, with its
- *                environments and last deploy; Code — the repos with their
- *                remote and the forge.yaml apps found in each, and the
- *                machines it is checked out on; Chats — your recent chats in
- *                it, and "New chat" there.
+ *   Overview     the way to deploy it (the project shell's empty state,
+ *                AppSectionEmptyState); Apps — each app its code holds, with
+ *                its environments; Code — the repos with their remote and the
+ *                forge.yaml apps found in each, and the machines it is
+ *                checked out on; Chats — the shell's project chats card
+ *                (ProjectChats), waiting first.
  *   Workspaces   the workspaces (git worktrees) its chats work in — Settings
  *                → Workspaces' own content (WorkspacesBody).
  *   Settings     the per-project controls of Settings → Projects: rename,
@@ -20,6 +21,11 @@
  * under this one (§3.4): it reads as "not in this organization". A project
  * shared with the person has the viewer's shape: no folder, no checkouts, no
  * chats of the owner's, and no Workspaces or Settings.
+ *
+ * In the one shell (U6) `/projects/<id>` lands on the app's Overview when the
+ * project has a deployed app (ProjectHomePage), so this Overview is the page
+ * of a project with nothing deployed; its Workspaces and Settings tabs are
+ * there for every project.
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -30,7 +36,6 @@ import AlertBanner from "@/components/forge-ui/alert_banner";
 import Button from "@/components/forge-ui/button";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
-import { useChatList } from "@/hooks/chat-queries";
 import { useProjectCatalog } from "@/hooks/project-catalog-queries";
 import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
 import { useActiveOrg } from "@/hooks/useOrgs";
@@ -41,17 +46,19 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
 import { linkLabel, type AppChipModel, type CatalogCheckout, type ProjectCatalogRow } from "@/services/projects/catalog";
-import { openChat, openNewChat } from "@/store/openChat";
+import { openNewChat } from "@/store/openChat";
 import { useProjectStore, type Project } from "@/store/projectStore";
-import type { Chat } from "@/types/chat";
 
+import { AppSectionEmptyState } from "../Forge/Console/AppSectionEmptyState";
 import { AreaShell } from "../Layout/AreaShell";
+import { sectionsAppOf } from "../Layout/sidebar/shellProject";
 import { WorkspacesBody } from "../Settings/BranchesSection";
 import { MoveProjectOrgDialog } from "../Settings/projects/MoveProjectOrgDialog";
 import { ProjectMachines } from "../Settings/projects/ProjectMachines";
 import { ProjectMoveSection } from "../Settings/projects/ProjectMoveSection";
 import { ProjectsTable } from "../Settings/projects/ProjectsTable";
 import { AppChip } from "./AppChip";
+import { ProjectChats } from "./ProjectChats";
 import { checkoutText } from "./ProjectRowSummary";
 import { RemoveProjectModal } from "./RemoveProjectModal";
 
@@ -245,12 +252,19 @@ function ProjectOverview({ row, hostedAppsState }: { row: ProjectCatalogRow; hos
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
       <div className="flex min-w-0 flex-col gap-4">
-        <AppsPanel row={row} hostedAppsState={hostedAppsState} />
+        {/* Nothing is deployed (a deployed app's project lands on its Overview): the way to deploy it, for the owner. */}
+        {!row.shared && (
+          // The empty state brings a page's padding (py-16); here it heads a column, so most of it goes.
+          <div className="-mb-12 -mt-16 min-w-0" data-testid="project-deploy">
+            <AppSectionEmptyState page={{ kind: "overview" }} projectId={row.key} title={`${sectionsAppOf(row) ?? row.name} isn't deployed yet`} />
+          </div>
+        )}
+        {row.apps.length > 0 && <AppsPanel row={row} hostedAppsState={hostedAppsState} />}
         <CodePanel row={row} />
       </div>
       {!row.shared && (
         <div className="min-w-0 lg:self-start">
-          <ChatsPanel row={row} />
+          <ProjectChats projectId={row.key} name={row.name} />
         </div>
       )}
     </div>
@@ -414,71 +428,6 @@ function CodePanel({ row }: { row: ProjectCatalogRow }) {
             </ul>
           )}
         </div>
-      )}
-    </Panel>
-  );
-}
-
-const RECENT_CHATS = 8;
-
-function ChatsPanel({ row }: { row: ProjectCatalogRow }) {
-  const { data: chats = [], isLoading, isError } = useChatList(row.key);
-  const newChat = useNewChatInProject(row.key);
-  const recent = useMemo(
-    () =>
-      chats
-        .filter((chat) => chat.projectId === row.key)
-        .sort((a, b) => (Date.parse(b.lastActive) || 0) - (Date.parse(a.lastActive) || 0))
-        .slice(0, RECENT_CHATS),
-    [chats, row.key],
-  );
-  const open = (chat: Chat) => {
-    // openChat goes to the chat's own URL (`/c/<id>`).
-    void openChat(chat)
-      .catch((err: unknown) => {
-        logger.error("[ProjectPage] Failed to open chat", err);
-        toast.error("Could not open that chat");
-      });
-  };
-  const total = chats.filter((chat) => chat.projectId === row.key).length;
-  return (
-    <Panel
-      title="Chats"
-      count={total || undefined}
-      testId="project-chats"
-      action={
-        <button
-          type="button"
-          onClick={newChat}
-          className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-meta font-medium text-primary-ink hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <SquarePen className="h-3.5 w-3.5" aria-hidden="true" />
-          New chat in this project
-        </button>
-      }
-    >
-      {isLoading ? (
-        <SkeletonLoader variant="text" count={3} className="m-4" />
-      ) : isError ? (
-        <PanelNote>Couldn’t load the chats.</PanelNote>
-      ) : recent.length === 0 ? (
-        <PanelNote>No chats here yet. Start one and it works in this project’s code.</PanelNote>
-      ) : (
-        <ul className="py-1">
-          {recent.map((chat) => (
-            <li key={chat.id}>
-              <button
-                type="button"
-                onClick={() => open(chat)}
-                className="flex w-full min-w-0 items-center justify-between gap-3 px-4 py-2 text-left hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                data-testid="project-chat"
-              >
-                <span className="truncate text-ui text-foreground">{chat.title || "Untitled chat"}</span>
-                <span className="shrink-0 text-meta text-muted-foreground">{formatRelativeTime(chat.lastActive)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
       )}
     </Panel>
   );

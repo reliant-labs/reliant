@@ -44,7 +44,6 @@ import { isCloudDaemon } from "@/components/Projects/picker/format";
 import { useProjectCatalog } from "@/hooks/project-catalog-queries";
 import { useSidebarProjectPrefs } from "@/hooks/sidebar-project-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { isForgeUIEnabled } from "@/lib/forgeFeature";
 import { appPath, projectChatsPath, projectPath, projectsPath } from "@/lib/paths";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
@@ -152,7 +151,7 @@ export function ProjectsBody() {
   const actions = [
     { label: ADD_PROJECT_LABEL, onClick: () => openAddProject(), variant: "primary" as const, icon: <Plus className="h-4 w-4" aria-hidden="true" /> },
   ];
-  const observability = isForgeUIEnabled() ? (
+  const observability = (
     <Link
       to={orgPath({ kind: "observability" })}
       className="no-color inline-flex items-center gap-1 font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -160,7 +159,7 @@ export function ProjectsBody() {
       <Activity className="h-3.5 w-3.5" aria-hidden="true" />
       Observability
     </Link>
-  ) : null;
+  );
   const buildAnApp = (
     <button
       type="button"

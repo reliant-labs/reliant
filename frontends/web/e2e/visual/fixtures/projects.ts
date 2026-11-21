@@ -30,6 +30,9 @@ const onLaptop = [{ daemonId: IDS.localDaemon, daemonName: 'alex-macbook', insta
 
 const p = (n: number) => `0000000${n}-0000-4000-8000-0000000000a${n}`
 
+/** A project with no app (`infra`): a project's own page, which a deployed project's id redirects past. */
+export const NO_APP_PROJECT_ID = p(2)
+
 /** The chat filter's three projects in its surfaces: shopfront, docs-site and mobile-api. */
 export const FILTER_PROJECT_IDS = [IDS.project, IDS.docsProject, p(1)]
 
