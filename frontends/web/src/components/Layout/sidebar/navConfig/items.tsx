@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
+import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
@@ -388,19 +388,19 @@ export const workflowsGroup: NavGroup = {
   ],
 };
 
-/** The machines agents run on (Settings › Machines), under Agents. */
+/** "Machines" in the UI is "Agent sandboxes" now (round 5); under Agents, "Sandboxes". */
 export const sandboxes: NavRow = {
   kind: "row",
   id: "sandboxes",
-  label: "Machines",
+  label: "Sandboxes",
   icon: icon(Server),
-  href: () => settingsPath("machines"),
-  match: (ctx) => isAtOrBelow(ctx.pathname, settingsPath("machines")),
+  href: () => sandboxesPath(),
+  match: (ctx) => isAtOrBelow(ctx.pathname, sandboxesPath()),
 };
 
-/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the machines. */
+/** The routes that are Agents: the chats (home, a project's, one chat, New chat), Workflows, the sandboxes. */
 export const isAgentsRoute = (ctx: NavCtx): boolean =>
-  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, settingsPath("machines"));
+  isChatPage(ctx.pathname) || isWorkflowsAreaPath(ctx.pathname) || isAtOrBelow(ctx.pathname, sandboxesPath());
 
 /** Agents' rows; the chat list last, so in the drill-in it takes the rest of the column. */
 // AI providers left Agents (U6e, owner): it lives in Settings only.

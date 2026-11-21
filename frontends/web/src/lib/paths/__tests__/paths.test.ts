@@ -101,6 +101,12 @@ const ROWS: Record<string, Row> = {
     template: "/settings/$section",
     params: { section: "org-ai-accounts" },
   },
+  sandboxesPath: {
+    build: () => paths.sandboxesPath(),
+    url: "/settings/machines",
+    template: "/settings/$section",
+    params: { section: "machines" },
+  },
   machineSettingsPath: {
     build: () => paths.machineSettingsPath("d-1"),
     url: "/settings/machines/d-1",

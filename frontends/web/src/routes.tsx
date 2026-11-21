@@ -14,6 +14,7 @@ import { retainTourParam } from './components/Onboarding/tourParam'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
+import { createSandboxesAliasRoute } from './sandboxesAliasRoute'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import { createOrgLayoutRoute } from './orgRoutes'
@@ -953,6 +954,10 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: UsageBillingPage,
   })
 
+  // /machines: an alias for Agent sandboxes, Settings' machines page
+  // (sandboxesAliasRoute.tsx).
+  const sandboxesAliasRoute = createSandboxesAliasRoute(authParent)
+
   // Projects: the nav's Projects entry — the person's apps and sites, and
   // their code (components/Projects/ProjectsPage.tsx; U7 replaces it).
   const projectsRoute = createRoute({
@@ -972,7 +977,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, appsRoute, sitesRoute, projectsRoute, projectHomeRoute] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, appsRoute, sitesRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute] as const,
   }
 }
 

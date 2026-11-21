@@ -113,7 +113,7 @@ describe("ComputeStep — waiting for the desktop app's machine", () => {
     renderStep();
     await tick(CONNECT_WAIT_SLOW_MS);
 
-    fireEvent.click(screen.getByRole("button", { name: /choose a machine myself/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose a sandbox myself/i }));
 
     expect(screen.queryByTestId("compute-step-loading")).toBeNull();
     expect(screen.getByRole("button", { name: /your own computer/i })).toBeInTheDocument();

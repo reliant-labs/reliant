@@ -97,7 +97,7 @@ describe("ComputeStep — a coupon covers the coupon unit", () => {
   it("marks M covered and still prices the cheaper S1", () => {
     renderStep();
 
-    expect(screen.getByTestId("compute-step-coverage-note")).toHaveTextContent(/covers the M machine/);
+    expect(screen.getByTestId("compute-step-coverage-note")).toHaveTextContent(/covers the M sandbox/);
     expect(screen.getByTestId("compute-step-coverage-note")).toHaveTextContent(/S1, S2 and the larger sizes need a monthly plan/);
     // A coupon is not a monthly plan, so the picker does not promise one.
     expect(screen.getByTestId("machine-pricing-line")).not.toHaveTextContent(/Includes \d+ hours a month/);
