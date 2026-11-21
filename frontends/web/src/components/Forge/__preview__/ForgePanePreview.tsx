@@ -208,14 +208,15 @@ function liveEnvironments(scenario: Scenario) {
   const queued = queuedHostedDeploy(scenario);
   return [
     {
-      environment: { id: "env-dev", name: "dev", project: "control-plane", kind: "DEPLOY_ENVIRONMENT_KIND_LOCAL", createdAt: ts("2026-09-01T10:00:00Z") },
+      environment: { id: "env-dev", name: "dev", project: "control-plane", lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT", secretPosture: "DEPLOY_SECRET_POSTURE_READABLE", createdAt: ts("2026-09-01T10:00:00Z") },
     },
     {
       environment: {
         id: "env-prod",
         name: "prod",
         project: "control-plane",
-        kind: "DEPLOY_ENVIRONMENT_KIND_SELF_MANAGED",
+        lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT",
+        secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY",
         currentPromotionId: "promo-15",
         declaredAt: ts("2026-10-04T21:18:40Z"),
         declaredBy: { repo: "github.com/reliant-labs/control-plane", commit: "47d0d1525ccc", branch: "main", forgeVersion: "v0.1.44" },
@@ -232,7 +233,7 @@ function liveEnvironments(scenario: Scenario) {
     },
     {
       // A pull request's preview: the scope control files it under its menu.
-      environment: { id: "env-pr-1042", name: "pr-1042", project: "control-plane", kind: "DEPLOY_ENVIRONMENT_KIND_PREVIEW", createdAt: ts("2026-10-06T09:00:00Z") },
+      environment: { id: "env-pr-1042", name: "pr-1042", project: "control-plane", lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PREVIEW", secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY", hostedSlot: true, createdAt: ts("2026-10-06T09:00:00Z") },
       phase: "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
     },
     {
@@ -242,7 +243,7 @@ function liveEnvironments(scenario: Scenario) {
         id: "env-hosted",
         name: "hosted",
         project: "control-plane",
-        kind: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT",
+        lifetime: "DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT", secretPosture: "DEPLOY_SECRET_POSTURE_WRITE_ONLY", hostedSlot: true,
         currentPromotionId: queued ? queued.promotion.id : "promo-h2",
         ...(queued ? { holds: queued.holds } : {}),
       },

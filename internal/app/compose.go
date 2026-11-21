@@ -346,13 +346,14 @@ func (g *Graph) newDaemon() (*daemon.Service, error) {
 // newSystem constructs the system handler (internal/handlers/system).
 func (g *Graph) newSystem() (*system.Service, error) {
 	return system.New(system.Deps{
-		Logger:        g.Log,
-		Config:        g.Cfg,
-		Repo:          g.Database(),
-		Temporal:      g.TemporalClient().Client,
-		NATSConnected: g.NATSConn().Conn.IsConnected,
-		StreamingHub:  g.StreamingHub().Hub,
-		OAuthProvider: g.APISettings().OAuthProvider,
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Temporal:       g.TemporalClient().Client,
+		NATSConnected:  g.NATSConn().Conn.IsConnected,
+		StreamingHub:   g.StreamingHub().Hub,
+		OAuthProvider:  g.APISettings().OAuthProvider,
+		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
 	})
 }
 

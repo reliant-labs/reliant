@@ -21,6 +21,7 @@ import { useSurface } from "../../../lib/surfaceContext";
 import { transcriptDateLabels } from "./transcriptPresentation";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
 import Tooltip from "../../forge-ui/tooltip";
+import { createPortal } from "react-dom";
 import { ChatMessage } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
 import { AgentMessageCard, isAgentMessage } from "../AgentMessageCard";
@@ -92,6 +93,12 @@ interface InterleavedTimelineProps {
   isLoadingOlderMessages?: boolean;
   /** Whether older messages remain to be loaded. Gates the startReached trigger. */
   hasOlderMessages?: boolean;
+  /**
+   * An element in the chat's top bar to render the pinned prompt into (one
+   * quiet line inside the bar), instead of a bar of its own over the
+   * transcript. Absent (a host with no top bar): the overlay, as before.
+   */
+  pinnedPromptSlot?: HTMLElement | null;
 }
 
 /** Minimal info needed for rendering - derived from WorkflowExecution */
@@ -374,7 +381,7 @@ const GroupedErrorRow = memo(function GroupedErrorRow({
   return (
     <div>
       {affectedThreads > 1 && (
-        <div className="px-2 pb-1 text-xs text-muted-foreground">
+        <div className="pb-1 text-meta text-muted-foreground">
           ×{affectedThreads} — the same failure hit {affectedThreads} threads at once
         </div>
       )}
@@ -386,11 +393,14 @@ const GroupedErrorRow = memo(function GroupedErrorRow({
 /**
  * The conversation column (§2.2 of the chat design): one width for every
  * transcript row, the pinned prompt and the footer, with the gutter inside
- * it. The composer and the new-chat screen read the same `--chat-column`.
+ * it. Fluid up to `--chat-column` of content (the gutter is added to the
+ * cap, so a row's content edge is the composer's). The composer and the
+ * new-chat screen read the same `--chat-column` and `--chat-gutter`.
  */
-const COLUMN_CLASS = "mx-auto w-full max-w-[var(--chat-column)] px-4 sm:px-6";
+const COLUMN_CLASS =
+  "mx-auto w-full max-w-[calc(var(--chat-column)+2*var(--chat-gutter))] px-[var(--chat-gutter)]";
 /** The column's gutter alone, for a full-width strip whose text aligns with it. */
-const GUTTER_CLASS = "px-4 sm:px-6";
+const GUTTER_CLASS = "px-[var(--chat-gutter)]";
 
 /**
  * How far past the header's bottom edge an already-pinned user message must
@@ -701,54 +711,24 @@ const TransitionDivider = memo(function TransitionDivider({
 }: TransitionDividerProps) {
   const Icon = icon === "fork" ? GitBranch : icon === "new" ? Plus : ArrowRightLeft;
 
+  // A quiet sentence, not a rule with a tinted chip: the thread's colour is
+  // its dot, the words are muted.
   return (
-    <div className="flex items-center gap-3 py-2 px-4">
-      <div className="flex-1 h-px bg-border" />
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        {routingInfo ? (
-          <>
-            <Route className="h-3.5 w-3.5" style={{ color }} />
-            <span className="text-muted-foreground">Routed to</span>
-            <span
-              className="font-medium px-1.5 py-0.5 rounded"
-              style={{
-                color,
-                backgroundColor: `${color}15`,
-              }}
-            >
-              {routingInfo.workflow}
-            </span>
-            {routingInfo.preset && (
-              <span
-                className="font-medium px-1.5 py-0.5 rounded"
-                style={{
-                  color: `${color}cc`,
-                  backgroundColor: `${color}10`,
-                }}
-              >
-                {routingInfo.preset}
-              </span>
-            )}
-            <Icon className="h-3 w-3 opacity-60" />
-            <span>{label}</span>
-          </>
-        ) : (
-          <>
-            <Icon className="h-3.5 w-3.5" style={{ color }} />
-            <span
-              className="font-medium px-1.5 py-0.5 rounded"
-              style={{
-                color,
-                backgroundColor: `${color}15`,
-              }}
-            >
-              {name}
-            </span>
-            <span>{label}</span>
-          </>
-        )}
-      </div>
-      <div className="flex-1 h-px bg-border" />
+    <div className="flex min-h-7 items-center gap-2 py-1 text-ui text-muted-foreground">
+      <span className="inline-flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
+        {routingInfo ? <Route className="size-4" style={{ color }} /> : <Icon className="size-4" style={{ color }} />}
+      </span>
+      {routingInfo ? (
+        <span className="min-w-0 truncate">
+          Routed to <span className="text-foreground">{routingInfo.workflow}</span>
+          {routingInfo.preset && <span className="text-foreground"> · {routingInfo.preset}</span>}
+          <span> · {label}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 truncate">
+          <span className="font-medium text-foreground">{name}</span> <span>{label}</span>
+        </span>
+      )}
     </div>
   );
 });
@@ -773,6 +753,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   onLoadOlderMessages,
   isLoadingOlderMessages = false,
   hasOlderMessages = false,
+  pinnedPromptSlot = null,
 }: InterleavedTimelineProps) {
   const activeThreads = useActiveThreads(chatId);
   const { mode: threadMode } = useChatThreadMode();
@@ -1133,7 +1114,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // the header left, and a shorter header (an attachment-only message) would
   // otherwise move the line and flip the very swap that showed it.
   const [measuredPinnedHeaderPx, setMeasuredPinnedHeaderPx] = useState<number | null>(null);
-  const pinnedHeaderLine = measuredPinnedHeaderPx ?? PINNED_HEADER_ESTIMATED_PX;
+  // In the top bar, the pin covers none of the transcript: a message is
+  // scrolled away once it passes the transcript's own top edge.
+  const pinnedHeaderLine = pinnedPromptSlot ? 0 : measuredPinnedHeaderPx ?? PINNED_HEADER_ESTIMATED_PX;
 
   // --- Per-thread scroll position memory ---
   // Derive a stable key for the current thread filter
@@ -1445,7 +1428,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // from the bar and carries the edge itself, so the bar's own hairline stays
   // off — one edge under both, not one between them. Read on every scroll
   // (the frame writes attributes only on a change, never React state).
-  const pinnedHeaderShown = !!pinnedUserMsg && pinnedPromptForm !== "hidden";
+  const pinnedHeaderShown = !!pinnedUserMsg && pinnedPromptForm !== "hidden" && !pinnedPromptSlot;
   const reportScrollEdges = floatingChrome?.reportScrollEdges;
   useEffect(() => {
     if (!reportScrollEdges || !scrollerEl) return;
@@ -1516,13 +1499,15 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           // every frame of the animation and each one triggers a re-measure
           // and a follow-scroll correction.
           "transition-colors",
-          !workflow.isMain && "ml-1 pl-3",
+          !workflow.isMain && "pl-4",
         )}
         style={
           !workflow.isMain
             ? {
-                borderLeftColor: workflow.color,
-                borderLeftWidth: 3,
+                // A hairline in the thread's colour, faded: enough to say
+                // which thread a row is on, never a coloured bar.
+                borderLeftColor: `color-mix(in srgb, ${workflow.color} 45%, transparent)`,
+                borderLeftWidth: 1,
                 borderLeftStyle: "solid",
               }
             : undefined
@@ -1668,7 +1653,25 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           view. With hit-testing passing through, a drag over it extends the
           selection to the text underneath instead. The Jump-to button opts
           back in, so it stays clickable. */}
-      {pinnedUserMsg && pinnedPromptForm === "overlay" && (
+      {pinnedUserMsg && pinnedPromptSlot && pinnedPromptForm !== "hidden" &&
+        createPortal(
+          <button
+            type="button"
+            onClick={handleJumpToPinned}
+            data-testid="pinned-user-message-header"
+            data-form="bar"
+            aria-label="Jump to your last message"
+            title={pinnedPromptFirstLine(messageText(pinnedUserMsg)) || undefined}
+            className="inline-flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-lg px-2 text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowUp aria-hidden="true" className="size-3.5 shrink-0" />
+            <span className="min-w-0 truncate">
+              {pinnedPromptFirstLine(messageText(pinnedUserMsg)) || "Your last message"}
+            </span>
+          </button>,
+          pinnedPromptSlot,
+        )}
+      {pinnedUserMsg && !pinnedPromptSlot && pinnedPromptForm === "overlay" && (
         <div
           ref={pinnedHeaderRef}
           data-testid="pinned-user-message-header"
@@ -1732,7 +1735,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           the strip: a hit area the element itself reports (a pseudo-element
           extension tapped fine but measured 36px), and never upward into the
           top bar. */}
-      {pinnedUserMsg && pinnedPromptForm === "strip" && (
+      {pinnedUserMsg && !pinnedPromptSlot && pinnedPromptForm === "strip" && (
         <div
           ref={pinnedHeaderRef}
           data-testid="pinned-user-message-header"
