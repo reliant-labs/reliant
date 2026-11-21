@@ -201,6 +201,14 @@ export const appsSearchSchema = z.object({
   kept: z.enum(["claimed", "existing"]).optional(),
 });
 
+// Search params for `/projects`: the filter (`show`: every project, or only the
+// apps, or only the sites; components/Projects/ProjectsPage.tsx), plus what
+// the Apps page took, since a claim now lands on Projects' apps and the
+// retired /apps and /sites redirect there with their query (lib/paths/legacy.ts).
+export const projectsSearchSchema = appsSearchSchema.extend({
+  show: z.enum(["apps", "sites"]).optional().catch(undefined),
+});
+
 // Search params for `/upgrade`. `returnTo` is the URL the user should be sent
 // back to after they link a real identity (with an email) onto their existing
 // anonymous account — e.g. the admin billing page. Validated at the call site
@@ -576,6 +584,11 @@ export const forgeConsoleSearchSchema = z.object({
   env: envScopeParam,
 });
 
+/** Environments: the scope, and `show=previews` (Deployments › Previews, U6e) for the preview environments alone. */
+export const forgeConsoleEnvironmentsSearchSchema = forgeConsoleSearchSchema.extend({
+  show: z.enum(["previews"]).optional().catch(undefined),
+});
+
 /**
  * Free text the router may have parsed as JSON: a search for "981" or a
  * version "1.2" arrives as a number, and must stay the text it was.
@@ -804,6 +817,8 @@ export const forgeConsoleDashboardsSearchSchema = z.object({
   group: z.enum(DASHBOARD_GROUPS).optional().catch(undefined),
   source: z.enum(["release", "workspace"]).optional().catch(undefined),
   owner: z.string().optional().catch(undefined),
+  // Several projects in the shell (U6c): which apps' dashboards the org-wide list shows.
+  apps: z.array(z.string()).optional().catch(undefined),
 });
 
 /**

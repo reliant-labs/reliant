@@ -115,12 +115,17 @@ vi.mock("../../../hooks/inbox-queries", async () => {
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "../sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 function renderSidebar() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <Sidebar />
+      <Sidebar pathname="/" />
     </QueryClientProvider>,
   );
 }
@@ -146,30 +151,28 @@ const chatIn = (region: HTMLElement) =>
   Array.from(region.querySelectorAll("[data-chat-id]")).map((row) => row.getAttribute("data-chat-id"));
 
 describe("Sidebar: which project a chat is in", () => {
-  it("heads every project's chats with its mark and name, and marks the open chat on its row, not its project", () => {
+  it("heads every project's chats with \"project · branch\", and marks the open chat on its row, not its project", () => {
     renderSidebar();
     const api = section("api");
     const web = section("web");
     expect(chatIn(api)).toEqual(["api-1", "api-2"]);
     expect(chatIn(web).sort()).toEqual(["web-branch", "web-main"]);
 
-    const apiHeader = screen.getByTestId("sidebar-project-header-p-api");
-    expect(within(apiHeader).getByTestId("project-mark")).toHaveTextContent("A");
-    expect(within(apiHeader).getByRole("button", { name: "api" })).toHaveAttribute("aria-expanded", "true");
+    // One small heading per workspace (U6d): the project, then the branch.
+    const apiHeading = screen.getByTestId("sidebar-project-header-p-api-heading");
+    expect(apiHeading).toHaveTextContent(/api\s*·\s*main/);
+    expect(within(apiHeading).getByRole("button", { expanded: true })).toBeInTheDocument();
     // Pinned while its chats scroll under it.
-    expect(apiHeader).toHaveClass("sticky");
-    // The open chat is in web: its row says so, and its project does not turn
-    // blue (a selection is not a link).
-    expect(within(screen.getByTestId("sidebar-project-header-p-web")).getByTestId("project-mark")).not.toHaveClass("text-primary-ink");
+    expect(apiHeading).toHaveClass("sticky");
     const open = within(section("web")).getAllByRole("button").find((b) => b.getAttribute("aria-current") === "true");
     expect(open?.closest("[data-chat-id]")).not.toBeNull();
   });
 
-  it("lists a main-only project's chats straight under the project, with no MAIN heading", () => {
+  it("lists every chat at the list's one left edge, under its heading (no deep indent)", () => {
     renderSidebar();
     const api = section("api");
-    expect(within(api).queryByText("main")).toBeNull();
-    expect(within(api).getByTestId("sidebar-workspace-chats")).toBeInTheDocument();
+    expect(within(api).getByText("main")).toBeInTheDocument();
+    for (const row of api.querySelectorAll("[data-chat-row]")) expect(row.className).toContain("pl-2");
   });
 
   it("keeps branch workspaces as labels under the project when it has them", () => {
@@ -179,17 +182,6 @@ describe("Sidebar: which project a chat is in", () => {
     expect(within(web).getByText("main")).toBeInTheDocument();
     // A quiet label, not an uppercase heading competing with the project's.
     expect(within(web).getByText("feature/login")).not.toHaveClass("uppercase");
-  });
-
-  it("names the project on each row of the flat list, and the branch only off main", () => {
-    useChatListPreferencesStore.setState({ viewMode: "flat" });
-    renderSidebar();
-    expect(screen.getByTestId("chat-project-api-1")).toHaveTextContent("api");
-    expect(screen.getByTestId("chat-project-web-branch")).toHaveTextContent("web");
-    const branchRow = document.querySelector('[data-chat-id="web-branch"]') as HTMLElement;
-    expect(branchRow).toHaveTextContent("feature/login");
-    const mainRow = document.querySelector('[data-chat-id="web-main"]') as HTMLElement;
-    expect(within(mainRow).queryByText("main")).toBeNull();
   });
 
   it("names no project on rows when the list is one project's", () => {
@@ -204,18 +196,6 @@ describe("Sidebar: which project a chat is in", () => {
     renderSidebar();
     expect(screen.getByTestId("sidebar-project-needs-you-p-api")).toHaveAccessibleName("A chat needs you");
     expect(screen.queryByTestId("sidebar-project-needs-you-p-web")).toBeNull();
-  });
-
-  it("names a filtered project in the Chats heading, with an X that shows every project again", async () => {
-    useWorkspaceStateStore.setState({ projectFilterId: "p-web" });
-    useProjectStore.setState({ setProjectFilter: vi.fn(async (id: string | null) => {
-      useWorkspaceStateStore.setState({ projectFilterId: id });
-    }) } as Partial<ReturnType<typeof useProjectStore.getState>>);
-    renderSidebar();
-    expect(screen.getByTestId("project-filter-label")).toHaveTextContent("web");
-    await userEvent.click(screen.getByTestId("project-filter-clear"));
-    expect(useWorkspaceStateStore.getState().projectFilterId).toBeNull();
-    expect(screen.queryByTestId("project-filter-label")).toBeNull();
   });
 
   it("groups archived chats by project across projects, instead of one merged \"main\"", async () => {

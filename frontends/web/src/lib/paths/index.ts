@@ -26,6 +26,7 @@
 
 import type { SettingsSection } from "../../routeSchemas";
 import { orgRootPath, withOrg, type PathContext } from "./org";
+import { withSearch } from "./search";
 
 export { withOrg, type PathContext } from "./org";
 export { withSearch } from "./search";
@@ -103,9 +104,17 @@ export function projectChatsPath(projectId: string, ctx?: PathContext): string {
 
 // ── Projects (the merged list, §8.3–§8.4) ──────────────────────────────────
 
-/** The person's projects: their apps and sites, and their code (the Projects page). */
+/** The person's projects: their apps and sites, and their code (components/Projects/ProjectsPage.tsx). */
 export function projectsPath(ctx?: PathContext): string {
   return withOrg("/projects", ctx);
+}
+
+/** What Projects lists: everything (no filter), only the apps, or only the apps with a live site. */
+export type ProjectsShow = "apps" | "sites";
+
+/** Projects as an href, narrowed to its apps or its sites (`?show=`); every project without one. */
+export function projectsHref(show?: ProjectsShow, ctx?: PathContext): string {
+  return withSearch(projectsPath(ctx), { show });
 }
 
 /** A project page's sub-pages (design §4, R7–R9, R18); the page itself has none. */

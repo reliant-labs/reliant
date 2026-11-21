@@ -10,7 +10,7 @@
  * offers the way back.
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -101,12 +101,17 @@ vi.mock("../../../hooks/inbox-queries", async () => {
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "../sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 function renderSidebar() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <Sidebar />
+      <Sidebar pathname="/" />
     </QueryClientProvider>,
   );
 }
@@ -158,10 +163,8 @@ describe("Sidebar: the machine filter", () => {
     renderSidebar();
     expect(listedChats()).toEqual([]);
     const empty = screen.getByTestId("machine-filter-empty");
-    expect(empty).toHaveTextContent("No active chats on Idle box");
-    expect(empty).toHaveTextContent("3 chats on other machines are hidden by the machine filter.");
-
-    await userEvent.click(screen.getByRole("button", { name: "Show all machines" }));
+    expect(empty).toHaveTextContent("None on Idle box");
+    await userEvent.click(within(empty).getByRole("button", { name: "Show all" }));
     expect(useWorkspaceStateStore.getState().machineFilterIds).toBeNull();
     expect(listedChats()).toEqual(["on-cloud-1", "on-cloud-2", "unpinned"]);
   });

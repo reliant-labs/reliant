@@ -92,6 +92,11 @@ vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutat
 
 import { Sidebar } from "../Sidebar";
 import { getCachedWorktrees } from "../../../hooks/worktree-queries";
+import { beforeEach as shellBeforeEach } from "vitest";
+import { ALL_PROJECTS_PICK, useShellLastPick } from "../sidebar/shellProject";
+
+// The project shell (U6b): these tests read the list across every project, as "All projects" shows it, on the chat home where Chats are open.
+shellBeforeEach(() => useShellLastPick.setState({ key: ALL_PROJECTS_PICK }));
 
 describe("Sidebar and child runs", () => {
   beforeEach(() => {
@@ -129,7 +134,7 @@ describe("Sidebar and child runs", () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       render(
         <QueryClientProvider client={queryClient}>
-          <Sidebar />
+          <Sidebar pathname="/" />
         </QueryClientProvider>,
       );
       expect(await screen.findByText("Chat far")).toBeInTheDocument();
@@ -149,7 +154,7 @@ describe("Sidebar and child runs", () => {
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
       render(
         <QueryClientProvider client={queryClient}>
-          <Sidebar />
+          <Sidebar pathname="/" />
         </QueryClientProvider>,
       );
       expect(await screen.findByText("Chat orphan")).toBeInTheDocument();
@@ -163,7 +168,7 @@ describe("Sidebar and child runs", () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar />
+        <Sidebar pathname="/" />
       </QueryClientProvider>,
     );
     for (const chat of chats) expect(await screen.findByText(chat.title as string)).toBeInTheDocument();

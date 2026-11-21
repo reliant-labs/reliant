@@ -270,6 +270,82 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByText('Machine usage and allowance').first(),
   },
+  // The one shell (U6): the same destinations the shell hosts, named so they can be re-captured
+  // as the shell changes. `ready` waits on page content, never on the sidebar.
+  {
+    name: 'shell-chat-home',
+    path: '/',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
+  },
+  {
+    name: 'shell-inbox',
+    path: '/inbox',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByRole('heading', { name: 'Inbox' }).first(),
+  },
+  {
+    name: 'shell-workflows',
+    path: '/workflows',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByRole('heading', { name: 'Workflows' }).first(),
+  },
+  {
+    name: 'shell-apps',
+    path: '/apps',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('shopfront', { exact: true }).first(),
+  },
+  {
+    name: 'shell-app-overview',
+    path: '/forge/p/shopfront',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('worker', { exact: true }).first(),
+  },
+  {
+    name: 'shell-app-observability',
+    path: '/forge/p/shopfront/observability/errors',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('idempotency key reused', { exact: false }).first(),
+  },
+  {
+    // The forge host's shell (lib/shell.ts reads this key before the router is built).
+    name: 'shell-forge-host-app-overview',
+    path: '/forge/p/shopfront',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('worker', { exact: true }).first(),
+    harness: { storage: { 'reliant.shell': 'forge' } },
+  },
+  {
+    // The hybrid nav at its top level: switcher, Find, the rows and their drill-in chevrons, Settings.
+    name: 'shell-nav-top',
+    path: '/forge/p/shopfront',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('shell-nav').getByText('Configure', { exact: true }),
+  },
+  {
+    // Drilled into Observability by the route: Back, the views, the Performance & issues divider.
+    name: 'shell-nav-observability',
+    path: '/forge/p/shopfront/observability/alerts',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('shell-nav').getByText('Performance & issues', { exact: true }),
+  },
+  {
+    // On a phone the nav is a drawer: the page header's Show sidebar opens it over the page.
+    name: 'shell-nav-drawer',
+    path: '/forge/p/shopfront',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('shell-nav').getByText('Configure', { exact: true }),
+    act: async (page) => {
+      await page.getByRole('button', { name: 'Show sidebar' }).click()
+    },
+  },
+  {
+    name: 'shell-settings',
+    path: '/settings',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('alex@example.com').first(),
+  },
 ]
 
 /**

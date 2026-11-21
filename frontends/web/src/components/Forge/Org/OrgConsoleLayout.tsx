@@ -37,7 +37,9 @@ import { isForgeShell } from "@/lib/shell";
 import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 import { orgPageOf, type OrgPage } from "../Console/paths";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
-import { OrgShell } from "./OrgShell";
+import { orgCrumbs, OrgShell } from "./OrgShell";
+import Link from "@/components/forge-ui/link";
+import { PageMain, ShellPageHeader, useShellFrame } from "@/components/Layout/shell/shellFrame";
 import { appsPath } from "@/lib/paths";
 
 // One preference for both consoles: collapsing the rail in an app keeps it collapsed up here.
@@ -78,6 +80,43 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
 
   const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
   const onClose = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
+  const { inShell } = useShellFrame();
+
+  // Inside the one shell, the Observability views are rows of its nav (under
+  // Apps, while one is open): the org console is a page under a slim bar.
+  if (inShell) {
+    const crumbs = orgCrumbs(page, search);
+    return (
+      <div className="forge-ui forge-console flex h-full min-h-0 w-full flex-col" data-testid="forge-org-frame">
+        <ShellPageHeader testId="forge-org-header">
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm text-ink-muted">
+            {crumbs.map((crumb, index) => (
+              <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5">
+                {index > 0 && (
+                  <span aria-hidden="true" className="text-ink-subtle">
+                    ›
+                  </span>
+                )}
+                {crumb.href ? (
+                  <Link href={crumb.href} className="truncate hover:text-ink">
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span aria-current="page" className="truncate font-medium text-ink">
+                    {crumb.label}
+                  </span>
+                )}
+              </span>
+            ))}
+          </nav>
+        </ShellPageHeader>
+        <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4">
+          <div className="empty:hidden [&:not(:empty)]:mb-4"><ObsQuotaBanner /></div>
+          <Outlet />
+        </PageMain>
+      </div>
+    );
+  }
 
   return (
     <OrgShell
