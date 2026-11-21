@@ -61,6 +61,43 @@ func TestConnectDaemonMergesDeclaredMachineLabels(t *testing.T) {
 	require.Equal(t, map[string]string{"pool": "gate", "gate": "yes", "team": "ci"}, machineLabels(t, repo, box))
 }
 
+// The labels a daemon declares at connect land on the machine it connected
+// as and nowhere else: a credential bound to one machine that asserts
+// another's id labels its own (the bound id wins), an unbound credential
+// cannot connect as, or label, a reserved machine, and another user's
+// credential labels nothing of the owner's. This is the one label write that
+// needs no person (DaemonRegistryService.SetMachineLabels does).
+func TestConnectDaemonDeclaredLabelsTouchOnlyTheConnectingMachine(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	svc := newTestService(repo)
+	t.Cleanup(svc.Close)
+	boxA, boxB := uuid.NewString(), uuid.NewString()
+
+	_, err := connectRegistering(t, svc, "user-A", boxA, labelledRegister("", map[string]string{"pool": "a"}))
+	require.NoError(t, err)
+	_, err = connectRegistering(t, svc, "user-A", boxB, labelledRegister("", map[string]string{"pool": "b"}))
+	require.NoError(t, err)
+
+	// Bound to A, asserting B: A is the machine that connected.
+	_, err = connectRegistering(t, svc, "user-A", boxA, labelledRegister(boxB, map[string]string{"pool": "stolen"}))
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"pool": "stolen"}, machineLabels(t, repo, boxA))
+	require.Equal(t, map[string]string{"pool": "b"}, machineLabels(t, repo, boxB), "a credential bound to A relabelled B")
+
+	// An unbound credential of the owner asserting reserved B is refused.
+	_, err = connectRegistering(t, svc, "user-A", "", labelledRegister(boxB, map[string]string{"pool": "stolen"}))
+	requireReservedRefusal(t, err)
+	require.Equal(t, map[string]string{"pool": "b"}, machineLabels(t, repo, boxB), "an unbound credential relabelled a reserved machine")
+
+	// Another user's credential, bound or asserting, labels nothing of A's.
+	_, err = connectRegistering(t, svc, "user-B", boxB, labelledRegister("", map[string]string{"pool": "stolen"}))
+	require.Error(t, err)
+	_, err = connectRegistering(t, svc, "user-B", "", labelledRegister(boxB, map[string]string{"pool": "stolen"}))
+	require.Error(t, err)
+	require.Equal(t, map[string]string{"pool": "b"}, machineLabels(t, repo, boxB), "another user's credential relabelled the owner's machine")
+}
+
 // A merge that would leave the machine more labels than allowed is not
 // written, and the connection carries on.
 func TestConnectDaemonSkipsADeclaredMergePastTheLabelLimit(t *testing.T) {
