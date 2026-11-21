@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	forgeauth "github.com/reliant-labs/forge/pkg/auth"
+	"github.com/reliant-labs/forge/pkg/authn"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -73,18 +75,29 @@ func asToken(p *fat.Principal) context.Context {
 	return auth.WithMachineToken(asCaller(auth.CredentialAccessToken), p)
 }
 
+// asBrowserSession is a context the authenticator leaves for a person's
+// sign-in cookie: a server-side session id read from the cookie.
+func asBrowserSession() context.Context {
+	return asMethod(auth.CredentialBrowserSession, authn.Method{Channel: authn.ChannelCookie, Credential: forgeauth.CredentialSession})
+}
+
+func asMethod(c auth.Credential, m authn.Method) context.Context {
+	return authn.ContextWithAuthMethod(asCaller(c), m)
+}
+
 func principal(res *fat.Resource, scopes ...fat.Scope) *fat.Principal {
 	return &fat.Principal{TokenID: "tok-1", ActingUserID: "test-user", Scopes: fat.SetOf(scopes...), Resource: res}
 }
 
-// An approval means a person decided it, or a token granted approvals:decide
-// explicitly (reliant #2123): a credential an agent or a script can hold — the
-// CLI login and API tokens, an OAuth client's token, or a context nothing
-// classified — is refused before anything is read or written, on every RPC that
+// An approval means a person decided it (reliant #2123; owner decision
+// 2026-11-19: approvals need a cookie session): a credential an agent or a
+// script can hold — the CLI login and API tokens, an OAuth client's token,
+// the managed identity's token, a browser-session credential with no cookie
+// session behind it, or a context nothing classified — is refused before anything is read or written, on every RPC that
 // resolves one, even for the chat's owner.
 func TestDecisionsRefuseCredentialsSoftwareHolds(t *testing.T) {
 	t.Parallel()
-	for _, cred := range []auth.Credential{auth.CredentialAccessToken, auth.CredentialOAuthClient, auth.CredentialUnknown} {
+	for _, cred := range []auth.Credential{auth.CredentialAccessToken, auth.CredentialOAuthClient, auth.CredentialIdentityToken, auth.CredentialBrowserSession, auth.CredentialUnknown} {
 		for _, d := range decisions {
 			t.Run(d.name+" with "+cred.String(), func(t *testing.T) {
 				t.Parallel()
@@ -147,12 +160,20 @@ func TestDecisionsCredentialMatrix(t *testing.T) {
 		reason string // "" = allowed
 		scopes string // the scope_missing header
 	}{
-		{"session", asCaller(auth.CredentialSession), "", ""},
+		{"supabase session (until cutover)", asCaller(auth.CredentialSession), "", ""},
 		{"shared key", asCaller(auth.CredentialSharedKey), "", ""},
-		{"approvals:decide", asToken(principal(nil, fat.ScopeApprovalsDecide)), "", ""},
-		{"approvals:decide with other scopes", asToken(principal(nil, fat.ScopeApprovalsDecide, fat.ScopeInboxManage, fat.ScopeRunsControl)), "", ""},
-		{"reliant:api", asToken(principal(nil, fat.ScopeReliantAPI)), fat.ReasonScopeMissing, "approvals:decide"},
-		{"wrong scope", asToken(principal(nil, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer)), fat.ReasonScopeMissing, "approvals:decide"},
+		{"browser session", asBrowserSession(), "", ""},
+		// A browser-session credential with no cookie-session method behind it
+		// is a context nothing authenticated as one: refused.
+		{"browser session credential without its method", asCaller(auth.CredentialBrowserSession), auth.ReasonPersonRequired, ""},
+		{"browser session credential, bearer method", asMethod(auth.CredentialBrowserSession, authn.Method{Channel: authn.ChannelAuthorization, Credential: forgeauth.CredentialSession}), auth.ReasonPersonRequired, ""},
+		{"browser session credential, token in the cookie", asMethod(auth.CredentialBrowserSession, authn.Method{Channel: authn.ChannelCookie, Credential: forgeauth.CredentialToken}), auth.ReasonPersonRequired, ""},
+		{"identity bearer token", asCaller(auth.CredentialIdentityToken), auth.ReasonPersonRequired, ""},
+		// rlat_ never decides (owner decision 2026-11-19), approvals:decide included.
+		{"approvals:decide", asToken(principal(nil, fat.ScopeApprovalsDecide)), auth.ReasonPersonRequired, ""},
+		{"approvals:decide with other scopes", asToken(principal(nil, fat.ScopeApprovalsDecide, fat.ScopeInboxManage, fat.ScopeRunsControl)), auth.ReasonPersonRequired, ""},
+		{"reliant:api", asToken(principal(nil, fat.ScopeReliantAPI)), auth.ReasonPersonRequired, ""},
+		{"wrong scope", asToken(principal(nil, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer)), auth.ReasonPersonRequired, ""},
 		{"daemon-bound reliant:api", asToken(principal(daemon, fat.ScopeReliantAPI)), auth.ReasonMachineCredentialCannotDecide, ""},
 		{"daemon-bound approvals:decide", asToken(principal(daemon, fat.ScopeApprovalsDecide)), auth.ReasonMachineCredentialCannotDecide, ""},
 		{"daemon PAT", asToken(principal(nil, fat.ScopeDaemonConnect, fat.ScopeApprovalsDecide)), auth.ReasonMachineCredentialCannotDecide, ""},
