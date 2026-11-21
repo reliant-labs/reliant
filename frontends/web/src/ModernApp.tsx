@@ -1700,6 +1700,8 @@ function App() {
             <div id="layout-left-sidebar" className="flex flex-col h-full">
               <Sidebar
                 paddingClass=""
+                pathname={location.pathname}
+                search={location.search}
                 onOpenWorkflows={() => {
                   navigate({ to: workflowsPath() });
                 }}
@@ -1738,6 +1740,8 @@ function App() {
               <div className="flex flex-col h-full">
                 <Sidebar
                   paddingClass=""
+                  pathname={location.pathname}
+                  search={location.search}
                   onOpenWorkflows={() => {
                     navigate({ to: workflowsPath() });
                   }}

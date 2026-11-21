@@ -22,6 +22,7 @@ const view: SidebarProjectPrefsView = Object.freeze({
   setPinned: () => {},
   setHidden: () => {},
   setShowAll: () => {},
+  setFilter: () => {},
 });
 
 export const useSidebarProjectPrefs: typeof Real.useSidebarProjectPrefs = () => view;

@@ -29,16 +29,24 @@ import { hasControlPlane } from "@/services/controlPlane/config";
 /** How long a burst of feed rows may wait before the list is re-read. */
 export const ORG_FEED_REFRESH_DEBOUNCE_MS = 250;
 
-/** The chats other members shared with `orgId`, most recently active first. */
-export function useSharedChats(orgId: string | null) {
+/**
+ * The chats other members shared with `orgId`, most recently active first;
+ * with `projectIds`, only those projects' (the chat list's project filter:
+ * ListSharedChats' `project_ids`, their union, applied by the server before
+ * its page limit). No fallback for a server without the field: the web ships
+ * with one that has it. The narrowing only guarantees the list never shows a
+ * chat of a project not chosen.
+ */
+export function useSharedChats(orgId: string | null, projectIds: readonly string[] = []) {
+  const ids = [...projectIds].sort();
   return useListSharedChats(
-    { orgId: orgId ?? undefined },
+    { orgId: orgId ?? undefined, ...(ids.length > 0 ? { projectIds: ids } : {}) },
     {
       enabled: hasControlPlane && !!orgId,
       // The org feed keeps it current; a refocus re-reads it in case the
       // feed was down (the server answers a fresh open with no replay).
       refetchOnWindowFocus: true,
-      select: (res) => res.chats,
+      select: (res) => (ids.length > 0 ? res.chats.filter((chat) => ids.includes(chat.projectId)) : res.chats),
     },
   );
 }

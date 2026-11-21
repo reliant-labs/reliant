@@ -23,6 +23,11 @@
  *   app       pick an app: one row per app (a project holding two lists
  *             both), the console's switcher.
  *
+ * Multi-select (`multiple`): choose N of M projects — the chat list's
+ * filter. Each row has a checkbox; Enter or a click toggles it and the panel
+ * stays open; "Only this" (⇧↵) keeps just that row; "Select all" and "Clear"
+ * act on the rows listed (a search narrows them). Grouping is the same.
+ *
  * Two presentations of one panel: `ProjectSelector` anchors it to a trigger
  * (forge-ui Popover), `ProjectSelectorDialog` floats it top-centre over the
  * page, like the command palette, for ⌘K and a menu item.
@@ -38,7 +43,7 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
-import { AppWindow, Check, FolderPlus, Plus, Search } from "lucide-react";
+import { AppWindow, Check, CheckSquare, FolderPlus, Plus, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
 import Popover, { type PopoverProps, type PopoverTriggerProps } from "@/components/forge-ui/popover";
@@ -110,6 +115,12 @@ export interface ProjectSelectorPanelProps {
   footer?: boolean;
   /** A line under the list (what it could not read). */
   notice?: React.ReactNode;
+  /**
+   * Choose several projects (projects only: use with mode "chat"). `selected`
+   * is checked; every toggle reports the whole new choice, in the order the
+   * person made it. [] is "none chosen".
+   */
+  multiple?: { selected: readonly string[]; onChange: (projectIds: string[]) => void };
   placeholder?: string;
 }
 
@@ -250,6 +261,7 @@ export function ProjectSelectorPanel({
   extraApps,
   footer = true,
   notice,
+  multiple,
   placeholder,
   onClose,
   inputRef: givenInputRef,
@@ -318,8 +330,34 @@ export function ProjectSelectorPanel({
     virtualizer.scrollToIndex(active, { align: "center" });
   }, [active, items.length, virtualizer]);
 
+  const chosen = useMemo(() => new Set(multiple?.selected ?? []), [multiple?.selected]);
+  // The project rows listed now: what Select all and Clear act on.
+  const listedProjectIds = useMemo(
+    () => items.flatMap((i) => (i.type === "row" && i.listed.row.kind === "project" && selectable(i) ? [i.listed.row.key] : [])),
+    [items],
+  );
+  const toggle = (id: string) => {
+    if (!multiple) return;
+    const now = multiple.selected;
+    multiple.onChange(chosen.has(id) ? now.filter((x) => x !== id) : [...now, id]);
+  };
+  const onlyThis = (id: string) => multiple?.onChange([id]);
+  const selectAllListed = () => {
+    if (!multiple) return;
+    multiple.onChange([...multiple.selected, ...listedProjectIds.filter((id) => !chosen.has(id))]);
+  };
+  const clearListed = () => {
+    if (!multiple) return;
+    const listed = new Set(listedProjectIds);
+    multiple.onChange(query.trim() ? multiple.selected.filter((id) => !listed.has(id)) : []);
+  };
+
   const pick = (item: Item) => {
     if (!selectable(item)) return;
+    if (multiple && item.type === "row") {
+      toggle(item.listed.row.key);
+      return;
+    }
     onClose();
     if (item.type === "lead") {
       item.lead.onSelect();
@@ -374,7 +412,9 @@ export function ProjectSelectorPanel({
       case "Enter":
         if (active >= 0 && items[active]) {
           e.preventDefault();
-          pick(items[active]);
+          const item = items[active];
+          if (multiple && e.shiftKey && item.type === "row") onlyThis(item.listed.row.key);
+          else pick(item);
         }
         break;
     }
@@ -411,11 +451,27 @@ export function ProjectSelectorPanel({
         />
       </div>
 
+      {multiple ? (
+        <div className="flex items-center gap-1 border-b border-border px-2 py-1" data-testid="project-selector-multi-bar">
+          <span className="px-1 text-meta text-muted-foreground" data-testid="project-selector-chosen-count">
+            {multiple.selected.length === 0 ? "All projects" : `${multiple.selected.length} chosen`}
+          </span>
+          <span className="ml-auto flex items-center gap-1">
+            <FooterButton icon={<CheckSquare aria-hidden className="h-3.5 w-3.5" />} testId="project-selector-select-all" onClick={selectAllListed}>
+              Select all
+            </FooterButton>
+            <FooterButton icon={<X aria-hidden className="h-3.5 w-3.5" />} testId="project-selector-clear" onClick={clearListed}>
+              Clear
+            </FooterButton>
+          </span>
+        </div>
+      ) : null}
       <div
         ref={scrollRef}
         id={listId}
         role="listbox"
         aria-label={label}
+        aria-multiselectable={multiple ? true : undefined}
         className="overflow-y-auto overscroll-contain p-1"
         style={{ height: empty || loading ? undefined : Math.min(total + 8, LIST_MAX) }}
       >
@@ -444,7 +500,9 @@ export function ProjectSelectorPanel({
                 );
               }
               const isActive = v.index === active;
-              const selected = selectedKey != null && keyOf(item) === selectedKey;
+              const selected = multiple
+                ? item.type === "row" && chosen.has(item.listed.row.key)
+                : selectedKey != null && keyOf(item) === selectedKey;
               const disabled = !selectable(item);
               return (
                 <div
@@ -461,7 +519,20 @@ export function ProjectSelectorPanel({
                   onClick={() => pick(item)}
                   className={cn(ROW_CLASS, isActive && "bg-foreground/5")}
                 >
-                  <Check aria-hidden className={cn("h-3.5 w-3.5 shrink-0 text-primary-ink", !selected && "invisible")} />
+                  {multiple ? (
+                    <span
+                      aria-hidden
+                      data-testid="project-selector-checkbox"
+                      className={cn(
+                        "grid h-4 w-4 shrink-0 place-items-center rounded-md border",
+                        selected ? "border-primary bg-primary text-primary-foreground" : "border-border",
+                      )}
+                    >
+                      {selected ? <Check className="h-3 w-3" /> : null}
+                    </span>
+                  ) : (
+                    <Check aria-hidden className={cn("h-3.5 w-3.5 shrink-0 text-primary-ink", !selected && "invisible")} />
+                  )}
                   {item.type === "lead" ? (
                     <span className="flex min-w-0 flex-1 items-center gap-2">
                       {item.lead.icon}
@@ -471,8 +542,24 @@ export function ProjectSelectorPanel({
                     <AppEntrySummary entry={item.entry} />
                   ) : (
                     <>
-                      <ProjectRowSummary row={item.listed.row} pinned={item.listed.pinned} />
+                      {/* Choosing several, the row also holds a checkbox and Only this: one chip. */}
+                      <ProjectRowSummary row={item.listed.row} pinned={item.listed.pinned} maxChips={multiple ? 1 : 3} />
                       {item.state?.hint ? <span className="ml-2 shrink-0 text-meta text-muted-foreground">{item.state.hint}</span> : null}
+                      {multiple && isActive ? (
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          data-testid="project-selector-only"
+                          aria-label={`Only ${item.listed.row.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onlyThis(item.listed.row.key);
+                          }}
+                          className="ml-1 shrink-0 rounded-md px-1.5 py-0.5 text-meta text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                        >
+                          Only this
+                        </button>
+                      ) : null}
                     </>
                   )}
                 </div>
@@ -513,7 +600,16 @@ export function ProjectSelectorPanel({
               Add an app
             </FooterButton>
           ) : null}
-          <span className="ml-auto hidden px-2 text-meta text-muted-foreground sm:inline">↑↓ to move · ↵ to pick · esc to close</span>
+          {multiple ? (
+            <>
+              <span className="ml-auto hidden px-2 text-meta text-muted-foreground sm:inline">↵ to choose · ⇧↵ only this</span>
+              <FooterButton icon={<Check aria-hidden className="h-3.5 w-3.5" />} testId="project-selector-done" onClick={onClose}>
+                Done
+              </FooterButton>
+            </>
+          ) : (
+            <span className="ml-auto hidden px-2 text-meta text-muted-foreground sm:inline">↑↓ to move · ↵ to pick · esc to close</span>
+          )}
         </div>
       ) : null}
     </div>
