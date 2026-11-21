@@ -35,6 +35,8 @@ import {
   type WireSummaryResponse,
 } from "@/services/controlPlane/tests/wire";
 
+import { fixtureCoverage, fixtureFileCoverage } from "./coverageFixtures";
+
 /** A fixed "now", so relative times in snapshots do not move. */
 export const FIXTURE_NOW = Date.UTC(2026, 10, 20, 12, 0, 0);
 const MINUTE = 60_000;
@@ -237,8 +239,18 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
     },
     listTestRuns: notInFixture("listTestRuns"),
     getTestRun: notInFixture("getTestRun"),
-    getCoverage: notInFixture("getCoverage"),
-    getFileCoverage: notInFixture("getFileCoverage"),
+    getCoverage: (req) => {
+      calls.push({ method: "getCoverage", req });
+      if (scenario === "not-configured" || scenario === "denied") return refuse();
+      if (scenario === "no-runs" || scenario === "pending") return Promise.reject(new ConnectError("no report for this commit", Code.NotFound));
+      return fixtureCoverage(req);
+    },
+    getFileCoverage: (req) => {
+      calls.push({ method: "getFileCoverage", req });
+      if (scenario === "not-configured" || scenario === "denied") return refuse();
+      if (scenario === "no-runs" || scenario === "pending") return Promise.reject(new ConnectError("no report for this commit", Code.NotFound));
+      return fixtureFileCoverage(req);
+    },
     getReleaseTests: notInFixture("getReleaseTests"),
     listFlakyTests: notInFixture("listFlakyTests"),
     getTest: notInFixture("getTest"),

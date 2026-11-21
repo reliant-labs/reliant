@@ -80,6 +80,9 @@ export function runSourceWords(run: TestRun): string {
 /** The palette token of each lane on the trend: combined is the page's hue, each lane its own (they are different series). */
 const LANE_COLOR: Record<string, string> = { unit: "--chart-2", integration: "--chart-3", e2e: "--chart-4" };
 
+/** A lane's palette token, the same on every Tests page (the trend, the coverage tree's bars). */
+export const laneColor = (lane: string): string => LANE_COLOR[lane] ?? "--chart-5";
+
 /**
  * The coverage trend as chart input: one timestamp per commit that has a
  * time, combined first, then each lane the trend carries, as fractions (the

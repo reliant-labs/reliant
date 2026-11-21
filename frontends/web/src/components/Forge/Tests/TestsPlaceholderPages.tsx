@@ -34,20 +34,8 @@ function OverviewLink() {
   );
 }
 
-export function TestsCoveragePage() {
-  return (
-    <TestsFrame title="Coverage" testId="console-tests-coverage">
-      <TestsPageComing
-        testId="tests-coverage-coming"
-        title="Coverage browsing"
-        shows="Coverage per package and file, combined and per lane, with diff coverage against a base commit, and each file's lines annotated with their hits (source fetched from your linked repository, never stored)."
-      >
-        <OverviewLink />
-        <CommandLine command="reliant forge test coverage --by package" />
-      </TestsPageComing>
-    </TestsFrame>
-  );
-}
+/** Tests › Coverage is built (W2): its own module, re-exported so the routes keep their import. */
+export { TestsCoveragePage } from "./TestsCoveragePage";
 
 export function TestsRunsPage() {
   return (
