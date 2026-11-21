@@ -13,10 +13,13 @@
 -- column whose other path leaves through a NULLABLE column is `authoritative`
 -- (tool_calls.chat_id, triggers.project_id, threads.chat_id, ...).
 
--- An agent message travels between two threads of ONE chat: the chat scopes the
--- row, and both thread ids must name threads of it.
+-- The chat scopes an agent message: to_thread_id, the recipient, is a thread
+-- of it. from_thread_id is too, except for a run message (send_to_run,
+-- internal/db/core/agent_message.go), whose sender is another chat's main
+-- thread. One declaration covers both paths, so the seeder keeps both in the
+-- chat: rows that are all valid, if never a cross-chat run message.
 COMMENT ON CONSTRAINT agent_messages_chat_id_fkey ON agent_messages IS
-    'forge:ref authoritative — the chat scopes the message; from_thread_id and to_thread_id are threads of it';
+    'forge:ref authoritative — the chat scopes the message; to_thread_id is a thread of it, and so is from_thread_id except for a run message from another chat';
 
 -- messages.chat_id is denormalized from the message's thread
 -- (internal/db/core/message.go): the thread decides the chat.
