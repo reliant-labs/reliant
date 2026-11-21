@@ -59,8 +59,7 @@ func (r *Repo) EnsureProjectForApp(ctx context.Context, in EnsureProjectForAppIn
 		if err := store.LockOrgRemote(ctx, db, in.OrgID, remote); err != nil {
 			return err
 		}
-		_, path, _ := strings.Cut(remote, "/")
-		candidates, err := store.ListOrgRemoteCandidates(ctx, db, in.OrgID, path)
+		candidates, err := store.ListOrgRemoteCandidates(ctx, db, in.OrgID)
 		if err != nil {
 			return err
 		}
@@ -83,6 +82,14 @@ func (r *Repo) EnsureProjectForApp(ctx context.Context, in EnsureProjectForAppIn
 		}
 
 		cloneURL := "https://" + remote
+		// Ensures of different remotes hold different LockOrgRemote locks;
+		// this one serializes their name choice, so they never pick the same
+		// free name or path. A create outside any ensure (CreateProject) can
+		// still take a name first: its unique violation (23505) is retried,
+		// and the re-run picks the next free name.
+		if err := store.LockUserProjectNames(ctx, db, in.UserID); err != nil {
+			return err
+		}
 		name, path, err := r.freeProjectName(ctx, in.UserID, in.OrgID, in.AppName)
 		if err != nil {
 			return err

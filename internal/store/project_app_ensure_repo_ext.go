@@ -32,18 +32,33 @@ type OrgRemoteCandidate struct {
 	RemoteURL string `bun:"remote"`
 }
 
+// LockUserProjectNames takes the transaction-scoped advisory lock that
+// serializes every ensure's choice of a free project name for one user, so two
+// ensures of different remotes (whose LockOrgRemote locks differ) never pick
+// the same free name or placeholder path. Taken after LockOrgRemote, in that
+// order by every ensure. ctx must carry a transaction.
+func LockUserProjectNames(ctx context.Context, db orm.Context, userID string) error {
+	if _, err := db.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "user-project-names:"+userID); err != nil {
+		return fmt.Errorf("failed to lock the user's project names: %w", err)
+	}
+	return nil
+}
+
 // ListOrgRemoteCandidates returns the repos of every live project in orgID
-// (any owner, any visibility; delete_after IS NULL) whose remote contains
-// pathHint, case-insensitively: a coarse prefilter, the caller compares the
-// canonical forms. Oldest project first, its root repo first.
-func ListOrgRemoteCandidates(ctx context.Context, db orm.Context, orgID, pathHint string) ([]OrgRemoteCandidate, error) {
+// (any owner, any visibility; delete_after IS NULL) that has a remote, for the
+// caller to compare in canonical form. There is no SQL prefilter on the
+// remote's text: a remote can be spelled in any form gitremote.Canonical
+// accepts (scp-style, userinfo, a port, a different case or suffix), and a
+// filter that missed one would create a duplicate project instead of reusing
+// the live one. Oldest project first, its root repo first.
+func ListOrgRemoteCandidates(ctx context.Context, db orm.Context, orgID string) ([]OrgRemoteCandidate, error) {
 	var rows []OrgRemoteCandidate
 	if err := db.Bun().NewRaw(`SELECT p.id AS project_id, COALESCE(r.id, '') AS repo_id, c.remote
 FROM projects p
 LEFT JOIN repos r ON r.project_id = p.id
 CROSS JOIN LATERAL (SELECT COALESCE(r.remote_url, CASE WHEN r.id IS NULL OR r.relative_path = '' THEN p.remote_url END) AS remote) c
-WHERE p.org_id = ?0 AND p.delete_after IS NULL AND c.remote ILIKE ?1 ESCAPE '\'
-ORDER BY p.created_at, p.id, r.relative_path NULLS FIRST`, orgID, "%"+likeEscape(pathHint)+"%").Scan(ctx, &rows); err != nil {
+WHERE p.org_id = ?0 AND p.delete_after IS NULL AND c.remote IS NOT NULL AND c.remote <> ''
+ORDER BY p.created_at, p.id, r.relative_path NULLS FIRST`, orgID).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("list org remote candidates: %w", err)
 	}
 	return rows, nil
@@ -81,8 +96,4 @@ ON CONFLICT (repo_id, subpath) DO NOTHING`, repoID, subpath, name).Exec(ctx); er
 		return fmt.Errorf("insert repo forge app: %w", err)
 	}
 	return nil
-}
-
-func likeEscape(s string) string {
-	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s)
 }

@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -131,4 +132,59 @@ func TestEnsureProjectForApp_NeverMatchesAnotherOrg(t *testing.T) {
 	assert.Equal(t, "org-a", *p.OrgID)
 	assert.Equal(t, "shop (app)", p.Name, "the user's path for \"shop\" is taken across orgs")
 	assert.Empty(t, forgeApps(t, r, "elsewhere"))
+}
+
+// Every spelling gitremote.Canonical equates is the same remote: userinfo, a
+// port, an upper-case host, a .git suffix and a trailing slash still find the
+// live project rather than creating a duplicate.
+func TestEnsureProjectForApp_MatchesAnySpellingOfTheRemote(t *testing.T) {
+	t.Parallel()
+	r, cleanup := setupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+	org, remote, now := "org-a", "https://deploy:tok@GitHub.com:443/acme/shop.git/", time.Now().UTC()
+	require.NoError(t, r.CreateProject(ctx, &Project{ID: "spelled", Name: "Shop", Path: "/src/shop", UserID: "u2",
+		OrgID: &org, RemoteURL: &remote, IsGitRepo: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
+
+	res, err := r.EnsureProjectForApp(ctx, ensureInput(org, "u1"))
+	require.NoError(t, err)
+	assert.Equal(t, "spelled", res.ProjectID)
+	assert.False(t, res.Created)
+	assert.Equal(t, 1, countOrgProjects(t, r, org))
+}
+
+// Concurrent ensures of different remotes for one user and app name each get
+// a project of their own, under distinct free names, and none fails: their
+// name choice is serialized (LockUserProjectNames), so they never race for
+// the same name or placeholder path.
+func TestEnsureProjectForApp_ConcurrentRemotesGetDistinctNames(t *testing.T) {
+	t.Parallel()
+	r, cleanup := setupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+
+	const n = 6
+	ids := make([]string, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			in := ensureInput("org-a", "u1")
+			in.Remote = fmt.Sprintf("github.com/acme/shop-%d", i)
+			res, err := r.EnsureProjectForApp(ctx, in)
+			ids[i], errs[i] = res.ProjectID, err
+		}()
+	}
+	wg.Wait()
+	names := map[string]bool{}
+	for i := range n {
+		require.NoError(t, errs[i])
+		p, err := r.GetProject(ctx, ids[i])
+		require.NoError(t, err)
+		assert.False(t, names[p.Name], "name %q chosen twice", p.Name)
+		names[p.Name] = true
+	}
+	assert.Equal(t, n, countOrgProjects(t, r, "org-a"))
 }
