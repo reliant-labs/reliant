@@ -7,11 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
@@ -65,32 +67,37 @@ func TestDynamicWorkflow_SkippedNodeRoutesWithoutWaitingForAParallelBranch(t *te
 	env.RegisterActivityWithOptions(func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 		return map[string]interface{}{"success": true}, nil
 	}, activity.RegisterOptions{Name: "WorkflowCheckpoint"})
+	env.RegisterActivityWithOptions(func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		return map[string]interface{}{}, nil
+	}, activity.RegisterOptions{Name: model.ActivitySkippedStep})
 
-	// beat stands for the heartbeat: it returns only once `after` has run.
-	// Under the old order `after` waits for beat, so the run never ends and
-	// the test environment's timeout fails it; no assertion reads a clock.
 	var mu sync.Mutex
 	var order []string
-	afterRan := make(chan struct{})
-	env.SetTestTimeout(2 * time.Minute)
-	env.RegisterActivityWithOptions(func(ctx context.Context, input types.ActivityInput) (map[string]interface{}, error) {
-		id := input.Node.GetId()
-		switch id {
-		case "beat":
-			select {
-			case <-afterRan:
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
-			id = "beat-done"
-		case "after":
-			defer close(afterRan)
-		}
+	record := func(id string) {
 		mu.Lock()
+		defer mu.Unlock()
 		order = append(order, id)
-		mu.Unlock()
+	}
+	callLLM := func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
+		record(input.Node.GetId())
 		return map[string]interface{}{"response_text": "ok"}, nil
-	}, activity.RegisterOptions{Name: "CallLLM"})
+	}
+	env.RegisterActivityWithOptions(callLLM, activity.RegisterOptions{Name: "CallLLM"})
+
+	// beat stands for the heartbeat. A mock with After waits on the test
+	// environment's clock, which moves only once the workflow is blocked and no
+	// other activity runs: so beat completes exactly when the workflow has
+	// nothing else to do. With the fix, `after` is dispatched while beat is
+	// pending and runs first. In the old order the workflow blocks after the
+	// skip, the clock jumps, beat completes, and only then `after` runs: the
+	// assertion below fails at once, with no wall-clock wait in either case.
+	isBeat := mock.MatchedBy(func(in types.ActivityInput) bool { return in.Node.GetId() == "beat" })
+	env.OnActivity("CallLLM", mock.Anything, isBeat).After(time.Second).Return(
+		func(_ context.Context, _ types.ActivityInput) (map[string]interface{}, error) {
+			record("beat-done")
+			return map[string]interface{}{"response_text": "ok"}, nil
+		})
+	env.OnActivity("CallLLM", mock.Anything, mock.Anything).Return(callLLM)
 
 	env.ExecuteWorkflow(DynamicWorkflow, resumeWorkflowInput("chat-skip-beside-branch", nil))
 	require.NoError(t, env.GetWorkflowError())
