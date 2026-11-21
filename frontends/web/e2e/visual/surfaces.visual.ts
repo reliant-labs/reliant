@@ -317,6 +317,30 @@ const SURFACES: Surface[] = [
     harness: { storage: { 'reliant.shell': 'forge' } },
   },
   {
+    // The hybrid nav at its top level: switcher, Find, the rows and their drill-in chevrons, Settings.
+    name: 'shell-nav-top',
+    path: '/forge/p/shopfront',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('shell-nav').getByText('Configure', { exact: true }),
+  },
+  {
+    // Drilled into Observability by the route: Back, the views, the Performance & issues divider.
+    name: 'shell-nav-observability',
+    path: '/forge/p/shopfront/observability/alerts',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('shell-nav').getByText('Performance & issues', { exact: true }),
+  },
+  {
+    // On a phone the nav is a drawer: the page header's Show sidebar opens it over the page.
+    name: 'shell-nav-drawer',
+    path: '/forge/p/shopfront',
+    on: ['mobile'],
+    ready: (page) => page.getByTestId('shell-nav').getByText('Configure', { exact: true }),
+    act: async (page) => {
+      await page.getByRole('button', { name: 'Show sidebar' }).click()
+    },
+  },
+  {
     name: 'shell-settings',
     path: '/settings',
     on: ['desktop', 'mobile'],
