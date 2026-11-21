@@ -120,8 +120,13 @@ func validEnsureProjectRequest(req ensureProjectForAppRequest) bool {
 			return false
 		}
 	}
-	if strings.TrimSpace(req.OrgID) != req.OrgID || strings.TrimSpace(req.UserID) != req.UserID ||
-		req.OrgID == "" || req.UserID == "" || strings.TrimSpace(req.AppName) == "" {
+	// The ids must be present and exactly as sent: no surrounding space.
+	for _, id := range []string{req.OrgID, req.UserID} {
+		if id == "" || strings.TrimSpace(id) != id {
+			return false
+		}
+	}
+	if strings.TrimSpace(req.AppName) == "" {
 		return false
 	}
 	if c := gitremote.Canonical(req.Remote); c == "" || c != req.Remote {
