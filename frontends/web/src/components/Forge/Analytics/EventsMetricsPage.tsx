@@ -25,6 +25,7 @@ import { useForgeConsole } from "../Console/consoleContext";
 import { Header, Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
 import { PAGE_SUBTITLES } from "../Console/groupedNav";
+import { chString } from "../Observability/Dashboards/alertExpr";
 import { formatCount } from "../Observability/format";
 import { useExploreHref } from "../Observability/Metrics/pivots";
 import { sqlPanelOf } from "../Observability/Metrics/model/explorerState";
@@ -42,6 +43,19 @@ export const EVENTS_PANEL: Panel = {
     "SELECT EventName AS event, count() AS events, uniqExact(UserId) AS users, toUnixTimestamp(max(Timestamp)) AS last_seen FROM product_events " +
     "WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY event ORDER BY events DESC LIMIT 100",
 };
+
+/**
+ * The explorer SQL for one event's count over time. The event name is data
+ * (any string an app passed to track()), so it is written as an exact
+ * ClickHouse string literal: a SQL panel takes no caller-supplied parameters,
+ * only the scope's {step}, {from} and {to}.
+ */
+export function eventExploreSql(event: string): string {
+  return (
+    "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, count() AS events FROM product_events " +
+    `WHERE EventName = ${chString(event)} AND Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY t ORDER BY t`
+  );
+}
 
 const TH = "h-9 px-3 text-left text-meta font-medium text-ink-muted whitespace-nowrap";
 const TD = "h-11 px-3 text-ui tabular-nums whitespace-nowrap";
@@ -105,8 +119,7 @@ export function EventsMetricsPage({ embedded = false }: { embedded?: boolean } =
               </thead>
               <tbody>
                 {custom.map((row) => {
-                  const sql = `SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, count() AS events FROM product_events WHERE EventName = '${row.event.replace(/'/g, "\\'")}' AND Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY t ORDER BY t`;
-                  const explore = exploreHref?.({ panel: { ...sqlPanelOf(sql), title: row.event } }, { range: RANGE }) ?? null;
+                  const explore = exploreHref?.({ panel: { ...sqlPanelOf(eventExploreSql(row.event)), title: row.event } }, { range: RANGE }) ?? null;
                   return (
                     <tr key={row.event} className="border-b border-border-subtle last:border-b-0" data-testid={`event-row-${row.event}`}>
                       <td className={`${TD} font-mono text-code text-ink`}>{row.event}</td>
