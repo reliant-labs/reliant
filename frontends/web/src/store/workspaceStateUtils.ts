@@ -431,7 +431,7 @@ export function createDefaultRestorationPlan(): RestorationPlan {
     activeViewerIndex: null,
     chatId: null,
     panels: {
-      fileBrowser: true,
+      fileBrowser: false,
       terminalOpen: false,
     },
     leftSidebarExpanded: true,

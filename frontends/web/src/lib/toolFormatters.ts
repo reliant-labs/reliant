@@ -912,10 +912,10 @@ export function formatToolParams(
  */
 export function generateReadOnlyToolsSummary(tools: Array<{ name: string; input: ToolInput }>): string {
   const counts: Record<string, number> = {};
-  
+
   tools.forEach(({ name }) => {
     const nameLower = name.toLowerCase();
-    
+
     if (nameLower === 'view' || nameLower === 'read' || nameLower === 'read_files') {
       counts.files = (counts.files || 0) + 1;
     } else if (nameLower === 'grep') {
@@ -930,9 +930,9 @@ export function generateReadOnlyToolsSummary(tools: Array<{ name: string; input:
       counts.fetches = (counts.fetches || 0) + 1;
     }
   });
-  
+
   const parts: string[] = [];
-  
+
   if (counts.files) {
     parts.push(`${counts.files} file${counts.files > 1 ? 's' : ''}`);
   }
@@ -951,11 +951,11 @@ export function generateReadOnlyToolsSummary(tools: Array<{ name: string; input:
   if (counts.fetches) {
     parts.push(`${counts.fetches} fetch${counts.fetches > 1 ? 'es' : ''}`);
   }
-  
+
   if (parts.length === 0) {
     return 'Explored';
   }
-  
+
   return `Explored ${parts.join(' ')}`;
 }
 

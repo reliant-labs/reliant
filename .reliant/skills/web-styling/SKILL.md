@@ -115,15 +115,20 @@ moved yet. New and restyled UI uses the roles.
   edge. Never `bg-card`, `bg-accent` or `bg-muted/NN` on shell chrome. (Today's
   shell predates this; it moves onto it when it is rebuilt.)
 - Every bar is `h-[var(--shell-bar-h)]`, so their bottom edges are one line.
-- Widths: conversation `max-w-[var(--chat-column)]` (768px), dashboards and
+- Widths: the conversation is fluid up to `--chat-column` (1200px) of
+  content, with `--chat-gutter` (15px, 22.5px from 640px, 30px from 1280px)
+  outside it: the transcript, composer, status band and permissions panel
+  all share that edge (`px-[var(--chat-gutter)]` around
+  `max-w-[var(--chat-column)]`). Answer prose keeps a ~80ch measure inside
+  it; code, tables, tool rows and cards take the whole column. Dashboards and
   lists `max-w-[var(--page-max)]` (1200px), settings and forms
   `max-w-[var(--form-max)]` (720px).
 - One filled primary button per view. A region shows at most 5 controls at
   rest, and no action has two homes.
 - The layout tokens (`--shell-bar-h`, `--sidebar-w`, `--right-panel-w`,
   `--row-h`, `--control-h`, `--table-row-h`, `--table-head-h`,
-  `--chat-column`, `--page-max`, `--form-max`) are declared once, in the
-  LAYOUT TOKENS block of `frontends/web/src/index.css`.
+  `--chat-column`, `--chat-gutter`, `--page-max`, `--form-max`) are declared
+  once, in the LAYOUT TOKENS block of `frontends/web/src/index.css`.
 - Radius has three tiers plus pills: control `rounded-md` (buttons, inputs,
   rows, badges), container `rounded-xl` (cards, menus, popovers, dialogs),
   hero `rounded-2xl` (composer, user bubble, onboarding cards), and

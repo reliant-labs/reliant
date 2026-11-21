@@ -29,6 +29,14 @@ import { DAY, FIXED_NOW, HOUR, IDS, MIN, USER, WORKTREES, iso } from './base'
 
 export const CHAT_IDS = {
   long: 'c0ffee00-2222-4aaa-8bbb-00000000000a',
+  /** A finished turn of a dozen tool calls, with thinking and redacted thinking. */
+  tools: 'c0ffee00-2222-4aaa-8bbb-000000000012',
+  /** A turn that stopped on a failed tool call and a provider error. */
+  failure: 'c0ffee00-2222-4aaa-8bbb-000000000013',
+}
+export const CHAT_TITLES = {
+  tools: 'Move tax rates behind the pricing config',
+  failure: 'Upgrade the Stripe SDK to v18',
 }
 
 const model = (id: string, name: string, provider: string, tags: string[], reason: boolean) => ({
@@ -78,6 +86,8 @@ const CHATS = [
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000e', title: 'Nightly: triage failing CI', launchKind: 'trigger.schedule', triggerId: 'trg-nightly', ago: 7 * HOUR }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-00000000000f', title: 'Migrate order confirmation emails from inline HTML strings to MJML templates with snapshot tests', ago: 26 * HOUR }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-000000000010', title: '', ago: 3 * DAY }),
+  chat({ id: CHAT_IDS.tools, title: CHAT_TITLES.tools, ago: 12 * MIN }),
+  chat({ id: CHAT_IDS.failure, title: CHAT_TITLES.failure, activity: 'CHAT_ACTIVITY_ERROR', workflowStopReason: 'WORKFLOW_STOP_REASON_FAILED', ago: 95 * MIN }),
   chat({ id: 'c0ffee00-2222-4aaa-8bbb-000000000011', title: 'Write the webhooks guide', projectId: IDS.docsProject, worktreeId: WORKTREES.docsMain.id,
     worktree: WORKTREES.docsMain, ago: 5 * HOUR }),
 ]
@@ -192,8 +202,8 @@ const SPEC_SNIPPET = '# Bundle discounts\n\nA flat code on a bundle applies once
 
 let updateSeq = 100
 /** A non-message update of the snapshot: `dataJson` is the SDK event, snake_case. */
-const update = (updateType: string, entityId: string, data: Record<string, unknown>, at: string) => ({
-  updateType, sequenceNumber: String(++updateSeq), entityId, chatId: MAIN, dataJson: JSON.stringify(data), createdAt: at,
+const update = (updateType: string, entityId: string, data: Record<string, unknown>, at: string, chatId = CHAT_IDS.long) => ({
+  updateType, sequenceNumber: String(++updateSeq), entityId, chatId, dataJson: JSON.stringify(data), createdAt: at,
 })
 
 const T0 = FIXED_NOW - 18 * MIN
@@ -371,6 +381,105 @@ function shortMessages() {
   ]
 }
 
+// ── Scripted chats: a dozen tool calls, and a turn that stopped on a failure ──
+type Turn = { role: 'user' | 'assistant'; blocks: Block[] | Block[][] }
+const scriptedTime = (agoMs: number, n: number, plus = 0) => new Date(FIXED_NOW - agoMs + n * 40_000 + plus).toISOString()
+function scripted(chatId: string, agoMs: number, turns: Turn[]) {
+  return turns.map((turn, i) => {
+    const n = i + 1
+    const id = `sc-${chatId.slice(-2)}-m${n}`
+    const assistant = turn.role === 'assistant'
+    return {
+      id, chatId, seq: String(n), thread: chatId, role: assistant ? 'MESSAGE_ROLE_ASSISTANT' : 'MESSAGE_ROLE_USER',
+      streamingState: 'STREAMING_STATE_COMPLETE', ...(assistant ? { model: 'claude-sonnet-5', agent: 'agent' } : {}),
+      // Tool calls run in the seconds after their message starts, not at the fixture's default instant.
+      contentBlocks: (turn.blocks.flat() as Block[]).map((b, j) => ({
+        id: `${id}-b${j}`, ...b, index: j,
+        ...(b.startedAt ? { startedAt: scriptedTime(agoMs, n, j * 2_000), completedAt: scriptedTime(agoMs, n, j * 2_000 + 1_500) } : {}),
+      })), attachments: [],
+      createdAt: scriptedTime(agoMs, n), updatedAt: scriptedTime(agoMs, n), sequenceNumber: String(n),
+    }
+  })
+}
+const thinkingBlock = (content: string): Block => ({ type: 'CONTENT_BLOCK_TYPE_THINKING', content })
+/** Withheld reasoning: an opaque payload with no readable text. */
+const redactedThinkingBlock = (): Block => ({
+  type: 'CONTENT_BLOCK_TYPE_REDACTED_THINKING',
+  content: 'EuYBCkQYAiJAq7mJm0nq0q4P3Zx9m1Yw0tYq3r0cE2k8mV1nT5bL6sZpQd4hF7gU9wJ2oXaK8eN3yRiB0cVtMlHxGfDsAqPz1C4uIhE=',
+})
+
+const TOOLS_TURNS: Turn[] = [
+  { role: 'user', blocks: [text('Tax rates are hard-coded in three places in checkout. Move them behind the pricing config and keep the totals identical.')] },
+  { role: 'assistant', blocks: [
+    [thinkingBlock('The rates are probably constants near the totals code. Find every reader before moving any of them.')],
+    [text('I will start by finding every place that reads a tax rate.')],
+    tool('t1', 'grep', { pattern: 'TAX_RATE', path: 'src' },
+      'src/cart/totals.ts:4:const TAX_RATE = 0.0825\nsrc/checkout/summary.tsx:11:const TAX_RATE = 0.0825\nsrc/invoices/render.ts:7:const TAX_RATE = 0.0825'),
+    tool('t2', 'grep', { pattern: 'taxRate', path: 'src' },
+      'src/cart/tax.ts:3:export function taxRate(region: string): number {\nsrc/cart/totals.ts:21:  const tax = gross * taxRate(cart.region)'),
+    tool('t3', 'glob', { pattern: 'src/**/pricing*.ts' }, 'src/pricing/config.ts\nsrc/pricing/config.test.ts'),
+    tool('t4', 'view', { path: 'src/pricing/config.ts' }, "1  export const pricing = {\n2    currency: 'USD',\n3    rounding: 'half-up',\n4  } as const"),
+    tool('t5', 'view', { path: 'src/cart/tax.ts' }, '1  import { TAX_RATE } from "./totals";\n2  \n3  export function taxRate(region: string): number {\n4    return region === "CA" ? 0.0725 : TAX_RATE;\n5  }'),
+    tool('t6', 'view', { path: 'src/cart/totals.ts' }, '1  import { taxRate } from "./tax";\n4  const TAX_RATE = 0.0825;\n21   const tax = gross * taxRate(cart.region);'),
+    tool('t7', 'view', { path: 'src/checkout/summary.tsx' }, '11 const TAX_RATE = 0.0825;\n34 <Row label="Tax" value={format(subtotal * TAX_RATE)} />'),
+    tool('t8', 'view', { path: 'src/invoices/render.ts' }, '7  const TAX_RATE = 0.0825;\n18 const tax = Math.round(net * TAX_RATE);'),
+    tool('t9', 'grep', { pattern: 'from \\"./totals\\"', path: 'src' }, 'src/cart/tax.ts:1:import { TAX_RATE } from "./totals";'),
+  ] },
+  { role: 'assistant', blocks: [
+    [redactedThinkingBlock()],
+    [text('Three call sites, and the config has no place for rates yet. I will add one and point all three at it.')],
+    tool('t10', 'edit', {
+      path: 'src/pricing/config.ts', old_string: "  rounding: 'half-up',\n} as const",
+      new_string: "  rounding: 'half-up',\n  taxRates: { default: 0.0825, CA: 0.0725 },\n} as const",
+    }, 'Edited src/pricing/config.ts (+1 -0)'),
+    tool('t11', 'edit', {
+      path: 'src/cart/tax.ts', old_string: 'import { TAX_RATE } from "./totals";\n\nexport function taxRate(region: string): number {\n  return region === "CA" ? 0.0725 : TAX_RATE;\n}',
+      new_string: 'import { pricing } from "../pricing/config";\n\nexport function taxRate(region: string): number {\n  const rates: Record<string, number> = pricing.taxRates;\n  return rates[region] ?? pricing.taxRates.default;\n}',
+    }, 'Edited src/cart/tax.ts (+4 -4)'),
+    tool('t12', 'edit', { path: 'src/cart/totals.ts', old_string: 'const TAX_RATE = 0.0825;\n', new_string: '' }, 'Edited src/cart/totals.ts (+0 -1)'),
+    tool('t13', 'edit', {
+      path: 'src/checkout/summary.tsx', old_string: 'format(subtotal * TAX_RATE)', new_string: 'format(subtotal * taxRate(region))',
+    }, 'Edited src/checkout/summary.tsx (+1 -1)'),
+  ] },
+  { role: 'assistant', blocks: [
+    [text('All three now read the config. Running the checks.')],
+    tool('t14', 'shell', { command: 'npm run typecheck', description: 'Typecheck' }, '> tsc --noEmit\n\nFound 0 errors.'),
+    tool('t15', 'shell', { command: 'npm test -- src/cart src/checkout src/invoices', description: 'Run the cart, checkout and invoice tests' },
+      ' PASS  src/cart/totals.test.ts\n PASS  src/checkout/summary.test.tsx\n PASS  src/invoices/render.test.ts\n\nTests:       86 passed, 86 total'),
+    tool('t16', 'grep', { pattern: 'TAX_RATE', path: 'src' }, 'No matches found.'),
+    [text('Tax rates now live in `pricing.taxRates`, and checkout, the cart and invoices all read them from there.\n\n- Totals are identical: the 86 cart, checkout and invoice tests pass unchanged.\n- California keeps its 7.25% rate; every other region falls back to 8.25%.\n- Nothing outside `src/pricing/config.ts` defines a rate any more.')],
+  ] },
+]
+
+const FAIL_TURNS: Turn[] = [
+  { role: 'user', blocks: [text('Upgrade the Stripe SDK to v18 and fix whatever breaks.')] },
+  { role: 'assistant', blocks: [
+    [text('Checking the current version and where the SDK is used, then upgrading.')],
+    tool('f1', 'view', { path: 'package.json' }, '12   "stripe": "^16.2.0",'),
+    tool('f2', 'grep', { pattern: "from 'stripe'", path: 'src' },
+      "src/payments/client.ts:1:import Stripe from 'stripe'\nsrc/payments/webhook.ts:2:import Stripe from 'stripe'"),
+    tool('f3', 'shell', { command: 'npm install stripe@18', description: 'Upgrade stripe' }, 'added 1 package, changed 1 package in 6s'),
+    tool('f4', 'shell', { command: 'npm run typecheck', description: 'Typecheck' },
+      "src/payments/webhook.ts:41:30 - error TS2345: Argument of type 'Stripe.Event' is not assignable to parameter of type 'Stripe.WebhookEndpoint'.\nsrc/payments/client.ts:9:3 - error TS2353: Object literal may only specify known properties, and 'apiVersion' does not exist in type 'StripeConfig'.",
+      { error: true, failed: true }),
+  ] },
+]
+
+const FAIL_ERRORS = [
+  update('CHAT_UPDATE_TYPE_ERROR', 'err-fail-final', {
+    id: 'err-fail-final', chat_id: CHAT_IDS.failure, activity_type: 'V2_CallLLM', activity_id: 'act-fail-3',
+    error_message: 'anthropic: 500 api_error: Internal server error', error_summary: 'The AI provider failed',
+    timestamp: scriptedTime(95 * MIN, 2, 20_000), attempt_number: 5, max_attempts: 5, is_retrying: false, workflow_id: `wf-${CHAT_IDS.failure}`, thread: CHAT_IDS.failure,
+  }, scriptedTime(95 * MIN, 2, 20_000), CHAT_IDS.failure),
+]
+
+/** Every chat but the fixture chat: its messages and the errors its stream carries. */
+const SCRIPTED: Record<string, { messages: () => Record<string, unknown>[]; errors: Record<string, unknown>[] }> = {
+  [SHORT_CHAT_ID]: { messages: shortMessages, errors: [] },
+  [CHAT_IDS.tools]: { messages: () => scripted(CHAT_IDS.tools, 12 * MIN, TOOLS_TURNS), errors: [] },
+  [CHAT_IDS.failure]: { messages: () => scripted(CHAT_IDS.failure, 95 * MIN, FAIL_TURNS), errors: FAIL_ERRORS },
+}
+
 export const chatFixtures: Fixtures = {
   'reliant.v1.CatalogService/ListModels': {
     models: MODELS, total: MODELS.length,
@@ -399,9 +508,10 @@ export const chatFixtures: Fixtures = {
   },
   'reliant.v1.ChatService/ListMessages': (req) => {
     const thread = req.threadId as string | undefined
-    const m = thread && thread !== MAIN && thread !== SHORT_CHAT_ID
+    const script = SCRIPTED[String(req.chatId)]
+    const m = thread && thread !== MAIN && !SCRIPTED[thread]
       ? threadMessages(thread)
-      : req.chatId === SHORT_CHAT_ID ? shortMessages()
+      : script ? script.messages()
         // A failed send lives in the client alone: the server never lists it.
         : !req.chatId || req.chatId === MAIN ? messages(MAIN).filter((x) => !x.id.startsWith('optimistic-')) : []
     return { messages: m, total: m.length, count: m.length, hasMore: false, oldestSeq: '1' }
@@ -439,9 +549,10 @@ export const chatFixtures: Fixtures = {
  */
 function chatStream({ failedSend }: { failedSend: boolean }) {
   return (req: Record<string, unknown>) => {
-    const all = req.chatId === SHORT_CHAT_ID ? shortMessages() : req.chatId && req.chatId !== MAIN ? [] : messages(MAIN)
+    const script = SCRIPTED[String(req.chatId)]
+    const all = script ? script.messages() : req.chatId && req.chatId !== MAIN ? [] : messages(MAIN)
     const m = failedSend ? all : all.filter((x) => !x.id.startsWith('optimistic-'))
-    const other = req.chatId === SHORT_CHAT_ID ? [] : ERROR_UPDATES
+    const other = script ? script.errors : ERROR_UPDATES
     const latest = String(Math.max(m.length, updateSeq))
     return {
       __type: 'reliant.v1.ChatStreamEvent',
