@@ -167,18 +167,26 @@ func (p *daemonMCPProxy) listTools(ctx context.Context, projectPath, serverName 
 // --- mcpManagerRuntime interface ---
 
 func (p *daemonMCPProxy) AddProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
-	return p.manageServer(ctx, "add", projectPath, serverName, &cfg)
+	return p.manageServer(ctx, "add", projectPath, serverName, &cfg, false)
+}
+
+// StartProjectServerFromProjectConfig starts a server as the machine's own
+// copy of the project's MCP config declares it now, with cfg (this process's
+// synced copy, which trails an edit) used only by a machine that does not
+// know the server, or that predates the request.
+func (p *daemonMCPProxy) StartProjectServerFromProjectConfig(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
+	return p.manageServer(ctx, "add", projectPath, serverName, &cfg, true)
 }
 
 func (p *daemonMCPProxy) RemoveProjectServer(projectPath, serverName string) error {
-	return p.manageServer(context.Background(), "remove", projectPath, serverName, nil)
+	return p.manageServer(context.Background(), "remove", projectPath, serverName, nil, false)
 }
 
 func (p *daemonMCPProxy) RestartProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
-	return p.manageServer(ctx, "restart", projectPath, serverName, &cfg)
+	return p.manageServer(ctx, "restart", projectPath, serverName, &cfg, false)
 }
 
-func (p *daemonMCPProxy) manageServer(ctx context.Context, action, projectPath, serverName string, cfg *config.MCPServer) error {
+func (p *daemonMCPProxy) manageServer(ctx context.Context, action, projectPath, serverName string, cfg *config.MCPServer, preferProjectConfig bool) error {
 	if p.onChange != nil {
 		defer p.onChange()
 	}
@@ -187,11 +195,14 @@ func (p *daemonMCPProxy) manageServer(ctx context.Context, action, projectPath, 
 		ProjectPath string            `json:"project_path"`
 		ServerName  string            `json:"server_name"`
 		Config      *config.MCPServer `json:"config,omitempty"`
+		// PreferProjectConfig: see the daemon's mcpManageServerRequest.
+		PreferProjectConfig bool `json:"prefer_project_config,omitempty"`
 	}{
-		Action:      action,
-		ProjectPath: projectPath,
-		ServerName:  serverName,
-		Config:      cfg,
+		Action:              action,
+		ProjectPath:         projectPath,
+		ServerName:          serverName,
+		Config:              cfg,
+		PreferProjectConfig: preferProjectConfig,
 	}
 
 	respData, err := p.sendCommand(ctx, "mcp.manage_server", req, int32(mcpCommandTimeout.Milliseconds()))

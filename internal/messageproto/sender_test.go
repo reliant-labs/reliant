@@ -61,6 +61,26 @@ func userMessage(id string, senderThread *string, senderKind *core.AgentMessageK
 	}
 }
 
+// The effective thinking level a turn ran at reaches the wire message; an
+// empty or absent one leaves the field unset.
+func TestFromDB_MapsThinkingLevel(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		stored *string
+		want   *string
+	}{
+		{ptr.Of("high"), ptr.Of("high")},
+		{ptr.Of(""), nil},
+		{nil, nil},
+	} {
+		msg := userMessage("m1", nil, nil)
+		msg.Role = reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT
+		msg.ThinkingLevel = tc.stored
+		assert.Equal(t, tc.want, FromDB(msg, nil, nil, nil).ThinkingLevel)
+	}
+}
+
 func TestFromDB_MapsSender(t *testing.T) {
 	t.Parallel()
 

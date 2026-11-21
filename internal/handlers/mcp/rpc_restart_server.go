@@ -80,7 +80,10 @@ func (s *Service) RestartServer(
 	startCtx, cancel := context.WithTimeout(ctx, installServerStartupTimeout)
 	defer cancel()
 
-	if err := mgr.AddProjectServer(startCtx, checkout.Path, name, intCfg); err != nil {
+	// The machine starts what its own copy of the project's config says now:
+	// the stored copy read above trails an edit to mcp.json by a few seconds,
+	// and restarting from it restarted the old command.
+	if err := mgr.StartProjectServerFromProjectConfig(startCtx, checkout.Path, name, intCfg); err != nil {
 		logServerFailure(ctx, "MCP server restart failed", err,
 			"operation", "restart",
 			"server", name,
