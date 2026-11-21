@@ -37,9 +37,6 @@ const (
 	// capacity accounting), shown to no caller; a launch it leads to is
 	// decided by authz in the launcher.
 	readBackground = "background owner work, shown to no caller"
-	// readUnused: nothing outside internal/db calls it yet. Classify it
-	// again before the first caller.
-	readUnused = "no caller outside internal/db"
 )
 
 // userScopedReads classifies every exported *Repo read in internal/db that
