@@ -16,24 +16,29 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Store is the slice of the repository this service reads; *db.Repo
-// satisfies it.
-type Store interface {
+// Calls reads the org's chats' latest model calls. store.LlmCallUsageExtStore
+// satisfies it; the read takes the org and fails closed on an empty one.
+type Calls interface {
 	// LatestOrgChatCalls is each of the org's live chats' latest chat-turn
 	// call at or after since, the limit most recent.
-	LatestOrgChatCalls(ctx context.Context, orgID string, since time.Time, limit int) ([]db.OrgChatCall, error)
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	LatestOrgChatCalls(ctx context.Context, orgID string, since time.Time, limit int) ([]store.OrgChatCall, error)
+}
+
+// Chats reads a chat. store.ChatsWithActivityExtStore satisfies it.
+type Chats interface {
+	GetChat(ctx context.Context, id string) (*core.Chat, error)
 }
 
 // ChatAttendance decides whether a chat's next call has nobody behind it, by
 // the rule its calls are scoped with; activity handlers.Attendance is the
 // production one.
 type ChatAttendance interface {
-	ChatUnattended(ctx context.Context, chat *db.Chat) bool
+	ChatUnattended(ctx context.Context, chat *core.Chat) bool
 }
 
 // Deps holds dependencies for the org_policy_impact service. Composition
@@ -43,8 +48,10 @@ type ChatAttendance interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Store reads the org's chats' latest model calls, and the chats.
-	Store Store
+	// Calls reads the org's chats' latest model calls.
+	Calls Calls
+	// Chats reads the chats those calls were made in.
+	Chats Chats
 	// Attendance decides which chats are an automation's run, so the
 	// automations section judges exactly the chats it governs.
 	Attendance ChatAttendance
@@ -63,8 +70,11 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("org_policy_impact: Deps.Config is required")
 	}
-	if d.Store == nil {
-		return fmt.Errorf("org_policy_impact: Deps.Store is required")
+	if d.Calls == nil {
+		return fmt.Errorf("org_policy_impact: Deps.Calls is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("org_policy_impact: Deps.Chats is required")
 	}
 	if d.Attendance == nil {
 		return fmt.Errorf("org_policy_impact: Deps.Attendance is required")

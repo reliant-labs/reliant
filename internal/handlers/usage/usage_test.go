@@ -36,8 +36,9 @@ func newEnv(t *testing.T) *env {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	return &env{t: t, repo: repo, svc: usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{
-		Store: repo,
-		Now:   func() time.Time { return now },
+		Usage:    store.NewLlmCallUsageExtStore(repo.ORM()),
+		Accounts: repo,
+		Now:      func() time.Time { return now },
 	}))}
 }
 
@@ -338,7 +339,7 @@ func TestGetLLMUsage_DetailBoundaryAtMidnight(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	at := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
-	svc := usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{Store: repo, Now: func() time.Time { return at }}))
+	svc := usage.NewTestUsage(t, usage.WithUsageDeps(usage.Deps{Usage: store.NewLlmCallUsageExtStore(repo.ORM()), Accounts: repo, Now: func() time.Time { return at }}))
 	resp, err := svc.GetLLMUsage(as("u"), connect.NewRequest(&pb.GetLLMUsageRequest{StartDate: "2026-08-01", EndDate: "2026-08-01"}))
 	require.NoError(t, err)
 	assert.Equal(t, "2026-08-01", resp.Msg.DetailAvailableFrom)

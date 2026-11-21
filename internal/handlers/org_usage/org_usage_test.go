@@ -101,9 +101,10 @@ func newEnv(t *testing.T) *env {
 	t.Cleanup(cleanup)
 	e := &env{t: t, repo: repo, dir: &directory{grants: map[string]map[string][]string{}}, prices: &listPrices{}}
 	e.svc = org_usage.NewTestOrgUsage(t, org_usage.WithOrgUsageDeps(org_usage.Deps{
-		Store:  repo,
-		Prices: e.prices,
-		Now:    func() time.Time { return now },
+		Usage:    store.NewLlmOrgUsageDailyExtStore(repo.ORM()),
+		Accounts: repo,
+		Prices:   e.prices,
+		Now:      func() time.Time { return now },
 	}))
 	// ada is org-a's billing admin; bob a member of org-a without the grant;
 	// gus the billing admin of org-b only.
@@ -378,7 +379,7 @@ func TestGetOrgLLMUsage_InvalidRateIsUnpriced(t *testing.T) {
 	e := newEnv(t)
 	e.record(call{user: "ada", org: "org-a", provider: "anthropic", model: "claude-sonnet-4-5", funding: "org_key", fundingOrg: "org-a", account: "acct-acme-key", in: 1000, out: 10})
 	e.svc = org_usage.NewTestOrgUsage(t, org_usage.WithOrgUsageDeps(org_usage.Deps{
-		Store: e.repo, Now: func() time.Time { return now },
+		Usage: store.NewLlmOrgUsageDailyExtStore(e.repo.ORM()), Accounts: e.repo, Now: func() time.Time { return now },
 		Prices: negativePrices{},
 	}))
 	got, err := e.read(e.asPerson("ada"), "org-a", pb.OrgLLMUsageGroupBy_ORG_LLM_USAGE_GROUP_BY_DAY)

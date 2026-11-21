@@ -23,15 +23,22 @@ import (
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Store is the slice of the repository this service reads; *db.Repo
-// satisfies it.
-type Store interface {
-	// ListLLMOrgUsageDaily is the org's rollup of org-funded calls.
-	ListLLMOrgUsageDaily(ctx context.Context, orgID string, from, to time.Time) ([]*db.LLMOrgUsageDay, error)
-	// ProviderAccountNames names the accounts a response groups by.
+// OrgUsage is the org's rollup of org-funded calls.
+// store.LlmOrgUsageDailyExtStore satisfies it; the read takes the org and fails
+// closed on an empty one.
+type OrgUsage interface {
+	ListLLMOrgUsageDaily(ctx context.Context, orgID string, from, to time.Time) ([]*store.LlmOrgUsageDaily, error)
+}
+
+// AccountNames names the accounts a response groups by. *db.Repo satisfies
+// it: provider accounts are a sealed table that handlers never reach through
+// the store, so this stays on the facade until internal/credentials takes it
+// over.
+type AccountNames interface {
 	ProviderAccountNames(ctx context.Context, ids []string) (map[string]db.ProviderAccountName, error)
 }
 
@@ -49,8 +56,10 @@ type ListPrices interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Store holds the org rollup.
-	Store Store
+	// Usage holds the org rollup.
+	Usage OrgUsage
+	// Accounts names the accounts a response groups by.
+	Accounts AccountNames
 	// Prices is nil when this deployment has no control plane to ask (self
 	// hosted, or no internal-service secret): usage is then shown without
 	// cost estimates.
@@ -72,8 +81,11 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("org_usage: Deps.Config is required")
 	}
-	if d.Store == nil {
-		return fmt.Errorf("org_usage: Deps.Store is required")
+	if d.Accounts == nil {
+		return fmt.Errorf("org_usage: Deps.Accounts is required")
+	}
+	if d.Usage == nil {
+		return fmt.Errorf("org_usage: Deps.Usage is required")
 	}
 	return nil
 }

@@ -78,7 +78,7 @@ func TestLLMCallUsage_EveryActivityAttemptIsCountedAndRepeatsAreNot(t *testing.T
 	require.NoError(t, raw.QueryRow(`SELECT count(DISTINCT attempt) FROM llm_call_usage WHERE id = $1`, "wf/run/act-1").Scan(&attempts))
 	assert.Equal(t, 2, attempts)
 
-	days, err := repo.ListLLMUsageDaily(ctx, "u1", at, at)
+	days, err := store.ListLLMUsageDaily(ctx, repo.ORM(), "u1", at, at)
 	require.NoError(t, err)
 	require.Len(t, days, 1)
 	d := days[0]
@@ -206,7 +206,7 @@ func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T
 	mk("h", time.Date(2026, 10, 28, 23, 59, 0, 0, time.UTC), func(r *LLMCallUsage) { r.Model = "edge" })
 	mk("i", time.Date(2026, 10, 29, 0, 1, 0, 0, time.UTC), func(r *LLMCallUsage) { r.Model = "edge" })
 
-	rows, err := repo.ListLLMUsageDaily(ctx, "u1", d1, d2)
+	rows, err := store.ListLLMUsageDaily(ctx, repo.ORM(), "u1", d1, d2)
 	require.NoError(t, err)
 	type key struct{ day, provider, model, mode string }
 	got := map[key]LLMUsageDay{}
@@ -238,7 +238,7 @@ func TestLLMUsageDaily_RollupSumsPerUserModelProviderAuthModeAndDay(t *testing.T
 	assert.Len(t, got, 6, "rows: %v", keys)
 
 	// Range bounds are inclusive UTC dates.
-	only, err := repo.ListLLMUsageDaily(ctx, "u1", d2, d2)
+	only, err := store.ListLLMUsageDaily(ctx, repo.ORM(), "u1", d2, d2)
 	require.NoError(t, err)
 	for _, r := range only {
 		assert.Equal(t, "2026-10-29", r.Day.Format("2006-01-02"))
@@ -313,7 +313,7 @@ func TestLLMUsageDaily_PurposeSplitsTheRollup(t *testing.T) {
 		_, err := repo.RecordLLMCallUsage(ctx, r)
 		require.NoError(t, err)
 	}
-	rows, err := repo.ListLLMUsageDaily(ctx, "u1", at, at)
+	rows, err := store.ListLLMUsageDaily(ctx, repo.ORM(), "u1", at, at)
 	require.NoError(t, err)
 	calls := map[string]int64{}
 	for _, r := range rows {

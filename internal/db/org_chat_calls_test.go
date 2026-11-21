@@ -49,7 +49,7 @@ func TestLatestOrgChatCalls(t *testing.T) {
 	call("other/1", "c-other-org", globex, "claude", "personal", store.LLMPurposeChat, now.Add(-time.Hour))
 	call("stale/1", "c-stale", acme, "claude", "personal", store.LLMPurposeChat, now.Add(-30*24*time.Hour))
 
-	got, err := repo.LatestOrgChatCalls(ctx, acme, now.Add(-14*24*time.Hour), 10)
+	got, err := store.LatestOrgChatCalls(ctx, repo.ORM(), acme, now.Add(-14*24*time.Hour), 10)
 	require.NoError(t, err)
 	assert.Equal(t, []OrgChatCall{
 		{ChatID: "c-auto", Provider: "codex", Model: "claude-4.8-opus", Funding: "personal"},
@@ -58,14 +58,14 @@ func TestLatestOrgChatCalls(t *testing.T) {
 
 	// The limit keeps the most recently active chats.
 	call("auto/2", "c-auto", acme, "codex", "personal", store.LLMPurposeChat, now.Add(-time.Minute))
-	got, err = repo.LatestOrgChatCalls(ctx, acme, now.Add(-14*24*time.Hour), 1)
+	got, err = store.LatestOrgChatCalls(ctx, repo.ORM(), acme, now.Add(-14*24*time.Hour), 1)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "c-auto", got[0].ChatID)
 
-	_, err = repo.LatestOrgChatCalls(ctx, "", now, 1)
+	_, err = store.LatestOrgChatCalls(ctx, repo.ORM(), "", now, 1)
 	assert.Error(t, err)
-	_, err = repo.LatestOrgChatCalls(ctx, acme, now, 0)
+	_, err = store.LatestOrgChatCalls(ctx, repo.ORM(), acme, now, 0)
 	assert.Error(t, err)
 }
 
