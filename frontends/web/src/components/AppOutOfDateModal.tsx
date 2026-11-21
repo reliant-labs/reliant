@@ -44,6 +44,15 @@ export function AppOutOfDateModal({ isOpen, onClose, data }: AppOutOfDateModalPr
       window.location.reload();
       return;
     }
+    if (forced) {
+      // The forced update (appUpdateStore.forceUpdate → the main process):
+      // check, download and restart, under an update dialog that cannot be
+      // dismissed either.
+      useAppUpdateStore.getState().forceUpdate(data.minVersion ?? "", data.upgradeUrl).catch((err: unknown) => {
+        logger.error("[AppOutOfDateModal] forced update failed", err);
+      });
+      return;
+    }
     // Settings → About shows where the updater stands; the check opens the
     // update dialog over it when it finds an update.
     void navigate({ to: settingsPath("about") });

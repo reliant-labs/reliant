@@ -23,6 +23,8 @@ func New(deps Deps) Service {
 
 // UserID pulls the authenticated user id from the request context, returning a
 // Connect Unauthenticated error when absent.
+//
+//forge:resolves-caller
 func UserID(ctx context.Context) (string, error) {
 	uid, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {

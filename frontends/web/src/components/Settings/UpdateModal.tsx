@@ -2,6 +2,8 @@ import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { Download, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
 import type { UpdateStatus } from "../../types/electron";
+import type { ForcedUpdate } from "../../store/appUpdateStore";
+import { openExternalLink } from "../../lib/open-link";
 
 interface UpdateModalProps {
   isOpen: boolean;
@@ -11,7 +13,19 @@ interface UpdateModalProps {
   onInstall: () => void;
   isDownloading: boolean;
   isInstalling: boolean;
+  /**
+   * The server requires a newer version: no Later, Minimize or Close, and
+   * neither Escape nor the backdrop closes the dialog.
+   */
+  forced?: ForcedUpdate | null;
+  /** Runs the forced update again, after it failed or found nothing. */
+  onRetryForced?: () => void;
 }
+
+/** Where to install from when the server names no page of its own. */
+const DEFAULT_DOWNLOAD_URL = "https://reliantlabs.io";
+
+const noDismiss = () => {};
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -33,7 +47,25 @@ export function UpdateModal({
   onInstall,
   isDownloading,
   isInstalling,
+  forced = null,
+  onRetryForced,
 }: UpdateModalProps) {
+  const isForced = !!forced;
+
+  // A forced update's only way out is the update itself.
+  const dismissButton = (label: string) =>
+    isForced ? null : (
+      <Button variant="outline" onClick={onClose} className="min-w-[100px]">
+        {label}
+      </Button>
+    );
+
+  const retryButton = onRetryForced ? (
+    <Button onClick={onRetryForced} className="min-w-[100px]">
+      Try again
+    </Button>
+  ) : null;
+
   const renderContent = () => {
     switch (updateStatus.type) {
       case 'available':
@@ -62,13 +94,7 @@ export function UpdateModal({
             </div>
 
             <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="min-w-[100px]"
-              >
-                Later
-              </Button>
+              {dismissButton("Later")}
               <Button
                 onClick={onDownload}
                 disabled={isDownloading}
@@ -148,15 +174,9 @@ export function UpdateModal({
               </div>
             </div>
 
-            <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="min-w-[100px]"
-              >
-                Minimize
-              </Button>
-            </div>
+            {!isForced && (
+              <div className="flex gap-3 justify-end">{dismissButton("Minimize")}</div>
+            )}
           </div>
         );
 
@@ -183,13 +203,7 @@ export function UpdateModal({
             </div>
 
             <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="min-w-[100px]"
-              >
-                Later
-              </Button>
+              {dismissButton("Later")}
               <Button
                 onClick={onInstall}
                 disabled={isInstalling}
@@ -232,17 +246,13 @@ export function UpdateModal({
             </div>
 
             <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="min-w-[100px]"
-              >
-                Close
-              </Button>
+              {dismissButton("Close")}
+              {isForced && retryButton}
             </div>
           </div>
         );
 
+      case 'forced':
       case 'checking':
         return (
           <div className="flex items-start gap-4">
@@ -261,6 +271,40 @@ export function UpdateModal({
         );
 
       case 'not-available':
+        if (isForced) {
+          return (
+            <div className="space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-full bg-primary/10">
+                  <Download className="w-6 h-6 text-primary-ink" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    Install the latest version
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    The built-in updater found no newer version. Download the latest version of
+                    Reliant and install it to keep working.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                {onRetryForced && (
+                  <Button variant="outline" onClick={onRetryForced} className="min-w-[100px]">
+                    Try again
+                  </Button>
+                )}
+                <Button
+                  onClick={() => void openExternalLink(forced?.upgradeUrl || DEFAULT_DOWNLOAD_URL)}
+                  className="min-w-[100px]"
+                >
+                  Download
+                </Button>
+              </div>
+            </div>
+          );
+        }
         return (
           <div className="space-y-6">
             <div className="flex items-start gap-4">
@@ -299,10 +343,18 @@ export function UpdateModal({
   return (
     <Modal
       open={isOpen}
-      onClose={onClose}
+      onClose={isForced ? noDismiss : onClose}
+      closeOnOverlay={!isForced}
       size="md"
-      hideCloseButton={updateStatus.type === 'download-progress'}
+      hideCloseButton={isForced || updateStatus.type === 'download-progress'}
     >
+      {isForced && (
+        <p className="mb-4 text-sm text-foreground">
+          This version of Reliant is no longer supported. Reliant is upgrading to the latest
+          version{forced?.minVersion ? ` (${forced.minVersion} or newer)` : ""} and will restart
+          when it is ready.
+        </p>
+      )}
       {renderContent()}
     </Modal>
   );

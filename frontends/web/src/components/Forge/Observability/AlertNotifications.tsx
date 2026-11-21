@@ -49,7 +49,7 @@ export function AlertNotifications({ orgId, envName, onOpenAlerts }: AlertNotifi
           <Bell className="h-4 w-4" aria-hidden="true" />
           {unread > 0 && (
             <span
-              className="absolute -right-0.5 -top-0.5 min-w-[1.1rem] rounded-full bg-danger px-1 text-center text-2xs font-semibold leading-[1.1rem] text-on-danger tabular-nums"
+              className="absolute -right-0.5 -top-0.5 min-w-[1.1rem] rounded-full bg-danger px-1 text-center text-meta font-semibold leading-[1.1rem] text-on-danger tabular-nums"
               data-testid="obs-notifications-unread"
             >
               {unread > 99 ? "99+" : unread}
@@ -111,15 +111,15 @@ function NotificationItem({ notification: n, env, onRead }: { notification: Noti
       />
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={cn("text-2xs font-medium", n.status === "firing" ? "text-danger-ink" : "text-success-ink")}>
+          <span className={cn("text-meta font-medium", n.status === "firing" ? "text-danger-ink" : "text-success-ink")}>
             {n.status}
           </span>
           <span className="font-mono text-xs font-medium text-ink">{n.alertname}</span>
           <SeverityChip severity={n.severity} />
-          {env && <span className="font-mono text-2xs text-ink-muted">{env}</span>}
+          {env && <span className="font-mono text-meta text-ink-muted">{env}</span>}
         </div>
         {summary && <p className="text-xs text-ink">{summary}</p>}
-        <p className="text-2xs text-ink-muted" title={formatTimestamp(n.receivedAtMs)}>
+        <p className="text-meta text-ink-muted" title={formatTimestamp(n.receivedAtMs)}>
           {formatAgo(n.receivedAtMs)}
         </p>
       </div>
@@ -127,7 +127,7 @@ function NotificationItem({ notification: n, env, onRead }: { notification: Noti
         <button
           type="button"
           onClick={onRead}
-          className="shrink-0 rounded-sm text-2xs text-ink-muted underline-offset-2 hover:text-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="shrink-0 rounded-sm text-meta text-ink-muted underline-offset-2 hover:text-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`Mark ${n.alertname} read`}
           data-testid={`obs-notification-read-${n.id}`}
         >

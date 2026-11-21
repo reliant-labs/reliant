@@ -233,7 +233,7 @@ export function TraceWaterfall({
 
       <div className="overflow-hidden rounded-md border border-border/60 bg-surface-sunken">
         {/* The time ruler. Decorative: every bar's row says its own offset and duration. */}
-        <div aria-hidden="true" className={cn("grid border-b border-border/60 text-2xs text-ink-muted", narrow ? "grid-cols-1 px-3" : COLUMNS_WIDE)}>
+        <div aria-hidden="true" className={cn("grid border-b border-border/60 text-meta text-ink-muted", narrow ? "grid-cols-1 px-3" : COLUMNS_WIDE)}>
           {!narrow && <div className="px-3 py-1">Span</div>}
           <div className="relative h-6">
             {ticks.map((tick) => (
@@ -315,7 +315,7 @@ export function TraceWaterfall({
                       {span.service}
                     </span>
                     {showVersion && (
-                      <span className="shrink-0 font-mono text-2xs text-ink-muted" data-testid="waterfall-span-version">
+                      <span className="shrink-0 font-mono text-meta text-ink-muted" data-testid="waterfall-span-version">
                         {version}
                       </span>
                     )}
@@ -341,7 +341,7 @@ export function TraceWaterfall({
                       );
                     })}
                     <span
-                      className="absolute top-1/2 -translate-y-1/2 whitespace-nowrap px-1 text-2xs tabular-nums text-ink-muted"
+                      className="absolute top-1/2 -translate-y-1/2 whitespace-nowrap px-1 text-meta tabular-nums text-ink-muted"
                       style={left + width > 80 ? { right: `${100 - left}%` } : { left: `${left + width}%` }}
                     >
                       {formatDuration(span.durationMs)}

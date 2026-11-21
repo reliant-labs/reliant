@@ -178,7 +178,7 @@ func TestProjectMachineCatalog_RemovedMachineLeavesTheUnionOnItsNextWrite(t *tes
 	require.True(t, p.push(t, p.defaultID, 1000, []config.StoredWorkflow{{Name: "release", RelativePath: p.releasePath, YAMLContent: releaseYAML}}, nil))
 	_, err := p.repo.ORM().Exec(ctx, `DELETE FROM daemons WHERE id = $1`, p.defaultID)
 	require.NoError(t, err)
-	catalogs, err := p.repo.ProjectMachineCatalogs(ctx, p.projectID)
+	catalogs, err := p.repo.projectMachineCatalogs(ctx, p.projectID)
 	require.NoError(t, err)
 	assert.Empty(t, catalogs, "the machine's catalog goes with it")
 	require.True(t, p.push(t, p.cicdID, 2000, nil, nil))

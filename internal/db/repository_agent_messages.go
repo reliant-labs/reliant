@@ -257,21 +257,6 @@ func (r *Repo) CancelQueuedAgentMessage(ctx context.Context, id, chatID string) 
 	return store.CancelQueuedAgentMessage(ctx, r.ORM(), id, chatID)
 }
 
-// ClaimQueuedAgentMessagesForThread takes queued human messages off a thread's
-// mailbox and returns exactly what it took — see core.AgentMessageStore for
-// why this is one statement rather than cancel-then-send.
-//
-// messageID is optional: pass "" to claim the whole queue.
-func (r *Repo) ClaimQueuedAgentMessagesForThread(ctx context.Context, toThreadID, chatID, messageID string) ([]*AgentMessage, error) {
-	if toThreadID == "" {
-		return nil, fmt.Errorf("to thread ID cannot be empty")
-	}
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.ClaimQueuedAgentMessagesForThread(ctx, r.ORM(), toThreadID, chatID, messageID)
-}
-
 // MarkQueuedAgentMessagesUndeliveredForThread resolves the mailbox of a thread
 // whose loop has exited — see core.AgentMessageStore for why a stranded row is
 // marked rather than deleted or left pending.

@@ -20,16 +20,19 @@ import (
 
 const (
 	// stop_reason is the one verdict on the turn that just ran; the loop
-	// continues on the four values where the model has more to do. Each is a
+	// continues on the three values where the model has more to do. Each is a
 	// production regression this loop once exited through:
 	//
 	//   tool_use     the model asked for tools
 	//   incomplete   the provider paused the turn (chat b43b41fe: announced
 	//                its next step, no tool call, exited as if finished)
-	//   truncated    output cap hit mid-thought (chat 2308c394: 868s, 64000
-	//                output tokens, reported complete)
 	//   interrupted  stream cut mid-flight (chat 7da3935c, thread 5e3fe370:
 	//                killed mid-edit, reported to its parent as a success)
+	//
+	// continuation is call_llm asking for a nudged continuation: a truncated
+	// turn (output cap hit mid-thought, chat 2308c394: 868s, 64000 output
+	// tokens, reported complete), capped at 3 in a row, after which the loop
+	// exits as truncated; or one retry of a premature Codex/Responses stop.
 	//
 	// has_feedback / pending_inbox are user input, not a verdict on the turn:
 	// pending_inbox keeps the loop alive for one more turn when a message
@@ -46,10 +49,10 @@ const (
 	//
 	// max_turns bounds all of it; 0, the default, is no limit, so a chat's
 	// agent loops exactly as it did before the input existed.
-	agentWhileExpr             = `(outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || outputs.has_feedback == true || outputs.pending_inbox == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)`
+	agentWhileExpr             = `(outputs.stop_reason in ['tool_use', 'incomplete', 'interrupted'] || outputs.continuation != '' || outputs.has_feedback == true || outputs.pending_inbox == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)`
 	edgeCallLLMToApproval      = `size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
 	edgeCallLLMToExecuteTools  = `size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
-	edgeCallLLMToAskQuestion   = `size(nodes.call_llm.tool_calls) == 0 && nodes.call_llm.stop_reason != 'incomplete' && inputs.ask`
+	edgeCallLLMToAskQuestion   = `size(nodes.call_llm.tool_calls) == 0 && nodes.call_llm.stop_reason != 'incomplete' && nodes.call_llm.continuation == '' && inputs.ask`
 	edgeApprovalToExecuteTools = `nodes.approval.status == 'approved'`
 	edgeExecuteToolsToCompact  = `nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold`
 )
@@ -223,6 +226,7 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 				"has_feedback":  false,
 				"pending_inbox": false,
 				"stop_reason":   "tool_use",
+				"continuation":  "",
 			},
 			Inputs: map[string]interface{}{
 				"max_turns": 200,
@@ -247,6 +251,7 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 							"tool_calls":           makeToolCalls(1),
 							"compaction_threshold": 185000,
 							"stop_reason":          "tool_use",
+							"continuation":         "",
 						},
 						"approval": map[string]interface{}{
 							"status": "approved",

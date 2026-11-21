@@ -348,12 +348,14 @@ export function UPlotChart({
       axes: compact
         ? [{ show: false }, { show: false }]
         : [
-            { stroke: palette.axis, font: palette.axisFont, grid: { stroke: palette.grid, width: 1 }, ticks: { stroke: palette.grid } },
+            // Time runs along the bottom with no vertical rules: only the
+            // value axis draws its few horizontal guides, and no tick marks.
+            { stroke: palette.axis, font: palette.axisFont, grid: { show: false }, ticks: { show: false } },
             {
               stroke: palette.axis,
               font: palette.axisFont,
               grid: { stroke: palette.grid, width: 1 },
-              ticks: { stroke: palette.grid },
+              ticks: { show: false },
               size: 64,
               values: (_u, splits) => splits.map((value) => formatValue(value, unit)),
             },
@@ -754,7 +756,7 @@ interface Palette {
   tones: Record<ChartTone, string>;
   axis: string;
   /**
-   * The axis labels' canvas font: text-2xs in the app's typeface, the bottom
+   * The axis labels' canvas font: text-meta in the app's typeface, the bottom
    * rung of the chart's type ladder (uplot-theme.css). uPlot's default is 12px
    * system-ui, as loud as the legend and the panel title. Read from the DOM so
    * it follows the Appearance font-size and font-family preferences.
@@ -778,18 +780,20 @@ function readPalette(): Palette {
     tones,
     axis: token("--muted-foreground", "rgb(100, 116, 139)"),
     axisFont: axisFont(),
-    grid: withAlpha(token("--border", "rgb(203, 213, 225)"), 0.6),
+    grid: withAlpha(token("--border", "rgb(203, 213, 225)"), 0.35),
     resolve: (name: string) => token(name, "rgb(100, 116, 139)"),
   };
 }
 
-/** text-2xs (0.714rem, tailwind.config.js) at the root size, in the body's typeface. */
-const AXIS_FONT_REM = 0.714;
+/** text-meta (0.8125rem, tailwind.config.js) at the root size, in the body's typeface. */
+const AXIS_FONT_REM = 0.8125;
 
 function axisFont(): string {
   const root = parseFloat(getComputedStyle(document.documentElement).fontSize) || 14;
   const family = getComputedStyle(document.body).fontFamily || "system-ui, sans-serif";
-  return `${Math.round(root * AXIS_FONT_REM * 10) / 10}px ${family}`;
+  // Whole pixels: uPlot reads the size with /(\d+)px/, so "12.2px" parses as
+  // 2px and the time axis stacks its date line on top of its hour line.
+  return `${Math.round(root * AXIS_FONT_REM)}px ${family}`;
 }
 
 /** `hsl(217 91% 60%)` → `hsl(217 91% 60% / 0.12)`. Anything else passes through. */

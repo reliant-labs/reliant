@@ -251,7 +251,7 @@ function ReleaseCell({ env }: { env: LiveEnv }) {
       {/* The provenance line (§2.1): images from the release's source, config
           from the render's. Truncated here, in full on the environment's page. */}
       {env.provenance !== "" && (
-        <span data-testid={`provenance-${env.name}`} className="truncate font-mono text-2xs text-ink-muted" title={env.provenance}>
+        <span data-testid={`provenance-${env.name}`} className="truncate font-mono text-meta text-ink-muted" title={env.provenance}>
           {env.provenance}
         </span>
       )}
