@@ -44,6 +44,8 @@ export const ERROR_REASONS = [
   "daemon_reconnecting",
   /** No machine exists for the request at all (ErrNoDaemon). Nothing to wait for. */
   "no_daemon",
+  /** The machine refused new work in a worktree for a moment while it finalizes that worktree's recovery (ErrRecoveryFinalizing). Retry shortly; the machine is up. */
+  "worktree_recovering",
   // ── reliant: handlers ──
   /** SendMessage on a chat whose root run has not started (handlers/chat). */
   "chat_not_started",

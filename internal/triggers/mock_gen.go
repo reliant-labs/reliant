@@ -248,7 +248,7 @@ func (m *MockTriggerPauser) PauseTrigger(ctx context.Context, id string, reason 
 var _ TriggerPauser = (*MockTriggerPauser)(nil)
 
 // forge:section MockLauncher
-// forge:hash=9aa6fa5eaf57db8938a2013141c4c2a41723a04b51ae99ccc9583da798de64db
+// forge:hash=a148b0b5669db5cfdb72bea387c917843791a7e14aa13e9346f6252eccd51ae7
 
 // MockLauncher is a test mock for the Launcher interface.
 //
@@ -258,7 +258,8 @@ var _ TriggerPauser = (*MockTriggerPauser)(nil)
 // "MockLauncher.<Method>Func not set" error.
 type MockLauncher struct {
 	contractkit.Recorder
-	LaunchFunc func(context.Context, launch.Event, launch.Spec) (*launch.Result, error)
+	LaunchFunc                 func(context.Context, launch.Event, launch.Spec) (*launch.Result, error)
+	ResolveDefaultWorkflowFunc func(context.Context, string, string) string
 }
 
 // Launch records the call and delegates to LaunchFunc when set.
@@ -268,6 +269,15 @@ func (m *MockLauncher) Launch(ctx context.Context, ev launch.Event, spec launch.
 		return m.LaunchFunc(ctx, ev, spec)
 	}
 	return nil, contractkit.MockNotSet("MockLauncher", "Launch")
+}
+
+// ResolveDefaultWorkflow records the call and delegates to ResolveDefaultWorkflowFunc when set.
+func (m *MockLauncher) ResolveDefaultWorkflow(ctx context.Context, userID string, reqWorkflow string) string {
+	m.Recorder.Record("ResolveDefaultWorkflow", ctx, userID, reqWorkflow)
+	if m.ResolveDefaultWorkflowFunc != nil {
+		return m.ResolveDefaultWorkflowFunc(ctx, userID, reqWorkflow)
+	}
+	return ""
 }
 
 // Compile-time check.

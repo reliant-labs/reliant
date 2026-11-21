@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { Chat } from "../api/client";
 import type { Chat as ProtoChat, ChatSelection, ListArchivedChatsResponse } from "../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
@@ -424,12 +424,17 @@ export function markChatSelectionsUnmaintained(): void {
  * An archived row as the sidebar lists it: the chat, with its workspace's name
  * and deletion time flattened in.
  */
-function toArchivedChats(response: ListArchivedChatsResponse): Chat[] {
-  return response.chats.map(({ chat, worktreeName, worktreeDeletedAt }) => {
-    const { $typeName: _, ...rest } = chat ?? ({} as Partial<ProtoChat>);
-    return { ...rest, worktreeName, worktreeDeletedAt } as Chat;
-  });
+function toArchivedChats(data: InfiniteData<ListArchivedChatsResponse, string>): Chat[] {
+  return data.pages.flatMap((page) =>
+    page.chats.map(({ chat, worktreeName, worktreeDeletedAt }) => {
+      const { $typeName: _, ...rest } = chat ?? ({} as Partial<ProtoChat>);
+      return { ...rest, worktreeName, worktreeDeletedAt } as Chat;
+    }),
+  );
 }
+
+/** Archived chats per page: the sidebar shows the newest, and loads more on request. */
+export const ARCHIVED_CHATS_PAGE_SIZE = 50;
 
 /**
  * The archived list is a pull read on the generated key (entity scope
@@ -438,13 +443,21 @@ function toArchivedChats(response: ListArchivedChatsResponse): Chat[] {
  * Unlike the live list it seeds no detail entry, so a refetch of it (a
  * generated ChatService mutation invalidates `chatServiceKeys.all`) never
  * writes over stream-maintained chat state.
+ *
+ * It is paged (newest updated first, `fetchNextPage` for more) and read only
+ * while `enabled`: the sidebar enables it while its Archived tab is open. A
+ * heavy account archives tens of thousands of chats (an automation archives
+ * each successful run), and every invalidation above refetched the whole
+ * list for each mounted reader. A disabled reader is not an active one, so
+ * those invalidations only mark it stale, and it reads again when the tab
+ * opens.
  */
-export function useArchivedChats() {
+export function useArchivedChats({ enabled = true }: { enabled?: boolean } = {}) {
   const org = useOrgScope();
-  return useQuery(
+  return useInfiniteQuery(
     withOrgFailure(
-      chatServiceQueries.listArchivedChats(orgRequest({}, org.orgId), {
-        enabled: orgQueryEnabled(org),
+      chatServiceQueries.listArchivedChatsInfinite(orgRequest({ pageSize: ARCHIVED_CHATS_PAGE_SIZE }, org.orgId), {
+        enabled: enabled && orgQueryEnabled(org),
         select: toArchivedChats,
       }),
       org,

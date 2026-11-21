@@ -481,8 +481,8 @@ func newForgeNamespaceEnv() *skillTestEnv {
 }
 
 // The headline friction from real-workflow run 1: six of seven fan-out units
-// independently called `skill load frontend/design` — the path `forge skill
-// list` prints and `forge skill load` accepts — and each got a 404.
+// independently called `skill load frontend/design` — the path `forge agent skill
+// list` prints and `forge agent skill load` accepts — and each got a 404.
 func TestSkillTool_Load_AcceptsPathForgePrints(t *testing.T) {
 	t.Parallel()
 	env := newForgeNamespaceEnv()

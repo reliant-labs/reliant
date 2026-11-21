@@ -48,13 +48,15 @@ const (
 	// ReasonMailbox is a row queued into agent_messages — spawn_send, a
 	// human addressing a thread through SendAgentMessage, or a SendMessage
 	// to a thread whose run is live (queued rather than written into
-	// history, so it cannot land before the reply of a turn in flight). The
+	// history, so it cannot land before the reply of a turn in flight), or
+	// to a paused run whose thread already had messages queued (queued
+	// behind them, so it is not read before what was typed first). The
 	// message body lives in the mailbox and is delivered by the drain.
 	ReasonMailbox Reason = "mailbox"
 
 	// ReasonUserMessage is a user message saved to `messages` on a thread
-	// that is about to take a turn: a paused run SendMessage just resumed.
-	// Nothing is queued in the mailbox for this one: the message is already
+	// that is about to take a turn: a paused run SendMessage just resumed,
+	// whose thread had nothing queued. The message is already
 	// in history, and the wake is what releases a loop parked on its
 	// background spawns, which resuming alone does not.
 	ReasonUserMessage Reason = "user_message"

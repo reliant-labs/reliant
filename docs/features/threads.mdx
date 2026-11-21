@@ -1,5 +1,6 @@
 ---
-title: "Threads"
+title: "Conversation threads and sub-agent isolation in Reliant"
+sidebarTitle: "Threads"
 description: "Understanding conversation structure, sub-agent isolation, and thread modes"
 ---
 
@@ -43,7 +44,8 @@ flowchart LR
 - id: call_helper
   type: workflow
   ref: builtin://agent
-  thread: inherit  # Share parent's thread
+  thread:
+    mode: inherit  # Share parent's thread
 ```
 
 **new**: Create a fresh, empty thread. The sub-workflow starts with no conversation history. Useful for spawned agents that should work independently.

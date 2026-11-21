@@ -2,6 +2,7 @@ package celeval
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -33,6 +34,22 @@ type TriggerRun struct {
 	DedupeError string `json:"dedupe_error,omitempty"`
 	// Findings are reads the integration's declared payload rules out.
 	Findings []string `json:"findings,omitempty"`
+	// Payload is the trigger.payload the run evaluated (for an integration
+	// trigger, the sample with the given payload merged over it), so a caller
+	// can start a run with the event the trigger saw. Not part of the report.
+	Payload map[string]any `json:"-"`
+	// SampleFilled are the payload fields (dotted paths under
+	// trigger.payload, with the value the sample gave them) an integration
+	// trigger's generated sample filled although the given payload did not
+	// set them and the event's declared payload does not require them: a real
+	// event may well leave them out. Not part of the report.
+	SampleFilled []SampleField `json:"-"`
+}
+
+// SampleField is one field a generated sample filled (TriggerRun.SampleFilled).
+type SampleField struct {
+	Path  string
+	Value any
 }
 
 // Errors lists what failed, one message each; empty when the trigger ran clean
@@ -102,6 +119,12 @@ func DryRunTrigger(wt *reliantv1.WorkflowTrigger, workflowInputs map[string]*rel
 	run.Source = source
 	if trigger == nil {
 		trigger = map[string]any{}
+	}
+	run.Payload, _ = trigger["payload"].(map[string]any)
+	if req.Integration != "" {
+		if schema, serr := EventSchema(req.Integration, req.Event); serr == nil {
+			run.SampleFilled = optionalFilled(schema, run.Payload, payload, "")
+		}
 	}
 	scope := triggerspec.Scope{
 		Trigger: trigger,
@@ -195,4 +218,60 @@ func (a *ActivationSample) ownerGitHubID() string {
 		return ""
 	}
 	return a.OwnerGitHubID
+}
+
+// optionalFilled walks an object schema beside the payload a sample produced
+// and the payload the caller gave, and returns the leaf fields the schema does
+// not require that the caller left unset, so their value came from the
+// sample. given may be nil (the caller set nothing at that level).
+func optionalFilled(schema, produced, given map[string]any, prefix string) []SampleField {
+	props, _ := schema["properties"].(map[string]any)
+	required := map[string]bool{}
+	if req, ok := schema["required"].([]any); ok {
+		for _, r := range req {
+			if name, ok := r.(string); ok {
+				required[name] = true
+			}
+		}
+	}
+	keys := make([]string, 0, len(props))
+	for k := range props {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out []SampleField
+	for _, key := range keys {
+		sub, _ := props[key].(map[string]any)
+		value, present := produced[key]
+		if sub == nil || !present {
+			continue
+		}
+		givenValue, set := given[key]
+		path := key
+		if prefix != "" {
+			path = prefix + "." + key
+		}
+		if producedObj, ok := value.(map[string]any); ok && schemaType(sub) == "object" {
+			if set {
+				givenObj, _ := givenValue.(map[string]any)
+				if givenObj == nil {
+					continue // replaced wholesale by the caller
+				}
+				out = append(out, optionalFilled(sub, producedObj, givenObj, path)...)
+				continue
+			}
+			if required[key] {
+				out = append(out, optionalFilled(sub, producedObj, nil, path)...)
+				continue
+			}
+		}
+		if set || required[key] {
+			continue
+		}
+		if _, isConst := sub["const"]; isConst {
+			continue
+		}
+		out = append(out, SampleField{Path: path, Value: value})
+	}
+	return out
 }

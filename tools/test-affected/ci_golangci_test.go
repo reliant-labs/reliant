@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,6 +23,10 @@ import (
 // job lints the changed packages beside the gate, and `CI result` (the one
 // required check) fails unless that job passed. A job the ruleset does not
 // require stops nothing, so these tests pin the wiring, not only the job.
+//
+// Since reliant #3095 `CI result` is a native aggregate: it `needs:` the two
+// workers and reads their results from `needs`, never from the Actions API
+// (an anonymous poll that answered 403 turned green groups red).
 
 const golangciJobName = "golangci (changed)"
 
@@ -33,6 +37,7 @@ type mqWorkflow struct {
 		Needs          any               `yaml:"needs"`
 		If             string            `yaml:"if"`
 		TimeoutMinutes int               `yaml:"timeout-minutes"`
+		Permissions    any               `yaml:"permissions"`
 		Env            map[string]string `yaml:"env"`
 		Steps          []mqStep          `yaml:"steps"`
 	} `yaml:"jobs"`
@@ -53,25 +58,48 @@ func loadMergeQueue(t *testing.T) *mqWorkflow {
 	return &wf
 }
 
-// TestMergeQueueGolangciGates: the job exists, runs in parallel (neither job
-// needs the other), lints from the group's base, and `CI result` ends by
-// waiting for its verdict, unconditionally fatal, for longer than the job may
-// run.
+// mqNeeds is a job's `needs:`, as a list whichever YAML form it takes.
+func mqNeeds(v any) []string {
+	switch n := v.(type) {
+	case string:
+		return []string{n}
+	case []any:
+		out := make([]string, 0, len(n))
+		for _, x := range n {
+			out = append(out, fmt.Sprint(x))
+		}
+		return out
+	}
+	return nil
+}
+
+// TestMergeQueueGolangciGates: the two workers (the merge gate and the lint)
+// run in parallel, neither needing the other; the lint lints from the group's
+// base; and `CI result` needs exactly both, runs always, and passes only when
+// both succeeded.
 func TestMergeQueueGolangciGates(t *testing.T) {
 	requireShellTools(t)
 	wf := loadMergeQueue(t)
 	if _, ok := wf.On["merge_group"]; !ok || len(wf.On) != 1 {
 		t.Fatalf("merge-queue.yml runs on %v, want merge_group alone", wf.On)
 	}
-	gl, gate := wf.Jobs["golangci"], wf.Jobs["ci-result"]
-	if gl == nil || gate == nil {
-		t.Fatalf("merge-queue.yml needs jobs golangci and ci-result, has %v", sortedKeys(wf.Jobs))
+	gl, gate, result := wf.Jobs["golangci"], wf.Jobs["merge-gate"], wf.Jobs["ci-result"]
+	if gl == nil || gate == nil || result == nil {
+		t.Fatalf("merge-queue.yml needs jobs golangci, merge-gate and ci-result, has %v", sortedKeys(wf.Jobs))
 	}
-	if gl.Name != golangciJobName || gate.Name != "CI result" {
-		t.Errorf("job names %q / %q, want %q / \"CI result\" (the ruleset's required check)", gl.Name, gate.Name, golangciJobName)
+	if gl.Name != golangciJobName || result.Name != "CI result" {
+		t.Errorf("job names %q / %q, want %q / \"CI result\" (the ruleset's required check)", gl.Name, result.Name, golangciJobName)
+	}
+	for id, j := range wf.Jobs {
+		if id != "ci-result" && j.Name == "CI result" {
+			t.Errorf("job %s is also named \"CI result\": the required check would have two producers", id)
+		}
 	}
 	if gl.Needs != nil || gate.Needs != nil {
-		t.Errorf("golangci needs %v, ci-result needs %v: a needs would serialize them (one more runner queue in front of the gate)", gl.Needs, gate.Needs)
+		t.Errorf("golangci needs %v, merge-gate needs %v: a needs would serialize them (one more runner queue in front of the gate)", gl.Needs, gate.Needs)
+	}
+	if gl.If != "" {
+		t.Errorf("golangci if=%q: a skipped lint job is not a success, so a no-change group must skip its steps, not the job", gl.If)
 	}
 	if gl.Env["BASE"] != "${{ github.event.merge_group.base_sha }}" {
 		t.Errorf("golangci BASE = %q, want the group's base sha", gl.Env["BASE"])
@@ -89,80 +117,93 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 		t.Error("the golangci job never runs `task ci:golangci -- --base \"${BASE}\"`")
 	}
 
-	idx := -1
-	for i, s := range gate.Steps {
-		if s.Name == golangciJobName+" passed" {
-			idx = i
-		}
+	// The aggregate: exactly the two workers, always run, and nothing but
+	// their results — no checkout, no action, no token, no API.
+	needs := mqNeeds(result.Needs)
+	slices.Sort(needs)
+	if strings.Join(needs, ",") != "golangci,merge-gate" {
+		t.Errorf("ci-result needs %v, want exactly [merge-gate golangci]", result.Needs)
 	}
-	if idx < 0 {
-		t.Fatalf("CI result has no %q step: the golangci job would gate nothing", golangciJobName+" passed")
+	if result.If != "always()" {
+		t.Errorf("ci-result if=%q, want always(): a failed or cancelled worker must fail the required check, not skip it", result.If)
 	}
-	wait := gate.Steps[idx]
-	if wait.If != "" || wait.ContinueOnError != nil {
-		t.Errorf("the wait step must be unconditional and fatal, has if=%q continue-on-error=%v", wait.If, wait.ContinueOnError)
+	if p, ok := result.Permissions.(map[string]any); !ok || len(p) != 0 {
+		t.Errorf("ci-result permissions %v, want {}: it reads only `needs`", result.Permissions)
 	}
-	if wait.Env["JOB"] != gl.Name {
-		t.Errorf("the wait step reads job %q, but the job is named %q", wait.Env["JOB"], gl.Name)
+	if len(result.Steps) != 1 {
+		t.Fatalf("ci-result has %d steps, want the one aggregation step", len(result.Steps))
 	}
-	if w, _ := strconv.Atoi(wait.Env["WAIT_S"]); w <= gl.TimeoutMinutes*60 {
-		t.Errorf("WAIT_S=%d is not above the job's %dm timeout: a slow lint would be read as unfinished, not failed", w, gl.TimeoutMinutes)
+	agg := result.Steps[0]
+	if agg.Uses != "" || agg.If != "" || agg.ContinueOnError != nil {
+		t.Errorf("the aggregation step must be a plain, unconditional, fatal run step: uses=%q if=%q continue-on-error=%v", agg.Uses, agg.If, agg.ContinueOnError)
 	}
-	for _, s := range gate.Steps[:idx] {
-		if s.Name == "Five-minute budget" {
-			t.Error("the wait must come before the budget step, which reports the run's wall time")
+	if len(agg.Env) != 1 || agg.Env["RESULTS"] != "${{ toJSON(needs) }}" {
+		t.Errorf("the aggregation step's env is %v, want RESULTS=${{ toJSON(needs) }} alone", agg.Env)
+	}
+	for _, banned := range []string{"curl", "gh ", "api.github.com", "github.token", "GITHUB_TOKEN", "GH_TOKEN", "secrets."} {
+		if strings.Contains(agg.Run, banned) {
+			t.Errorf("the aggregation step mentions %q: the verdict must come from `needs` alone", banned)
 		}
 	}
 
-	// The script against a fake gh that answers with one state per call. Each
-	// run owns its directory, so the cases after the harness check run in
-	// parallel: one bash run is ~0.5s on a loaded host, nine in a row were 5s.
-	run := func(t *testing.T, waitS string, states ...string) (bool, string) {
+	// The acceptance matrix, against the real script. "missing" omits the
+	// job from `needs` altogether.
+	run := func(t *testing.T, gateResult, lintResult string) (bool, string) {
 		t.Helper()
-		dir := t.TempDir()
-		var answers strings.Builder
-		for _, s := range states {
-			answers.WriteString(s + "\n")
+		r := map[string]string{}
+		if gateResult != "missing" {
+			r["merge-gate"] = gateResult
 		}
-		if err := os.WriteFile(filepath.Join(dir, "answers"), []byte(answers.String()), 0o644); err != nil {
-			t.Fatal(err)
+		if lintResult != "missing" {
+			r["golangci"] = lintResult
 		}
-		// Each call pops the next line; a line "fail" is an API error, and
-		// past the last line the last one repeats.
-		writeExec(t, filepath.Join(dir, "gh"), `#!/usr/bin/env bash
-case "$*" in *"/actions/runs/123/attempts/2/jobs"*) ;; *) echo "unexpected gh $*" >&2; exit 9 ;; esac
-f="`+dir+`/answers"
-line=$(head -1 "$f"); [ "$(wc -l <"$f")" -gt 1 ] && { sed 1d "$f" >"$f.n"; mv "$f.n" "$f"; }
-[ "$line" = fail ] && exit 1
-printf '%s\n' "$line"
-`)
-		env := map[string]string{
-			"PATH": dir + ":" + os.Getenv("PATH"), "GITHUB_REPOSITORY": "o/r", "GITHUB_RUN_ID": "123",
-			"GITHUB_RUN_ATTEMPT": "2", "GITHUB_SERVER_URL": "https://github.com", "GH_TOKEN": "tok",
-			"JOB": wait.Env["JOB"], "WAIT_S": waitS, "POLL_S": "0",
-		}
-		return ciShell(t, wait.Run, env)
+		return ciShell(t, agg.Run, map[string]string{"RESULTS": needsJSON(r), "GH_TOKEN": "", "GITHUB_TOKEN": ""})
 	}
-	if ok, out := run(t, "0", "completed success"); !ok {
-		t.Fatalf("harness: a passed job fails the step, so the cases below prove nothing:\n%s", out)
+	if ok, out := run(t, "success", "success"); !ok {
+		t.Fatalf("harness: CI result fails with both workers green, so the cases below prove nothing:\n%s", out)
 	}
-	t.Run("passes after queuing, running and one API error", func(t *testing.T) {
+	bad := []string{"failure", "cancelled", "skipped", "missing"}
+	for _, b := range bad {
+		for _, c := range []struct{ gate, lint string }{{"success", b}, {b, "success"}, {b, b}} {
+			t.Run("gate="+c.gate+"/lint="+c.lint, func(t *testing.T) {
+				t.Parallel()
+				ok, out := run(t, c.gate, c.lint)
+				if ok {
+					t.Fatalf("CI result passes with merge-gate=%s golangci=%s:\n%s", c.gate, c.lint, out)
+				}
+				for job, res := range map[string]string{"merge-gate": c.gate, "golangci": c.lint} {
+					if res != "success" && !strings.Contains(out, job+": "+res) {
+						t.Errorf("the failure does not name %s: %s:\n%s", job, res, out)
+					}
+				}
+			})
+		}
+	}
+	t.Run("unparseable needs", func(t *testing.T) {
 		t.Parallel()
-		if ok, out := run(t, "60", "queued ", "in_progress ", "fail", "completed success"); !ok {
-			t.Errorf("a job that passes after queuing, running and one API error fails the step:\n%s", out)
+		if ok, out := ciShell(t, agg.Run, map[string]string{"RESULTS": "not json"}); ok {
+			t.Errorf("CI result passes on an unreadable needs document:\n%s", out)
 		}
 	})
-	for _, bad := range [][]string{
-		{"completed failure"}, {"completed cancelled"}, {"completed skipped"}, {"completed timed_out"},
-		{"in_progress "}, {"absent "}, {"fail"},
-	} {
-		t.Run(strings.Join(bad, " "), func(t *testing.T) {
-			t.Parallel()
-			// WAIT_S=0: one poll, then the deadline has passed.
-			if ok, out := run(t, "0", bad...); ok {
-				t.Errorf("CI result passes with golangci at %q:\n%s", bad, out)
-			}
-		})
+}
+
+// TestMergeQueueBudgetStaysOnTheGate: the five-minute budget measurement and
+// its merge-queue-slo-<attempt> artifact belong to the merge gate, whose
+// bindings the default-branch Merge queue SLO listener verifies.
+func TestMergeQueueBudgetStaysOnTheGate(t *testing.T) {
+	wf := loadMergeQueue(t)
+	var budget, upload bool
+	for _, s := range wf.Jobs["merge-gate"].Steps {
+		switch {
+		case s.Name == "Five-minute budget":
+			budget = s.If == "always()" && s.ContinueOnError == true &&
+				strings.Contains(s.Run, `schema:"merge-queue-slo/v1"`) && strings.Contains(s.Run, "${RUNNER_TEMP}/merge-queue-slo.json")
+		case strings.HasPrefix(s.Uses, "actions/upload-artifact@") && s.With["name"] == "merge-queue-slo-${{ github.run_attempt }}":
+			upload = s.If == "always()" && s.ContinueOnError == true && s.With["path"] == "${{ runner.temp }}/merge-queue-slo.json"
+		}
+	}
+	if !budget || !upload {
+		t.Errorf("merge-gate must measure the budget (%v) and upload merge-queue-slo-<attempt> (%v), both non-gating", budget, upload)
 	}
 }
 

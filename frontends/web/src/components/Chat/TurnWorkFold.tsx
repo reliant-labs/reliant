@@ -8,7 +8,7 @@ import { viewerSafeMessage } from "../../lib/viewerResults";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { findWorkflowById } from "../../lib/workflowTree";
 import { workflowLifecycleToDisplayStatus } from "./ToolExecution";
-import { ChatMessage, type ChatTimelineVariant } from "./ChatMessage";
+import { ChatMessage } from "./ChatMessage";
 import {
   formatTurnWorkHeadline,
   formatTurnWorkElapsed,
@@ -31,7 +31,6 @@ interface TurnWorkFoldProps {
   /** The turn is still being worked on: the header shows live text and ticks. */
   isStreaming?: boolean;
   onSelectThread?: (threadId: string | null) => void;
-  timelineVariant?: ChatTimelineVariant;
 }
 
 const NO_APPROVALS: Approval[] = [];
@@ -62,7 +61,6 @@ function TurnWorkFoldComponent({
   approvals = NO_APPROVALS,
   isStreaming = false,
   onSelectThread,
-  timelineVariant,
 }: TurnWorkFoldProps) {
   const surface = useSurface();
   const canBranch = useCapability("chatBranching");
@@ -197,7 +195,7 @@ function TurnWorkFoldComponent({
     prefetchContentBlockBodies(chatId, elidedKey.split(","));
   }, [expanded, chatId, elidedKey]);
 
-  const common = { chatId, approvals, isStreaming, onSelectThread, timelineVariant };
+  const common = { chatId, approvals, isStreaming, onSelectThread };
   const renderEvents = (afterPart: number) => (work.events ?? [])
     .filter((event) => event.afterPart === afterPart)
     .map(({ message }) => isAgentMessage(message) ? (

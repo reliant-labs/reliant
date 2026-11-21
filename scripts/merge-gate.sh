@@ -98,7 +98,7 @@
 # checkouts beside the other phases, except on a host under 32 GiB (a hosted
 # runner), where forge generate runs first and alone (the memory budget below).
 #
-# The whole gate holds ONE host heavy slot (forge slot run), taken here; every
+# The whole gate holds ONE host heavy slot (forge machine slot run), taken here; every
 # phase nests inside it and never queues again. Its phases share a CPU budget
 # (MG_CPUS) instead of each spawning one thread per core of a host whose other
 # slots are busy too. MG_LOGDIR=<dir> keeps the
@@ -134,12 +134,12 @@ export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" GOPRIVATE="${GOPRIVATE:-github.c
 export FORGE_NO_MERGE_DRIVER=1
 
 # ── one heavy slot for the whole gate ─────────────────────────────────────
-# Slots are machine-wide, so any forge with `forge slot` will do: FORGE_BIN
+# Slots are machine-wide, so any forge with `forge machine slot` will do: FORGE_BIN
 # (the pin) when set, else the forge on PATH, else `reliant forge`
 # (scripts/forge.sh --machine; never a `go run`).
 read -r -a slotforge <<<"$(scripts/forge.sh --machine --which 2>/dev/null || true)"
-if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "${slotforge[@]}" slot status --class heavy >/dev/null 2>&1; then
-  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "${slotforge[@]}" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$queue" = 1 ] && echo --queue)
+if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "${slotforge[@]}" machine slot status --class heavy >/dev/null 2>&1; then
+  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "${slotforge[@]}" machine slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$queue" = 1 ] && echo --queue)
 fi
 t0=$(date +%s)
 slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
@@ -577,8 +577,9 @@ if [ "$fail" = 0 ]; then
   fi
   if [ "$queue" != 1 ] || echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$'; then
     # buf lint, then buf breaking against the diff base: semver at major 1 (owner,
-    # 2026-11-05), so a wire break fails unless the owner applied breaking:approved
-    # (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
+    # 2026-11-05), so a wire break fails unless the owner accepted it with
+    # breaking:approved, applied by the owner or by the Reliant bot on the owner's
+    # instruction (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
     # CI_QUEUE_ENTRY judges only this entry's squash, against its own PR's labels.
     phase proto env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c 'task proto:lint && scripts/check-compat.sh proto' & pids+=($!)
   fi
@@ -592,7 +593,8 @@ if [ "$fail" = 0 ]; then
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     # A migration declaring forge:breaks-rollback also needs the owner's
-    # migration:breaks-rollback-approved label (scripts/check-compat.sh).
+    # migration:breaks-rollback-approved label, applied by the owner or by the
+    # Reliant bot on the owner's instruction (scripts/check-compat.sh).
     phase migsafety env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
   # A migration below main's newest is never applied and reliant's migrator

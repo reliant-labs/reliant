@@ -200,7 +200,7 @@ In this harness `take_screenshot` **without `filePath` returns a text
 placeholder, not pixels** (bug 3f6a8b8e; re-confirmed 2026-11-01). If you
 cannot describe what is in the image, you did not see it: base findings on
 DOM, computed styles, contrast math, the overflow probe
-(`reliant forge skill load frontend/design/verify`) and the code, label them
+(`reliant forge agent skill load frontend/design/verify`) and the code, label them
 **"measured, not seen"**, and save screenshots with `filePath` (under
 `research/app-ux-review-2026-11/shots/<area>/`) for the owner.
 

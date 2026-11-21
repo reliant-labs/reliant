@@ -595,7 +595,7 @@ type runner struct {
 	budget time.Duration
 	owned  map[string]bool
 	// slot prefixes a FULL lane's command (Taskfile.yml passes
-	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
+	// TEST_AFFECTED_SLOT='forge machine slot run --class heavy --'): a whole-module
 	// run is as heavy as any gate check, and outside a host slot it only steals
 	// CPU from the jobs queued in one. A scoped run stays out of the queue: it
 	// is the inner loop. Empty runs everything directly.

@@ -31,6 +31,7 @@
 
 import { isSafeReturnTo } from "@/lib/returnTo";
 import { onboardingPath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 /** Path prefixes a not-yet-onboarded user may open without the wizard. */
 export const ONBOARDING_EXEMPT_PREFIXES = ["/onboarding", "/settings", "/m", "/forge/demo", "/apps"] as const;
@@ -39,7 +40,9 @@ const underPrefix = (pathname: string, prefix: string) => pathname === prefix ||
 
 /** Whether `pathname` (a route under the `_authenticated` layout) needs onboarding finished. */
 export function routeRequiresOnboarding(pathname: string): boolean {
-  return !ONBOARDING_EXEMPT_PREFIXES.some((prefix) => underPrefix(pathname, prefix));
+  // An org page (`/o/<org>/apps`) is exempt when its org-less twin is.
+  const path = orgFreePath(pathname);
+  return !ONBOARDING_EXEMPT_PREFIXES.some((prefix) => underPrefix(path, prefix));
 }
 
 export type OnboardingGateDecision = "allow" | "wait" | "onboard";
@@ -63,7 +66,7 @@ export function onboardingGateDecision(state: {
  */
 export function isOnboardingReturnTo(returnTo: string | undefined | null): returnTo is string {
   if (!isSafeReturnTo(returnTo)) return false;
-  const pathname = returnTo.split(/[?#]/, 1)[0];
+  const pathname = orgFreePath(returnTo.split(/[?#]/, 1)[0]);
   return pathname !== "/" && !underPrefix(pathname, "/onboarding") && !underPrefix(pathname, "/auth");
 }
 

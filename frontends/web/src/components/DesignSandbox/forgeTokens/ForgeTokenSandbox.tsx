@@ -4,7 +4,7 @@
  * verified against REAL forge components rather than against a synthetic
  * swatch grid, in every color scheme and both light and dark.
  *
- * The components below are installed verbatim by `forge component install`
+ * The components below are installed verbatim by `forge ui component install`
  * and are never edited; that is the whole point of mapping at the theme
  * layer. If a token is unmapped it shows up here as a transparent fill or
  * inherited text, which is what a missing mapping looks like in the UI.
