@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import ErrorBoundary from "../ErrorBoundary";
 import Tooltip from "../forge-ui/tooltip";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
+import { orgFreePath } from "@/lib/paths/org";
 
 interface AreaShellProps {
   /** The area's list path, e.g. "/inbox". Anything below it is a detail page. */
@@ -39,7 +40,8 @@ export function AreaShell({ areaPath, areaLabel, areaNoun, children }: AreaShell
     useTitleBarChrome({ collapsedPadding: "8px" });
 
   // The detail page steps back to the list; the list exits to the app.
-  const isDetail = pathname.startsWith(`${areaPath}/`);
+  // Both read org-less, so the list's path and the page's agree in either form.
+  const isDetail = orgFreePath(pathname).startsWith(`${orgFreePath(areaPath)}/`);
   const onClose = useCallback(() => {
     void navigate(getParentRouteNavigateOptions(pathname));
   }, [navigate, pathname]);

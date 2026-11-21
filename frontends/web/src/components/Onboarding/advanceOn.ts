@@ -28,6 +28,7 @@ import { tourEvents, type TourEventMap } from "./tourEvents";
 import { TOUR_SIGNAL_NAMES } from "./journeys/signals";
 import type { JourneyId } from "./tourParam";
 import type { AdvanceContext, AdvanceOn, ChecklistItemId, JourneyContext, JourneyStep } from "./types";
+import { orgFreePath } from "@/lib/paths/org";
 
 /** Delay before `autoAdvance` moves on, so the user sees the check. */
 export const AUTO_ADVANCE_MS = 600;
@@ -66,9 +67,12 @@ export function conditionsOf(step: Pick<JourneyStep, "advanceOn">): AdvanceOn[] 
   return step.advanceOn ? [step.advanceOn].flat() : [];
 }
 
-function routeMatches(path: string | RegExp, pathname: string): boolean {
+function routeMatches(path: string | RegExp, routePathname: string): boolean {
+  // A step's route and the page, both org-less: either form of a page is that page.
+  const pathname = orgFreePath(routePathname);
   if (typeof path !== "string") return path.test(pathname);
-  return pathname === path || pathname.startsWith(path.endsWith("/") ? path : `${path}/`);
+  const target = orgFreePath(path);
+  return pathname === target || pathname.startsWith(target.endsWith("/") ? target : `${target}/`);
 }
 
 export function watchAdvance(

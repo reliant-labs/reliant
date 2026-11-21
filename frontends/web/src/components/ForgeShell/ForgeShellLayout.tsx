@@ -22,6 +22,7 @@ import { useAuthStore } from "@/store/authStore";
 
 import { ForgeBrand, ForgeMark } from "./ForgeBrand";
 import { appsPath, authPath, settingsPath, sitesPath, usagePath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 /** The shell's own pages, in nav order. */
 export const FORGE_SHELL_NAV = [
@@ -32,7 +33,9 @@ export const FORGE_SHELL_NAV = [
 ] as const;
 
 /** The nav entry a path belongs to. */
-export function activeNavHref(pathname: string): string | null {
+export function activeNavHref(routePathname: string): string | null {
+  // An org page (`/o/<org>/apps`) is its org-less twin's entry.
+  const pathname = orgFreePath(routePathname);
   const hit = FORGE_SHELL_NAV.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
   return hit?.href ?? null;
 }

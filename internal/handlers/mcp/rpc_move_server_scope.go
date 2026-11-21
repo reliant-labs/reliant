@@ -108,11 +108,10 @@ func (s *Service) MoveServerScope(
 			defer cancel()
 
 			if err := mgr.AddProjectServer(startCtx, checkout.Path, name, intCfg); err != nil {
-				logging.ErrorContext(ctx, "MCP server scope move failed",
+				logServerFailure(ctx, "MCP server scope move failed", err,
 					"operation", "move_scope",
 					"server", name,
 					"target_scope", targetScope.String(),
-					"error", err,
 				)
 				return connect.NewResponse(&reliantv1.MoveServerScopeResponse{
 					Success: false,
