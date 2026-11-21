@@ -36,8 +36,8 @@
  *       /security                           → /security/vulnerabilities
  *       /tests                              Tests › Overview (`branch`)
  *       /tests/coverage                     coverage tree and a file's lines (`path`, `commit`, `lane`, `base`)
- *       /tests/runs[/$run]                  recorded runs, and one run
- *       /tests/flaky[/$test]                flaky tests, and one test
+ *       /tests/runs[/$run]                  recorded runs (`branch`, `commit`, `release`, `lane`, `source`, `status`), and one run
+ *       /tests/flaky[/$test]                flaky tests (`state`), and one test
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
@@ -77,6 +77,8 @@ import {
   forgeConsoleSbomsSearchSchema,
   forgeConsoleSecretsSearchSchema,
   forgeConsoleTestsCoverageSearchSchema,
+  forgeConsoleTestsFlakySearchSchema,
+  forgeConsoleTestsRunsSearchSchema,
   forgeConsoleTestsSearchSchema,
   forgeConsoleServicesSearchSchema,
   forgeConsoleStorageSearchSchema,
@@ -481,7 +483,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const testsRunsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'tests/runs',
-    validateSearch: forgeConsoleTestsSearchSchema,
+    validateSearch: forgeConsoleTestsRunsSearchSchema,
     component: components.testsRuns,
   })
   const testsRunRoute = createRoute({
@@ -493,7 +495,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const testsFlakyRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'tests/flaky',
-    validateSearch: forgeConsoleTestsSearchSchema,
+    validateSearch: forgeConsoleTestsFlakySearchSchema,
     component: components.testsFlaky,
   })
   const testsFlakyTestRoute = createRoute({

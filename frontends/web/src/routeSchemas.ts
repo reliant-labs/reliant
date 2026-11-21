@@ -21,6 +21,8 @@ import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from ".
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
 import { isBucketName, isSendableKey, MAX_TOKEN_LENGTH, type StorageSearch } from "./components/Forge/Storage/storageUrl-model";
 import { DATA_PAGE_SIZES, MAX_OFFSET, type DataSearch } from "./components/Forge/Data/dataUrl-model";
+import { RUN_SOURCES, RUN_STATUSES, type RunsSearch as TestRunsSearch } from "./components/Forge/Tests/runsModel";
+import { FLAKY_STATE_FILTERS, type FlakySearch } from "./components/Forge/Tests/flakyModel";
 import type { VulnSearch } from "./components/Forge/Security/vulnModel";
 import { MIN_SEVERITIES } from "./services/controlPlane/vulnerabilities/types";
 import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTypes";
@@ -700,11 +702,39 @@ export const forgeConsoleSbomsSearchSchema = z.object({
 /** A git ref or a lane the router may have parsed as a number ("1234"). */
 const testsRefParam = (max: number) => z.union([z.string().min(1).max(max), z.number().transform(String)]).optional().catch(undefined);
 
-/** Tests (Overview, Runs, Flaky tests): the scope, and a branch other than the default one. */
+/** Tests › Overview (and the base of Runs and Coverage): the scope, and a branch other than the default one. */
 export const forgeConsoleTestsSearchSchema = z.object({
   env: envScopeParam,
   branch: testsRefParam(256),
 });
+
+/**
+ * Tests › Runs: the scope, and ListTestRuns' filters (Tests/runsModel.ts
+ * RunsSearch) — a branch, a commit (or its prefix), a release, a lane, where
+ * the run was recorded and its status. Every filtered list is a link someone
+ * can send ("the failed CI runs of main"). The environment is the console's
+ * one scope (`env`), never a second key.
+ */
+export const forgeConsoleTestsRunsSearchSchema = forgeConsoleTestsSearchSchema.extend({
+  commit: testsRefParam(64),
+  release: testsRefParam(256),
+  lane: testsRefParam(64),
+  source: z.enum(RUN_SOURCES).optional().catch(undefined),
+  status: z.enum(RUN_STATUSES).optional().catch(undefined),
+});
+
+/** Every Tests RunsSearch key has a schema entry and vice versa. */
+export type _TestsRunsSchemaCoversSearch = AssertNoDrift<Exclude<keyof TestRunsSearch, keyof z.output<typeof forgeConsoleTestsRunsSearchSchema>>>;
+export type _TestsRunsSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleTestsRunsSearchSchema>, "env">, keyof TestRunsSearch>>;
+
+/** Tests › Flaky tests: the scope, and one flake state (Tests/flakyModel.ts FlakySearch). */
+export const forgeConsoleTestsFlakySearchSchema = z.object({
+  env: envScopeParam,
+  state: z.enum(FLAKY_STATE_FILTERS).optional().catch(undefined),
+});
+
+export type _TestsFlakySchemaCoversSearch = AssertNoDrift<Exclude<keyof FlakySearch, keyof z.output<typeof forgeConsoleTestsFlakySearchSchema>>>;
+export type _TestsFlakySearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleTestsFlakySearchSchema>, "env">, keyof FlakySearch>>;
 
 /**
  * Tests › Coverage: the scope, the path (repo-relative; a file path rides the

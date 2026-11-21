@@ -13,10 +13,10 @@
  * the unit, integration and e2e lanes of commit 9f3c…, two releases sit on the
  * trend, four tests are flaky (two quarantined).
  *
- * Only GetTestSummary is answered here (the Overview's one read, W1). The
- * Coverage, Runs and Flaky tests pages (W2, W3) add their reads to this file;
- * until then the api answers them Unimplemented, which those placeholder
- * pages never call.
+ * GetTestSummary is answered here (the Overview's one read, W1); ListTestRuns,
+ * GetTestRun, ListFlakyTests and GetTest from runFlakeFixtures.ts (the Runs
+ * and Flaky tests pages, W3). The Coverage reads (W2) still answer
+ * Unimplemented until their page adds them.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -24,7 +24,11 @@ import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 
 import type { TestApi } from "@/services/controlPlane/tests/TestApiContext";
 import {
+  flakePageOf,
+  runDetailOf,
+  runPageOf,
   summaryOf,
+  testDetailOf,
   WireIngestState,
   WireRunOutcome,
   WireRunSource,
@@ -34,6 +38,8 @@ import {
   type WireStatementCoverage,
   type WireSummaryResponse,
 } from "@/services/controlPlane/tests/wire";
+
+import { fixtureFlakyWire, fixtureRunsWire, fixtureRunWire, fixtureTestWire } from "./runFlakeFixtures";
 
 /** A fixed "now", so relative times in snapshots do not move. */
 export const FIXTURE_NOW = Date.UTC(2026, 10, 20, 12, 0, 0);
@@ -150,11 +156,16 @@ export function fixtureSummaryResponse(): WireSummaryResponse {
  *   no-runs         the service answers, and nothing was ever recorded
  *   pending         one run recorded, its ingest not finished: no figures yet
  *   unit-only       one lane merged so far, and no trend before it
+ *   no-flakes       the report's runs, and no test has ever flaked (nor any host failure)
  *   not-configured  a control plane without TestsService (Unimplemented)
  *   denied          no tests:read
+ *
+ * The Runs and Flaky tests pages read the same scenarios (runFlakeFixtures.ts):
+ * the report has nine runs over two pages, a failed branch run and ten flaky
+ * tests; pending and unit-only have their one run; no-runs has none.
  */
-export type TestsScenario = "report" | "no-runs" | "pending" | "unit-only" | "not-configured" | "denied";
-export const TESTS_SCENARIOS: readonly TestsScenario[] = ["report", "no-runs", "pending", "unit-only", "not-configured", "denied"];
+export type TestsScenario = "report" | "no-runs" | "pending" | "unit-only" | "no-flakes" | "not-configured" | "denied";
+export const TESTS_SCENARIOS: readonly TestsScenario[] = ["report", "no-runs", "pending", "unit-only", "no-flakes", "not-configured", "denied"];
 
 export function fixtureSummaryWire(scenario: TestsScenario): WireSummaryResponse {
   const empty: WireSummaryResponse = {
@@ -204,6 +215,8 @@ export function fixtureSummaryWire(scenario: TestsScenario): WireSummaryResponse
         lastRun: { ...FIXTURE_LAST_RUN, lane: "unit", coveragePercent: LANES.unit, totals: report.totals },
       };
     }
+    case "no-flakes":
+      return { ...fixtureSummaryResponse(), suspectedCount: 0, flakyCount: 0, quarantinedCount: 0, hostFailures30d: 0 };
     default:
       return fixtureSummaryResponse();
   }
@@ -223,11 +236,21 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
     if (scenario === "denied") return Promise.reject(new ConnectError("missing tests:read", Code.PermissionDenied));
     return Promise.reject(new ConnectError("TestsService is not available", Code.Unimplemented));
   };
-  // Answered by the pages of W2 and W3, which add their fixtures here.
+  // Answered by the Coverage page (W2), which adds its fixtures here.
   const notInFixture = (method: keyof TestApi) => (req: unknown) => {
     calls.push({ method, req });
     return Promise.reject(new ConnectError(`${method} is not in the Tests fixture yet`, Code.Unimplemented));
   };
+  // A read the scenario refuses, or the fixture's answer (a NotFound or a bad page token it throws, rejected).
+  function answer<T>(method: keyof TestApi, req: unknown, build: () => T): Promise<T> {
+    calls.push({ method, req });
+    if (scenario === "not-configured" || scenario === "denied") return refuse();
+    try {
+      return Promise.resolve(build());
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  }
   return {
     calls,
     getTestSummary: (req) => {
@@ -235,12 +258,12 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
       if (scenario === "not-configured" || scenario === "denied") return refuse();
       return Promise.resolve(summaryOf(fixtureSummaryWire(scenario)));
     },
-    listTestRuns: notInFixture("listTestRuns"),
-    getTestRun: notInFixture("getTestRun"),
+    listTestRuns: (req) => answer("listTestRuns", req, () => runPageOf(fixtureRunsWire(scenario, req))),
+    getTestRun: (req) => answer("getTestRun", req, () => runDetailOf(fixtureRunWire(scenario, req))),
     getCoverage: notInFixture("getCoverage"),
     getFileCoverage: notInFixture("getFileCoverage"),
     getReleaseTests: notInFixture("getReleaseTests"),
-    listFlakyTests: notInFixture("listFlakyTests"),
-    getTest: notInFixture("getTest"),
+    listFlakyTests: (req) => answer("listFlakyTests", req, () => flakePageOf(fixtureFlakyWire(scenario, req))),
+    getTest: (req) => answer("getTest", req, () => testDetailOf(fixtureTestWire(scenario, req))),
   };
 }

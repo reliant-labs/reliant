@@ -66,7 +66,11 @@ import { SbomsPage } from "../Security/SbomsPage";
 import { VulnerabilitiesPage } from "../Security/VulnerabilitiesPage";
 import { VulnerabilityPage } from "../Security/VulnerabilityPage";
 import { TestsOverviewPage } from "../Tests/TestsOverviewPage";
-import { TestsCoveragePage, TestsFlakyPage, TestsFlakyTestPage, TestsRunPage, TestsRunsPage } from "../Tests/TestsPlaceholderPages";
+import { TestsFlakyPage } from "../Tests/TestsFlakyPage";
+import { TestsFlakyTestPage } from "../Tests/TestsFlakyTestPage";
+import { TestsCoveragePage } from "../Tests/TestsPlaceholderPages";
+import { TestsRunPage } from "../Tests/TestsRunPage";
+import { TestsRunsPage } from "../Tests/TestsRunsPage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
