@@ -210,7 +210,7 @@ function GalleryCard({ item, project, envIds, href, onStar }: { item: GalleryIte
         <CardPreview dashboard={d} project={project} envIds={envIds} enabled={near} />
       </div>
       <div className="mt-auto flex min-w-0 items-center gap-2 px-4 pb-3 pt-3 text-meta text-ink-muted">
-        <span className={cn("inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-2xs font-medium", BADGE_CLASS[badge])} data-testid={`dashboards-card-${item.id}-badge`}>
+        <span className={cn("inline-flex h-5 shrink-0 items-center rounded-md border px-1.5 text-meta font-medium", BADGE_CLASS[badge])} data-testid={`dashboards-card-${item.id}-badge`}>
           {GALLERY_BADGE_LABELS[badge]}
         </span>
         {item.note ? (
