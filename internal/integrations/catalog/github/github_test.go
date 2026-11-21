@@ -1108,6 +1108,12 @@ var minimal = map[string]map[string]any{
 	"check_run.create": {"owner": "acme", "repo": "app", "name": "Reliant review", "head_sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"},
 	"check_run.update": {"owner": "acme", "repo": "app", "check_run_id": 1, "status": "in_progress"},
 	"check_run.list":   {"owner": "acme", "repo": "app", "head_sha": "6dcb09b5b57875f334f61aebed695e2e4193db5e"},
+
+	"branch.rules":    {"owner": "acme", "repo": "app", "branch": "main"},
+	"compare":         {"owner": "acme", "repo": "app", "base": "v1.4.0", "head": "main"},
+	"commit.statuses": {"owner": "acme", "repo": "app", "ref": "main"},
+	"release.create":  {"owner": "acme", "repo": "app", "tag_name": "v1.5.0"},
+	"release.update":  {"owner": "acme", "repo": "app", "release_id": 1, "draft": false},
 }
 
 // Every action in the manifest is covered by these tests: adding one without

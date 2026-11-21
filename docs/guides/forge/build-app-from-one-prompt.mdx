@@ -5,8 +5,6 @@ description: "Describe an app in one message, and the Build an App workflow scop
 keywords: ["AI app builder production", "build an app from a prompt", "AI full-stack app generator", "forge-one-shot", "Build an App workflow"]
 ---
 
-{/* verified: 2026-11-20 · reliant v1.21.3 · forge v1.6.1-0.20261115024114-0ab7c562e817 (project pin) · L/LD steps run in scratch: yes (guides-scratch/build-app-from-one-prompt/guides-sandbox-oneprompt: workflow run forge-one-shot unattended=true ask=false → run 535b9957 COMPLETED/SUCCESS in 30m18s, one iteration; workflow watch + status; go build ./...; forge lint --quiet (29 gating linters passed); env up dev with a forge shim on PATH; curl healthz + ListBooks; db query dev; env down dev) · H steps: none (the workflow does not deploy) · unverified: the app's pages were not inspected in a browser (no Chrome on the verifying machine), so this page makes no claim about how they look; the interactive scoping conversation (ask=true, unattended=false) was not exercised */}
-
 You describe an app in one message. The built-in **Build an App** workflow turns it into a [Forge](/forge/overview) project with a Go API, a Postgres schema and a Next.js frontend, gets its checks green, has a separate agent review the running app, and leaves it running on your machine. The result is ordinary code in your folder that you review, commit and deploy.
 
 The checks are Forge's own: `generate`, `lint`, `build` and `task test`. Forge derives the wiring from the proto and the migrations ([Two sources of truth](/forge/concepts/two-sources-of-truth)), so the agents write the domain.
@@ -161,6 +159,6 @@ The checks are Forge's own: `generate`, `lint`, `build` and `task test`. Forge d
 <CardGroup cols={2}>
   <Card title="Build a Go and React app by hand" icon="code" href="/guides/forge/build-go-react-app-connect-rpc">The same kind of project, one command at a time</Card>
   <Card title="Deploy a Go API with managed Postgres" icon="rocket" href="/guides/hosting/deploy-go-api-managed-postgres">Put the app on a URL</Card>
-  <Card title="How forge generate works" icon="gears" href="/deep-dives/how-forge-generate-works">What Forge writes from the proto and the migrations</Card>
-  <Card title="Get It Right" icon="rotate" href="/guides/get-it-right">The loop this workflow runs</Card>
+  <Card title="How forge generate works" icon="settings-2" href="/deep-dives/how-forge-generate-works">What Forge writes from the proto and the migrations</Card>
+  <Card title="Get It Right" icon="rotate-cw" href="/guides/get-it-right">The loop this workflow runs</Card>
 </CardGroup>

@@ -53,6 +53,29 @@ inputs:
     ui: hidden
     description: Most sub-agents the whole run may have running at once, at every depth
 
+  # Bounds and bindings for an agent a workflow runs (ref: builtin://agent).
+  # Both default to today's behaviour: no turn limit, no bound parameters.
+  max_turns:
+    type: integer
+    default: 0
+    min: 0
+    max: 500
+    ui: hidden
+    description: |
+      Most turns (model calls) the agent takes before it stops and the workflow
+      moves on; 0 = no limit. Set it when a workflow must end: under
+      concurrency.max_running it is what bounds the agent, since a timeout: on
+      the workflow node bounds nothing.
+  tool_params:
+    type: object
+    default: {}
+    ui: hidden
+    description: |
+      Per-tool bound parameters (tools_config.tools), keyed by tool name, which
+      the model can neither see nor override, e.g. {shell: {credentials: none}}.
+      They bind this agent's own tools only: a sub-agent it spawns gets its
+      preset's tools unbound, so pass spawn_presets: [] when the binding must hold.
+
   skills:
     type: array
     default: []
@@ -135,6 +158,11 @@ outputs:
   message: "{{nodes.agent_loop.message}}"
   # The final response text (convenience accessor)
   response_text: "{{nodes.agent_loop.response_text}}"
+  # Why the last turn ended (done, tool_use, truncated, refused, ...) and how
+  # many turns ran: turns == max_turns with stop_reason tool_use means the
+  # limit stopped an agent that was still working.
+  stop_reason: "{{nodes.agent_loop.stop_reason}}"
+  turns: "{{nodes.agent_loop._iterations}}"
 
 # Entry point - replaces from: started edge
 entry: [agent_loop]
@@ -185,7 +213,12 @@ nodes:
     # whose history still ends with the assistant yields instead of calling
     # the provider — unless continue_turn says the previous turn was
     # "incomplete", where that tail is the expected shape.
-    while: outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || outputs.has_feedback == true || outputs.pending_inbox == true
+    #
+    # max_turns bounds all of it, the user's input included (0, the default,
+    # is no limit): a workflow that runs this agent unattended can rely on it
+    # ending, which a timeout: on its workflow node cannot give it. Lint reads
+    # this conjunct to tell a bounded agent node from an unbounded one.
+    while: (outputs.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || outputs.has_feedback == true || outputs.pending_inbox == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
@@ -250,6 +283,8 @@ nodes:
               loadable_tools: "{{inputs.mode == 'plan' ? ['tag:coding:plan', 'tag:shell'] : ['*']}}"
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: orchestrator
+              # Bound parameters the model never sees (empty by default).
+              tools: "{{inputs.tool_params}}"
 
         - id: approval
           type: approval
@@ -344,7 +379,23 @@ nodes:
                 label: auto_approve
 
 
-edges: []
+  # Says why the agent stopped when max_turns ended it; never runs at the
+  # default (0, no limit).
+  - id: max_turns_notification
+    type: save_message
+    args:
+      role: "system"
+      display_style: "warning"
+      content: "Agent reached its turn limit ({{inputs.max_turns}} turns) and stopped."
+
+edges:
+  - from: agent_loop
+    cases:
+      - to: max_turns_notification
+        # The limit ended a loop that would have gone on, not one that
+        # finished on its last allowed turn.
+        condition: inputs.max_turns > 0 && nodes.agent_loop._iterations >= inputs.max_turns && (nodes.agent_loop.stop_reason in ['tool_use', 'incomplete', 'truncated', 'interrupted'] || nodes.agent_loop.has_feedback == true || nodes.agent_loop.pending_inbox == true)
+        label: "max_turns_reached"
 
 ui:
   positions:
@@ -354,3 +405,6 @@ ui:
     agent_loop:
       x: 446
       y: 254
+    max_turns_notification:
+      x: 917
+      y: 283
