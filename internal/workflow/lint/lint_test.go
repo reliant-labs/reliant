@@ -297,3 +297,36 @@ func TestApprovalPermissionIsReportedOnceAndCoversItsSteps(t *testing.T) {
 	in.Source = src
 	assert.Empty(t, findingsOf(Check(in), RuleApprovalDecider))
 }
+
+// A schedule firing carries no event, so the fix for an unfired schedule
+// trigger must not ask for a payload; an event trigger's fix still does.
+func TestScenarioTriggerFixAsksForAPayloadOnlyForEvents(t *testing.T) {
+	wf, err := wfyaml.ParseWorkflow([]byte(`
+name: fixture
+triggers:
+- name: nightly
+  schedule: {cron: '0 3 * * *'}
+- name: hook
+  webhook: {}
+entry: [done]
+nodes:
+- id: done
+  type: save_message
+  args: {role: assistant, content: done}
+`))
+	require.NoError(t, err)
+	sc, err := scenario.ParseScenarioYAML([]byte("name: plain\nexpect: {completed: [done]}\n"))
+	require.NoError(t, err)
+	fixes := map[string]string{}
+	for _, f := range findingsOf(Check(Input{Workflow: wf, Scenarios: sc}), RuleScenarioTrigger) {
+		fixes[f.Message] = f.Fix
+	}
+	require.Len(t, fixes, 2, "%v", fixes)
+	for msg, fix := range fixes {
+		if strings.Contains(msg, `"nightly"`) {
+			assert.Equal(t, "add a scenario with `trigger: {name: nightly}` (a schedule firing needs no payload)", fix)
+		} else {
+			assert.Contains(t, fix, "trigger: {name: hook, payload: {...}}")
+		}
+	}
+}

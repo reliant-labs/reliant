@@ -491,6 +491,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant github`](#reliant-github) | Act on GitHub as the Reliant bot (reviews, labels, merges) or as yourself |
 | [`reliant github gh`](#reliant-github-gh) | Run gh as the Reliant bot for one repository (--as app, the default) or as yourself |
 | [`reliant github token`](#reliant-github-token) | Print a GitHub token: the Reliant bot's for one repository (--as app), or yours (--as user) |
+| [`reliant integrations`](#reliant-integrations) | Show the integration connections your steps and automations act through |
+| [`reliant integrations list`](#reliant-integrations-list) | List your integration connections |
 | [`reliant machine`](#reliant-machine) | List, start, stop, resize, rename and label your machines, and manage machine pools |
 | [`reliant machine label`](#reliant-machine-label) | Set a machine's durable labels (which decide its machine pools) |
 | [`reliant machine list`](#reliant-machine-list) | List your machines |
@@ -21438,6 +21440,62 @@ reliant github token [flags]
 
 ---
 
+## reliant integrations
+
+Show the integration connections your steps and automations act through
+
+Shows your integration connections: the accounts at GitHub, Slack, Gmail and
+the rest that integration steps and integration triggers act through.
+
+Connecting or removing an account is done in the Reliant app (web or desktop):
+Settings → Integrations. An automation names the connection it listens
+through with `reliant trigger activate --connection <integration>=<id>`, and
+`reliant trigger get` shows the one it uses.
+
+```
+reliant integrations
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`list`](#reliant-integrations-list) | List your integration connections |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
+---
+
+### reliant integrations list
+
+List your integration connections
+
+Lists your integration connections: the integration, the account each acts as,
+its status, whether it is that integration's default, and its id.
+
+The default connection is the one an integration trigger listens through when
+its activation names none. With --org it also lists that organization's own
+connections (its Slack bot, its API keys), which its members may use by id.
+
+```
+reliant integrations list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--integration` | `string` | - | Only this integration's connections (e.g. github) |
+| `--json` | `bool` | - | Print JSON |
+| `--org` | `string` | - | Also list this organization's own connections |
+
+---
+
 ## reliant machine
 
 List, start, stop, resize, rename and label your machines, and manage machine pools
@@ -23078,15 +23136,17 @@ CLI and the app see the same scenarios. A sub-workflow ref (project://`<name>`)
 resolves by name: too, never by file name. Scenarios in the retired layouts
 (scenarios/`<file>`/, `<file>`_scenarios.yaml) are an error naming where they go.
 
-If a specific workflow file is given, runs scenarios for that workflow only.
-Otherwise, discovers all workflows in the workflow directory and runs their
+If a specific workflow file (or a builtin:// ref) is given, runs scenarios for
+that workflow only. Otherwise, discovers all workflows in the workflow directory and runs their
 associated scenarios.
 
 Examples:
   reliant workflow scenario run                               # run all project scenarios
   reliant workflow scenario run my-workflow.yaml              # run scenarios for one workflow
+  reliant workflow scenario run builtin://autopilot-oncall    # run one builtin's scenarios
   reliant workflow scenario run --include-builtins            # include builtin workflow scenarios
   reliant workflow scenario run --filter happy_path           # run only matching scenarios
+  reliant workflow scenario run --filter my-workflow/         # --filter also matches the printed `<workflow>`/`<scenario>` label
   reliant workflow scenario run --json                        # JSON output for CI
 
 Exit code 0 if all scenarios pass, 1 if any fail.
@@ -23101,7 +23161,7 @@ reliant workflow scenario run [workflow-path] [flags]
 |------|------|---------|-------------|
 | `--dir` | `string` | `.reliant/workflows` | Directory containing workflow YAML files |
 | `--fail-fast` | `bool` | - | Stop on first scenario failure |
-| `--filter` | `string` | - | Only run scenarios whose name contains this string |
+| `--filter` | `string` | - | Only run scenarios whose name, or `<workflow>`/`<scenario>` label, contains this string |
 | `--include-builtins` | `bool` | - | Also run builtin workflow scenarios |
 | `--json` | `bool` | - | Output in JSON format (for CI) |
 | `--verbose`, `-V` | `bool` | - | Show detailed output for each scenario |

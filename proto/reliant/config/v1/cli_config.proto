@@ -25,6 +25,7 @@ message CLIConfig {
       {path: ["chat"]},
       {path: ["daemon"]},
       {path: ["github"]},
+      {path: ["integrations"]},
       {path: ["machine"]},
       {path: ["mcp"]},
       {path: ["models"]},
