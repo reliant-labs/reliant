@@ -260,6 +260,8 @@ export function consoleCrumbs(
       return [{ label: "Services" }];
     case "service":
       return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
+    case "speed-insights":
+      return [{ label: "Observability" }, { label: "Speed insights" }];
   }
 }
 

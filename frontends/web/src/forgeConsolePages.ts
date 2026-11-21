@@ -29,6 +29,7 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   users: lazyRoute(() => import('./components/Forge/Users/UsersPage'), 'UsersPage'),
   services: lazyRoute(() => import('./components/Forge/Services/ServicesPages'), 'ServicesPage'),
   service: lazyRoute(() => import('./components/Forge/Services/ServicesPages'), 'ServicePage'),
+  speedInsights: lazyRoute(() => import('./components/Forge/Analytics/SpeedInsightsPage'), 'SpeedInsightsPage'),
   orgLayout: lazyRoute(() => import('./components/Forge/Org'), 'OrgConsoleLayout'),
   orgObservability: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute'),
   landing: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute'),

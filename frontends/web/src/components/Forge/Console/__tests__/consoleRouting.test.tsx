@@ -242,6 +242,7 @@ function renderAt(
     activity: probe("activity"),
     services: probe("services"),
     service: probe("service"),
+    speedInsights: probe("speed-insights"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,

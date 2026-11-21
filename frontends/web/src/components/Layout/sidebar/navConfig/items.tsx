@@ -208,6 +208,15 @@ function obsRow(view: ObsNavView, extra: Partial<NavRow> = {}): NavRow {
   };
 }
 
+const speedInsights: NavRow = {
+  kind: "row",
+  id: "speed-insights",
+  label: "Speed insights",
+  href: consoleHref({ kind: "speed-insights" }),
+  match: pageIs("speed-insights"),
+  available: hasApp,
+};
+
 const alertsRow = obsRow("alerts", {
   badge: (ctx) => {
     const firing = ctx.console?.alertsFiring ?? 0;
@@ -231,6 +240,7 @@ export const performanceRows: readonly NavItem[] = [
   obsRow("errors"),
   alertsRow,
   obsRow("traces"),
+  speedInsights,
   sessionsRow,
 ];
 
@@ -247,10 +257,11 @@ export const obsOverview: NavRow = {
   available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
 };
 
-/** The routes that are Observability: its Overview, every view but Dashboards (top-level), and the org-wide pages. */
+/** The routes that are Observability: its Overview, every view but Dashboards (top-level), Speed insights, and the org-wide pages. */
 export const isObservabilityRoute = (ctx: NavCtx): boolean =>
   isObsOverview(ctx) ||
   (ctx.page?.kind === "obs-view" && ctx.page.view !== "dashboards") ||
+  ctx.page?.kind === "speed-insights" ||
   ctx.orgPage?.kind === "observability" ||
   (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view !== "dashboards");
 
