@@ -116,7 +116,8 @@ const DAEMONLESS = [
 /** Pages that work without a machine: the URL, and the page it mounts. */
 const NO_MACHINE_PAGES = [
   ["/projects", "ProjectsPage"],
-  ["/apps", "AppsPage"],
+  // The retired /apps: Projects' apps (lib/paths/legacy.ts RETIRED_PAGES).
+  ["/apps", "ProjectsPage"],
   ["/forge/p/x", null],
   ["/inbox", "InboxPage"],
   ["/workflows", null],
@@ -168,7 +169,7 @@ describe.each(HOSTS)("the %s brand", (host) => {
         if (page) expect(await screen.findByTestId(`page-${page}`)).toBeInTheDocument();
         await settle();
         // Where it was opened (or that page's canonical, org form): not the wizard, not a home.
-        expect(h.pathname()).toContain(url.split("/")[1]);
+        expect(h.pathname()).toContain(url === "/apps" ? "projects" : url.split("/")[1]);
         expect(h.pathname()).not.toMatch(/\/onboarding$/);
         expect(world.mounted).not.toContain("OnboardingRoute");
         expect(world.completeOnboarding).not.toHaveBeenCalled();

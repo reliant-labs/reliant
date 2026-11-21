@@ -38,7 +38,7 @@
 
 import type { DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import { isSafeReturnTo } from "@/lib/returnTo";
-import { appsPath, onboardingPath, projectsPath, settingsPath, withSearch } from "@/lib/paths";
+import { onboardingPath, projectsPath, settingsPath, withSearch } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
 import { hasUsableDaemonForOnboarding } from "./usableDaemon";
@@ -171,7 +171,8 @@ const MOBILE_HOMES = new Set(["/m", "/m/chats"]);
  * stays put: no redirect on a guess, so the home never flaps.
  *
  * The phone keeps its earlier rule: on the forge brand its chat list sends a
- * person who has not onboarded to their apps; otherwise the chat routes'
+ * person who has not onboarded to their projects (Projects, where their apps
+ * are); otherwise the chat routes'
  * onboarding redirect applies (MobileShell).
  */
 export function homeTarget(
@@ -181,7 +182,7 @@ export function homeTarget(
 ): string | null {
   const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
   if (path === DESKTOP_HOME) return chatSetupNeeded(setup) && !options.chatIntent ? projectsPath() : null;
-  if (MOBILE_HOMES.has(path)) return options.forgeBrand && setup === "onboard" ? appsPath() : null;
+  if (MOBILE_HOMES.has(path)) return options.forgeBrand && setup === "onboard" ? projectsPath() : null;
   return null;
 }
 

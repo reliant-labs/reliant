@@ -84,7 +84,7 @@ import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import { focusEventName } from "../../lib/keyboard/focus";
-import { inboxPath, newChatPath, settingsPath, withSearch } from "../../lib/paths";
+import { inboxPath, newChatPath, projectsPath, withSearch } from "../../lib/paths";
 import type { Chat } from "../../api/client";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
@@ -119,6 +119,7 @@ import {
 
 import { archiveWorktree } from "../../hooks/worktree-actions";
 import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
+import { ChatAppTag } from "../Projects/ChatAppTag";
 
 interface SidebarProps {
   /** The page on screen (the router's): which row is current, which app is open. */
@@ -386,7 +387,14 @@ const ChatItem = memo(function ChatItem({
         </>
       }
       suffix={where}
-      glyph={isRun(chat) ? <AutomationOriginGlyph chat={chat} /> : undefined}
+      glyph={
+        isRun(chat) || chat.appName ? (
+          <>
+            {chat.appName && <ChatAppTag name={chat.appName} interactive={false} compact className="ml-1" />}
+            {isRun(chat) && <AutomationOriginGlyph chat={chat} />}
+          </>
+        ) : undefined
+      }
       editor={editor}
       isTabStop={isTabStop}
       onClick={() => onChatClick(chat)}
@@ -1826,7 +1834,7 @@ function SidebarComponent({
           filterId={projectFilterId}
           projects={projects}
           onAddProject={() => openAddProject()}
-          onManageProjects={() => go(settingsPath("projects"))}
+          onManageProjects={() => go(projectsPath())}
           sortOrder={sortOrder}
           onSortChange={setSortOrder}
           viewMode={viewMode}

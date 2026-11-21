@@ -34,6 +34,7 @@ import { rollbackTargets, type RollbackTarget } from "../Promote/rollback";
 import { usePromoteFlow } from "../Promote/usePromoteFlow";
 import { usePromoterNames } from "../Releases/useReleaseData";
 import { promoterOf } from "../Releases/releaseModel";
+import { AppCodeCard } from "../Console/AppCodeCard";
 import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewRollback, type OverviewSearch } from "./OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch, type WorkloadRollback } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
@@ -246,6 +247,8 @@ function ProjectOverviewPage() {
               }
             : undefined
         }
+        // The app's code (U13); the chats about it are the project's Chats card above.
+        about={<AppCodeCard app={forgeProject} />}
       />
       {dialog}
     </div>

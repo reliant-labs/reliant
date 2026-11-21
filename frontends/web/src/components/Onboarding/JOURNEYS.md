@@ -52,7 +52,7 @@ export const workflowsJourney: Journey = {
   steps: [ /* JourneyStep[] */ ],
   outro: [ /* JourneyStep[], walked after steps; see "Outro" */ ],
   finish: (shell) => shell === "reliant" ? { to: "/forge" } : null, // where Finish lands; default: Reliant's chat
-  elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` }, // lib/shell.ts: runtime config APP_URL
+  elsewhere: { label: "Try AI workflows", href: () => workflowLibraryPath() }, // where it runs: an app path opens in place, a URL in a new tab
   isAvailable: () => true,          // e.g. a feature flag
   reshowAfterVersionBump: true,     // default true
   phone: MyPhoneDeck,               // optional: shown on Reliant phones instead of "Open this on a computer"
