@@ -1,7 +1,7 @@
 -- forge:breaks-rollback drops api_keys.api_key: the previous release writes it (always '') in every automation-token upsert and its boot backfill selects it, so it fails to save an automation token, and to boot, against this schema until it is rolled forward again. It needs the owner's migration:breaks-rollback-approved label.
 
 -- Migration: drop_plaintext_api_key
--- Created: 2026-11-19T20:11:28Z
+-- Created: 2026-11-21T03:43:20Z
 --
 -- api_keys.api_key is the plaintext column sealing replaced. Every reader has opened only
 -- api_key_sealed since the sealing contract, writers have written api_key as '', and every boot

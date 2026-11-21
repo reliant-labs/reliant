@@ -13,15 +13,15 @@ import (
 	forgedb "github.com/reliant-labs/reliant/db"
 )
 
-// 20261119201126_drop_legacy_credentials and 20261119201128_drop_plaintext_api_key drop data
+// 20261121034320_drop_legacy_credentials and 20261121034321_drop_plaintext_api_key drop data
 // that only an older release's boot moved into place (the legacy credential copy, the api_keys
 // sealing backfill). Each refuses to run on a database that never booted that release and still
 // holds the data. These tests build the schema just before them, plant rows, and boot the
 // current binary's Migrate over it.
 
 const (
-	beforeLegacyCredentialDrop = 20261119174725 // the newest migration before drop_legacy_credentials
-	beforePlaintextAPIKeyDrop  = 20261119201126 // drop_legacy_credentials
+	beforeLegacyCredentialDrop = 20261120223939 // the newest migration before drop_legacy_credentials
+	beforePlaintextAPIKeyDrop  = 20261121034320 // drop_legacy_credentials
 )
 
 // schemaAt returns a database migrated through version, and its DSN.

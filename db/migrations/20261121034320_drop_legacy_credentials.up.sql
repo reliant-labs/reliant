@@ -1,7 +1,7 @@
 -- forge:breaks-rollback drops the legacy credential tables, legacy_credential_copy and provider_accounts.legacy_source: the previous release names legacy_source in its provider_accounts inserts, credential rewrites and full-row reads, deletes from the *_auth_tokens tables on account purge, and reads legacy_credential_copy at boot, so it fails on those paths against this schema until it is rolled forward again. It irreversibly deletes the legacy credential rows: it needs the owner's migration:breaks-rollback-approved label.
 
 -- Migration: drop_legacy_credentials
--- Created: 2026-11-19T20:11:26Z
+-- Created: 2026-11-21T03:43:20Z
 --
 -- The contract half of 20261019033847_provider_accounts and
 -- 20261019120616_legacy_credential_copy_done. Since those, every LLM credential lives in
