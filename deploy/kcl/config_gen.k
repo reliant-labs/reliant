@@ -1756,7 +1756,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=3d6e8af2d18c858240068dd3f7667595d04158e3d8753f9b10e5740a7271cb17
+# forge:hash=09a5d7c0a8673e590b84b4ca3139ab5a68ea7ed2ea973ea5d5955597c0e78fcc
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -1918,6 +1918,16 @@ rootEnvMap = lambda c: ReliantProcess, w: any -> {str: str | forge.SecretRef} {
 
 # workloadEnvMap is a workload's config env: rootEnvMap for a workload bound
 # to a root, reliantProcessEnvMap (its config_secrets) for any other.
+#
+# The caller layers the workload's own env over it (`| w.env`), so a name
+# the workload sets wins. A plain value is left out here rather than merged:
+# KCL's union refuses a string under a reference, and that is exactly
+# `forge.bucket_env("UPLOADS", "uploads")` over a typed config block whose
+# unset leaves project as "" (`conflicting values on the attribute
+# 'UPLOADS_ENDPOINT'`). A string the workload overrides with a string is
+# replaced either way.
 workloadEnvMap = lambda c: ReliantProcess, w: any -> {str: str | forge.SecretRef} {
-    rootEnvMap(c, w) if w.root else reliantProcessEnvMap(c, (w.command or []) + (w.args or []), w.config_secrets or [])
+    _all = rootEnvMap(c, w) if w.root else reliantProcessEnvMap(c, (w.command or []) + (w.args or []), w.config_secrets or [])
+    _own = w.env or {}
+    {_k: _v for _k, _v in _all if _k not in _own or typeof(_v) != "str"}
 }

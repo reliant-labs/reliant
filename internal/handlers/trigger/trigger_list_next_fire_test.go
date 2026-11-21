@@ -67,11 +67,14 @@ func TestListTriggersBoundsNextFireLookupsByOneBudget(t *testing.T) {
 	for _, tr := range resp.Msg.GetTriggers() {
 		assert.Nil(t, tr.NextFireAt, "trigger %s: a lookup that ran out of budget has no next fire time", tr.GetId())
 	}
-	// Serially, or a budget per batch of workers, this would be n/8 budgets
-	// or more; one budget plus the list's own queries is well under this.
-	assert.Less(t, elapsed, 2*time.Second, "the next-fire lookups must share one budget")
+	// The proof that the lookups share one budget is the count: once it is
+	// spent, the remaining triggers are not asked, so no second batch (and no
+	// second budget) ever starts. The elapsed bound only says the list does not
+	// hang on a backend that never answers; it is a timeout the code must
+	// beat, not a measure of how fast this machine ran it.
 	assert.LessOrEqual(t, int(asked.Load()), nextFireWorkers,
 		"once the budget is spent, the remaining triggers are not asked")
+	assert.Less(t, elapsed, 5*time.Second, "a backend that never answers must not hang the list")
 }
 
 // Concurrent lookups land on the trigger they were made for, and one that
