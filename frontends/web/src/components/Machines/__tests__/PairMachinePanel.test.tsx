@@ -117,7 +117,7 @@ describe("pairing by code", () => {
     render(<PairMachinePanel />);
     await user.type(screen.getByLabelText("Pairing code"), "BDFG-HJKL");
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    await user.click(await screen.findByRole("button", { name: "Not my machine" }));
+    await user.click(await screen.findByRole("button", { name: "Not my computer" }));
     expect(mockDecide).toHaveBeenCalledWith("BDFG-HJKL", false, null);
     expect(await screen.findByText(/Declined/)).toBeInTheDocument();
   });
@@ -129,7 +129,7 @@ describe("pairing by code", () => {
     render(<PairMachinePanel />);
     await user.type(screen.getByLabelText("Pairing code"), "BDFG-HJKL");
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(await screen.findByText(/No machine is waiting with that code/)).toBeInTheDocument();
+    expect(await screen.findByText(/No computer is waiting with that code/)).toBeInTheDocument();
   });
 
   it("does not approve a CLI sign-in's code as a machine", async () => {
@@ -146,7 +146,7 @@ describe("pairing by code", () => {
     render(<PairMachinePanel />);
     await user.type(screen.getByLabelText("Pairing code"), "BDFG-HJKL");
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(await screen.findByText(/That code signs in the Reliant CLI, not a machine/)).toBeInTheDocument();
+    expect(await screen.findByText(/That code signs in the Reliant CLI, not a sandbox/)).toBeInTheDocument();
     expect(screen.queryByText(/Approve machine/)).not.toBeInTheDocument();
     expect(mockDecide).not.toHaveBeenCalled();
   });

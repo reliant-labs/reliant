@@ -188,7 +188,8 @@ export const authSearchSchema = z.object({
   redirect: z.string().optional(),
 });
 
-// Search params for `/apps`. `claimed` names the app (the forge project) a
+// Search params for the apps list (Projects' apps, `/projects?show=apps`; once
+// `/apps`). `claimed` names the app (the forge project) a
 // finished claim just made the user's own, so the page can point at it. It is
 // a highlight, not a filter: every app is still listed, and the param is
 // dropped once the page has shown it.
@@ -538,11 +539,16 @@ const idParam = z.preprocess((value) => (typeof value === "number" ? String(valu
  *   project  the project it starts in
  *   machine  the machine it runs on (a daemon id)
  *   ws       the workspace (worktree id); absent: the project's main checkout
+ *   app      the app it is about (Chat.app_name), when started from one
  */
 export const newChatSearchSchema = z.object({
   project: idParam,
   machine: idParam,
   ws: idParam,
+  // The app the new chat is about (Chat.app_name; store/newChatAppStore.ts):
+  // set by a screen that starts a chat from an app, so a refresh keeps the
+  // tag. Anything but a string is dropped rather than failing the route.
+  app: z.string().optional().catch(undefined),
 });
 export type NewChatSearch = z.infer<typeof newChatSearchSchema>;
 
@@ -811,6 +817,15 @@ export const forgeConsoleServicesSearchSchema = z.object({
  * explorers' vocabulary, as on the Observability pages). The environment is
  * in the path; `env` is still carried so the way back keeps the scope.
  */
+/**
+ * Analytics (U6c): the scope, plus what the open tab carries — a built-in
+ * dashboard's window (`range`), or Events & metrics' own (none).
+ */
+export const forgeConsoleAnalyticsSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+});
+
 export const forgeConsoleWorkloadSearchSchema = z.object({
   env: envScopeParam,
   tab: z.enum(WORKLOAD_TABS).optional().catch(undefined),

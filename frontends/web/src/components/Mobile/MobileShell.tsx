@@ -75,7 +75,7 @@ import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 import { navDrawerHeld } from "../Layout/sidebar/navDrawerHold";
 import { onboardingPath } from "@/lib/paths";
 import { isForgeShell } from "@/lib/shell";
-import { forgeBrandHomeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
+import { homeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
 
 export function MobileShell() {
   const navigate = useNavigate();
@@ -89,7 +89,9 @@ export function MobileShell() {
     !isUserLoading &&
     (!currentUser || !currentUser.onboardingCompleted) &&
     routeRequiresOnboarding(pathname);
-  const notOnboardedHome = forgeBrandHomeTarget(pathname, isForgeShell());
+  // The phone keeps its home rule (homeTarget): on the forge brand the chat
+  // list sends a person who has not onboarded to their apps.
+  const notOnboardedHome = homeTarget(pathname, "onboard", { forgeBrand: isForgeShell() });
 
   // Same gate the desktop shell applies (see ModernApp), on the same routes:
   // the chats (onboardingGate.ts). A user without a completed setup has no

@@ -41,7 +41,7 @@ test.describe('mobile surface', () => {
     const drawer = page.getByRole('dialog', { name: 'Navigation' });
     await expect(drawer.getByRole('link', { name: /^Inbox/ })).toHaveAttribute('href', '/m/inbox');
     await expect(drawer.getByTestId('drawer-inbox-count')).toHaveText('3');
-    await expect(drawer.getByRole('link', { name: /^Apps/ })).toHaveAttribute('href', '/apps');
+    await expect(drawer.getByRole('link', { name: /^Apps/ })).toHaveAttribute('href', '/projects?show=apps');
     await expect(drawer.getByRole('link', { name: /^Observability/ })).toHaveAttribute('href', '/forge/observability');
 
     await drawer.getByRole('link', { name: /^Inbox/ }).click();

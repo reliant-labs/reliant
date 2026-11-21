@@ -52,9 +52,9 @@ export function NoMachineState({
         aria-hidden="true"
       />
       <div className="space-y-1">
-        <p className="text-sm font-medium text-foreground">No machine yet</p>
+        <p className="text-sm font-medium text-foreground">No agent sandbox yet</p>
         <p className="text-xs text-muted-foreground">
-          {`Add a machine to ${purpose}. Chats work without one.`}
+          {`Add an agent sandbox to ${purpose}. Chats work without one.`}
         </p>
       </div>
       <button
@@ -63,7 +63,7 @@ export function NoMachineState({
         className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
       >
         <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-        Add machine
+        Add sandbox
       </button>
       {/* Mounted while open: this surface reloads itself the moment any
           machine connects (above), so nothing needs the sheet afterwards. */}

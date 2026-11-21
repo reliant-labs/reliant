@@ -4,6 +4,7 @@ import { billingFixtures } from './billing'
 import { chatFixtures } from './chat'
 import { consoleFixtures } from './console'
 import { dataFixtures } from './data'
+import { identityFixtures } from './identity'
 import { projectCatalogFixtures } from './projects'
 import { servicesFixtures } from './services'
 import { speedInsightsFixtures, speedInsightsQueryPanel } from './speedInsights'
@@ -34,5 +35,6 @@ export const allFixtures: Fixtures = withDashboardFixtures({
   ...overviewFixtures,
   ...speedInsightsFixtures,
   ...dataFixtures,
+  ...identityFixtures,
   [QUERY_PANEL]: queryPanel,
 })

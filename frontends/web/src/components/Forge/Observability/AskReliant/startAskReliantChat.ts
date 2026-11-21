@@ -21,6 +21,9 @@
  * composer and `sendError` says why it was not sent. A retry from there sends
  * the same text on the same workspace, which StartChat recognizes by its
  * attempt key, so a start whose response was lost does not make a second chat.
+ *
+ * `appName` tags the chat with the app it is about (Chat.app_name, D4): sent
+ * with the start, or left for the composer's first send (newChatAppStore).
  */
 
 import type { Chat } from "@/api/client";
@@ -31,6 +34,7 @@ import { openChatInWorkspace } from "@/lib/openChatInWorkspace";
 import { DEFAULT_COPY_PATHS } from "@/lib/worktreeCopyPaths";
 import { useChatStore } from "@/store/chatStore";
 import { useComposerHandoffStore } from "@/store/composerHandoffStore";
+import { isAppName, useNewChatAppStore } from "@/store/newChatAppStore";
 import { useProjectStore, type Project } from "@/store/projectStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
 import { createWorktree } from "@/hooks/worktree-actions";
@@ -47,6 +51,8 @@ export interface StartAskReliantChat {
   onChatCreated?: (chatId: string) => void;
   /** Move the app to the project's chat screen. */
   openProject: (projectId: string) => void;
+  /** The app the chat is about (forge.yaml `name`); dropped when it is not a valid name. */
+  appName?: string;
 }
 
 export interface StartedAskReliantChat {
@@ -57,7 +63,8 @@ export interface StartedAskReliantChat {
   sendError?: unknown;
 }
 
-export async function startAskReliantChat({ project, prompt, workspaceName, send = false, onChatCreated, openProject }: StartAskReliantChat): Promise<StartedAskReliantChat> {
+export async function startAskReliantChat({ project, prompt, workspaceName, send = false, onChatCreated, openProject, appName }: StartAskReliantChat): Promise<StartedAskReliantChat> {
+  const about = isAppName(appName) ? appName : undefined;
   if (useProjectStore.getState().currentProject?.id !== project.id) {
     await useProjectStore.getState().selectProject(project);
   }
@@ -78,7 +85,7 @@ export async function startAskReliantChat({ project, prompt, workspaceName, send
   if (send) {
     let chat: Chat | undefined;
     try {
-      chat = await useChatStore.getState().startChat(worktree.id, prompt);
+      chat = await useChatStore.getState().startChat(worktree.id, prompt, undefined, undefined, undefined, undefined, undefined, { appName: about });
     } catch (error) {
       sendError = error;
     }
@@ -93,6 +100,7 @@ export async function startAskReliantChat({ project, prompt, workspaceName, send
   }
 
   await useWorktreeStore.getState().switchWorktreeContext(project.id, worktree, { openFreshNewChat: true });
+  useNewChatAppStore.getState().set(about ? { projectId: project.id, appName: about } : null);
   useComposerHandoffStore.getState().offer({ projectId: project.id, worktreeId: worktree.id, text: prompt, onChatCreated });
   openProject(project.id);
   return sendError === undefined ? { worktreeId: worktree.id } : { worktreeId: worktree.id, sendError };

@@ -570,6 +570,7 @@ export function MCPSettings() {
       <div className="flex flex-col gap-4">
         <SettingsPageHeader
           title="MCP servers"
+          learn="connectors"
           description="Give agents extra tools by connecting Model Context Protocol (MCP) servers. Install one from the Discover tab, or add your own custom server; installed servers are available to this project's agents."
           meta={<SettingsProjectScope hint="Servers installed here are available to this project's agents" />}
           className="mb-0"
