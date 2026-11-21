@@ -107,8 +107,7 @@ message CLIWebConfig {
   }];
 }
 
-// CLIMachineConfig is where this machine keeps its Reliant state, and what
-// the platform declared it to be.
+// CLIMachineConfig is where this machine keeps its Reliant state.
 message CLIMachineConfig {
   // Unset: the id persisted in ~/.reliant, created on first use.
   string instance_id = 1 [(forge.v1.config) = {
@@ -126,20 +125,5 @@ message CLIMachineConfig {
   string app_data_dir = 3 [(forge.v1.config) = {
     env_var: "RELIANT_APP_DATA_DIR"
     description: "Internal app data directory (default: platform-specific)"
-  }];
-
-  // What the platform says this machine is. The workspace operator sets
-  // "managed" on the pods it creates; nothing sets it on a user's machine.
-  // `daemon start` reports it (unset: the transport decides, see
-  // daemonruntime.resolveDaemonType); `auth login` and `auth logout` treat a
-  // managed machine's daemon sign-in as the platform's, and sign in with the
-  // device flow there.
-  string daemon_type = 4 [(forge.v1.config) = {
-    env_var: "RELIANT_DAEMON_TYPE"
-    allowed_values: [
-      "managed",
-      "self_hosted"
-    ]
-    description: "Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted"
   }];
 }

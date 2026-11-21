@@ -38,17 +38,18 @@ func configureCLIMachine(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// isManagedMachine reports a Reliant cloud machine (CLIConfig's
-// machine.daemon_type, RELIANT_DAEMON_TYPE=managed, which the workspace
-// operator sets on the pods it creates): its daemon sign-in is a Secret the
-// platform mounts read-only, which no login of this machine's owns, and no
-// browser on it can reach a loopback listener.
+// isManagedMachine reports a Reliant cloud machine (AuthConfig's daemon_type,
+// RELIANT_DAEMON_TYPE=managed, which the workspace operator sets on the pods
+// it creates): its daemon sign-in is a Secret the platform mounts read-only,
+// which no login of this machine's owns, and no browser on it can reach a
+// loopback listener. cmd is a `reliant auth` command, the subtree AuthConfig
+// binds.
 func isManagedMachine(cmd *cobra.Command) (bool, error) {
-	cfg, err := config.LoadCLIConfig(cmd)
+	cfg, err := config.LoadAuthConfig(cmd)
 	if err != nil {
 		return false, err
 	}
-	return cfg.GetMachine().GetDaemonType() == "managed", nil
+	return cfg.GetDaemonType() == "managed", nil
 }
 
 // cliWebOrigins is the web origins CLIConfig names (RELIANT_WEB_ORIGIN and

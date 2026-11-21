@@ -105,6 +105,8 @@ Reliant server components.`,
 	machineCmd, githubCmd, providersCmd, chatCmd, integrationsCmd := newMachineCmd(), newGitHubCmd(), newProvidersCmd(), newChatCmd(), newIntegrationsCmd()
 	mcpCmd, modelsCmd, worktreeCmd := newMCPCmd(), newModelsCmd(), newWorktreeCmd(deps)
 	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd, providersCmd, chatCmd, mcpCmd, integrationsCmd, modelsCmd, worktreeCmd)
+	// `reliant auth` also carries AuthConfig (RELIANT_DAEMON_TYPE).
+	config.RegisterAuthConfigFlags(authCmd)
 	for _, c := range rootCommands(deps) {
 		root.AddCommand(c)
 	}

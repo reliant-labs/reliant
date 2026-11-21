@@ -238,8 +238,7 @@ func (x *CLIWebConfig) GetFrontendPort() string {
 	return ""
 }
 
-// CLIMachineConfig is where this machine keeps its Reliant state, and what
-// the platform declared it to be.
+// CLIMachineConfig is where this machine keeps its Reliant state.
 type CLIMachineConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unset: the id persisted in ~/.reliant, created on first use.
@@ -247,14 +246,7 @@ type CLIMachineConfig struct {
 	// Unset: ~/.reliant. The desktop app sets both directories.
 	UserConfigDir string `protobuf:"bytes,2,opt,name=user_config_dir,json=userConfigDir,proto3" json:"user_config_dir,omitempty"`
 	// Unset: the platform's user config directory, then ~/.local/share/reliant.
-	AppDataDir string `protobuf:"bytes,3,opt,name=app_data_dir,json=appDataDir,proto3" json:"app_data_dir,omitempty"`
-	// What the platform says this machine is. The workspace operator sets
-	// "managed" on the pods it creates; nothing sets it on a user's machine.
-	// `daemon start` reports it (unset: the transport decides, see
-	// daemonruntime.resolveDaemonType); `auth login` and `auth logout` treat a
-	// managed machine's daemon sign-in as the platform's, and sign in with the
-	// device flow there.
-	DaemonType    string `protobuf:"bytes,4,opt,name=daemon_type,json=daemonType,proto3" json:"daemon_type,omitempty"`
+	AppDataDir    string `protobuf:"bytes,3,opt,name=app_data_dir,json=appDataDir,proto3" json:"app_data_dir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -310,13 +302,6 @@ func (x *CLIMachineConfig) GetAppDataDir() string {
 	return ""
 }
 
-func (x *CLIMachineConfig) GetDaemonType() string {
-	if x != nil {
-		return x.DaemonType
-	}
-	return ""
-}
-
 var File_reliant_config_v1_cli_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_cli_config_proto_rawDesc = "" +
@@ -359,7 +344,7 @@ const file_reliant_config_v1_cli_config_proto_rawDesc = "" +
 	"\aorigins\x18\x01 \x03(\tBX\x82\xce\x18T\n" +
 	"\x12RELIANT_WEB_ORIGIN*>Comma-separated web origins the localhost OAuth helper acceptsR\aorigins\x12\x87\x01\n" +
 	"\rfrontend_port\x18\x02 \x01(\tBb\x82\xce\x18^\n" +
-	"\rFRONTEND_PORT*MDev web server port whose loopback origins the localhost OAuth helper acceptsR\ffrontendPort\"\xbd\x04\n" +
+	"\rFRONTEND_PORT*MDev web server port whose loopback origins the localhost OAuth helper acceptsR\ffrontendPort\"\x89\x03\n" +
 	"\x10CLIMachineConfig\x12\x81\x01\n" +
 	"\vinstance_id\x18\x01 \x01(\tB`\x82\xce\x18\\\n" +
 	"\x13RELIANT_INSTANCE_ID*EPinned machine instance id (default: the one persisted in ~/.reliant)R\n" +
@@ -368,10 +353,7 @@ const file_reliant_config_v1_cli_config_proto_rawDesc = "" +
 	"\x17RELIANT_USER_CONFIG_DIR*2User configuration directory (default: ~/.reliant)R\ruserConfigDir\x12v\n" +
 	"\fapp_data_dir\x18\x03 \x01(\tBT\x82\xce\x18P\n" +
 	"\x14RELIANT_APP_DATA_DIR*8Internal app data directory (default: platform-specific)R\n" +
-	"appDataDir\x12\xb1\x01\n" +
-	"\vdaemon_type\x18\x04 \x01(\tB\x8f\x01\x82\xce\x18\x8a\x01\n" +
-	"\x13RELIANT_DAEMON_TYPE*]Daemon type the platform declares: managed (an operator-created workspace pod) or self_hostedJ\amanagedJ\vself_hostedR\n" +
-	"daemonTypeB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"appDataDirB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_cli_config_proto_rawDescOnce sync.Once

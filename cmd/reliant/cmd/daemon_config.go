@@ -17,8 +17,8 @@ import (
 
 // loadDaemonConfig loads `daemon start`'s config (proto/reliant/config/v1 DaemonConfig)
 // and refuses one the daemon cannot run with. The loader refuses a value that
-// does not parse or lies outside a field's allowed set (DAEMON_TLS_MODE);
-// this adds a port that is not a port. So a typo in any
+// does not parse or lies outside a field's allowed set (DAEMON_TLS_MODE,
+// RELIANT_DAEMON_TYPE); this adds a port that is not a port. So a typo in any
 // daemon setting stops the daemon here, before it claims its data directory or
 // dials anything.
 func loadDaemonConfig(cmd *cobra.Command) (*config.DaemonConfig, error) {
@@ -45,18 +45,6 @@ func loadDaemonConfig(cmd *cobra.Command) (*config.DaemonConfig, error) {
 	// labels is not checked here: --label replaces it, so only the list in
 	// effect is checked, by daemonMachineLabels.
 	return cfg, nil
-}
-
-// effectiveDaemonType is the daemon type `daemon start` declares:
-// machine.daemon_type (RELIANT_DAEMON_TYPE, or the CLIConfig file) when set,
-// else DaemonConfig's deprecated top-level daemon_type, which a `daemon start
-// --config` file written before machine.daemon_type existed still carries.
-// Both are checked against the same allowed values by their loaders.
-func effectiveDaemonType(cfg *config.DaemonConfig, machineDaemonType string) string {
-	if machineDaemonType != "" {
-		return machineDaemonType
-	}
-	return cfg.GetDaemonType() //nolint:staticcheck // SA1019: the deprecated field is kept working for v1
 }
 
 // labelsFlag is a repeatable key=value flag (`--label pool=pipeline --label
@@ -102,12 +90,10 @@ func daemonMachineLabels(cmd *cobra.Command, cfg *config.DaemonConfig, flag *lab
 }
 
 // daemonHost is what the platform declared about where this daemon runs, in
-// the shape the daemon runtime takes: `daemon start`'s own settings, and the
-// machine's daemon type (machineDaemonType: CLIConfig's machine.daemon_type,
-// which every `daemon` command loads and RELIANT_DAEMON_TYPE sets).
-func daemonHost(cfg *config.DaemonConfig, machineDaemonType string) daemonruntime.Host {
+// the shape the daemon runtime takes.
+func daemonHost(cfg *config.DaemonConfig) daemonruntime.Host {
 	return daemonruntime.Host{
-		DaemonType:   effectiveDaemonType(cfg, machineDaemonType),
+		DaemonType:   cfg.GetDaemonType(),
 		WorkingDir:   cfg.GetWorkingDir(),
 		RuntimeType:  cfg.GetRuntimeType(),
 		FrontendPort: int(cfg.GetFrontendPort()),

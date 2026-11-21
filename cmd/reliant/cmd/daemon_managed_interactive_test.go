@@ -3,8 +3,6 @@ package cmd
 
 import (
 	"testing"
-
-	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // TestManagedDaemonIsNeverInteractive is the second half of the 2026-09-30
@@ -90,16 +88,11 @@ func TestManagedDaemonIsNeverInteractive(t *testing.T) {
 			t.Setenv("RELIANT_DAEMON_TYPE", tc.daemonType)
 			t.Setenv("RELIANT_DAEMON_NON_INTERACTIVE", tc.envFlag)
 
-			cmd := daemonCommandWithArgs(t, "start", tc.args...)
-			cfg, err := loadDaemonConfig(cmd)
+			cfg, err := loadDaemonConfig(daemonCommandWithArgs(t, "start", tc.args...))
 			if err != nil {
 				t.Fatalf("loading daemon start config: %v", err)
 			}
-			cliCfg, err := config.LoadCLIConfig(cmd)
-			if err != nil {
-				t.Fatalf("loading daemon start's CLI config: %v", err)
-			}
-			got := daemonNonInteractive(cfg.GetNonInteractive(), daemonHost(cfg, cliCfg.GetMachine().GetDaemonType()).Managed())
+			got := daemonNonInteractive(cfg.GetNonInteractive(), daemonHost(cfg).Managed())
 			if got != tc.want {
 				t.Errorf("non-interactive = %v, want %v (daemon_type=%q env=%q args=%v)",
 					got, tc.want, tc.daemonType, tc.envFlag, tc.args)
