@@ -15,6 +15,7 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   workload: lazyRoute(() => import('./components/Forge/Workloads/WorkloadPages'), 'WorkloadPage'),
   releases: lazyRoute(() => import('./components/Forge/Releases/ReleasesPages'), 'ReleasesPage'),
   release: lazyRoute(() => import('./components/Forge/Releases/ReleasesPages'), 'ReleasePage'),
+  obsOverview: lazyRoute(() => import('./components/Forge/Observability/ObsOverview/ObsOverviewPage'), 'ObsOverviewPage'),
   observabilityView: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage'),
   dashboards: lazyRoute(() => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage'),
   dashboard: lazyRoute(() => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage'),

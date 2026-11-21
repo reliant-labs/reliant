@@ -3,10 +3,12 @@
 /**
  * `/projects/<id>` (U6c: Home and Overview are ONE landing page, "Overview").
  *
- *   a deployed app   → its console's Overview (consolePath overview), the
- *                      landing. Replace, so Back skips it.
- *   no deployed app  → the landing's no-app form, here: the project's chats
- *                      and the way to deploy it (NoAppLanding).
+ *   a deployed app   → its console's Overview (consolePath overview), which is
+ *                      the landing: health, what needs attention (alerts,
+ *                      errors, chats waiting), the live state, recent releases
+ *                      and the project's chats. Replace, so Back skips it.
+ *   no deployed app  → the same landing's no-app form, here: the project's
+ *                      chats and the way to deploy it (NoAppLanding).
  */
 
 import { useEffect } from "react";

@@ -38,7 +38,7 @@ import type { ComponentType, ReactNode } from "react";
 import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, settingsPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
-import { consolePath, OBS_NAV_LABELS, orgPath, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
+import { consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
 import { isSettingsItemCurrent, settingsItemEntry, settingsNavGroups, type SectionItem } from "../../../Settings/SettingsNavigation";
 import type { SettingsTab } from "../../../../routeSchemas";
 import { isAt, isAtOrBelow } from "../navLocation";
@@ -234,22 +234,36 @@ export const performanceRows: readonly NavItem[] = [
   sessionsRow,
 ];
 
-/** The routes that are Observability: every view but Dashboards (top-level), and the org-wide pages. */
+/** The Observability Overview: golden signals, top errors, slowest endpoints, firing alerts (OVERVIEW agent's page). */
+const isObsOverview = (ctx: NavCtx) => ctx.page?.kind === "obs-overview" || ctx.orgPage?.kind === "observability";
+
+export const obsOverview: NavRow = {
+  kind: "row",
+  id: "obs-overview",
+  label: "Overview",
+  href: (ctx) =>
+    ctx.mode !== "one" ? orgPath({ kind: "observability" }) : ctx.app ? withSearch(obsOverviewPath(ctx.app), { env: ctx.console?.env }) : undefined,
+  match: isObsOverview,
+  available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
+};
+
+/** The routes that are Observability: its Overview, every view but Dashboards (top-level), and the org-wide pages. */
 export const isObservabilityRoute = (ctx: NavCtx): boolean =>
+  isObsOverview(ctx) ||
   (ctx.page?.kind === "obs-view" && ctx.page.view !== "dashboards") ||
   ctx.orgPage?.kind === "observability" ||
   (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view !== "dashboards");
 
-/** Observability › — one of the two drill-ins; drilling in lands on its first view (the org's page across several projects). */
+/** Observability › — one of the two drill-ins; drilling in lands on its Overview. */
 export const observabilityArea: NavArea = {
   kind: "area",
   id: "observability",
   label: "Observability",
   icon: icon(Gauge),
   match: isObservabilityRoute,
-  href: (ctx) => (ctx.mode !== "one" ? orgPath({ kind: "observability" }) : consoleHref({ kind: "obs-view", view: "graph" })(ctx)),
+  href: obsOverview.href,
   available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
-  children: [...observabilityRows, ...performanceRows],
+  children: [obsOverview, ...observabilityRows, ...performanceRows],
 };
 
 // ── Analytics ───────────────────────────────────────────────────────────────

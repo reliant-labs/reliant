@@ -6,6 +6,8 @@
  *
  *   /forge/p/:project                         Overview (project home: health, workloads)
  *   /forge/p/:project/workloads/:env/:name    one workload in one environment
+ *   /forge/p/:project/observability           Observability Overview (U6e): golden signals per service,
+ *                                             top errors, slowest endpoints, firing alerts, the map
  *   /forge/p/:project/releases                Releases
  *   /forge/p/:project/releases/:version       one release (its DORA strip is on Releases)
  *   /forge/p/:project/observability/:view     errors · sessions · logs · traces · metrics · profiles · dashboards · alerts
@@ -138,6 +140,8 @@ export function orgPageOf(pathname: string): OrgPage | null {
 /** Every page of the console, as the nav and the breadcrumb name it. */
 export type ConsolePage =
   | { kind: "overview" }
+  /** Observability's own Overview (U6e): golden signals per service, top errors, slowest endpoints, firing alerts, the map (Observability/ObsOverview). */
+  | { kind: "obs-overview" }
   /** One workload. Its environment is in the path: a workload is one per environment, and so are its actions. */
   | { kind: "workload"; env: string; name: string }
   | { kind: "releases" }
@@ -199,6 +203,8 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
   switch (page.kind) {
     case "overview":
       return base;
+    case "obs-overview":
+      return `${base}/observability`;
     case "workload":
       return `${base}/workloads/${encodeURIComponent(page.env)}/${encodeURIComponent(page.name)}`;
     case "releases":
@@ -236,6 +242,8 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
 
 /** The project's landing page: Home and Overview, merged. */
 export const overviewPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "overview" }, ctx);
+/** Observability's Overview (U6e): where drilling into Observability lands. */
+export const obsOverviewPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "obs-overview" }, ctx);
 export const servicesPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "services" }, ctx);
 /** Storage: the app's buckets. */
 export const storagePath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "storage" }, ctx);
@@ -273,7 +281,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "releases":
         return sub ? { kind: "release", version: safeDecode(sub) } : { kind: "releases" };
       case "observability":
-        if (!sub) return null;
+        if (!sub) return { kind: "obs-overview" };
         if (sub === "dashboards" && dashKind) {
           return isDashboardPageKind(dashKind) && dashKey && rest.length === 0 ? { kind: "dashboard", dashKind, key: safeDecode(dashKey) } : null;
         }

@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   projects: [] as unknown[],
   navigate: vi.fn(),
   search: {} as Record<string, unknown>,
+  several: null as "all" | "many" | null,
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => state.navigate, useSearch: () => state.search }));
@@ -23,6 +24,10 @@ vi.mock("@/hooks/project-queries", () => ({
 }));
 const startBuilding = vi.fn();
 vi.mock("../../Apps/startBuilding", () => ({ useStartBuildingApp: () => startBuilding }));
+// The summary of several projects (the project shell's Home) has its own tests.
+vi.mock("../../Forge/Console/ProjectsOverview", () => ({ ProjectsOverview: () => null }));
+// One project in the shell: the page lists every project (the Home of several is ProjectsOverview's).
+vi.mock("../../Layout/sidebar/shellProject", () => ({ useShellSeveral: () => ({ mode: state.several, rows: [] }) }));
 vi.mock("../../Layout/AreaShell", () => ({ AreaShell: ({ children }: { children: ReactNode }) => <>{children}</> }));
 // The apps list and the sites list are covered where they live: here, which one shows.
 vi.mock("../../Apps/AppsPage", () => ({
@@ -45,6 +50,27 @@ beforeEach(() => {
   ];
   state.navigate.mockReset();
   state.search = {};
+  state.several = null;
+});
+
+describe("ProjectsPage with several projects in the shell", () => {
+  it("is their Home: the summary alone, with a quiet way to browse every project", () => {
+    state.several = "all";
+    render(<ProjectsPage />);
+    expect(screen.getByTestId("projects-page")).toHaveAttribute("data-mode", "home");
+    expect(screen.queryByRole("heading", { name: "Projects" })).toBeNull();
+    expect(screen.queryByTestId("apps-body")).toBeNull();
+    expect(screen.queryByTestId("projects-code")).toBeNull();
+    fireEvent.click(screen.getByTestId("projects-browse-all"));
+    expect(state.navigate).toHaveBeenCalledWith({ href: "/projects?browse=1" });
+  });
+
+  it("lists every project when asked to browse", () => {
+    state.several = "all";
+    state.search = { browse: 1 };
+    render(<ProjectsPage />);
+    expect(screen.getByTestId("apps-body")).toBeInTheDocument();
+  });
 });
 
 describe("ProjectsPage", () => {

@@ -24,6 +24,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
     case "overview":
     case "workload":
       return { title: "Overview", shows: PAGE_SUBTITLES.overview };
+    case "obs-overview":
+      return { title: "Observability", shows: "Requests, errors and latency per service, the top errors, the slowest endpoints and what is alerting" };
     case "obs-view":
       return { title: OBS_NAV_LABELS[page.view], shows: PAGE_SUBTITLES[page.view] ?? "" };
     case "dashboard":

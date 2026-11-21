@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { inboxPath, newChatPath, projectChatsPath, runsPath, settingsPath } from "@/lib/paths";
 
-import { consolePageOf, consolePath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
+import { consolePageOf, consolePath, obsOverviewPath, orgPageOf, orgPath } from "../../../Forge/Console/paths";
 import { activeArea, backHref, childrenOf, drillInIds, flattenIds, hrefOf, hybridNav, isCurrent, visibleItems, type NavCtx } from "../navConfig";
 import { NavRenderer } from "../NavRenderer";
 
@@ -97,11 +97,12 @@ describe("the hybrid nav's shape", () => {
     expect(screen.getByTestId("nav-services")).toHaveAttribute("aria-current", "page");
   });
 
-  it("lists Observability's views, then a Performance & issues divider over Errors … Sessions", () => {
+  it("leads Observability with its Overview, then a Performance & issues divider over Errors … Sessions", () => {
     const ctx = ctxAt(inboxPath());
     const observability = hybridNav.items.find((item) => item.id === "observability")!;
     expect(flattenIds([observability], ctx)).toEqual([
       "observability",
+      "obs-overview",
       "obs-graph",
       "obs-metrics",
       "obs-logs",
@@ -113,8 +114,8 @@ describe("the hybrid nav's shape", () => {
       "obs-traces",
       "obs-sessions",
     ]);
-    // Drilling in lands on its first view, the Service graph.
-    expect(hrefOf(observability, ctx)).toBe(consolePath("shopfront", { kind: "obs-view", view: "graph" }));
+    // Drilling in lands on the Overview, not the Service graph.
+    expect(hrefOf(observability, ctx)).toBe(`${obsOverviewPath("shopfront")}`);
   });
 
   it("gives Agents its rows", () => {
@@ -180,11 +181,17 @@ describe("drill-in is derived from the route", () => {
     for (const id of ["obs-errors", "obs-alerts", "obs-traces", "obs-sessions"]) expect(screen.getByTestId(`nav-${id}`)).toBeInTheDocument();
   });
 
+  it("is Observability's on its Overview page, with the Overview row lit", () => {
+    renderAt(obsOverviewPath("shopfront"));
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "observability");
+    expect(screen.getByTestId("nav-obs-overview")).toHaveAttribute("aria-current", "page");
+  });
+
   it("keeps a drawer open on a drill-in and its back header, not on a destination", () => {
     const onNavigate = vi.fn();
     renderAt(inboxPath(), onNavigate);
     fireEvent.click(screen.getByTestId("nav-observability"));
-    expect(onNavigate).toHaveBeenLastCalledWith(consolePath("shopfront", { kind: "obs-view", view: "graph" }), { drill: true });
+    expect(onNavigate).toHaveBeenLastCalledWith(obsOverviewPath("shopfront"), { drill: true });
     fireEvent.click(screen.getByTestId("sidebar-settings-button"));
     expect(onNavigate).toHaveBeenLastCalledWith(settingsPath());
   });
