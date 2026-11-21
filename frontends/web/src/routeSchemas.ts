@@ -539,11 +539,16 @@ const idParam = z.preprocess((value) => (typeof value === "number" ? String(valu
  *   project  the project it starts in
  *   machine  the machine it runs on (a daemon id)
  *   ws       the workspace (worktree id); absent: the project's main checkout
+ *   app      the app it is about (Chat.app_name), when started from one
  */
 export const newChatSearchSchema = z.object({
   project: idParam,
   machine: idParam,
   ws: idParam,
+  // The app the new chat is about (Chat.app_name; store/newChatAppStore.ts):
+  // set by a screen that starts a chat from an app, so a refresh keeps the
+  // tag. Anything but a string is dropped rather than failing the route.
+  app: z.string().optional().catch(undefined),
 });
 export type NewChatSearch = z.infer<typeof newChatSearchSchema>;
 

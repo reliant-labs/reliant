@@ -512,6 +512,37 @@ describe("the first message of a new chat", () => {
 
     expect(new Set(startedIds()).size).toBe(2);
   });
+
+  it("is a new start, with a new id, when the app it is about changed before sending again", async () => {
+    startMock
+      .mockRejectedValueOnce(new ConnectError("timed out", Code.DeadlineExceeded))
+      .mockResolvedValueOnce(startedChat)
+      .mockRejectedValueOnce(new ConnectError("timed out", Code.DeadlineExceeded))
+      .mockResolvedValueOnce(startedChat);
+    const startAbout = (appName?: string) =>
+      useChatStore
+        .getState()
+        .startChat("w1", TEXT, undefined, undefined, "builtin://agent", undefined, undefined, appName ? { appName } : undefined);
+
+    // Tagged shop, then the tag removed: the server must not answer with the shop chat.
+    await act(async () => {
+      await expect(startAbout("shop")).rejects.toThrow();
+    });
+    await act(async () => {
+      await startAbout();
+    });
+    expect(startedIds()[1]).not.toBe(startedIds()[0]);
+    expect(startMock.mock.calls[1][0].appName ?? "").toBe("");
+
+    // The same tag again is the same start.
+    await act(async () => {
+      await expect(startAbout("worker")).rejects.toThrow();
+    });
+    await act(async () => {
+      await startAbout("worker");
+    });
+    expect(startedIds()[3]).toBe(startedIds()[2]);
+  });
 });
 
 describe("a send retried across a machine coming up", () => {

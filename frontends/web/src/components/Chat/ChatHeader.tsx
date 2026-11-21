@@ -43,6 +43,7 @@ import { MoveChatToProjectDialog } from "./MoveChatToProjectDialog";
 import { useThreadNavigation } from "./useThreadNavigation";
 import { setChatThreadMode, useChatThreadMode } from "./thread-views/useChatThreadMode";
 import { ShareChatDialog } from "../Sharing/ShareChatDialog";
+import { ChatAppTag } from "../Projects/ChatAppTag";
 import { ResourceVisibility } from "../../gen/reliant/v1/common_pb";
 import { hasControlPlane } from "../../services/controlPlane/config";
 
@@ -383,6 +384,9 @@ export function ChatHeader({
                   Machine: {machineName}
                 </span>
               )}
+
+              {/* The app the chat was started from (Chat.app_name, D4). */}
+              {!isNewChat && chat?.appName && <ChatAppTag name={chat.appName} />}
 
               {/* Shared with the org: the owner's reminder, the viewer's "read only". */}
               {!isNewChat && (isShared || isViewer) && (

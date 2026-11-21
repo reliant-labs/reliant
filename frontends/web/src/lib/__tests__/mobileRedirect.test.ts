@@ -118,6 +118,14 @@ describe('shouldRedirectToMobile', () => {
     }
     expect(shouldRedirectToMobile(phone({ pathname: '/projectsx' }))).toBe(true)
   })
+
+  it('leaves Projects and a project page on a phone: one responsive page, no /m twin', () => {
+    for (const pathname of ['/projects', '/projects/p-1', '/projects/p-1/workspaces', '/o/acme/projects/p-1/settings']) {
+      expect(shouldRedirectToMobile(phone({ pathname })), pathname).toBe(false)
+    }
+    // The chat home filtered to a project is still the chat surface.
+    expect(shouldRedirectToMobile(phone({ pathname: '/project/p-1' }))).toBe(true)
+  })
 })
 
 describe('mobilePathFor', () => {
