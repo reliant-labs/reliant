@@ -404,9 +404,12 @@ func (t *Tree) Start(ctx context.Context, cmd *exec.Cmd) error {
 // ctx as cmd was and takes every field a caller sets, cmd's Cancel (nil for
 // exec.Command) included; it is written over cmd, so the caller's pointer and
 // anything holding it (CommandContext's default Cancel) see the started
-// command.
+// command. It is made with no name, so os/exec looks nothing up: cmd's Path
+// and Err are kept exactly as they were resolved, and a relative Path still
+// names a program in cmd.Dir, not one on $PATH or in the daemon's directory.
 func renew(ctx context.Context, cmd *exec.Cmd) {
-	fresh := exec.CommandContext(ctx, cmd.Path)
+	fresh := exec.CommandContext(ctx, "")
+	fresh.Path, fresh.Err = cmd.Path, cmd.Err
 	fresh.Args, fresh.Env, fresh.Dir = cmd.Args, cmd.Env, cmd.Dir
 	fresh.Stdin, fresh.Stdout, fresh.Stderr = cmd.Stdin, cmd.Stdout, cmd.Stderr
 	fresh.ExtraFiles, fresh.SysProcAttr = cmd.ExtraFiles, cmd.SysProcAttr

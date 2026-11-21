@@ -388,6 +388,27 @@ func TestRenewMakesAFailedCmdStartable(t *testing.T) {
 	}
 }
 
+// renew keeps the program cmd names exactly: a relative Path, which execve
+// resolves in cmd.Dir, is not looked up again on $PATH or in the daemon's
+// directory, where it would name another program or none.
+func TestRenewKeepsARelativeProgramInTheCommandsDir(t *testing.T) {
+	dir := t.TempDir()
+	const name = "proctree-renew-tool"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\necho ran in \"$(pwd)\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(context.Background(), "/bin/true")
+	cmd.Path, cmd.Args, cmd.Dir = name, []string{name}, dir
+	renew(context.Background(), cmd)
+	if cmd.Path != name || cmd.Err != nil || len(cmd.Args) != 1 || cmd.Args[0] != name {
+		t.Fatalf("renew changed the program: Path %q, Args %q, Err %v; want Path %q", cmd.Path, cmd.Args, cmd.Err, name)
+	}
+	out, err := cmd.Output()
+	if want := "ran in " + dir + "\n"; err != nil || string(out) != want {
+		t.Fatalf("the renewed command printed %q (%v), want %q", out, err, want)
+	}
+}
+
 // A delegated cgroup (the cloud entrypoint's /daemon) bounds each command to
 // its own pids.max, says so in LimitNote, kills it whole with cgroup.kill,
 // and is removed once empty. Runs only where the daemon's cgroup is
