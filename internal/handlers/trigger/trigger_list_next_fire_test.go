@@ -50,26 +50,35 @@ func TestListTriggersBoundsNextFireLookupsByOneBudget(t *testing.T) {
 	const budget = 100 * time.Millisecond
 	shrinkNextFireBudget(t, budget)
 	var asked atomic.Int32
+	deadlines := make(chan time.Time, n)
 	env.backend.mu.Lock()
 	env.backend.nextFireHook = func(ctx context.Context, _ string) (*time.Time, error) {
 		asked.Add(1)
+		deadline, _ := ctx.Deadline()
+		deadlines <- deadline
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
 	env.backend.mu.Unlock()
 
-	start := time.Now()
 	resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
-	elapsed := time.Since(start)
 
 	require.NoError(t, err, "a schedule backend that never answers must not fail the list")
 	require.Len(t, resp.Msg.GetTriggers(), n)
 	for _, tr := range resp.Msg.GetTriggers() {
 		assert.Nil(t, tr.NextFireAt, "trigger %s: a lookup that ran out of budget has no next fire time", tr.GetId())
 	}
-	// Serially, or a budget per batch of workers, this would be n/8 budgets
-	// or more; one budget plus the list's own queries is well under this.
-	assert.Less(t, elapsed, 2*time.Second, "the next-fire lookups must share one budget")
+	// Pin the shared deadline itself, not this machine's elapsed time.
+	close(deadlines)
+	var shared time.Time
+	for deadline := range deadlines {
+		require.False(t, deadline.IsZero(), "every lookup must have a deadline")
+		if shared.IsZero() {
+			shared = deadline
+		}
+		assert.Equal(t, shared, deadline, "all lookups must share one budget")
+	}
+	require.False(t, shared.IsZero(), "at least one lookup must run")
 	assert.LessOrEqual(t, int(asked.Load()), nextFireWorkers,
 		"once the budget is spent, the remaining triggers are not asked")
 }

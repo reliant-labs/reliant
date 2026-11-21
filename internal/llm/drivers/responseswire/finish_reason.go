@@ -18,6 +18,8 @@
 // driver package for registration side effects, so anything a driver imported
 // from it would be an import cycle. A leaf package next to the drivers is the
 // nearest home both can reach.
+//
+//forge:exclude-contract: pure Responses API wire conversions shared by provider drivers; no service or outbound IO
 package responseswire
 
 import (

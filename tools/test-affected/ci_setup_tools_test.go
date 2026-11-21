@@ -398,13 +398,19 @@ func TestSetupInstallsCachedTools(t *testing.T) {
 					writeExec(t, filepath.Join(cache, tc.binary), cached)
 				}
 
-				script := strings.ReplaceAll(run, "${{ github.action_path }}", actionDir)
+				// Expressions can contain the host's action path in a job
+				// container; only the runtime path points at the mounted action.
+				if strings.Contains(run, "${{ github.action_path }}") {
+					t.Fatal("run must use the container-visible GITHUB_ACTION_PATH")
+				}
+				script := run
 				if strings.Contains(script, "${{") {
 					t.Fatalf("%s has an unsubstituted expression:\n%s", tc.install, script)
 				}
 				cmd := exec.CommandContext(t.Context(), "bash", "-e", "-c", script)
 				cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "HOME="+home,
-					"RUNNER_TEMP="+tmp, "GITHUB_PATH="+ghPath, "GH_TOKEN=tok", "BUF_VERSION=1.50.0", "V=2.14.0")
+					"RUNNER_TEMP="+tmp, "GITHUB_PATH="+ghPath, "GITHUB_ACTION_PATH="+actionDir,
+					"GH_TOKEN=tok", "BUF_VERSION=1.50.0", "V=2.14.0")
 				if out, err := cmd.CombinedOutput(); err != nil {
 					t.Fatalf("%s: %v\n%s", tc.install, err, out)
 				}
