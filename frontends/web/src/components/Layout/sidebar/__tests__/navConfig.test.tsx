@@ -49,7 +49,7 @@ describe("the hybrid nav's shape", () => {
       "deployments",
       "data",
       "storage",
-      "users",
+      "auth",
       "configure",
     ]);
   });
@@ -60,7 +60,7 @@ describe("the hybrid nav's shape", () => {
     expect(flattenIds(hybridNav.items, ctx)).not.toContain("security");
     const unregister = registerConsoleNavEntry({ id: "advisories", label: "Advisories", segment: "advisories", after: "more-tools", group: "security" });
     try {
-      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "users", "security", "configure"]);
+      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "analytics", "deployments", "data", "storage", "auth", "security", "configure"]);
       expect(flattenIds(hybridNav.items, ctx)).toContain("registered-advisories");
       // Not in Analytics: a Security row joins Security alone.
       const analytics = hybridNav.items.find((item) => item.id === "analytics")!;
@@ -86,7 +86,7 @@ describe("the hybrid nav's shape", () => {
     expect(ids.filter((id) => id === "slot-inbox")).toHaveLength(1);
   });
 
-  it("Configure is Secrets, Domains, Activity", () => {
+  it("keeps Sign-in users out of Configure (it is Auth now), and Configure is Secrets, Domains, Activity", () => {
     const ctx = ctxAt(inboxPath());
     const configure = hybridNav.items.find((item) => item.id === "configure")!;
     expect(flattenIds([configure], ctx)).toEqual(["configure", "secrets", "domains", "activity"]);
