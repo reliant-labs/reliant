@@ -9,6 +9,8 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../buf/validate/validate_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_field_mask, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { PlanStatus } from "./common_pb";
 import { file_reliant_v1_common } from "./common_pb";
 import type { Task, TaskDependency } from "./task_pb";
@@ -19,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/plan.proto.
  */
 export const file_reliant_v1_plan: GenFile = /*@__PURE__*/
-  fileDesc("ChVyZWxpYW50L3YxL3BsYW4ucHJvdG8SCnJlbGlhbnQudjEi7wEKBFBsYW4SCgoCaWQYASABKAkSDwoHY2hhdF9pZBgCIAEoCRINCgV0aXRsZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRImCgZzdGF0dXMYBSABKA4yFi5yZWxpYW50LnYxLlBsYW5TdGF0dXMSLgoKY29tcGxleGl0eRgGIAEoDjIaLnJlbGlhbnQudjEuUGxhbkNvbXBsZXhpdHkSEgoKY3JlYXRlZF9hdBgHIAEoCRISCgp1cGRhdGVkX2F0GAggASgJEhcKCnByb2plY3RfaWQYCSABKAlIAIgBAUINCgtfcHJvamVjdF9pZCLIAQoRQ3JlYXRlUGxhblJlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRImCgZzdGF0dXMYBCABKA4yFi5yZWxpYW50LnYxLlBsYW5TdGF0dXMSLgoKY29tcGxleGl0eRgFIAEoDjIaLnJlbGlhbnQudjEuUGxhbkNvbXBsZXhpdHkSFwoKcHJvamVjdF9pZBgGIAEoCUgAiAEBQg0KC19wcm9qZWN0X2lkIjQKEkNyZWF0ZVBsYW5SZXNwb25zZRIeCgRwbGFuGAEgASgLMhAucmVsaWFudC52MS5QbGFuIiEKDkdldFBsYW5SZXF1ZXN0Eg8KB3BsYW5faWQYASABKAkiMQoPR2V0UGxhblJlc3BvbnNlEh4KBHBsYW4YASABKAsyEC5yZWxpYW50LnYxLlBsYW4iKQoWR2V0UGxhbkJ5Q2hhdElkUmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIjkKF0dldFBsYW5CeUNoYXRJZFJlc3BvbnNlEh4KBHBsYW4YASABKAsyEC5yZWxpYW50LnYxLlBsYW4i6AEKEVVwZGF0ZVBsYW5SZXF1ZXN0Eg8KB3BsYW5faWQYASABKAkSEgoFdGl0bGUYAiABKAlIAIgBARIYCgtkZXNjcmlwdGlvbhgDIAEoCUgBiAEBEisKBnN0YXR1cxgEIAEoDjIWLnJlbGlhbnQudjEuUGxhblN0YXR1c0gCiAEBEjMKCmNvbXBsZXhpdHkYBSABKA4yGi5yZWxpYW50LnYxLlBsYW5Db21wbGV4aXR5SAOIAQFCCAoGX3RpdGxlQg4KDF9kZXNjcmlwdGlvbkIJCgdfc3RhdHVzQg0KC19jb21wbGV4aXR5IjQKElVwZGF0ZVBsYW5SZXNwb25zZRIeCgRwbGFuGAEgASgLMhAucmVsaWFudC52MS5QbGFuIiQKEURlbGV0ZVBsYW5SZXF1ZXN0Eg8KB3BsYW5faWQYASABKAkiJQoSRGVsZXRlUGxhblJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgiLwoUTGlzdFBsYW5UYXNrc1JlcXVlc3QSFwoHcGxhbl9pZBgBIAEoCUIGukgDyAEBInkKFUxpc3RQbGFuVGFza3NSZXNwb25zZRIfCgV0YXNrcxgBIAMoCzIQLnJlbGlhbnQudjEuVGFzaxINCgV0b3RhbBgCIAEoBRIwCgxkZXBlbmRlbmNpZXMYAyADKAsyGi5yZWxpYW50LnYxLlRhc2tEZXBlbmRlbmN5IjcKGUxpc3RQbGFuc0J5UHJvamVjdFJlcXVlc3QSGgoKcHJvamVjdF9pZBgBIAEoCUIGukgDyAEBIkwKGkxpc3RQbGFuc0J5UHJvamVjdFJlc3BvbnNlEh8KBXBsYW5zGAEgAygLMhAucmVsaWFudC52MS5QbGFuEg0KBXRvdGFsGAIgASgFKogBCg5QbGFuQ29tcGxleGl0eRIfChtQTEFOX0NPTVBMRVhJVFlfVU5TUEVDSUZJRUQQABIaChZQTEFOX0NPTVBMRVhJVFlfU0lNUExFEAESHAoYUExBTl9DT01QTEVYSVRZX01PREVSQVRFEAISGwoXUExBTl9DT01QTEVYSVRZX0NPTVBMRVgQAzKxBQoLUGxhblNlcnZpY2USTQoKQ3JlYXRlUGxhbhIdLnJlbGlhbnQudjEuQ3JlYXRlUGxhblJlcXVlc3QaHi5yZWxpYW50LnYxLkNyZWF0ZVBsYW5SZXNwb25zZSIAEkQKB0dldFBsYW4SGi5yZWxpYW50LnYxLkdldFBsYW5SZXF1ZXN0GhsucmVsaWFudC52MS5HZXRQbGFuUmVzcG9uc2UiABJcCg9HZXRQbGFuQnlDaGF0SWQSIi5yZWxpYW50LnYxLkdldFBsYW5CeUNoYXRJZFJlcXVlc3QaIy5yZWxpYW50LnYxLkdldFBsYW5CeUNoYXRJZFJlc3BvbnNlIgASgQEKClVwZGF0ZVBsYW4SHS5yZWxpYW50LnYxLlVwZGF0ZVBsYW5SZXF1ZXN0Gh4ucmVsaWFudC52MS5VcGRhdGVQbGFuUmVzcG9uc2UiNKK7GDA6LgoGdXBkYXRlEiQKBHBsYW4SB3BsYW5faWQaE3Jlc3BvbnNlLnBsYW4udGl0bGUSbAoKRGVsZXRlUGxhbhIdLnJlbGlhbnQudjEuRGVsZXRlUGxhblJlcXVlc3QaHi5yZWxpYW50LnYxLkRlbGV0ZVBsYW5SZXNwb25zZSIforsYGzoZCgZkZWxldGUSDwoEcGxhbhIHcGxhbl9pZBJWCg1MaXN0UGxhblRhc2tzEiAucmVsaWFudC52MS5MaXN0UGxhblRhc2tzUmVxdWVzdBohLnJlbGlhbnQudjEuTGlzdFBsYW5UYXNrc1Jlc3BvbnNlIgASZQoSTGlzdFBsYW5zQnlQcm9qZWN0EiUucmVsaWFudC52MS5MaXN0UGxhbnNCeVByb2plY3RSZXF1ZXN0GiYucmVsaWFudC52MS5MaXN0UGxhbnNCeVByb2plY3RSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge, file_reliant_v1_common, file_reliant_v1_task]);
+  fileDesc("ChVyZWxpYW50L3YxL3BsYW4ucHJvdG8SCnJlbGlhbnQudjEipwIKBFBsYW4SCgoCaWQYASABKAkSDwoHY2hhdF9pZBgCIAEoCRINCgV0aXRsZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRImCgZzdGF0dXMYBSABKA4yFi5yZWxpYW50LnYxLlBsYW5TdGF0dXMSLgoKY29tcGxleGl0eRgGIAEoDjIaLnJlbGlhbnQudjEuUGxhbkNvbXBsZXhpdHkSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFwoKcHJvamVjdF9pZBgJIAEoCUgAiAEBQg0KC19wcm9qZWN0X2lkIsgBChFDcmVhdGVQbGFuUmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJEg0KBXRpdGxlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEiYKBnN0YXR1cxgEIAEoDjIWLnJlbGlhbnQudjEuUGxhblN0YXR1cxIuCgpjb21wbGV4aXR5GAUgASgOMhoucmVsaWFudC52MS5QbGFuQ29tcGxleGl0eRIXCgpwcm9qZWN0X2lkGAYgASgJSACIAQFCDQoLX3Byb2plY3RfaWQiNAoSQ3JlYXRlUGxhblJlc3BvbnNlEh4KBHBsYW4YASABKAsyEC5yZWxpYW50LnYxLlBsYW4iHAoOR2V0UGxhblJlcXVlc3QSCgoCaWQYASABKAkiMQoPR2V0UGxhblJlc3BvbnNlEh4KBHBsYW4YASABKAsyEC5yZWxpYW50LnYxLlBsYW4iKQoWR2V0UGxhbkJ5Q2hhdElkUmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIjkKF0dldFBsYW5CeUNoYXRJZFJlc3BvbnNlEh4KBHBsYW4YASABKAsyEC5yZWxpYW50LnYxLlBsYW4iZAoRVXBkYXRlUGxhblJlcXVlc3QSHgoEcGxhbhgBIAEoCzIQLnJlbGlhbnQudjEuUGxhbhIvCgt1cGRhdGVfbWFzaxgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siNAoSVXBkYXRlUGxhblJlc3BvbnNlEh4KBHBsYW4YASABKAsyEC5yZWxpYW50LnYxLlBsYW4iHwoRRGVsZXRlUGxhblJlcXVlc3QSCgoCaWQYASABKAkiFAoSRGVsZXRlUGxhblJlc3BvbnNlIi8KFExpc3RQbGFuVGFza3NSZXF1ZXN0EhcKB3BsYW5faWQYASABKAlCBrpIA8gBASJ5ChVMaXN0UGxhblRhc2tzUmVzcG9uc2USHwoFdGFza3MYASADKAsyEC5yZWxpYW50LnYxLlRhc2sSDQoFdG90YWwYAiABKAUSMAoMZGVwZW5kZW5jaWVzGAMgAygLMhoucmVsaWFudC52MS5UYXNrRGVwZW5kZW5jeSI3ChlMaXN0UGxhbnNCeVByb2plY3RSZXF1ZXN0EhoKCnByb2plY3RfaWQYASABKAlCBrpIA8gBASJMChpMaXN0UGxhbnNCeVByb2plY3RSZXNwb25zZRIfCgVwbGFucxgBIAMoCzIQLnJlbGlhbnQudjEuUGxhbhINCgV0b3RhbBgCIAEoBSqIAQoOUGxhbkNvbXBsZXhpdHkSHwobUExBTl9DT01QTEVYSVRZX1VOU1BFQ0lGSUVEEAASGgoWUExBTl9DT01QTEVYSVRZX1NJTVBMRRABEhwKGFBMQU5fQ09NUExFWElUWV9NT0RFUkFURRACEhsKF1BMQU5fQ09NUExFWElUWV9DT01QTEVYEAMyrAUKC1BsYW5TZXJ2aWNlEk0KCkNyZWF0ZVBsYW4SHS5yZWxpYW50LnYxLkNyZWF0ZVBsYW5SZXF1ZXN0Gh4ucmVsaWFudC52MS5DcmVhdGVQbGFuUmVzcG9uc2UiABJECgdHZXRQbGFuEhoucmVsaWFudC52MS5HZXRQbGFuUmVxdWVzdBobLnJlbGlhbnQudjEuR2V0UGxhblJlc3BvbnNlIgASXAoPR2V0UGxhbkJ5Q2hhdElkEiIucmVsaWFudC52MS5HZXRQbGFuQnlDaGF0SWRSZXF1ZXN0GiMucmVsaWFudC52MS5HZXRQbGFuQnlDaGF0SWRSZXNwb25zZSIAEoEBCgpVcGRhdGVQbGFuEh0ucmVsaWFudC52MS5VcGRhdGVQbGFuUmVxdWVzdBoeLnJlbGlhbnQudjEuVXBkYXRlUGxhblJlc3BvbnNlIjSiuxgwOi4KBnVwZGF0ZRIkCgRwbGFuEgdwbGFuLmlkGhNyZXNwb25zZS5wbGFuLnRpdGxlEmcKCkRlbGV0ZVBsYW4SHS5yZWxpYW50LnYxLkRlbGV0ZVBsYW5SZXF1ZXN0Gh4ucmVsaWFudC52MS5EZWxldGVQbGFuUmVzcG9uc2UiGqK7GBY6FAoGZGVsZXRlEgoKBHBsYW4SAmlkElYKDUxpc3RQbGFuVGFza3MSIC5yZWxpYW50LnYxLkxpc3RQbGFuVGFza3NSZXF1ZXN0GiEucmVsaWFudC52MS5MaXN0UGxhblRhc2tzUmVzcG9uc2UiABJlChJMaXN0UGxhbnNCeVByb2plY3QSJS5yZWxpYW50LnYxLkxpc3RQbGFuc0J5UHJvamVjdFJlcXVlc3QaJi5yZWxpYW50LnYxLkxpc3RQbGFuc0J5UHJvamVjdFJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_field_mask, file_google_protobuf_timestamp, file_reliant_v1_common, file_reliant_v1_task]);
 
 /**
  * Plan represents a plan in the system
@@ -58,14 +60,14 @@ export type Plan = Message<"reliant.v1.Plan"> & {
   complexity: PlanComplexity;
 
   /**
-   * @generated from field: string created_at = 7;
+   * @generated from field: google.protobuf.Timestamp created_at = 7;
    */
-  createdAt: string;
+  createdAt?: Timestamp | undefined;
 
   /**
-   * @generated from field: string updated_at = 8;
+   * @generated from field: google.protobuf.Timestamp updated_at = 8;
    */
-  updatedAt: string;
+  updatedAt?: Timestamp | undefined;
 
   /**
    * @generated from field: optional string project_id = 9;
@@ -150,9 +152,9 @@ export const CreatePlanResponseSchema: GenMessage<CreatePlanResponse> = /*@__PUR
  */
 export type GetPlanRequest = Message<"reliant.v1.GetPlanRequest"> & {
   /**
-   * @generated from field: string plan_id = 1;
+   * @generated from field: string id = 1;
    */
-  planId: string;
+  id: string;
 };
 
 /**
@@ -226,29 +228,18 @@ export const GetPlanByChatIdResponseSchema: GenMessage<GetPlanByChatIdResponse> 
  */
 export type UpdatePlanRequest = Message<"reliant.v1.UpdatePlanRequest"> & {
   /**
-   * @generated from field: string plan_id = 1;
+   * The plan, carrying its id and the fields update_mask names.
+   *
+   * @generated from field: reliant.v1.Plan plan = 1;
    */
-  planId: string;
+  plan?: Plan | undefined;
 
   /**
-   * @generated from field: optional string title = 2;
+   * The Plan fields to write (title, description, status, complexity).
+   *
+   * @generated from field: google.protobuf.FieldMask update_mask = 2;
    */
-  title?: string | undefined;
-
-  /**
-   * @generated from field: optional string description = 3;
-   */
-  description?: string | undefined;
-
-  /**
-   * @generated from field: optional reliant.v1.PlanStatus status = 4;
-   */
-  status?: PlanStatus | undefined;
-
-  /**
-   * @generated from field: optional reliant.v1.PlanComplexity complexity = 5;
-   */
-  complexity?: PlanComplexity | undefined;
+  updateMask?: FieldMask | undefined;
 };
 
 /**
@@ -284,9 +275,9 @@ export const UpdatePlanResponseSchema: GenMessage<UpdatePlanResponse> = /*@__PUR
  */
 export type DeletePlanRequest = Message<"reliant.v1.DeletePlanRequest"> & {
   /**
-   * @generated from field: string plan_id = 1;
+   * @generated from field: string id = 1;
    */
-  planId: string;
+  id: string;
 };
 
 /**
@@ -302,10 +293,6 @@ export const DeletePlanRequestSchema: GenMessage<DeletePlanRequest> = /*@__PURE_
  * @generated from message reliant.v1.DeletePlanResponse
  */
 export type DeletePlanResponse = Message<"reliant.v1.DeletePlanResponse"> & {
-  /**
-   * @generated from field: bool success = 1;
-   */
-  success: boolean;
 };
 
 /**
@@ -447,7 +434,6 @@ export const PlanComplexitySchema: GenEnum<PlanComplexity> = /*@__PURE__*/
 export const PlanService: GenService<{
   /**
    * CreatePlan creates a new plan
-   * forge:custom — authorizes the caller through the chat and stores it as the plan's thread
    *
    * @generated from rpc reliant.v1.PlanService.CreatePlan
    */
@@ -458,7 +444,6 @@ export const PlanService: GenService<{
   },
   /**
    * GetPlan retrieves a plan by ID
-   * forge:custom — authorizes through the plan's thread and chat, and resolves chat_id from them
    *
    * @generated from rpc reliant.v1.PlanService.GetPlan
    */
@@ -469,6 +454,7 @@ export const PlanService: GenService<{
   },
   /**
    * GetPlanByChatId retrieves a plan by chat ID
+   * forge:query-scope Plan
    *
    * @generated from rpc reliant.v1.PlanService.GetPlanByChatId
    */
@@ -478,8 +464,7 @@ export const PlanService: GenService<{
     output: typeof GetPlanByChatIdResponseSchema;
   },
   /**
-   * UpdatePlan updates an existing plan
-   * forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
+   * UpdatePlan updates an existing plan; update_mask names the fields it writes
    *
    * @generated from rpc reliant.v1.PlanService.UpdatePlan
    */
@@ -490,7 +475,6 @@ export const PlanService: GenService<{
   },
   /**
    * DeletePlan deletes a plan
-   * forge:custom — authorized through the plan's chat, which it notifies to refetch
    *
    * @generated from rpc reliant.v1.PlanService.DeletePlan
    */
@@ -501,6 +485,7 @@ export const PlanService: GenService<{
   },
   /**
    * ListPlanTasks lists all tasks for a plan
+   * forge:query-scope Plan
    *
    * @generated from rpc reliant.v1.PlanService.ListPlanTasks
    */
@@ -511,6 +496,7 @@ export const PlanService: GenService<{
   },
   /**
    * ListPlansByProject lists all plans for a project (cross-workflow sharing)
+   * forge:query-scope Plan
    *
    * @generated from rpc reliant.v1.PlanService.ListPlansByProject
    */

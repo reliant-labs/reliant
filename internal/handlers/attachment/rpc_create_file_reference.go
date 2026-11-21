@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -95,21 +94,7 @@ func (s *Service) CreateFileReference(
 		"userID", userID)
 
 	// Create response
-	attachmentInfo := &reliantv1.AttachmentInfo{
-		Id:             attachmentID,
-		UserId:         userID,
-		Filename:       filename,
-		Size:           int64(len(content)),
-		MimeType:       mimeType,
-		FileHash:       &fileHash,
-		FilePath:       filePath,
-		CreatedAt:      time.Now().Format(time.RFC3339),
-		UpdatedAt:      time.Now().Format(time.RFC3339),
-		Url:            fmt.Sprintf("/api/attachments/%s", attachmentID),
-		AttachmentType: string(attachment.TypeFileReference),
-	}
-
 	return connect.NewResponse(&reliantv1.CreateFileReferenceResponse{
-		Attachment: attachmentInfo,
+		Attachment: attachmentToWire(dbAttachment),
 	}), nil
 }

@@ -13,6 +13,8 @@ import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -156,8 +158,8 @@ type Task struct {
 	Status        TaskStatus             `protobuf:"varint,5,opt,name=status,proto3,enum=reliant.v1.TaskStatus" json:"status,omitempty"`
 	Position      int32                  `protobuf:"varint,6,opt,name=position,proto3" json:"position,omitempty"`
 	ParentTaskId  *string                `protobuf:"bytes,7,opt,name=parent_task_id,json=parentTaskId,proto3,oneof" json:"parent_task_id,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     string                 `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	Metadata      *string                `protobuf:"bytes,10,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
 	Assignee      *string                `protobuf:"bytes,11,opt,name=assignee,proto3,oneof" json:"assignee,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -243,18 +245,18 @@ func (x *Task) GetParentTaskId() string {
 	return ""
 }
 
-func (x *Task) GetCreatedAt() string {
+func (x *Task) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
-	return ""
+	return nil
 }
 
-func (x *Task) GetUpdatedAt() string {
+func (x *Task) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdatedAt
 	}
-	return ""
+	return nil
 }
 
 func (x *Task) GetMetadata() string {
@@ -355,7 +357,7 @@ type CreateTaskRequest struct {
 	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	Status        TaskStatus             `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.TaskStatus" json:"status,omitempty"`
-	Position      *int32                 `protobuf:"varint,5,opt,name=position,proto3,oneof" json:"position,omitempty"`
+	Position      int32                  `protobuf:"varint,5,opt,name=position,proto3" json:"position,omitempty"`
 	ParentTaskId  *string                `protobuf:"bytes,6,opt,name=parent_task_id,json=parentTaskId,proto3,oneof" json:"parent_task_id,omitempty"`
 	Metadata      *string                `protobuf:"bytes,7,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
 	Assignee      *string                `protobuf:"bytes,8,opt,name=assignee,proto3,oneof" json:"assignee,omitempty"`
@@ -422,8 +424,8 @@ func (x *CreateTaskRequest) GetStatus() TaskStatus {
 }
 
 func (x *CreateTaskRequest) GetPosition() int32 {
-	if x != nil && x.Position != nil {
-		return *x.Position
+	if x != nil {
+		return x.Position
 	}
 	return 0
 }
@@ -497,7 +499,7 @@ func (x *CreateTaskResponse) GetTask() *Task {
 // GetTaskRequest retrieves a task by ID
 type GetTaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -532,9 +534,9 @@ func (*GetTaskRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_task_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetTaskRequest) GetTaskId() string {
+func (x *GetTaskRequest) GetId() string {
 	if x != nil {
-		return x.TaskId
+		return x.Id
 	}
 	return ""
 }
@@ -633,7 +635,7 @@ func (x *ListTasksRequest) GetPlanId() string {
 type ListTasksResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Tasks         []*Task                `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	TotalCount    int32                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -675,23 +677,20 @@ func (x *ListTasksResponse) GetTasks() []*Task {
 	return nil
 }
 
-func (x *ListTasksResponse) GetTotal() int32 {
+func (x *ListTasksResponse) GetTotalCount() int32 {
 	if x != nil {
-		return x.Total
+		return x.TotalCount
 	}
 	return 0
 }
 
 // UpdateTaskRequest updates a task
 type UpdateTaskRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	Title         *string                `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
-	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	Status        *TaskStatus            `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.TaskStatus,oneof" json:"status,omitempty"`
-	Position      *int32                 `protobuf:"varint,5,opt,name=position,proto3,oneof" json:"position,omitempty"`
-	Metadata      *string                `protobuf:"bytes,6,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
-	Assignee      *string                `protobuf:"bytes,7,opt,name=assignee,proto3,oneof" json:"assignee,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The task, carrying its id and the fields update_mask names.
+	Task *Task `protobuf:"bytes,1,opt,name=task,proto3" json:"task,omitempty"`
+	// The Task fields to write (title, description, status, position, metadata, assignee).
+	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -726,53 +725,18 @@ func (*UpdateTaskRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_task_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *UpdateTaskRequest) GetTaskId() string {
+func (x *UpdateTaskRequest) GetTask() *Task {
 	if x != nil {
-		return x.TaskId
+		return x.Task
 	}
-	return ""
+	return nil
 }
 
-func (x *UpdateTaskRequest) GetTitle() string {
-	if x != nil && x.Title != nil {
-		return *x.Title
+func (x *UpdateTaskRequest) GetUpdateMask() *fieldmaskpb.FieldMask {
+	if x != nil {
+		return x.UpdateMask
 	}
-	return ""
-}
-
-func (x *UpdateTaskRequest) GetDescription() string {
-	if x != nil && x.Description != nil {
-		return *x.Description
-	}
-	return ""
-}
-
-func (x *UpdateTaskRequest) GetStatus() TaskStatus {
-	if x != nil && x.Status != nil {
-		return *x.Status
-	}
-	return TaskStatus_TASK_STATUS_UNSPECIFIED
-}
-
-func (x *UpdateTaskRequest) GetPosition() int32 {
-	if x != nil && x.Position != nil {
-		return *x.Position
-	}
-	return 0
-}
-
-func (x *UpdateTaskRequest) GetMetadata() string {
-	if x != nil && x.Metadata != nil {
-		return *x.Metadata
-	}
-	return ""
-}
-
-func (x *UpdateTaskRequest) GetAssignee() string {
-	if x != nil && x.Assignee != nil {
-		return *x.Assignee
-	}
-	return ""
+	return nil
 }
 
 // UpdateTaskResponse returns the updated task
@@ -823,7 +787,7 @@ func (x *UpdateTaskResponse) GetTask() *Task {
 // DeleteTaskRequest deletes a task
 type DeleteTaskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -858,9 +822,9 @@ func (*DeleteTaskRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_task_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *DeleteTaskRequest) GetTaskId() string {
+func (x *DeleteTaskRequest) GetId() string {
 	if x != nil {
-		return x.TaskId
+		return x.Id
 	}
 	return ""
 }
@@ -868,7 +832,6 @@ func (x *DeleteTaskRequest) GetTaskId() string {
 // DeleteTaskResponse confirms deletion
 type DeleteTaskResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -901,13 +864,6 @@ func (x *DeleteTaskResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DeleteTaskResponse.ProtoReflect.Descriptor instead.
 func (*DeleteTaskResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_task_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *DeleteTaskResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
 }
 
 // AddTaskDependencyRequest creates a dependency between two tasks
@@ -1225,7 +1181,7 @@ var File_reliant_v1_task_proto protoreflect.FileDescriptor
 const file_reliant_v1_task_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/task.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x8b\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc3\x03\n" +
 	"\x04Task\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\aplan_id\x18\x02 \x01(\tR\x06planId\x12\x14\n" +
@@ -1233,11 +1189,11 @@ const file_reliant_v1_task_proto_rawDesc = "" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12.\n" +
 	"\x06status\x18\x05 \x01(\x0e2\x16.reliant.v1.TaskStatusR\x06status\x12\x1a\n" +
 	"\bposition\x18\x06 \x01(\x05R\bposition\x12)\n" +
-	"\x0eparent_task_id\x18\a \x01(\tH\x00R\fparentTaskId\x88\x01\x01\x12\x1d\n" +
+	"\x0eparent_task_id\x18\a \x01(\tH\x00R\fparentTaskId\x88\x01\x01\x129\n" +
 	"\n" +
-	"created_at\x18\b \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\t \x01(\tR\tupdatedAt\x12\x1f\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1f\n" +
 	"\bmetadata\x18\n" +
 	" \x01(\tH\x01R\bmetadata\x88\x01\x01\x12\x1f\n" +
 	"\bassignee\x18\v \x01(\tH\x02R\bassignee\x88\x01\x01B\x11\n" +
@@ -1252,53 +1208,42 @@ const file_reliant_v1_task_proto_rawDesc = "" +
 	"to_task_id\x18\x03 \x01(\tR\btoTaskId\x12C\n" +
 	"\x0fdependency_type\x18\x04 \x01(\x0e2\x1a.reliant.v1.DependencyTypeR\x0edependencyType\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\tR\tcreatedAt\"\xdc\x02\n" +
+	"created_at\x18\x05 \x01(\tR\tcreatedAt\"\xca\x02\n" +
 	"\x11CreateTaskRequest\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12.\n" +
-	"\x06status\x18\x04 \x01(\x0e2\x16.reliant.v1.TaskStatusR\x06status\x12\x1f\n" +
-	"\bposition\x18\x05 \x01(\x05H\x00R\bposition\x88\x01\x01\x12)\n" +
-	"\x0eparent_task_id\x18\x06 \x01(\tH\x01R\fparentTaskId\x88\x01\x01\x12\x1f\n" +
-	"\bmetadata\x18\a \x01(\tH\x02R\bmetadata\x88\x01\x01\x12\x1f\n" +
-	"\bassignee\x18\b \x01(\tH\x03R\bassignee\x88\x01\x01B\v\n" +
-	"\t_positionB\x11\n" +
+	"\x06status\x18\x04 \x01(\x0e2\x16.reliant.v1.TaskStatusR\x06status\x12\x1a\n" +
+	"\bposition\x18\x05 \x01(\x05R\bposition\x12)\n" +
+	"\x0eparent_task_id\x18\x06 \x01(\tH\x00R\fparentTaskId\x88\x01\x01\x12\x1f\n" +
+	"\bmetadata\x18\a \x01(\tH\x01R\bmetadata\x88\x01\x01\x12\x1f\n" +
+	"\bassignee\x18\b \x01(\tH\x02R\bassignee\x88\x01\x01B\x11\n" +
 	"\x0f_parent_task_idB\v\n" +
 	"\t_metadataB\v\n" +
 	"\t_assignee\":\n" +
 	"\x12CreateTaskResponse\x12$\n" +
-	"\x04task\x18\x01 \x01(\v2\x10.reliant.v1.TaskR\x04task\")\n" +
-	"\x0eGetTaskRequest\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId\"7\n" +
+	"\x04task\x18\x01 \x01(\v2\x10.reliant.v1.TaskR\x04task\" \n" +
+	"\x0eGetTaskRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"7\n" +
 	"\x0fGetTaskResponse\x12$\n" +
 	"\x04task\x18\x01 \x01(\v2\x10.reliant.v1.TaskR\x04task\"<\n" +
 	"\x10ListTasksRequest\x12\x1c\n" +
 	"\aplan_id\x18\x01 \x01(\tH\x00R\x06planId\x88\x01\x01B\n" +
 	"\n" +
-	"\b_plan_id\"Q\n" +
+	"\b_plan_id\"\\\n" +
 	"\x11ListTasksResponse\x12&\n" +
-	"\x05tasks\x18\x01 \x03(\v2\x10.reliant.v1.TaskR\x05tasks\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xd2\x02\n" +
-	"\x11UpdateTaskRequest\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x19\n" +
-	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12%\n" +
-	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01\x123\n" +
-	"\x06status\x18\x04 \x01(\x0e2\x16.reliant.v1.TaskStatusH\x02R\x06status\x88\x01\x01\x12\x1f\n" +
-	"\bposition\x18\x05 \x01(\x05H\x03R\bposition\x88\x01\x01\x12\x1f\n" +
-	"\bmetadata\x18\x06 \x01(\tH\x04R\bmetadata\x88\x01\x01\x12\x1f\n" +
-	"\bassignee\x18\a \x01(\tH\x05R\bassignee\x88\x01\x01B\b\n" +
-	"\x06_titleB\x0e\n" +
-	"\f_descriptionB\t\n" +
-	"\a_statusB\v\n" +
-	"\t_positionB\v\n" +
-	"\t_metadataB\v\n" +
-	"\t_assignee\":\n" +
+	"\x05tasks\x18\x01 \x03(\v2\x10.reliant.v1.TaskR\x05tasks\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x05R\n" +
+	"totalCount\"v\n" +
+	"\x11UpdateTaskRequest\x12$\n" +
+	"\x04task\x18\x01 \x01(\v2\x10.reliant.v1.TaskR\x04task\x12;\n" +
+	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
+	"updateMask\":\n" +
 	"\x12UpdateTaskResponse\x12$\n" +
-	"\x04task\x18\x01 \x01(\v2\x10.reliant.v1.TaskR\x04task\",\n" +
-	"\x11DeleteTaskRequest\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\tR\x06taskId\".\n" +
-	"\x12DeleteTaskResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x9f\x01\n" +
+	"\x04task\x18\x01 \x01(\v2\x10.reliant.v1.TaskR\x04task\"#\n" +
+	"\x11DeleteTaskRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x14\n" +
+	"\x12DeleteTaskResponse\"\x9f\x01\n" +
 	"\x18AddTaskDependencyRequest\x12 \n" +
 	"\ffrom_task_id\x18\x01 \x01(\tR\n" +
 	"fromTaskId\x12\x1c\n" +
@@ -1336,7 +1281,7 @@ const file_reliant_v1_task_proto_rawDesc = "" +
 	"\x1bDEPENDENCY_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DEPENDENCY_TYPE_BLOCKS\x10\x01\x12\x1b\n" +
 	"\x17DEPENDENCY_TYPE_RELATED\x10\x02\x12!\n" +
-	"\x1dDEPENDENCY_TYPE_PARALLEL_WITH\x10\x032\xa3\a\n" +
+	"\x1dDEPENDENCY_TYPE_PARALLEL_WITH\x10\x032\x9e\a\n" +
 	"\vTaskService\x12M\n" +
 	"\n" +
 	"CreateTask\x12\x1d.reliant.v1.CreateTaskRequest\x1a\x1e.reliant.v1.CreateTaskResponse\"\x00\x12D\n" +
@@ -1345,11 +1290,12 @@ const file_reliant_v1_task_proto_rawDesc = "" +
 	"\n" +
 	"UpdateTask\x12\x1d.reliant.v1.UpdateTaskRequest\x1a\x1e.reliant.v1.UpdateTaskResponse\"4\xa2\xbb\x180:.\n" +
 	"\x06update\x12$\n" +
-	"\x04task\x12\atask_id\x1a\x13response.task.title\x12l\n" +
+	"\x04task\x12\atask.id\x1a\x13response.task.title\x12g\n" +
 	"\n" +
-	"DeleteTask\x12\x1d.reliant.v1.DeleteTaskRequest\x1a\x1e.reliant.v1.DeleteTaskResponse\"\x1f\xa2\xbb\x18\x1b:\x19\n" +
-	"\x06delete\x12\x0f\n" +
-	"\x04task\x12\atask_id\x12\xab\x01\n" +
+	"DeleteTask\x12\x1d.reliant.v1.DeleteTaskRequest\x1a\x1e.reliant.v1.DeleteTaskResponse\"\x1a\xa2\xbb\x18\x16:\x14\n" +
+	"\x06delete\x12\n" +
+	"\n" +
+	"\x04task\x12\x02id\x12\xab\x01\n" +
 	"\x11AddTaskDependency\x12$.reliant.v1.AddTaskDependencyRequest\x1a%.reliant.v1.AddTaskDependencyResponse\"I\xa2\xbb\x18E:C\n" +
 	"\x0eadd_dependency\x12\x14\n" +
 	"\x04task\x12\ffrom_task_id*\n" +
@@ -1395,41 +1341,46 @@ var file_reliant_v1_task_proto_goTypes = []any{
 	(*RemoveTaskDependencyResponse)(nil), // 17: reliant.v1.RemoveTaskDependencyResponse
 	(*ListReadyTasksRequest)(nil),        // 18: reliant.v1.ListReadyTasksRequest
 	(*ListReadyTasksResponse)(nil),       // 19: reliant.v1.ListReadyTasksResponse
+	(*timestamppb.Timestamp)(nil),        // 20: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil),        // 21: google.protobuf.FieldMask
 }
 var file_reliant_v1_task_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.Task.status:type_name -> reliant.v1.TaskStatus
-	1,  // 1: reliant.v1.TaskDependency.dependency_type:type_name -> reliant.v1.DependencyType
-	0,  // 2: reliant.v1.CreateTaskRequest.status:type_name -> reliant.v1.TaskStatus
-	2,  // 3: reliant.v1.CreateTaskResponse.task:type_name -> reliant.v1.Task
-	2,  // 4: reliant.v1.GetTaskResponse.task:type_name -> reliant.v1.Task
-	2,  // 5: reliant.v1.ListTasksResponse.tasks:type_name -> reliant.v1.Task
-	0,  // 6: reliant.v1.UpdateTaskRequest.status:type_name -> reliant.v1.TaskStatus
-	2,  // 7: reliant.v1.UpdateTaskResponse.task:type_name -> reliant.v1.Task
-	1,  // 8: reliant.v1.AddTaskDependencyRequest.dependency_type:type_name -> reliant.v1.DependencyType
-	3,  // 9: reliant.v1.AddTaskDependencyResponse.dependency:type_name -> reliant.v1.TaskDependency
-	1,  // 10: reliant.v1.RemoveTaskDependencyRequest.dependency_type:type_name -> reliant.v1.DependencyType
-	2,  // 11: reliant.v1.ListReadyTasksResponse.tasks:type_name -> reliant.v1.Task
-	4,  // 12: reliant.v1.TaskService.CreateTask:input_type -> reliant.v1.CreateTaskRequest
-	6,  // 13: reliant.v1.TaskService.GetTask:input_type -> reliant.v1.GetTaskRequest
-	8,  // 14: reliant.v1.TaskService.ListTasks:input_type -> reliant.v1.ListTasksRequest
-	10, // 15: reliant.v1.TaskService.UpdateTask:input_type -> reliant.v1.UpdateTaskRequest
-	12, // 16: reliant.v1.TaskService.DeleteTask:input_type -> reliant.v1.DeleteTaskRequest
-	14, // 17: reliant.v1.TaskService.AddTaskDependency:input_type -> reliant.v1.AddTaskDependencyRequest
-	16, // 18: reliant.v1.TaskService.RemoveTaskDependency:input_type -> reliant.v1.RemoveTaskDependencyRequest
-	18, // 19: reliant.v1.TaskService.ListReadyTasks:input_type -> reliant.v1.ListReadyTasksRequest
-	5,  // 20: reliant.v1.TaskService.CreateTask:output_type -> reliant.v1.CreateTaskResponse
-	7,  // 21: reliant.v1.TaskService.GetTask:output_type -> reliant.v1.GetTaskResponse
-	9,  // 22: reliant.v1.TaskService.ListTasks:output_type -> reliant.v1.ListTasksResponse
-	11, // 23: reliant.v1.TaskService.UpdateTask:output_type -> reliant.v1.UpdateTaskResponse
-	13, // 24: reliant.v1.TaskService.DeleteTask:output_type -> reliant.v1.DeleteTaskResponse
-	15, // 25: reliant.v1.TaskService.AddTaskDependency:output_type -> reliant.v1.AddTaskDependencyResponse
-	17, // 26: reliant.v1.TaskService.RemoveTaskDependency:output_type -> reliant.v1.RemoveTaskDependencyResponse
-	19, // 27: reliant.v1.TaskService.ListReadyTasks:output_type -> reliant.v1.ListReadyTasksResponse
-	20, // [20:28] is the sub-list for method output_type
-	12, // [12:20] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	20, // 1: reliant.v1.Task.created_at:type_name -> google.protobuf.Timestamp
+	20, // 2: reliant.v1.Task.updated_at:type_name -> google.protobuf.Timestamp
+	1,  // 3: reliant.v1.TaskDependency.dependency_type:type_name -> reliant.v1.DependencyType
+	0,  // 4: reliant.v1.CreateTaskRequest.status:type_name -> reliant.v1.TaskStatus
+	2,  // 5: reliant.v1.CreateTaskResponse.task:type_name -> reliant.v1.Task
+	2,  // 6: reliant.v1.GetTaskResponse.task:type_name -> reliant.v1.Task
+	2,  // 7: reliant.v1.ListTasksResponse.tasks:type_name -> reliant.v1.Task
+	2,  // 8: reliant.v1.UpdateTaskRequest.task:type_name -> reliant.v1.Task
+	21, // 9: reliant.v1.UpdateTaskRequest.update_mask:type_name -> google.protobuf.FieldMask
+	2,  // 10: reliant.v1.UpdateTaskResponse.task:type_name -> reliant.v1.Task
+	1,  // 11: reliant.v1.AddTaskDependencyRequest.dependency_type:type_name -> reliant.v1.DependencyType
+	3,  // 12: reliant.v1.AddTaskDependencyResponse.dependency:type_name -> reliant.v1.TaskDependency
+	1,  // 13: reliant.v1.RemoveTaskDependencyRequest.dependency_type:type_name -> reliant.v1.DependencyType
+	2,  // 14: reliant.v1.ListReadyTasksResponse.tasks:type_name -> reliant.v1.Task
+	4,  // 15: reliant.v1.TaskService.CreateTask:input_type -> reliant.v1.CreateTaskRequest
+	6,  // 16: reliant.v1.TaskService.GetTask:input_type -> reliant.v1.GetTaskRequest
+	8,  // 17: reliant.v1.TaskService.ListTasks:input_type -> reliant.v1.ListTasksRequest
+	10, // 18: reliant.v1.TaskService.UpdateTask:input_type -> reliant.v1.UpdateTaskRequest
+	12, // 19: reliant.v1.TaskService.DeleteTask:input_type -> reliant.v1.DeleteTaskRequest
+	14, // 20: reliant.v1.TaskService.AddTaskDependency:input_type -> reliant.v1.AddTaskDependencyRequest
+	16, // 21: reliant.v1.TaskService.RemoveTaskDependency:input_type -> reliant.v1.RemoveTaskDependencyRequest
+	18, // 22: reliant.v1.TaskService.ListReadyTasks:input_type -> reliant.v1.ListReadyTasksRequest
+	5,  // 23: reliant.v1.TaskService.CreateTask:output_type -> reliant.v1.CreateTaskResponse
+	7,  // 24: reliant.v1.TaskService.GetTask:output_type -> reliant.v1.GetTaskResponse
+	9,  // 25: reliant.v1.TaskService.ListTasks:output_type -> reliant.v1.ListTasksResponse
+	11, // 26: reliant.v1.TaskService.UpdateTask:output_type -> reliant.v1.UpdateTaskResponse
+	13, // 27: reliant.v1.TaskService.DeleteTask:output_type -> reliant.v1.DeleteTaskResponse
+	15, // 28: reliant.v1.TaskService.AddTaskDependency:output_type -> reliant.v1.AddTaskDependencyResponse
+	17, // 29: reliant.v1.TaskService.RemoveTaskDependency:output_type -> reliant.v1.RemoveTaskDependencyResponse
+	19, // 30: reliant.v1.TaskService.ListReadyTasks:output_type -> reliant.v1.ListReadyTasksResponse
+	23, // [23:31] is the sub-list for method output_type
+	15, // [15:23] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_task_proto_init() }
@@ -1440,7 +1391,6 @@ func file_reliant_v1_task_proto_init() {
 	file_reliant_v1_task_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_task_proto_msgTypes[2].OneofWrappers = []any{}
 	file_reliant_v1_task_proto_msgTypes[6].OneofWrappers = []any{}
-	file_reliant_v1_task_proto_msgTypes[8].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

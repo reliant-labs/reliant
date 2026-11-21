@@ -141,11 +141,8 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.PackageCommandsService/RunCommand":             AsOutsider,
 	"reliant.v1.PackageCommandsService/SetCommandFavorite":     AsOutsider,
 	"reliant.v1.PlanService/CreatePlan":                        AsOutsider,
-	"reliant.v1.PlanService/DeletePlan":                        AsOutsider,
-	"reliant.v1.PlanService/GetPlan":                           AsOutsider,
 	"reliant.v1.PlanService/ListPlanTasks":                     AsOutsider,
 	"reliant.v1.PlanService/ListPlansByProject":                AsOutsider,
-	"reliant.v1.PlanService/UpdatePlan":                        AsOutsider,
 	"reliant.v1.PresetService/CreatePreset":                    AsOutsider,
 	"reliant.v1.PresetService/DeletePreset":                    AsOutsider,
 	"reliant.v1.PresetService/GetDefaultPreset":                AsOutsider,
@@ -236,9 +233,6 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.WorktreeService/ListWorktreeRecoveries": AsOutsider,
 	"reliant.v1.WorktreeService/ListWorktrees":          AsOutsider,
 	"reliant.v1.WorktreeService/PruneWorktrees":         AsOutsider,
-	"reliant.v1.TaskService/DeleteTask":                 AsOutsider,
-	"reliant.v1.TaskService/GetTask":                    AsOutsider,
-	"reliant.v1.TaskService/UpdateTask":                 AsOutsider,
 }
 
 // matrixKeys are the request fields that make an rpc "take a chat or a

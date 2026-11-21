@@ -9,13 +9,15 @@ import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobu
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../buf/validate/validate_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_field_mask, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/task.proto.
  */
 export const file_reliant_v1_task: GenFile = /*@__PURE__*/
-  fileDesc("ChVyZWxpYW50L3YxL3Rhc2sucHJvdG8SCnJlbGlhbnQudjEioQIKBFRhc2sSCgoCaWQYASABKAkSDwoHcGxhbl9pZBgCIAEoCRINCgV0aXRsZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRImCgZzdGF0dXMYBSABKA4yFi5yZWxpYW50LnYxLlRhc2tTdGF0dXMSEAoIcG9zaXRpb24YBiABKAUSGwoOcGFyZW50X3Rhc2tfaWQYByABKAlIAIgBARISCgpjcmVhdGVkX2F0GAggASgJEhIKCnVwZGF0ZWRfYXQYCSABKAkSFQoIbWV0YWRhdGEYCiABKAlIAYgBARIVCghhc3NpZ25lZRgLIAEoCUgCiAEBQhEKD19wYXJlbnRfdGFza19pZEILCglfbWV0YWRhdGFCCwoJX2Fzc2lnbmVlIo8BCg5UYXNrRGVwZW5kZW5jeRIKCgJpZBgBIAEoCRIUCgxmcm9tX3Rhc2tfaWQYAiABKAkSEgoKdG9fdGFza19pZBgDIAEoCRIzCg9kZXBlbmRlbmN5X3R5cGUYBCABKA4yGi5yZWxpYW50LnYxLkRlcGVuZGVuY3lUeXBlEhIKCmNyZWF0ZWRfYXQYBSABKAkijAIKEUNyZWF0ZVRhc2tSZXF1ZXN0Eg8KB3BsYW5faWQYASABKAkSDQoFdGl0bGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSJgoGc3RhdHVzGAQgASgOMhYucmVsaWFudC52MS5UYXNrU3RhdHVzEhUKCHBvc2l0aW9uGAUgASgFSACIAQESGwoOcGFyZW50X3Rhc2tfaWQYBiABKAlIAYgBARIVCghtZXRhZGF0YRgHIAEoCUgCiAEBEhUKCGFzc2lnbmVlGAggASgJSAOIAQFCCwoJX3Bvc2l0aW9uQhEKD19wYXJlbnRfdGFza19pZEILCglfbWV0YWRhdGFCCwoJX2Fzc2lnbmVlIjQKEkNyZWF0ZVRhc2tSZXNwb25zZRIeCgR0YXNrGAEgASgLMhAucmVsaWFudC52MS5UYXNrIiEKDkdldFRhc2tSZXF1ZXN0Eg8KB3Rhc2tfaWQYASABKAkiMQoPR2V0VGFza1Jlc3BvbnNlEh4KBHRhc2sYASABKAsyEC5yZWxpYW50LnYxLlRhc2siNAoQTGlzdFRhc2tzUmVxdWVzdBIUCgdwbGFuX2lkGAEgASgJSACIAQFCCgoIX3BsYW5faWQiQwoRTGlzdFRhc2tzUmVzcG9uc2USHwoFdGFza3MYASADKAsyEC5yZWxpYW50LnYxLlRhc2sSDQoFdG90YWwYAiABKAUikAIKEVVwZGF0ZVRhc2tSZXF1ZXN0Eg8KB3Rhc2tfaWQYASABKAkSEgoFdGl0bGUYAiABKAlIAIgBARIYCgtkZXNjcmlwdGlvbhgDIAEoCUgBiAEBEisKBnN0YXR1cxgEIAEoDjIWLnJlbGlhbnQudjEuVGFza1N0YXR1c0gCiAEBEhUKCHBvc2l0aW9uGAUgASgFSAOIAQESFQoIbWV0YWRhdGEYBiABKAlIBIgBARIVCghhc3NpZ25lZRgHIAEoCUgFiAEBQggKBl90aXRsZUIOCgxfZGVzY3JpcHRpb25CCQoHX3N0YXR1c0ILCglfcG9zaXRpb25CCwoJX21ldGFkYXRhQgsKCV9hc3NpZ25lZSI0ChJVcGRhdGVUYXNrUmVzcG9uc2USHgoEdGFzaxgBIAEoCzIQLnJlbGlhbnQudjEuVGFzayIkChFEZWxldGVUYXNrUmVxdWVzdBIPCgd0YXNrX2lkGAEgASgJIiUKEkRlbGV0ZVRhc2tSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIInkKGEFkZFRhc2tEZXBlbmRlbmN5UmVxdWVzdBIUCgxmcm9tX3Rhc2tfaWQYASABKAkSEgoKdG9fdGFza19pZBgCIAEoCRIzCg9kZXBlbmRlbmN5X3R5cGUYAyABKA4yGi5yZWxpYW50LnYxLkRlcGVuZGVuY3lUeXBlIksKGUFkZFRhc2tEZXBlbmRlbmN5UmVzcG9uc2USLgoKZGVwZW5kZW5jeRgBIAEoCzIaLnJlbGlhbnQudjEuVGFza0RlcGVuZGVuY3kifAobUmVtb3ZlVGFza0RlcGVuZGVuY3lSZXF1ZXN0EhQKDGZyb21fdGFza19pZBgBIAEoCRISCgp0b190YXNrX2lkGAIgASgJEjMKD2RlcGVuZGVuY3lfdHlwZRgDIAEoDjIaLnJlbGlhbnQudjEuRGVwZW5kZW5jeVR5cGUiLwocUmVtb3ZlVGFza0RlcGVuZGVuY3lSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIjAKFUxpc3RSZWFkeVRhc2tzUmVxdWVzdBIXCgdwbGFuX2lkGAEgASgJQga6SAPIAQEiSAoWTGlzdFJlYWR5VGFza3NSZXNwb25zZRIfCgV0YXNrcxgBIAMoCzIQLnJlbGlhbnQudjEuVGFzaxINCgV0b3RhbBgCIAEoBSrfAQoKVGFza1N0YXR1cxIbChdUQVNLX1NUQVRVU19VTlNQRUNJRklFRBAAEhcKE1RBU0tfU1RBVFVTX1BFTkRJTkcQARIbChdUQVNLX1NUQVRVU19JTl9QUk9HUkVTUxACEhkKFVRBU0tfU1RBVFVTX0NPTVBMRVRFRBADEhYKElRBU0tfU1RBVFVTX0ZBSUxFRBAEEhcKE1RBU0tfU1RBVFVTX0JMT0NLRUQQBRIZChVUQVNLX1NUQVRVU19DQU5DRUxMRUQQBhIXChNUQVNLX1NUQVRVU19TS0lQUEVEEAcqjQEKDkRlcGVuZGVuY3lUeXBlEh8KG0RFUEVOREVOQ1lfVFlQRV9VTlNQRUNJRklFRBAAEhoKFkRFUEVOREVOQ1lfVFlQRV9CTE9DS1MQARIbChdERVBFTkRFTkNZX1RZUEVfUkVMQVRFRBACEiEKHURFUEVOREVOQ1lfVFlQRV9QQVJBTExFTF9XSVRIEAMyowcKC1Rhc2tTZXJ2aWNlEk0KCkNyZWF0ZVRhc2sSHS5yZWxpYW50LnYxLkNyZWF0ZVRhc2tSZXF1ZXN0Gh4ucmVsaWFudC52MS5DcmVhdGVUYXNrUmVzcG9uc2UiABJECgdHZXRUYXNrEhoucmVsaWFudC52MS5HZXRUYXNrUmVxdWVzdBobLnJlbGlhbnQudjEuR2V0VGFza1Jlc3BvbnNlIgASSgoJTGlzdFRhc2tzEhwucmVsaWFudC52MS5MaXN0VGFza3NSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0VGFza3NSZXNwb25zZSIAEoEBCgpVcGRhdGVUYXNrEh0ucmVsaWFudC52MS5VcGRhdGVUYXNrUmVxdWVzdBoeLnJlbGlhbnQudjEuVXBkYXRlVGFza1Jlc3BvbnNlIjSiuxgwOi4KBnVwZGF0ZRIkCgR0YXNrEgd0YXNrX2lkGhNyZXNwb25zZS50YXNrLnRpdGxlEmwKCkRlbGV0ZVRhc2sSHS5yZWxpYW50LnYxLkRlbGV0ZVRhc2tSZXF1ZXN0Gh4ucmVsaWFudC52MS5EZWxldGVUYXNrUmVzcG9uc2UiH6K7GBs6GQoGZGVsZXRlEg8KBHRhc2sSB3Rhc2tfaWQSqwEKEUFkZFRhc2tEZXBlbmRlbmN5EiQucmVsaWFudC52MS5BZGRUYXNrRGVwZW5kZW5jeVJlcXVlc3QaJS5yZWxpYW50LnYxLkFkZFRhc2tEZXBlbmRlbmN5UmVzcG9uc2UiSaK7GEU6QwoOYWRkX2RlcGVuZGVuY3kSFAoEdGFzaxIMZnJvbV90YXNrX2lkKgp0b190YXNrX2lkKg9kZXBlbmRlbmN5X3R5cGUStwEKFFJlbW92ZVRhc2tEZXBlbmRlbmN5EicucmVsaWFudC52MS5SZW1vdmVUYXNrRGVwZW5kZW5jeVJlcXVlc3QaKC5yZWxpYW50LnYxLlJlbW92ZVRhc2tEZXBlbmRlbmN5UmVzcG9uc2UiTKK7GEg6RgoRcmVtb3ZlX2RlcGVuZGVuY3kSFAoEdGFzaxIMZnJvbV90YXNrX2lkKgp0b190YXNrX2lkKg9kZXBlbmRlbmN5X3R5cGUSWQoOTGlzdFJlYWR5VGFza3MSIS5yZWxpYW50LnYxLkxpc3RSZWFkeVRhc2tzUmVxdWVzdBoiLnJlbGlhbnQudjEuTGlzdFJlYWR5VGFza3NSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("ChVyZWxpYW50L3YxL3Rhc2sucHJvdG8SCnJlbGlhbnQudjEi2QIKBFRhc2sSCgoCaWQYASABKAkSDwoHcGxhbl9pZBgCIAEoCRINCgV0aXRsZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRImCgZzdGF0dXMYBSABKA4yFi5yZWxpYW50LnYxLlRhc2tTdGF0dXMSEAoIcG9zaXRpb24YBiABKAUSGwoOcGFyZW50X3Rhc2tfaWQYByABKAlIAIgBARIuCgpjcmVhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCghtZXRhZGF0YRgKIAEoCUgBiAEBEhUKCGFzc2lnbmVlGAsgASgJSAKIAQFCEQoPX3BhcmVudF90YXNrX2lkQgsKCV9tZXRhZGF0YUILCglfYXNzaWduZWUijwEKDlRhc2tEZXBlbmRlbmN5EgoKAmlkGAEgASgJEhQKDGZyb21fdGFza19pZBgCIAEoCRISCgp0b190YXNrX2lkGAMgASgJEjMKD2RlcGVuZGVuY3lfdHlwZRgEIAEoDjIaLnJlbGlhbnQudjEuRGVwZW5kZW5jeVR5cGUSEgoKY3JlYXRlZF9hdBgFIAEoCSL6AQoRQ3JlYXRlVGFza1JlcXVlc3QSDwoHcGxhbl9pZBgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRImCgZzdGF0dXMYBCABKA4yFi5yZWxpYW50LnYxLlRhc2tTdGF0dXMSEAoIcG9zaXRpb24YBSABKAUSGwoOcGFyZW50X3Rhc2tfaWQYBiABKAlIAIgBARIVCghtZXRhZGF0YRgHIAEoCUgBiAEBEhUKCGFzc2lnbmVlGAggASgJSAKIAQFCEQoPX3BhcmVudF90YXNrX2lkQgsKCV9tZXRhZGF0YUILCglfYXNzaWduZWUiNAoSQ3JlYXRlVGFza1Jlc3BvbnNlEh4KBHRhc2sYASABKAsyEC5yZWxpYW50LnYxLlRhc2siHAoOR2V0VGFza1JlcXVlc3QSCgoCaWQYASABKAkiMQoPR2V0VGFza1Jlc3BvbnNlEh4KBHRhc2sYASABKAsyEC5yZWxpYW50LnYxLlRhc2siNAoQTGlzdFRhc2tzUmVxdWVzdBIUCgdwbGFuX2lkGAEgASgJSACIAQFCCgoIX3BsYW5faWQiSQoRTGlzdFRhc2tzUmVzcG9uc2USHwoFdGFza3MYASADKAsyEC5yZWxpYW50LnYxLlRhc2sSEwoLdG90YWxfY291bnQYAiABKAUiZAoRVXBkYXRlVGFza1JlcXVlc3QSHgoEdGFzaxgBIAEoCzIQLnJlbGlhbnQudjEuVGFzaxIvCgt1cGRhdGVfbWFzaxgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE1hc2siNAoSVXBkYXRlVGFza1Jlc3BvbnNlEh4KBHRhc2sYASABKAsyEC5yZWxpYW50LnYxLlRhc2siHwoRRGVsZXRlVGFza1JlcXVlc3QSCgoCaWQYASABKAkiFAoSRGVsZXRlVGFza1Jlc3BvbnNlInkKGEFkZFRhc2tEZXBlbmRlbmN5UmVxdWVzdBIUCgxmcm9tX3Rhc2tfaWQYASABKAkSEgoKdG9fdGFza19pZBgCIAEoCRIzCg9kZXBlbmRlbmN5X3R5cGUYAyABKA4yGi5yZWxpYW50LnYxLkRlcGVuZGVuY3lUeXBlIksKGUFkZFRhc2tEZXBlbmRlbmN5UmVzcG9uc2USLgoKZGVwZW5kZW5jeRgBIAEoCzIaLnJlbGlhbnQudjEuVGFza0RlcGVuZGVuY3kifAobUmVtb3ZlVGFza0RlcGVuZGVuY3lSZXF1ZXN0EhQKDGZyb21fdGFza19pZBgBIAEoCRISCgp0b190YXNrX2lkGAIgASgJEjMKD2RlcGVuZGVuY3lfdHlwZRgDIAEoDjIaLnJlbGlhbnQudjEuRGVwZW5kZW5jeVR5cGUiLwocUmVtb3ZlVGFza0RlcGVuZGVuY3lSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIjAKFUxpc3RSZWFkeVRhc2tzUmVxdWVzdBIXCgdwbGFuX2lkGAEgASgJQga6SAPIAQEiSAoWTGlzdFJlYWR5VGFza3NSZXNwb25zZRIfCgV0YXNrcxgBIAMoCzIQLnJlbGlhbnQudjEuVGFzaxINCgV0b3RhbBgCIAEoBSrfAQoKVGFza1N0YXR1cxIbChdUQVNLX1NUQVRVU19VTlNQRUNJRklFRBAAEhcKE1RBU0tfU1RBVFVTX1BFTkRJTkcQARIbChdUQVNLX1NUQVRVU19JTl9QUk9HUkVTUxACEhkKFVRBU0tfU1RBVFVTX0NPTVBMRVRFRBADEhYKElRBU0tfU1RBVFVTX0ZBSUxFRBAEEhcKE1RBU0tfU1RBVFVTX0JMT0NLRUQQBRIZChVUQVNLX1NUQVRVU19DQU5DRUxMRUQQBhIXChNUQVNLX1NUQVRVU19TS0lQUEVEEAcqjQEKDkRlcGVuZGVuY3lUeXBlEh8KG0RFUEVOREVOQ1lfVFlQRV9VTlNQRUNJRklFRBAAEhoKFkRFUEVOREVOQ1lfVFlQRV9CTE9DS1MQARIbChdERVBFTkRFTkNZX1RZUEVfUkVMQVRFRBACEiEKHURFUEVOREVOQ1lfVFlQRV9QQVJBTExFTF9XSVRIEAMyngcKC1Rhc2tTZXJ2aWNlEk0KCkNyZWF0ZVRhc2sSHS5yZWxpYW50LnYxLkNyZWF0ZVRhc2tSZXF1ZXN0Gh4ucmVsaWFudC52MS5DcmVhdGVUYXNrUmVzcG9uc2UiABJECgdHZXRUYXNrEhoucmVsaWFudC52MS5HZXRUYXNrUmVxdWVzdBobLnJlbGlhbnQudjEuR2V0VGFza1Jlc3BvbnNlIgASSgoJTGlzdFRhc2tzEhwucmVsaWFudC52MS5MaXN0VGFza3NSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0VGFza3NSZXNwb25zZSIAEoEBCgpVcGRhdGVUYXNrEh0ucmVsaWFudC52MS5VcGRhdGVUYXNrUmVxdWVzdBoeLnJlbGlhbnQudjEuVXBkYXRlVGFza1Jlc3BvbnNlIjSiuxgwOi4KBnVwZGF0ZRIkCgR0YXNrEgd0YXNrLmlkGhNyZXNwb25zZS50YXNrLnRpdGxlEmcKCkRlbGV0ZVRhc2sSHS5yZWxpYW50LnYxLkRlbGV0ZVRhc2tSZXF1ZXN0Gh4ucmVsaWFudC52MS5EZWxldGVUYXNrUmVzcG9uc2UiGqK7GBY6FAoGZGVsZXRlEgoKBHRhc2sSAmlkEqsBChFBZGRUYXNrRGVwZW5kZW5jeRIkLnJlbGlhbnQudjEuQWRkVGFza0RlcGVuZGVuY3lSZXF1ZXN0GiUucmVsaWFudC52MS5BZGRUYXNrRGVwZW5kZW5jeVJlc3BvbnNlIkmiuxhFOkMKDmFkZF9kZXBlbmRlbmN5EhQKBHRhc2sSDGZyb21fdGFza19pZCoKdG9fdGFza19pZCoPZGVwZW5kZW5jeV90eXBlErcBChRSZW1vdmVUYXNrRGVwZW5kZW5jeRInLnJlbGlhbnQudjEuUmVtb3ZlVGFza0RlcGVuZGVuY3lSZXF1ZXN0GigucmVsaWFudC52MS5SZW1vdmVUYXNrRGVwZW5kZW5jeVJlc3BvbnNlIkyiuxhIOkYKEXJlbW92ZV9kZXBlbmRlbmN5EhQKBHRhc2sSDGZyb21fdGFza19pZCoKdG9fdGFza19pZCoPZGVwZW5kZW5jeV90eXBlElkKDkxpc3RSZWFkeVRhc2tzEiEucmVsaWFudC52MS5MaXN0UmVhZHlUYXNrc1JlcXVlc3QaIi5yZWxpYW50LnYxLkxpc3RSZWFkeVRhc2tzUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
 
 /**
  * Task represents a task in the system
@@ -59,14 +61,14 @@ export type Task = Message<"reliant.v1.Task"> & {
   parentTaskId?: string | undefined;
 
   /**
-   * @generated from field: string created_at = 8;
+   * @generated from field: google.protobuf.Timestamp created_at = 8;
    */
-  createdAt: string;
+  createdAt?: Timestamp | undefined;
 
   /**
-   * @generated from field: string updated_at = 9;
+   * @generated from field: google.protobuf.Timestamp updated_at = 9;
    */
-  updatedAt: string;
+  updatedAt?: Timestamp | undefined;
 
   /**
    * @generated from field: optional string metadata = 10;
@@ -152,9 +154,9 @@ export type CreateTaskRequest = Message<"reliant.v1.CreateTaskRequest"> & {
   status: TaskStatus;
 
   /**
-   * @generated from field: optional int32 position = 5;
+   * @generated from field: int32 position = 5;
    */
-  position?: number | undefined;
+  position: number;
 
   /**
    * @generated from field: optional string parent_task_id = 6;
@@ -205,9 +207,9 @@ export const CreateTaskResponseSchema: GenMessage<CreateTaskResponse> = /*@__PUR
  */
 export type GetTaskRequest = Message<"reliant.v1.GetTaskRequest"> & {
   /**
-   * @generated from field: string task_id = 1;
+   * @generated from field: string id = 1;
    */
-  taskId: string;
+  id: string;
 };
 
 /**
@@ -269,9 +271,9 @@ export type ListTasksResponse = Message<"reliant.v1.ListTasksResponse"> & {
   tasks: Task[];
 
   /**
-   * @generated from field: int32 total = 2;
+   * @generated from field: int32 total_count = 2;
    */
-  total: number;
+  totalCount: number;
 };
 
 /**
@@ -288,39 +290,18 @@ export const ListTasksResponseSchema: GenMessage<ListTasksResponse> = /*@__PURE_
  */
 export type UpdateTaskRequest = Message<"reliant.v1.UpdateTaskRequest"> & {
   /**
-   * @generated from field: string task_id = 1;
+   * The task, carrying its id and the fields update_mask names.
+   *
+   * @generated from field: reliant.v1.Task task = 1;
    */
-  taskId: string;
+  task?: Task | undefined;
 
   /**
-   * @generated from field: optional string title = 2;
+   * The Task fields to write (title, description, status, position, metadata, assignee).
+   *
+   * @generated from field: google.protobuf.FieldMask update_mask = 2;
    */
-  title?: string | undefined;
-
-  /**
-   * @generated from field: optional string description = 3;
-   */
-  description?: string | undefined;
-
-  /**
-   * @generated from field: optional reliant.v1.TaskStatus status = 4;
-   */
-  status?: TaskStatus | undefined;
-
-  /**
-   * @generated from field: optional int32 position = 5;
-   */
-  position?: number | undefined;
-
-  /**
-   * @generated from field: optional string metadata = 6;
-   */
-  metadata?: string | undefined;
-
-  /**
-   * @generated from field: optional string assignee = 7;
-   */
-  assignee?: string | undefined;
+  updateMask?: FieldMask | undefined;
 };
 
 /**
@@ -356,9 +337,9 @@ export const UpdateTaskResponseSchema: GenMessage<UpdateTaskResponse> = /*@__PUR
  */
 export type DeleteTaskRequest = Message<"reliant.v1.DeleteTaskRequest"> & {
   /**
-   * @generated from field: string task_id = 1;
+   * @generated from field: string id = 1;
    */
-  taskId: string;
+  id: string;
 };
 
 /**
@@ -374,10 +355,6 @@ export const DeleteTaskRequestSchema: GenMessage<DeleteTaskRequest> = /*@__PURE_
  * @generated from message reliant.v1.DeleteTaskResponse
  */
 export type DeleteTaskResponse = Message<"reliant.v1.DeleteTaskResponse"> & {
-  /**
-   * @generated from field: bool success = 1;
-   */
-  success: boolean;
 };
 
 /**
@@ -626,7 +603,6 @@ export const DependencyTypeSchema: GenEnum<DependencyType> = /*@__PURE__*/
 export const TaskService: GenService<{
   /**
    * CreateTask creates a new task
-   * forge:custom — authorizes the caller through the plan's thread and chat before it writes
    *
    * @generated from rpc reliant.v1.TaskService.CreateTask
    */
@@ -637,7 +613,6 @@ export const TaskService: GenService<{
   },
   /**
    * GetTask retrieves a task by ID
-   * forge:custom — authorizes through the task's plan, thread and chat
    *
    * @generated from rpc reliant.v1.TaskService.GetTask
    */
@@ -648,7 +623,6 @@ export const TaskService: GenService<{
   },
   /**
    * ListTasks lists tasks (optionally filtered by plan)
-   * forge:custom — requires plan_id and authorizes through the plan's chat before it lists
    *
    * @generated from rpc reliant.v1.TaskService.ListTasks
    */
@@ -658,8 +632,7 @@ export const TaskService: GenService<{
     output: typeof ListTasksResponseSchema;
   },
   /**
-   * UpdateTask updates an existing task
-   * forge:custom — a partial update authorized through the task's chat, which it notifies to refetch
+   * UpdateTask updates an existing task; update_mask names the fields it writes
    *
    * @generated from rpc reliant.v1.TaskService.UpdateTask
    */
@@ -670,7 +643,6 @@ export const TaskService: GenService<{
   },
   /**
    * DeleteTask deletes a task
-   * forge:custom — authorized through the task's chat, which it notifies to refetch
    *
    * @generated from rpc reliant.v1.TaskService.DeleteTask
    */
@@ -701,6 +673,7 @@ export const TaskService: GenService<{
   },
   /**
    * ListReadyTasks lists tasks that are ready to work on (no unresolved blockers)
+   * forge:query-scope Task
    *
    * @generated from rpc reliant.v1.TaskService.ListReadyTasks
    */

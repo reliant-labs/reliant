@@ -18,7 +18,7 @@ import (
 func TestListPlanTasks_Generated(t *testing.T) {
 	t.Parallel()
 
-	repo := newPlanMocks()
+	repo := newPlanMocks(t)
 	repo.Tasks.ListTasksByPlanFunc = func(_ context.Context, planID string) ([]*core.Task, error) {
 		return []*core.Task{
 			{ID: "task-1", PlanID: planID, Title: "First", Position: 0},
@@ -35,10 +35,10 @@ func TestListPlanTasks_Generated(t *testing.T) {
 			WantErr: connect.CodeNotFound,
 		},
 		{
-			Name:    "another user's plan is denied",
+			Name:    "another user's plan is not found",
 			Req:     connect.NewRequest(&pb.ListPlanTasksRequest{PlanId: otherPlanID}),
 			Ctx:     plan.AuthedContext(t),
-			WantErr: connect.CodePermissionDenied,
+			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "the plan's tasks, in order",

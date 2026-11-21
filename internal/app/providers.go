@@ -32,6 +32,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
 
@@ -121,6 +122,15 @@ type DatabaseDeps struct{ Pool *DBRepo }
 // Reaching it reaches DBRepo, so whatever reads the database still stops
 // before the pools close.
 func NewDatabase(d DatabaseDeps) (*db.Repo, error) { return d.Pool.Repo, nil }
+
+// ORMDeps is the database whose handle the generated CRUD ops run on.
+type ORMDeps struct{ Repo *db.Repo }
+
+// NewORM is the database's forge ORM handle: the orm.Context a handler's
+// generated CRUD ops (and its scoped transactions) run on. It is the same
+// client Repo.ORM() hands the stores, so every path shares one pool and one
+// transaction context.
+func NewORM(d ORMDeps) (orm.Context, error) { return d.Repo.ORM(), nil }
 
 // NATSConn is the process's NATS connection.
 type NATSConn struct{ Conn *nats.Conn }

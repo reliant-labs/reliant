@@ -10,11 +10,10 @@ import (
 func RealDeps(repo *db.Repo) Deps {
 	o := repo.ORM()
 	return Deps{
-		Tasks:   store.NewTaskExtStore(o),
 		Plans:   store.NewPlanExtStore(o),
 		Threads: store.NewThreadExtStore(o),
 		Chats:   store.NewChatExtStore(o),
 		Refetch: repo,
-		Tx:      o,
+		DB:      o,
 	}
 }

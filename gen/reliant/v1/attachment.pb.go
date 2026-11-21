@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -23,133 +24,6 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
-
-// AttachmentInfo contains full attachment metadata including storage details
-type AttachmentInfo struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	UserId    string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Filename  string                 `protobuf:"bytes,3,opt,name=filename,proto3" json:"filename,omitempty"`
-	Size      int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
-	MimeType  string                 `protobuf:"bytes,5,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	FileHash  *string                `protobuf:"bytes,6,opt,name=file_hash,json=fileHash,proto3,oneof" json:"file_hash,omitempty"`
-	FilePath  string                 `protobuf:"bytes,7,opt,name=file_path,json=filePath,proto3" json:"file_path,omitempty"`
-	CreatedAt string                 `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt string                 `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	// URL for frontend compatibility (constructed from ID)
-	Url string `protobuf:"bytes,10,opt,name=url,proto3" json:"url,omitempty"`
-	// Type of attachment: "image" (binary uploaded) or "file_reference" (path to local file)
-	AttachmentType string `protobuf:"bytes,11,opt,name=attachment_type,json=attachmentType,proto3" json:"attachment_type,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *AttachmentInfo) Reset() {
-	*x = AttachmentInfo{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AttachmentInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AttachmentInfo) ProtoMessage() {}
-
-func (x *AttachmentInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AttachmentInfo.ProtoReflect.Descriptor instead.
-func (*AttachmentInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *AttachmentInfo) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetFilename() string {
-	if x != nil {
-		return x.Filename
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetSize() int64 {
-	if x != nil {
-		return x.Size
-	}
-	return 0
-}
-
-func (x *AttachmentInfo) GetMimeType() string {
-	if x != nil {
-		return x.MimeType
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetFileHash() string {
-	if x != nil && x.FileHash != nil {
-		return *x.FileHash
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetFilePath() string {
-	if x != nil {
-		return x.FilePath
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetCreatedAt() string {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetUpdatedAt() string {
-	if x != nil {
-		return x.UpdatedAt
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetUrl() string {
-	if x != nil {
-		return x.Url
-	}
-	return ""
-}
-
-func (x *AttachmentInfo) GetAttachmentType() string {
-	if x != nil {
-		return x.AttachmentType
-	}
-	return ""
-}
 
 type UploadAttachmentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -165,7 +39,7 @@ type UploadAttachmentRequest struct {
 
 func (x *UploadAttachmentRequest) Reset() {
 	*x = UploadAttachmentRequest{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[1]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -177,7 +51,7 @@ func (x *UploadAttachmentRequest) String() string {
 func (*UploadAttachmentRequest) ProtoMessage() {}
 
 func (x *UploadAttachmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[1]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -190,7 +64,7 @@ func (x *UploadAttachmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadAttachmentRequest.ProtoReflect.Descriptor instead.
 func (*UploadAttachmentRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *UploadAttachmentRequest) GetFilename() string {
@@ -217,14 +91,14 @@ func (x *UploadAttachmentRequest) GetMimeType() string {
 type UploadAttachmentResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The created attachment with metadata
-	Attachment    *AttachmentInfo `protobuf:"bytes,1,opt,name=attachment,proto3" json:"attachment,omitempty"`
+	Attachment    *v1.Attachment `protobuf:"bytes,1,opt,name=attachment,proto3" json:"attachment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UploadAttachmentResponse) Reset() {
 	*x = UploadAttachmentResponse{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[2]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -236,7 +110,7 @@ func (x *UploadAttachmentResponse) String() string {
 func (*UploadAttachmentResponse) ProtoMessage() {}
 
 func (x *UploadAttachmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[2]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -249,10 +123,10 @@ func (x *UploadAttachmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UploadAttachmentResponse.ProtoReflect.Descriptor instead.
 func (*UploadAttachmentResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *UploadAttachmentResponse) GetAttachment() *AttachmentInfo {
+func (x *UploadAttachmentResponse) GetAttachment() *v1.Attachment {
 	if x != nil {
 		return x.Attachment
 	}
@@ -261,14 +135,14 @@ func (x *UploadAttachmentResponse) GetAttachment() *AttachmentInfo {
 
 type GetAttachmentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	AttachmentId  string                 `protobuf:"bytes,1,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetAttachmentRequest) Reset() {
 	*x = GetAttachmentRequest{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[3]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -280,7 +154,7 @@ func (x *GetAttachmentRequest) String() string {
 func (*GetAttachmentRequest) ProtoMessage() {}
 
 func (x *GetAttachmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[3]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,12 +167,12 @@ func (x *GetAttachmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttachmentRequest.ProtoReflect.Descriptor instead.
 func (*GetAttachmentRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *GetAttachmentRequest) GetAttachmentId() string {
+func (x *GetAttachmentRequest) GetId() string {
 	if x != nil {
-		return x.AttachmentId
+		return x.Id
 	}
 	return ""
 }
@@ -306,7 +180,7 @@ func (x *GetAttachmentRequest) GetAttachmentId() string {
 type GetAttachmentResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Attachment metadata
-	Attachment *AttachmentInfo `protobuf:"bytes,1,opt,name=attachment,proto3" json:"attachment,omitempty"`
+	Attachment *v1.Attachment `protobuf:"bytes,1,opt,name=attachment,proto3" json:"attachment,omitempty"`
 	// File content as bytes (base64 encoded in JSON transport)
 	Content       []byte `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -315,7 +189,7 @@ type GetAttachmentResponse struct {
 
 func (x *GetAttachmentResponse) Reset() {
 	*x = GetAttachmentResponse{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[4]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -327,7 +201,7 @@ func (x *GetAttachmentResponse) String() string {
 func (*GetAttachmentResponse) ProtoMessage() {}
 
 func (x *GetAttachmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[4]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -340,10 +214,10 @@ func (x *GetAttachmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAttachmentResponse.ProtoReflect.Descriptor instead.
 func (*GetAttachmentResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetAttachmentResponse) GetAttachment() *AttachmentInfo {
+func (x *GetAttachmentResponse) GetAttachment() *v1.Attachment {
 	if x != nil {
 		return x.Attachment
 	}
@@ -359,14 +233,14 @@ func (x *GetAttachmentResponse) GetContent() []byte {
 
 type DeleteAttachmentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	AttachmentId  string                 `protobuf:"bytes,1,opt,name=attachment_id,json=attachmentId,proto3" json:"attachment_id,omitempty"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteAttachmentRequest) Reset() {
 	*x = DeleteAttachmentRequest{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[5]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -378,7 +252,7 @@ func (x *DeleteAttachmentRequest) String() string {
 func (*DeleteAttachmentRequest) ProtoMessage() {}
 
 func (x *DeleteAttachmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[5]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -391,12 +265,12 @@ func (x *DeleteAttachmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAttachmentRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAttachmentRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *DeleteAttachmentRequest) GetAttachmentId() string {
+func (x *DeleteAttachmentRequest) GetId() string {
 	if x != nil {
-		return x.AttachmentId
+		return x.Id
 	}
 	return ""
 }
@@ -410,7 +284,7 @@ type DeleteAttachmentResponse struct {
 
 func (x *DeleteAttachmentResponse) Reset() {
 	*x = DeleteAttachmentResponse{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[6]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -422,7 +296,7 @@ func (x *DeleteAttachmentResponse) String() string {
 func (*DeleteAttachmentResponse) ProtoMessage() {}
 
 func (x *DeleteAttachmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[6]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -435,7 +309,7 @@ func (x *DeleteAttachmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAttachmentResponse.ProtoReflect.Descriptor instead.
 func (*DeleteAttachmentResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DeleteAttachmentResponse) GetMessage() string {
@@ -459,7 +333,7 @@ type CreateFileReferenceRequest struct {
 
 func (x *CreateFileReferenceRequest) Reset() {
 	*x = CreateFileReferenceRequest{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[7]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -471,7 +345,7 @@ func (x *CreateFileReferenceRequest) String() string {
 func (*CreateFileReferenceRequest) ProtoMessage() {}
 
 func (x *CreateFileReferenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[7]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -484,7 +358,7 @@ func (x *CreateFileReferenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFileReferenceRequest.ProtoReflect.Descriptor instead.
 func (*CreateFileReferenceRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CreateFileReferenceRequest) GetFilePath() string {
@@ -511,14 +385,14 @@ func (x *CreateFileReferenceRequest) GetContent() []byte {
 type CreateFileReferenceResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The created file reference with metadata
-	Attachment    *AttachmentInfo `protobuf:"bytes,1,opt,name=attachment,proto3" json:"attachment,omitempty"`
+	Attachment    *v1.Attachment `protobuf:"bytes,1,opt,name=attachment,proto3" json:"attachment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateFileReferenceResponse) Reset() {
 	*x = CreateFileReferenceResponse{}
-	mi := &file_reliant_v1_attachment_proto_msgTypes[8]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -530,7 +404,7 @@ func (x *CreateFileReferenceResponse) String() string {
 func (*CreateFileReferenceResponse) ProtoMessage() {}
 
 func (x *CreateFileReferenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_attachment_proto_msgTypes[8]
+	mi := &file_reliant_v1_attachment_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -543,10 +417,10 @@ func (x *CreateFileReferenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFileReferenceResponse.ProtoReflect.Descriptor instead.
 func (*CreateFileReferenceResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_attachment_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *CreateFileReferenceResponse) GetAttachment() *AttachmentInfo {
+func (x *CreateFileReferenceResponse) GetAttachment() *v1.Attachment {
 	if x != nil {
 		return x.Attachment
 	}
@@ -558,50 +432,33 @@ var File_reliant_v1_attachment_proto protoreflect.FileDescriptor
 const file_reliant_v1_attachment_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/attachment.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\"\xcc\x02\n" +
-	"\x0eAttachmentInfo\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1a\n" +
-	"\bfilename\x18\x03 \x01(\tR\bfilename\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04size\x12\x1b\n" +
-	"\tmime_type\x18\x05 \x01(\tR\bmimeType\x12 \n" +
-	"\tfile_hash\x18\x06 \x01(\tH\x00R\bfileHash\x88\x01\x01\x12\x1b\n" +
-	"\tfile_path\x18\a \x01(\tR\bfilePath\x12\x1d\n" +
-	"\n" +
-	"created_at\x18\b \x01(\tR\tcreatedAt\x12\x1d\n" +
-	"\n" +
-	"updated_at\x18\t \x01(\tR\tupdatedAt\x12\x10\n" +
-	"\x03url\x18\n" +
-	" \x01(\tR\x03url\x12'\n" +
-	"\x0fattachment_type\x18\v \x01(\tR\x0eattachmentTypeB\f\n" +
-	"\n" +
-	"_file_hash\"l\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x15reliant/v1/chat.proto\"l\n" +
 	"\x17UploadAttachmentRequest\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\x12\x1b\n" +
-	"\tmime_type\x18\x03 \x01(\tR\bmimeType\"V\n" +
-	"\x18UploadAttachmentResponse\x12:\n" +
+	"\tmime_type\x18\x03 \x01(\tR\bmimeType\"R\n" +
+	"\x18UploadAttachmentResponse\x126\n" +
 	"\n" +
-	"attachment\x18\x01 \x01(\v2\x1a.reliant.v1.AttachmentInfoR\n" +
-	"attachment\";\n" +
-	"\x14GetAttachmentRequest\x12#\n" +
-	"\rattachment_id\x18\x01 \x01(\tR\fattachmentId\"m\n" +
-	"\x15GetAttachmentResponse\x12:\n" +
+	"attachment\x18\x01 \x01(\v2\x16.reliant.v1.AttachmentR\n" +
+	"attachment\"&\n" +
+	"\x14GetAttachmentRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"i\n" +
+	"\x15GetAttachmentResponse\x126\n" +
 	"\n" +
-	"attachment\x18\x01 \x01(\v2\x1a.reliant.v1.AttachmentInfoR\n" +
+	"attachment\x18\x01 \x01(\v2\x16.reliant.v1.AttachmentR\n" +
 	"attachment\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\fR\acontent\">\n" +
-	"\x17DeleteAttachmentRequest\x12#\n" +
-	"\rattachment_id\x18\x01 \x01(\tR\fattachmentId\"4\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\")\n" +
+	"\x17DeleteAttachmentRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"4\n" +
 	"\x18DeleteAttachmentResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"o\n" +
 	"\x1aCreateFileReferenceRequest\x12\x1b\n" +
 	"\tfile_path\x18\x01 \x01(\tR\bfilePath\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x18\n" +
-	"\acontent\x18\x03 \x01(\fR\acontent\"Y\n" +
-	"\x1bCreateFileReferenceResponse\x12:\n" +
+	"\acontent\x18\x03 \x01(\fR\acontent\"U\n" +
+	"\x1bCreateFileReferenceResponse\x126\n" +
 	"\n" +
-	"attachment\x18\x01 \x01(\v2\x1a.reliant.v1.AttachmentInfoR\n" +
+	"attachment\x18\x01 \x01(\v2\x16.reliant.v1.AttachmentR\n" +
 	"attachment2\xa0\x05\n" +
 	"\x11AttachmentService\x12\xb0\x01\n" +
 	"\x10UploadAttachment\x12#.reliant.v1.UploadAttachmentRequest\x1a$.reliant.v1.UploadAttachmentResponse\"Q\xa2\xbb\x18M:K:Istages an image for the composer: the message that sends it is the record\x12\xc1\x01\n" +
@@ -621,30 +478,30 @@ func file_reliant_v1_attachment_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_attachment_proto_rawDescData
 }
 
-var file_reliant_v1_attachment_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_reliant_v1_attachment_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_reliant_v1_attachment_proto_goTypes = []any{
-	(*AttachmentInfo)(nil),              // 0: reliant.v1.AttachmentInfo
-	(*UploadAttachmentRequest)(nil),     // 1: reliant.v1.UploadAttachmentRequest
-	(*UploadAttachmentResponse)(nil),    // 2: reliant.v1.UploadAttachmentResponse
-	(*GetAttachmentRequest)(nil),        // 3: reliant.v1.GetAttachmentRequest
-	(*GetAttachmentResponse)(nil),       // 4: reliant.v1.GetAttachmentResponse
-	(*DeleteAttachmentRequest)(nil),     // 5: reliant.v1.DeleteAttachmentRequest
-	(*DeleteAttachmentResponse)(nil),    // 6: reliant.v1.DeleteAttachmentResponse
-	(*CreateFileReferenceRequest)(nil),  // 7: reliant.v1.CreateFileReferenceRequest
-	(*CreateFileReferenceResponse)(nil), // 8: reliant.v1.CreateFileReferenceResponse
+	(*UploadAttachmentRequest)(nil),     // 0: reliant.v1.UploadAttachmentRequest
+	(*UploadAttachmentResponse)(nil),    // 1: reliant.v1.UploadAttachmentResponse
+	(*GetAttachmentRequest)(nil),        // 2: reliant.v1.GetAttachmentRequest
+	(*GetAttachmentResponse)(nil),       // 3: reliant.v1.GetAttachmentResponse
+	(*DeleteAttachmentRequest)(nil),     // 4: reliant.v1.DeleteAttachmentRequest
+	(*DeleteAttachmentResponse)(nil),    // 5: reliant.v1.DeleteAttachmentResponse
+	(*CreateFileReferenceRequest)(nil),  // 6: reliant.v1.CreateFileReferenceRequest
+	(*CreateFileReferenceResponse)(nil), // 7: reliant.v1.CreateFileReferenceResponse
+	(*v1.Attachment)(nil),               // 8: reliant.v1.Attachment
 }
 var file_reliant_v1_attachment_proto_depIdxs = []int32{
-	0, // 0: reliant.v1.UploadAttachmentResponse.attachment:type_name -> reliant.v1.AttachmentInfo
-	0, // 1: reliant.v1.GetAttachmentResponse.attachment:type_name -> reliant.v1.AttachmentInfo
-	0, // 2: reliant.v1.CreateFileReferenceResponse.attachment:type_name -> reliant.v1.AttachmentInfo
-	1, // 3: reliant.v1.AttachmentService.UploadAttachment:input_type -> reliant.v1.UploadAttachmentRequest
-	7, // 4: reliant.v1.AttachmentService.CreateFileReference:input_type -> reliant.v1.CreateFileReferenceRequest
-	3, // 5: reliant.v1.AttachmentService.GetAttachment:input_type -> reliant.v1.GetAttachmentRequest
-	5, // 6: reliant.v1.AttachmentService.DeleteAttachment:input_type -> reliant.v1.DeleteAttachmentRequest
-	2, // 7: reliant.v1.AttachmentService.UploadAttachment:output_type -> reliant.v1.UploadAttachmentResponse
-	8, // 8: reliant.v1.AttachmentService.CreateFileReference:output_type -> reliant.v1.CreateFileReferenceResponse
-	4, // 9: reliant.v1.AttachmentService.GetAttachment:output_type -> reliant.v1.GetAttachmentResponse
-	6, // 10: reliant.v1.AttachmentService.DeleteAttachment:output_type -> reliant.v1.DeleteAttachmentResponse
+	8, // 0: reliant.v1.UploadAttachmentResponse.attachment:type_name -> reliant.v1.Attachment
+	8, // 1: reliant.v1.GetAttachmentResponse.attachment:type_name -> reliant.v1.Attachment
+	8, // 2: reliant.v1.CreateFileReferenceResponse.attachment:type_name -> reliant.v1.Attachment
+	0, // 3: reliant.v1.AttachmentService.UploadAttachment:input_type -> reliant.v1.UploadAttachmentRequest
+	6, // 4: reliant.v1.AttachmentService.CreateFileReference:input_type -> reliant.v1.CreateFileReferenceRequest
+	2, // 5: reliant.v1.AttachmentService.GetAttachment:input_type -> reliant.v1.GetAttachmentRequest
+	4, // 6: reliant.v1.AttachmentService.DeleteAttachment:input_type -> reliant.v1.DeleteAttachmentRequest
+	1, // 7: reliant.v1.AttachmentService.UploadAttachment:output_type -> reliant.v1.UploadAttachmentResponse
+	7, // 8: reliant.v1.AttachmentService.CreateFileReference:output_type -> reliant.v1.CreateFileReferenceResponse
+	3, // 9: reliant.v1.AttachmentService.GetAttachment:output_type -> reliant.v1.GetAttachmentResponse
+	5, // 10: reliant.v1.AttachmentService.DeleteAttachment:output_type -> reliant.v1.DeleteAttachmentResponse
 	7, // [7:11] is the sub-list for method output_type
 	3, // [3:7] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
@@ -657,14 +514,13 @@ func file_reliant_v1_attachment_proto_init() {
 	if File_reliant_v1_attachment_proto != nil {
 		return
 	}
-	file_reliant_v1_attachment_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_attachment_proto_rawDesc), len(file_reliant_v1_attachment_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
