@@ -300,7 +300,8 @@ const SURFACES: Surface[] = [
   },
   {
     name: 'shell-apps',
-    path: '/apps',
+    // Projects, narrowed to the apps: the nav's Apps heading, and where the retired /apps redirects.
+    path: '/projects?show=apps',
     on: ['desktop', 'mobile'],
     ready: (page) => page.getByText('shopfront', { exact: true }).first(),
   },

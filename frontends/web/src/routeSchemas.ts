@@ -188,7 +188,8 @@ export const authSearchSchema = z.object({
   redirect: z.string().optional(),
 });
 
-// Search params for `/apps`. `claimed` names the app (the forge project) a
+// Search params for the apps list (Projects' apps, `/projects?show=apps`; once
+// `/apps`). `claimed` names the app (the forge project) a
 // finished claim just made the user's own, so the page can point at it. It is
 // a highlight, not a filter: every app is still listed, and the param is
 // dropped once the page has shown it.

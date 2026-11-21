@@ -81,7 +81,7 @@ import { consolePath } from "@/components/Forge/Console/paths";
 
 import { UPGRADE_STILL_REQUIRED_MESSAGE } from "./claimCopy";
 import { claimSituation, type ClaimSituation } from "./claimSituation";
-import { appsPath, upgradePath } from "@/lib/paths";
+import { projectsPath, upgradePath } from "@/lib/paths";
 
 export type ClaimView =
   | { kind: "loading" }
@@ -163,17 +163,17 @@ export function useClaimFlow(): ClaimFlow {
       const search = {
         ...(project ? { claimed: project } : {}),
         // Said where the result is: which site was paused, and why it is not
-        // a surprise. Reversible by subscribing (the /apps banner says so).
+        // a surprise. Reversible by subscribing (the apps list's banner says so).
         ...(paused ? { pausedSite: paused.name, kept: paused.kept } : {}),
       };
       // The forge shell lands in the claimed app's console: it has no
       // onboarding to protect the user from, and the console is its home.
-      // A paused site still goes to /apps, whose banner says what happened.
+      // A paused site still goes to the apps (Projects), whose banner says what happened.
       if (isForgeShell() && project && !paused) {
         void navigate({ href: consolePath(project, { kind: "overview" }), replace: true });
         return;
       }
-      void navigate({ to: appsPath(), search, replace: true });
+      void navigate({ to: projectsPath(), search: { show: "apps", ...search }, replace: true });
     },
     [navigate],
   );
