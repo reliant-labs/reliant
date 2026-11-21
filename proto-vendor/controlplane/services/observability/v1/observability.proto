@@ -233,6 +233,21 @@ service ObservabilityService {
     };
   }
 
+  // GetManagedDatabaseMetrics returns the health series of the org's managed
+  // Postgres databases (Reliant hosting's ManagedDatabase, a CloudNativePG
+  // cluster per database): connections (active, idle, max), transactions per
+  // second, cache hit ratio, the database instances' CPU and memory, and
+  // storage. The platform's node agent collects them from the database's own
+  // exporter and the kubelet, stamped with the tenant from the namespace the
+  // operator labelled, never from the data. Admission and scoping are every
+  // other read's (QueryScope). Max range 30 days.
+  rpc GetManagedDatabaseMetrics(GetManagedDatabaseMetricsRequest) returns (GetManagedDatabaseMetricsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // GetDashboards returns the dashboards for an environment in forge's
   // dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
   // synthesized from the services seen in the org's data in scope.time_range;
@@ -1674,6 +1689,58 @@ message WorkloadSeries {
   string unit = 4;
   // Utilization and usage: the worst replica per bucket. Restarts: the sum over
   // replicas of the growth within the bucket.
+  repeated TimePoint points = 5;
+}
+
+message GetManagedDatabaseMetricsRequest {
+  // Max range 30 days. Every environment in scope is returned separately.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // The ManagedDatabase name (the CloudNativePG cluster). Empty = every
+  // managed database in scope.
+  string database = 2 [(buf.validate.field).string.max_len = 256];
+  // Bucket width. 0 = chosen from the range (see QueryMetricRequest).
+  int32 step_seconds = 3 [(buf.validate.field).int32.gte = 0];
+}
+
+message GetManagedDatabaseMetricsResponse {
+  // One series per (environment, database, metric), ordered by environment,
+  // database, then metric. A metric with no data in scope has no series.
+  repeated ManagedDatabaseSeries series = 1;
+  int32 step_seconds = 2;
+  // True when the series cap (200) cut the result.
+  bool truncated = 3;
+}
+
+enum ManagedDatabaseMetric {
+  MANAGED_DATABASE_METRIC_UNSPECIFIED = 0;
+  // Client connections by state, summed over the instances and databases
+  // (cnpg_backends_total). Idle in transaction counts as neither.
+  MANAGED_DATABASE_METRIC_CONNECTIONS_ACTIVE = 1;
+  MANAGED_DATABASE_METRIC_CONNECTIONS_IDLE = 2;
+  // The server's max_connections setting (the highest instance's).
+  MANAGED_DATABASE_METRIC_CONNECTIONS_MAX = 3;
+  // Committed plus rolled back transactions per second.
+  MANAGED_DATABASE_METRIC_TPS = 4;
+  // Buffer cache hits over all block reads in the bucket, 0..1.
+  MANAGED_DATABASE_METRIC_CACHE_HIT_RATIO = 5;
+  // The Postgres containers of the database's instances: CPU in cores and
+  // memory working set in bytes.
+  MANAGED_DATABASE_METRIC_CPU_USAGE = 6;
+  MANAGED_DATABASE_METRIC_MEMORY_WORKING_SET = 7;
+  // The data volume (pgdata): bytes used and its capacity.
+  MANAGED_DATABASE_METRIC_STORAGE_USED = 8;
+  MANAGED_DATABASE_METRIC_STORAGE_CAPACITY = 9;
+  // The databases' own size (pg_database_size), summed.
+  MANAGED_DATABASE_METRIC_DATABASE_SIZE = 10;
+}
+
+message ManagedDatabaseSeries {
+  string env_id = 1;
+  // The ManagedDatabase name.
+  string database = 2;
+  ManagedDatabaseMetric metric = 3;
+  // UCUM: "{connection}", "{transaction}/s", "1", "{cpu}", "By".
+  string unit = 4;
   repeated TimePoint points = 5;
 }
 
