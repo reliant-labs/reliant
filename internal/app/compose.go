@@ -618,6 +618,13 @@ func (g *Graph) newWorkflowEventRelay() (*workflowevent.Relay, error) {
 	})
 }
 
+func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
+	return NewTriggerDeliveryRelay(TriggerDeliveryRelayDeps{
+		DB: g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
+		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+	})
+}
+
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
 		DB:       g.Database(),

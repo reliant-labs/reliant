@@ -34,7 +34,7 @@
 // per-RPC test owner; never both.
 //
 // Library reference: github.com/reliant-labs/forge/pkg/tdd
-// Skill: forge skill load testing/patterns
+// Skill: forge agent skill load testing/patterns
 package automation_takeover_test
 
 import (

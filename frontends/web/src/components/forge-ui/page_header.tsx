@@ -120,7 +120,7 @@ export default function PageHeader({
     return (
       <div className={`flex min-h-8 flex-wrap items-center justify-between gap-x-4 gap-y-2 ${className ?? "mb-4"}`} data-density="compact">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight text-ink">{title}</h1>
+          <h1 className="min-w-0 truncate text-title text-ink">{title}</h1>
           {titleAccessory && <span className="self-center">{titleAccessory}</span>}
           {meta ? <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">{meta}</div> : null}
           {subtitle ? <p className="text-sm text-ink-muted">{subtitle}</p> : null}
@@ -136,7 +136,7 @@ export default function PageHeader({
   }
 
   return (
-    <div className={className ?? "mb-6"}>
+    <div className={className ?? "mb-8"}>
       {breadcrumbs.length > 0 && (
         <nav
           aria-label="Breadcrumb"
@@ -167,15 +167,15 @@ export default function PageHeader({
           {/* tracking-tight: display sizes set at default tracking read loose. */}
           {titleAccessory ? (
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight text-ink">
+              <h1 className="min-w-0 truncate text-title text-ink">
                 {title}
               </h1>
               {titleAccessory}
             </div>
           ) : (
-            <h1 className="text-xl font-semibold tracking-tight text-ink">{title}</h1>
+            <h1 className="text-title text-ink">{title}</h1>
           )}
-          {subtitle ? <p className="mt-1 text-sm text-ink-muted">{subtitle}</p> : null}
+          {subtitle ? <p className="mt-1.5 text-ui text-ink-muted">{subtitle}</p> : null}
           {meta ? (
             <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
               {meta}

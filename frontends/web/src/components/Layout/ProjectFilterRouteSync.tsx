@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
+import { orgFreePath } from "@/lib/paths/org";
 import { syncProjectFilterUrl, useProjectStore } from "../../store/projectStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 
@@ -15,7 +16,8 @@ const PROJECT_PATH = /^\/project\/([^/]+)\/?$/;
  * to A, undoing every project → project pick in the sidebar.
  */
 export function projectIdOfPath(pathname: string): string | undefined {
-  const match = PROJECT_PATH.exec(pathname);
+  // `/o/<org>/project/<id>` names it too.
+  const match = PROJECT_PATH.exec(orgFreePath(pathname));
   if (!match) return undefined;
   try {
     return decodeURIComponent(match[1]);
@@ -31,7 +33,8 @@ export function useRouteProjectId(): string | undefined {
 
 /** The chat shell's URL/filter bridge, mounted once by ModernApp. */
 export function ProjectFilterRouteSync() {
-  const { pathname } = useLocation();
+  // Org-less, so an org's home (`/o/<org>`) is the chat home `/` it is.
+  const pathname = orgFreePath(useLocation().pathname);
   const projectId = projectIdOfPath(pathname);
   const previousPath = useRef<string | null>(null);
   useEffect(() => {

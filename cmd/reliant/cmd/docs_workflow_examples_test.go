@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/workflow/lint"
 )
 
 // docsSkipMarker, on the line directly above a fenced YAML block, exempts it
@@ -149,4 +151,125 @@ func TestDocsWorkflowExamplesValidate(t *testing.T) {
 		t.Fatalf("only %d workflow examples found under %s (skipped %d); the extractor is probably broken", validated, docsRoot, skipped)
 	}
 	t.Logf("validated %d workflow examples, skipped %d", validated, skipped)
+}
+
+var (
+	// A node fragment is a block that is a bare list of nodes, the shape most
+	// pages use to show one or two nodes of a larger workflow.
+	docsNodeListStart = regexp.MustCompile(`^(\s*(#[^\n]*)?\n)*-\s+id:`)
+	docsNodeListID    = regexp.MustCompile(`(?m)^-\s+id:\s*([A-Za-z0-9_-]+)`)
+)
+
+// docsFragmentContextErrors are the validation errors a node fragment gets
+// only because the rest of its workflow is on the page around it, not in the
+// block: the nodes, edges and inputs it refers to. Every other error is the
+// fragment's own (an unknown node type or field, an input its ref does not
+// take, a scalar where a mapping belongs) and fails the test.
+var docsFragmentContextErrors = []string{
+	"is unreachable",                         // the edges that reach it are elsewhere
+	"references unknown node",                // an edge or router candidate names a node defined elsewhere
+	"CEL compilation error: undefined field", // CEL reads a node or input defined elsewhere
+	"is not guaranteed to have executed",     // ordering comes from edges elsewhere
+	"parallel write conflict",                // every fragment node is an entry here
+	"no project workflow is named",           // a ref to a workflow the reader writes
+	"call_llm node requires a model",         // the workflow's inputs.model is elsewhere
+}
+
+// dedentDocsBlock removes the indentation every non-blank line shares, so a
+// fragment shown inside a list item still starts at column 0.
+func dedentDocsBlock(body string) string {
+	lines := strings.Split(body, "\n")
+	common := -1
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		n := len(l) - len(strings.TrimLeft(l, " "))
+		if common < 0 || n < common {
+			common = n
+		}
+	}
+	if common <= 0 {
+		return body
+	}
+	for i, l := range lines {
+		if len(l) >= common {
+			lines[i] = l[common:]
+		} else {
+			lines[i] = strings.TrimLeft(l, " ")
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// wrapDocsNodeList makes a node fragment a workflow: a name, every listed
+// node as an entry, and the list as its nodes.
+func wrapDocsNodeList(body string) string {
+	var ids []string
+	for _, m := range docsNodeListID.FindAllStringSubmatch(body, -1) {
+		ids = append(ids, m[1])
+	}
+	return "name: docs-example\nentry: [" + strings.Join(ids, ", ") + "]\nnodes:\n" + body
+}
+
+// TestDocsWorkflowNodeFragmentsValidate validates the node fragments that
+// TestDocsWorkflowExamplesValidate cannot (no top-level nodes:), so a node a
+// page shows with a field or input its type rejects fails here too. A
+// fragment that elides on purpose (`inline: # ...`, `workflows: [...]`) takes
+// the docs-validate skip marker.
+func TestDocsWorkflowNodeFragmentsValidate(t *testing.T) {
+	docsRoot := filepath.Join("..", "..", "..", "docs")
+	blocks := extractDocsYAMLBlocks(t, docsRoot)
+
+	tmp := t.TempDir()
+	validated, skipped := 0, 0
+	for _, b := range blocks {
+		body := dedentDocsBlock(b.body)
+		if docsWorkflowKey.MatchString(b.body) || !docsNodeListStart.MatchString(body) {
+			continue
+		}
+		if b.skipped {
+			skipped++
+			continue
+		}
+		validated++
+		name := fmt.Sprintf("%s:%d", b.file, b.line)
+		t.Run(name, func(t *testing.T) {
+			dir := filepath.Join(tmp, fmt.Sprintf("fragment-%d", validated))
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "example.yaml")
+			if err := os.WriteFile(path, []byte(wrapDocsNodeList(body)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			res := validateWorkflowFile(path, dir)
+			var own []string
+			for _, e := range res.Errors {
+				context := false
+				for _, c := range docsFragmentContextErrors {
+					if strings.Contains(e, c) {
+						context = true
+						break
+					}
+				}
+				if !context {
+					own = append(own, e)
+				}
+			}
+			for _, f := range res.Lint {
+				if f.Severity == lint.SeverityError {
+					own = append(own, f.String())
+				}
+			}
+			if len(own) > 0 {
+				t.Errorf("docs node fragment %s does not validate:\n  %s", name, strings.Join(own, "\n  "))
+			}
+		})
+	}
+
+	if validated < 40 {
+		t.Fatalf("only %d node fragments found under %s (skipped %d); the extractor is probably broken", validated, docsRoot, skipped)
+	}
+	t.Logf("validated %d node fragments, skipped %d", validated, skipped)
 }

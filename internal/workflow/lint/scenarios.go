@@ -50,8 +50,14 @@ func (c *checker) checkScenarios() {
 
 	for _, wt := range wf.GetTriggers() {
 		if !fired[wt.GetName()] {
-			c.add(RuleScenarioTrigger, "", fmt.Sprintf("no scenario fires trigger %q, so its filter and inputs mapping are untested", wt.GetName()),
-				fmt.Sprintf("add a scenario with `trigger: {name: %s, payload: {...}}`", wt.GetName()))
+			// A schedule firing carries no event, so its scenario needs no
+			// payload: telling the author to invent one sends them looking for
+			// a shape that does not exist.
+			fix := fmt.Sprintf("add a scenario with `trigger: {name: %s, payload: {...}}`", wt.GetName())
+			if wt.GetSchedule() != nil {
+				fix = fmt.Sprintf("add a scenario with `trigger: {name: %s}` (a schedule firing needs no payload)", wt.GetName())
+			}
+			c.add(RuleScenarioTrigger, "", fmt.Sprintf("no scenario fires trigger %q, so its filter and inputs mapping are untested", wt.GetName()), fix)
 		}
 	}
 

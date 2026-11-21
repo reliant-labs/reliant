@@ -6,6 +6,14 @@ inputs:
   pr_number: 101
   reason: re-review label
 events:
+  # ensure-labels only creates labels on GitHub; what it does is the
+  # autopilot-ensure-labels scenarios' to test, not this one's.
+  - node: labels
+    black_box: true
+    output: {}
+  - node: reset_label
+    black_box: true
+    output: {}
   - node: me
     output: {is_error: false, data: {login: reliant-01, id: 225976313}}
   - node: pr

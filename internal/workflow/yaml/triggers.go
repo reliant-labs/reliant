@@ -60,13 +60,16 @@ const triggerSourceOneof protoreflect.Name = "source"
 // by the trigger layer per firing, and a hand-started run has no trigger
 // payload to render it against. `check` as well: its repository and head_sha
 // are templates over `trigger`, rendered when the firing is recorded, and its
-// output reads the node outputs of a run that has ended.
+// output reads the node outputs of a run that has ended. `attention` is
+// evaluated once by the root unattended launch runtime over finalized inputs,
+// never the generic resolver.
 var runtimeEvaluatedTopLevelKeys = map[string]bool{
 	"outputs":     true,
 	"triggers":    true,
 	"on_failure":  true,
 	"finally":     true,
 	"concurrency": true,
+	"attention":   true,
 	"check":       true,
 }
 

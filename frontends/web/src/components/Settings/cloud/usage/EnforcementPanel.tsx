@@ -194,7 +194,7 @@ export function EnforcementPanel({ dimensions }: EnforcementPanelProps) {
         </ul>
       ) : null}
 
-      <h4 className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h4 className="mt-2 text-xs font-semibold text-muted-foreground">
         What happens to each kind of service
       </h4>
       <dl className="flex flex-col gap-2">

@@ -104,6 +104,57 @@ func TestListInbox_LeavesOutItemsOfAnOrgTheCallerMayNotRead(t *testing.T) {
 	require.Equal(t, acmeOnly, itemIDs(authz.WithCredentialOrg(both, "acme")), "a credential bound to acme, not the default org")
 }
 
+// An attention incident is about its chat: ListInbox with no org_id leaves
+// out one of an org the owner has left, or of an org other than the one a
+// credential is bound to, and still lists one whose trigger is gone.
+func TestListInbox_LeavesOutAttentionIncidentsOfAnOrgTheCallerMayNotRead(t *testing.T) {
+	org := func(s string) *string { return &s }
+	orgOf := map[string]*string{"c-acme": org("acme"), "c-home": org("home"), "p-acme": org("acme"), "p-home": org("home")}
+	newSvc := func() *Service {
+		repo := newInflightRepo(0)
+		repo.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil }
+		repo.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
+			return &db.Chat{ID: id, UserID: "user-1", OrgID: orgOf[id]}, nil
+		}
+		repo.GetProjectFunc = func(_ context.Context, id string) (*db.Project, error) {
+			return &db.Project{ID: id, UserID: "user-1", OrgID: orgOf[id]}, nil
+		}
+		repo.ListAttentionIncidentsFunc = func(context.Context, string) ([]*core.AttentionIncident, error) {
+			opened := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+			incident := func(name string) *core.AttentionIncident {
+				return &core.AttentionIncident{
+					UserID: "user-1", ProjectID: "p-" + name, ChatID: "c-" + name, TriggerID: "deleted-trigger",
+					Key: "pr:" + name, EpisodeID: "ep-" + name, State: "action_required",
+					FailureClass: "unsuccessful", Detail: "secret detail of " + name, OpenedAt: opened, UpdatedAt: opened,
+				}
+			}
+			return []*core.AttentionIncident{incident("acme"), incident("home")}, nil
+		}
+		return NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
+	}
+	itemIDs := func(ctx context.Context) []string {
+		t.Helper()
+		resp, err := newSvc().ListInbox(ctx, connect.NewRequest(&reliantv1.ListInboxRequest{}))
+		require.NoError(t, err)
+		out := []string{}
+		for _, it := range resp.Msg.Items {
+			out = append(out, it.ItemId)
+		}
+		sort.Strings(out)
+		return out
+	}
+	incident := func(name string) string { return inboxFailingPrefix + "incident:ep-" + name }
+
+	both := authz.WithMembership(userCtx(), memberOf{"home": true, "acme": true})
+	require.Equal(t, []string{incident("acme"), incident("home")}, itemIDs(both), "a member of both, its trigger deleted")
+
+	removed := authz.WithMembership(userCtx(), memberOf{"home": true})
+	require.Equal(t, []string{incident("home")}, itemIDs(removed), "a removed member of acme")
+
+	require.Equal(t, []string{incident("home")}, itemIDs(authz.WithCredentialOrg(both, "home")), "a credential bound to home")
+	require.Equal(t, []string{incident("acme")}, itemIDs(authz.WithCredentialOrg(both, "acme")), "a credential bound to acme")
+}
+
 // acmeAndHome is the org source of a live member of acme and home, whose
 // default org is home.
 type acmeAndHome struct{}

@@ -7,6 +7,7 @@ Worktree:            wt-1
 Daemon:              daemon-1
 Workflow:            builtin://agent
 Acting as:           owner (the activation owner's own GitHub account)
+Connection:          conn-1
 Organization:        acme
 Unattended funding:  any (its runs may also spend your own AI accounts)
 Schedule:            0 9 * * *

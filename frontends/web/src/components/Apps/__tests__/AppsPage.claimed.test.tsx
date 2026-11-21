@@ -53,16 +53,17 @@ describe('/apps after a claim', () => {
   })
 
   it.each([
-    ['claimed', /you kept this site live/i],
-    ['existing', /you kept your existing site live/i],
-  ] as const)('says which site is paused and that subscribing undoes it (kept %s)', async (kept, said) => {
+    ['claimed', /you chose free hosting for the site you claimed/i],
+    ['existing', /you kept free hosting where it was/i],
+  ] as const)('names the reported paused site and offers billing (kept %s)', async (kept, said) => {
     search = { claimed: 'storefront', pausedSite: 'blog', kept }
     render(<AppsPage />)
     const note = await screen.findByTestId('apps-claimed-paused')
     expect(note).toHaveTextContent(said)
     expect(note).toHaveTextContent(/blog/)
     expect(note).toHaveTextContent(/is paused/i)
-    fireEvent.click(screen.getByRole('button', { name: 'Subscribe' }))
+    expect(note).not.toHaveTextContent(/one static site|10 GiB/i)
+    fireEvent.click(screen.getByRole('button', { name: 'Review billing' }))
     expect(goToBilling).toHaveBeenCalledWith('upgrade')
   })
 })

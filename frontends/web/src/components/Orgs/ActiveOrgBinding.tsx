@@ -12,6 +12,7 @@ import {
   useActiveOrgStore,
   failOrgResolution,
   forgetChosenOrg,
+  learnOrgSegments,
   setEffectiveOrg,
 } from "@/store/activeOrgStore";
 
@@ -73,6 +74,11 @@ export function ActiveOrgBinding({
       void qc.resetQueries({ queryKey: ["orgs"] });
     }
   }, [userId, qc]);
+
+  // Each org's URL segment, for a link built outside the org tree (lib/paths/org.ts).
+  useEffect(() => {
+    if (orgs.length > 0) learnOrgSegments(orgs);
+  }, [orgs]);
 
   useEffect(() => {
     if (!userId || isLoading) return;

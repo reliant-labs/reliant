@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +56,24 @@ type Login struct {
 	Timeout time.Duration
 	// HTTPClient performs discovery and the token exchange; nil uses bounded defaults.
 	HTTPClient oauth2.HTTPDoer
+	// ExpiresIn, when positive, asks for a token that lives that long
+	// (ExpiresInParam). A control plane that predates it ignores it, so the
+	// caller checks the credential's ExpiresAt.
+	ExpiresIn time.Duration
+}
+
+// ExpiresInParam is the optional authorization-request parameter (whole
+// seconds, at least 60) asking the control plane for a shorter-lived token
+// than its default. It is clamped to the default lifetime, never longer. An
+// older control plane ignores it and mints the default.
+const ExpiresInParam = "expires_in"
+
+// expiresInValue is d as ExpiresInParam's value, "" when d asks for nothing.
+func expiresInValue(d time.Duration) string {
+	if d <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(int64(d/time.Second), 10)
 }
 
 // ErrInteractiveRequired is returned when NonInteractive is set: the flow
@@ -85,6 +104,9 @@ func (l Login) Run(ctx context.Context) (credentials.Credential, error) {
 	extra := url.Values{}
 	if l.Name != "" {
 		extra.Set("device", l.Name)
+	}
+	if v := expiresInValue(l.ExpiresIn); v != "" {
+		extra.Set(ExpiresInParam, v)
 	}
 	tok, err := oauth2.LoopbackLogin{
 		AuthorizeEndpoint: meta.AuthorizationEndpoint,
@@ -136,7 +158,7 @@ func New(deps Deps) Service {
 	return &adapter{deps: deps}
 }
 
-// DepsFromEnv locates the shared credentials file the way `forge login` does:
+// DepsFromEnv locates the shared credentials file the way `forge cloud login` does:
 // $FORGE_HOME, then $XDG_CONFIG_HOME, then the home directory
 // (credentials.DirsFromEnv, forge's one reader of those variables).
 func DepsFromEnv() Deps {
@@ -203,7 +225,7 @@ func (a *adapter) Remove(server string) (bool, string, error) {
 // construct New(Deps{...}) directly.
 
 // CredentialsPath is where the shared credentials file lives: the same file
-// `forge login` writes.
+// `forge cloud login` writes.
 func CredentialsPath() (string, error) { return New(DepsFromEnv()).CredentialsPath() }
 
 // Store saves c — with the account it signed in as — as the reliant CLI's

@@ -556,7 +556,7 @@ function StatusPanel({
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-ink-muted">{title}</h3>
+      <h3 className="text-xs font-medium text-ink-muted">{title}</h3>
       <CardInset padding="sm">{children}</CardInset>
     </section>
   );
