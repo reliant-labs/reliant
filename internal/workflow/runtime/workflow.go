@@ -2775,7 +2775,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 
 		// Wait for at least one step (activity or inline workflow) to complete
-		if len(runningSteps) > 0 || len(runningInlineWorkflows) > 0 {
+		// Unless this pass produced events of its own (a skipped node), which are
+		// routed first (routePendingFirst).
+		if (len(runningSteps) > 0 || len(runningInlineWorkflows) > 0) && !routePendingFirst(ctx, len(events)) {
 			completedSteps, completedInline := waitForAnyCompletion(ctx, runningSteps, runningInlineWorkflows)
 
 			// Check for pause signal after completion before processing results
