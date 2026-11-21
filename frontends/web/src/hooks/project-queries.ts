@@ -25,7 +25,6 @@
  * stale.
  */
 
-import { isForgeShell } from "@/lib/shell";
 import { useCallback, useMemo } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
@@ -281,10 +280,9 @@ export interface ProjectListView {
 export function useProjects(): ProjectListView {
   const hasSession = useHasSession();
   const org = useOrgScope();
-  // The forge shell (lib/shell.ts) has no Reliant projects: its apps are the
-  // control plane's forge projects, keyed by name. Disabled there, the list
-  // reads empty and settled for every caller.
-  const wanted = hasSession && !isForgeShell();
+  // On both hosts: the forge host mounts the one route tree (U6), projects
+  // and chats included.
+  const wanted = hasSession;
   // Not before the tab's org is known: a list naming no org is every org's.
   // An org that failed to resolve is the list's error, with a Retry.
   const query = useQuery(

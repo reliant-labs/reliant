@@ -93,7 +93,7 @@ var forgeInputs = []string{
 	"buf.gen.sdk-ts.yaml", "sdk/ts/src/gen/**",
 	// generate.hooks: sdk-go-gen, sdk-aliases.
 	"buf.gen.sdk-go.yaml", "scripts/sdk-go-gen.sh", "tools/sdkalias/**",
-	"tools/protoc-gen-es/package.json", "tools/protoc-gen-es/package-lock.json",
+	"tools/protoc-gen-es/package.json", "tools/protoc-gen-es/pnpm-lock.yaml", "tools/protoc-gen-es/pnpm-workspace.yaml",
 	// generate.hooks: the go:generate outputs, the manifest schemas, and the
 	// integration projections' specs, upstream schema and catalog output.
 	"internal/workflow/yaml/bindings_generated.go",

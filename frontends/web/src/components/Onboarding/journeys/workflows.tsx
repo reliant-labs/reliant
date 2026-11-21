@@ -24,6 +24,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 
+import { CHAT_SHELL_PREFIXES } from "../../../lib/chatRoute";
 import { reliantAppOrigin } from "../../../lib/shell";
 import { useProjectStore } from "../../../store/projectStore";
 import { useTourStore } from "../../../store/tourStore";
@@ -36,6 +37,7 @@ import { EdgeLesson, FOCUS_TARGET, OnCanvas } from "./workflowsCanvas";
 import { APPROVE, LESSONS, LOOP, MERGE, REPORT, REVIEW, SCHEDULE, START, SWITCH } from "./workflowsLessons";
 import { WorkflowsPhoneDeck } from "./workflowsPhone";
 import { homePath, newWorkflowPath, projectPath, workflowBuilderPath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 function exampleSlug(context: JourneyContext): string | undefined {
   const slug = context[EXAMPLE_SLUG];
@@ -67,7 +69,7 @@ function ExampleIntro() {
   const projectId = useProjectStore((s) => s.currentProject?.id);
   const slug = useTourStore((s) => exampleSlug(s.contexts?.workflows ?? {}));
   const [failed, setFailed] = useState<string | null>(null);
-  const onExample = !!slug && pathname === `/workflow/${slug}`;
+  const onExample = !!slug && orgFreePath(pathname) === `/workflow/${slug}`;
   const tour = useRef(search.tour);
   tour.current = search.tour;
 
@@ -243,6 +245,8 @@ export const workflowsJourney: Journey = {
       ],
       route: {
         path: "/project/",
+        // The chat shell, open on a chat or a draft, is the same page (lib/chatRoute.ts).
+        alsoAt: CHAT_SHELL_PREFIXES,
         open: () => {
           const projectId = useProjectStore.getState().currentProject?.id;
           return projectId ? { to: projectPath(projectId) } : { to: homePath() };

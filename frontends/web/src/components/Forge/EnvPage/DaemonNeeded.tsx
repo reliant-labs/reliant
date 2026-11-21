@@ -52,7 +52,7 @@ export function DaemonNeeded({
             : `It shows ${what}.`}{" "}
           Overview, Releases and Secrets come from Reliant and don&apos;t need it.
         </p>
-        {detail && !forgeDisabled && <p className="font-mono text-2xs text-ink-muted">{detail}</p>}
+        {detail && !forgeDisabled && <p className="font-mono text-meta text-ink-muted">{detail}</p>}
       </div>
       {onRetry && !forgeDisabled && (
         <Button

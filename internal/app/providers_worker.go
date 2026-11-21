@@ -93,6 +93,9 @@ type WorkerDaemonRouter struct {
 	// ControlPlane is the adapter the router resumes machines through, nil
 	// when self-hosted. manage_machine stops and resizes through it too.
 	ControlPlane controlplane.Service
+	// ControlPlaneURL is the control plane's base URL, "" when self-hosted.
+	// The Forge Changes tools call it as the user (change_controller.go).
+	ControlPlaneURL string
 }
 
 // A run step's retry reattaches through the worker's router
@@ -117,7 +120,9 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 	repo := d.DB
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
 	var cpService controlplane.Service
+	cpURL := ""
 	if cp := ControlPlaneEndpoint(d.ControlPlane); cp.Hosted() {
+		cpURL = cp.URL
 		cpDeps := controlplane.Deps{ControlPlane: d.ControlPlane}
 		if secret := cp.InternalServiceSecret; secret != "" {
 			cpDeps.Sign = func() (string, error) { return auth.SignInternalServiceToken(secret) }
@@ -139,7 +144,7 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 	}
 	router := toolexec.NewNATSDaemonRouter(d.NATS.Conn, opts...)
 	logging.Info("Tool execution routing via NATS")
-	return &WorkerDaemonRouter{NATSDaemonRouter: router, ControlPlane: cpService}, nil
+	return &WorkerDaemonRouter{NATSDaemonRouter: router, ControlPlane: cpService, ControlPlaneURL: cpURL}, nil
 }
 
 // WorkerIntegrationCredentials is the credential source the worker's
@@ -542,6 +547,9 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// list_machines / manage_machine act on the user's machines as the
 		// user, through the router's control-plane adapter.
 		MachineController: newMachineController(repo, d.Router, registry),
+		// list_changes / get_change / manage_change run Forge Changes as the
+		// user, through the control plane's ChangesService.
+		ChangeController: newChangeController(repo, d.Router),
 		// propose_connection raises its card and reads back the connection
 		// the person made (metadata only, never the credential).
 		ConnectionProposer: newConnectionProposer(repo, d.Membership),
@@ -825,6 +833,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		SecretResolver:         secretResolver,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
+		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
 		TriggerCredentials:     triggerCredentials(creds),
 		AllowPrivateEgress:     AllowPrivateEgress(d.Network),
 		WorkflowTaskSlots:      int(d.WorkflowTaskSlots),
@@ -849,6 +858,42 @@ type WorkflowEventRelayDeps struct {
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
 	return workflowevent.NewRelay(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue), nil
+}
+
+type TriggerDeliveryRelayDeps struct {
+	DB           *db.Repo
+	Temporal     *TemporalClient
+	Integrations *IntegrationSettings
+	Membership   *orgs.Resolver
+	Policies     *orgpolicy.Resolver
+}
+
+// TriggerDeliveryRelay gives the inbox live membership and policy context.
+type TriggerDeliveryRelay struct {
+	relay      *webhook.Relay
+	membership authz.Membership
+	policies   *orgpolicy.Resolver
+}
+
+// NewTriggerDeliveryRelay routes authenticated receipts on the worker.
+//
+//forge:root-only worker
+func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay, error) {
+	repo := d.DB
+	intake := triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
+		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+		WithPoolCatalogs(machinepool.Catalogs{R: repo}).
+		WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug))
+	var membership authz.Membership
+	if d.Membership != nil {
+		membership = d.Membership
+	}
+	return &TriggerDeliveryRelay{relay: webhook.NewRelay(repo, intake, repo.Connections(), triggers.NewAutoPause(repo, nil)),
+		membership: membership, policies: d.Policies}, nil
+}
+
+func (r *TriggerDeliveryRelay) Run(ctx context.Context) error {
+	return r.relay.Run(orgpolicy.WithResolver(authz.WithMembership(ctx, r.membership), r.policies))
 }
 
 // WorkflowCheckSyncerDeps is where workflows' checks are recorded, the

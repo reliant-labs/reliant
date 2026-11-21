@@ -23,8 +23,9 @@ import (
 // forgepin says why this matters everywhere).
 //
 // So inside a project that pins another forge, the shipped skills come from
-// THAT forge: `forge skill list --json --with-bodies`, one call for the whole
-// catalog. forgepin caches it per pinned forge.
+// THAT forge: `forge agent skill list --json --with-bodies`, one call for the
+// whole catalog (`skill list --json --with-bodies` from a pin older than the
+// `agent` noun, forge v1.4.0). forgepin caches it per pinned forge.
 //
 // What stays on the embedded forge: user (~/.forge/skills) and project
 // (.forge/skills) skills, which are the user's files rather than any forge's
@@ -82,6 +83,7 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 		return e.list, nil
 	}
 	raw, err := pinnedForge.Output(pf, baseDir, pinnedCatalogCacheName,
+		[]string{"agent", "skill", "list", "--json", "--with-bodies"},
 		[]string{"skill", "list", "--json", "--with-bodies"})
 	if err != nil {
 		return nil, err
@@ -96,7 +98,7 @@ func (e *pinnedForgeEntry) loadList(pf forgecli.PinnedForge, baseDir string) ([]
 		Body        *string `json:"body"`
 	}
 	if err := json.Unmarshal(raw, &listed); err != nil {
-		return nil, fmt.Errorf("%s: `skill list --json`: %w", pf.Want, err)
+		return nil, fmt.Errorf("%s: `agent skill list --json`: %w", pf.Want, err)
 	}
 	skills := make([]forgecli.Skill, 0, len(listed))
 	for _, s := range listed {

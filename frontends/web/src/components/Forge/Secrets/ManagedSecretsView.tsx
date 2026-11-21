@@ -368,7 +368,7 @@ function ProtectionLine({
           <span className="tabular-nums text-ink" data-testid="secrets-step-up-countdown">
             {formatCountdown(grantUntil - now)}
           </span>
-          . This also covers <code className="font-mono text-ink">forge secret set</code> from your
+          . This also covers <code className="font-mono text-ink">forge env secret set</code> from your
           machine.
         </span>
       </p>
@@ -601,7 +601,7 @@ function SecretDetail({
 
       {row.declaredBy.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
+          <h3 className="text-2xs font-medium text-ink-muted">
             Declared by
           </h3>
           <ul className="space-y-1">
@@ -646,7 +646,7 @@ function SecretDetail({
         </p>
       ) : (
       <section className="space-y-2">
-        <h3 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
+        <h3 className="text-2xs font-medium text-ink-muted">
           Version history
         </h3>
         <SecretVersionHistory
@@ -705,7 +705,7 @@ function EmptyState({
             ? "This environment hasn't been built yet, so nothing holds a value for it. Run forge env build for it, or open Preview with your daemon online — after that its secrets can be set here, with your daemon offline."
             : "No secrets in this environment yet."
           : mode === "managed-remote"
-            ? "No secrets are declared here, and Reliant cannot read the managed store. Set one with forge secret set."
+            ? "No secrets are declared here, and Reliant cannot read the managed store. Set one with forge env secret set."
           : mode === "external"
             ? "No secrets are declared here. An external secret manager holds the values for this environment, so they are provisioned outside reliant."
             : mode === "file"
@@ -716,7 +716,7 @@ function EmptyState({
         {mode === "file" && (
           <>
             No secrets are declared here. This environment reads values from a gitignored file on
-            your own machine — set one with <span className="font-mono">forge secret set</span>.
+            your own machine — set one with <span className="font-mono">forge env secret set</span>.
           </>
         )}
       </p>

@@ -27,6 +27,7 @@
  * We learned this the hard way - don't repeat the mistake!
  */
 
+import { navigateToChatUrl } from "../lib/chatRoute";
 import { create } from "zustand";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
 import { isWorkspaceClosed, workspaceOfChat } from "../lib/chatWorkspace";
@@ -74,7 +75,13 @@ export function chatNeedsAttention(
   return activityNeedsAttention(activities.get(chat.id) ?? ChatActivity.IDLE, chat.unread);
 }
 
-async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
+/**
+ * Open `chat` at its URL (lib/chatRoute.ts): a push for the person's own
+ * move (next, previous, the next one waiting), a replace for the app's (the
+ * open chat was archived, and the one before it takes its place).
+ */
+async function selectChatWithWorktreeContext(chat: Chat, { replace = false }: { replace?: boolean } = {}): Promise<void> {
+  navigateToChatUrl(chat.id, { orgId: chat.orgId, replace });
   const { openChatInWorkspace } = await import("../lib/openChatInWorkspace");
   await openChatInWorkspace(chat);
 }
@@ -416,7 +423,7 @@ export const useChatNavigationStore = create<ChatNavigationState>((set, get) => 
         // Use chatStore.selectChat() to switch to next chat
         const chat = getChatFromCache(nextChatId);
         if (chat) {
-          await selectChatWithWorktreeContext(chat);
+          await selectChatWithWorktreeContext(chat, { replace: true });
         }
       } else {
         // No more chats, clear active chat

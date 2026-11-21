@@ -35,7 +35,6 @@ function computePlan(id: string, priceCents: bigint): Plan {
     name: id,
     tier: 0,
     stripePriceId: "price_test",
-    limits: "",
     priceCents,
     displayOrder: 0,
     structuredLimits: {

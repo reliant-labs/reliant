@@ -1,45 +1,51 @@
 /**
- * Which Reliant routes send a user who has not finished onboarding through
+ * Which routes send a user who has not finished onboarding through
  * `/onboarding` first, and how they come back to the page they asked for.
  *
- * The redirect used to live only in ModernApp (`/` and `/project/$projectId`)
- * and MobileShell (`/m/*`). Every other authenticated route was gated on
- * sign-in alone, so a deep link skipped the wizard: a user who came from
- * forge — "Open in Reliant" on forge.reliantlabs.io lands on
- * `/forge/p/<project>/…` — reached the forge console, the inbox or workflows
- * with no machine and no project, and found the dead ends there instead.
+ * Onboarding sets up what CHATS need — a machine, a provider, a project — so
+ * it guards the chat routes and nothing else (U6, control-plane
+ * docs/design/unified-shell-and-projects.md). A person with no machine still
+ * gets a working app everywhere else: their apps and each app's console,
+ * Sites, Usage, Workflows, the Inbox, Settings. Both hosts run this one rule
+ * (the forge host mounts the same route tree, routes.tsx).
  *
- * The gate is on by default for the `_authenticated` layout, so a new route is
- * covered without anyone remembering to add it. What is exempt, and why:
+ * The chat routes, read through orgFreePath so `/o/<org>/…` matches as well:
  *
- *   /onboarding    the wizard itself.
- *   /settings      reachable mid-onboarding by design: the escape hatch's
- *                  "Settings" (sign out, delete the account) and the billing
- *                  detour (`?from=onboarding`) both land there
- *                  (OnboardingEscapeHatch, Settings/cloud/billing).
- *   /m             MobileShell runs the same redirect for the phone surface.
- *   /forge/demo    the forge journey's console on fixture data: nothing of
- *                  the user's, offered to everyone.
- *   /apps          where a claim lands (Claim/useClaimFlow): the claim design
- *                  keeps a new claimant out of the wizard on the way to their
- *                  claimed app. Opening that app's console is gated.
+ *   /                  the chat home (ModernApp)
+ *   /project/<id>      one project's chats (ModernApp)
+ *   /c/<chatId>[/t/<threadId>]
+ *                      a chat by its ID (ModernApp, U5)
+ *   /new               a new chat (ModernApp, U5)
+ *   /m                 the phone's chat list, and every chat under it
+ *   /m/chats/…           (MobileShell)
+ *   /m/new             a new chat on the phone (MobileShell)
  *
- * Only a user the server says has NOT finished is redirected. A user whose
- * record failed to load is let through: a control-plane hiccup must not trap
- * someone on a spinner, and `/` still asks again.
+ * Three places act on it, all asking routeRequiresOnboarding: OnboardingGate
+ * on the `_authenticated` layout (the phone's chat routes sit under it),
+ * ModernApp (`/`, `/project/$projectId`, `/c/…`, `/new`, under `_app`) and MobileShell
+ * (`/m/*`). Everything else is let through, including the wizard itself.
+ *
+ * Only a user the server says has NOT finished is redirected by the gate. A
+ * user whose record failed to load is let through: a control-plane hiccup
+ * must not trap someone on a spinner. (ModernApp and MobileShell also send a
+ * user whose record failed to load to `/onboarding`, which asks again.)
  */
 
 import { isSafeReturnTo } from "@/lib/returnTo";
-import { onboardingPath } from "@/lib/paths";
+import { appsPath, onboardingPath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
-/** Path prefixes a not-yet-onboarded user may open without the wizard. */
-export const ONBOARDING_EXEMPT_PREFIXES = ["/onboarding", "/settings", "/m", "/forge/demo", "/apps"] as const;
+/** The org-less path prefixes of the chat routes, besides the home `/`: the only routes onboarding guards. */
+export const ONBOARDING_GATED_PREFIXES = ["/project", "/c", "/new", "/m/chats", "/m/new"] as const;
 
 const underPrefix = (pathname: string, prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`);
 
-/** Whether `pathname` (a route under the `_authenticated` layout) needs onboarding finished. */
+/** Whether `pathname` (either form, `/o/<org>/…` or org-less) is a chat route, which needs onboarding finished. */
 export function routeRequiresOnboarding(pathname: string): boolean {
-  return !ONBOARDING_EXEMPT_PREFIXES.some((prefix) => underPrefix(pathname, prefix));
+  const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
+  // `/m` itself is the phone's chat list (a redirect to /m/chats).
+  if (path === "/" || path === "/m") return true;
+  return ONBOARDING_GATED_PREFIXES.some((prefix) => underPrefix(path, prefix));
 }
 
 export type OnboardingGateDecision = "allow" | "wait" | "onboard";
@@ -63,15 +69,38 @@ export function onboardingGateDecision(state: {
  */
 export function isOnboardingReturnTo(returnTo: string | undefined | null): returnTo is string {
   if (!isSafeReturnTo(returnTo)) return false;
-  const pathname = returnTo.split(/[?#]/, 1)[0];
+  const pathname = orgFreePath(returnTo.split(/[?#]/, 1)[0]);
   return pathname !== "/" && !underPrefix(pathname, "/onboarding") && !underPrefix(pathname, "/auth");
 }
 
-/** The navigation that sends a user at `href` to onboarding, remembering `href`. */
-export function onboardingGateTarget(href: string) {
+/**
+ * The navigation that sends a not-yet-onboarded user at `href` away from a
+ * chat route: to onboarding, remembering `href` — or, at the home on the forge
+ * brand, to their apps (forgeBrandHomeTarget).
+ */
+export function onboardingGateTarget(href: string, forgeBrand = false) {
+  const home = forgeBrandHomeTarget(href.split(/[?#]/, 1)[0], forgeBrand);
+  if (home) return { to: home, search: {}, replace: true };
   return {
     to: onboardingPath(),
     search: isOnboardingReturnTo(href) ? { returnTo: href } : {},
     replace: true,
   };
+}
+
+/** The homes a person lands on without asking for a chat: `/` (and `/o/<org>`), and the phone's chat list. */
+const HOMES = new Set(["/", "/m", "/m/chats"]);
+
+/**
+ * Where a home (HOMES) sends a person who has not finished onboarding, on the
+ * forge brand (lib/shell.ts), or null to onboard them as Reliant does. A
+ * forge signup came to deploy, not to chat: until the daemonless home lands
+ * (U6 PR3: Projects with a "Set up chats" card) their home is their apps, as
+ * the forge host's `/` always was. Any other chat route (a project's chats, a
+ * chat on the phone) still onboards them: they asked for a chat.
+ */
+export function forgeBrandHomeTarget(pathname: string, forgeBrand: boolean): string | null {
+  if (!forgeBrand) return null;
+  const path = orgFreePath(pathname).replace(/\/+$/, "") || "/";
+  return HOMES.has(path) ? appsPath() : null;
 }

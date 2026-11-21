@@ -36,9 +36,14 @@ import (
 //
 // label and pool are the machine's durable labels and the owner's machine
 // pools, which the Reliant API owns (DaemonRegistryService), not the control
-// plane: they need only the CLI login. An agent's shell is refused the writes
-// (refuseLabelsFromAgentShell): a label decides which pool, and so which
-// runs, a machine takes, which is the owner's call.
+// plane. Reading them needs only the CLI login. Writing them is a person's
+// call — a label decides which pool, and so which runs, a machine takes — so
+// the server takes a write from a person signed in to the app (or a self-host
+// deployment's shared key) or an agent's approved card, and never from a
+// daemon's credential (reason person_required). The CLI login's writes, which
+// shipped in v1.23.0, keep working but are deprecated: every agent shell
+// inherits that login. An agent's shell is refused the writes here as well
+// (refuseLabelsFromAgentShell), with a message that points it at its tool.
 
 var errAgentCannotManageMachines = errors.New("an agent cannot start, stop or resize machines from its shell: use the manage_machine tool (start and resize need the user's approval card in chat), or ask the user to do it in Settings -> Machines")
 
@@ -167,14 +172,15 @@ func newMachineCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "machine",
 		Aliases: []string{"machines"},
-		Short:   "List, start, stop, resize, rename and label your machines, and manage machine pools",
+		Short:   "Create, list, start, stop, resize, rename, delete and label your machines, and manage machine pools",
 		Long: `Manage your own machines, exactly as Settings -> Machines does.
 
 A machine is billed while it runs. start wakes a suspended machine; stop
 suspends a running one; resize changes a SUSPENDED machine's size (s1, s2,
 m, l, xl, 2xl, 3xl), which takes effect when it next starts. To resize a
 running machine: stop, resize, start. rename changes what a machine is
-called, and nothing else.
+called, and nothing else. create makes a cloud machine, delete removes one
+(its disk too: --yes), and grow-disk grows a cloud machine's disk.
 
 label sets a machine's durable labels, and pool defines machine pools: a
 pool is the set of your machines whose labels contain its selector, and a
@@ -183,10 +189,16 @@ also declare its own labels when it starts ('reliant daemon start --label').
 
 start, stop, resize and rename need a login made by this release ('reliant
 auth login'): it carries the daemon:manage permission, which only a person's
-login can hold. An agent's shell is refused start, stop, resize, label and
-the pool changes.`,
+login can hold. An agent's shell is refused create, delete, start, stop,
+resize, grow-disk, label and the pool changes.
+
+Changing labels and pools is a person's decision. The preferred way is to ask
+the agent in a Reliant chat and approve its card. Writing them with the CLI
+login still works but is deprecated: the CLI login is inherited by every
+agent's shell. A machine's own credential is never accepted.`,
 	}
 	cmd.AddCommand(newMachineListCmd(), newMachineStartCmd(), newMachineStopCmd(), newMachineResizeCmd(), newMachineRenameCmd(),
+		newMachineCreateCmd(), newMachineDeleteCmd(), newMachineGrowDiskCmd(),
 		newMachineLabelCmd(), newMachinePoolCmd())
 	return cmd
 }

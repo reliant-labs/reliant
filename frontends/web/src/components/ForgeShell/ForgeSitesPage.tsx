@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /sites in the forge shell: every static site the organization hosts, where
+ * /sites (and /o/<org>/sites), on both hosts: every static site the organization hosts, where
  * it opens, and the custom domains bound to it (sites.ts). A row opens the
  * app's Domains page in its console, where domains are added and bound.
  */
@@ -15,10 +15,22 @@ import { useApps } from "@/hooks/apps-queries";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { DOMAIN_STATE_LABELS } from "@/services/forge/domains";
 
+import { sitesPath } from "@/lib/paths";
+
 import { LiveLink } from "../Apps/appParts";
+import { AreaShell } from "../Layout/AreaShell";
 import { consolePath, withSearch } from "../Forge/Console/paths";
 import { RunFromTerminal } from "./RunFromTerminal";
 import { sitesOf, type SiteRow } from "./sites";
+
+/** The route's page (routes.tsx): the list in the app's area chrome, like Apps and the Inbox. */
+export function SitesPage() {
+  return (
+    <AreaShell areaPath={sitesPath()} areaLabel="Sites" areaNoun="sites">
+      <ForgeSitesPage />
+    </AreaShell>
+  );
+}
 
 export function ForgeSitesPage() {
   const { apps, loading, availability, detail } = useApps();

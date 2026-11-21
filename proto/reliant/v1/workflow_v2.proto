@@ -109,8 +109,15 @@ message ModelSelector {
 }
 
 // DaemonSelectorProto specifies criteria for selecting which daemon executes tools.
-// Supports direct ID, name matching, type filtering, and label matching.
-// In YAML, a plain string like "local" is shorthand for {type: "local"}.
+// Supports direct ID, name matching, type filtering, label matching and a
+// machine pool. In YAML, a plain string like "local" is shorthand for
+// {type: "local"}, and any other string is a machine id or name.
+//
+// {pool: <name>} places the run (a workflow-level selector) or the node (a
+// node-level one) ONCE on one machine, chosen like a
+// pool-bound trigger's run: the least-loaded member that can take work, under
+// the pool's max_runs_per_member, on the pool's agreed workflow catalog. Every
+// later step of that run or node runs on the chosen machine.
 message DaemonSelectorProto {
   // Exact daemon ID (UUID).
   string id = 1;
@@ -118,8 +125,13 @@ message DaemonSelectorProto {
   string name = 2;
   // Daemon type: "local", "cloud", or "any".
   string type = 3;
-  // Match by labels (all must match).
+  // Match by labels (all must match): the labels a machine advertises when
+  // it connects, on each call. Never placed.
   map<string, string> labels = 4;
+  // Place on one member of the owner's machine pool of this name. Exclusive
+  // with id, name, type and labels. A pool the owner does not have is a
+  // validation error.
+  string pool = 5;
 }
 
 // CelDaemonSelector wraps a DaemonSelectorProto that may be a literal or a CEL {{expr}} expression.
@@ -542,6 +554,23 @@ message CallLLMArgs {
     description: "Exclude configured skills for this call (default false); rejects skill preloads, does not redact history or restrict other tools"
     label: "Exclude skill catalog"
     visibility_contexts: "advanced"
+    category: "Prompt"
+  }];
+  // Continuation is the previous turn's CallLLMOutput.continuation, handed
+  // back by the loop: the harness asked to continue that turn, and this call
+  // does so. It appends a short hidden user message for the model ("you hit
+  // the output limit, continue", or "you stopped before acting, act now"),
+  // saved with display_style HIDDEN so the transcript is unchanged, and calls
+  // the provider. Implies continue_turn.
+  //
+  // Unset or empty is the old behavior. A value this runtime does not know
+  // is ignored. No nudge is added when the mailbox delivered new input this
+  // turn: that input is what the model answers.
+  CelString continuation = 18 [(reliant) = {
+    description: "Continue the previous turn with a hidden nudge (truncated | commentary | reasoning_only); set from the previous call's continuation output"
+    label: "Continuation"
+    visibility_contexts: "advanced"
+    hidden: true
     category: "Prompt"
   }];
 }
@@ -1894,6 +1923,24 @@ message CallLLMOutput {
   // takes no level (it cannot reason, or runs at its driver's default). The
   // inline save_message persists it onto messages.thinking_level.
   string thinking_level = 22 [(reliant) = {visibility_contexts: "advanced"}];
+
+  // Continuation is set when the harness wants this turn continued: the
+  // loop passes it back as the next call's CallLLMArgs.continuation, which
+  // nudges the model and calls the provider. Empty means no continuation.
+  //
+  //   truncated       stop_reason is truncated and fewer than 3 nudged
+  //                   continuations already ran in a row; at the cap this is
+  //                   empty and the turn ends as truncated
+  //   commentary      an OpenAI Responses turn (codex, openai) ended on interim
+  //                   commentary with no final answer and no tool call
+  //   reasoning_only  an OpenAI Responses turn ended with reasoning and no
+  //                   visible text or tool call
+  //
+  // The last two keep stop_reason "done", the provider's verdict, and are
+  // offered once per turn: a turn since the last tool call or new input that
+  // was already nudged for a premature stop gets no second one. A loop that
+  // ignores this field behaves as it did before the field existed.
+  string continuation = 23 [(reliant) = {visibility_contexts: "advanced"}];
 }
 
 // ToolCapabilities is one agent turn's tool capability set: resolved once by

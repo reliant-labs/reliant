@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,7 +109,7 @@ func TestCancelToolCall_PreservesExistingExecutionFields(t *testing.T) {
 	assert.Equal(t, startedAt.Unix(), call.RequestedAt.Unix(),
 		"requested_at belongs to the first write and must not move")
 
-	calls, err := repo.ListToolCallsByChat(ctx, f.ChatID)
+	calls, err := store.ListToolCallsByChat(ctx, repo.ORM(), f.ChatID)
 	require.NoError(t, err)
 	require.Len(t, calls, 1, "the handler must update the existing row, not add one")
 }
@@ -129,7 +130,7 @@ func TestCancelToolCall_IsIdempotent(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	calls, err := repo.ListToolCallsByChat(ctx, f.ChatID)
+	calls, err := store.ListToolCallsByChat(ctx, repo.ORM(), f.ChatID)
 	require.NoError(t, err)
 	require.Len(t, calls, 1)
 	assert.Equal(t, core.ToolCallStatusCancelled, calls[0].Status)

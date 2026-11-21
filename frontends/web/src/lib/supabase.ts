@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import type { Session } from '@supabase/supabase-js'
 import { navigatorLock } from '@supabase/auth-js'
 import type { LockFunc, SupportedStorage } from '@supabase/auth-js'
 import { devAuthGrpc } from '@/api/grpc-unauth'
@@ -345,6 +346,20 @@ const getStorage = (): { storage: SupportedStorage; shared: SharedCookieSession 
 }
 
 
+// The page's storage, selected once: the client and a dev sign-in must read
+// and write the same place.
+let selectedStorage: ReturnType<typeof getStorage> | null = null
+const selectStorage = (): ReturnType<typeof getStorage> => (selectedStorage ??= getStorage())
+
+/**
+ * DEV SIGN-IN ONLY (lib/devSignIn.ts): stores session where the client looks
+ * for one at start, under the client's own key. The caller restarts the page
+ * afterwards, so a client that already started reads it too.
+ */
+export const writeStoredSessionForDevSignIn = async (session: Session): Promise<void> => {
+  await selectStorage().storage.setItem(STORAGE_KEY, JSON.stringify(session))
+}
+
 /** True when this build carries the config Supabase needs to start. */
 export const isSupabaseConfigured = (): boolean => Boolean(supabaseAnonKey())
 
@@ -380,7 +395,7 @@ const getClient = (): SupabaseClient => {
   const anonKey = supabaseAnonKey()
   if (!anonKey) throw new Error(MISSING_ANON_KEY_MESSAGE)
 
-  const { storage, shared } = getStorage()
+  const { storage, shared } = selectStorage()
   client = createClient(supabaseUrl(), anonKey, {
     auth: {
       autoRefreshToken: true,

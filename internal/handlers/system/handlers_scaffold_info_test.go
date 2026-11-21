@@ -40,7 +40,19 @@ func TestInfo_Generated(t *testing.T) {
 				if got.WorktreeName != filepath.Base(wd) {
 					t.Fatalf("Info worktree = %q, want %q", got.WorktreeName, filepath.Base(wd))
 				}
+				requireMinimums(t, got.GetClientMinimums(), emptyMinimums())
 			},
 		},
 	}, svc.Info)
+}
+
+func TestInfo_ServesConfiguredClientMinimums(t *testing.T) {
+	t.Parallel()
+
+	svc := system.NewTestSystem(t, system.WithSystemDeps(system.Deps{ClientVersions: testPolicy()}))
+	resp, err := svc.Info(t.Context(), connect.NewRequest(&pb.InfoRequest{}))
+	if err != nil {
+		t.Fatalf("Info: %v", err)
+	}
+	requireMinimums(t, resp.Msg.GetClientMinimums(), testPolicyMinimums())
 }

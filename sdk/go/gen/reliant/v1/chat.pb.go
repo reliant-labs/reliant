@@ -2776,12 +2776,14 @@ func (x *RunNowResponse) GetRunId() string {
 	return ""
 }
 
-// ListChatsRequest lists the caller's chats: in one project, or in all of them.
+// ListChatsRequest lists the caller's chats: in one project, in several, or in
+// all of them.
 type ListChatsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The project to list. Empty lists every project the caller owns: the
-	// sidebar's "All projects" view. Chats are scoped by the caller either way,
-	// so a project id that is not the caller's lists nothing.
+	// The project to list. Empty (and no project_ids) lists every project the
+	// caller owns: the sidebar's "All projects" view. Chats are scoped by the
+	// caller either way, so a project id that is not the caller's lists
+	// nothing. Set with project_ids, it is one more project of that set.
 	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Limit     *int32 `protobuf:"varint,2,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
 	// List only this organization's chats. It must be one the caller is a
@@ -2794,7 +2796,16 @@ type ListChatsRequest struct {
 	// project_id and org_id when they are set; pair it with org_id, since an
 	// app's name is its identity only within one org. A malformed name lists
 	// nothing; an empty one is the same as unset.
-	AppName       *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
+	AppName *string `protobuf:"bytes,5,opt,name=app_name,json=appName,proto3,oneof" json:"app_name,omitempty"`
+	// List the chats of several projects at once: the sidebar's multi-project
+	// filter. The projects listed are the union of project_id and project_ids,
+	// so a client may set either or both; with both empty every project is
+	// listed, as before this field existed. One query answers it, ordered and
+	// limited exactly like a single project's list. Chats are still scoped by
+	// the caller, so an id that is not the caller's contributes nothing. At
+	// most 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+	// main_worktrees then holds the main workspace of each listed project.
+	ProjectIds    []string `protobuf:"bytes,6,rep,name=project_ids,json=projectIds,proto3" json:"project_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2855,6 +2866,13 @@ func (x *ListChatsRequest) GetAppName() string {
 		return *x.AppName
 	}
 	return ""
+}
+
+func (x *ListChatsRequest) GetProjectIds() []string {
+	if x != nil {
+		return x.ProjectIds
+	}
+	return nil
 }
 
 // ListChatsResponse returns the list of chats
@@ -8254,13 +8272,15 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\xbe\x01\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\xf0\x01\n" +
 	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
 	"\x05limit\x18\x02 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\x1a\n" +
 	"\x06org_id\x18\x04 \x01(\tH\x01R\x05orgId\x88\x01\x01\x12\x1e\n" +
-	"\bapp_name\x18\x05 \x01(\tH\x02R\aappName\x88\x01\x01B\b\n" +
+	"\bapp_name\x18\x05 \x01(\tH\x02R\aappName\x88\x01\x01\x120\n" +
+	"\vproject_ids\x18\x06 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10\xc8\x01\"\x04r\x02\x10\x01R\n" +
+	"projectIdsB\b\n" +
 	"\x06_limitB\t\n" +
 	"\a_org_idB\v\n" +
 	"\t_app_nameJ\x04\b\x03\x10\x04R\fsidebar_only\"\xe5\x01\n" +

@@ -80,6 +80,7 @@ import forge
 import forge.workloads as fw
 import config_gen
 import ..workloads as wl
+import ..dev_sign_in as dsi
 import .config as appcfg
 import .ports
 
@@ -250,4 +251,4 @@ _bundle = forge.Bundle {
     }
 }
 
-output = forge.render(_bundle)
+output = forge.render(dsi.only_in_dev("dev", _bundle))

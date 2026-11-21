@@ -33,7 +33,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useAuthStore } from "../../store/authStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { openAddProject } from "../../store/addProjectDialogStore";
@@ -57,6 +57,8 @@ import { lazyRoute } from "../../lib/lazyRoute";
 import { logger } from "../../lib/logger";
 import { SequenceHint } from "../Layout/SequenceHint";
 import { homePath, projectPath, settingsPath, workflowsPath } from "@/lib/paths";
+import { orgFreeRouteId } from "@/lib/paths/org";
+import { chatShellRouteOf } from "@/lib/chatRoute";
 
 // Loaded on first open (and warmed once the host is live): they would
 // otherwise ride in the entry chunk to every unauthenticated page.
@@ -109,12 +111,14 @@ export function shortcutScope({
   pathname: string;
   signedIn: boolean;
 }): ShortcutScope {
+  // The org tree mounts the same layouts under `/o/$org` (routes.tsx).
+  const ids = routeIds.map(orgFreeRouteId);
   const enabled =
     signedIn &&
     surfaceForPath(pathname) === "desktop" &&
-    routeIds.some((id) => id === WORKSPACE_LAYOUT || id === APP_LAYOUT) &&
-    !routeIds.some((id) => EXCLUDED_ROUTES.has(id));
-  return { enabled, workspace: enabled && routeIds.includes(WORKSPACE_LAYOUT) };
+    ids.some((id) => id === WORKSPACE_LAYOUT || id === APP_LAYOUT) &&
+    !ids.some((id) => EXCLUDED_ROUTES.has(id));
+  return { enabled, workspace: enabled && ids.includes(WORKSPACE_LAYOUT) };
 }
 
 type Overlay =
@@ -136,6 +140,8 @@ interface LiveState {
   workspace: boolean;
   pathname: string;
   navigate: ReturnType<typeof useNavigate>;
+  /** Where the router is going, ahead of the page on screen. */
+  latestPathname: () => string;
 }
 
 interface HostCore {
@@ -205,6 +211,8 @@ function createHostCore(
   };
 
   const navigateToWorkspace = () => {
+    // Already on its way (an open chat navigates to its own URL first, lib/chatRoute.ts).
+    if (chatShellRouteOf(live.current.latestPathname())) return;
     const { navigate } = live.current;
     // The chat workspace's URL carries the sidebar's project filter.
     const projectId = useWorkspaceStateStore.getState().projectFilterId;
@@ -435,16 +443,19 @@ export function ShortcutHost({ children }: { children: ReactNode }) {
   });
 
   const navigate = useNavigate();
+  const router = useRouter();
   const [overlay, setOverlay] = useState<Overlay | null>(null);
+  const latestPathname = () => router.latestLocation.pathname;
 
   const live = useRef<LiveState>({
     enabled,
     workspace,
     pathname,
     navigate,
+    latestPathname,
   });
   useLayoutEffect(() => {
-    live.current = { enabled, workspace, pathname, navigate };
+    live.current = { enabled, workspace, pathname, navigate, latestPathname };
   });
 
   const [core] = useState(() => createHostCore(live, setOverlay));

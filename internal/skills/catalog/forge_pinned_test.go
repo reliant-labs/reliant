@@ -21,13 +21,17 @@ import (
 
 // fakePinnedForge stands in for the forge a project pins: resolve says which
 // one (or why it cannot be had), run plays its `skill list --json
-// --with-bodies`, and counts the calls.
+// --with-bodies` (`agent skill …` when agentNoun), and counts the calls.
 type fakePinnedForge struct {
 	mu         sync.Mutex
 	resolveErr error
 	unpinned   bool
 	runs       []string
 	resolves   int
+	// agentNoun: the pinned forge spells its skill commands `agent skill …`
+	// (forge v1.4.0 and later). Without it the pin predates the noun and
+	// knows only `skill …`.
+	agentNoun bool
 	// restart stands in for a new process: fresh memory, the same disk cache.
 	restart func()
 	// cache is forgepin's disk cache directory.
@@ -59,6 +63,12 @@ func useFakePinnedForge(t *testing.T, f *fakePinnedForge) {
 		f.mu.Lock()
 		f.runs = append(f.runs, strings.Join(args, " "))
 		f.mu.Unlock()
+		if f.agentNoun != (len(args) > 0 && args[0] == "agent") {
+			return nil, errors.New("unknown command " + strings.Join(args, " "))
+		}
+		if f.agentNoun {
+			args = args[1:]
+		}
 		switch {
 		case strings.Join(args, " ") == "skill list --json --with-bodies":
 			return []byte(`[
@@ -130,7 +140,9 @@ func TestPinnedProject_SkillsComeFromThePinnedForge(t *testing.T) {
 	f.restart()
 	_ = discoverForgeSkills(dir, "", false)
 	_, _ = loadForgeDefinition(defs["forge/only-in-v104"])
-	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs, "the pinned forge was asked again for what it already said")
+	// v1.0.4 predates the `agent` noun: the new spelling is refused once,
+	// and the old one answers.
+	assert.Equal(t, []string{"agent skill list --json --with-bodies", "skill list --json --with-bodies"}, f.runs, "the pinned forge was asked again for what it already said")
 	// One resolution per process: the restart asked again.
 	assert.Equal(t, 2, f.resolves, "which forge the project pins was resolved more than once per process")
 }
@@ -157,7 +169,7 @@ func TestPinnedProject_MetadataOnlyCacheFromAnEarlierReleaseIsNotRead(t *testing
 	loaded, err := loadForgeDefinition(defs["forge/only-in-v104"])
 	require.NoError(t, err, "a skill listed by the old metadata-only cache cannot load its body")
 	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
-	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs)
+	assert.Equal(t, []string{"agent skill list --json --with-bodies", "skill list --json --with-bodies"}, f.runs)
 
 	// And the catalog it fetched is what the next process reads.
 	f.restart()
@@ -165,7 +177,7 @@ func TestPinnedProject_MetadataOnlyCacheFromAnEarlierReleaseIsNotRead(t *testing
 	loaded, err = loadForgeDefinition(defs["forge/only-in-v104"])
 	require.NoError(t, err)
 	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
-	assert.Equal(t, []string{"skill list --json --with-bodies"}, f.runs, "the refreshed catalog was not kept on disk")
+	assert.Equal(t, []string{"agent skill list --json --with-bodies", "skill list --json --with-bodies"}, f.runs, "the refreshed catalog was not kept on disk")
 }
 
 // With no pin (or the pin is the embedded forge), nothing changes.
@@ -205,4 +217,19 @@ func TestPinnedProject_UnobtainablePinSaysSoAndServesNoOtherForge(t *testing.T) 
 
 	_, err := loadForgeDefinition(Definition{Scope: defs["forge"].Scope, Path: forgeSyntheticPath(dir, "db"), SkillPath: "forge/db"})
 	require.Error(t, err, "a framework skill loaded from the embedded forge")
+}
+
+// A pin that has the `agent` noun is asked in the new spelling only.
+func TestPinnedProject_APinWithTheAgentNounIsAskedInTheNewSpelling(t *testing.T) {
+	isolateHome(t)
+	f := &fakePinnedForge{agentNoun: true}
+	useFakePinnedForge(t, f)
+	dir := pinnedProject(t)
+
+	defs := paths(discoverForgeSkills(dir, "", false))
+	require.Contains(t, defs, "forge/only-in-v104")
+	loaded, err := loadForgeDefinition(defs["forge/only-in-v104"])
+	require.NoError(t, err)
+	assert.Equal(t, "# only-in-v104 as forge v1.0.4 renders it\n", loaded.Body)
+	assert.Equal(t, []string{"agent skill list --json --with-bodies"}, f.runs)
 }

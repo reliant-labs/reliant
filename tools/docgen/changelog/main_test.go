@@ -15,9 +15,9 @@ const repoRoot = "../../.."
 
 // TestReleaseMetadataMatchesElectronVersion pins the release bookkeeping a
 // `chore: release vX.Y.Z` commit writes: the Electron version names a release
-// record, that record declares the same version, the lockfile agrees with
-// package.json, and the generated changelog page is current and carries the
-// release. The files are read by this test process, so Go's test cache sees
+// record, that record declares the same version, and the generated changelog
+// page is current and carries the release. (electron/pnpm-lock.yaml records no
+// version of the app, so there is no lockfile copy to agree.) The files are read by this test process, so Go's test cache sees
 // every input.
 func TestReleaseMetadataMatchesElectronVersion(t *testing.T) {
 	var pkg struct {
@@ -28,20 +28,6 @@ func TestReleaseMetadataMatchesElectronVersion(t *testing.T) {
 		t.Fatal("electron/package.json has no version")
 	}
 	version := "v" + pkg.Version
-
-	var lock struct {
-		Version  string `json:"version"`
-		Packages map[string]struct {
-			Version string `json:"version"`
-		} `json:"packages"`
-	}
-	readJSON(t, filepath.Join(repoRoot, "electron", "package-lock.json"), &lock)
-	if lock.Version != pkg.Version {
-		t.Errorf("electron/package-lock.json version = %q, package.json = %q", lock.Version, pkg.Version)
-	}
-	if root, ok := lock.Packages[""]; !ok || root.Version != pkg.Version {
-		t.Errorf("electron/package-lock.json packages[\"\"].version = %q, package.json = %q", root.Version, pkg.Version)
-	}
 
 	releasesDir := filepath.Join(repoRoot, "docs", "data", "releases")
 	recordPath := filepath.Join(releasesDir, version+".yaml")

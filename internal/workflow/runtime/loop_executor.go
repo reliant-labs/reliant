@@ -839,6 +839,16 @@ func (e *InlineLoopExecutor) loadPresetParams(ctx workflow.Context, presetName s
 // and it runs only on success — a loop that failed did not complete, and saying
 // otherwise would fabricate execution.
 func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
+	// A `daemon: {pool:}` on the loop places every iteration's body on one
+	// member (run_placement.go): the loop runs no step of its own, so
+	// StepExecutor.Start never sees it. Here, not at a dispatch site, so
+	// every loop — top level, nested, parallel or sequential — is placed.
+	placed, err := placeStructuralDaemon(e.ctx, e.chatID, e.workflowID, e.nodePath(), e.loopStep.Node, e.daemonScope, e.execContext)
+	if err != nil {
+		return nil, err
+	}
+	e.execContext = placed
+
 	out, err := e.execute()
 	if err != nil {
 		return nil, err
@@ -1256,6 +1266,17 @@ func (e *InlineLoopExecutor) bodyScope() *LoopScope {
 // (items, key, while, presets).
 func (e *InlineLoopExecutor) celWorkflow() *model.WorkflowContext {
 	return workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, e.workflowInputs, e.execContext))
+}
+
+// daemonScope is the CEL scope the loop's own `daemon:` expression resolves
+// in: the scope ENCLOSING the loop, as its `items` expression sees it.
+func (e *InlineLoopExecutor) daemonScope() *wfcel.NodeResolutionContext {
+	return &wfcel.NodeResolutionContext{
+		Inputs:   e.workflowInputs,
+		Nodes:    e.nodeOutputs,
+		Workflow: e.celWorkflow(),
+		Iter:     e.enclosingIter(),
+	}
 }
 
 // enclosingIter is the `iter` of the loop ENCLOSING this one — the scope this
@@ -1965,9 +1986,10 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						e.logger.Info("[InlineLoop] Activity cancelled (pause), blocking until resume then retrying in place",
+						e.logger.Info("[InlineLoop] Activity cancelled, blocking until resume then retrying in place",
 							"stepID", running.StepID,
 							"iteration", e.iteration,
+							"cause", iterExecutor.cancelCause(running),
 						)
 						e.pauseCtrl.DoCheckPause(e.ctx)
 						// A genuine CancelWorkflow (not a pause) must still unwind.
@@ -1981,8 +2003,10 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						// that paused it. Re-dispatch with that, not the
 						// inputs this iteration started with.
 						e.syncIterationInputs(iterInputs)
-						// A call_llm the pause cut off continues its partial.
-						iterExecutor.noteCancelledForPause(running)
+						// A call_llm the pause cut off continues its partial;
+						// a tool batch an interrupt cancelled is settled
+						// instead of run again (interrupt_settle.go).
+						iterExecutor.noteCancelled(running)
 						newRunning := iterExecutor.Start(&core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,
@@ -2140,7 +2164,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 					_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", exhaustion.payload()).Get(e.ctx, &errorResult)
 
 					// Update DB status to paused
-					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "paused", "", "", nil)
+					_ = notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "paused", "", "", nil)
 
 					// Self-pause and block until resume
 					e.pauseCtrl.DoRequestPauseFor(stepEvent.Error)
@@ -2154,7 +2178,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 					_ = workflow.Sleep(e.ctx, 0)
 
 					// Resumed! Update DB status back to running
-					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "started", "", "", &workflowStatusOpts{Resumed: true})
+					_ = notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "started", "", "", &workflowStatusOpts{Resumed: true})
 
 					e.logger.Info("[InlineLoop] Resumed after pause, retrying step",
 						"loopID", e.loopID,

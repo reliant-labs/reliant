@@ -47,7 +47,7 @@ export const CARDS_SHOWN = 10;
  * a row is two columns (the name, its status) and the rest wraps under them.
  */
 const ROW_GRID =
-  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 px-4 py-2.5 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_14rem_6rem_5.5rem] lg:gap-y-0";
+  "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-1.5 px-3 py-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_14rem_6rem_5.5rem] lg:gap-y-0";
 
 /** Where a row's links go, beyond the Overview's own hrefs. */
 export interface RowHrefs {
@@ -80,9 +80,9 @@ export function ServiceCards({
   const [all, setAll] = useState(false);
   if (loading) {
     return (
-      <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface" aria-label="Services" aria-busy="true">
+      <ul className="divide-y divide-border-subtle border-t border-border" aria-label="Services" aria-busy="true">
         {Array.from({ length: 3 }).map((_, i) => (
-          <li key={i} className="flex h-14 items-center gap-4 px-4">
+          <li key={i} className="flex h-14 items-center gap-4 px-3">
             <span className="sr-only">Loading…</span>
             <span aria-hidden="true" className="h-3 w-32 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
             <span aria-hidden="true" className="h-3 flex-1 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
@@ -93,37 +93,38 @@ export function ServiceCards({
   }
   if (rows.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-3 text-sm text-ink-muted" data-testid="overview-services-empty">
+      <p className="border-t border-border pt-4 text-ui text-ink-muted" data-testid="overview-services-empty">
         {empty}
       </p>
     );
   }
   const shown = all ? rows : rows.slice(0, CARDS_SHOWN);
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface">
+    // On the page, not in a card: a header rule, then quiet rules between rows.
+    <div>
       {/* The column names, once, for a desktop; a phone labels each figure in place. */}
-      <div aria-hidden="true" className={cn(ROW_GRID, "hidden border-b border-border py-2 text-xs text-ink-muted lg:grid")}>
+      <div aria-hidden="true" className={cn(ROW_GRID, "hidden h-10 border-y border-border py-0 text-meta text-ink-muted lg:grid")}>
         <span>Name</span>
         <span>Status</span>
         <span className="grid grid-cols-3 gap-2 text-right">
-          <span>req/s</span>
-          <span>errors</span>
+          <span>Req/s</span>
+          <span>Errors</span>
           <span>p95</span>
         </span>
         <span className="text-right">Error logs</span>
         <span className="text-right">Alerts</span>
       </div>
-      <ul className="divide-y divide-border" aria-label="Services">
+      <ul className="divide-y divide-border-subtle border-t border-border lg:border-t-0" aria-label="Services">
         {shown.map((row) => (
           <Row key={row.key} row={row} showEnv={showEnv} hosted={hosted} hrefs={hrefs} rowHrefs={rowHrefs} redLoading={redLoading} />
         ))}
       </ul>
       {rows.length > CARDS_SHOWN && (
-        <div className="border-t border-border px-2 py-1">
+        <div className="border-t border-border-subtle px-1 py-1.5">
           <button
             type="button"
             onClick={() => setAll((prev) => !prev)}
-            className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-8 items-center rounded-md px-2 text-meta font-medium text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-testid="overview-services-more"
           >
             {all ? "Show fewer" : `Show all ${rows.length}`}
@@ -163,7 +164,7 @@ function Row({
   const href = unobserved ? null : row.type === "process" ? rowHrefs.traces(row.name) : hrefs.workload(row.name, row.envName);
   return (
     <li
-      className={cn(ROW_GRID, "relative min-w-0 transition-colors", href && "hover:bg-ink/5")}
+      className={cn(ROW_GRID, "relative min-w-0 rounded-lg transition-colors", href && "hover:bg-ink/5")}
       data-testid={testIdOf(row, showEnv)}
       data-kind={row.kind}
       data-tone={row.tone}
@@ -176,14 +177,14 @@ function Row({
             <Link
               href={href}
               title={row.type === "process" ? `${row.name}: no workload reports under this name, so this opens its traces` : undefined}
-              className="no-color truncate text-sm font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
+              className="no-color truncate text-ui font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring"
             >
               {row.name}
             </Link>
           ) : (
-            <span className="truncate text-sm font-medium text-ink-muted">{row.name}</span>
+            <span className="truncate text-ui font-medium text-ink-muted">{row.name}</span>
           )}
-          {row.kindLabel && <span className="shrink-0 text-xs text-ink-muted" data-testid="overview-row-kind">{row.kindLabel}</span>}
+          {row.kindLabel && <span className="shrink-0 text-meta text-ink-muted" data-testid="overview-row-kind">{row.kindLabel}</span>}
           {showEnv && row.envName && <Tag>{row.envName}</Tag>}
         </div>
         <Subject row={row} hosted={hosted} hrefs={hrefs} />
@@ -202,15 +203,15 @@ function Row({
       </div>
 
       {unobserved ? (
-        <p className="col-span-2 text-xs text-ink-muted lg:col-span-3">Declared by {row.envName}&apos;s last recorded render; nothing reports from it.</p>
+        <p className="col-span-2 text-meta text-ink-muted lg:col-span-3">Declared by {row.envName}&apos;s last recorded render; nothing reports from it.</p>
       ) : (
         <>
           <div className="col-span-2 lg:col-span-1">
             <Red row={row} loading={redLoading} />
           </div>
           {/* A phone puts error logs and alerts on one line; a desktop gives each its column. */}
-          <div className={cn("col-span-2 flex gap-4 text-xs lg:contents", !row.health && !row.alertsFiring && "max-lg:hidden")}>
-            <span className="flex items-baseline gap-1 lg:justify-end lg:text-sm">
+          <div className={cn("col-span-2 flex gap-4 text-meta lg:contents", !row.health && !row.alertsFiring && "max-lg:hidden")}>
+            <span className="flex items-baseline gap-1 lg:justify-end lg:text-ui">
               <span className="text-ink-muted lg:sr-only">Error logs</span>
               {row.health ? (
                 <Link href={rowHrefs.logs(row.name)} className={cn(INK_LINK, "relative z-10 tabular-nums")} title={`Error logs from ${row.name}`}>
@@ -220,7 +221,7 @@ function Row({
                 <span className="text-ink-muted">—</span>
               )}
             </span>
-            <span className="flex items-baseline gap-1 lg:justify-end lg:text-sm">
+            <span className="flex items-baseline gap-1 lg:justify-end lg:text-ui">
               <span className="text-ink-muted lg:sr-only">Alerts</span>
               {row.alertsFiring > 0 ? (
                 <span className="text-warning-ink" data-testid="overview-row-alerts">{row.alertsFiring} firing</span>
@@ -241,7 +242,7 @@ function Subject({ row, hosted, hrefs }: { row: OverviewRow; hosted: HostedByEnv
     if (row.service.unobserved) return null;
     const w = row.service;
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-muted">
+      <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-meta text-ink-muted">
         <span className={cn("tabular-nums", replicasShort(w) && "text-warning-ink")}>{replicasText(w)} ready</span>
         <span aria-hidden="true">·</span>
         <span className="relative z-10">
@@ -254,7 +255,7 @@ function Subject({ row, hosted, hrefs }: { row: OverviewRow; hosted: HostedByEnv
     const { latest } = row.job;
     const at = latest.finishedAtMs ?? latest.startedAtMs;
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-ink-muted">
+      <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 text-meta text-ink-muted">
         <span>
           {latest.result === "running" ? "running since " : "ran "}
           {at ? <Ago at={new Date(at).toISOString()} /> : "at an unknown time"}
@@ -270,7 +271,7 @@ function Subject({ row, hosted, hrefs }: { row: OverviewRow; hosted: HostedByEnv
       </div>
     );
   }
-  return <div className="text-xs text-ink-muted">Sends telemetry; no workload reports under this name</div>;
+  return <div className="mt-0.5 text-meta text-ink-muted">Sends telemetry; no workload reports under this name</div>;
 }
 
 /** Why the status is what it is: restarts and the last exit, a job's failure and its run count, a process's signal. */
@@ -293,7 +294,7 @@ function Why({ row }: { row: OverviewRow }) {
   }
   if (!text) return null;
   return (
-    <div className={cn("truncate text-xs", TONE_INK[row.tone])} data-testid="overview-row-why">
+    <div className={cn("mt-0.5 truncate text-meta", TONE_INK[row.tone])} data-testid="overview-row-why">
       {text}
     </div>
   );
@@ -305,8 +306,8 @@ function Red({ row, loading }: { row: OverviewRow; loading: boolean }) {
   if (loading && !health) return <div className="h-4 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-hidden="true" />;
   if (!health || health.requestCount === 0) {
     // A job serves no requests: say nothing rather than "no requests traced".
-    if (row.type === "job") return <p className="hidden text-right text-xs text-ink-muted lg:block">—</p>;
-    return <p className="text-xs text-ink-muted lg:text-right" data-testid="service-card-no-requests">No requests traced in this window.</p>;
+    if (row.type === "job") return <p className="hidden text-right text-meta text-ink-muted lg:block">—</p>;
+    return <p className="text-meta text-ink-muted lg:text-right" data-testid="service-card-no-requests">No requests traced in this window.</p>;
   }
   const erroring = health.errorRate >= ERROR_RATE_ALERT;
   return (
@@ -322,8 +323,8 @@ function Figure({ name, value, tone }: { name: string; value: string; tone?: str
   return (
     // The term is first in the markup, as a description list requires; it is drawn after the figure, and only on a phone.
     <div className="flex min-w-0 flex-row-reverse items-baseline justify-end gap-1 lg:justify-start">
-      <dt className="text-xs text-ink-muted lg:sr-only">{name}</dt>
-      <dd className={cn("truncate text-sm tabular-nums text-ink lg:w-full lg:text-right", tone)}>{value}</dd>
+      <dt className="text-meta text-ink-muted lg:sr-only">{name}</dt>
+      <dd className={cn("truncate text-ui tabular-nums text-ink lg:w-full lg:text-right", tone)}>{value}</dd>
     </div>
   );
 }

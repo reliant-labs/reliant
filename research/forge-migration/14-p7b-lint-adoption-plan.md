@@ -62,7 +62,7 @@ Both runs pass `--skip-frontends`, because the frontend lane is P9's (§6).
    tracing ~378" are historical counts: today they are **0 and 0**, with 151 declarations and a
    store-backed interceptor. Its warn-level debt is 277 findings, led by
    `forgeconv-handler-connect-error` **72** (cp never set it to error) plus a
-   `forge fix connect-errors` worklist of 135 rewrites and 47 manual sites.
+   `forge lint fix connect-errors` worklist of 135 rewrites and 47 manual sites.
 
 Risk: **low to medium.** The proto lanes change no wire behaviour: method options, and
 idempotency on pure reads. The operator-visible change is new `activity.event` INFO log lines
@@ -95,7 +95,7 @@ the golangci `nolint`s. None of those is P7b's business.
 
 ### 2.1 `forgeconv-activity-declared` (191)
 
-**What it requires** (`forge skill load activity`):
+**What it requires** (`forge agent skill load activity`):
 
 - Every **mutating** rpc declares `(forge.v1.method).activity`. An rpc counts as mutating unless
   its name starts with `Get/List/Watch/Search/Query/Count/Describe/BatchGet` or it carries
@@ -212,7 +212,7 @@ The fix is control-plane's shape (`control-plane/internal/activitystream`), size
 
 #### 2.1.4 Codemod
 
-None exists. `forge fix` has `connect-errors`, `narrow-deps`, `tx-isolation` and others, but no
+None exists. `forge lint fix` has `connect-errors`, `narrow-deps`, `tx-isolation` and others, but no
 activity codemod. Deciding E vs N and choosing verb and target is judgment, and the lint already
 resolves paths fast and exactly. So hand-writing the declarations with `forge generate && forge
 lint --conventions` as the oracle works: control-plane wrote 151 that way (#1080).
@@ -239,7 +239,7 @@ count. The fix hint is "extract RPCs into sibling `rpc_<name>.go` files".
 
 - **Codemod:** none. The scaffold the hint names (`forge scaffold handler-file <svc> <name>`)
   only writes a package stub, so splitting is hand-done code motion. Same package, no API change.
-  F4 (not blocking) proposes a `forge fix split-handler-file` that moves a named rpc together with
+  F4 (not blocking) proposes a `forge lint fix split-handler-file` that moves a named rpc together with
   the unexported helpers only it reaches.
 - **`tools_daemon.go` is a smell the lint only half sees.** It is the daemon connection hub
   (stream registry, request/response correlation, terminal fan-out) living inside a handler
@@ -261,7 +261,7 @@ workload's env in KCL) can see them. The rule is a warning by default and an err
 |---|---|---|
 | `internal/handlers/mcp/mcp.go:618` (`protoConfigToInternal`) | `os.Getenv(key)` for each `${VAR}` in a user's MCP command/args/headers/url | **Remove the server-side expansion.** The API server's environment is not the user's (PLAN §Architecture: the API server never has the user's machine). Store the `${VAR}` text as written. The daemon expands it when it launches the server. A2 first checks whether the daemon's MCP launcher already expands it; if so, this is deletion. Its own PR, ahead of P7b (D2). |
 | `internal/handlers/mcp/mcp.go:663` (`scopedConfigToInternal`) | same | same |
-| `internal/cliauth/cliauth.go:140` | `FORGE_HOME` | `credentials.DirsFromEnv()` in **forge** (F2). `FORGE_HOME` is forge's variable, `forge login` already resolves it this way, and `cliauth.DepsFromEnv` re-implements it. |
+| `internal/cliauth/cliauth.go:140` | `FORGE_HOME` | `credentials.DirsFromEnv()` in **forge** (F2). `FORGE_HOME` is forge's variable, `forge cloud login` already resolves it this way, and `cliauth.DepsFromEnv` re-implements it. |
 | `internal/cliauth/cliauth.go:141` | `XDG_CONFIG_HOME` | same |
 
 reliant has 33 other `os.Getenv/LookupEnv` sites. The rule doesn't flag them: they are in
@@ -489,7 +489,7 @@ The "activity ~142 / tracing ~378" in the brief predate those PRs.
 | `forge-config-deps` | 113 | workers 30, operators 10, then many small packages. Advisory lane (F1 applies) |
 | `forgeconv-handler-connect-error` | **72** | default warn; cp never set it to error (reliant did in P7a). 45 fixed-message, 27 error-value |
 | `forge-optional-deps-guard` | 58 | handlers/deploy 15, dashboard 7, operators/workspace 6, access_token 5, identity 5, … |
-| `forgeconv-deps-surface` | 11 | e.g. `handlers/deploy Deps.Plans` never called; `billing Deps.CouponService` uses 1 of 8; `forge fix narrow-deps` applies |
+| `forgeconv-deps-surface` | 11 | e.g. `handlers/deploy Deps.Plans` never called; `billing Deps.CouponService` uses 1 of 8; `forge lint fix narrow-deps` applies |
 | `component-drift/*` | 11 | 4 orphan KCL entries for reliant's own workloads (`reliant-api-server`, `reliant-temporal-worker`, `daemon-gateway`, `cloudsql-backup-prune`), which are D4/F6 territory; 7 undeclared (`manageddatabase`, `shared`, `staticsite`, `workload` operators; `gen-llm-gateway`, `pricing-export`, `stripe-catalog` binaries) |
 | `scaffold-not-customized` | 8 | live `FORGE_SCAFFOLD` markers in 8 rpc files (issues ×4, observability, deploy, billing, app_database) |
 | `forge-time-bucket-session-tz` | 2 | `db/migrations/20261013031500_observability_billing.up.sql:109,139`: two-argument `date_trunc` over TIMESTAMPTZ. A forward migration fixes the view/function; the old migration stays |
@@ -498,7 +498,7 @@ The "activity ~142 / tracing ~378" in the brief predate those PRs.
 
 ### 8.3 The connect-errors worklist
 
-`forge fix connect-errors --dry-run` at cp's pin:
+`forge lint fix connect-errors --dry-run` at cp's pin:
 
 - **135 production rewrites** that are wire-identical. 45 are in `internal/handlers/**` (the 45
   fixed-message findings above). 90 are outside: `svcdaemon` 73, `pkg/middleware` 7,
@@ -577,7 +577,7 @@ GOWORK=off /tmp/p7b/forge-reliant lint --json --tests --proto-markers --proto-op
 
 # control-plane
 cd control-plane && GOWORK=off /tmp/p7b/cpbin/forge lint --json --skip-frontends > /tmp/p7b/cp-lint.json
-GOWORK=off /tmp/p7b/cpbin/forge fix connect-errors --dry-run         # 202 rewrites (135 prod + 67 test), 47 left
+GOWORK=off /tmp/p7b/cpbin/forge lint fix connect-errors --dry-run         # 202 rewrites (135 prod + 67 test), 47 left
 rg -c 'activity: \{' proto/                                           # 151 declarations
 
 # reliant §3 sites

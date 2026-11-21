@@ -40,6 +40,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import type { z } from "zod";
+import type { forgeConsoleEnvSearchSchema } from "@/routeSchemas";
 
 import { cn } from "@/lib/utils";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
@@ -61,6 +63,8 @@ import { isLocalLifecycle } from "@/services/forge/status";
 import { environments } from "@/services/forge/topology";
 import { useProjectStore } from "@/store/projectStore";
 import { isForgeShell } from "@/lib/shell";
+import { useOrgScope } from "@/lib/orgScope";
+import { OrgSwitchGate } from "@/components/Orgs/OrgSwitchGate";
 import { RunFromTerminal } from "@/components/ForgeShell/RunFromTerminal";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
@@ -77,10 +81,31 @@ import { OverviewTab, RunningTab } from "./EnvTabPanels";
 import { resolveTab, retiredTabOf, RETIRED_TABS, tabNeedsDaemon, tabParam, tabsFor, type EnvTab } from "./envTabs";
 import Link from "@/components/forge-ui/link";
 
+/**
+ * A link may name the org it was written for (`?org=`: the control plane's
+ * queued-deploy action URL does). The page reads the control plane in the
+ * ACTIVE org, so for another org it asks before switching (OrgSwitchGate) and
+ * reads nothing until the person has chosen; it never switches on its own.
+ */
 export function ForgeEnvPage() {
   const navigate = useNavigate();
-  const { env: envName } = useParams({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
-  const { secret: secretParam, tab: tabSearch } = useSearch({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
+  // Not strict: the page is mounted at `/forge/p/$project/environments/$env`
+  // and, in the org tree, at `/o/$org/apps/$project/environments/$env`
+  // (forgeConsoleRoutes.tsx); both validate this search (forgeConsoleEnvSearchSchema).
+  const { org } = useSearch({ strict: false }) as z.output<typeof forgeConsoleEnvSearchSchema>;
+  const dismissOrg = () =>
+    void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, org: undefined }), replace: true });
+  return (
+    <OrgSwitchGate requestedOrgId={org} onDismiss={dismissOrg} subject="environment link" testIdPrefix="env-org">
+      <EnvPageContent />
+    </OrgSwitchGate>
+  );
+}
+
+function EnvPageContent() {
+  const navigate = useNavigate();
+  const { env: envName = "" } = useParams({ strict: false }) as { env?: string };
+  const { secret: secretParam, tab: tabSearch } = useSearch({ strict: false }) as z.output<typeof forgeConsoleEnvSearchSchema>;
   // The console says which project this is (consoleContext.ts): the forge
   // project the URL names, and the Reliant project that declares it — null
   // when none here does, and then there is no daemon to ask.
@@ -165,8 +190,12 @@ export function ForgeEnvPage() {
   const placedId = liveEnv && isPlacedKind(liveEnv.kind) ? liveEnv.id : null;
   const cloudStatus = useCloudEnvStatus(placedId);
 
-  // Billing, with this page as the way back (and its project in the URL).
-  const goToBilling = useGoToBilling("forge");
+  // Billing, with this page as the way back (and its project in the URL), for
+  // the org this page read the environment in: the link carries it, so
+  // billing asks before acting in another org rather than paying for the
+  // wrong one.
+  const orgScope = useOrgScope();
+  const goToBilling = useGoToBilling("forge", { orgId: orgScope.orgId });
 
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
@@ -248,7 +277,7 @@ export function ForgeEnvPage() {
   const identityLoading = !backendSettled || (askDaemonForIdentity && envStatus.isLoading && !envStatus.data && !liveEnv);
 
   return (
-    <div className="space-y-6" data-testid="forge-env-page" data-tab={tab} data-lifecycle={lifecycle}>
+    <div className="space-y-8" data-testid="forge-env-page" data-tab={tab} data-lifecycle={lifecycle}>
       <EnvPageHeader
         lifecycleControls={
           liveEnv && placedId ? (
@@ -345,8 +374,8 @@ export function ForgeEnvPage() {
       <div role="tabpanel" id={`env-tab-${tab}`} aria-labelledby={`env-tab-button-${tab}`}>
         {identityLoading && (tab === "overview" || tab === "running") ? (
           <div className="space-y-4" data-testid="live-loading" aria-busy="true">
-            <div className="h-28 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />
-            <div className="h-40 animate-pulse rounded-lg border border-border bg-surface motion-reduce:animate-none" />
+            <div className="h-28 animate-pulse rounded-xl bg-ink/5 motion-reduce:animate-none" />
+            <div className="h-40 animate-pulse rounded-xl bg-ink/5 motion-reduce:animate-none" />
           </div>
         ) : tab === "overview" ? (
           <OverviewTab
@@ -451,9 +480,9 @@ function TabButton({
       tabIndex={active ? 0 : -1}
       onClick={() => onSelect(id)}
       className={cn(
-        "-mb-px shrink-0 whitespace-nowrap rounded-sm border-b-2 px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "-mb-px shrink-0 whitespace-nowrap rounded-sm border-b-2 px-3 pb-2.5 pt-1 text-ui transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "border-primary font-medium text-ink"
+          ? "border-ink font-medium text-ink aria-selected:text-ink"
           : "border-transparent text-ink-muted hover:text-ink"
       )}
     >
@@ -484,10 +513,10 @@ function ScopedPages({
   ] as const;
   const pages = local ? all.filter((page) => page.kind === "secrets") : all;
   return (
-    <nav aria-label={`More about ${envName}`} className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted" data-testid="env-scoped-pages">
+    <nav aria-label={`More about ${envName}`} className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border pt-6 text-ui text-ink-muted" data-testid="env-scoped-pages">
       <span>Also for {envName}:</span>
       {pages.map((page) => (
-        <Link key={page.kind} href={href({ kind: page.kind }, { env: envName })} className="text-ink underline-offset-2 hover:underline" data-testid={`env-scoped-${page.kind}`}>
+        <Link key={page.kind} href={href({ kind: page.kind }, { env: envName })} className="no-color text-ink underline-offset-4 hover:underline" data-testid={`env-scoped-${page.kind}`}>
           {page.label}
         </Link>
       ))}

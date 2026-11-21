@@ -4,12 +4,18 @@ package app
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,4 +154,55 @@ func TestMachineControllerListsPoolsAndLabels(t *testing.T) {
 	require.Equal(t, map[string]string{"pool": "cicd"}, list[0].Labels)
 	require.Equal(t, []string{"cicd"}, list[0].Pools)
 	require.Equal(t, 2, list[0].LiveRuns["cicd"])
+}
+
+// The worker's label and pool writes reach the real registry rpcs with no
+// request credential: they land only when the tool marked the ctx with the
+// card a person approved, and are refused (person_required) otherwise.
+func TestMachineControllerPoolWritesNeedTheApprovedCard(t *testing.T) {
+	var writes []string
+	registry, err := daemon_registry.New(daemon_registry.Deps{
+		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{},
+		Repo: &daemon_registry.MockRepository{
+			SetDaemonLabelsFunc: func(_ context.Context, userID, id string, _ map[string]string) (bool, error) {
+				writes = append(writes, "label "+id+" for "+userID)
+				return true, nil
+			},
+			GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) { return &db.Daemon{ID: id, UserID: "u"}, nil },
+			PutMachinePoolFunc: func(_ context.Context, p *core.MachinePool) (*core.MachinePool, error) {
+				writes = append(writes, "put "+p.Name+" for "+p.UserID)
+				return p, nil
+			},
+			DeleteMachinePoolByNameFunc: func(_ context.Context, userID, name string) error {
+				writes = append(writes, "delete "+name+" for "+userID)
+				return nil
+			},
+			ListMachinePoolsForUserFunc: func(context.Context, string) ([]*core.MachinePool, error) { return nil, nil },
+			ListMachinePoolMembersFunc: func(context.Context, *core.MachinePool, string) ([]core.MachinePoolMemberRow, error) {
+				return nil, nil
+			},
+			ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
+		},
+	})
+	require.NoError(t, err)
+	repo := &fakeMachineRegistry{daemons: map[string]*db.Daemon{"cicd": {ID: "cicd", UserID: "u"}}}
+	m := &machineController{repo: repo, pools: registry}
+	spec := tools.MachinePoolSpec{Name: "cicd", MemberIdleTimeout: "10m"}
+
+	bare := context.Background()
+	for _, err := range []error{
+		m.SetMachineLabels(bare, "u", "cicd", map[string]string{"pool": "cicd"}),
+		func() error { _, err := m.PutMachinePool(bare, "u", spec); return err }(),
+		m.DeleteMachinePool(bare, "u", "cicd"),
+	} {
+		require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "a write with no approved card: %v", err)
+	}
+	require.Empty(t, writes)
+
+	approved := auth.WithApprovedCard(bare, "call-1")
+	require.NoError(t, m.SetMachineLabels(approved, "u", "cicd", map[string]string{"pool": "cicd"}))
+	_, err = m.PutMachinePool(approved, "u", spec)
+	require.NoError(t, err)
+	require.NoError(t, m.DeleteMachinePool(approved, "u", "cicd"))
+	require.Equal(t, []string{"label cicd for u", "put cicd for u", "delete cicd for u"}, writes)
 }

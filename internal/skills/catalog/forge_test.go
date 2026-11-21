@@ -162,7 +162,7 @@ func TestLoadFullDefinition_EmitBothRendersByAudience(t *testing.T) {
 			"@forge-only block markers must be absent from a general-audience render")
 		require.NotContains(t, debug.Body, "Forge Debug Tools",
 			"forge-specific section header must be stripped for general audience")
-		require.NotContains(t, debug.Body, "forge debug start",
+		require.NotContains(t, debug.Body, "debug start", // `forge debug start` or `forge dev debug start`, as the pinned forge spells it
 			"forge CLI commands must be stripped for general audience")
 		// The general methodology must survive the strip.
 		require.Contains(t, debug.Body, "Triage First",
@@ -180,7 +180,7 @@ func TestLoadFullDefinition_EmitBothRendersByAudience(t *testing.T) {
 		require.NotEmpty(t, debug.Body, "debug skill body should be hydrated")
 		require.Contains(t, debug.Body, "Forge Debug Tools",
 			"forge audience must see the forge-specific section header")
-		require.Contains(t, debug.Body, "forge debug start",
+		require.Contains(t, debug.Body, "debug start", // `forge debug start` or `forge dev debug start`, as the pinned forge spells it
 			"forge audience must see the forge-specific CLI commands")
 		require.Contains(t, debug.Body, "Triage First",
 			"the methodology section must be present in either audience")
@@ -359,7 +359,7 @@ func TestDiscoverForgeSkills_PreAdoptionEntry(t *testing.T) {
 	startHere, err := forgecli.RenderSkill(dir, forgeStartHerePath, forgecli.RenderSkillOptions{Audience: "forge"})
 	require.NoError(t, err)
 	require.Equal(t, forgePreAdoptionPreamble+string(startHere), entry.Body,
-		"the rest of the body is the start-here, rendered as `reliant forge skill load forge` prints it")
+		"the rest of the body is the start-here, rendered as `reliant forge agent skill load forge` prints it")
 	require.Contains(t, entry.Body, "Forge — start here")
 
 	// Lazy load goes through the same renderer.

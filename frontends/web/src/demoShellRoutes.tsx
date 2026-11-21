@@ -15,12 +15,11 @@
  *   /forge/p/shop/<no page> → a not-found page
  *   anything else   → the console's overview, keeping the query
  *
- * A tree of its own rather than a flag on the forge shell's: there is no
+ * A tree of its own rather than a brand of the app's (routes.tsx): there is no
  * /auth, /oauth or /claim route here, so nothing on this host can sign in.
  * The console's pages sit under a pathless `_authenticated` layout with NO
  * guard: the pages read their params and search by route id
- * (`/_authenticated/_forge/forge/p/$project/…`, as forgeShellRoutes.tsx
- * explains), and every RPC they make is answered by the demo's transport
+ * (`/_authenticated/_forge/forge/p/$project/…`, as in routes.tsx), and every RPC they make is answered by the demo's transport
  * (demoShellBoot.ts), which refuses writes. No ActiveOrgBinding and no
  * landing-journey handoff: each page offers an optional tour without auto-start.
  */

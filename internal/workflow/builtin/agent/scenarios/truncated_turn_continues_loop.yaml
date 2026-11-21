@@ -10,9 +10,11 @@
 # 226KB thinking signature. The loop read that as a clean finish.
 #
 # stop_reason=truncated is what distinguishes them: the work is unfinished, so
-# agent.yaml must take another turn. Note structured-agent.yaml gates on the
-# INVERSE of this — there, re-entering would re-issue the identical request that
-# just truncated, forever.
+# agent.yaml must take another turn. call_llm says so with continuation
+# "truncated" (below its cap of 3 in a row), and the next call_llm appends a
+# hidden "continue from where you stopped" nudge and calls the provider. Note
+# structured-agent.yaml gates on the INVERSE of this — there, re-entering would
+# re-issue the identical request that just truncated, forever.
 name: truncated_turn_continues_loop
 description: A turn that hit the output cap must re-enter the loop, not report the agent as finished
 inputs:
@@ -27,6 +29,7 @@ events:
       response_text: ""
       tool_calls: []
       stop_reason: truncated
+      continuation: truncated
   # Iteration 1: the retry completes the work.
   - node: agent_loop.call_llm
     output:

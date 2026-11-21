@@ -315,8 +315,8 @@ func TestVisibilityAndFavoriteQueries(t *testing.T) {
 	if err := store.SetVisibilityOverride(ctx, env.ORM, "u", wf, "s1", true); err != nil {
 		t.Fatalf("SetVisibilityOverride(replace): %v", err)
 	}
-	if v, err := env.Repo.GetVisibilityOverride(ctx, "u", int32(wf), "s1"); err != nil || v == nil || !*v {
-		t.Fatalf("Repo.GetVisibilityOverride = %v, %v; want true", v, err)
+	if v, err := store.GetVisibilityOverride(ctx, env.ORM, "u", wf, "s1"); err != nil || v == nil || !*v {
+		t.Fatalf("GetVisibilityOverride = %v, %v; want true", v, err)
 	}
 	if err := env.Repo.SetVisibilityOverride(ctx, "u", int32(wf), "s0", false); err != nil {
 		t.Fatalf("Repo.SetVisibilityOverride: %v", err)

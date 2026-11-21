@@ -11,7 +11,6 @@
 
 import { useEffect, useId, useState } from "react";
 
-import Card from "../../forge-ui/card";
 import type { Trigger } from "@/hooks/trigger-model";
 import { formatZonedClock } from "@/lib/cronSchedule";
 import { automationHref } from "@/lib/workflowsArea";
@@ -65,18 +64,18 @@ export function ComingUpTimeline({ triggers, now: nowOverride }: { triggers: Tri
 
   return (
     <section aria-labelledby={headingId} data-testid="coming-up-timeline">
-      <Card padding="none">
-        <div className="flex items-baseline justify-between gap-4 border-b border-border/60 px-5 py-3">
-          <h2 id={headingId} className="text-sm font-semibold text-foreground">
+      <div>
+        <div className="flex items-baseline gap-2">
+          <h2 id={headingId} className="text-ui font-medium text-foreground">
             Coming up
           </h2>
-          <span className="text-xs text-muted-foreground">Next 24 hours</span>
+          <span className="text-meta text-muted-foreground">Next 24 hours</span>
         </div>
 
-        <div className="px-5 py-4" aria-hidden="true">
+        <div className="pt-3" aria-hidden="true">
           <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5">
             <div />
-            <div className="relative h-4 text-xs text-muted-foreground">
+            <div className="relative h-4 text-meta tabular-nums text-muted-foreground">
               <span className="absolute left-0">Now</span>
               {marks.map((mark) => (
                 <span key={mark.at} className="absolute -translate-x-1/2" style={{ left: position(mark.at) }}>
@@ -90,7 +89,7 @@ export function ComingUpTimeline({ triggers, now: nowOverride }: { triggers: Tri
             ))}
           </div>
           {model.hiddenCount > 0 && (
-            <p className="mt-3 text-xs text-muted-foreground" data-testid="coming-up-more">
+            <p className="mt-3 text-meta text-muted-foreground" data-testid="coming-up-more">
               +{model.hiddenCount} more
             </p>
           )}
@@ -111,7 +110,7 @@ export function ComingUpTimeline({ triggers, now: nowOverride }: { triggers: Tri
           ))}
           {model.hiddenCount > 0 && <li>{model.hiddenCount} more automations not shown</li>}
         </ol>
-      </Card>
+      </div>
     </section>
   );
 }
@@ -127,15 +126,15 @@ function Lane({
 }) {
   return (
     <>
-      <a href={automationHref(lane.trigger)} tabIndex={-1} className="truncate text-xs text-foreground hover:underline">
+      <a href={automationHref(lane.trigger)} tabIndex={-1} className="no-color truncate text-meta text-foreground hover:underline">
         {lane.trigger.name}
       </a>
       <div
-        className="relative h-5 rounded-sm border border-border/60 bg-background"
+        className="relative h-5 rounded-md border-b border-border bg-background"
         data-testid={`coming-up-lane-${lane.trigger.id}`}
       >
         {marks.map((at) => (
-          <span key={at} className="absolute inset-y-0 w-px bg-border/60" style={{ left: position(at) }} />
+          <span key={at} className="absolute inset-y-1 w-px bg-border-subtle" style={{ left: position(at) }} />
         ))}
         {lane.ticks.map((tick) => (
           <span

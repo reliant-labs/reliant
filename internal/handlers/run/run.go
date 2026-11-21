@@ -77,6 +77,9 @@ func runToProto(run *core.Workflow) *reliantv1.Run {
 	if run.FailureDetail != nil {
 		out.FailureDetail = *run.FailureDetail
 	}
+	if run.RunOutcome != nil {
+		out.RunOutcome = runstateproto.Outcome(*run.RunOutcome)
+	}
 	if run.CompletedAt != nil {
 		out.CompletedAtMs = run.CompletedAt.UnixMilli()
 	}
@@ -143,6 +146,7 @@ func runItemToProto(item *db.RunListItem) *reliantv1.Run {
 		State:        runstateproto.State(item.RootStatus.State),
 		StopReason:   runstateproto.StopReason(item.RootStatus.StopReason),
 		Outcome:      item.Outcome,
+		RunOutcome:   runstateproto.Outcome(item.RunOutcome),
 		CreatedAtMs:  item.CreatedAt.UnixMilli(),
 		Title:        item.Title,
 		ProjectId:    item.ProjectID,
