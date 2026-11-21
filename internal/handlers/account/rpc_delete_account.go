@@ -8,7 +8,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -48,13 +47,23 @@ func (s *Service) DeleteAccount(
 	// and forfeits promotional credit as part of deleting the account.
 	// If it succeeds and the purge below then fails, the user is locked out of
 	// the platform but their data is still here and the operation is
-	// retryable. The reverse order has an unacceptable failure: every chat and
-	// project destroyed, and the billing still running.
+	// retryable: the retry finds the platform account already deleted and
+	// resumes at the purge (controlPlaneAccountAlreadyDeleted). The reverse
+	// order has an unacceptable failure: every chat and project destroyed,
+	// and the billing still running.
 	resp := &reliantv1.DeleteAccountResponse{}
+	platformDeleted := false
 	if s.deps.ControlPlane != nil {
 		result, cpErr := s.deps.ControlPlane.DeleteCurrentUserAccount(ctx,
 			auth.BearerToken(req.Header().Get("Authorization")))
-		if cpErr != nil {
+		switch {
+		case cpErr != nil && controlPlaneAccountAlreadyDeleted(cpErr):
+			// An earlier attempt deleted the platform account and then
+			// failed the purge. Finish the job rather than strand the data.
+			logging.WarnContext(ctx, "[AccountService] platform account already deleted; resuming the local purge",
+				"user_id", userID)
+			platformDeleted = true
+		case cpErr != nil:
 			// control-plane's error is a remote client's: it decides which
 			// sentence this rpc says, and is the logged cause, never the
 			// verdict itself (svcerr.Code reads the *connect.Error it is).
@@ -65,23 +74,29 @@ func (s *Service) DeleteAccount(
 				return nil, svcerr.WithCause(svcerr.Unavailable("we could not confirm your refund with our payment provider; nothing was deleted, please try again in a minute"), cpErr)
 			}
 			return nil, svcerr.WithCause(svcerr.Internal("could not delete your platform account; nothing was deleted"), cpErr)
-		}
-		if len(result.Blockers) > 0 {
+		case len(result.Blockers) > 0:
 			// FailedPrecondition with the blocker's own sentence: the user
 			// gets "cancel your subscription first", not a generic error.
 			return nil, svcerr.FailedPrecondition(result.Blockers[0].Detail)
+		default:
+			platformDeleted = true
+			resp.RefundedCents = result.RefundedCents
+			resp.RefundDestinations = refundDestinationsToProto(result.RefundDestinations)
+			resp.ForfeitedPromoCents = result.ForfeitedPromoCents
+			resp.RefundPending = result.RefundPending
+			resp.RefundOwedCents = result.RefundOwedCents
 		}
-		resp.RefundedCents = result.RefundedCents
-		resp.RefundDestinations = refundDestinationsToProto(result.RefundDestinations)
-		resp.ForfeitedPromoCents = result.ForfeitedPromoCents
-		resp.RefundPending = result.RefundPending
-		resp.RefundOwedCents = result.RefundOwedCents
 	}
 
-	deleted, err := accountpurge.Purge(ctx, s.deps.SQL, userID)
+	deleted, err := s.purgeWithRetry(ctx, userID)
 	if err != nil {
-		// The purge is transactional: a failure changed nothing, so the client
-		// can safely retry.
+		// The purge is transactional: a failure changed nothing locally, so
+		// the client can safely retry. Once the platform account is gone the
+		// user must not be told "nothing was deleted", and must be told to
+		// retry: the retry resumes here.
+		if platformDeleted {
+			return nil, svcerr.WrapOr(err, svcerr.Internal("your platform account was deleted, but removing your Reliant data failed; please try again to finish deleting it"))
+		}
 		return nil, svcerr.WrapOr(err, svcerr.Internal("account deletion failed; nothing was deleted"))
 	}
 

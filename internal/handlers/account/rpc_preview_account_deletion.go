@@ -59,12 +59,19 @@ func (s *Service) PreviewAccountDeletion(
 	if s.deps.ControlPlane != nil {
 		quote, cpErr := s.deps.ControlPlane.PreviewAccountDeletionWallet(ctx,
 			auth.BearerToken(req.Header().Get("Authorization")))
-		if cpErr != nil {
+		switch {
+		case cpErr != nil && controlPlaneAccountAlreadyDeleted(cpErr):
+			// An earlier DeleteAccount deleted the platform account (and
+			// settled its wallet) but failed the local purge. There is no
+			// wallet left to quote; the preview must still load so the user
+			// can retry the deletion and finish it.
+		case cpErr != nil:
 			// control-plane's error is a remote client's: the logged cause,
 			// never this rpc's verdict.
 			return nil, svcerr.WithCause(svcerr.Unavailable("could not load your wallet balance; please try again"), cpErr)
+		default:
+			wallet = walletQuoteToProto(quote)
 		}
-		wallet = walletQuoteToProto(quote)
 	}
 
 	return connect.NewResponse(&reliantv1.PreviewAccountDeletionResponse{

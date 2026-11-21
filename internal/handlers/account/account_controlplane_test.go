@@ -254,3 +254,75 @@ func TestDeleteAccount_UnconfirmedRefundIsRetryableAndPurgesNothing(t *testing.T
 		t.Errorf("the user must be told nothing was deleted, got %q", err.Error())
 	}
 }
+
+// accountDeletedErr is what control-plane's deleted-account interceptor
+// answers once the caller's platform account is tombstoned.
+func accountDeletedErr() error {
+	return connect.NewError(connect.CodePermissionDenied, errors.New("this account has been deleted"))
+}
+
+// TestDeleteAccount_ResumesPurgeWhenPlatformAccountAlreadyDeleted: a deletion
+// whose control-plane half succeeded and whose local purge failed must be
+// finishable. The retry finds the platform account already deleted; treating
+// that refusal as a failure would strand the user's data for good.
+func TestDeleteAccount_ResumesPurgeWhenPlatformAccountAlreadyDeleted(t *testing.T) {
+	for name, cpErr := range map[string]error{
+		"message (control-plane before the reason)": accountDeletedErr(),
+		"reason": func() error {
+			ce := connect.NewError(connect.CodePermissionDenied, errors.New("gone"))
+			ce.Meta().Set(svcerr.ReasonHeader, controlPlaneAccountDeletedReason)
+			return ce
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+			defer cleanup()
+
+			cp := &stubControlPlane{err: cpErr}
+			svc := newAccountService(t, rawDB, cp)
+
+			resp, err := svc.DeleteAccount(accountAuthedCtx("u-resume", "owner@example.com"), deleteReq("owner@example.com"))
+			if err != nil {
+				t.Fatalf("a retry after the platform account was deleted must finish the purge: %v", err)
+			}
+			if resp.Msg.GetUserId() != "u-resume" {
+				t.Errorf("user id = %q, want u-resume", resp.Msg.GetUserId())
+			}
+		})
+	}
+}
+
+// TestDeleteAccount_OtherPermissionDeniedStillAborts: only the deleted-account
+// refusal resumes the purge; any other refusal leaves the data alone.
+func TestDeleteAccount_OtherPermissionDeniedStillAborts(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	cp := &stubControlPlane{err: connect.NewError(connect.CodePermissionDenied, errors.New("admin role required"))}
+	svc := newAccountService(t, rawDB, cp)
+
+	_, err := svc.DeleteAccount(accountAuthedCtx("u-pd", "owner@example.com"), deleteReq("owner@example.com"))
+	if svcerr.Code(err) != connect.CodeInternal {
+		t.Fatalf("want Internal, got %v", err)
+	}
+}
+
+// TestPreviewAccountDeletion_LoadsWhenPlatformAccountAlreadyDeleted: the
+// dialog is the only way to retry a half-finished deletion, so its preview
+// must load (with no wallet left to quote) rather than fail.
+func TestPreviewAccountDeletion_LoadsWhenPlatformAccountAlreadyDeleted(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	cp := &stubControlPlane{quoteErr: accountDeletedErr()}
+	svc := newAccountService(t, rawDB, cp)
+
+	resp, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"),
+		connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{}))
+	if err != nil {
+		t.Fatalf("PreviewAccountDeletion: %v", err)
+	}
+	if resp.Msg.GetWallet() != nil {
+		t.Errorf("a deleted platform account has no wallet to quote, got %+v", resp.Msg.GetWallet())
+	}
+}
