@@ -1,0 +1,6 @@
+--- stdout
+app "shop" on https://cp.example is already scheduled for deletion; nothing to do:
+  scheduled:     2026-11-18 10:00 UTC by user usr_ada
+  purge after:   2026-11-25 10:00 UTC
+  purge started: not yet (cancel with `forge app delete --cancel`)
+--- error

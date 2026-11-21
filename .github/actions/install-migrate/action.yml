@@ -1,0 +1,27 @@
+name: Install golang-migrate CLI
+description: >-
+  Puts the `migrate` binary on PATH for jobs that run forge's database tests.
+
+# WHY A SHARED ACTION rather than a step copied into each workflow.
+#
+# `forge db reset` and `db migrate up` shell out to the golang-migrate CLI
+# (internal/cli/db.go: exec.LookPath("migrate")), so every job that runs
+# TestDBReset_* needs it, and so does every e2e shard, whose tests drive
+# `forge db` in the projects they scaffold. That is more than one job and not
+# an obvious set. Installing it in one workflow fixed that workflow and left
+# another failing in the same way — which is exactly what happened.
+#
+# The version tracks go.mod's golang-migrate/migrate/v4 so the CLI and the
+# library forge links cannot disagree about migration semantics. Bump both
+# together.
+#
+# `-tags postgres` is REQUIRED. The CLI ships with no database drivers
+# compiled in, and without the tag every command fails with "unknown driver
+# postgres" — which reads like a DSN problem rather than a build one.
+
+runs:
+  using: composite
+  steps:
+    - name: Install golang-migrate CLI
+      shell: bash
+      run: go install -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.20.1

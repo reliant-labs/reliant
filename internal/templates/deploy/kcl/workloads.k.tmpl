@@ -1,0 +1,148 @@
+"""
+What {{.ProjectName}} RUNS — every workload, declared ONCE.
+
+YOURS. forge scaffolds this file once and never rewrites it. `forge
+scaffold service|worker|binary|operator` APPENDS a new declaration to the
+end; nothing else forge does touches what is already here. Edit it
+freely — reorder it, comment it, delete a workload you no longer ship.
+
+DECLARE ONCE, BIND PER ENV
+==========================
+A declaration here states the facts that are true WHEREVER the workload
+runs: how it is built, the subcommand it runs (`args`), its ports, and the
+credentials it reads (`config_secrets`). It says nothing about WHERE it
+runs. Each environment's `deploy/kcl/<env>/main.k` binds it to a runtime:
+
+    forge.OnHost {runner = "go-run"}      a local process (the dev loop)
+    forge.OnCluster {target = _prod}      a Kubernetes cluster you operate
+    forge.OnHosted {}                     the forge control plane
+    forge.OnCompose {service = "nats"}    a docker-compose service
+    forge.BuildOnly {}                    built and shipped, never run
+
+The same `args` select the subcommand on every runtime: forge derives
+`go run ./cmd/{{.ProjectName}} <args>` on the host, and a pod runs the
+image's ENTRYPOINT (`/app/{{.ProjectName}}`) with `<args>`. Nothing about a
+workload is re-stated per runtime, so the dev loop and prod cannot drift.
+
+Probes are not declared here, and do not need to be: forge writes a
+`/readyz` readiness and a `/healthz` liveness probe on the `http` port into
+the spec of every service it builds, on every runtime. That is exactly what
+the scaffolded server serves. Declare `probes` only to change them.
+
+WHAT A WORKLOAD IS
+==================
+One deployable unit: an executable, the args that select what it does,
+and where it runs. In Kubernetes terms, what becomes ONE Deployment.
+
+A workload is NOT a proto service. One binary can mount a dozen Connect
+services on a shared mux and still be ONE workload, because it is one
+process with one image and one set of args.
+{{- if .Graph}} The binary's commands are
+the roots of its composition graph (cmd/{{.ProjectName}}/cmd/roots_gen.go):
+`args = ["server"]` runs the default root — every service and worker in
+one process — and there is NO command per service. So no service or
+worker is declared here: each env runs them all as its `_api` (the
+binary's `server`), in deploy/kcl/<env>/main.k.
+
+Splitting one into a process of its own is a new root: a `//forge:root`
+struct in internal/app (forge generate gives it a command), then a
+workload bound to it (`import config_gen` above), which renders only
+if the root exists:
+
+    billing = fw.Workload {
+        name = "billing"
+        kind = "service"
+        build = forge.GoBuild {cmd = "./cmd/{{.ProjectName}}", output_name = "{{.ProjectName}}"}
+        ports = [fw.Port {name = "http", port = 8080, expose = True}]
+    } | config_gen.root_of("billing")
+{{- else}} `args = ["server"]` runs
+every service, worker and operator in one process; `args = ["<name>"]`
+runs exactly one.
+{{- end}}
+
+A subcommand of your own that mounts SEVERAL components (an `admin-api`
+serving every admin service, say) is one workload too. List what it
+runs in its `serves`, so `forge lint` knows those components are
+deployed and `forge scaffold` does not declare a second workload for one:
+
+    serves = ["billing-admin", "user-admin"]
+
+When most components of a kind run in such processes and none states
+`serves`, `forge scaffold` declares no workload for a new one either; it
+prints the choice instead.
+
+  kind = "service"   Deployment + Service (named ports)
+  kind = "worker"    Deployment, no Service (nothing dials it)
+  kind = "cron"      CronJob on `schedule` (a process that runs to completion)
+  kind = "job"       one-shot; `before` names who waits on it
+  kind = "operator"  controller Deployment + cluster RBAC
+  kind = "tool"      built, never scheduled
+
+A field a kind or a runtime cannot honour is REJECTED at render, naming
+the field and the reason, rather than silently dropped: `replicas` on a
+job, `namespacedRBAC` on a host process, `clusterRBAC` on the hosted
+runtime.
+
+REFINE PER ENV
+==============
+An environment refines a declaration with KCL's `|` merge and states only
+the difference:
+
+    wl.{{.PrimaryIdent}} | {replicas = 3}
+    wl.{{.PrimaryIdent}} | {runtime = forge.OnCluster {target = _k3d}}
+
+`|` preserves the schema type, so every check re-runs on the merged
+result: a bad override fails at that env, naming the field.
+
+ADDING SOMETHING THAT ISN'T GO CODE
+===================================
+Anything can be a workload. Declare it in the env that HAS it rather than
+here, and only that env gets it. Every image names its own registry — a
+third-party one included, because there is no env registry to fall back on:
+
+    # in deploy/kcl/dev/main.k
+    _nats = fw.Workload {
+        name = "nats"
+        image = "docker.io/library/nats:2.10"
+        ports = [fw.Port {name = "client", port = 4222}]
+        runtime = forge.OnCluster {target = _k3d}
+    }
+"""
+
+import forge
+import forge.workloads as fw
+
+# One NAMED declaration per deployable unit. The name is what each
+# environment refines (`wl.{{.PrimaryIdent}} | {...}`), which is why these are
+# bindings rather than entries in one anonymous list.
+{{- if .Workloads}}
+
+{{.Workloads}}
+{{- else}}
+
+{{- if .Graph}}
+# No workloads yet: every service and worker runs in the binary's `server`,
+# which each env declares as `_api`. Declare a workload here for a root of
+# your own (see WHAT A WORKLOAD IS, above), or for anything that is not Go
+# code.
+{{- else}}
+# No workloads yet. `forge scaffold service <name>` appends the first
+# one — or write it by hand:
+#
+#     billing = fw.Workload {
+#         name = "billing"
+#         build = forge.GoBuild {cmd = "./cmd/{{.ProjectName}}", output_name = "{{.ProjectName}}"}
+#         args = ["billing"]
+#         ports = [fw.Port {name = "http", port = 8080, expose = True}]
+#         config_secrets = ["DATABASE_URL"]
+#     }
+{{- end}}
+{{- end}}
+
+# Every workload this project ships. `forge scaffold` appends to this
+# list, and each environment starts from it.
+#
+# An environment is NOT obliged to deploy all of them — `deploy/kcl/<env>/main.k`
+# names what IT runs, so an env can drop one, refine one, or add a workload
+# only it has. This list is "what exists", not "what every env deploys".
+ALL: [fw.Workload] = [{{.WorkloadIdents}}]

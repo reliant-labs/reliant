@@ -1,0 +1,13 @@
+import forge
+
+bundle = forge.Bundle {
+    delivery_policy = forge.DeliveryPolicy {
+        vuln_gate = forge.VulnPolicy {
+            mode = "enforce"
+            exemptions = [
+                forge.VulnExemption {id = "CVE-2026-1234", reason = "unreachable: we never call the \"parser\"", expires = "2026-12-31"}
+                forge.VulnExemption {id = "GO-2026-0001", reason = "unused", expires = "2026-12-01"}
+            ]
+        }
+    }
+}
