@@ -449,6 +449,7 @@
                   "guides/hosting/manage-production-secrets",
                   "guides/hosting/deploy-to-your-own-kubernetes",
                   "guides/hosting/keep-helm-fly-cloud-run",
+                  "guides/hosting/call-hosted-api-from-frontend-elsewhere",
                   "guides/hosting/stop-hosted-environment"
                 ]
               },

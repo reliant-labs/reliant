@@ -8,7 +8,9 @@
  * - a call waiting on the user's approval;
  * - a generation tool's image or video, the result the user asked for;
  * - a drafted automation, once its draft is back (its "Review & create" card);
- * - a deploy that put something live (its app card).
+ * - a deploy that put something live (its app card);
+ * - a spawned sub-agent (its card: who it is, its state, its thread). A
+ *   message to one or a check on one (spawn_send, spawn_status) is work.
  *
  * The last three depend on a result or an approval, so a call can move out
  * of its fold when one arrives (and back into it once an approval settles).
@@ -16,7 +18,7 @@
 
 import { ApprovalStatus, type Approval } from "../../../gen/reliant/v1/approval_pb";
 import type { ToolExecution, ToolResultsByCallId } from "../../../lib/messageProcessor";
-import { isRequestMachineTool } from "../../../lib/toolFormatters";
+import { isRequestMachineTool, isSpawnTool } from "../../../lib/toolFormatters";
 import { deployOfToolCall } from "../../Apps/DeployedAppCard";
 import { isDraftAutomationTool } from "../tool-renderers/DraftAutomationToolRenderer";
 import { isSurfacedMediaTool, type SurfacedExecutionPredicate } from "./simplifiedTurns";
@@ -32,6 +34,7 @@ export function isSurfacedExecution({ call, result, approval }: SurfacedCandidat
   if (call.name === "ask_user" || isRequestMachineTool(call.name)) return true;
   if (approval?.status === ApprovalStatus.PENDING) return true;
   if (isSurfacedMediaTool(call.name)) return true;
+  if (isSpawnTool(call.name)) return true;
   if (isDraftAutomationTool(call.name)) return Boolean(result && !result.is_error);
   return deployOfToolCall(call.name, call.input, result) !== null;
 }

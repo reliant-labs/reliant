@@ -31,7 +31,7 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
     ✓ env "preview": no placeholders remaining and KCL compiles.
     ```
 
-    Commit the template. Also ignore the per-PR copies, because forge writes them on every run and an untracked copy makes every preview release a dirty-tree build:
+    Commit the template. From forge v1.9.0, each per-PR copy writes its own `.gitignore`, so nothing else is needed. On v1.8.0 and earlier, also ignore the copies, because forge writes them on every run and an untracked copy makes every preview release a dirty-tree build:
 
     ```text .gitignore
     deploy/kcl/preview-*/
@@ -217,7 +217,7 @@ A preview is an ordinary forge environment with an expiry marker, so `env deploy
 
 <AccordionGroup>
   <Accordion title="cutting new release … because the checkout has uncommitted changes (deploy/kcl/preview-pr-42/…)">
-    The preview's own copy is untracked, so forge treats the tree as dirty and labels the release `DIRTY TREE`. Add `deploy/kcl/preview-*/` to `.gitignore` and commit it, as in step 1.
+    The preview's own copy is untracked, so forge treats the tree as dirty and labels the release `DIRTY TREE`. Forge v1.9.0 and later ignore the copy for you; on an earlier forge, add `deploy/kcl/preview-*/` to `.gitignore` and commit it, as in step 1.
   </Accordion>
   <Accordion title="env deploy exits 7">
     The deploy is queued on billing, usually because the one free static site (one per person, counted across environments) is already in use by `prod`. It goes live once billing is set up ([Queued deploys](/hosting/overview#queued-deploys)).

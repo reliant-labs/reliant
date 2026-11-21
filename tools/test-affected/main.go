@@ -728,7 +728,7 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 		out = append(out, r.goSteps(pl)...)
 	}
 	if enabled[laneElectron] && pl.Electron.Full {
-		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"npm", "test", "--silent"}, exclusive: true})
+		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"pnpm", "--silent", "test"}, exclusive: true})
 	}
 	if enabled[laneWeb] {
 		out = append(out, r.webSteps(pl)...)

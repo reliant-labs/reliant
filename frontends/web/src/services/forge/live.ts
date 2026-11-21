@@ -85,7 +85,6 @@ import type { JsonObject } from "@bufbuild/protobuf";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
-  DeployEnvironmentKind,
   DeployHoldKind,
   DeployRolloutPhase,
   type DeployConvergence,
@@ -98,6 +97,8 @@ import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { orgRequest } from "@/lib/orgScope";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
+
+import { environmentKindOf } from "./environmentKind";
 
 // ── Kinds ───────────────────────────────────────────────────────────────────
 
@@ -129,21 +130,6 @@ export function liveKindLabel(kind: LiveEnvKind): string {
       return "Local";
     default:
       return "Unknown";
-  }
-}
-
-function kindOf(kind: DeployEnvironmentKind): LiveEnvKind {
-  switch (kind) {
-    case DeployEnvironmentKind.PERSISTENT:
-      return "persistent";
-    case DeployEnvironmentKind.PREVIEW:
-      return "preview";
-    case DeployEnvironmentKind.SELF_MANAGED:
-      return "self_managed";
-    case DeployEnvironmentKind.LOCAL:
-      return "local";
-    default:
-      return "unknown";
   }
 }
 
@@ -768,7 +754,7 @@ export function toLiveEnv(msg: DeployLiveEnvironment): LiveEnv | null {
   const environment: DeployEnvironment | undefined = msg.environment;
   if (!environment || environment.id === "" || environment.name === "") return null;
 
-  const kind = kindOf(environment.kind);
+  const kind = environmentKindOf(environment);
   const declaredAt = toISO(environment.declaredAt);
   const declaredBy = toProvenance(environment.declaredBy);
   const promotion = msg.currentPromotion;
