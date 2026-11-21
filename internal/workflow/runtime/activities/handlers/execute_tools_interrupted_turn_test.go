@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -128,4 +129,52 @@ func TestInterruptedTurn_AnswersEveryCallWithoutRunningAny(t *testing.T) {
 type ToolResultMsgView struct {
 	Content string
 	IsError bool
+}
+
+// unreadableToolCallStore is a store whose tool-call row lookups fail, as a
+// database that is briefly unavailable fails them.
+type unreadableToolCallStore struct{ ExecuteToolsStore }
+
+func (unreadableToolCallStore) GetToolCall(context.Context, string) (*db.ToolCall, error) {
+	return nil, errors.New("connection refused")
+}
+
+// A row the settle cannot read proves neither that the call ran nor that it
+// did not: it is answered as of unknown effect, never as "did nothing", and
+// nothing is written over the row it could not see.
+func TestInterruptedTurn_AnUnreadableRowIsOfUnknownEffect(t *testing.T) {
+	t.Parallel()
+
+	f := setupDurableStatusFixture(t)
+	defer f.h.Cleanup()
+	ctx := context.Background()
+	thread := f.chatID
+	now := time.Now().UTC()
+	running := "toolu_running_" + uuid.NewString()
+	require.NoError(t, f.h.Repo().UpsertToolCall(ctx, &db.ToolCall{
+		ID: running, ChatID: f.chatID, ThreadID: &thread, ToolName: "shell", Status: core.ToolCallStatusExecuting,
+		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
+	}))
+
+	executor := newMockToolExecutor()
+	executor.SetResult(running, &toolexec.ToolResult{Success: true, Content: "should never run"})
+	input := ExecuteToolsInput{
+		ChatID:    f.chatID,
+		Thread:    thread,
+		ToolCalls: []message.ToolCall{{ID: running, Name: "shell", Input: `{"command":"sleep 600"}`}},
+	}.V3()
+	input.Runtime.InterruptedTurn = true
+
+	var output ExecuteToolsOutput
+	store := unreadableToolCallStore{ExecuteToolsStore: f.h.Repo()}
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(store, executor).Execute, input, &output))
+
+	assert.Zero(t, executor.GetExecutionCount(running), "an interrupted turn runs nothing")
+	require.Len(t, output.ToolResults, 1)
+	assert.Equal(t, CancelledByInterruptToolResultContent, output.ToolResults[0].GetContent(),
+		"a call whose row could not be read may have started: its effects are unknown")
+	assert.True(t, output.ToolResults[0].GetIsError())
+	call, err := f.h.Repo().GetToolCall(ctx, running)
+	require.NoError(t, err)
+	assert.Equal(t, core.ToolCallStatusExecuting, call.Status, "nothing is written over a row the settle could not read")
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/sdk/activity"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -31,7 +32,10 @@ const interruptedTurnReason = "user interrupted the agent"
 //     unknown: it is recorded Cancelled with the result that says so;
 //   - no row means the call never started (it was still waiting on its
 //     activation preview or approval card, or the batch was cancelled before
-//     dispatching it): it is recorded Cancelled as not run.
+//     dispatching it): it is recorded Cancelled as not run;
+//   - a row that cannot be read (the database failed the lookup) proves
+//     neither: the call may have started, so its result says the effects are
+//     unknown, and nothing is written over a row this cannot see.
 //
 // A row that belongs to another chat or thread (a provider-chosen id that
 // repeats) is not this call's, so it is neither returned nor overwritten.
@@ -42,6 +46,13 @@ func (a *ExecuteToolsActivity) settleInterruptedCall(ctx context.Context, rtx Ru
 
 	content := NotRunInterruptedToolResultContent
 	existing, err := a.repo.GetToolCall(ctx, call.ID)
+	if err != nil && !svcerr.IsNotFound(err) {
+		activity.GetLogger(ctx).Warn("[ExecuteTools] Interrupted turn: could not read the call's row; answering it as of unknown effect",
+			"tool_call_id", call.ID,
+			"tool_name", call.Name,
+			"error", err)
+		return a.buildToolResult(call.ID, call.Name, CancelledByInterruptToolResultContent, "", true, nil, nil)
+	}
 	if err == nil && existing != nil {
 		if !toolCallIsThisThreads(existing, rtx.ChatID, rtx.Thread) {
 			return a.buildToolResult(call.ID, call.Name, content, "", true, nil, nil)
