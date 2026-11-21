@@ -47,8 +47,13 @@ func FunctionCallKey(fc responses.ResponseFunctionToolCall) string {
 //     stopped (for example "interrupted", which Codex CLI treats as a
 //     completed turn that wants a follow-up). Everything else is dropped.
 //
-// Any other status, including one a mock left empty, is read as completed,
-// matching FinishReason.
+// Only `completed` is proof that the whole response finished. Any other
+// status — `in_progress`, `queued`, or one the API adds later — is not, so it
+// is gated like `incomplete`: only calls the response itself confirms run. A
+// response with no status at all (a Responses-compatible server that omits
+// the field, or a mock) is read as completed, as FinishReason reads it: what
+// carried it was a terminal response.completed event or a finished
+// non-streaming body, and there is no status that says otherwise.
 type ToolCallGate struct {
 	all       bool
 	confirmed map[string]struct{}
@@ -61,9 +66,11 @@ func GateToolCalls(resp *responses.Response) ToolCallGate {
 		return ToolCallGate{}
 	}
 	switch resp.Status {
+	case responses.ResponseStatusCompleted, "":
+		return ToolCallGate{all: true}
 	case responses.ResponseStatusFailed, responses.ResponseStatusCancelled:
 		return ToolCallGate{}
-	case responses.ResponseStatusIncomplete:
+	default: // incomplete, and any status that is not proof of completion
 		gate := ToolCallGate{confirmed: map[string]struct{}{}}
 		for _, out := range resp.Output {
 			fc := out.AsFunctionCall()
@@ -75,8 +82,6 @@ func GateToolCalls(resp *responses.Response) ToolCallGate {
 			}
 		}
 		return gate
-	default:
-		return ToolCallGate{all: true}
 	}
 }
 
