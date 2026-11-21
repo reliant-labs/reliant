@@ -27,11 +27,13 @@ async function syncJob() {
 }
 
 describe("agentAvailability", () => {
-  it("needs the chat backend and a linked git repository, and says why not", () => {
+  it("in Reliant, needs a linked git repository and says why not; in handoff mode, needs no project", () => {
     expect(agentAvailability({ mode: "chat", projectId: "p1", project: { is_git_repo: true } })).toEqual({ available: true });
     // A project the list has not answered for yet is resolved again when the action starts.
     expect(agentAvailability({ mode: "chat", projectId: "p1", project: undefined })).toEqual({ available: true });
-    expect(agentAvailability({ mode: "handoff", projectId: "p1", project: { is_git_repo: true } })).toEqual({ available: false, reason: AGENT_REASON.handoff });
+    // The forge shell and demos open the "Ask an agent" sheet, which touches no project.
+    expect(agentAvailability({ mode: "handoff", projectId: null, project: undefined })).toEqual({ available: true });
+    expect(agentAvailability({ mode: "handoff", projectId: "p1", project: { is_git_repo: false } })).toEqual({ available: true });
     expect(agentAvailability({ mode: "chat", projectId: null, project: undefined })).toEqual({ available: false, reason: AGENT_REASON.noProject });
     expect(agentAvailability({ mode: "chat", projectId: "p1", project: { is_git_repo: false } })).toEqual({ available: false, reason: AGENT_REASON.notGit });
   });

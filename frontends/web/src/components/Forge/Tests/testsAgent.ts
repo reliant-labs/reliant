@@ -24,18 +24,19 @@ import type { CoverageTree, FileCoverage, LineCoverage, TestDetail, TestFlake } 
 export type AgentAvailability = { available: true } | { available: false; reason: string };
 
 export const AGENT_REASON = {
-  handoff: "Agents start from Reliant, where they work on a checkout of this project's repository. Open this project in Reliant to hand it to one.",
   noProject: "No Reliant project holds this app's repository yet. Add it as a project to hand this to an agent.",
   notGit: "This project's folder isn't a git repository, so an agent can't work on a branch of its own.",
 } as const;
 
 /**
- * Whether the Tests agent actions can start. They need Ask Reliant's chat
- * backend (not the handoff mode of the forge shell and demos) and a linked
- * repository: the Reliant project the console resolved for this forge project,
- * a git repository, since the agent works on a branch of its own. A project
- * the list has not answered for yet is not held against it: the action
- * resolves the project again when it starts.
+ * Whether the Tests agent actions can start. In Reliant (mode "chat") they
+ * need a linked repository: the Reliant project the console resolved for this
+ * forge project, a git repository, since the agent works on a branch of its
+ * own. A project the list has not answered for yet is not held against it:
+ * the action resolves the project again when it starts. In the handoff mode
+ * of the forge shell and demos they need neither, as every Ask Reliant
+ * surface there: the action opens the "Ask an agent" sheet, which touches no
+ * project.
  */
 export function agentAvailability({
   mode,
@@ -46,7 +47,7 @@ export function agentAvailability({
   projectId: string | null | undefined;
   project: { is_git_repo: boolean } | undefined;
 }): AgentAvailability {
-  if (mode === "handoff") return { available: false, reason: AGENT_REASON.handoff };
+  if (mode === "handoff") return { available: true };
   if (!projectId) return { available: false, reason: AGENT_REASON.noProject };
   if (project && !project.is_git_repo) return { available: false, reason: AGENT_REASON.notGit };
   return { available: true };

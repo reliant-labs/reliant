@@ -9,9 +9,13 @@
  * with agent" does: a new chat on a workspace and git branch of its own,
  * sent at once (useAskReliant, intent "fix").
  *
- * Disabled, with the reason beside it, when no agent can start
- * (agentAvailability): no chat backend here, no Reliant project for this
- * app, or a project that is not a git repository.
+ * Where there is no chat to start (the forge shell, a demo: handoff mode),
+ * each is the house's one "Ask an agent" button instead, opening the handoff
+ * sheet with the same subject: its prompt and the forge commands to run.
+ *
+ * Disabled, with the reason beside it, when no agent can start in Reliant
+ * (agentAvailability): no Reliant project for this app, or a project that is
+ * not a git repository.
  */
 
 import { useCallback, useId, useState, type ReactNode } from "react";
@@ -26,7 +30,7 @@ import { toast } from "@/lib/toast-manager";
 import { useTestApi } from "@/services/controlPlane/tests/TestApiContext";
 import type { CoverageTarget, TestFlake } from "@/services/controlPlane/tests/types";
 
-import { useAskReliant } from "../Observability/AskReliant/AskReliant";
+import { ASK_AGENT_HINT, ASK_AGENT_LABEL, useAskReliant } from "../Observability/AskReliant/AskReliant";
 import { useAskAgentMode } from "../Observability/AskReliant/askAgentMode";
 import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
 import { agentAvailability, coverageSubject, defaultCoverageTarget, filesToRead, flakyTestSubject, MAX_UNCOVERED_FILES, type AgentAvailability } from "./testsAgent";
@@ -55,7 +59,8 @@ interface AgentButtonProps {
 
 function AgentButton({ project, projectId, label, icon, hint, testId, build }: AgentButtonProps) {
   const availability = useTestsAgentAvailability(projectId);
-  const { ask, busy, dialog } = useAskReliant({ forgeProject: project });
+  const { ask, busy, dialog, mode } = useAskReliant({ forgeProject: project });
+  const handoff = mode === "handoff";
   const [building, setBuilding] = useState(false);
   const reason = useId();
   const onClick = useCallback(async () => {
@@ -86,8 +91,17 @@ function AgentButton({ project, projectId, label, icon, hint, testId, build }: A
   }
   return (
     <>
-      <Button variant="outline" size="sm" leftIcon={icon} onClick={() => void onClick()} loading={building || busy} title={hint} data-testid={testId}>
-        {label}
+      <Button
+        variant="outline"
+        size="sm"
+        leftIcon={handoff ? <Bot className="h-3.5 w-3.5" /> : icon}
+        onClick={() => void onClick()}
+        loading={building || busy}
+        title={handoff ? ASK_AGENT_HINT : hint}
+        data-testid={testId}
+        data-mode={mode}
+      >
+        {handoff ? ASK_AGENT_LABEL : label}
       </Button>
       {dialog}
     </>

@@ -21,7 +21,6 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { useProject } from "@/hooks/project-queries";
 import { forgeConsoleTestsFlakySearchSchema } from "@/routeSchemas";
 
-import { AskAgentModeProvider } from "../../Observability/AskReliant/askAgentMode";
 import type { AskFlakyTestSubject } from "../../Observability/AskReliant/askReliantPrompt";
 import { AGENT_REASON } from "../testsAgent";
 
@@ -222,13 +221,8 @@ describe("Tests › Flaky tests: nothing to show", () => {
 
 const runHref = (runId: string) => `/forge/p/shopfront/tests/runs/${runId}`;
 
-function renderTest(scenario: TestsScenario, testId: string, { projectId = "proj-shopfront", mode = "chat" }: { projectId?: string | null; mode?: "chat" | "handoff" } = {}) {
-  return renderWithApi(
-    fixtureTestApi(scenario),
-    <AskAgentModeProvider mode={mode}>
-      <TestsFlakyTestView project={FIXTURE_PROJECT} projectId={projectId} testId={testId} runHref={runHref} now={FIXTURE_NOW} />
-    </AskAgentModeProvider>
-  );
+function renderTest(scenario: TestsScenario, testId: string, { projectId = "proj-shopfront" }: { projectId?: string | null } = {}) {
+  return renderWithApi(fixtureTestApi(scenario), <TestsFlakyTestView project={FIXTURE_PROJECT} projectId={projectId} testId={testId} runHref={runHref} now={FIXTURE_NOW} />);
 }
 
 describe("a test's page", () => {
@@ -244,7 +238,7 @@ describe("a test's page", () => {
     expect(within(record).getByTestId("tests-fix-with-agent")).toBeEnabled();
   });
 
-  it("disables Fix this flaky test, saying why, where no agent can start", async () => {
+  it("disables Fix this flaky test, saying why, where no agent can start in Reliant", async () => {
     const id = idOf("internal/jobs", "TestSyncJob");
     const reasonOf = async () => {
       const fix = await screen.findByTestId("tests-fix-with-agent");
@@ -255,10 +249,6 @@ describe("a test's page", () => {
     const noRepo = renderTest("report", id, { projectId: null });
     expect(await reasonOf()).toBe(AGENT_REASON.noProject);
     noRepo.unmount();
-
-    const handoff = renderTest("report", id, { mode: "handoff" });
-    expect(await reasonOf()).toBe(AGENT_REASON.handoff);
-    handoff.unmount();
 
     vi.mocked(useProject).mockReturnValue({ is_git_repo: false } as ReturnType<typeof useProject>);
     renderTest("report", id);
