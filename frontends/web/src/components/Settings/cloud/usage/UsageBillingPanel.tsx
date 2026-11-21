@@ -9,6 +9,9 @@ import { isDesktopUpdateRequired } from "@/lib/desktopUpdate";
 import { UsageBillingCard } from "./UsageBillingCard";
 import { usageBillingReturnUrls } from "./usageBillingCheckout";
 import { hostedRateLines, hostingMinimumLine, type HostedRateLike } from "@/components/Billing/priceFormat";
+import { HostingBudgetEditor } from "./HostingBudgetEditor";
+import { clearHostingCheckout, hostingCheckoutStarted, HostingActivatedNotice, markHostingCheckoutStarted } from "./HostingActivatedNotice";
+import { useOrgHostingUsageSummary } from "./hostingBillingQueries";
 
 /** The hosting terms this panel discloses, as GetCurrentUserUsageBilling carries them. */
 type HostedTerms = { rates: HostedRateLike[]; minimumMonthlyCents?: bigint };
@@ -43,7 +46,21 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
     const stop = setTimeout(() => clearInterval(interval), 60_000);
     return () => { clearInterval(interval); clearTimeout(stop); };
   }, [pending, refetch]);
-  return <div id="app-hosting"><UsageBillingCard
+  const active = state.data?.agreement?.status === "active";
+  // A checkout this browser started for this org, now verified by the server.
+  const [activatedNotice, setActivatedNotice] = useState(() => hostingCheckoutStarted(orgId));
+  // Spend so far: lowering the budget below it pauses deploys at once, so the editor warns.
+  const summary = useOrgHostingUsageSummary(active && canManage ? orgId : null);
+  return <div id="app-hosting" className="flex flex-col gap-4">
+    {active && activatedNotice && <HostingActivatedNotice orgId={orgId} onDismiss={() => { clearHostingCheckout(orgId); setActivatedNotice(false); }} />}
+    <UsageBillingCard
+    budgetControl={active ? <HostingBudgetEditor
+      orgId={orgId}
+      budgetCents={state.data!.agreement!.infraBudgetCents}
+      policyVersion={state.data?.policyVersion ?? ""}
+      canManage={canManage}
+      spentCents={summary.data ? Number(summary.data.spentCents) : null}
+    /> : undefined}
     key={`${state.data?.policyVersion ?? "loading"}:${state.data?.agreement?.id ?? "new"}`}
     enabled={state.data?.enabled ?? false}
     policyVersion={state.data?.policyVersion ?? ""}
@@ -68,6 +85,8 @@ function OrgUsageBillingPanel({ orgId, canManage }: { orgId: string; canManage: 
         const response = await checkout.mutateAsync({ ...consent, orgId, ...urls });
         if (!mounted.current) return; // An org switch must not open the old org's checkout.
         if (!response.checkoutUrl) throw new Error("Checkout URL unavailable");
+        markHostingCheckoutStarted(orgId);
+        setActivatedNotice(true);
         await openCheckout(response.checkoutUrl, urls.successUrl);
         if (mounted.current) void refetch(); // An outcome is never proof of funding.
       } catch (err) {

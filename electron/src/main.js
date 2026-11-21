@@ -60,6 +60,7 @@ const {
   resolveMenuAccelerators,
 } = require("./menu-accelerators");
 const { createMenuShortcutDelivery, menuShortcutItems } = require("./menu-shortcuts");
+const { parseDeepLink } = require("./deep-link");
 const WindowManager = require("./window-manager");
 const {
   createWindowSurfacer,
@@ -104,7 +105,9 @@ const ChunkedDownloader = require("./chunked-downloader");
 const {
   canCheckForUpdates,
   classifyCheckResult,
+  cleanMinVersion,
   createDownloadRunner,
+  createForcedUpdate,
   createMenuUpdateCheck,
   nextUpdateState,
 } = require("./update-check");
@@ -3052,7 +3055,35 @@ const downloadRunner = createDownloadRunner({
 
 ipcMain.handle("download-update", () => downloadRunner.run());
 
-ipcMain.handle("install-update", async () => {
+ipcMain.handle("install-update", () => installDownloadedUpdate());
+
+// The forced update (update-check.js createForcedUpdate): the server requires
+// a newer version than this one, so the app checks, downloads and installs
+// without waiting for the user. The renderer asks for it (preload's
+// forceUpdate) and keeps its update dialog up, undismissable, while it runs;
+// every window hears the forced state through update-status.
+const forceUpdate = createForcedUpdate({
+  getStatus: () => lastUpdateStatus,
+  isDownloading: () => downloadRunner.isInFlight(),
+  check: () => autoUpdater.checkForUpdates(),
+  download: () => downloadRunner.run(),
+  install: () => installDownloadedUpdate(),
+  announce: (minVersion) => broadcastUpdateStatus({ type: "forced", minVersion }),
+});
+
+ipcMain.handle("force-update", async (_event, minVersion) => {
+  if (!app.isPackaged) {
+    log.info("[AutoUpdater] Skipping forced update in development");
+    return { outcome: "inactive" };
+  }
+  const min = cleanMinVersion(minVersion);
+  log.warn(`[AutoUpdater] Forced update: the server requires ${min || "a newer version"} (running ${app.getVersion()})`);
+  const result = await forceUpdate(min);
+  log.info(`[AutoUpdater] Forced update outcome: ${result.outcome}${result.error ? ` (${result.error})` : ""}`);
+  return result;
+});
+
+async function installDownloadedUpdate() {
   if (!app.isPackaged) {
     return { error: "Updates not available in development" };
   }
@@ -3130,7 +3161,7 @@ ipcMain.handle("install-update", async () => {
     isInstallingUpdate = false;
     return { error: error.message };
   }
-});
+}
 
 /**
  * Perform manual macOS update when chunked download was used.
@@ -3781,33 +3812,31 @@ if (gotTheLock) {
 }
 
 // Handle deep links - MUST be defined before app.whenReady()
+// Parsed by deep-link.js: `open?path=<dir>` opens a project, `open?url=<app
+// path>` opens a page of the app (a chat, the web app's "Open in desktop").
 function handleDeepLink(url) {
-  try {
-    const urlObj = new URL(url);
-    log.info("[DeepLink] Handling deep link", { hostname: urlObj.hostname });
+  const link = parseDeepLink(url);
+  log.info("[DeepLink] Handling deep link", { kind: link.kind });
 
-    if (urlObj.hostname === "open") {
-      const projectPath = decodeURIComponent(
-        urlObj.searchParams.get("path") || ""
-      );
-
-      if (projectPath) {
-        if (mainWindow && mainWindow.webContents) {
-          log.info("[DeepLink] Sending open-project event");
-          mainWindow.webContents.send("open-project", projectPath);
-          if (mainWindow.isMinimized()) mainWindow.restore();
-          mainWindow.focus();
-        } else {
-          log.info("[DeepLink] No mainWindow, storing as pending");
-          pendingProjectPath = projectPath;
-        }
-      }
-    } else {
-      log.warn("[DeepLink] Unknown deep link hostname:", urlObj.hostname);
-    }
-  } catch (error) {
-    log.error("[DeepLink] Error parsing URL:", error?.message);
+  if (link.kind === "route") {
+    // The window the user is in, brought forward, once its page has loaded:
+    // its router navigates there (preload onOpenRoute).
+    sendToSurfacedWindow("open-route", link.route);
+    return;
   }
+  if (link.kind === "project") {
+    if (mainWindow && mainWindow.webContents) {
+      log.info("[DeepLink] Sending open-project event");
+      mainWindow.webContents.send("open-project", link.path);
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    } else {
+      log.info("[DeepLink] No mainWindow, storing as pending");
+      pendingProjectPath = link.path;
+    }
+    return;
+  }
+  log.warn("[DeepLink] Ignored deep link:", link.reason);
 }
 
 // Check if app was launched with a URL (macOS)

@@ -340,11 +340,11 @@ function ReceiverRow({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-sm font-medium text-ink">{receiver.name}</span>
-            <span className="rounded border border-border px-1.5 py-px text-2xs text-ink-muted">{RECEIVER_TYPE_LABELS[receiver.type]}</span>
+            <span className="rounded border border-border px-1.5 py-px text-meta text-ink-muted">{RECEIVER_TYPE_LABELS[receiver.type]}</span>
             {builtIn ? (
-              <span className="text-2xs text-ink-muted">built in</span>
+              <span className="text-meta text-ink-muted">built in</span>
             ) : receiver.hasSecret ? (
-              <span className="inline-flex items-center gap-1 text-2xs text-ink-muted" data-testid="obs-receiver-secret" title="The secret is stored encrypted and never shown again">
+              <span className="inline-flex items-center gap-1 text-meta text-ink-muted" data-testid="obs-receiver-secret" title="The secret is stored encrypted and never shown again">
                 <Lock className="h-3 w-3" aria-hidden="true" />
                 secret set
               </span>
@@ -589,7 +589,7 @@ function ReceiverDialog({
               autoComplete="new-password"
               spellCheck={false}
             />
-            <p className="mt-1 text-2xs text-ink-muted">Stored encrypted. Reliant never shows it again, here or anywhere else.</p>
+            <p className="mt-1 text-meta text-ink-muted">Stored encrypted. Reliant never shows it again, here or anywhere else.</p>
           </div>
         )}
         {problems.length > 0 && (

@@ -39,6 +39,8 @@ type fakeTriggerBackend struct {
 	deleteErr error
 	fireErr   error
 	nextFire  *time.Time
+	// nextFireHook, when set, answers NextFireAt instead of nextFire.
+	nextFireHook func(ctx context.Context, triggerID string) (*time.Time, error)
 
 	// repo is what the real syncer re-reads the row from.
 	repo interface {
@@ -76,10 +78,15 @@ func (b *fakeTriggerBackend) Delete(_ context.Context, id string) error {
 	return nil
 }
 
-func (b *fakeTriggerBackend) NextFireAt(_ context.Context, _ string) (*time.Time, error) {
+func (b *fakeTriggerBackend) NextFireAt(ctx context.Context, triggerID string) (*time.Time, error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.nextFire, nil
+	hook, next := b.nextFireHook, b.nextFire
+	b.mu.Unlock()
+	// Outside the lock: a hook may block, and lookups run concurrently.
+	if hook != nil {
+		return hook(ctx, triggerID)
+	}
+	return next, nil
 }
 
 func (b *fakeTriggerBackend) StartManualFire(_ context.Context, triggerID string) (string, error) {

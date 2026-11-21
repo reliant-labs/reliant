@@ -93,7 +93,7 @@ export function DeviceSummary({ client, className, testId }: { client: ClientInf
         <span className="truncate">{osLabel(client) || client.deviceType}</span>
       </span>
       {(client.deviceType || viewport) && (
-        <span className="truncate text-2xs text-ink-muted">{[client.deviceType, viewport].filter(Boolean).join(" · ")}</span>
+        <span className="truncate text-meta text-ink-muted">{[client.deviceType, viewport].filter(Boolean).join(" · ")}</span>
       )}
     </span>
   );
@@ -107,7 +107,7 @@ export function ClientName({ client, className, testId }: { client: ClientInfo; 
   return (
     <span className={cn("flex min-w-0 flex-col leading-tight", className)} title={clientTitle(client)} data-testid={testId}>
       <span className="truncate text-ink">{label}</span>
-      {electron && <span className="truncate text-2xs text-ink-muted">Electron {electron}</span>}
+      {electron && <span className="truncate text-meta text-ink-muted">Electron {electron}</span>}
     </span>
   );
 }

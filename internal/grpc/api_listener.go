@@ -8,6 +8,8 @@ import (
 	"net/http"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
+
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 )
@@ -47,6 +49,10 @@ type APIListenerDeps struct {
 	// Policies is put on every request's context beside Membership
 	// (orgpolicy.WithResolver). nil is a deployment with no org policies.
 	Policies *orgpolicy.Resolver
+	// ClientVersions is the client version policy; its legacy switches
+	// make the edge answer pre-header browser bundles a bare 404
+	// (refuseLegacyUnidentified). nil refuses nothing.
+	ClientVersions *configv1.ClientVersionPolicy
 }
 
 // NewAPIListener builds the API listener; it binds nothing until it runs.
@@ -80,13 +86,14 @@ func NewAPIListener(deps APIListenerDeps) (*APIListener, error) {
 	cfg.TLSCertPath, cfg.TLSKeyPath = deps.TLSCertFile, deps.TLSKeyFile
 
 	cors := newCORSHandler(deps.CORSAllowedOrigins)
+	legacy := refuseLegacyUnidentified(deps.ClientVersions)
 	l, err := serverkit.NewListener(serverkit.ListenerDeps{
 		Config: cfg,
 		Chain:  deps.Chain.Chain,
 		Routes: deps.Routes,
 		Logger: deps.Logger,
 		Edge: func(h http.Handler) http.Handler {
-			return withMembership(deps.Membership, deps.Policies, cors(securityHeaders(compressBrowserStreams(h))))
+			return withMembership(deps.Membership, deps.Policies, cors(securityHeaders(legacy(compressBrowserStreams(h)))))
 		},
 	})
 	if err != nil {

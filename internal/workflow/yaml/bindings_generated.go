@@ -80,6 +80,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
 			"compaction_threshold":   {},
+			"continuation":           {},
 			"continue_turn":          {},
 			"exclude_ambient_memory": {},
 			"exclude_skill_catalog":  {},
@@ -227,6 +228,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"resolved_provider_account_id": {},
 			"resolved_role":                {},
 			"resolved_thinking":            {},
+			"resolved_thinking_level":      {},
 			"resolved_tool_calls":          {},
 			"resolved_tool_results":        {},
 			"role":                         {},

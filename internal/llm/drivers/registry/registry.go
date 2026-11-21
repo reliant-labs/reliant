@@ -9,6 +9,7 @@ package registry
 
 import (
 	"context"
+	"sort"
 	"sync"
 
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -50,4 +51,16 @@ func GetDriverFactory(family models.Family) (DriverFactory, bool) {
 	defer driverRegistryMu.RUnlock()
 	factory, ok := driverRegistry[family]
 	return factory, ok
+}
+
+// Families lists every registered driver family, sorted.
+func Families() []models.Family {
+	driverRegistryMu.RLock()
+	defer driverRegistryMu.RUnlock()
+	families := make([]models.Family, 0, len(driverRegistry))
+	for family := range driverRegistry {
+		families = append(families, family)
+	}
+	sort.Slice(families, func(i, j int) bool { return families[i] < families[j] })
+	return families
 }

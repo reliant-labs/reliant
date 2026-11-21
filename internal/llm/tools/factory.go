@@ -92,6 +92,11 @@ type ToolsOptions struct {
 	// both report they are unavailable here (self-hosted, or the daemon
 	// runtime).
 	MachineController MachineController
+	// ChangeController reads and acts on Forge Changes (remote config,
+	// rollouts, A/B tests) as the user, for list_changes, get_change and
+	// manage_change. Optional: nil means they report they are unavailable
+	// here (self-hosted, or the daemon runtime).
+	ChangeController ChangeController
 	// ConnectionProposer checks a propose_connection call (the chat's org,
 	// the person's org role, an identical proposal already waiting) and reads
 	// back the connection the person made. Optional: nil means the tool
@@ -531,6 +536,22 @@ func (f *ToolsFactory) ManageMachine() Tool {
 
 func (f *ToolsFactory) ManageMachinePool() Tool {
 	return NewManageMachinePoolTool(f.store(), f.opts.MachineController)
+}
+
+func (f *ToolsFactory) ListChanges() Tool {
+	return NewListChangesTool(f.store(), f.opts.ChangeController)
+}
+
+func (f *ToolsFactory) GetChange() Tool {
+	return NewGetChangeTool(f.store(), f.opts.ChangeController)
+}
+
+func (f *ToolsFactory) ChangeResults() Tool {
+	return NewChangeResultsTool(f.store(), f.opts.ChangeController)
+}
+
+func (f *ToolsFactory) ManageChange() Tool {
+	return NewManageChangeTool(f.store(), f.opts.ChangeController)
 }
 
 func (f *ToolsFactory) ProposeConnection() Tool {

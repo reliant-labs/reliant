@@ -18,9 +18,7 @@ service BackgroundService {
 
   // KillProcess terminates a background process
   rpc KillProcess(KillProcessRequest) returns (KillProcessResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "stops a background process on the daemon; process lifecycle, not project history"}
-    };
+    option (forge.v1.method) = {activity: {none: "stops a background process on the daemon; process lifecycle, not project history"}};
   }
 
   // StreamProcessOutput streams real-time process output (stdout/stderr)

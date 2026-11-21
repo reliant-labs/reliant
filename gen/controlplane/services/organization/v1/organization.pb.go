@@ -1950,9 +1950,13 @@ type MyOrganization struct {
 	IsOwner   bool                   `protobuf:"varint,6,opt,name=is_owner,json=isOwner,proto3" json:"is_owner,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// When the caller joined the org.
-	JoinedAt      *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=joined_at,json=joinedAt,proto3" json:"joined_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	JoinedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=joined_at,json=joinedAt,proto3" json:"joined_at,omitempty"`
+	// Whether this caller may create a hosted project owned by this org.
+	// Requires owner/admin membership AND the live deploy:write grant.
+	// Absent on older servers; clients must not infer permission from role.
+	CanCreateHostedProject *bool `protobuf:"varint,9,opt,name=can_create_hosted_project,json=canCreateHostedProject,proto3,oneof" json:"can_create_hosted_project,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *MyOrganization) Reset() {
@@ -2039,6 +2043,13 @@ func (x *MyOrganization) GetJoinedAt() *timestamppb.Timestamp {
 		return x.JoinedAt
 	}
 	return nil
+}
+
+func (x *MyOrganization) GetCanCreateHostedProject() bool {
+	if x != nil && x.CanCreateHostedProject != nil {
+		return *x.CanCreateHostedProject
+	}
+	return false
 }
 
 type ListMyOrganizationsRequest struct {
@@ -2358,7 +2369,7 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\x04role\x18\x03 \x01(\tR\x04role\"f\n" +
 	"\x18UpdateMemberRoleResponse\x122\n" +
 	"\x06member\x18\x01 \x01(\v2\x1a.controlplane.v1.OrgMemberR\x06member\x12\x16\n" +
-	"\x06scopes\x18\x02 \x03(\tR\x06scopes\"\x8a\x02\n" +
+	"\x06scopes\x18\x02 \x03(\tR\x06scopes\"\xe8\x02\n" +
 	"\x0eMyOrganization\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -2369,7 +2380,9 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\bis_owner\x18\x06 \x01(\bR\aisOwner\x129\n" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x127\n" +
-	"\tjoined_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bjoinedAt\"\x1c\n" +
+	"\tjoined_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\bjoinedAt\x12>\n" +
+	"\x19can_create_hosted_project\x18\t \x01(\bH\x00R\x16canCreateHostedProject\x88\x01\x01B\x1c\n" +
+	"\x1a_can_create_hosted_project\"\x1c\n" +
 	"\x1aListMyOrganizationsRequest\"\xbc\x01\n" +
 	"\x1bListMyOrganizationsResponse\x12E\n" +
 	"\rorganizations\x18\x01 \x03(\v2\x1f.controlplane.v1.MyOrganizationR\rorganizations\x12$\n" +
@@ -2517,6 +2530,7 @@ func file_services_organization_v1_organization_proto_init() {
 	file_services_organization_v1_organization_proto_msgTypes[3].OneofWrappers = []any{}
 	file_services_organization_v1_organization_proto_msgTypes[12].OneofWrappers = []any{}
 	file_services_organization_v1_organization_proto_msgTypes[18].OneofWrappers = []any{}
+	file_services_organization_v1_organization_proto_msgTypes[32].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

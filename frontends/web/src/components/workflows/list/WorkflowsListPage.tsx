@@ -563,13 +563,14 @@ function WorkflowsBody() {
   const clearNarrowing = () => setSearch({ ...search, q: undefined, show: undefined });
 
   return (
-    <div className="space-y-3" data-onboarding="workflow-hub">
+    <div className="space-y-8" data-onboarding="workflow-hub">
       {triggerList.length > 0 && <OnSummary triggers={triggerList} allProjects={scope.allProjects} />}
 
+      <div className="space-y-3">
       <WorkflowsControls search={search} onChange={setSearch} showFailed={listed.invalid.length > 0} />
 
       {needingCount > 0 && (
-        <p className="flex items-center gap-1.5 text-xs text-warning-ink" role="status">
+        <p className="flex items-center gap-1.5 text-meta text-warning-ink" role="status">
           <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
           {needingCount === 1 ? "1 workflow needs" : `${needingCount} workflows need`} you: a trigger is broken, not set up,
           or keeps failing. Pinned to the top.
@@ -577,8 +578,8 @@ function WorkflowsBody() {
       )}
 
       {view.noMatches ? (
-        <Card padding="lg" role="status">
-          <p className="text-sm font-medium text-foreground">
+        <div role="status" className="border-t border-border py-10 text-center">
+          <p className="text-section text-foreground">
             {search.q?.trim()
               ? `No workflows match “${search.q.trim()}”.`
               : search.show === "on"
@@ -588,7 +589,7 @@ function WorkflowsBody() {
           <Button className="mt-4" variant="outline" size="sm" onClick={clearNarrowing}>
             {search.q?.trim() ? "Clear search" : "Show all workflows"}
           </Button>
-        </Card>
+        </div>
       ) : (
         <>
           <ReadyMadeStrip rows={view.readyMade} projectId={scope.currentProjectId} />
@@ -607,13 +608,13 @@ function WorkflowsBody() {
                   "data-testid": `workflow-row-${row.workflow.name}${row.view.projectId ? `-${row.view.projectId}` : ""}`,
                   "data-attention": row.view.needsYou ? "true" : undefined,
                   "data-state": row.view.state,
-                  className: row.view.needsYou ? "bg-warning/5" : undefined,
+
                 })}
               />
             </div>
           )}
           {view.noWorkflowsOfYourOwn && (
-            <p className="px-1 text-sm text-muted-foreground">
+            <p className="px-1 text-ui text-muted-foreground">
               None of your own yet. Start from a built-in, or{" "}
               <button
                 type="button"
@@ -627,11 +628,11 @@ function WorkflowsBody() {
           )}
           {view.buildingBlocks.length > 0 && (
             <details className="group" data-testid="building-blocks">
-              <summary className="mb-2 cursor-pointer select-none px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <summary className="mb-2 cursor-pointer select-none px-1 text-ui font-medium text-muted-foreground">
                 Building blocks
-                <span className="ml-1.5 font-medium text-muted-foreground/70">{view.buildingBlocks.length}</span>
+                <span className="ml-1.5 font-normal tabular-nums text-muted-foreground/70">{view.buildingBlocks.length}</span>
               </summary>
-              <p className="mb-2 px-1 text-xs text-muted-foreground">
+              <p className="mb-3 px-1 text-meta text-muted-foreground">
                 Used by other workflows. You can run them directly, but they are not offered in the composer.
               </p>
               <div className="forge-ui @container">
@@ -657,6 +658,7 @@ function WorkflowsBody() {
           )}
         </>
       )}
+      </div>
 
       <ConfirmationDialog
         open={deleting !== null}
@@ -695,33 +697,39 @@ function WorkflowsBody() {
  */
 function OnSummary({ triggers, allProjects }: { triggers: Trigger[]; allProjects: boolean }) {
   const counts = useMemo(() => automationCounts(automationUnits(triggers)), [triggers]);
+  // The headline: what runs by itself and is healthy, as the one big number;
+  // what needs you, what is off and when the next run is, as a quiet row
+  // beside it; then the next 24 hours as the one chart.
   const cells: Array<{ label: string; value: string; title?: string; tone?: string }> = [
-    { label: "need you", value: String(counts.needYou), tone: counts.needYou > 0 ? "text-warning-ink" : undefined },
-    { label: "on and healthy", value: String(counts.healthyOn) },
-    { label: "off", value: String(counts.paused) },
+    { label: "Need you", value: String(counts.needYou), tone: counts.needYou > 0 ? "text-warning-ink" : undefined },
+    { label: "Off", value: String(counts.paused) },
     {
-      label: "until the next scheduled run",
+      label: "Next scheduled run",
       value: counts.nextRunAt ? formatRelativeTime(counts.nextRunAt) : "—",
       title: counts.nextRunAt ? formatAbsoluteTime(counts.nextRunAt) : "Nothing is scheduled",
     },
   ];
   return (
-    <details open className="group space-y-3" data-testid="on-summary">
-      <summary className="cursor-pointer select-none px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Runs by itself{allProjects ? ", every project" : ""}
-      </summary>
-      <Card padding="none" className="overflow-hidden" data-testid="automation-counts">
-        <dl className="grid grid-cols-2 divide-border/60 sm:grid-cols-4 sm:divide-x">
+    <section className="space-y-6" aria-label="Runs by itself" data-testid="on-summary">
+      <div className="flex flex-wrap items-end justify-between gap-x-12 gap-y-6" data-testid="automation-counts">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-2 text-ui">
+            <span className="font-medium text-foreground">On and healthy</span>
+            <span className="text-meta text-muted-foreground">Runs by itself{allProjects ? ", every project" : ""}</span>
+          </div>
+          <div className="mt-1 text-figure tabular-nums text-foreground" data-testid="automation-healthy-on">{counts.healthyOn}</div>
+        </div>
+        <dl className="flex flex-wrap gap-x-10 gap-y-5">
           {cells.map((cell) => (
-            <div key={cell.label} className="flex flex-col-reverse px-4 py-3" title={cell.title}>
-              <dd className={`text-2xl font-semibold tabular-nums text-foreground ${cell.tone ?? ""}`}>{cell.value}</dd>
-              <dt className="mt-0.5 text-xs text-muted-foreground">{cell.label}</dt>
+            <div key={cell.label} className="min-w-0" title={cell.title}>
+              <dt className="text-meta text-muted-foreground">{cell.label}</dt>
+              <dd className={`mt-0.5 text-2xl font-semibold tabular-nums text-foreground ${cell.tone ?? ""}`}>{cell.value}</dd>
             </div>
           ))}
         </dl>
-      </Card>
+      </div>
       <ComingUpTimeline triggers={triggers} />
-    </details>
+    </section>
   );
 }
 
@@ -758,7 +766,7 @@ function WorkflowsControls({
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Find workflows">
       <FilterSearch value={query} onChange={setQuery} placeholder="Search names and descriptions" label="Search workflows" />
-      <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Show">
+      <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-border p-0.5" role="group" aria-label="Show">
         {chips.map((chip) => (
           <button
             key={chip}
@@ -768,8 +776,8 @@ function WorkflowsControls({
             onClick={() => onChange({ ...search, show: chip === "all" ? undefined : chip })}
             className={
               active === chip
-                ? "inline-flex h-7 items-center rounded-full border border-primary/40 bg-primary/10 px-2.5 text-xs font-medium text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                : "inline-flex h-7 items-center rounded-full border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                ? "inline-flex h-7 items-center rounded-md bg-foreground/[0.08] px-2.5 text-ui font-medium text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                : "inline-flex h-7 items-center rounded-md px-2.5 text-ui text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             }
           >
             {SHOW_LABEL[chip]}
@@ -806,7 +814,7 @@ function InvalidSection({
 }) {
   return (
     <section aria-label="Failed to load" className="pt-2">
-      <h2 className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-destructive-ink">
+      <h2 className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold text-destructive-ink">
         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
         Failed to load
         <span className="ml-0.5 font-medium text-destructive-ink/70">{workflows.length}</span>

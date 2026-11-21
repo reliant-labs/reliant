@@ -41,6 +41,7 @@ func TestManageMachineLabelNeedsACardForTheExactResult(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Equal(t, []machineCall{{op: "label pool=pipeline, team=infra", user: "owner", id: "cicd-id"}}, f.calls)
+	require.Equal(t, []string{"call"}, f.cards, "the write carries the card the person approved, which the registry requires")
 
 	// Applied: the same call is now a no-op, with no card.
 	_, ask, err = tool.(AutomationApprovalTool).PrepareAutomation(machineToolCtx(automationpolicy.Execution{}), call, false)
@@ -150,6 +151,7 @@ func TestManageMachinePoolPutNeedsACardForTheExactDefinition(t *testing.T) {
 	require.False(t, resp.IsError, resp.Content)
 	require.Len(t, f.calls, 1)
 	require.Contains(t, f.calls[0].op, "put pipeline: selector pool=pipeline; max_runs_per_member 24")
+	require.Equal(t, []string{"call"}, f.cards, "the write carries the card the person approved, which the registry requires")
 
 	// A put that changes nothing needs no card.
 	_, ask, err = tool.(AutomationApprovalTool).PrepareAutomation(machineToolCtx(automationpolicy.Execution{}),
@@ -220,6 +222,7 @@ func TestManageMachinePoolDeleteAndRefusals(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 	require.Equal(t, []machineCall{{op: "delete pipeline", user: "owner"}}, f.calls)
+	require.Equal(t, []string{"call"}, f.cards, "the write carries the card the person approved, which the registry requires")
 
 	for _, input := range []string{
 		`{"action":"delete","name":"nope"}`,

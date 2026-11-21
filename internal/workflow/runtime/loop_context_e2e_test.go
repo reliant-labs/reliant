@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -245,7 +246,7 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		require.NoError(t, err)
 
 		// Retrieve and verify
-		retrieved, err := repo.GetStepExecution(ctx, stepExec.ID)
+		retrieved, err := store.LoadStepExecution(ctx, repo.ORM(), stepExec.ID)
 		require.NoError(t, err)
 
 		assert.NotNil(t, retrieved.LoopNodeID, "LoopNodeID should be valid")
@@ -273,7 +274,7 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		require.NoError(t, err)
 
 		// Retrieve and verify
-		retrieved, err := repo.GetStepExecution(ctx, stepExec.ID)
+		retrieved, err := store.LoadStepExecution(ctx, repo.ORM(), stepExec.ID)
 		require.NoError(t, err)
 
 		assert.Nil(t, retrieved.LoopNodeID, "LoopNodeID should be NULL for non-loop step")
@@ -343,7 +344,7 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		err = repo.CreateStepExecution(ctx, stepExec)
 		require.NoError(t, err)
 
-		retrieved, err := repo.GetStepExecution(ctx, stepExec.ID)
+		retrieved, err := store.LoadStepExecution(ctx, repo.ORM(), stepExec.ID)
 		require.NoError(t, err)
 
 		assert.NotNil(t, retrieved.LoopIteration, "Iteration 0 should be Valid, not NULL")

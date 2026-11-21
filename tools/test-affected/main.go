@@ -33,6 +33,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,6 +78,7 @@ func main() {
 	planFile := fs.String("plan", "", "with run: run this plan (the -json output of an earlier plan) instead of computing one; the merge gate's plan phase already wrote it")
 	budgetFlag := fs.String("test-budget", "", "with run: fail a Go test this change adds or edits that runs longer than this (a duration; \"auto\" is 10s scaled by the load per core; empty or 0 is off), and report every other test over it")
 	webFullFlag := fs.String("web-full", webFullAll, "with run: what a FULL web lane runs: all (the whole vitest suite) or reached (only the vitest files the diff's own web modules reach, at -reach's cut; the merge gate's choice, dev-docs/testing-affected.md)")
+	webShardFlag := fs.String("web-shard", "", "with run: run only shard i of n of the web lane's vitest files (i/n, vitest --shard): the merge queue's vitest job splits the SAME selected file list across n runners, one leg each")
 	reachFlag := fs.String("reach", "", "Go and web lane fan-out: all (every package whose test binary, every vitest file whose import closure, contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers; the vitest files that import a changed module or a module importing it: the merge tier)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
@@ -109,6 +111,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "test-affected: -web-full must be %s or %s, not %q\n", webFullAll, webFullReached, *webFullFlag)
 		os.Exit(2)
 	}
+	if *webShardFlag != "" && !validShard(*webShardFlag) {
+		fmt.Fprintf(os.Stderr, "test-affected: -web-shard must be i/n with 1 <= i <= n, not %q\n", *webShardFlag)
+		os.Exit(2)
+	}
 
 	ctx := context.Background()
 	var pl *Plan
@@ -132,7 +138,7 @@ func main() {
 		os.Exit(1)
 	}
 	if cmd == "run" {
-		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs, webFull: *webFullFlag,
+		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs, webFull: *webFullFlag, webShard: *webShardFlag,
 			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT"))}
 		if err := r.setBudget(ctx, *budgetFlag, pl.Base); err != nil {
 			fmt.Fprintln(os.Stderr, "test-affected:", err)
@@ -595,7 +601,7 @@ type runner struct {
 	budget time.Duration
 	owned  map[string]bool
 	// slot prefixes a FULL lane's command (Taskfile.yml passes
-	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
+	// TEST_AFFECTED_SLOT='forge machine slot run --class heavy --'): a whole-module
 	// run is as heavy as any gate check, and outside a host slot it only steals
 	// CPU from the jobs queued in one. A scoped run stays out of the queue: it
 	// is the inner loop. Empty runs everything directly.
@@ -603,6 +609,9 @@ type runner struct {
 	// webFull is what a FULL web lane runs (-web-full): webFullAll, the
 	// whole suite, or webFullReached, the files the plan's Tests list.
 	webFull string
+	// webShard is -web-shard: "i/n" runs vitest's shard i of n over the
+	// web step's files; empty runs them all.
+	webShard string
 }
 
 // -web-full values.
@@ -610,6 +619,28 @@ const (
 	webFullAll     = "all"
 	webFullReached = "reached"
 )
+
+// validShard reports whether s is a -web-shard value: i/n, 1 <= i <= n.
+func validShard(s string) bool {
+	is, ns, ok := strings.Cut(s, "/")
+	if !ok {
+		return false
+	}
+	i, err1 := strconv.Atoi(is)
+	n, err2 := strconv.Atoi(ns)
+	return err1 == nil && err2 == nil && i >= 1 && i <= n && fmt.Sprint(i) == is && fmt.Sprint(n) == ns
+}
+
+// vitest is `vitest run` over files (none: the whole suite), restricted to
+// the runner's shard when it has one. A shard can be handed no file (fewer
+// files than shards), which is a pass, not vitest's "No test files found".
+func (r *runner) vitest(files []string) []string {
+	argv := []string{"npx", "vitest", "run"}
+	if r.webShard != "" {
+		argv = append(argv, "--shard="+r.webShard, "--passWithNoTests")
+	}
+	return append(argv, files...)
+}
 
 // heavy is argv run inside a host heavy slot when there is one.
 func (r *runner) heavy(argv []string) []string {
@@ -697,7 +728,7 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 		out = append(out, r.goSteps(pl)...)
 	}
 	if enabled[laneElectron] && pl.Electron.Full {
-		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"npm", "test", "--silent"}, exclusive: true})
+		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"pnpm", "--silent", "test"}, exclusive: true})
 	}
 	if enabled[laneWeb] {
 		out = append(out, r.webSteps(pl)...)
@@ -782,13 +813,13 @@ func (r *runner) webSteps(pl *Plan) []step {
 		if len(pl.Web.Tests) == 0 {
 			return nil
 		}
-		return []step{{name: "web (FULL fallback: the reached files)", dir: web, argv: append([]string{"npx", "vitest", "run"}, pl.Web.Tests...)}}
+		return []step{{name: "web (FULL fallback: the reached files)", dir: web, argv: r.vitest(pl.Web.Tests)}}
 	case pl.Web.Full:
-		return []step{{name: "web (full)", dir: web, argv: r.heavy([]string{"npx", "vitest", "run"})}}
+		return []step{{name: "web (full)", dir: web, argv: r.heavy(r.vitest(nil))}}
 	case len(pl.Web.Tests) == 0:
 		return nil
 	}
-	return []step{{name: "web", dir: web, argv: append([]string{"npx", "vitest", "run"}, pl.Web.Tests...)}}
+	return []step{{name: "web", dir: web, argv: r.vitest(pl.Web.Tests)}}
 }
 
 func (r *runner) run(ctx context.Context, pl *Plan, enabled map[lane]bool) int {

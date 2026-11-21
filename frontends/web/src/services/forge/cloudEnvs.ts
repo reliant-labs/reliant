@@ -36,7 +36,6 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
-  DeployEnvironmentKind,
   DeployObservedState,
   DeploySuspendReason,
   DeployRunState,
@@ -58,6 +57,7 @@ import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
 import { domainStateOf } from "./domains";
+import { environmentKindOf } from "./environmentKind";
 import { hostedVerdictOf, type ForgeHostedWorkload, type HostedDomain, type HostedVerdict } from "./topology";
 
 // ── Domain types ────────────────────────────────────────────────────────────
@@ -190,27 +190,12 @@ function toISO(ts: Timestamp | undefined): string | undefined {
   }
 }
 
-function kindOf(kind: DeployEnvironmentKind): CloudEnvKind {
-  switch (kind) {
-    case DeployEnvironmentKind.PERSISTENT:
-      return "persistent";
-    case DeployEnvironmentKind.PREVIEW:
-      return "preview";
-    case DeployEnvironmentKind.SELF_MANAGED:
-      return "self_managed";
-    case DeployEnvironmentKind.LOCAL:
-      return "local";
-    default:
-      return "unknown";
-  }
-}
-
 export function toCloudEnv(msg: DeployEnvironment): CloudEnv {
   return {
     id: msg.id,
     name: msg.name,
     project: msg.project ?? "",
-    kind: kindOf(msg.kind),
+    kind: environmentKindOf(msg),
     createdAt: toISO(msg.createdAt),
   };
 }

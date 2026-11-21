@@ -8,8 +8,16 @@ export interface BackendStatus {
 }
 
 export interface UpdateStatus {
-  type: 'checking' | 'available' | 'not-available' | 'downloaded' | 'download-progress' | 'error';
+  /**
+   * 'forced': the server requires a newer version and the forced update has
+   * started but not found one yet (electron/src/update-check.js).
+   */
+  type: 'checking' | 'available' | 'not-available' | 'downloaded' | 'download-progress' | 'error' | 'forced';
   version?: string;
+  /** The update is required, not optional: the dialog cannot be dismissed. */
+  forced?: boolean;
+  /** With `forced`: the oldest version the server serves. */
+  minVersion?: string;
   progress?: {
     percent: number;
     transferred: number;
@@ -96,6 +104,14 @@ export interface ElectronAPI {
   }>;
   downloadUpdate: () => Promise<{ success?: boolean; error?: string }>;
   installUpdate: () => Promise<{ success?: boolean; error?: string }>;
+  /**
+   * The server requires a newer version: check, download and install without
+   * waiting for the user. Absent in a desktop build from before it existed.
+   */
+  forceUpdate?: (minVersion: string) => Promise<{
+    outcome: 'installing' | 'up-to-date' | 'inactive' | 'error';
+    error?: string;
+  }>;
   onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
   /** The updater's current state, null before any check has answered. */
   getUpdateStatus?: () => Promise<UpdateStatus | null>;
@@ -125,6 +141,8 @@ export interface ElectronAPI {
   onProjectInfo: (callback: (data: { id?: string; name?: string; path?: string }) => void) => void;
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => () => void;
   onOpenProject: (callback: (projectPath: string) => void) => () => void;
+  /** An app page (a chat) a `reliant://open?url=` link named; absent before the desktop release that added it. */
+  onOpenRoute?: (callback: (route: string) => void) => () => void;
 
   // OAuth
   //
@@ -277,5 +295,14 @@ declare global {
     RELIANT_CONFIG?: ReliantConfig;
     /** Only on the desktop find bar's own page (electron/src/find-bar-preload.js). */
     findBarAPI?: FindBarAPI;
+    /**
+     * The desktop app's versions (electron/src/preload.js desktopVersions),
+     * each present only when it looks like a version.
+     */
+    forgeDesktop?: {
+      readonly appVersion?: string;
+      readonly electronVersion?: string;
+      readonly chromiumVersion?: string;
+    };
   }
 }

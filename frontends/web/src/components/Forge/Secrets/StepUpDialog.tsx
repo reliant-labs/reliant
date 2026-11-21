@@ -96,7 +96,7 @@ export function StepUpPanel({ gate, env }: StepUpPanelProps) {
             aria-describedby={`${codeId}-hint`}
             aria-invalid={state.phase === "entering" && state.notice === "invalid"}
             className={cn(
-              "w-full rounded-md border bg-surface-sunken px-3 py-2 font-mono text-sm uppercase tracking-[0.2em] text-ink",
+              "w-full rounded-md border bg-surface-sunken px-3 py-2 font-mono text-sm text-ink",
               "placeholder:text-ink-subtle",
               "focus:outline-none focus:ring-2 focus:ring-ring",
               "disabled:cursor-not-allowed disabled:text-ink-muted",

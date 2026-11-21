@@ -29,19 +29,23 @@ logging.
 
 ## Who gets sent to /onboarding, and where they come back to
 
-Three places redirect a signed-in user whose `onboardingCompleted` is false:
-ModernApp (`/`, `/project/$projectId`), MobileShell (`/m/*`), and
-`OnboardingGate` on the `_authenticated` layout (every other app route —
-`/forge/*`, `/inbox`, `/workflows`, … — except the exemptions listed in
-`OnboardingFlow/onboardingGate.ts`: `/onboarding`, `/settings`, `/m`,
-`/forge/demo`, `/apps`). The gate carries the page as `?returnTo=` and
-`leaveOnboarding` lands every exit to the app there instead of `/`.
+Onboarding guards the CHAT routes only (U6): `/`, `/project/$projectId`,
+`/m`, `/m/chats…`, `/m/new`, in either form (`/o/<org>/…`). The list is
+`routeRequiresOnboarding` in `OnboardingFlow/onboardingGate.ts`, and all three
+redirects ask it: ModernApp (`/`, `/project/$projectId`), MobileShell (`/m/*`)
+and `OnboardingGate` on the `_authenticated` layout. Apps and every app's
+console, Sites, Usage, Workflows, the Inbox and Settings never redirect, so a
+person with no machine gets a working app there — and OnboardingRoute (with
+its returning-user heal) is never mounted on the way. The gate carries the
+page as `?returnTo=` and `leaveOnboarding` lands every exit to the app there
+instead of `/`.
 
-The forge shell (forge.reliantlabs.io, `forgeShellRoutes.tsx`) has NO
-onboarding at all, by design: `forge login`, claim links and every console link
-forge prints land there, and its guard (`ForgeAuthGuard`) asks for sign-in only.
-Chat/agent onboarding runs when a user first opens the agent side
-(app.reliantlabs.io, "Open in Reliant"); the per-user flag is untouched on the
-forge host. Do not mount `OnboardingGate` or `/onboarding` there (#2866 did and
-was reverted: new forge accounts were sent through "Choose your machine" before
-/apps). "Why wasn't a forge user onboarded?" starts there.
+The forge host (forge.reliantlabs.io) mounts the same route tree
+(`routes.tsx`) as the forge brand (`isForgeShell()`). On that brand a home
+(`/`, `/o/<org>`, the phone's chat list) sends a person who has not onboarded
+to `/apps` instead of the wizard (`forgeBrandHomeTarget`): `forge cloud login`, claim
+links and every console link forge prints land on non-chat pages anyway, and a
+forge signup is onboarded only when they open a chat. (#2866 sent new forge
+accounts through "Choose your machine" before /apps and was reverted; the
+chat-routes scope is what makes the one router safe for them.) "Why wasn't a
+forge user onboarded?" starts at `forgeBrandHomeTarget`.

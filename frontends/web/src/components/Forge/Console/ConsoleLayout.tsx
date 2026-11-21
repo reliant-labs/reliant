@@ -44,6 +44,7 @@ import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 
 import { ForgeCloseButton } from "../ForgeHeader";
 import { ObsQuotaBanner } from "../Observability/ObsStates";
+import { PrimeMetricCatalog } from "../Observability/Metrics/PrimeMetricCatalog";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
@@ -55,6 +56,7 @@ import { useObsNavOpen } from "./obsNavOpen";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
 import { consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 import { appsPath } from "@/lib/paths";
+import { changesUIEnabled } from "@/lib/changesFeature";
 
 const RAIL_KEY = "forge.console.rail";
 
@@ -269,6 +271,7 @@ export function ConsoleLayout() {
       starred={starred}
       dashboardTitle={dashboardTitle}
       optionalViews={optionalViews}
+      experiments={changesUIEnabled()}
       obsOpen={obsOpen}
       onObsOpenChange={setObsOpen}
       scope={scope}
@@ -280,6 +283,9 @@ export function ConsoleLayout() {
       brand={brand}
       brandCollapsed={brandCollapsed}
     >
+      {page.kind === "obs-view" && page.view === "metrics" && (
+        <PrimeMetricCatalog orgId={org.orgId} forgeProject={forgeProject} env={env} roster={roster} />
+      )}
       {body}
     </ConsoleShell>
     </LedConsoleProvider>

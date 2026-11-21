@@ -16,35 +16,26 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 //
 // The paths are the command groups that talk to a Reliant server or touch
 // ~/.reliant. `server` and `db` are the hosted roles; `forge` is forge's own
-// CLI, whose flags are its own; `version` and `preview-url` read none of this.
+// CLI, whose flags are its own; `version` and `preview-url` read none of this
+// (`preview access` does: it calls the control plane as the login).
 message CLIConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
     subtrees: [
-      {
-        path: ["auth"]
-      },
-      {
-        path: ["daemon"]
-      },
-      {
-        path: ["github"]
-      },
-      {
-        path: ["machine"]
-      },
-      {
-        path: ["project"]
-      },
-      {
-        path: ["providers"]
-      },
-      {
-        path: ["trigger"]
-      },
-      {
-        path: ["workflow"]
-      }
+      {path: ["auth"]},
+      {path: ["chat"]},
+      {path: ["daemon"]},
+      {path: ["github"]},
+      {path: ["integrations"]},
+      {path: ["machine"]},
+      {path: ["mcp"]},
+      {path: ["models"]},
+      {path: ["preview"]},
+      {path: ["project"]},
+      {path: ["providers"]},
+      {path: ["trigger"]},
+      {path: ["workflow"]},
+      {path: ["worktree"]}
     ]
   };
 

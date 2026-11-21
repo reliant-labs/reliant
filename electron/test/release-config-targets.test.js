@@ -2,7 +2,7 @@
 // target gets its endpoints from electron/release.config.json, which is
 // projected out of control-plane's KCL by .github/scripts/sync-release-config.mjs.
 //
-// The failure this prevents is the v1.7.5 one, and it is silent: an npm target
+// The failure this prevents is the v1.7.5 one, and it is silent: a build target
 // that packages WITHOUT the release config produces an installer that builds
 // green and ships with no control-plane URL — which is what made coupons throw
 // "Control plane API URL not configured" on real users' machines. The renderer
@@ -61,7 +61,7 @@ function resolvesThroughWrapper(name, seen = new Set()) {
   if (!script) return false;
   if (script.includes(WRAPPER)) return true;
 
-  const alias = script.trim().match(/^npm run ([\w:.-]+)$/);
+  const alias = script.trim().match(/^pnpm run ([\w:.-]+)$/);
   if (alias) return resolvesThroughWrapper(alias[1], seen);
 
   return false;

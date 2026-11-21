@@ -15,7 +15,7 @@
 import { useEffect, useMemo } from "react";
 
 import { useProjects } from "@/hooks/project-queries";
-import { isForgeShell } from "@/lib/shell";
+import { isDemoShell } from "@/lib/shell";
 import { useAuthStore } from "@/store/authStore";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
@@ -43,18 +43,19 @@ export interface ConsoleReliantProject {
 /**
  * The Reliant project behind `forgeProject`, made the current project once
  * found. `listed` once the project list has answered (or failed): until then a
- * forge name matches nothing only because nothing is loaded yet. The forge
- * shell has no Reliant projects (useProjects is off there): the forge name in
- * the URL is the whole scope, and nothing is waited for.
+ * forge name matches nothing only because nothing is loaded yet. The demo
+ * shell (lib/shell.ts) has no Reliant projects: the forge name in the URL is
+ * the whole scope, and nothing is waited for. Both app hosts have projects
+ * (the forge host mounts the one route tree, U6).
  */
 export function useConsoleReliantProject(forgeProject: string): ConsoleReliantProject {
-  const forgeShell = isForgeShell();
+  const demo = isDemoShell();
   const { projects, isLoading: listing } = useProjects();
-  const listed = forgeShell || projects.length > 0 || !listing;
+  const listed = demo || projects.length > 0 || !listing;
   const currentProject = useProjectStore((state) => state.currentProject);
   const selectProject = useProjectStore((state) => state.selectProject);
 
-  const match = listed && !forgeShell ? projectDeclaring(forgeProject, projects, currentProject) : null;
+  const match = listed && !demo ? projectDeclaring(forgeProject, projects, currentProject) : null;
   useEffect(() => {
     if (match && match.id !== currentProject?.id) void selectProject(match);
   }, [match, currentProject?.id, selectProject]);

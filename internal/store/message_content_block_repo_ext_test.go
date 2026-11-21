@@ -96,11 +96,6 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 			t.Fatal(err)
 		}
 		requireSameBlock(t, "FindContentBlock "+want.ID, want, got)
-		twin, err := f.env.Repo.GetContentBlock(ctx, want.ID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		requireSameBlock(t, "Repo.GetContentBlock "+want.ID, want, twin)
 	}
 	if got, err := store.FindContentBlock(ctx, o, "absent"); err != nil || got != nil {
 		t.Fatalf("FindContentBlock(absent) = %v, %v", got, err)
@@ -115,7 +110,7 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	if *bad.Content != "bad \uFFFD byte" {
 		t.Fatalf("caller's block content = %q; want it repaired in place", *bad.Content)
 	}
-	if got, _ := f.env.Repo.GetContentBlock(ctx, bad.ID); *got.Content != "bad \uFFFD byte" {
+	if got, _ := store.FindContentBlock(ctx, o, bad.ID); *got.Content != "bad \uFFFD byte" {
 		t.Fatalf("stored content = %q", *got.Content)
 	}
 
@@ -125,7 +120,7 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	if err := store.InsertContentBlockOnce(ctx, o, again); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.env.Repo.CreateContentBlockIfNotExists(ctx, again); err != nil {
+	if err := store.InsertContentBlockOnce(ctx, f.env.Repo.ORM(), again); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := store.FindContentBlock(ctx, o, again.ID); *got.Content != "content "+again.ID {
@@ -198,7 +193,7 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		delta := fmt.Sprintf("<%d '\\ ?>", i)
 		if i%2 == 0 {
-			err = f.env.Repo.AppendToContentBlock(ctx, "m1-b0", delta)
+			err = store.AppendToContentBlock(ctx, f.env.Repo.ORM(), "m1-b0", delta)
 		} else {
 			err = store.AppendToContentBlock(ctx, o, "m1-b0", delta)
 		}
@@ -213,7 +208,7 @@ func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
 	if want := "<0 '\\ ?><1 '\\ ?><2 '\\ ?><3 '\\ ?><4 '\\ ?><5 '\\ ?>"; *got.Content != want || *got.Version != 6 {
 		t.Fatalf("content %q version %d; want %q version 6", *got.Content, *got.Version, want)
 	}
-	if err := f.env.Repo.AppendToolInputDelta(ctx, f.chat, "m1-b1", `,"x":1}`); err != nil {
+	if err := store.AppendToolInputDelta(ctx, f.env.Repo.ORM(), "m1-b1", `,"x":1}`); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.AppendToolInputDelta(ctx, o, "m1-b1", "?"); err != nil {
@@ -275,6 +270,9 @@ func TestSaveMessageAtomic_InterleavesAcrossLayers(t *testing.T) {
 	if err != nil || msg.Seq != 1 || msg.Model != nil || msg.ProviderAccountID == nil || *msg.ProviderAccountID != "acct-1" || !msg.CreatedAt.Equal(t0) {
 		t.Fatalf("a1 = %+v, %v", msg, err)
 	}
+	if msg.ThinkingLevel != nil {
+		t.Fatalf("a1 thinking level = %q, want NULL when none was recorded", *msg.ThinkingLevel)
+	}
 	blocks, err := store.ListContentBlocksForMessages(ctx, f.env.ORM, ids)
 	if err != nil || len(blocks) != 12 {
 		t.Fatalf("blocks = %d, %v; want 12", len(blocks), err)
@@ -291,6 +289,33 @@ func TestSaveMessageAtomic_InterleavesAcrossLayers(t *testing.T) {
 	updates, err := store.ListChatUpdate(ctx, f.env.ORM, orm.WhereEq(store.ChatUpdateFieldChatID, f.chat), orm.WithOrderBy(store.ChatUpdateFieldSequenceNumber, orm.Asc))
 	if err != nil || len(updates) != 4 || updates[3].SequenceNumber != 4 || updates[3].UpdateType != db.UpdateTypeMessage || updates[3].EntityID != "a3" {
 		t.Fatalf("chat updates = %+v, %v", updates, err)
+	}
+}
+
+// TestSaveMessageAtomic_ThinkingLevel: the effective thinking level a turn ran
+// at is stored on the message through both layers; an empty one is NULL.
+func TestSaveMessageAtomic_ThinkingLevel(t *testing.T) {
+	f := newMsgFixture(t, "chat-atomic-thinking")
+	ctx := context.Background()
+	for id, level := range map[string]*string{"t-high": sp("high"), "t-empty": sp(""), "t-none": nil} {
+		w := atomicWrite(f, id, 1)
+		w.ThinkingLevel = level
+		if _, err := f.env.Repo.SaveMessageAtomic(ctx, w); err != nil {
+			t.Fatalf("save %s: %v", id, err)
+		}
+	}
+	for id, want := range map[string]any{"t-high": "high", "t-empty": nil, "t-none": nil} {
+		msg, err := f.env.Repo.GetMessage(ctx, id)
+		if err != nil {
+			t.Fatalf("get %s: %v", id, err)
+		}
+		var got any
+		if msg.ThinkingLevel != nil {
+			got = *msg.ThinkingLevel
+		}
+		if got != want {
+			t.Fatalf("%s thinking level = %v, want %v", id, got, want)
+		}
 	}
 }
 

@@ -74,6 +74,10 @@ type CaptureMeta struct {
 	IdleSeconds int64     `json:"idle_seconds,omitempty"`
 	CapturedAt  time.Time `json:"captured_at"`
 	Version     string    `json:"daemon_version,omitempty"`
+	// CaptureOnly marks a capture a capture-only pass made (`reliant
+	// worktree reclaim scan --capture`): its checkout was never removed, so
+	// nothing restores it on its own (LatestCapture skips it).
+	CaptureOnly bool `json:"capture_only,omitempty"`
 }
 
 // Capture is one capture written for a checkout.
@@ -439,14 +443,15 @@ func ListCaptures(ctx context.Context, repo, key string) ([]CaptureInfo, error) 
 }
 
 // LatestCapture is the newest capture of key in repo that was taken of the
-// checkout at path, or "" when there is none.
+// checkout at path, or "" when there is none. A capture-only pass's capture
+// is never one: its checkout was not removed, so it has nothing to put back.
 func LatestCapture(ctx context.Context, repo, key, path string) (CaptureInfo, bool) {
 	infos, err := ListCaptures(ctx, repo, key)
 	if err != nil {
 		return CaptureInfo{}, false
 	}
 	for _, info := range infos {
-		if info.Meta.Path != "" && samePath(info.Meta.Path, path) {
+		if info.Meta.Path != "" && !info.Meta.CaptureOnly && samePath(info.Meta.Path, path) {
 			return info, true
 		}
 	}

@@ -531,14 +531,14 @@ function RoleTags({ roles, declared, max }: { roles: string[]; declared: Set<str
         <span
           key={role}
           title={declared.has(role) ? DECLARED_ROLE_NOTE : undefined}
-          className="inline-flex max-w-full items-center gap-1 truncate rounded border border-border/60 px-1.5 py-px font-mono text-2xs text-ink-muted"
+          className="inline-flex max-w-full items-center gap-1 truncate rounded border border-border/60 px-1.5 py-px font-mono text-meta text-ink-muted"
         >
           {declared.has(role) && <Lock className="h-2.5 w-2.5 shrink-0" aria-label="declared" />}
           {role}
         </span>
       ))}
       {rest > 0 && (
-        <span className="text-2xs text-ink-muted" title={roles.slice(shown.length).join(", ")}>
+        <span className="text-meta text-ink-muted" title={roles.slice(shown.length).join(", ")}>
           +{rest}
         </span>
       )}

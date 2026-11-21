@@ -10,10 +10,12 @@
  *
  * The chain composes forge's web runtime (`@reliantlabs/forge-web-runtime`)
  * with reliant's own interceptors. The order is:
- *   error-normalize → org-snapshot → timeout → auth → missing-token → daemon-last-seen → trace
- *     → error-logging → upgrade-modal → machine-wake → 401-signout → write-owner
- * (error-normalize and auth are the runtime's; daemon-last-seen only on reliant
- * api-server transports — see TransportBackend; trace is the runtime's).
+ *   error-normalize → org-snapshot → timeout → auth → missing-token → client-version
+ *     → daemon-last-seen → trace → error-logging → upgrade-modal → machine-wake
+ *     → 401-signout → write-owner
+ * (error-normalize and auth are the runtime's; client-version and
+ * daemon-last-seen only on reliant api-server transports — see
+ * TransportBackend; trace is the runtime's).
  *
  * Why this order:
  *   - error-normalize outermost so EVERY failure a caller sees — a server
@@ -77,7 +79,8 @@ import { createDeadlineInterceptor, type StalledCalls } from "./rpcDeadline";
 import { writeOwnerInterceptor } from "./writeOwner";
 import { isReadSlotProcedure } from "../services/controlPlane/observability/readSlots";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
-import { noteVersionSkew } from "./versionSkew";
+import { noteUpgradeRequired, noteVersionSkew } from "./versionSkew";
+import { clientHeaderValue, upgradeRequiredInfo } from "../lib/clientVersion";
 import { pageActivity } from "../lib/pageActivity";
 import {
   DEFAULT_GRPC_TIMEOUT_MS,
@@ -120,6 +123,22 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
   if (_daemonLastSeen !== null) {
     req.header.set("x-daemon-last-seen", String(_daemonLastSeen));
   }
+  return await next(req);
+};
+
+// Reliant-Client names this build to the reliant api-server (lib/clientVersion):
+// `web/<version>` or `desktop/<version>`. The server refuses a build older
+// than its minimum with `upgrade_required`, and can refuse a call that names
+// no build at all, so every reliant.v1 call carries it, streams included.
+// Only reliant api-server transports: the control-plane platform-api's CORS
+// allow-list does not name it, and a header the preflight does not allow
+// fails every call that carries it. The reliant api-server's list must name
+// it (internal/grpc/cors_web_client_test.go enforces that; it reads this
+// same-file const).
+export const RELIANT_CLIENT_HEADER = "Reliant-Client";
+
+const clientVersionInterceptor: Interceptor = (next) => async (req) => {
+  req.header.set(RELIANT_CLIENT_HEADER, clientHeaderValue());
   return await next(req);
 };
 
@@ -469,6 +488,13 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
       logger.info("[gRPC Client] Account required", context);
       throw error;
     }
+    if (kind === "upgrade-required") {
+      // This build is below the server's minimum: the forced reload/update
+      // prompt is the remedy, reported once per session by versionSkew.
+      logger.warn("[gRPC Client] Server requires a newer app version", context);
+      noteUpgradeRequired("refused", upgradeRequiredInfo(error));
+      throw error;
+    }
     if (kind === "already-absent") {
       // An idempotent delete found nothing to delete: the caller's goal
       // holds. Still thrown, so a caller that cares can tell.
@@ -477,6 +503,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     if (kind === "machine-wait") {
       logger.info("[gRPC Client] Machine not serving yet", context);
+      throw error;
+    }
+    if (kind === "machine-busy") {
+      // The machine refused for a moment and nothing ran; the caller's next
+      // poll or retry is the remedy.
+      logger.info("[gRPC Client] Machine refused work for a moment", context);
       throw error;
     }
     if (kind === "network") {
@@ -795,9 +827,9 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
 /**
  * Which server a transport dials.
  *
- * It decides the backend-specific headers: x-daemon-last-seen, a hint only
- * the reliant api-server reads, and Forge-Via, which only the control plane's
- * activity stream reads. In a production build the web app calls both
+ * It decides the backend-specific headers: Reliant-Client and
+ * x-daemon-last-seen, which only the reliant api-server reads, and Forge-Via,
+ * which only the control plane's activity stream reads. In a production build the web app calls both
  * servers CROSS-ORIGIN (api.reliantapi.com and admin.reliantapi.com), so every
  * header it sends must be in that server's CORS preflight allow-list or the
  * browser refuses to send the RPC at all. The control-plane platform-api does
@@ -818,7 +850,7 @@ export type TransportBackend = "reliant-api" | "control-plane";
  * pops the modal.
  *
  * `backend` (default `"reliant-api"`) names the server the transport dials:
- * `"reliant-api"` sends the daemon-last-seen header, `"control-plane"` sends
+ * `"reliant-api"` sends Reliant-Client and daemon-last-seen, `"control-plane"` sends
  * Forge-Via instead. See TransportBackend.
  *
  * Order is intentional — see the module-level comment. Do NOT reorder
@@ -834,7 +866,9 @@ export function buildInterceptors(
     ...(withAuth ? [orgInterceptor] : []),
     timeoutInterceptor,
     ...(withAuth ? [authInterceptor, missingTokenInterceptor] : []),
-    backend === "reliant-api" ? daemonLastSeenInterceptor : forgeViaInterceptor,
+    ...(backend === "reliant-api"
+      ? [clientVersionInterceptor, daemonLastSeenInterceptor]
+      : [forgeViaInterceptor]),
     traceStage,
     errorInterceptor,
     upgradeInterceptor,

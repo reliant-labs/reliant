@@ -66,7 +66,7 @@
       "title": "A service with steady traffic went quiet",
       "severity": "warning",
       "for": "0s",
-      "interval": "1m",
+      "interval": "5m",
       "signal": "metrics",
       "params": [
         {
@@ -151,7 +151,13 @@
       "for": "0s",
       "interval": "1m",
       "signal": "platform",
-      "params": []
+      "params": [
+        {
+          "name": "client_timeout_min_sessions",
+          "default": 2,
+          "doc": "distinct browser sessions a client-side timeout issue (a request the browser gave up on, or a connection stall) must reach before NewIssue fires for it; the issue itself opens at once. 1 pages on first sight like any other issue"
+        }
+      ]
     },
     {
       "id": "issue-regressed",

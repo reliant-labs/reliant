@@ -214,7 +214,7 @@ function CleanupWorkspacesAction({ storage, label }: { storage: InboxStorage; la
           </ul>
           {manual.length > 0 && (
             <div className="flex flex-col gap-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Remove manually</h4>
+              <h4 className="text-xs font-semibold text-muted-foreground">Remove manually</h4>
               <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto" aria-label="Workspaces to remove manually">
                 {manual.map((w) => (
                   <WorktreeRow key={w.worktreeId} w={w} note={removalNote(w)} showPath />
@@ -314,7 +314,7 @@ function ForgetWorkspacesAction({ storage }: { storage: InboxStorage }) {
           )}
           {notYet.length > 0 && (
             <div className="flex flex-col gap-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Not yet</h4>
+              <h4 className="text-xs font-semibold text-muted-foreground">Not yet</h4>
               <ul className="flex max-h-40 flex-col gap-2 overflow-y-auto" aria-label="Workspaces that cannot be forgotten yet">
                 {notYet.map((w) => (
                   <WorktreeRow key={w.worktreeId} w={w} note={notForgettableNote(w)} showPath />

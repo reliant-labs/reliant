@@ -208,6 +208,16 @@ type daemonConnection struct {
 	// stream to another replica, which pendingToolRequests never saw.
 	daemonToolCallsInFlight atomic.Uint32
 
+	// drainsOnRestartRequest is the daemon's
+	// DaemonRegister.drains_on_restart_request: it acts on RestartRequested
+	// (upgrade.go). Set once, at registration.
+	drainsOnRestartRequest bool
+	// upgradeState and upgradeDeadlineMs are the drain-protocol state the
+	// daemon's newest heartbeat reported (a reliantv1.DaemonUpgradeState and
+	// its deadline). Written only by the receive loop.
+	upgradeState      atomic.Int32
+	upgradeDeadlineMs atomic.Int64
+
 	// pendingCommands tracks in-flight DaemonCommandRequests awaiting responses.
 	// Key is request_id, value is a channel that receives the response.
 	pendingCommandsMu sync.Mutex
@@ -251,6 +261,12 @@ type daemonConnection struct {
 	lastDiskWrite  time.Time
 	lastDiskStored *reliantv1.DiskReport
 	lastDiskLoaded bool
+
+	// Machine stats bookkeeping (see logMachineStatsLines). machineStats
+	// holds whether the machine carries the selection label, when that was
+	// last read, when its lines were last logged, and whether a label read
+	// error has been logged. Only the inbound state worker touches it.
+	machineStats machineStatsState
 
 	// Local-model relay (see localmodel_gateway.go). Guarded by localModelMu.
 	localModelMu sync.Mutex

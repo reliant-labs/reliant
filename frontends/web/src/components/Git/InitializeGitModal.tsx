@@ -182,7 +182,7 @@ export function InitializeGitModal({
         </div>
 
         <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
-          <p className="text-xs font-semibold text-foreground uppercase tracking-wide mb-2">
+          <p className="text-xs font-semibold text-foreground mb-2">
             This will create:
           </p>
           <ul className="text-xs text-muted-foreground space-y-1">

@@ -69,8 +69,9 @@ it("shows an actionable error when checkout returns no URL", async () => {
 it("keeps disabled billing recoverable without offering checkout or a machine purchase", async () => {
   mocks.read.mockResolvedValue({ enabled: false });
   mount();
-  expect(await screen.findByText(/App hosting billing is unavailable/)).toBeInTheDocument();
-  expect(screen.getByText(/Buying a machine plan does not enable it/)).toBeInTheDocument();
+  expect(await screen.findByText("App hosting billing isn’t available yet.")).toBeInTheDocument();
+  expect(screen.getByTestId("hosting-billing-unavailable").textContent).not.toMatch(/machine plan/i);
+  expect(screen.getByTestId("hosting-billing-contact-support")).toBeInTheDocument();
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   mocks.read.mockResolvedValue({ enabled: true, policyVersion: "p1", rates: [{ displayName: "CPU", priceCents: "9", unit: "vCPU-hour" }] });
   fireEvent.click(screen.getByRole("button", { name: "Check billing status" }));
@@ -84,7 +85,7 @@ it("keeps genuine read failures actionable rather than treating them as disabled
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   mocks.read.mockResolvedValue({ enabled: false });
   fireEvent.click(screen.getByRole("button", { name: "Check billing status" }));
-  expect(await screen.findByText(/App hosting billing is unavailable/)).toBeInTheDocument();
+  expect(await screen.findByText("App hosting billing isn’t available yet.")).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 it("discloses the server's free egress allowance and monthly minimum, never its own", async () => {
@@ -102,4 +103,21 @@ it("states no minimum or allowance the server did not send", async () => {
   await screen.findByRole("checkbox");
   expect(screen.queryByTestId("hosting-minimum")).not.toBeInTheDocument();
   expect(screen.queryByText(/free each month/)).not.toBeInTheDocument();
+});
+it("after a hosting checkout this session started, confirms queued deploys go out once the server says active", async () => {
+  sessionStorage.setItem("reliant.hostingCheckout.org-a", "1");
+  mocks.read.mockResolvedValue({ enabled: true, policyVersion: "p1", rates: [], agreement: { id: "a1", status: "active", infraBudgetCents: 5000n } });
+  mount();
+  expect(await screen.findByTestId("hosting-activated-notice")).toHaveTextContent(/now goes out on its own/);
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  expect(screen.queryByTestId("hosting-activated-notice")).not.toBeInTheDocument();
+  expect(sessionStorage.getItem("reliant.hostingCheckout.org-a")).toBeNull();
+});
+it("never claims activation while the agreement is still pending", async () => {
+  sessionStorage.setItem("reliant.hostingCheckout.org-a", "1");
+  mocks.read.mockResolvedValue({ enabled: true, policyVersion: "p1", rates: [], agreement: { id: "a1", status: "pending", infraBudgetCents: 5000n } });
+  mount();
+  await screen.findByText(/Checkout is pending/);
+  expect(screen.queryByTestId("hosting-activated-notice")).not.toBeInTheDocument();
+  sessionStorage.clear();
 });

@@ -122,6 +122,24 @@ one: a consumer ignores its dependencies' replace directives, and
 `consumer_test.go` builds a scratch module against the SDK as an external
 dependency to hold that (`task test:sdk:full`).
 
+### Client identity and forced upgrades
+
+Every request names the SDK in `Reliant-Client: sdk-go/<version>`, where the
+version is the one your build resolved for this module (read from the binary's
+build info: a pseudo-version such as `0.0.0-20261120093000-abcdef123456` for a
+commit of `main`; `Version` when the build records none). A server that no
+longer supports that version refuses the call with `ErrUpgradeRequired`:
+
+```go
+var up *reliant.UpgradeRequiredError
+if errors.As(err, &up) {
+	log.Fatalf("upgrade the Reliant SDK (needs %s): %s", up.MinVersion, up.UpgradeCommand)
+}
+```
+
+`reliant.AsUpgradeRequired(err)` reads the same refusal from the bare
+`*connect.Error` a generated client returns.
+
 ### Changing the SDK, and the app that uses it
 
 Reliant's own app builds against this repository's `sdk/go`: the root

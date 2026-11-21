@@ -85,6 +85,10 @@ type StepExecutor struct {
 	// pre-allocated message id of the dispatch it cancelled, until that node
 	// is re-dispatched (noteCancelledForPause).
 	cutOffTurns map[string]string
+	// interruptedTurns marks the execute_tools nodes a same-thread interrupt
+	// cancelled, until that node is re-dispatched to settle its batch
+	// (noteInterruptedTurn, interrupt_settle.go).
+	interruptedTurns map[string]bool
 }
 
 // WithAskUserHandoff lets this executor's execute_tools batches park their
@@ -413,11 +417,32 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		e.pauseCtrl.CapacitySlot.beforeStep(e.ctx)
 	}
 
-	// A machine step that follows a hold first makes sure the machine is
-	// awake (machine_resume_wake.go): the idle policy may have suspended it
-	// while the run waited, and the step's own calls never wake it.
-	if machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult); machine {
-		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), toolNames, toolsKnown)
+	// An execute_tools step an interrupt cancelled is re-dispatched to settle
+	// its batch, running none of it (interrupt_settle.go).
+	settleInterrupted := stepType == model.NodeTypeExecuteTools && e.takeInterruptedTurn(node.GetId())
+
+	// A node-level pool or labels-only selector is placed on one machine,
+	// once per node per run, before the node first dispatches
+	// (run_placement.go); every later read of its selector routes there.
+	if err := e.placeNodeDaemon(node); err != nil {
+		e.logger.Warn("Failed to place step on a machine", "error", err, "stepID", node.GetId())
+		return e.startFailedStepMsg(node, event, fmt.Sprintf("could not place step %s on a machine: %s", node.GetId(), preflightFailureMessage(err)))
+	}
+
+	// A machine step that follows a hold first makes sure the machine it
+	// routes to is awake (machine_resume_wake.go): the idle policy may have
+	// suspended it while the run waited, and the step's own calls never wake
+	// it. On a pool member the step (or its loop or workflow node) was placed
+	// on, the run's requirements are then checked there once, before the
+	// first step there runs (preflight_requirements.go). A batch being
+	// settled runs nothing on the machine.
+	if machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult); machine && !settleInterrupted {
+		target := e.daemonSelector(node)
+		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), target, toolNames, toolsKnown)
+		if err := e.pauseCtrl.CheckPlacedRequirements(e.ctx, target); err != nil {
+			e.logger.Warn("Placed machine does not meet the run's requirements", "error", err, "stepID", node.GetId())
+			return e.startFailedStepMsg(node, event, err.Error())
+		}
 	}
 
 	switch stepType {
@@ -453,7 +478,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
-			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID, event)
+			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID, event, settleInterrupted)
 		} else {
 			e.logger.Error("[StepExecutor] Unknown step type", "stepType", stepType, "stepID", node.GetId())
 			future = e.executeFailActivity(node, "unknown step type: "+stepType)
@@ -474,6 +499,10 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		ThreadInterruptEpoch:  threadInterruptEpoch,
 		SaveDelegated:         saveDelegated,
 		ProviderPinsKey:       e.providerPinsKey(),
+	}
+	if (activityName == "CallLLM" || activityName == "Compact") && e.pauseCtrl.activeManualFallback(e.ctx, e.GetThread()) {
+		// This dispatch did not use or clean up the saved provider's pins.
+		running.ProviderPinsKey = ""
 	}
 	if e.pauseCtrl != nil {
 		e.pauseCtrl.CapacitySlot.trackStep(running)
@@ -498,7 +527,7 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// wrapper has then written the failed attempt already.
 	activityFailed := stepEvent != nil && stepEvent.Error != nil
 	if machine, _, _ := machineStepTools(running.Node.GetType(), nil); machine {
-		e.pauseCtrl.MachineStepDone(e.ctx)
+		e.pauseCtrl.MachineStepDone(e.ctx, e.daemonSelector(running.Node))
 	}
 
 	// Daemon-offline circuit breaker: observe the outcome AFTER save_message
@@ -883,7 +912,13 @@ func deepCopyJSONValue(value interface{}) interface{} {
 
 // startFailedStep returns a RunningStep that will immediately fail.
 func (e *StepExecutor) startFailedStep(node *reliantv1.Node, event *core.WorkflowEvent, err error) *RunningStep {
-	future := e.executeFailActivity(node, fmt.Sprintf("CEL evaluation failed for step %s: %v", node.GetId(), err))
+	return e.startFailedStepMsg(node, event, fmt.Sprintf("CEL evaluation failed for step %s: %v", node.GetId(), err))
+}
+
+// startFailedStepMsg returns a RunningStep that will immediately fail with
+// errorMsg.
+func (e *StepExecutor) startFailedStepMsg(node *reliantv1.Node, event *core.WorkflowEvent, errorMsg string) *RunningStep {
+	future := e.executeFailActivity(node, errorMsg)
 	return &RunningStep{
 		ActivityID:   node.GetId(), // Set to StepID for backwards compat
 		StepID:       node.GetId(),
@@ -900,6 +935,7 @@ func (e *StepExecutor) startAction(
 	evalResult *reliantv1.Node,
 	preallocatedMessageID string,
 	event *core.WorkflowEvent,
+	settleInterrupted bool,
 ) (workflow.Future, string, bool) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
@@ -959,6 +995,9 @@ func (e *StepExecutor) startAction(
 		// under it, on whichever worker runs the batch (run_telemetry.go).
 		if rtx.Telemetry != nil {
 			rtx.Telemetry.TurnTraceParent = e.upstreamTurnTraceParent(node, evalResult.GetExecuteTools().GetResolvedToolCalls())
+		}
+		if settleInterrupted {
+			return e.startSettleInterrupted(node, evalResult, rtx)
 		}
 		// A batch with spawn/ask_user calls is merged workflow-side, so the
 		// workflow is the executor of that output and saves it itself; any
@@ -1068,37 +1107,10 @@ const computeActivityName = "Compute"
 // goes stale when the chat moves to the workspace's machine while the run
 // lives. nil means no selector.
 func (e *StepExecutor) runDaemonSelector(node *reliantv1.Node) map[string]interface{} {
-	if node.GetDaemon() != nil {
-		if lit := node.GetDaemon().GetLiteral(); lit != nil {
-			return map[string]interface{}{
-				"id":     lit.GetId(),
-				"name":   lit.GetName(),
-				"type":   lit.GetType(),
-				"labels": lit.GetLabels(),
-			}
-		}
-		if node.GetDaemon().GetExpr() == "" {
-			return nil
-		}
-		ds, err := ResolveCelDaemonSelector(node.GetDaemon(), e.nodeScope())
-		if err != nil {
-			logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
-			return nil
-		}
-		if ds == nil {
-			return nil
-		}
-		return map[string]interface{}{
-			"id":     ds.ID,
-			"name":   ds.Name,
-			"type":   ds.Type,
-			"labels": ds.Labels,
-		}
-	}
-	if e.execContext == nil || e.execContext.DaemonSelector == nil {
+	ds := e.daemonSelector(node)
+	if ds == nil {
 		return nil
 	}
-	ds := e.execContext.DaemonSelector
 	sel := map[string]interface{}{
 		"id":     ds.ID,
 		"name":   ds.Name,
@@ -1347,6 +1359,12 @@ func (e *StepExecutor) failStepInput(node *reliantv1.Node, errorMsg string) map[
 		input["loop_node_id"] = e.loopNodeID
 		input["loop_iteration"] = e.loopIteration
 	}
+	// The run the node belongs to, recorded on its step row, so the failure
+	// is never read as the next run's on the reused workflow id
+	// (store.FirstHandledNodeFailure).
+	if rt := e.runtimeTelemetry(); rt != nil {
+		input["telemetry"] = rt
+	}
 	return input
 }
 
@@ -1458,6 +1476,14 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		rtx.FallbackModel = e.pauseCtrl.liveFallback(e.ctx, rtx.Thread)
 		rtx.Failover = failoverPolicy(e.workflowInputs)
 	}
+	if rtx.FallbackModel != "" && e.pauseCtrl.activeManualFallback(e.ctx, rtx.Thread) {
+		// The fallback's model@driver constrains this call, not the saved pin.
+		// Do not clear the original provider's account assignment on this stay.
+		rtx.ManualFallback = true
+		rtx.ChatProvider = ""
+		rtx.ProviderPreference = nil
+		rtx.ClearProviderPins = false
+	}
 
 	// Loop context
 	if e.loopNodeID != "" {
@@ -1509,39 +1535,63 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	}
 
 	// Daemon selector: node-level override takes priority over workflow-level default
-	if node.GetDaemon() != nil {
-		if lit := node.GetDaemon().GetLiteral(); lit != nil {
-			rtx.DaemonSelector = &types.DaemonSelector{
-				ID:     lit.GetId(),
-				Name:   lit.GetName(),
-				Type:   lit.GetType(),
-				Labels: lit.GetLabels(),
-			}
-		} else if node.GetDaemon().GetExpr() != "" {
-			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), e.nodeScope())
-			if err != nil {
-				logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
-			} else if ds != nil {
-				rtx.DaemonSelector = &types.DaemonSelector{
-					ID:     ds.ID,
-					Name:   ds.Name,
-					Type:   ds.Type,
-					Labels: ds.Labels,
-				}
-			}
-		}
-	} else if e.execContext != nil && e.execContext.DaemonSelector != nil {
-		// Fall back to workflow-level daemon selector
+	if ds := e.daemonSelector(node); ds != nil {
 		rtx.DaemonSelector = &types.DaemonSelector{
-			ID:      e.execContext.DaemonSelector.ID,
-			Name:    e.execContext.DaemonSelector.Name,
-			Type:    e.execContext.DaemonSelector.Type,
-			Labels:  e.execContext.DaemonSelector.Labels,
-			Session: e.execContext.DaemonSelector.Session,
+			ID:      ds.ID,
+			Name:    ds.Name,
+			Type:    ds.Type,
+			Labels:  ds.Labels,
+			Session: ds.Session,
 		}
 	}
 
 	return rtx
+}
+
+// daemonSelector is the one answer to "which machine do this node's
+// activities route to": the node's own selector — or, when it is placed, the
+// machine its placement chose — else the workflow-level one (configured,
+// placed, or the chat's pin). Node > workflow > session > default; a node
+// that declares a selector never falls back, even when it resolves to
+// nothing. nil means no selector.
+func (e *StepExecutor) daemonSelector(node *reliantv1.Node) *DaemonSelectorValue {
+	if node.GetDaemon() == nil {
+		if e.execContext == nil {
+			return nil
+		}
+		return e.execContext.DaemonSelector
+	}
+	ds := e.nodeDaemonSelector(node)
+	if ds.NeedsPlacement() {
+		if entry, ok := runPlacementsFrom(e.ctx).lookup(e.GetWorkflowID(), e.nodePlacementScope(node)); ok && entry.placement != nil {
+			return entry.placement.selector()
+		}
+	}
+	return ds
+}
+
+// nodeDaemonSelector is the node's own daemon selector resolved in its scope,
+// or nil when it declares none or its expression resolves to nothing.
+func (e *StepExecutor) nodeDaemonSelector(node *reliantv1.Node) *DaemonSelectorValue {
+	return resolveNodeDaemonSelector(node, e.nodeScope)
+}
+
+// nodePlacementScope is a node's placement scope: its graph path, which
+// carries no loop iteration, so every iteration reuses the first one's
+// machine.
+func (e *StepExecutor) nodePlacementScope(node *reliantv1.Node) string {
+	return joinNodePath(e.nodePathPrefix, node.GetId())
+}
+
+// placeNodeDaemon places the node's own selector when it needs placement and
+// this run has not placed it yet (run_placement.go).
+func (e *StepExecutor) placeNodeDaemon(node *reliantv1.Node) error {
+	ds := e.nodeDaemonSelector(node)
+	if !ds.NeedsPlacement() {
+		return nil
+	}
+	_, err := runPlacementsFrom(e.ctx).place(e.ctx, e.GetChatID(), e.GetWorkflowID(), e.nodePlacementScope(node), ds)
+	return err
 }
 
 // mapToStruct converts a map[string]interface{} to a protobuf Struct.

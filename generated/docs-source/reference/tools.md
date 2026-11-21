@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (74 tools)
+- [Other Tools](#other-tools) (82 tools)
 
 ---
 
@@ -379,6 +379,11 @@ ASSIGNEE:
 - Use a descriptive label: spawn title, role name, or agent identifier
 - Claim pattern: update_task(task_id="X", status="in_progress", assignee="researcher-auth")
 - Other agents see assignments in list_tasks and skip claimed work
+
+ON A PLAN YOU WERE SPAWNED FROM (your parent's board):
+- You may update the task you were given: status, description, assignee, metadata
+- The first sub-agent to update a task holds it; another sub-agent's update is refused
+- Titles and the plan's shape stay with the thread that owns the plan
 
 METADATA OPTIONS:
 - notes: Add discoveries, blockers, or important context
@@ -2146,14 +2151,19 @@ _Miscellaneous tools and utilities._
 | Tool | Tags | Description |
 |------|------|-------------|
 | [`ask_user`](#ask_user) | coding:default, coding:plan | Ask the user one or more questions. By default the question is posted to the user (in the chat an... |
+| [`change_results`](#change_results) | readonly | Read the results of one Forge Change experiment run, as the control plane computes them: the verd... |
 | [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
+| [`get_change`](#get_change) | readonly | Show one Forge Change in full: its declared variants (from the environment's current release), mo... |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, an e... |
 | [`github__branch_get`](#github__branch_get) | integration | Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protec... |
+| [`github__branch_rules`](#github__branch_rules) | integration | List every rule that applies to a branch from the repository's and its organization's active rule... |
 | [`github__check_run_list`](#github__check_run_list) | integration | List the check runs on a commit, newest first, with name, status, conclusion, the App that wrote ... |
 | [`github__code_search`](#github__code_search) | integration | Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:own... |
+| [`github__commit_statuses`](#github__commit_statuses) | integration | Read the commit statuses of a branch, tag or commit: the combined state (failure if any context f... |
+| [`github__compare`](#github__compare) | integration | Compare two branches, tags or commits of one repository: status (ahead, behind, diverged or ident... |
 | [`github__issue_comment`](#github__issue_comment) | integration | Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share... |
 | [`github__issue_comment_list`](#github__issue_comment_list) | integration | List the comments on an issue, or on a pull request's conversation tab (pass the PR number as iss... |
 | [`github__issue_comment_update`](#github__issue_comment_update) | integration | Edit a comment by id. body REPLACES the whole text, so read the current one first (issue.comment.... |
@@ -2184,10 +2194,12 @@ _Miscellaneous tools and utilities._
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
+| [`list_changes`](#list_changes) | readonly | List the Forge Changes of a project: remote config, gradual rollouts and A/B tests, the same list... |
 | [`list_machines`](#list_machines) | readonly | List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected)... |
 | [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
+| [`manage_change`](#manage_change) | - | Draft, preview, launch, ramp, roll out or stop one Forge Change (remote config, gradual rollout o... |
 | [`manage_machine`](#manage_machine) | - | Start, stop, resize or label one of the user's own machines (from list_machines), exactly as Sett... |
 | [`manage_machine_pool`](#manage_machine_pool) | - | Define or delete one of the user's machine pools: a named set of their machines (those whose labe... |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
@@ -2203,6 +2215,7 @@ _Miscellaneous tools and utilities._
 | [`skill`](#skill) | coding:default, readonly, coding:plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`slack__conversations_history`](#slack__conversations_history) | integration | Read messages from a channel the bot is a member of, newest first, optionally between oldest and ... |
 | [`slack__conversations_list`](#slack__conversations_list) | integration | List the workspace's conversations: public channels, and private channels the bot is a member of.... |
+| [`slack__conversations_replies`](#slack__conversations_replies) | integration | Read a thread in a conversation the bot is a member of: the parent message first, then its replie... |
 | [`slack__message_post`](#slack__message_post) | integration | Post a message as the Reliant bot to a channel or DM by its ID. Give text, Block Kit blocks, or b... |
 | [`slack__message_reply`](#slack__message_reply) | integration | Post a reply in the thread of an existing message, identified by its channel and ts (a reply to a... |
 | [`slack__message_update`](#slack__message_update) | integration | Replace the text and/or blocks of a message the Reliant bot posted, identified by channel and ts.... |
@@ -2248,6 +2261,14 @@ Usage notes:
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.
 - Use allow_multiple: true when choices are not mutually exclusive.
 - Group related questions in a single call (up to 4 questions).
+
+---
+
+### change_results
+
+**Tags:** `readonly`
+
+Read the results of one Forge Change experiment run, as the control plane computes them: the verdict (no data, sample-ratio check failed, inconclusive and why, the new version better, or worse), each version's assigned people, people whose metric window has closed, conversions and conversion rate with its confidence interval, each treatment's lift against the control with its interval, the sample-ratio check, and the window the readout covers (still collecting or final). Every call runs a query, so do not poll it. A fixed-horizon test is decided once, at the pre-registered sample size: do not treat an early significant result as a decision.
 
 ---
 
@@ -2394,13 +2415,21 @@ NOTES:
 
 ---
 
+### get_change
+
+**Tags:** `readonly`
+
+Show one Forge Change in full: its declared variants (from the environment's current release), mode, who gets it (unit, audience, percentage, split), the preview list, the success metric, the open run, whether the environment needs a person's approval to launch or ramp up, its revision, and its most recent audit events (who did what, and how it was approved). For an experiment's results use change_results.
+
+---
+
 ### get_run
 
 **Tags:** `runs`, `readonly`
 
 Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
-The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. An ended run also has an outcome: succeeded, failed, or failure_handled when it completed only because a node failed and its failure path ran. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.
 
@@ -2411,6 +2440,14 @@ Only runs the user owns can be inspected. To check on a sub-agent you spawned, u
 **Tags:** `integration`
 
 Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protected (branch protection or a ruleset). A branch that does not exist answers exists false, not an error. Publishing steps read this before pushing, to refuse a protected branch.
+
+---
+
+### github__branch_rules
+
+**Tags:** `integration`
+
+List every rule that applies to a branch from the repository's and its organization's active rulesets: required status checks, required reviews, the merge queue, linear history, restricted pushes and so on. Each rule has its type, its parameters (the required check contexts, the approving review count, ...) and the ruleset it comes from. Rulesets in evaluate or disabled mode are not listed, and neither is classic branch protection: branch.get's protected says whether either applies. Follows GitHub's pagination up to 1000 rules.
 
 ---
 
@@ -2427,6 +2464,22 @@ List the check runs on a commit, newest first, with name, status, conclusion, th
 **Tags:** `integration`
 
 Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:owner/name, org:name or user:name; without one it searches every repository the connection can see. language:, path: and extension: narrow it further, for example "ParseDuration repo:golang/go language:go". Only default branches are indexed, files over 384 KB are not, and GitHub allows about ten code searches a minute, so prefer one precise query over many broad ones.
+
+---
+
+### github__commit_statuses
+
+**Tags:** `integration`
+
+Read the commit statuses of a branch, tag or commit: the combined state (failure if any context failed or errored, pending if any is pending or there are none, else success) and the latest status of each context, with its state, description, target_url and the login that set it. These are commit statuses, which external CI posts; check runs (GitHub Actions and Apps) are read with check_run.list, and a required check may be either. At most 100 contexts are listed; truncated says when there were more. Needs the GitHub App's Commit statuses (read) permission; without it GitHub answers 403.
+
+---
+
+### github__compare
+
+**Tags:** `integration`
+
+Compare two branches, tags or commits of one repository: status (ahead, behind, diverged or identical), ahead_by, behind_by, total_commits, the merge base, and the commits head has that base lacks, oldest first, each as its sha, its author's login and the first line of its message (capped at 300 characters). One page of up to limit commits (at most 100) is returned; has_more says whether a later page holds more, read with page. Changed files are not returned: use pr.list_files for a diff.
 
 ---
 
@@ -2670,6 +2723,14 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 ---
 
+### list_changes
+
+**Tags:** `readonly`
+
+List the Forge Changes of a project: remote config, gradual rollouts and A/B tests, the same list as the console's Experiments page. Each change shows its key, id, environment, mode (off, preview, everyone, rollout, experiment), the share of its audience that gets it, how long its current run has been open, whether the environment's current release declares it, and its revision. Use get_change for one change's variants, audience, metric and audit trail, and manage_change to draft, preview, launch, ramp, roll out or stop one.
+
+---
+
 ### list_machines
 
 **Tags:** `readonly`
@@ -2719,6 +2780,23 @@ Use this when you need a tool that isn't currently loaded. You can:
 - Search for tools by keyword or tag name: {"query": "workflow"}
 
 Loaded tools become available immediately on the next turn.
+
+---
+
+### manage_change
+
+Draft, preview, launch, ramp, roll out or stop one Forge Change (remote config, gradual rollout or A/B test), exactly as the console's Experiments page does, as the user, with the same audit trail. The release declares what a change can be (changes.yaml: key, variants, default); this decides who gets it.
+
+- draft: without change_id, create a change (key + environment; it starts off). With change_id, edit what the next launch freezes: description, unit, audience (or clear_audience), split, metric (or clear_metric). A running experiment keeps its frozen copy until the next launch. No card.
+- preview: replace the preview list (teammates by unit id, each with a variant; ids are hashed server-side and never measured). activate moves an off change to preview. No card.
+- launch: start an experiment (a new run) at percent of the audience with the draft's split and metric. Launching while a run is open ends that run. Needs the user's approval card.
+- ramp: move a running experiment or rollout to percent. Raising it only adds people; it needs an approval card. Lowering it needs none.
+- roll_out: give variant to everyone (everyone=true) or to percent of the audience. Needs an approval card.
+- stop: the kill switch. Everyone gets the default, previews included, and the open run ends. Never needs approval.
+- end_run: conclude an experiment or rollout without shipping a variant (back to preview). Never needs approval.
+- request_approval: email the user a one-time code for one launch, ramp up or roll-out in a protected environment.
+
+Production needs a person: in a protected environment (prod) the control plane refuses a launch, ramp up or roll-out from an agent with approval_required even after the card. Then ask the user to approve it in the Experiments page of the Forge console, or run request_approval and retry with the code they read to you as step_up_code. Launching or rolling out a variant the environment's current release does not declare is refused until a release that declares it is deployed. Unattended runs may only draft, preview, stop, end_run and ramp down.
 
 ---
 
@@ -2899,6 +2977,14 @@ Read messages from a channel the bot is a member of, newest first, optionally be
 **Tags:** `integration`
 
 List the workspace's conversations: public channels, and private channels the bot is a member of. Returns each channel's ID (what every other action takes), name, and whether the bot is a member — it can only post to and read channels it is in. Follows Slack's cursor pagination.
+
+---
+
+### slack__conversations_replies
+
+**Tags:** `integration`
+
+Read a thread in a conversation the bot is a member of: the parent message first, then its replies, oldest first. ts is the thread's parent ts; for the thread an app_mentioned or message.posted event came from, pass the event's thread_ts when it has one, else its ts (a message that is not in a thread answers just itself). Optionally only replies between oldest and latest. limit bounds the page size; up to 5 pages are followed.
 
 ---
 
@@ -3150,8 +3236,9 @@ Prefer this to running "git worktree add" yourself: a checkout made by hand is i
 A worktree made here is the same workspace the "new worktree" button in the Reliant UI makes. It lives at ~/.reliant/worktrees/<project>/<name>-<id>/ and holds one checkout per repository of the project (laid out like the project itself), each on its own branch. It appears in the Reliant sidebar.
 
 ACTIONS:
-1. create - Required: name. Optional: branch, base_branch, copy_files, force
+1. create - Required: name. Optional: branch, base_branch, base_branch_repo, copy_files, force
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
+   In a multi-repo project base_branch must exist in every repository; to start from a branch that exists in one repository only (e.g. a pull request's branch), also pass base_branch_repo (the name of that repository) and the others start from their default branch.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
 2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.

@@ -35,7 +35,7 @@ export function OrgEnvPicker({ environments, selection, onChange }: { environmen
       }
     >
       <fieldset>
-        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Environments across every project</legend>
+        <legend className="px-1 pb-1 text-meta font-medium text-ink-muted">Environments across every project</legend>
         <button
           type="button"
           onClick={() => onChange([])}

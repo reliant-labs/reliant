@@ -24,6 +24,8 @@ import { Check, Copy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { shortVersion } from "../Releases/releaseModel";
+
 /** How much of the end is pinned visible. A short sha. */
 const TAIL = 8;
 
@@ -45,10 +47,13 @@ export function ReleaseVersion({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  // A short version is one span: splitting "v12" would only add a node.
-  const split = version.length > TAIL * 2;
-  const head = split ? version.slice(0, -TAIL) : version;
-  const tail = split ? version.slice(-TAIL) : "";
+  // An auto version ("20261118.121200-a1b2c3d4e5f6") shows its date part: the
+  // commit is a hash, on hover and in the copy. A short version is one span:
+  // splitting "v12" would only add a node.
+  const shown = shortVersion(version);
+  const split = shown.length > TAIL * 2;
+  const head = split ? shown.slice(0, -TAIL) : shown;
+  const tail = split ? shown.slice(-TAIL) : "";
 
   return (
     <span className={cn("inline-flex min-w-0 max-w-full items-center gap-1", className)} data-testid={testId}>
@@ -56,7 +61,7 @@ export function ReleaseVersion({
           tail, the tail is CLIPPED here rather than painted under whatever
           sits beside this component. */}
       <span
-        className="flex min-w-0 overflow-hidden whitespace-nowrap font-mono text-ink"
+        className="flex min-w-0 overflow-hidden whitespace-nowrap tabular-nums text-ink"
         title={version}
         data-release-version={version}
       >

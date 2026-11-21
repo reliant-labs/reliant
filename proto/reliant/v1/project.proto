@@ -131,9 +131,7 @@ service ProjectService {
 
   // TouchProject updates the project's last_active timestamp
   rpc TouchProject(TouchProjectRequest) returns (TouchProjectResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "bumps last_active when the project is opened: recency for sorting, not a change to the project"}
-    };
+    option (forge.v1.method) = {activity: {none: "bumps last_active when the project is opened: recency for sorting, not a change to the project"}};
   }
 
   // GetProjectMetadata returns detailed project metadata
@@ -164,9 +162,7 @@ service ProjectService {
 
   // InitializeProject initializes a project (no-op in V2, projects are initialized on creation)
   rpc InitializeProject(InitializeProjectRequest) returns (InitializeProjectResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "a no-op kept for old clients: projects are initialized when they are created, so it only reports that"}
-    };
+    option (forge.v1.method) = {activity: {none: "a no-op kept for old clients: projects are initialized when they are created, so it only reports that"}};
   }
 
   // GetProjectChanges returns recent git changes for a project
@@ -223,9 +219,7 @@ service ProjectService {
   // remains for callers that cloned by some other route and only need to
   // record the result.
   rpc MarkProjectInstalled(MarkProjectInstalledRequest) returns (MarkProjectInstalledResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "records where a clone made by another route lives on a machine: idempotent placement bookkeeping the cloning client re-runs"}
-    };
+    option (forge.v1.method) = {activity: {none: "records where a clone made by another route lives on a machine: idempotent placement bookkeeping the cloning client re-runs"}};
   }
 
   // CreateProjectFromRepo adds a GitHub repository as a project on a daemon:
@@ -414,6 +408,16 @@ service ProjectService {
   // With no org_id, the caller's own moves.
   // forge:custom — an org's ledger, for its admins and owners; else the caller's own moves
   rpc ListProjectOrgMoves(ListProjectOrgMovesRequest) returns (ListProjectOrgMovesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListProjectsWithApps is the Projects list (unified-shell-and-projects.md
+  // §8.3): every project the caller may read in one org, each with the forge
+  // apps its code holds linked to the org's hosted apps, plus the org's apps
+  // that no listed project contains. The link is computed here, under
+  // reliant's project authorization and control-plane's app authorization.
+  // forge:custom — joins caller-visible projects with the org's hosted apps
+  rpc ListProjectsWithApps(ListProjectsWithAppsRequest) returns (ListProjectsWithAppsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
@@ -1230,4 +1234,103 @@ message ListProjectOrgMovesRequest {
 
 message ListProjectOrgMovesResponse {
   repeated ProjectOrgMove moves = 1;
+}
+
+message ListProjectsWithAppsRequest {
+  // The org to list; one the caller is a live member of (PERMISSION_DENIED
+  // otherwise). Unset: the caller's default org.
+  optional string org_id = 1;
+}
+
+message ListProjectsWithAppsResponse {
+  // The org listed.
+  string org_id = 1;
+  // The caller's own projects in the org and the projects shared with them in
+  // it, together in one list, most recently active first (ties by id).
+  // Project.viewer_access tells a shared one from the caller's own. Each half
+  // is capped at 500: past that, the most recently active of each.
+  repeated ProjectWithApps projects = 2;
+  // The org's apps that no project in `projects` contains: app-only rows.
+  repeated HostedApp unlinked_apps = 3;
+  // Whether the org's apps could be read. Not OK: `projects` still lists,
+  // their apps carry no `hosted`, and `unlinked_apps` is empty.
+  HostedAppsState hosted_apps_state = 4;
+}
+
+enum HostedAppsState {
+  HOSTED_APPS_STATE_UNSPECIFIED = 0;
+  HOSTED_APPS_STATE_OK = 1;
+  // The caller may not read the org's apps (no deploy:read).
+  HOSTED_APPS_STATE_NO_ACCESS = 2;
+  // The control plane could not be reached, or this server has none.
+  HOSTED_APPS_STATE_UNAVAILABLE = 3;
+}
+
+message ProjectWithApps {
+  // As ListProjects returns it; a shared project in the viewer's shape.
+  Project project = 1;
+  // The project's repos. For a viewer: name and relative_path only.
+  repeated ProjectRepoSummary repos = 2;
+  // One per forge.yaml in the project's repos, ordered by repo then subpath.
+  repeated ProjectApp apps = 3;
+  // The machines with a checkout. The owner's only; empty for a viewer.
+  repeated ProjectCheckout checkouts = 4;
+}
+
+message ProjectRepoSummary {
+  // The repo's id: an opaque identifier, set for a viewer too, because
+  // ProjectApp.repo_id joins an app to its repo by it. It names nothing about
+  // where the repo lives.
+  string id = 1;
+  string name = 2;
+  string relative_path = 3;
+  // forge's canonical "host/owner/repo"; "" without a shareable remote, and
+  // always "" for a viewer.
+  string remote = 4;
+}
+
+message ProjectCheckout {
+  string daemon_id = 1;
+  string daemon_name = 2;
+  ProjectInstallState install_state = 3;
+}
+
+message ProjectApp {
+  // forge.yaml `name`: the app's name in the project's org.
+  string name = 1;
+  string repo_id = 2;
+  // The forge.yaml's directory in the repo, "/"-separated; "" is the root.
+  string subpath = 3;
+  ProjectAppLink link = 4;
+  // The org's app of this name; unset when link is NOT_HOSTED.
+  HostedApp hosted = 5;
+}
+
+enum ProjectAppLink {
+  PROJECT_APP_LINK_UNSPECIFIED = 0;
+  // The org has no app of this name, or its apps could not be read.
+  PROJECT_APP_LINK_NOT_HOSTED = 1;
+  // Same name in the same org, but no recorded source from this repo's
+  // remote and subpath (a fork, a local folder, an older forge).
+  PROJECT_APP_LINK_NAME = 2;
+  // The app records a deploy from this repo's remote at this subpath.
+  PROJECT_APP_LINK_SOURCE = 3;
+}
+
+message HostedApp {
+  string name = 1;
+  string created_at = 2; // RFC 3339
+  optional string last_deployed_at = 3; // RFC 3339; unset: never deployed
+  repeated string environments = 4;
+  bool has_static_site = 5;
+  repeated HostedAppSource sources = 6; // newest first
+  // The two-repositories warning (D5); "" otherwise.
+  string warning = 7;
+}
+
+message HostedAppSource {
+  string remote = 1; // canonical host/owner/repo; "" = a local checkout
+  string subpath = 2;
+  string commit = 3;
+  string last_seen_at = 4; // RFC 3339
 }

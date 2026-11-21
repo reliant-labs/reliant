@@ -30,7 +30,7 @@ func worktreeSummaryToProto(w *db.Worktree) *reliantv1.WorktreeSummary {
 }
 
 // attachWorktrees fills each chat's worktree summary and returns the main
-// workspace of every project in scope (projectID, or all of the user's when it
+// workspace of every project in scope (projects, or all of the user's when it
 // is empty), in two queries however many chats, projects and workspaces there
 // are.
 // The client groups the sidebar from this, so it never has to page the whole
@@ -41,7 +41,7 @@ func worktreeSummaryToProto(w *db.Worktree) *reliantv1.WorktreeSummary {
 // caller's; a main workspace is listed only when the caller may read its
 // project (authz, so not one of an org they have left or a credential's
 // other org) and the project is in the list's org scope.
-func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string, scope *core.OrgScope, chats []*db.Chat, protoChats []*reliantv1.Chat) []*reliantv1.WorktreeSummary {
+func (s *Service) attachWorktrees(ctx context.Context, userID string, projects []string, scope *core.OrgScope, chats []*db.Chat, protoChats []*reliantv1.Chat) []*reliantv1.WorktreeSummary {
 	seen := make(map[string]struct{}, len(chats))
 	ids := make([]string, 0, len(chats))
 	for _, c := range chats {
@@ -58,7 +58,7 @@ func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string,
 	if len(ids) > 0 {
 		rows, err := s.deps.Repo.ListWorktreesByIDs(ctx, ids)
 		if err != nil {
-			logging.WarnContext(ctx, "Failed to load the workspaces of a chat list", "error", err, "projectID", projectID)
+			logging.WarnContext(ctx, "Failed to load the workspaces of a chat list", "error", err, "projects", projects)
 		} else {
 			byID := make(map[string]*reliantv1.WorktreeSummary, len(rows))
 			for _, w := range rows {
@@ -74,13 +74,9 @@ func (s *Service) attachWorktrees(ctx context.Context, userID, projectID string,
 
 	// The query checks ownership itself: a project id that is not the
 	// caller's gets no main workspace.
-	var inProject *string
-	if projectID != "" {
-		inProject = &projectID
-	}
-	mains, err := s.deps.Repo.ListMainWorktreesForUser(ctx, userID, inProject)
+	mains, err := s.deps.Repo.ListMainWorktreesForUser(ctx, userID, projects)
 	if err != nil {
-		logging.WarnContext(ctx, "Failed to load the main workspaces of a chat list", "error", err, "projectID", projectID)
+		logging.WarnContext(ctx, "Failed to load the main workspaces of a chat list", "error", err, "projects", projects)
 		return nil
 	}
 	readable := s.readableProjects(ctx, userID, scope, mains)

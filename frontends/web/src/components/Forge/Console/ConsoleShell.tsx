@@ -38,7 +38,7 @@
  */
 
 import { memo, type ReactNode } from "react";
-import { Activity, Database, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon, Users } from "lucide-react";
+import { Activity, Database, FlaskConical, Gauge, Globe, HardDrive, Home, KeyRound, Layers, Tag as TagIcon, Users } from "lucide-react";
 
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 import Link from "@/components/forge-ui/link";
@@ -79,6 +79,15 @@ export interface ConsoleNavInput {
   /** Omitted/unknown keeps useful views visible; false means a definite empty read. Sessions is always listed. */
   optionalViews?: { profiles: boolean };
   /**
+   * Whether the Experiments row is listed (Forge Changes). Off until the
+   * control plane serves ChangesService: the web config's CHANGES_UI
+   * (lib/changesFeature.ts). The open page lists it regardless. When chat
+   * 411eb83a's console nav registry lands, this becomes a
+   * registerConsoleNavEntry({ id: "experiments", after: "product-analytics",
+   * available }) beside the route instead of a field here.
+   */
+  experiments?: boolean;
+  /**
    * Whether Observability is expanded — the reader's remembered choice
    * (obsNavOpen.ts). Omitted, it starts expanded and toggles for the visit.
    */
@@ -104,7 +113,7 @@ export const NAV_STARRED_MAX = 3;
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, obsOpen, onObsOpenChange, linkTo }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, experiments = false, obsOpen, onObsOpenChange, linkTo }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
@@ -122,6 +131,9 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
     items: [
       row("Overview", { kind: "overview" }, icon(Home), { active: is("overview") || is("workload") }),
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
+      ...(experimentsListed(page, experiments)
+        ? [row("Experiments", { kind: "experiments" }, icon(FlaskConical), { active: is("experiments") || is("experiment") })]
+        : []),
       row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
         active: false,
         // Its views are the console's most-visited pages: listed on every page, until the reader collapses them.
@@ -166,6 +178,11 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
 }
 
 /** The Configure section: Environments (each long-lived one, previews as one row), Secrets, Domains. */
+/** The Experiments row is listed when its flag is on, and always while one of its pages is open. */
+export function experimentsListed(page: ConsolePage, flag: boolean): boolean {
+  return flag || page.kind === "experiments" || page.kind === "experiment";
+}
+
 export function configureNavRows({ page, envs }: Pick<ConsoleNavInput, "page" | "envs">, href: (target: ConsolePage) => string): SidebarNavItem[] {
   const long = envs.filter((candidate) => !candidate.preview);
   const previews = envs.filter((candidate) => candidate.preview);
@@ -249,6 +266,16 @@ export function consoleCrumbs(
       return [{ label: "Domains" }];
     case "activity":
       return [{ label: "Activity" }];
+    case "experiments":
+      return [{ label: "Experiments" }];
+    case "experiment":
+      return [{ label: "Experiments", href: href({ kind: "experiments" }) }, { label: "Change" }];
+    case "vulnerabilities":
+      return [{ label: "Security" }, { label: "Vulnerabilities" }];
+    case "vulnerability":
+      return [{ label: "Security" }, { label: "Vulnerabilities", href: href({ kind: "vulnerabilities" }) }, { label: page.advisory }];
+    case "sboms":
+      return [{ label: "Security" }, { label: "SBOMs" }];
   }
 }
 

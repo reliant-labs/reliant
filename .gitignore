@@ -110,10 +110,6 @@ lerna-debug.log*
 # iOS
 ios/Pods/
 ios/build/
-mobile-app/ios/Pods/
-mobile-app/ios/build/
-mobile-app/ios/.xcode.env.local
-mobile-app/ios/Podfile.lock
 Podfile.lock
 *.xcworkspace
 *.xcworkspace/xcuserdata
@@ -123,10 +119,6 @@ Podfile.lock
 android/.gradle/
 android/build/
 android/app/build/
-mobile-app/android/.gradle/
-mobile-app/android/build/
-mobile-app/android/app/build/
-mobile-app/android/app/debug.keystore
 *.apk
 *.aab
 
@@ -230,8 +222,6 @@ electron/src/release-renderer-config.js
 # Reliant local config (gitignored, for local overrides)
 .reliant.local/
 
-/tests/backend/tests/testdata/
-
 # Claude settings
 .claude/settings.local.json
 
@@ -243,9 +233,6 @@ electron/electron/
 # Browser data
 browser-data/
 
-
-# Gluestack MCP server (cloned from github.com/gluestack/mcp)
-.gluestack-mcp/
 
 # Generated protobuf code is COMMITTED — all of gen/, including
 # gen/controlplane/. See the "Generated code is committed" note below.
@@ -365,3 +352,7 @@ secrets/
 # reads it, and never committed (commitpolicy: only what the compiler needs is
 # committed). Added by `forge generate`.
 /gen/forge_descriptor/
+
+# Merge-tool leftovers (git mergetool, patch): never source. #3070 committed two.
+*.orig
+*.rej

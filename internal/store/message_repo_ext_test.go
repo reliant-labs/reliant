@@ -102,6 +102,7 @@ func (f *msgFixture) seedTranscript(t *testing.T) []*core.Message {
 	}
 	msgs[4].TokenCount, msgs[4].Cost = ip(1200), func() *float64 { v := 0.25; return &v }()
 	msgs[7].TokenCount = ip(1500)
+	msgs[1].ThinkingLevel, msgs[2].ThinkingLevel = sp("high"), sp("low")
 	for i, m := range msgs {
 		var err error
 		if i%2 == 0 {
@@ -158,6 +159,7 @@ func flat(m core.Message) map[string]any {
 		"id": m.ID, "chat": m.ChatID, "ord": m.Ordinal, "seq": m.Seq, "thread": m.ThreadID, "cw": m.ContextWindowID,
 		"role": m.Role, "model": s(m.Model), "agent": s(m.Agent), "wf": s(m.WorkflowID), "run": s(m.RunID),
 		"node": s(m.NodeID), "path": s(m.NodePath), "act": s(m.ActivityID), "acct": s(m.ProviderAccountID),
+		"thinking": s(m.ThinkingLevel),
 	}
 	if m.DisplayStyle != nil {
 		out["style"] = *m.DisplayStyle
@@ -430,7 +432,7 @@ func TestMessageUpdates_AcrossLayers(t *testing.T) {
 	if got.TokenCount == nil || *got.TokenCount != 42 || got.Cost == nil || *got.Cost != 1.5 || got.Model == nil || *got.Model != "model-m1" {
 		t.Fatalf("after UpdateMessageUsage: %+v", flat(*got))
 	}
-	if err := f.env.Repo.UpdateMessage(ctx, &core.Message{ID: "m1"}); err != nil {
+	if err := store.UpdateMessageUsage(ctx, o, "m1", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ = store.FindMessage(ctx, o, "m1"); got.TokenCount != nil || got.Cost != nil {

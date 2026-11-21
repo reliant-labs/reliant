@@ -223,7 +223,6 @@ export function ProjectsSection() {
         {currentProject && (
           <CurrentProjectDetails
             project={currentProject}
-            onChatOpened={() => goToProject(currentProject.id)}
             onManageWorkspaces={() =>
               void navigate({ to: settingsPath("branches") })
             }

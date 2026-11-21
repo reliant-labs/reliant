@@ -144,6 +144,13 @@ func NewAuthInterceptor(settings auth.Settings, publicProcedures map[string]stru
 		default:
 			return nil, auth.ErrInvalidPublicKey
 		}
+		validator, err := auth.WithDevSigner(validator, settings)
+		if err != nil {
+			return nil, err
+		}
+		if settings.DevJWTSecret != "" {
+			logging.Warn("[gRPC Auth] dev signer enabled: HS256 tokens signed with AUTH_DEV_JWT_SECRET are accepted (dev tier only)")
+		}
 		logging.Info("[gRPC Auth] Supabase JWT auth mode enabled")
 		return &AuthInterceptor{
 			validator:        validator,
@@ -338,7 +345,7 @@ func credentialMismatch(ctx context.Context, err error) error {
 	}
 	return svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
 		"this credential acts in organization %s only, and this belongs to organization %s; "+
-			"to act there, sign in for it: `reliant auth login` (or `forge login --org %s`)",
+			"to act there, sign in for it: `reliant auth login` (or `forge cloud login --org %s`)",
 		bound, refused, refused)), orgs.ReasonOrgMismatch))
 }
 

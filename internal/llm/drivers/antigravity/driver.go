@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -38,6 +39,9 @@ import (
 type Client struct {
 	options    llm.DriverOptions
 	httpClient *http.Client
+
+	// ladder overrides the retry ladder's defaults; tests inject the clock.
+	ladder ratelimit.Retryer
 }
 
 // ManagedSystemPrompt is the seam for the Antigravity managed system prompt.
@@ -263,6 +267,43 @@ func stampUnsignedCallSteps(history []*content) int {
 	return stamped
 }
 
+// replaceSignaturesWithStandIns rebuilds history for the one retry after the
+// server rejected a thought signature (geminiwire.RecoverSignatureRejection):
+// every signature is removed, and the stand-in goes on the first call of
+// every step. Replayed reasoning parts are dropped with their signatures:
+// they were sent only to carry them, and an unsigned thought part is not
+// something the server asked for. A model turn left with nothing gets the
+// same placeholder convertMessagesWithValidation uses. Returns how many
+// signatures it removed.
+func replaceSignaturesWithStandIns(history []*content) int {
+	removed := 0
+	for _, c := range history {
+		if c == nil {
+			continue
+		}
+		kept := c.Parts[:0]
+		for _, p := range c.Parts {
+			if p == nil {
+				continue
+			}
+			if p.ThoughtSignature != "" {
+				p.ThoughtSignature = ""
+				removed++
+			}
+			if p.Thought {
+				continue
+			}
+			kept = append(kept, p)
+		}
+		c.Parts = kept
+		if len(c.Parts) == 0 {
+			c.Parts = []*part{{Text: "[Empty message]"}}
+		}
+	}
+	stampUnsignedCallSteps(history)
+	return removed
+}
+
 // resolveToolCall finds the tool name and thought signature for a tool result,
 // preferring the name the result already carries.
 func resolveToolCall(messages []message.Message, toolCallID, resultName string) (string, string) {
@@ -351,6 +392,17 @@ func (c *Client) systemInstruction(prompts []string) *content {
 
 // buildEnvelope assembles the full double-wrapped request body.
 func (c *Client) buildEnvelope(messages []message.Message, prompts []string, toolList []toolsPkg.Tool) *requestEnvelope {
+	return c.buildEnvelopeWith(messages, prompts, toolList, false)
+}
+
+// buildEnvelopeWith is buildEnvelope, with every thought signature replaced by
+// the stand-in when standIns is set (the retry after a rejected signature).
+func (c *Client) buildEnvelopeWith(messages []message.Message, prompts []string, toolList []toolsPkg.Tool, standIns bool) *requestEnvelope {
+	contents := convertMessagesWithValidation(messages)
+	if standIns {
+		removed := replaceSignaturesWithStandIns(contents)
+		logging.Debug("[ANTIGRAVITY] Replaced thought signatures with the stand-in", "removed", removed)
+	}
 	generation := &generationConfig{MaxOutputTokens: c.options.MaxTokens}
 	if c.options.Temperature != nil {
 		temp := *c.options.Temperature
@@ -377,7 +429,7 @@ func (c *Client) buildEnvelope(messages []message.Message, prompts []string, too
 		UserAgent:   envelopeUserAgent,
 		RequestType: envelopeRequestType,
 		Request: &generateReq{
-			Contents:          convertMessagesWithValidation(messages),
+			Contents:          contents,
 			SystemInstruction: c.systemInstruction(prompts),
 			Tools:             convertTools(toolList),
 			ToolConfig:        buildToolConfig(c.options.ForceToolChoice, toolList),
@@ -456,17 +508,18 @@ func usage(resp *generateResp) llm.TokenUsage {
 	if resp == nil || resp.UsageMetadata == nil {
 		return llm.TokenUsage{}
 	}
+	// Thought tokens are generated and billed as output but reported apart
+	// from candidatesTokenCount, and the cached prefix is inside
+	// promptTokenCount; geminiwire.Usage.TokenUsage owns both rules.
 	m := resp.UsageMetadata
-	return llm.TokenUsage{
-		TokenCount:  m.TotalTokenCount,
-		InputTokens: m.PromptTokenCount,
-		// Thought tokens are generated and billed as output but reported apart
-		// from candidatesTokenCount.
-		OutputTokens:         m.CandidatesTokenCount + m.ThoughtsTokenCount,
-		ReasoningTokens:      m.ThoughtsTokenCount,
-		CachedInputTokens:    m.CachedContentTokenCount,
-		CacheReadInputTokens: m.CachedContentTokenCount,
-	}
+	return geminiwire.Usage{
+		PromptTokenCount:        m.PromptTokenCount,
+		CachedContentTokenCount: m.CachedContentTokenCount,
+		ToolUsePromptTokenCount: m.ToolUsePromptTokenCount,
+		CandidatesTokenCount:    m.CandidatesTokenCount,
+		ThoughtsTokenCount:      m.ThoughtsTokenCount,
+		TotalTokenCount:         m.TotalTokenCount,
+	}.TokenUsage()
 }
 
 // finishReason maps Gemini finish reasons onto Reliant's.
@@ -490,34 +543,25 @@ func parseJSONToMap(raw string) (map[string]any, error) {
 	return out, err
 }
 
-// isRetryableStatus reports whether an HTTP status is worth retrying: rate
-// limits and transient gateway/server errors.
-func isRetryableStatus(status int) bool {
-	switch status {
-	case http.StatusTooManyRequests,
-		http.StatusInternalServerError,
-		http.StatusBadGateway,
-		http.StatusServiceUnavailable,
-		http.StatusGatewayTimeout:
-		return true
-	default:
-		return false
+func (c *Client) retryer() ratelimit.Retryer {
+	r := c.ladder
+	if r.Provider == "" {
+		r.Provider = "Antigravity"
+		r.Log = "[ANTIGRAVITY] stream request"
 	}
+	return r
 }
 
-// retryDelay honors Retry-After when the server sends one, and otherwise backs
-// off exponentially with jitter, matching the gemini driver's ladder.
-func retryDelay(attempt int, resp *http.Response) time.Duration {
-	if resp != nil {
-		if after := resp.Header.Get("Retry-After"); after != "" {
-			if seconds, err := strconv.Atoi(after); err == nil && seconds > 0 {
-				return time.Duration(seconds) * time.Second
-			}
-		}
+// antigravityFailure describes a refused request to the shared ladder.
+func antigravityFailure(resp *http.Response, body []byte, err error) ratelimit.Failure {
+	if resp == nil {
+		return ratelimit.HTTPFailure(nil, fmt.Errorf("antigravity: request failed: %w", err))
 	}
-	backoff := 2000 * (1 << (attempt - 1))
-	jitter := int(float64(backoff) * 0.2)
-	return time.Duration(backoff+jitter) * time.Millisecond
+	f := ratelimit.HTTPFailure(resp, fmt.Errorf("antigravity: API request failed with status %d: %s", resp.StatusCode, string(body)))
+	if s, ok := ratelimit.ParseGoogleStatus(body); ok {
+		ratelimit.DescribeGoogle(&f, s.Details)
+	}
+	return f
 }
 
 // clientIdentityTransport stamps the fixed Antigravity client identity onto

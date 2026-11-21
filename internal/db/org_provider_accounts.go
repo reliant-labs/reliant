@@ -171,7 +171,7 @@ func (s *accountStore) RotateOrgAPIKey(ctx context.Context, orgID, accountID str
 		}
 		c, err := s.credential(ctx, owner, cur.ID, core.AccountUpsert{
 			AuthKind: core.AuthKindAPIKey, KeyHint: k.KeyHint, Secrets: core.AccountSecrets{Secret: k.Secret},
-		}, k.IdentityKey, nil)
+		}, k.IdentityKey)
 		if err != nil {
 			return err
 		}

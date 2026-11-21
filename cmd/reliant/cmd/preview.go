@@ -4,7 +4,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -84,8 +83,9 @@ the deliverable shape a handoff node can post.`,
 			// Listening check is advisory (mirrors netports' "affordance, not a
 			// gate" stance). ok=false on non-Linux hosts where /proc is absent —
 			// treat as unknown and never gate on it.
-			ports, ok := netports.ListeningLoopbackPorts(nil)
-			listening := ok && slices.Contains(ports, uint32(port))
+			// The whole port range: the port was named, so the ephemeral-range
+			// filter of the unprompted list does not apply.
+			listening, ok := netports.IsLoopbackListening(port)
 			if ok && !listening {
 				if requireListening {
 					return fmt.Errorf("nothing is listening on port %d yet", port)
@@ -117,7 +117,7 @@ the deliverable shape a handoff node can post.`,
 			// Human/agent path: URL on stdout (easy to capture), notes on stderr.
 			fmt.Fprintln(cmd.OutOrStdout(), url)
 			if remote {
-				fmt.Fprintln(cmd.ErrOrStderr(), "access: openable by the workspace owner (authenticated); make the port public to share beyond the owner")
+				fmt.Fprintf(cmd.ErrOrStderr(), "access: openable by the workspace owner (authenticated); to share it beyond the owner: reliant preview access set <machine> %d public\n", port)
 			}
 			return nil
 		},

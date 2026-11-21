@@ -288,6 +288,11 @@
             "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
           },
           {
+            "field": "span.attr.forge.probe",
+            "op": "neq",
+            "value": "true"
+          },
+          {
             "field": "span.status",
             "op": "eq",
             "value": "error"
@@ -360,6 +365,11 @@
             "field": "span.kind",
             "op": "eq",
             "value": "server"
+          },
+          {
+            "field": "span.attr.forge.probe",
+            "op": "neq",
+            "value": "true"
           }
         ],
         "groupBy": [
@@ -1025,7 +1035,7 @@
           "title": "Backend traffic by version",
           "description": "The share of server requests each service.version served, per bucket: a rollout is one band replacing another.",
           "kind": "sql",
-          "sql": "SELECT t, version AS \"Version\", round(n / sum(n) OVER (PARTITION BY t), 4) AS \"Share of requests\"\nFROM (\n    SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version']) AS version,\n           sum(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))) AS n\n    FROM otel_traces\n    WHERE SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY t, version\n)\nORDER BY t, version",
+          "sql": "SELECT t, version AS \"Version\", round(n / sum(n) OVER (PARTITION BY t), 4) AS \"Share of requests\"\nFROM (\n    SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version']) AS version,\n           sum(if(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))) = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))) AS n\n    FROM otel_traces\n    WHERE SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND SpanAttributes['forge.probe'] != 'true' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\n    GROUP BY t, version\n)\nORDER BY t, version",
           "display": {
             "style": "area",
             "stack": true,
@@ -1081,6 +1091,11 @@
               "field": "span.kind",
               "op": "eq",
               "value": "server"
+            },
+            {
+              "field": "span.attr.forge.probe",
+              "op": "neq",
+              "value": "true"
             }
           ],
           "groupBy": [
@@ -1110,6 +1125,11 @@
               "field": "span.kind",
               "op": "eq",
               "value": "server"
+            },
+            {
+              "field": "span.attr.forge.probe",
+              "op": "neq",
+              "value": "true"
             }
           ],
           "groupBy": [
@@ -1137,6 +1157,11 @@
               "field": "span.kind",
               "op": "eq",
               "value": "server"
+            },
+            {
+              "field": "span.attr.forge.probe",
+              "op": "neq",
+              "value": "true"
             }
           ],
           "groupBy": [
@@ -1168,7 +1193,7 @@
           "title": "Releases side by side",
           "description": "One row per backend version seen in the range, newest first: when it was first and last seen, its requests, error rate and latency.",
           "kind": "sql",
-          "sql": "SELECT if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version']) AS \"Version\",\n       formatDateTime(min(Timestamp), '%Y-%m-%d %H:%i') AS \"First seen (UTC)\",\n       formatDateTime(max(Timestamp), '%Y-%m-%d %H:%i') AS \"Last seen (UTC)\",\n       toUInt64(round(sum(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))))) AS \"Requests\",\n       round(100 * sumIf(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)), (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND NOT (SpanAttributes['error_class'] = 'canceled' OR SpanAttributes['rpc.connect_rpc.error_code'] = 'canceled' OR SpanAttributes['http.response.status_code'] = '499' OR SpanAttributes['http.status_code'] = '499'))) / nullIf(sum(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))), 0), 2) AS \"Error rate (%)\",\n       round(quantileExactWeightedIf(0.5)(Duration / 1000000, toUInt64(round(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p50 (ms)\",\n       round(quantileExactWeightedIf(0.95)(Duration / 1000000, toUInt64(round(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p95 (ms)\",\n       round(quantileExactWeightedIf(0.99)(Duration / 1000000, toUInt64(round(if(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)') = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p99 (ms)\"\nFROM otel_traces\nWHERE SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version'])\nORDER BY min(Timestamp) DESC, \"Version\"\nLIMIT 20",
+          "sql": "SELECT if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version']) AS \"Version\",\n       formatDateTime(min(Timestamp), '%Y-%m-%d %H:%i') AS \"First seen (UTC)\",\n       formatDateTime(max(Timestamp), '%Y-%m-%d %H:%i') AS \"Last seen (UTC)\",\n       toUInt64(round(sum(if(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))) = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))))) AS \"Requests\",\n       round(100 * sumIf(if(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))) = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)), (StatusCode IN ('Error', 'STATUS_CODE_ERROR') AND NOT (SpanAttributes['error_class'] = 'canceled' OR SpanAttributes['rpc.connect_rpc.error_code'] = 'canceled' OR SpanAttributes['http.response.status_code'] = '499' OR SpanAttributes['http.status_code'] = '499'))) / nullIf(sum(if(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))) = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6))), 0), 2) AS \"Error rate (%)\",\n       round(quantileExactWeightedIf(0.5)(Duration / 1000000, toUInt64(round(if(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))) = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p50 (ms)\",\n       round(quantileExactWeightedIf(0.95)(Duration / 1000000, toUInt64(round(if(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))) = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p95 (ms)\",\n       round(quantileExactWeightedIf(0.99)(Duration / 1000000, toUInt64(round(if(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))) = '', 1.0, round(least(1000000.0, 1 / greatest(1 - reinterpretAsUInt64(reverse(unhex(concat('00', rightPad(left(if(startsWith(TraceState, 'ot=th:') AND position(TraceState, ',') = 0 AND position(TraceState, ';') = 0, if(length(TraceState) \u003e 6 AND trim(BOTH '0123456789abcdef' FROM substring(TraceState, 7)) = '', substring(TraceState, 7), ''), if(TraceState = '', '', extract(TraceState, '(?:^|,)ot=(?:[^;,]*;)*th:([0-9a-f]+)(?:[;,]|$)'))), 14), 14, '0'))))) / 72057594037927936, 0.000001)), 6)))), NOT (SpanAttributes['forge.rpc.stream_type'] != '' OR match(SpanName, '/Stream[A-Z][^/]*$'))), 1) AS \"p99 (ms)\"\nFROM otel_traces\nWHERE SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND SpanAttributes['forge.probe'] != 'true' AND Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)} AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id'])) AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY if(ResourceAttributes['service.version'] = '', '(unversioned)', ResourceAttributes['service.version'])\nORDER BY min(Timestamp) DESC, \"Version\"\nLIMIT 20",
           "width": 24,
           "height": 8
         },
@@ -1285,7 +1310,8 @@
         },
         {
           "id": "page-views",
-          "title": "Page views",
+          "title": "Page loads",
+          "description": "Document loads and in-app route changes the browser SDK traced (documentLoad and routeChange spans). Page views, the analytics event page_viewed, are the Product dashboard's.",
           "kind": "number",
           "signal": "traces",
           "series": [
@@ -2015,7 +2041,6 @@
         }
       ],
       "defaultRange": "30d",
-      "defaultCompare": "period",
       "panels": [
         {
           "section": "glance",
@@ -2340,7 +2365,6 @@
         }
       ],
       "defaultRange": "30d",
-      "defaultCompare": "period",
       "panels": [
         {
           "section": "glance",
@@ -2640,7 +2664,6 @@
         }
       ],
       "defaultRange": "7d",
-      "defaultCompare": "period",
       "panels": [
         {
           "section": "glance",
@@ -2915,7 +2938,6 @@
         }
       ],
       "defaultRange": "30d",
-      "defaultCompare": "period",
       "panels": [
         {
           "section": "glance",
@@ -3190,7 +3212,6 @@
         }
       ],
       "defaultRange": "7d",
-      "defaultCompare": "period",
       "panels": [
         {
           "section": "glance",
@@ -3619,7 +3640,6 @@
         }
       ],
       "defaultRange": "7d",
-      "defaultCompare": "period",
       "panels": [
         {
           "section": "calls",

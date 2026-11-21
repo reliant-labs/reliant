@@ -161,7 +161,7 @@ export function MobileNotificationsPanel() {
       {notificationsEnabled && permission === "granted" && (
         <>
           <div className="bg-muted/30 px-4 py-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs font-semibold text-muted-foreground">
               When to notify
             </p>
           </div>

@@ -110,7 +110,7 @@ export function ComputeBand({
           <Cpu className="h-4 w-4 text-muted-foreground" />
           <h3
             id="compute-band-heading"
-            className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            className="text-xs font-semibold text-muted-foreground"
           >
             Compute
           </h3>
@@ -330,7 +330,7 @@ function CapacityBar({
             every inset on this page is: a track is a well the fill sits in,
             and `bg-muted` is lighter than the card in every dark theme, so it
             would read as raised. Matches the credit meter's track. */}
-        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-background">
+        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-foreground/10">
           <div
             role="progressbar"
             aria-label="Included hours used"
@@ -348,7 +348,7 @@ function CapacityBar({
         <span aria-hidden className="h-3 w-px bg-border" />
         {/* Overage segment — narrow, because it is the exception, not half the
             capacity. */}
-        <div className="h-2.5 w-1/4 overflow-hidden rounded-full bg-background">
+        <div className="h-2.5 w-1/4 overflow-hidden rounded-full bg-foreground/10">
           <div
             className="h-full rounded-full bg-destructive"
             style={{ width: `${capacity.overagePct}%` }}

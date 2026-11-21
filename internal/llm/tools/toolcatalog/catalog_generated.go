@@ -47,6 +47,13 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"change_results": {
+		Bindable: map[string]struct{}{
+			"change_id": {},
+			"run_id":    {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"code_context": {
 		Bindable: map[string]struct{}{
 			"depth":          {},
@@ -280,6 +287,12 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
+	"get_change": {
+		Bindable: map[string]struct{}{
+			"change_id": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"get_integration_schema": {
 		Bindable: map[string]struct{}{
 			"ref": {},
@@ -329,6 +342,15 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__branch_rules": {
+		Bindable: map[string]struct{}{
+			"branch":     {},
+			"connection": {},
+			"owner":      {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__check_run_list": {
 		Bindable: map[string]struct{}{
 			"app_id":     {},
@@ -348,6 +370,27 @@ var generatedToolParams = map[string]ToolParams{
 			"page":       {},
 			"per_page":   {},
 			"q":          {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__commit_statuses": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"owner":      {},
+			"ref":        {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__compare": {
+		Bindable: map[string]struct{}{
+			"base":       {},
+			"connection": {},
+			"head":       {},
+			"limit":      {},
+			"owner":      {},
+			"page":       {},
+			"repo":       {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -668,6 +711,14 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_changes": {
+		Bindable: map[string]struct{}{
+			"environment": {},
+			"org_id":      {},
+			"project":     {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"list_machines": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -728,6 +779,30 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"name":  {},
 			"query": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"manage_change": {
+		Bindable: map[string]struct{}{
+			"action":            {},
+			"activate":          {},
+			"audience":          {},
+			"change_id":         {},
+			"clear_audience":    {},
+			"clear_metric":      {},
+			"description":       {},
+			"environment":       {},
+			"everyone":          {},
+			"expected_revision": {},
+			"key":               {},
+			"metric":            {},
+			"percent":           {},
+			"preview":           {},
+			"project":           {},
+			"split":             {},
+			"step_up_code":      {},
+			"unit":              {},
+			"variant":           {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -1020,6 +1095,17 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"slack__conversations_replies": {
+		Bindable: map[string]struct{}{
+			"channel":    {},
+			"connection": {},
+			"latest":     {},
+			"limit":      {},
+			"oldest":     {},
+			"ts":         {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"slack__message_post": {
 		Bindable: map[string]struct{}{
 			"blocks":          {},
@@ -1234,16 +1320,17 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"worktree": {
 		Bindable: map[string]struct{}{
-			"action":      {},
-			"archived":    {},
-			"base_branch": {},
-			"branch":      {},
-			"copy_files":  {},
-			"filter":      {},
-			"force":       {},
-			"limit":       {},
-			"name":        {},
-			"page_token":  {},
+			"action":           {},
+			"archived":         {},
+			"base_branch":      {},
+			"base_branch_repo": {},
+			"branch":           {},
+			"copy_files":       {},
+			"filter":           {},
+			"force":            {},
+			"limit":            {},
+			"name":             {},
+			"page_token":       {},
 		},
 		Unbindable: map[string]string{},
 	},

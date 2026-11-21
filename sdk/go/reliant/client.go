@@ -70,8 +70,11 @@ const (
 	EnvToken     = "RELIANT_TOKEN"
 )
 
-// Version is the SDK version sent in the User-Agent. It is the module's
-// release, set at tag time.
+// Version is the fallback SDK version, for a binary whose build info does not
+// record this module's version (a directory replace, say). Requests carry the
+// version the binary was actually built with, read from its build info, in
+// the User-Agent (reliant-go-sdk/<version>) and in Reliant-Client
+// (sdk-go/<version>), which the server compares with its minimum for this SDK.
 const Version = "0.1.0"
 
 // TokenSource supplies the bearer token for each request. Use it for a token
@@ -274,7 +277,7 @@ func sameOrigin(scheme, host string, next func(*http.Request, []*http.Request) e
 	}
 }
 
-// authTransport adds the bearer token and the User-Agent.
+// authTransport adds the bearer token, the User-Agent and Reliant-Client.
 type authTransport struct {
 	next   http.RoundTripper
 	scheme string
@@ -304,7 +307,10 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	r := req.Clone(req.Context())
 	r.Header.Set("Authorization", "Bearer "+token)
 	if r.Header.Get("User-Agent") == "" {
-		r.Header.Set("User-Agent", "reliant-go-sdk/"+Version)
+		r.Header.Set("User-Agent", "reliant-go-sdk/"+clientVersion())
+	}
+	if r.Header.Get(headerClient) == "" {
+		r.Header.Set(headerClient, clientHeader())
 	}
 	return t.next.RoundTrip(r)
 }

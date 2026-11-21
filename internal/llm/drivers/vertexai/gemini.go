@@ -3,111 +3,126 @@ package vertexai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"google.golang.org/genai"
 )
 
-// sendMessagesGemini sends messages using the Gemini provider
+// sendMessagesGemini sends messages using the Gemini provider, retried once
+// with stand-in thought signatures if Gemini rejects one.
 func (c *VertexAIClient) sendMessagesGemini(ctx context.Context, prompts []string, messages []message.Message, toolsList []tools.Tool) (*llm.DriverResponse, error) {
+	return geminiwire.RecoverSignatureRejectionSync(ctx, geminiwire.SourceVertexAI, func(standIns bool) (*llm.DriverResponse, error) {
+		return c.sendMessagesGeminiOnce(ctx, prompts, messages, toolsList, standIns)
+	})
+}
+
+func (c *VertexAIClient) sendMessagesGeminiOnce(ctx context.Context, prompts []string, messages []message.Message, toolsList []tools.Tool, standIns bool) (*llm.DriverResponse, error) {
 	// Convert messages to Gemini format
 	contents := c.convertMessagesToGemini(messages)
+	c.prepareGeminiSignatures(contents, standIns)
 
 	// Build configuration
 	config := c.buildGeminiConfig(prompts, toolsList)
 
 	// Generate content
-	resp, err := c.geminiClient.Models.GenerateContent(ctx, c.options.Model.APIModel, contents, config)
-	if err != nil {
-		return nil, fmt.Errorf("gemini API error: %w", err)
+	var resp *genai.GenerateContentResponse
+	if err := c.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+		var genErr error
+		resp, genErr = c.geminiClient.Models.GenerateContent(ctx, c.options.Model.APIModel, contents, config)
+		if genErr != nil {
+			return geminiFailure(fmt.Errorf("gemini API error: %w", genErr)), false
+		}
+		return ratelimit.Failure{}, true
+	}, nil); err != nil {
+		return nil, err
 	}
 
 	return c.convertGeminiResponse(resp)
 }
 
-// streamResponseGemini streams responses using the Gemini provider
+// streamResponseGemini streams responses using the Gemini provider, retried
+// once with stand-in thought signatures if Gemini rejects one before
+// streaming anything.
 func (c *VertexAIClient) streamResponseGemini(ctx context.Context, prompts []string, messages []message.Message, toolsList []tools.Tool) <-chan llm.DriverEvent {
+	return geminiwire.RecoverSignatureRejection(ctx, geminiwire.SourceVertexAI, func(standIns bool) <-chan llm.DriverEvent {
+		return c.streamResponseGeminiOnce(ctx, prompts, messages, toolsList, standIns)
+	})
+}
+
+// prepareGeminiSignatures readies the thought signatures of a converted
+// request: the stand-in on steps with none (on models that validate them),
+// or, on the retry after a rejection, the stand-in in place of every
+// signature. See geminiwire.RecoverSignatureRejection.
+func (c *VertexAIClient) prepareGeminiSignatures(contents []*genai.Content, standIns bool) {
+	if standIns {
+		geminiwire.ReplaceSignaturesWithStandIns(contents)
+		return
+	}
+	if geminiwire.ValidatesThoughtSignatures(c.options.Model.APIModel) {
+		geminiwire.StampUnsignedSteps(contents)
+	}
+}
+
+func (c *VertexAIClient) streamResponseGeminiOnce(ctx context.Context, prompts []string, messages []message.Message, toolsList []tools.Tool, standIns bool) <-chan llm.DriverEvent {
 	eventChan := make(chan llm.DriverEvent)
 
 	go func() {
 		defer close(eventChan)
 
 		contents := c.convertMessagesToGemini(messages)
+		c.prepareGeminiSignatures(contents, standIns)
 		config := c.buildGeminiConfig(prompts, toolsList)
 
-		stream := c.geminiClient.Models.GenerateContentStream(ctx, c.options.Model.APIModel, contents, config)
-
-		accumulated := &llm.DriverResponse{
-			Content:   "",
-			ToolCalls: []message.ToolCall{},
-		}
-
-		for resp, err := range stream {
-			if err != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
-				return
+		// The request retries through the ladder until the stream yields its
+		// first chunk. A failure after that is not retried here: its events
+		// already reached the consumer, and CallLLM's own retry owns a stream
+		// that broke mid-way.
+		var accumulated *llm.DriverResponse
+		emitCancelled := false
+		streamErr := c.retryer().Run(ctx, func(int) (ratelimit.Failure, bool) {
+			accumulated = &llm.DriverResponse{
+				Content:   "",
+				ToolCalls: []message.ToolCall{},
 			}
-
-			// Process the response
-			if len(resp.Candidates) > 0 {
-				candidate := resp.Candidates[0]
-
-				// Check for error finish reasons (e.g., MALFORMED_FUNCTION_CALL)
-				if isErrorFinishReason(candidate.FinishReason) {
-					errMsg := fmt.Sprintf("gemini error: %s", candidate.FinishReason)
-					if candidate.FinishMessage != "" {
-						errMsg = fmt.Sprintf("%s: %s", errMsg, candidate.FinishMessage)
+			received := false
+			for resp, err := range c.geminiClient.Models.GenerateContentStream(ctx, c.options.Model.APIModel, contents, config) {
+				if err != nil {
+					if received {
+						return ratelimit.Failure{Err: err, Fatal: true}, false
 					}
-					eventChan <- llm.DriverEvent{Type: llm.EventError, Error: errors.New(errMsg)}
-					return
+					return geminiFailure(err), false
 				}
-
-				// Process content parts (handle nil Content)
-				if candidate.Content != nil {
-					for _, part := range candidate.Content.Parts {
-						if part.Text != "" {
-							text := part.Text
-							accumulated.Content += text
-							eventChan <- llm.DriverEvent{
-								Type:    llm.EventContentDelta,
-								Content: text,
-							}
-						}
-
-						if part.FunctionCall != nil {
-							toolCall := geminiToolCall(part.FunctionCall)
-							accumulated.ToolCalls = append(accumulated.ToolCalls, toolCall)
-							eventChan <- llm.DriverEvent{
-								Type:     llm.EventToolUseStart,
-								ToolCall: &toolCall,
-							}
-						}
-					}
-				}
-
-				// Update usage if available
-				if resp.UsageMetadata != nil {
-					// TokenCount = TotalTokenCount (prompt + response + tool tokens)
-					accumulated.Usage = llm.TokenUsage{
-						TokenCount: int64(resp.UsageMetadata.TotalTokenCount),
-					}
-				}
-
-				// Set finish reason
-				if candidate.FinishReason != genai.FinishReasonUnspecified {
-					accumulated.FinishReason = c.convertGeminiFinishReason(candidate.FinishReason)
+				received = true
+				if err := c.handleGeminiChunk(resp, accumulated, eventChan); err != nil {
+					return ratelimit.Failure{Err: err, Fatal: true}, false
 				}
 			}
+			return ratelimit.Failure{}, true
+		}, func(wait llm.RetryWait) error {
+			select {
+			case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				return nil
+			case <-ctx.Done():
+				emitCancelled = true
+				return ctx.Err()
+			}
+		})
+		if streamErr != nil {
+			if !emitCancelled {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: streamErr}
+			}
+			return
 		}
 
 		// Send complete event
@@ -118,6 +133,56 @@ func (c *VertexAIClient) streamResponseGemini(ctx context.Context, prompts []str
 	}()
 
 	return eventChan
+}
+
+// handleGeminiChunk folds one streamed chunk into accumulated and emits its
+// events. An error finish reason (e.g. MALFORMED_FUNCTION_CALL) ends the
+// stream with that error.
+func (c *VertexAIClient) handleGeminiChunk(resp *genai.GenerateContentResponse, accumulated *llm.DriverResponse, eventChan chan<- llm.DriverEvent) error {
+	if len(resp.Candidates) == 0 {
+		return nil
+	}
+	candidate := resp.Candidates[0]
+
+	// Check for error finish reasons (e.g., MALFORMED_FUNCTION_CALL).
+	// The StopError's identity decides the retry; see geminiwire.StopError.
+	if isErrorFinishReason(candidate.FinishReason) {
+		return geminiStopError(candidate)
+	}
+
+	// Process content parts (handle nil Content)
+	if candidate.Content != nil {
+		for _, part := range candidate.Content.Parts {
+			if part.Text != "" {
+				text := part.Text
+				accumulated.Content += text
+				eventChan <- llm.DriverEvent{
+					Type:    llm.EventContentDelta,
+					Content: text,
+				}
+			}
+
+			if part.FunctionCall != nil {
+				toolCall := geminiToolCall(part)
+				accumulated.ToolCalls = append(accumulated.ToolCalls, toolCall)
+				eventChan <- llm.DriverEvent{
+					Type:     llm.EventToolUseStart,
+					ToolCall: &toolCall,
+				}
+			}
+		}
+	}
+
+	// Update usage if available
+	if resp.UsageMetadata != nil {
+		accumulated.Usage = geminiwire.UsageFromGenAI(resp.UsageMetadata).TokenUsage()
+	}
+
+	// Set finish reason
+	if candidate.FinishReason != genai.FinishReasonUnspecified {
+		accumulated.FinishReason = c.convertGeminiFinishReason(candidate.FinishReason)
+	}
+	return nil
 }
 
 // buildGeminiConfig builds the generation configuration
@@ -233,6 +298,9 @@ func (c *VertexAIClient) convertMessagesToGemini(messages []message.Message) []*
 						Name: toolCall.Name,
 						Args: args,
 					},
+					// Gemini 3 rejects a later request that replays its
+					// call without the signature it came with.
+					ThoughtSignature: decodeThoughtSignature(toolCall.ThoughtSignature),
 				})
 			}
 
@@ -293,14 +361,10 @@ func (c *VertexAIClient) convertGeminiResponse(resp *genai.GenerateContentRespon
 
 	candidate := resp.Candidates[0]
 
-	// Check for error finish reasons (e.g., MALFORMED_FUNCTION_CALL)
-	// These should be treated as errors so the system can retry
+	// Check for error finish reasons (e.g., MALFORMED_FUNCTION_CALL). The
+	// StopError's identity decides the retry; see geminiwire.StopError.
 	if isErrorFinishReason(candidate.FinishReason) {
-		errMsg := fmt.Sprintf("gemini error: %s", candidate.FinishReason)
-		if candidate.FinishMessage != "" {
-			errMsg = fmt.Sprintf("%s: %s", errMsg, candidate.FinishMessage)
-		}
-		return nil, errors.New(errMsg)
+		return nil, geminiStopError(candidate)
 	}
 
 	response := &llm.DriverResponse{
@@ -316,17 +380,14 @@ func (c *VertexAIClient) convertGeminiResponse(resp *genai.GenerateContentRespon
 			}
 
 			if part.FunctionCall != nil {
-				response.ToolCalls = append(response.ToolCalls, geminiToolCall(part.FunctionCall))
+				response.ToolCalls = append(response.ToolCalls, geminiToolCall(part))
 			}
 		}
 	}
 
 	// Set usage metadata
 	if resp.UsageMetadata != nil {
-		// TokenCount = TotalTokenCount (prompt + response + tool tokens)
-		response.Usage = llm.TokenUsage{
-			TokenCount: int64(resp.UsageMetadata.TotalTokenCount),
-		}
+		response.Usage = geminiwire.UsageFromGenAI(resp.UsageMetadata).TokenUsage()
 	}
 
 	// Set finish reason
@@ -353,13 +414,45 @@ func (c *VertexAIClient) convertGeminiResponse(resp *genai.GenerateContentRespon
 // Minting it here is safe because the id never reaches Vertex:
 // convertMessagesToGemini pairs a function response with its call by name.
 // The direct Gemini and Antigravity drivers mint ids the same way.
-func geminiToolCall(fc *genai.FunctionCall) message.ToolCall {
+//
+// The part's thought signature is kept, base64-encoded as the direct Gemini
+// driver stores it, so convertMessagesToGemini can replay it: Gemini 3
+// rejects a later request whose replayed call lost its signature.
+func geminiToolCall(part *genai.Part) message.ToolCall {
+	fc := part.FunctionCall
 	argsJSON, _ := json.Marshal(fc.Args)
-	return message.ToolCall{
+	call := message.ToolCall{
 		ID:       "call_" + uuid.New().String(),
 		Name:     fc.Name,
 		Input:    string(argsJSON),
 		Finished: true,
+	}
+	if len(part.ThoughtSignature) > 0 {
+		call.ThoughtSignature = base64.StdEncoding.EncodeToString(part.ThoughtSignature)
+	}
+	return call
+}
+
+// decodeThoughtSignature turns a stored signature back into the bytes the
+// genai SDK sends. Stored signatures are base64; a value that is not is
+// replayed as its raw bytes, as the direct Gemini driver does.
+func decodeThoughtSignature(stored string) []byte {
+	if stored == "" {
+		return nil
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(stored); err == nil {
+		return decoded
+	}
+	return []byte(stored)
+}
+
+// geminiStopError is the error for a candidate that finished with an error
+// reason.
+func geminiStopError(candidate *genai.Candidate) error {
+	return &geminiwire.StopError{
+		Source:  geminiwire.SourceVertexAI,
+		Reason:  string(candidate.FinishReason),
+		Message: candidate.FinishMessage,
 	}
 }
 
@@ -368,26 +461,10 @@ func (c *VertexAIClient) convertTools(toolsList []tools.Tool) *genai.Tool {
 	var functionDeclarations []*genai.FunctionDeclaration
 
 	for _, tool := range toolsList {
-		schema := tool.ParamSchema()
-
-		// Convert schema properties
-		properties := make(map[string]*genai.Schema)
-
-		// Iterate over the ordered map
-		for pair := schema.Properties.Oldest(); pair != nil; pair = pair.Next() {
-			key := pair.Key
-			value := pair.Value
-			properties[key] = c.convertSchemaProperty(value)
-		}
-
 		functionDeclarations = append(functionDeclarations, &genai.FunctionDeclaration{
 			Name:        tool.Name(),
 			Description: tool.Description(),
-			Parameters: &genai.Schema{
-				Type:       genai.TypeObject,
-				Properties: properties,
-				Required:   schema.Required,
-			},
+			Parameters:  geminiwire.ToolParameters(tool),
 		})
 	}
 
@@ -418,39 +495,6 @@ func (c *VertexAIClient) buildToolConfig(toolsList []tools.Tool) *genai.ToolConf
 			AllowedFunctionNames: []string{c.options.ForceToolChoice},
 		},
 	}
-}
-
-// convertSchemaProperty converts a jsonschema.Schema to Gemini Schema format
-func (c *VertexAIClient) convertSchemaProperty(prop *jsonschema.Schema) *genai.Schema {
-	schema := &genai.Schema{}
-
-	// Convert type
-	if prop.Type != "" {
-		switch prop.Type {
-		case "string":
-			schema.Type = genai.TypeString
-		case "number", "integer":
-			schema.Type = genai.TypeNumber
-		case "boolean":
-			schema.Type = genai.TypeBoolean
-		case "array":
-			schema.Type = genai.TypeArray
-		case "object":
-			schema.Type = genai.TypeObject
-		default:
-			schema.Type = genai.TypeString
-		}
-	} else {
-		// Default to string if type is not specified
-		schema.Type = genai.TypeString
-	}
-
-	// Add description if present
-	if prop.Description != "" {
-		schema.Description = prop.Description
-	}
-
-	return schema
 }
 
 // convertGeminiFinishReason converts Gemini finish reason to internal format

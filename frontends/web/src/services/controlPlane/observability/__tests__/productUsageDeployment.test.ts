@@ -31,7 +31,7 @@ const window = { startMs: Date.UTC(2026, 2, 16, 0), endMs: Date.UTC(2026, 2, 16,
 beforeEach(() => client.queryPanel.mockReset());
 
 it("loads the actual generated analytics dashboards and sends every unchanged panel through the hosted adapter", async () => {
-  expect(createHash("sha256").update(raw).digest("hex")).toBe("8c983f65a335bb38fa80272b78b916df220eb75bd10d90dc64ad139e2bcc7369");
+  expect(createHash("sha256").update(raw).digest("hex")).toBe("0eb8da037798bffb903911003f8f1894fe53a8982bbf96900d078a61a96810c3");
   expect(spec.dashboards.some(d => d.id === "usage")).toBe(false);
   client.queryPanel.mockResolvedValue(create(QueryPanelResponseSchema, { kind: "sql", columns: ["events"], rows: [{ group: { event: "synthetic" }, values: [2] }] }));
   const panels = Object.entries(ANALYTICS).flatMap(([id, count]) => {

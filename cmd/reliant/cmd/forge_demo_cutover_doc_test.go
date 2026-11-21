@@ -26,8 +26,10 @@ type forgeDocCommand struct {
 	args []string // after `forge` / `reliant forge`
 }
 
-// forgeDocCommands is every `forge domain …` and `forge env status …` line in
-// the doc's ```bash blocks, comments stripped.
+// forgeDocCommands is every `forge cloud domain …` and `forge env status …` line in
+// the doc's ```bash blocks, comments stripped. A line in the old spelling
+// (`forge domain …`) is collected too, so it fails to parse once forge drops
+// that alias instead of slipping past unchecked.
 func forgeDocCommands(t *testing.T, path string) []forgeDocCommand {
 	t.Helper()
 	f, err := os.Open(path)
@@ -62,7 +64,7 @@ func forgeDocCommands(t *testing.T, path string) []forgeDocCommand {
 		default:
 			continue
 		}
-		if len(fields) > 0 && (fields[0] == "domain" || (fields[0] == "env" && len(fields) > 1 && fields[1] == "status")) {
+		if isDomainCommand(fields) || (len(fields) > 1 && fields[0] == "env" && fields[1] == "status") {
 			out = append(out, forgeDocCommand{line: n, args: fields})
 		}
 	}
@@ -70,6 +72,12 @@ func forgeDocCommands(t *testing.T, path string) []forgeDocCommand {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// isDomainCommand reports whether args (after `forge`) is a domain command:
+// `cloud domain …`, or the old `domain …`.
+func isDomainCommand(args []string) bool {
+	return (len(args) > 1 && args[0] == "cloud" && args[1] == "domain") || (len(args) > 0 && args[0] == "domain")
 }
 
 // Every domain and env-status command the cutover runbook tells an operator to
@@ -98,7 +106,7 @@ func TestForgeDemoCutoverDomainCommandsParse(t *testing.T) {
 			t.Errorf("%s:%d: `forge %s`: %v", path, c.line, strings.Join(c.args, " "), err)
 			continue
 		}
-		if c.args[0] != "domain" {
+		if !isDomainCommand(c.args) {
 			continue
 		}
 		env, _ := sub.Flags().GetString("env")
@@ -117,7 +125,7 @@ func TestForgeDemoCutoverDomainCommandsParse(t *testing.T) {
 	// Not vacuous: the page carries the move into prod and the rollback to demo.
 	for _, want := range []string{"prod/forge-demo", "demo/forge-demo"} {
 		if !binds[want] {
-			t.Errorf("%s: no `forge domain bind … --env %s --target %s` found; parsed %d commands",
+			t.Errorf("%s: no `forge cloud domain bind … --env %s --target %s` found; parsed %d commands",
 				path, strings.Split(want, "/")[0], strings.Split(want, "/")[1], len(cmds))
 		}
 	}
