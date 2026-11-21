@@ -468,6 +468,18 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByText('Configure sign-in').first(),
   },
   {
+    name: 'shell-project-usage',
+    path: '/forge/p/shopfront/usage',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('usage-by-env'),
+  },
+  {
+    name: 'shell-usage-billing',
+    path: '/usage',
+    on: ['desktop'],
+    ready: (page) => page.getByTestId('usage-billing-total'),
+  },
+  {
     name: 'shell-settings',
     path: '/settings',
     on: ['desktop', 'mobile'],

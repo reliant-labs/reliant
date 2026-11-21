@@ -103,6 +103,11 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/design-sandbox",
     "/forge",
     "/apps",
+    "/sites",
+    // A row of the one nav (U6e) with no phone twin: the org's Usage &
+    // billing is a page of the shell, which fits a phone, so the nav's drawer
+    // opens it rather than the chat list.
+    "/usage",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return false;

@@ -192,8 +192,8 @@ const AppsPage = lazyRoute(
   () => import('./components/Apps/AppsPage'), 'AppsPage')
 const SitesPage = lazyRoute(
   () => import('./components/ForgeShell/ForgeSitesPage'), 'SitesPage')
-const UsagePage = lazyRoute(
-  () => import('./components/ForgeShell/ForgeUsagePage'), 'ForgeUsagePage')
+const UsageBillingPage = lazyRoute(
+  () => import('./components/Usage/UsageBillingPage'), 'UsageBillingPage')
 const ProjectsPage = lazyRoute(
   () => import('./components/Projects/ProjectsPage'), 'ProjectsPage')
 const ProjectHomePage = lazyRoute(
@@ -925,9 +925,9 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   })
 
   // Apps: everything the user has built and deployed, with its live links
-  // (components/Apps/AppsPage.tsx). The sidebar's Apps entry, and the bare
-  // /forge, land here. Behind ForgeGate like every forge surface: it is the way
-  // into the console, and the Developer off-switch has to turn it off too.
+  // (components/Apps/AppsPage.tsx). The bare /forge lands here. Behind
+  // ForgeGate like every forge surface: it is the way into the console, and
+  // the Developer off-switch has to turn it off too.
   const appsRoute = createRoute({
     getParentRoute: authParent,
     path: '/apps',
@@ -936,20 +936,21 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
   })
 
   // Sites: every static site the org hosts, and its domains
-  // (ForgeShell/ForgeSitesPage.tsx). Usage: the org's spend on what forge
-  // provisions (ForgeShell/ForgeUsagePage.tsx). Both were the forge host's
-  // own pages until one router served both hosts (U6); now every host serves
-  // them, in both forms. Not behind ForgeGate: neither reaches a write path.
+  // (ForgeShell/ForgeSitesPage.tsx). Every host serves it, in both forms. Not
+  // behind ForgeGate: it reaches no write path.
   const sitesRoute = createRoute({
     getParentRoute: authParent,
     path: '/sites',
     component: SitesPage,
   })
 
+  // Usage & billing: the org's spend over time, per project, AI and sandbox
+  // time, plan, credits and invoices (components/Usage/UsageBillingPage.tsx;
+  // U6c). Its period is the page's `?range=` search, read without a route id.
   const usageRoute = createRoute({
     getParentRoute: authParent,
     path: '/usage',
-    component: UsagePage,
+    component: UsageBillingPage,
   })
 
   // Projects: the nav's Projects entry — the person's apps and sites, and
@@ -971,7 +972,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, appsRoute, sitesRoute, usageRoute, projectsRoute, projectHomeRoute] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, appsRoute, sitesRoute, projectsRoute, projectHomeRoute] as const,
   }
 }
 

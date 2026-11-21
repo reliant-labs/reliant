@@ -151,9 +151,18 @@ export function sitesPath(ctx?: PathContext): string {
   return withOrg("/sites", ctx);
 }
 
-/** The org's usage and spend on what forge provisions (ForgeShell/ForgeUsagePage.tsx). */
+/** The org's Usage & billing page (components/Usage/UsageBillingPage.tsx); `usageBillingPath` names the same URL. */
 export function usagePath(ctx?: PathContext): string {
   return withOrg("/usage", ctx);
+}
+
+/**
+ * Usage & billing (components/Usage/UsageBillingPage.tsx): the org's spend
+ * over time, per project, AI and sandbox time, plan, credits and invoices.
+ * The nav footer's entry; Settings › Billing is its admin side.
+ */
+export function usageBillingPath(ctx?: PathContext): string {
+  return usagePath(ctx);
 }
 
 /**

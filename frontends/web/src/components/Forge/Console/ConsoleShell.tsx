@@ -263,6 +263,8 @@ export function consoleCrumbs(
       return [{ label: "Services" }];
     case "service":
       return [{ label: "Services", href: href({ kind: "services" }) }, { label: page.name }];
+    case "usage":
+      return [{ label: "Usage" }];
     case "events":
       return [{ label: "Product analytics" }, { label: "Events & metrics" }];
     case "analytics":

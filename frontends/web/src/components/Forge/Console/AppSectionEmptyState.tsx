@@ -53,6 +53,8 @@ function describe(page: ConsolePage): { title: string; shows: string } {
     case "services":
     case "service":
       return { title: "Services", shows: PAGE_SUBTITLES.services };
+    case "usage":
+      return { title: "Usage", shows: PAGE_SUBTITLES.usage };
     case "events":
       return { title: "Events & metrics", shows: PAGE_SUBTITLES.events };
     case "analytics":

@@ -70,8 +70,8 @@ describe("the hybrid nav's shape", () => {
     }
   });
 
-  it("has Settings in the footer, and no footer Inbox", () => {
-    expect(hybridNav.footer.map((item) => item.id)).toEqual(["settings"]);
+  it("has Usage & billing and Settings in the footer, and no footer Inbox", () => {
+    expect(hybridNav.footer.map((item) => item.id)).toEqual(["usage-billing", "settings"]);
     expect(hybridNav.footer.find((item) => item.id === "settings")?.kind).toBe("row");
   });
 
@@ -86,10 +86,10 @@ describe("the hybrid nav's shape", () => {
     expect(ids.filter((id) => id === "slot-inbox")).toHaveLength(1);
   });
 
-  it("keeps Sign-in users out of Configure (it is Auth now), and Configure is Secrets, Domains, Activity", () => {
+  it("keeps Sign-in users out of Configure (it is Auth now), and Configure is Secrets, Domains, Usage, Activity", () => {
     const ctx = ctxAt(inboxPath());
     const configure = hybridNav.items.find((item) => item.id === "configure")!;
-    expect(flattenIds([configure], ctx)).toEqual(["configure", "secrets", "domains", "activity"]);
+    expect(flattenIds([configure], ctx)).toEqual(["configure", "secrets", "domains", "project-usage", "activity"]);
   });
 
   it("merges Services, Releases and Environments into Deployments, with Previews a URL of its own", () => {

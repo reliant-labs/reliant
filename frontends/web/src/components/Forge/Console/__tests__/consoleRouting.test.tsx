@@ -242,6 +242,7 @@ function renderAt(
     activity: probe("activity"),
     services: probe("services"),
     service: probe("service"),
+    usage: probe("usage"),
     events: probe("events"),
     analytics: probe("analytics"),
     speedInsights: probe("speed-insights"),
