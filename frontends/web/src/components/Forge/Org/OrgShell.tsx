@@ -23,7 +23,7 @@ import { Gauge, LayoutGrid } from "lucide-react";
 import Link from "@/components/forge-ui/link";
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 
-import { appsPath } from "@/lib/paths";
+import { projectsHref } from "@/lib/paths";
 
 import {
   carriedOrgSearch,
@@ -58,7 +58,7 @@ export function buildOrgNav({ page, apps, alertsFiring = 0, search = {}, obsOpen
   return {
     items: [
       {
-        // The Apps list (/apps) is its own page outside the org console, so it
+        // The apps list (Projects' apps) is its own page outside the org console, so it
         // is never the current route here, and a group with an href only opens
         // on its current route. With no href the group opens in place, and
         // "All apps" is its first entry.
@@ -67,7 +67,7 @@ export function buildOrgNav({ page, apps, alertsFiring = 0, search = {}, obsOpen
         active: false,
         // An app's console is its own place with its own nav, so these do not carry the org filters.
         children: [
-          { label: "All apps", href: appsPath(), active: false },
+          { label: "All apps", href: projectsHref("apps"), active: false },
           ...apps.map((app) => ({ label: app, href: consolePath(app, { kind: "overview" }), active: false })),
         ],
       },

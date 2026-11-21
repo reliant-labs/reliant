@@ -34,7 +34,12 @@
  *     OAuth, claims, invitations).
  *   - the retired paths (`/workflow`, `/runs`, `/automations`, …): they
  *     redirect to a current path first, which forwards from there.
+ *
+ * Below the forwarding table is the other half of the old URLs: the pages
+ * that are gone (RETIRED_PAGES), each a redirect to the page that replaced it.
  */
+
+import { homePath, projectsPath } from "./index";
 
 /** Exactly these paths forward as they are. */
 const FORWARDED = new Set([
@@ -74,6 +79,48 @@ export function legacyOrgForward(pathname: string, search: Record<string, unknow
   }
   return null;
 }
+
+// ── Retired pages ───────────────────────────────────────────────────────────
+
+/**
+ * A page that is gone, and the page its links open now. Old links, bookmarks
+ * and older Electron builds name these paths, so each stays a route that only
+ * redirects (legacyRedirectRoutes.tsx): never a not-found. The request's own
+ * query rides along (a claim's `?claimed=`), under the target's.
+ */
+export interface RetiredPage {
+  /** The retired path, org-less (`/apps`). */
+  from: string;
+  /** The page it opens now, from lib/paths (any org is replaced by the request's own). */
+  to: () => string;
+  /** Search keys the target adds (the Projects filter). */
+  search?: Readonly<Record<string, string>>;
+  /**
+   * `org-scoped`: an org-scoped page's path, retired in both forms
+   * (`/apps` and `/o/<org>/apps`). `root`: a path that only ever existed
+   * org-less.
+   */
+  scope: "org-scoped" | "root";
+}
+
+/**
+ * Every retired page (U6, one shell). The other retired URLs keep their
+ * redirects beside the area that replaced them, where the mapping needs the
+ * area's own knowledge: the Workflows area's (`/workflow`, `/runs`,
+ * `/automations`, workflowsAreaRoutes.tsx), Settings' section aliases
+ * (routeSchemas.ts SETTINGS_SECTION_ALIASES) and the console's
+ * (forgeConsoleRoutes.tsx: `/forge`, `/forge/env/<env>`, `/forge/topology`, …).
+ * __tests__/legacyUrls.production.test.ts holds every one of them to resolving.
+ */
+export const RETIRED_PAGES: readonly RetiredPage[] = [
+  // Apps and Sites are filters of Projects: one list of what the person has shipped.
+  { from: "/apps", to: () => projectsPath(), search: { show: "apps" }, scope: "org-scoped" },
+  { from: "/sites", to: () => projectsPath(), search: { show: "sites" }, scope: "org-scoped" },
+  // The bare project path: every project's chats.
+  { from: "/project", to: () => homePath(), scope: "root" },
+  // The forge shell's dev preview: there is one shell, and its home is Projects.
+  { from: "/forge-shell-preview", to: () => projectsPath(), scope: "root" },
+];
 
 /** Whether a URL segment (percent-encoded) names a built-in workflow (`builtin://…`). */
 function isBuiltinRef(segment: string): boolean {

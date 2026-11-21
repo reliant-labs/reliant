@@ -13,7 +13,9 @@ test.describe('Apps', () => {
     await mockAppsBackend(page);
     // The index is ready when its rows render; an unrelated Monaco CDN
     // loader can leave the document load event pending (CI trace 40471064815).
+    // The retired /apps: Projects, narrowed to the apps (lib/paths/legacy.ts).
     await page.goto('/apps', { waitUntil: 'domcontentloaded' });
+    await expect(page).toHaveURL(/\/projects\?show=apps$/, { timeout: 15_000 });
 
     const store = page.getByTestId('app-row-storefront');
     await expect(store).toBeVisible({ timeout: 15_000 });
@@ -34,16 +36,16 @@ test.describe('Apps', () => {
     );
   });
 
-  test('the bare /forge lands on the Apps page', async ({ page }) => {
+  test('the bare /forge lands on the apps', async ({ page }) => {
     await mockAppsBackend(page);
     await page.goto('/forge');
-    await expect(page).toHaveURL(/\/apps$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/\/projects\?show=apps$/, { timeout: 15_000 });
     await expect(page.getByTestId('apps-page')).toBeVisible();
   });
 
   test('with nothing deployed, the Apps page offers to build one', async ({ page }) => {
     await mockAppsBackend(page, { environments: [] });
-    await page.goto('/apps');
+    await page.goto('/projects?show=apps');
     // The forge project exists but is not live: listed, with how to deploy it.
     await expect(page.getByTestId('app-row-storefront')).toContainText('Not deployed yet', { timeout: 15_000 });
     await page.getByRole('button', { name: 'Build an app' }).first().click();

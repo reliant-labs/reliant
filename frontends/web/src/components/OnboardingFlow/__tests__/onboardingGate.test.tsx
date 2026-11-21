@@ -77,6 +77,7 @@ function renderAt(url: string) {
         page("/settings/$section"),
         page("/apps"),
         page("/sites"),
+        page("/projects"),
         page("/usage"),
         page("/inbox"),
         page("/workflows"),
@@ -160,12 +161,12 @@ describe("OnboardingGate", () => {
     expect(await screen.findByTestId("where")).toHaveTextContent("/m/chats");
   });
 
-  it("sends a not-yet-onboarded user on the forge brand from the phone's chat list to their apps, not the wizard", async () => {
+  it("sends a not-yet-onboarded user on the forge brand from the phone's chat list to their projects, not the wizard", async () => {
     resetShellForTests("forge");
     mockUseCurrentUser.mockReturnValue(notOnboarded);
     const router = renderAt("/m/chats");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/apps"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/projects"));
     expect(screen.queryByTestId("wizard")).toBeNull();
   });
 
@@ -352,9 +353,9 @@ describe.each([false, true])("homeTarget (forge brand %s)", (forgeBrand) => {
     }
   });
 
-  it("keeps the phone's rule: the forge brand's chat list sends a person who has not onboarded to their apps", () => {
+  it("keeps the phone's rule: the forge brand's chat list sends a person who has not onboarded to their projects", () => {
     for (const path of ["/m", "/m/chats"]) {
-      expect(homeTarget(path, "onboard", { forgeBrand })).toBe(forgeBrand ? "/apps" : null);
+      expect(homeTarget(path, "onboard", { forgeBrand })).toBe(forgeBrand ? "/projects" : null);
       expect(homeTarget(path, "connect-machine", { forgeBrand })).toBeNull();
     }
   });
@@ -362,7 +363,7 @@ describe.each([false, true])("homeTarget (forge brand %s)", (forgeBrand) => {
   it("is what the gate's target is, on the homes", () => {
     expect(onboardingGateTarget("/m/chats?x=1", forgeBrand)).toEqual(
       forgeBrand
-        ? { to: "/apps", search: {}, replace: true }
+        ? { to: "/projects", search: {}, replace: true }
         : { to: "/onboarding", search: { returnTo: "/m/chats?x=1" }, replace: true },
     );
     expect(onboardingGateTarget("/m/chats/c-1", forgeBrand).to).toBe("/onboarding");

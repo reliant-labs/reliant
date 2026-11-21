@@ -54,14 +54,3 @@ export const hybridNav: NavConfig = {
   footer,
   sectionPages: [settingsSections],
 };
-
-/**
- * The nav while the forge UI is turned off (Settings › Developer;
- * lib/forgeFeature.ts): no app page, since each one's route is behind
- * ForgeGate too. The project's Overview, the Inbox and Agents stay.
- */
-export const forgeOffNav: NavConfig = {
-  items: [overview, inbox, agentsArea],
-  footer,
-  sectionPages: [settingsSections],
-};
