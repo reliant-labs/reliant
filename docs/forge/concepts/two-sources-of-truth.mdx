@@ -69,7 +69,7 @@ message Customer {
 }
 ```
 
-The schema side is a migration, which `forge db migration new create_customers` created with a UTC version so parallel branches never collide:
+The schema side is a migration, which `forge db migration new create_customers --backward-compatible "new table, no previous-release reader"` created with a UTC version, so parallel branches never collide, and with the compatibility declaration as its first line (without the flag, you write that line yourself):
 
 ```sql
 -- forge:backward-compatible — new table, no previous-release reader

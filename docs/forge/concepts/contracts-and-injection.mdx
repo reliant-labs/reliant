@@ -144,7 +144,7 @@ func (o *forgeMiddlewareService) Quote(ctx context.Context, sku string, qty int)
 }
 ```
 
-The decorator records the method name, duration and error status, and captures no arguments or results. You tune the chain in the owned `observe_chain.go`. `// forge:no-observe` on the constructor opts a package out, and on a single method it skips just that method. [Observability](/forge/observability) covers where those spans go.
+The decorator records the method name, duration and error status, and captures no arguments or results. You tune the chain in the owned `observe_chain.go`. `// forge:no-observe` on the constructor opts a package out, and on a single method it skips just that method. [Observability](/hosting/observability) covers where those spans go.
 
 ## Handler `Deps` and `validateDeps`
 

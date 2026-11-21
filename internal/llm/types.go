@@ -213,9 +213,6 @@ type DriverOptions struct {
 	// this warning comes from.
 	ForceToolChoice string
 
-	// Anthropic-specific options
-	UseBedrock bool
-
 	// Copilot-specific options. Auth is the raw GitHub OAuth token as a Bearer
 	// credential against a single host; there is no tier or session-token concept.
 	BearerToken string

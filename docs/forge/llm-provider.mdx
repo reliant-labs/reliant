@@ -35,8 +35,8 @@ On a claimed environment, gateway calls use the environment's platform-issued ke
 This path does not depend on an unclaimed gateway route.
 
 1. Retrieve the private claim link with `forge env status prod --claimable`. Give it only to the owner: whoever opens it first owns the deploy. Do not paste it in an issue, PR, repository or public log.
-2. The owner opens that link and claims the deploy. Claiming lifts the backend egress restriction. A backend and managed Postgres need [paid app hosting](/forge/hosting#billing); free signup does not mean free ongoing backend compute. A static site alone cannot hold the key: add a backend under an account first.
-3. Sign in to the owning account with `forge cloud login`. Use a funded provider API key with access to the model your app requests. Keep it in the [managed secret store](/forge/secrets), not git:
+2. The owner opens that link and claims the deploy. Claiming lifts the backend egress restriction. A backend and managed Postgres need [paid app hosting](/hosting/overview#billing); free signup does not mean free ongoing backend compute. A static site alone cannot hold the key: add a backend under an account first.
+3. Sign in to the owning account with `forge cloud login`. Use a funded provider API key with access to the model your app requests. Keep it in the [managed secret store](/hosting/secrets), not git:
 
    ```bash
    forge env secret set --env prod OPENAI_API_KEY
@@ -62,7 +62,7 @@ This path does not depend on an unclaimed gateway route.
    forge obs check prod --wait --json
    ```
 
-   Only exit 0 proves the release check passed. Exit 1 means a regression to investigate, exit 2 is not proven good, and exit 8 needs more data. See [Forge obs](/forge/observability/forge-obs).
+   Only exit 0 proves the release check passed. Exit 1 means a regression to investigate, exit 2 is not proven good, and exit 8 needs more data. See [Forge obs](/hosting/observability/forge-obs).
 
 6. Exercise your app's LLM feature through its backend with a small prompt. Confirm a successful model response, not just HTTP 200 for the homepage. Check server logs for missing credentials, DNS/connection failures, provider 401/403, quota errors or unsupported models, without logging secrets or prompt contents. Do not report model access as working until that request succeeds.
 

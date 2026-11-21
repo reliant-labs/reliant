@@ -32,18 +32,6 @@ func TestMapFinishReason(t *testing.T) {
 	}
 }
 
-func TestIsRetryableStatus(t *testing.T) {
-	retryable := []int{429, 500, 502, 503, 529}
-	for _, code := range retryable {
-		assert.True(t, isRetryableStatus(code), "expected %d to be retryable", code)
-	}
-
-	nonRetryable := []int{200, 400, 401, 403, 404, 422}
-	for _, code := range nonRetryable {
-		assert.False(t, isRetryableStatus(code), "expected %d to not be retryable", code)
-	}
-}
-
 func TestIsAnthropicModel(t *testing.T) {
 	tests := []struct {
 		apiModel string

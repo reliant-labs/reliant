@@ -93,6 +93,10 @@ assume it.
    builds with `GOWORK=off` (what CI sees), re-runs the pinned `forge generate`,
    and regenerates `task generate:docs`. `generated/docs-source/reference/cli.md`
    embeds forge's whole command tree, so nearly every bump changes it.
+   Also refresh `AGENTS.md`, the copy of forge's framework guide that non-Reliant
+   agents read: replace everything above its `## Project Notes` with
+   `reliant forge project memory`'s output, minus that output's own
+   `## Project Notes` placeholder.
 
 6. **Fix what lint and build surface.** The upgrade's lint phase and step 5's
    build list them. A finding in reliant's code is fixed here, in this PR. A

@@ -351,6 +351,7 @@ These IDs are not in `lint.rules`; they are governed by the directive itself. Fi
 | `forgeconv-handler-tests-use-tdd` | warning | A hand-rolled `tests := []struct{name, call}` loop in a handler test instead of `forge/pkg/tdd` |
 | `forgeconv-frontend-hook-tests` | warning | A generated `*-hooks.ts` file with no sibling test, so a broken hook is found only at run time |
 | `forgeconv-frontend-hook-test-shape` | error | A hook test whose assertions contradict its hook, such as awaiting `isSuccess` on a mutation, so it can never pass |
+| `forgeconv-crud-owner-resolver` | error | An owner-scoping CRUD wrapper that resolves the owner differently from its siblings on the same column, so it filters by the wrong principal and returns nothing or someone else's rows |
 | `forgeconv-tx-lock-under-serializable` | warning (error under `--strict`) | A lock taken inside a SERIALIZABLE or REPEATABLE READ transaction, which wakes into a stale snapshot and fails with 40001 |
 | `forgeconv-bun-dollar-placeholder` | error | A `$1` placeholder in SQL that bun formats, which is sent literally and fails with "there is no parameter $1" |
 | `forgeconv-bun-literal-question-mark` | error | A literal `?` in SQL that bun formats, which is read as a placeholder and shifts every later argument |
@@ -373,6 +374,27 @@ await waitFor(() => expect(["success", "error"]).toContain(result.current.status
 ```
 
 Or delete the test file and run `forge project rescaffold <path>`.
+
+### `forgeconv-crud-owner-resolver`
+
+The owner-scoping wrappers in a service's `handlers_crud.go` each compute the owner a query is filtered by. When forge appends a wrapper to a file, it copies the resolver the file's other wrappers on that column already use, but a file written before that, or a hand edit, can leave one wrapper on a different principal: a `List` that scopes `company_id` by the user's id while every other wrapper resolves the company. It compiles and runs, and it returns no rows, or another principal's rows when the two id spaces overlap. The rule compares each wrapper with its siblings on the same column (reads with reads, writes with writes, so a write behind a stricter resolver is not a finding), and flags it when it differs from the one source they agree on, or when it is still on forge's `FORGE_SCAFFOLD` placeholder (`owner := claims.UserID`) while a sibling has decided. It gates from forge v1.1.1.
+
+```go
+// bad: the other wrappers on company_id call tenancy.CompanyID(ctx); this one
+// still has forge's placeholder, so it filters company_id by a user id
+owner := claims.UserID
+op.Filters = func(ctx context.Context, r *pb.ListCrewsRequest) ([]orm.QueryOption, error) {
+    return append(opts, orm.WhereEq("company_id", owner)), nil
+}
+
+// fix: resolve the owner as the siblings do
+owner, err := tenancy.CompanyID(ctx)
+if err != nil {
+    return nil, err
+}
+```
+
+Read the suggestion before you apply it: the fix text names the siblings' source, which is wrong when this RPC really does need another principal. Then keep it and say why with `// forge:lint-disable-next-line forgeconv-crud-owner-resolver: <why>` above the method. An owner forge cannot trace (read off the request, or computed) is not judged. [Scope rows to their owner](/guides/forge/scope-rows-to-owner) covers the wrappers.
 
 ### `forgeconv-tx-lock-under-serializable`
 

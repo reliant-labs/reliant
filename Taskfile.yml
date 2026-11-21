@@ -152,6 +152,7 @@ tasks:
       - task: deps:electron
 
   deps:web:
+    aliases: [deps:frontend]  # forge's scaffold name
     desc: Install the web app's packages (frontends/web, pnpm install --frozen-lockfile)
     dir: frontends/web
     cmds:
@@ -259,6 +260,7 @@ tasks:
       - go build -buildvcs=false -o dist/reliant-dev ./tools/reliant-dev
 
   build:web:
+    aliases: [build:frontend]  # forge's scaffold name
     desc: Build the web application (frontends/web/dist)
     dir: frontends/web
     cmds:
@@ -447,6 +449,7 @@ tasks:
         silent: true
 
   test:web:
+    aliases: [test:frontend]  # forge's scaffold name
     desc: Run the web unit tests (vitest, every file — prefer task test:affected LANES=web)
     dir: frontends/web
     cmds:
@@ -740,6 +743,7 @@ tasks:
       - bash scripts/vet.sh {{.CLI_ARGS}}
 
   lint:web:
+    aliases: [lint:frontend]  # forge's scaffold name
     desc: Lint the web app
     dir: frontends/web
     cmds:
@@ -758,6 +762,7 @@ tasks:
       - go fmt ./...
 
   fmt:web:
+    aliases: [fmt:frontend]  # forge's scaffold name
     desc: Format the web app (eslint --fix)
     dir: frontends/web
     cmds:
@@ -788,6 +793,7 @@ tasks:
       - '{{.GEN_ENV}} {{.FORGE}} generate'
 
   generate:check:
+    aliases: [verify-generate]  # forge's scaffold name for the generated-code drift guard
     # It judges only what generate changes, so it runs on a tree with
     # uncommitted edits too. `task test:affected` runs it when the diff
     # touches a forge input. `-- --github` adds CI annotations. FORGE=<binary>
@@ -955,6 +961,30 @@ tasks:
     desc: Apply pending database migrations (wraps `reliant db migrate up`)
     cmds:
       - go run ./cmd/reliant db migrate up
+
+  # forge's scaffold names for the dev loop. `forge env up dev` is the whole
+  # product stack on this machine (deploy/kcl/dev): air for the three server
+  # roles, the web app, host Postgres, NATS and Temporal; no docker compose,
+  # so forge's dev-up/dev-up-prod/dev-psql have no counterpart here (the
+  # stack's DSN: `forge env config dev`; queries: .reliant/tools/db-query.sh).
+  dev:
+    desc: Run this checkout's dev stack with hot reload (forge env up dev)
+    cmds:
+      - '{{.FORGE}} env up dev {{.CLI_ARGS}}'
+
+  dev-down:
+    desc: Stop this checkout's dev stack only (forge env down dev)
+    cmds:
+      - '{{.FORGE}} env down dev {{.CLI_ARGS}}'
+
+  db-seed:
+    # forge's seeder: deterministic, FK-coherent rows derived from the applied
+    # schema, with reliant's vocabulary (db/seeds/vocab.yaml). It refuses every
+    # env but dev (deploy/kcl/dev/config.k) and has no override; the DSN is the
+    # env's own database unless `-- --dsn <loopback DSN>` names another.
+    desc: Seed the dev database (forge db seed apply; dev only)
+    cmds:
+      - '{{.FORGE}} db seed apply {{.CLI_ARGS}}'
 
   # ── Pins, releases, docs site ─────────────────────────────────────────
 

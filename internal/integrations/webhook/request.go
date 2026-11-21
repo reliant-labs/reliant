@@ -22,8 +22,24 @@ import (
 // needs one that large: the run can fetch the rest).
 const MaxBodyBytes = 1 << 20
 
-// recordTimeout bounds recording one verified delivery.
+// recordTimeout bounds recording one verified delivery for one trigger. An
+// app-level delivery that reaches many triggers gives each its own
+// recordTimeout, within deliveryTimeout for the whole delivery.
 const recordTimeout = time.Minute
+
+// deliveryTimeout bounds recording one verified app-level delivery across
+// every trigger it reaches (EventsReceiver.recordAndAck).
+//
+// It is not one recordTimeout shared by every trigger: that is how a delivery
+// lost events. A pull_request delivery reaches every activation of the PR
+// pipeline, about fifteen, recorded one after another; under a burst the
+// first ones used up the shared minute and the rest failed "context deadline
+// exceeded" before writing their row (prod issues c1b84ec9, dcead605).
+// Recording is sequential, so its database load stays one trigger at a time,
+// and each trigger gets a full recordTimeout, so a slow one costs the others
+// nothing. This cap only keeps a pathological delivery (dozens of triggers
+// each slow to the limit) from holding its handler for an unbounded time.
+const deliveryTimeout = 5 * time.Minute
 
 // recordingContext is the context a verified delivery is recorded under: the
 // request's values (trace, logger) without its cancellation, bounded by
