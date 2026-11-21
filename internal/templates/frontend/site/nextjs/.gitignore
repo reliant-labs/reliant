@@ -1,0 +1,13 @@
+# dependencies
+node_modules/
+
+# Next.js build state, and the static export forge deploys
+.next/
+out/
+next-env.d.ts
+
+# misc
+.DS_Store
+*.log
+*.tsbuildinfo
+.env*.local

@@ -1,0 +1,47 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// /auth/verify?userID=…&code=… — the page a "confirm your address" email opens.
+//
+// Public (the route guard lists it beside /auth/sign-in) and rendered outside
+// the app shell, like the sign-in screen. The form is shared with the Vite
+// scaffold: src/components/verify-email-form.tsx.
+
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+import { AuthPage } from "@/components/auth-ui";
+import { VerifyEmailForm } from "@/components/verify-email-form";
+import { useAuth } from "@/lib/auth/use-auth";
+import { joinBasePath } from "@/lib/basepath_gen";
+
+function Page() {
+  const searchParams = useSearchParams();
+  const { refresh } = useAuth();
+  return (
+    <AuthPage>
+      <VerifyEmailForm
+        userID={searchParams?.get("userID") ?? null}
+        code={searchParams?.get("code") ?? null}
+        signInHref={joinBasePath("/auth/sign-in")}
+        forgotHref={joinBasePath("/auth/forgot")}
+        onSignedIn={async () => {
+          // A full navigation, as the sign-in screen does: every provider
+          // re-initialises with the session in place.
+          await refresh();
+          window.location.assign(joinBasePath("/"));
+        }}
+      />
+    </AuthPage>
+  );
+}
+
+// useSearchParams bails out of prerendering; keep the bailout to this page.
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={null}>
+      <Page />
+    </Suspense>
+  );
+}

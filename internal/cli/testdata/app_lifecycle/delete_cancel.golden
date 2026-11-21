@@ -1,0 +1,4 @@
+--- stdout
+Cancelled the deletion of app "shop"; it is kept.
+Started again the 2 deployment(s) the deletion stopped; one stopped before it stays stopped.
+--- error

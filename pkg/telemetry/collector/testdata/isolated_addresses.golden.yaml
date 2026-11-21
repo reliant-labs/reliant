@@ -1,0 +1,65 @@
+exporters:
+  otlphttp/telemetry_isolated:
+    endpoint: http://gateway.observability.svc:4318
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_elapsed_time: 2m
+      max_interval: 30s
+    sending_queue:
+      block_on_overflow: false
+      enabled: true
+      num_consumers: 1
+      queue_size: 200
+    timeout: 10s
+extensions: {}
+k8sattributes_labels: null
+logs_preserve: null
+logs_processors: null
+node_metrics_processors: null
+pipelines:
+  metrics/telemetry_alertmanager:
+    exporters:
+    - otlphttp/telemetry_isolated
+    processors:
+    - memory_limiter
+    - transform/telemetry_target/alertmanager
+    - batch
+    receivers:
+    - prometheus/telemetry_alertmanager
+    - httpcheck/telemetry_alertmanager_0
+processors:
+  transform/telemetry_target/alertmanager:
+    error_mode: ignore
+    metric_statements:
+    - context: resource
+      statements:
+      - set(attributes["service.name"], "alertmanager")
+receivers:
+  httpcheck/telemetry_alertmanager_0:
+    collection_interval: 30s
+    targets:
+    - endpoint: http://alertmanager.observability.svc.cluster.local:9093/-/healthy
+      method: GET
+  prometheus/telemetry_alertmanager:
+    config:
+      scrape_configs:
+      - fallback_scrape_protocol: PrometheusText0.0.4
+        job_name: telemetry/alertmanager/0
+        label_limit: 30
+        label_value_length_limit: 256
+        metric_relabel_configs:
+        - action: keep
+          regex: up|(?:alertmanager_(alerts|notifications_total|notifications_failed_total))
+          source_labels:
+          - __name__
+        metrics_path: /metrics
+        sample_limit: 5000
+        scheme: http
+        scrape_interval: 30s
+        scrape_timeout: 10s
+        static_configs:
+        - targets:
+          - alertmanager.observability.svc.cluster.local:9093
+service_extensions: null
+warnings: null

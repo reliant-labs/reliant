@@ -1,0 +1,404 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/reliant-labs/forge/main/schema/vuln-patch.v1.schema.json",
+  "title": "forge vuln patch document (forge.dev/vuln-patch/v1)",
+  "description": "What `forge vuln patch --json` did to each requested finding — bumped, verified, fixed, still present, or skipped for an agent with the reason — and the exit code it chose. Generated from the Go type forge encodes it with.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "description": "Schema is DocumentSchema.",
+      "type": "string"
+    },
+    "env": {
+      "description": "Env is the env whose findings were patched; \"\" for a directory scan.",
+      "type": "string"
+    },
+    "release": {
+      "description": "Release is the release the findings were read from; \"\" for a directory scan.",
+      "type": "string"
+    },
+    "dir": {
+      "description": "Dir is the tree that was patched.",
+      "type": "string"
+    },
+    "allow_major": {
+      "description": "AllowMajor reports --allow-major.",
+      "type": "boolean"
+    },
+    "changed": {
+      "description": "Changed reports that the patcher changed the tree.",
+      "type": "boolean"
+    },
+    "findings": {
+      "description": "Findings are the requested findings and what happened to each.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Result"
+      }
+    },
+    "bumps": {
+      "description": "Bumps are the version changes applied, one per package per manifest.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Bump"
+      }
+    },
+    "verify": {
+      "description": "Verify is the verification run; absent without --verify.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VerifyResult"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pr": {
+      "description": "PR is the pull request --pr opened; absent without --pr.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PRResult"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "summary": {
+      "$ref": "#/$defs/Summary",
+      "description": "Summary counts Findings by status."
+    },
+    "exit_code": {
+      "description": "ExitCode is the exit code the command returned: 0 every requested finding bumped (and verified with --verify); 1 a bump failed or verification failed — the agent takeover signal; 2 nothing deterministic left to do for at least one requested finding (skipped); 4 refused.",
+      "type": "integer"
+    },
+    "refusals": {
+      "description": "Refusals are why the patch was refused (exit 4): nothing was changed.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "description": "Notes are what the reader should know that changed no status.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "env",
+    "release",
+    "dir",
+    "allow_major",
+    "changed",
+    "findings",
+    "bumps",
+    "summary",
+    "exit_code"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Bump": {
+      "description": "Bump is one package raised in one manifest.",
+      "type": "object",
+      "properties": {
+        "ecosystem": {
+          "description": "Ecosystem is the tool that applied it.",
+          "type": "string"
+        },
+        "manifest": {
+          "description": "Manifest is the go.mod, lockfile or Dockerfile, relative to the patched tree.",
+          "type": "string"
+        },
+        "package": {
+          "description": "Package is the module or package name; \"toolchain\" for a go.mod's toolchain directive, and the image (alpine, golang) for a Dockerfile's FROM.",
+          "type": "string"
+        },
+        "from": {
+          "description": "From and To are the versions before and after; for a Dockerfile, the image references.",
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "direct": {
+          "description": "Direct reports a direct dependency; a transitive npm, pnpm or yarn one is raised by an override (overrides, pnpm.overrides, resolutions).",
+          "type": "boolean"
+        },
+        "commands": {
+          "description": "Commands are the commands run for its manifest, each as argv (every bump of one manifest shares them).",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "edits": {
+          "description": "Edits are the changes the patcher made to a file itself rather than through a tool: an override in package.json, a Dockerfile's FROM.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "error": {
+          "description": "Error is the failure, with the tool's output tail; \"\" on success.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ecosystem",
+        "manifest",
+        "package",
+        "from",
+        "to",
+        "direct",
+        "commands"
+      ],
+      "additionalProperties": false
+    },
+    "PRResult": {
+      "description": "PRResult is what --pr did.",
+      "type": "object",
+      "properties": {
+        "branch": {
+          "description": "Branch is the branch the patch is committed on.",
+          "type": "string"
+        },
+        "committed": {
+          "description": "Committed reports the commit; false when there was nothing to commit or verification failed (the changes stay on Branch, uncommitted).",
+          "type": "boolean"
+        },
+        "url": {
+          "description": "URL is the opened pull request.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "branch",
+        "committed"
+      ],
+      "additionalProperties": false
+    },
+    "Package": {
+      "description": "Package is the component a finding is in.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Name and Version as the SBOM names them.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "purl": {
+          "description": "PURL is the package URL, when the SBOM gives one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "description": "Type is the ecosystem: go-module, npm, apk, deb, python, binary, ...",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "Result": {
+      "description": "Result is one finding and what happened to it.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "ID is the advisory (CVE-…, GHSA-…, GO-…), and Aliases its other ids.",
+          "type": "string"
+        },
+        "aliases": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "severity": {
+          "description": "Severity is the scanner's severity.",
+          "type": "string"
+        },
+        "package": {
+          "$ref": "#/$defs/Package",
+          "description": "Package is the vulnerable package as the scan named it."
+        },
+        "ecosystem": {
+          "description": "Ecosystem is the patcher that handled it; \"\" when none applies.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "installed": {
+          "description": "Installed is the version the finding names, and Target the version it is bumped to (\"\" when skipped before a target was chosen). For an OS package, Target is the base image reference its Dockerfile is refreshed to.",
+          "type": "string"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manifests": {
+          "description": "Manifests are the tree's files the package resolved to, relative to Dir (go.mod, package-lock.json, Dockerfile, ...).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "description": "Status is fixed, still_present, bumped, failed or skipped.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Reason says why it was skipped, failed or is still present.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "severity",
+        "package",
+        "installed",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "Summary": {
+      "description": "Summary counts results by status.",
+      "type": "object",
+      "properties": {
+        "fixed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "still_present": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "bumped": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "failed": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "skipped": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "VerifyResult": {
+      "description": "VerifyResult is the verification of a patch.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "Command is the verify command (sh -c), \"\" when the project has none and only the rescan ran.",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source says where Command came from: flag, forge.yaml, taskfile, go, npm, pnpm, yarn, or none.",
+          "type": "string"
+        },
+        "passed": {
+          "description": "Passed reports that Command exited 0 (true when there is none).",
+          "type": "boolean"
+        },
+        "output": {
+          "description": "Output is the tail of Command's combined output.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rescanned": {
+          "description": "Rescanned are the directories rescanned, relative to the tree.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "rebuilt": {
+          "description": "Rebuilt are the Dockerfiles changed, rebuilt with docker and whose images were rescanned, relative to the tree.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "rescan_error": {
+          "description": "RescanError is why the rescan could not run, when it could not.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "command",
+        "source",
+        "passed",
+        "rescanned"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

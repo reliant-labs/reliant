@@ -1,0 +1,20 @@
+package items
+
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	pb "example.com/v2app/gen/services/items/v1"
+	itemsv1connect "example.com/v2app/gen/services/items/v1/itemsv1connect"
+)
+
+// Upload implements the Upload client streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=items.Upload
+func (s *Service) Upload(
+	ctx context.Context,
+	stream itemsv1connect.ItemsServiceUploadServerStream,
+) (*pb.UploadResponse, error) {
+	return nil, svcerr.Wrap(svcerr.ScaffoldStub("Upload"))
+}
