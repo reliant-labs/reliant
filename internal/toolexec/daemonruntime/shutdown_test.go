@@ -123,3 +123,30 @@ func TestStartReleasesTheClaimWhenItReturns(t *testing.T) {
 	require.NoError(t, err, "the claim must not outlive the runtime that took it")
 	require.NoError(t, lock.Release())
 }
+
+// `daemon start` hands its own claim to the runtime (DataDirClaim), so the
+// directory is never unclaimed between its check and the runtime: Start runs
+// under that claim instead of refusing it as another daemon's, and leaves it
+// held for the caller to release.
+func TestStartRunsUnderTheCallersClaim(t *testing.T) {
+	dir := t.TempDir()
+	claim, err := daemonstate.Acquire(dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = claim.Release() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Start returns as soon as it reaches the run loop
+
+	err = Start(ctx, StartOptions{
+		BootstrapConfig: testBootstrapConfig(dir),
+		DataDirClaim:    claim,
+	})
+	require.NotErrorIs(t, err, daemonstate.ErrLocked, "the caller's own claim is not another daemon's")
+
+	_, err = daemonstate.Acquire(dir)
+	require.ErrorIs(t, err, daemonstate.ErrLocked, "the caller's claim is still held after Start returns")
+	require.NoError(t, claim.Release())
+	lock, err := daemonstate.Acquire(dir)
+	require.NoError(t, err)
+	require.NoError(t, lock.Release())
+}

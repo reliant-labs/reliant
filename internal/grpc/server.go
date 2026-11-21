@@ -91,6 +91,10 @@ type APIHTTPRoutesDeps struct {
 	// org's org-key usage (OrgKeyUsagePath). Optional; no public auth
 	// fallback.
 	OrgKeyUsage http.Handler
+	// EnsureProjectForApp is control-plane's internally authenticated
+	// find-or-create of a deployed app's project (EnsureProjectForAppPath).
+	// Optional; no public auth fallback.
+	EnsureProjectForApp http.Handler
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -137,6 +141,9 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	}
 	if deps.OrgKeyUsage != nil {
 		handle(OrgKeyUsagePath, deps.OrgKeyUsage)
+	}
+	if deps.EnsureProjectForApp != nil {
+		handle(EnsureProjectForAppPath, deps.EnsureProjectForApp)
 	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and

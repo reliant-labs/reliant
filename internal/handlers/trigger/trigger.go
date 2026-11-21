@@ -6,10 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -455,15 +460,120 @@ func (s *Service) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigge
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve a trigger's source state", "trigger_id", t.ID, "error", err)
 	}
-	return s.renderWithWorkflows(ctx, t, recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.deps.Repo}, s.deps.Repo)
+	return s.renderWithWorkflows(ctx, t, s.nextFireAt(ctx, t), recent[t.ID], regs[t.ID], triggers.LaunchWorkflows{Repo: s.deps.Repo}, s.deps.Repo)
+}
+
+// nextFireBudget bounds the wait for next fire times: one trigger's in
+// render, every listed trigger's together in ListTriggers. Each is a Temporal
+// schedule Describe, and a slow Temporal used to hold a list for the SDK's
+// deadline once per trigger, in turn (prod, 2026-11-20: ListTriggers p95
+// 38.6s, p99 246s). A var so tests can shrink it.
+var nextFireBudget = 3 * time.Second
+
+// nextFireWorkers is how many Describes ListTriggers has in flight at once.
+const nextFireWorkers = 8
+
+// nextFireAt is t's next fire time, nil when it has none or it could not be
+// read within nextFireBudget: an absent next_fire_at never fails a response.
+func (s *Service) nextFireAt(ctx context.Context, t *core.Trigger) *time.Time {
+	if s.deps.Syncer == nil || !syncs(t.Kind) {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, nextFireBudget)
+	defer cancel()
+	next, err := s.deps.Syncer.NextFireAt(ctx, t.ID)
+	if err != nil {
+		logging.WarnContext(ctx, "could not resolve a trigger's next fire time", "trigger_id", t.ID, "error", err)
+		return nil
+	}
+	return next
+}
+
+// nextFireTimes resolves the next fire time of every syncing trigger in
+// stored, nextFireWorkers at a time, all under one nextFireBudget: the list
+// waits for Temporal at most that long whatever its length. A trigger whose
+// lookup failed or ran out of budget is absent from the map, and the
+// failures are logged once for the list.
+func (s *Service) nextFireTimes(ctx context.Context, stored []*core.Trigger) map[string]*time.Time {
+	if s.deps.Syncer == nil {
+		return nil
+	}
+	var ids []string
+	for _, t := range stored {
+		if syncs(t.Kind) {
+			ids = append(ids, t.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	ctx, span := otel.Tracer("reliant.trigger").Start(ctx, "trigger.nextFireTimes",
+		trace.WithAttributes(attribute.Int("trigger.schedules", len(ids))))
+	defer span.End()
+	budget, cancel := context.WithTimeout(ctx, nextFireBudget)
+	defer cancel()
+
+	var (
+		mu       sync.Mutex
+		out      = make(map[string]*time.Time, len(ids))
+		failed   int
+		firstErr error
+	)
+	fail := func(n int, err error) {
+		mu.Lock()
+		defer mu.Unlock()
+		failed += n
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	// A fixed pool of workers drains the ids; the feeder hands them over only
+	// while the budget lasts, so an expired budget stops the submission too
+	// and the request never walks the rest of a long list.
+	work := make(chan string)
+	var wg sync.WaitGroup
+	for range min(nextFireWorkers, len(ids)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for id := range work {
+				next, err := s.deps.Syncer.NextFireAt(budget, id)
+				if err != nil {
+					fail(1, err)
+					continue
+				}
+				mu.Lock()
+				out[id] = next
+				mu.Unlock()
+			}
+		}()
+	}
+feed:
+	for i, id := range ids {
+		select {
+		case work <- id:
+		case <-budget.Done():
+			// Past the budget, the rest are not asked at all.
+			fail(len(ids)-i, budget.Err())
+			break feed
+		}
+	}
+	close(work)
+	wg.Wait()
+	span.SetAttributes(attribute.Int("trigger.next_fire_failures", failed))
+	if failed > 0 {
+		logging.WarnContext(ctx, "could not resolve some triggers' next fire times",
+			"failed", failed, "triggers", len(ids), "error", firstErr)
+	}
+	return out
 }
 
 // renderWithWorkflows renders a trigger, resolving an activation's
 // declaration through workflows so that a broken one reports BROKEN health.
 // It is computed on read, from the workflow as it is now: a stored verdict
 // would go stale the moment someone fixed the YAML.
-func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver, sources launch.WorkflowResolver) *reliantv1.Trigger {
-	proto := s.renderFirings(ctx, t, firings, reg)
+func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration, workflows triggers.WorkflowResolver, sources launch.WorkflowResolver) *reliantv1.Trigger {
+	proto := s.renderFirings(ctx, t, nextFireAt, firings, reg)
 	if t.WorkflowTrigger == nil {
 		return proto
 	}
@@ -536,19 +646,10 @@ func joinIssues(issues []validation.ParamIssue) string {
 	return strings.Join(msgs, "; ")
 }
 
-// renderFirings renders a trigger from its row, recent firings and (for a
-// polled trigger) its source state.
-func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration) *reliantv1.Trigger {
-	var nextFireAt *time.Time
-	if s.deps.Syncer != nil && syncs(t.Kind) {
-		next, err := s.deps.Syncer.NextFireAt(ctx, t.ID)
-		if err != nil {
-			logging.WarnContext(ctx, "could not resolve a trigger's next fire time", "trigger_id", t.ID, "error", err)
-		} else {
-			nextFireAt = next
-		}
-	}
-
+// renderFirings renders a trigger from its row, its next fire time (nil when
+// it has none or it could not be read), recent firings and (for a polled
+// trigger) its source state.
+func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration) *reliantv1.Trigger {
 	proto, err := renderTrigger(t, nextFireAt, firings, reg)
 	if err != nil {
 		// Params that will not round-trip through structpb. Report the trigger

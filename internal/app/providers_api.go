@@ -230,6 +230,9 @@ type HTTPRoutesDeps struct {
 	Integrations *IntegrationSettings
 	OAuthIssuers []string
 	ControlPlane *configv1.ControlPlaneConfig
+	// Membership checks the user control-plane names on an internal
+	// ensure-for-app call; nil on a deployment with no orgs.
+	Membership *orgs.Resolver
 }
 
 // NewHTTPRoutes is the API's plain-HTTP routes (grpcserver.APIHTTPRoutes):
@@ -256,7 +259,17 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		ControlPlaneURL:     cp.URL,
 		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
 		OrgKeyUsage:         grpcserver.NewOrgKeyUsageHandler(d.DB, cp.InternalServiceSecret),
+		EnsureProjectForApp: grpcserver.NewEnsureProjectForAppHandler(d.DB, httpRoutesMembership(d.Membership), cp.InternalServiceSecret),
 	})
+}
+
+// httpRoutesMembership keeps a nil resolver a nil interface (a nil
+// *orgs.Resolver would be a non-nil one), so the handler fails closed.
+func httpRoutesMembership(r *orgs.Resolver) grpcserver.OrgMembership {
+	if r == nil {
+		return nil
+	}
+	return r
 }
 
 // APIListenerDeps is where the API listens and what it serves there.
