@@ -127,7 +127,7 @@ describe("MobileNavDrawer", () => {
     await user.click(screen.getByRole("link", { name: "Drill in" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/m/inbox"));
     expect(onClose).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("link", { name: "Machines" }));
+    await user.click(screen.getByRole("link", { name: "Sandboxes" }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
