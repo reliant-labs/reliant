@@ -18,7 +18,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { logger } from "@/lib/logger";
-import { getOrganizationCostSummary } from "@/services/controlPlane/observability/organizationCostsApi";
+import { getOrganizationCostSummary, getProjectCost } from "@/services/controlPlane/observability/organizationCostsApi";
 import { listOrganizationUsage, type OrganizationUsageRequest } from "@/services/controlPlane/observability/organizationUsageApi";
 
 export const organizationUsageKeys = {
@@ -26,6 +26,7 @@ export const organizationUsageKeys = {
   usage: (req: OrganizationUsageRequest) => ["organization-usage", req.orgId, req.startMs, req.endMs, req.granularity, req.groupBy] as const,
   /** The same key OrganizationCostsView reads, so the two views share one cached summary. */
   costSummary: (orgId: string) => ["organization-cost-summary", orgId] as const,
+  projectCost: (orgId: string, projectId: string) => ["project-cost", orgId, projectId] as const,
 };
 
 /** A billing answer that named another organization than the one asked about, twice. */
@@ -75,6 +76,17 @@ export function useOrganizationCostSummary(orgId: string | null) {
     queryKey: organizationUsageKeys.costSummary(orgId ?? ""),
     queryFn: () => forOrg(orgId as string, "GetOrganizationCostSummary", () => getOrganizationCostSummary(orgId as string)),
     enabled: !!orgId,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+/** One project's hosting cost this month (BillingService.GetProjectCost): the project shell's Usage page. */
+export function useProjectCost(orgId: string | null | undefined, projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: organizationUsageKeys.projectCost(orgId ?? "", projectId ?? ""),
+    queryFn: () => getProjectCost(orgId as string, projectId as string),
+    enabled: !!orgId && !!projectId,
     staleTime: 60_000,
     retry: false,
   });

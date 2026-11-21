@@ -28,11 +28,17 @@ const probe = vi.hoisted(() => ({ navMounts: 0, pageMounts: 0, signedIn: true, n
 // The nav itself is covered in Sidebar*.test.tsx; here it only says when it
 // mounts and which page it was told is on screen.
 vi.mock("../../Sidebar", () => ({
-  Sidebar: ({ pathname }: { pathname: string }) => {
+  Sidebar: ({ pathname, onNavigate }: { pathname: string; onNavigate?: (href: string, options?: { drill?: boolean }) => void }) => {
     useEffect(() => {
       probe.navMounts += 1;
     }, []);
-    return <div data-testid="nav-probe">{pathname}</div>;
+    return (
+      <>
+        <div data-testid="nav-probe">{pathname}</div>
+        <button type="button" onClick={() => onNavigate?.("/inbox", { drill: true })}>drill</button>
+        <button type="button" onClick={() => onNavigate?.("/forge/p/shop")}>destination</button>
+      </>
+    );
   },
 }));
 
@@ -331,5 +337,25 @@ describe("the shell's main landmark", () => {
     };
     walk(src);
     expect(offenders).toEqual([]);
+  });
+
+  // U6e, mobile: the narrow window's drawer draws the one nav; a drill-in
+  // (Agents, Observability, or back out) keeps it open on the area's rows, a
+  // destination closes it.
+  it("keeps the narrow drawer open through a drill-in and closes it on a destination", async () => {
+    probe.narrow = true;
+    const router = renderAt("/");
+    await screen.findByTestId("nav-probe");
+    const { useNavDrawer } = await import("../shellFrame");
+    act(() => useNavDrawer.getState().setOpen(true));
+    expect(screen.getByTestId("shell-nav")).toHaveAttribute("data-state", "open");
+
+    act(() => screen.getByRole("button", { name: "drill", hidden: true }).click());
+    await waitFor(() => expect(router.state.location.pathname).toBe("/inbox"));
+    expect(screen.getByTestId("shell-nav")).toHaveAttribute("data-state", "open");
+
+    act(() => screen.getByRole("button", { name: "destination", hidden: true }).click());
+    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/shop"));
+    expect(screen.getByTestId("shell-nav")).toHaveAttribute("data-state", "closed");
   });
 });

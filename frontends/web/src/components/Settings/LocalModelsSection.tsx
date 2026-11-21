@@ -382,7 +382,7 @@ export function LocalModelsSection() {
           <p className="text-sm text-muted-foreground">
             {loading
               ? "Loading machines…"
-              : "Local models run on a machine of yours that Reliant is connected to. Connect a machine in Settings → Machines, then come back here to see the model servers it can reach."}
+              : "Local models run on an agent sandbox of yours that Reliant is connected to. Connect one in Settings → Agent sandboxes, then come back here to see the model servers it can reach."}
           </p>
         </Card>
       ) : (

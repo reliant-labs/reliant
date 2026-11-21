@@ -3,10 +3,16 @@
 /**
  * `/projects/<id>` (U6c: Home and Overview are ONE landing page, "Overview").
  *
- *   a deployed app   → its console's Overview (consolePath overview), the
- *                      landing. Replace, so Back skips it.
- *   no deployed app  → the landing's no-app form, here: the project's chats
- *                      and the way to deploy it (NoAppLanding).
+ *   a deployed app   → its console's Overview (consolePath overview), which is
+ *                      the landing: health, what needs attention (alerts,
+ *                      errors, chats waiting), the live state, recent releases
+ *                      and the project's chats. Replace, so Back skips it.
+ *   no deployed app  → the project's own page (U7, ProjectPage): the way to
+ *                      deploy it, its apps, code and machines, its chats, and
+ *                      its Workspaces and Settings tabs.
+ *
+ * NoAppLanding stays the console Overview's form for an app with nothing
+ * deployed (WorkloadPages OverviewPage).
  */
 
 import { useEffect } from "react";
@@ -14,8 +20,9 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 
 import { AppSectionEmptyState } from "../Forge/Console/AppSectionEmptyState";
 import { consolePath } from "../Forge/Console/paths";
-import { deployedAppOf, rowForRef, sectionsAppOf } from "../Layout/sidebar/shellProject";
+import { deployedAppOf, rowForRef } from "../Layout/sidebar/shellProject";
 import { ProjectChats } from "./ProjectChats";
+import { ProjectPage } from "./ProjectPage";
 import { useSelectorCatalog } from "./ProjectSelector";
 
 export function ProjectHomePage() {
@@ -27,15 +34,9 @@ export function ProjectHomePage() {
   useEffect(() => {
     if (deployed) void navigate({ href: consolePath(deployed, { kind: "overview" }), replace: true });
   }, [deployed, navigate]);
-  // Until the catalog answers, nothing: the landing must not flash the no-app form before redirecting.
+  // Until the catalog answers, nothing: the landing must not flash the project's page before redirecting.
   if (deployed || !catalog) return null;
-  return (
-    <div className="h-full overflow-y-auto" data-testid="project-home">
-      <div className="mx-auto max-w-[var(--page-max)] px-8 pb-12 pt-8 max-md:px-4">
-        <NoAppLanding projectId={projectId} name={row?.name ?? "Project"} app={sectionsAppOf(row)} />
-      </div>
-    </div>
-  );
+  return <ProjectPage />;
 }
 
 /** The landing of a project with nothing deployed: its chats, and the one way to deploy it. Also the console Overview's form for such an app. */
