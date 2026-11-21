@@ -29,6 +29,11 @@ interface FileLinkProps {
   worktreeId?: string;
   /** Inline variant (no padding, smaller text) */
   inline?: boolean;
+  /**
+   * In running prose: the path takes the surrounding text's size (the caller
+   * sets mono and the size on `className`) instead of the inline `text-xs`.
+   */
+  prose?: boolean;
 }
 
 /**
@@ -80,6 +85,7 @@ function FileLinkComponent({
   showIcon = false,
   worktreeId,
   inline = false,
+  prose = false,
 }: FileLinkProps) {
   const openFile = useFileOpener();
 
@@ -138,7 +144,7 @@ function FileLinkComponent({
         title={tooltipMessage}
       >
         {showIcon && <FileText className="w-3 h-3 flex-shrink-0 opacity-50" />}
-        <span className={cn(inline && "text-xs font-mono")}>{displayText}</span>
+        <span className={cn(inline && !prose && "text-xs font-mono")}>{displayText}</span>
         {shouldShowLineSuffix && (
           <span className="text-xs text-muted-foreground font-mono">
             :{parsedPath.line}
@@ -161,7 +167,7 @@ function FileLinkComponent({
       type="button"
     >
       {showIcon && <FileText className="w-3 h-3 flex-shrink-0" />}
-      <span className={cn(inline && "text-xs font-mono")}>{displayText}</span>
+      <span className={cn(inline && !prose && "text-xs font-mono")}>{displayText}</span>
       {shouldShowLineSuffix && (
         <span className="text-xs text-muted-foreground font-mono">
           :{parsedPath.line}

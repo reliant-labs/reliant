@@ -1,9 +1,10 @@
 ---
-title: "Environments & deploys"
+title: "Deploy a forge project: environments, releases, hosting"
+sidebarTitle: "Environments & deploys"
 description: "Where to find how a forge project declares its environments, what a deploy produces, how releases are promoted, and how to deploy things forge did not write"
 ---
 
-A forge project describes every place it runs as code. Each **environment** is a directory under `deploy/kcl/`, and a new project has three: `dev` runs on your machine, while `staging` and `prod` deploy to [Reliant hosting](/forge/hosting). Deploying is the same command for every environment and every target, so once you know how releases and plans work you know how to ship anywhere.
+A forge project describes every place it runs as code. Each **environment** is a directory under `deploy/kcl/`, and a new project has three: `dev` runs on your machine, while `staging` and `prod` deploy to [Reliant hosting](/hosting/overview). Deploying is the same command for every environment and every target, so once you know how releases and plans work you know how to ship anywhere.
 
 This section is split by the question you are asking.
 
@@ -23,7 +24,7 @@ This section is split by the question you are asking.
   <Card title="Escape hatches" href="/forge/deploy/escape-hatches">
     Patch one field, add raw manifests or charts, bring your own Dockerfile, deploy code in any language, adopt an existing app, and turn features off.
   </Card>
-  <Card title="Hosting on Reliant" href="/forge/hosting">
+  <Card title="Hosting on Reliant" href="/hosting/overview">
     What hosting runs, what it costs, what a queued deploy means, and what it refuses.
   </Card>
 </CardGroup>
@@ -40,4 +41,4 @@ Nothing is written until you approve a plan, a deploy waits for health before it
 
 ## Related topics
 
-[Secrets](/forge/secrets), [Custom domains](/forge/custom-domains), [Observability](/forge/observability) and [Forge sign-in](/forge/sign-in). Agents can load the `deploy` skill and its sub-skills for the full detail, and `forge env deploy --help` documents every flag.
+[Secrets](/hosting/secrets), [Custom domains](/hosting/custom-domains), [Observability](/hosting/observability) and [Forge sign-in](/forge/sign-in). Agents can load the `deploy` skill and its sub-skills for the full detail, and `forge env deploy --help` documents every flag.

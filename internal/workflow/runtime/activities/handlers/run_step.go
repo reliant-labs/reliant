@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -291,6 +292,12 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 		workingDir = worktreePath
 	}
 	commandDir := runCommandDir(workingDir, input.WorkDir)
+	foreignMachine, foreign := foreignWorkspaceRunMachine(execCtx, commandDir)
+	if foreign {
+		logging.WarnContext(ctx, "[RunStep] the step's machine selector routes a command in a branch workspace away from the workspace's machine",
+			"chat_id", input.ChatID, "step_id", input.StepID, "worktree_id", worktreeID,
+			"owner", execCtx.WorktreeDaemonID, "selected", foreignMachine, "command_dir", commandDir)
+	}
 
 	// Pick executor: test override or remote via daemon
 	executor := a.runExecutor
@@ -327,6 +334,9 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 	}
 	a.stopCommandIfCancelled(ctx, execCtx, input, requestID)
 	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
+	if err == nil && foreign && exitCode != 0 && !interrupted {
+		stderr = foreignWorkspaceRunNote(ctx, a.repo, worktreePath, execCtx.WorktreeDaemonID, foreignMachine) + stderr
+	}
 	if err != nil {
 		// The machine never took the command within the wait (or is gone):
 		// the step fails saying which machine and for how long.
@@ -801,6 +811,47 @@ func shellQuote(s string) string {
 // node's resolved `work_dir`) when it names one, joined onto checkout when it
 // is relative; else checkout. A directory that does not exist fails the
 // command on its machine, saying so, rather than running it elsewhere.
+// foreignWorkspaceRunMachine reports the machine a run node's command is
+// pinned to when it is not the machine its branch workspace lives on, and the
+// command runs inside that workspace: an explicit node or workflow `daemon:`
+// selector keeps its precedence over the workspace's owner
+// (toolDaemonSelector), so the command is sent to a machine whose disk most
+// likely has no such directory.
+//
+// The command still runs, unlike an agent's tool calls (ensureBatchWorkspace
+// refuses those): a run node could always target another machine, and two
+// daemons sharing one disk do have the directory. Refusing would break a
+// workflow that works today; the step's failure is explained instead
+// (foreignWorkspaceRunNote). A work_dir outside the workspace (an absolute
+// path on the selected machine) is not a conflict at all.
+func foreignWorkspaceRunMachine(execCtx RunExecutorContext, commandDir string) (string, bool) {
+	owner, workspace := execCtx.WorktreeDaemonID, execCtx.WorktreePath
+	if owner == "" || workspace == "" || execCtx.DaemonSelector == nil {
+		return "", false
+	}
+	selected := execCtx.DaemonSelector.ID
+	if selected == "" || selected == owner || !pathWithin(workspace, commandDir) {
+		return "", false
+	}
+	return selected, true
+}
+
+// foreignWorkspaceRunNote leads the stderr of a failed command that ran on
+// another machine than its branch workspace's (foreignWorkspaceRunMachine),
+// naming both machines, so the failure ("working directory does not exist")
+// says why and what to change rather than sending the reader to look for a
+// workspace that was never deleted. Only a failure carries it: a command that
+// succeeded keeps its output byte for byte.
+func foreignWorkspaceRunNote(ctx context.Context, repo any, workspacePath, owner, selected string) string {
+	reader, _ := repo.(daemonplacement.DaemonReader)
+	ownerName := daemonplacement.MachineName(ctx, reader, owner)
+	selectedName := daemonplacement.MachineName(ctx, reader, selected)
+	return fmt.Sprintf("[Workspace elsewhere] This step ran on %s, the machine its `daemon:` selector picked, but this chat's workspace %s lives on %s, "+
+		"so the command's directory may not exist where it ran. Run the step on %s (or drop the step's `daemon:` selector) to run it in the workspace, "+
+		"or give it a work_dir that exists on %s.\n",
+		selectedName, workspacePath, ownerName, ownerName, selectedName)
+}
+
 func runCommandDir(checkout, workDir string) string {
 	workDir = strings.TrimSpace(workDir)
 	switch {

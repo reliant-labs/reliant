@@ -170,6 +170,9 @@ var actionPermissions = map[string]map[string]string{
 	// A check run is checks alone; GitHub lets only an App write one.
 	"check_run.create": {"checks": "write"},
 	"check_run.update": {"checks": "write"},
+	// A release tags a commit and publishes notes: contents alone.
+	"release.create": {"contents": "write"},
+	"release.update": {"contents": "write"},
 	// git_publish's push (writeledger.GitPushAction): a branch is contents.
 	"git.push": {"contents": "write"},
 }

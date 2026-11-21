@@ -313,12 +313,11 @@ function ClaimedBanner({
         {paused && (
           <span data-testid="apps-claimed-paused">
             {" "}
-            {paused.kept === "claimed" ? "You kept this site live, so " : "You kept your existing site live, so "}
-            <strong className="font-semibold">{paused.name}</strong> is paused: the free plan includes one static site.{" "}
+            {paused.kept === "claimed" ? "You chose free hosting for the site you claimed. " : "You kept free hosting where it was. "}
+            <strong className="font-semibold">{paused.name}</strong> is paused.{" "}
             <button type="button" onClick={goToBilling} className="font-medium underline underline-offset-2">
-              Subscribe
-            </button>{" "}
-            to run both.
+              Review billing
+            </button>
           </span>
         )}
       </span>

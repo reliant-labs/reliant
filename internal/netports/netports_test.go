@@ -145,3 +145,29 @@ func TestListeningLoopbackPorts_SkipsEphemeralRange(t *testing.T) {
 		t.Errorf("ports = %v, want none (custom range covers all fixtures)", ports)
 	}
 }
+
+// TestIsLoopbackListening_WholeRange: a port the caller names is checked
+// wherever it is. `reliant preview-url` used the filtered list, so a dev
+// server on an ephemeral-range port read as "nothing listening" and
+// --require-listening failed (north-star AW-23).
+func TestIsLoopbackListening_WholeRange(t *testing.T) {
+	fixture := `header
+   0: 0100007F:1436 00000000:0000 0A 0
+   1: 0100007F:B571 00000000:0000 0A 0
+   2: 0100007F:1F90 00000000:0000 01 0
+`
+	tcp4 := writeFixture(t, "tcp", fixture)
+	nope6 := filepath.Join(t.TempDir(), "nope6")
+	for port, want := range map[int]bool{5174: true, 46449: true, 8080: false, 3000: false} {
+		listening, ok := isLoopbackListening(tcp4, nope6, port)
+		if !ok {
+			t.Fatalf("port %d: ok = false", port)
+		}
+		if listening != want {
+			t.Errorf("port %d: listening = %v, want %v", port, listening, want)
+		}
+	}
+	if _, ok := isLoopbackListening(filepath.Join(t.TempDir(), "nope4"), nope6, 5174); ok {
+		t.Error("ok = true with no proc tables")
+	}
+}
