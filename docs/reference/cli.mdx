@@ -21642,6 +21642,11 @@ auth login'): it carries the daemon:manage permission, which only a person's
 login can hold. An agent's shell is refused create, delete, start, stop,
 resize, grow-disk, label and the pool changes.
 
+Changing labels and pools is a person's decision. The preferred way is to ask
+the agent in a Reliant chat and approve its card. Writing them with the CLI
+login still works but is deprecated: the CLI login is inherited by every
+agent's shell. A machine's own credential is never accepted.
+
 ```
 reliant machine
 ```
