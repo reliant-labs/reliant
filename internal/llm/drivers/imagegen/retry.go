@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -90,5 +91,5 @@ func retryDelay(attempt int, err error, baseDelay time.Duration) (time.Duration,
 	if apiErr.RetryAfter > 0 {
 		return apiErr.RetryAfter, true
 	}
-	return baseDelay * time.Duration(1<<(attempt-1)), true
+	return retry.Backoff{Initial: baseDelay}.Delay(attempt), true
 }

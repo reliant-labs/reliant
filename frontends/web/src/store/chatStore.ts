@@ -119,6 +119,7 @@ import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-q
 import { invalidatePlanTasks } from "../hooks/task-queries";
 import {
   chatKeys,
+  invalidateChatListsHolding,
   seedChatDetail,
   upsertChatInListCache,
   patchChatCaches,
@@ -1241,8 +1242,7 @@ function applyFirstSend(chat: Chat, projectId: string, orgId: string | null): vo
   // show it without waiting for a stream-triggered list refetch.
   seedChatDetail(chat);
   upsertChatInListCache(projectId, chat, orgId);
-  void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId, orgId) });
-  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null, orgId) });
+  invalidateChatListsHolding(projectId, orgId);
 
   // Initialize state for the new chat
   useChatStore.getState().initChatState(chat);

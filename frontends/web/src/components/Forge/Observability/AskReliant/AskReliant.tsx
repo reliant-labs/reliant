@@ -55,7 +55,7 @@ import { useObsAskContext } from "./askReliantContext";
 import { askWorkspaceName, buildAskReliantPrompt, type AskEnv, type AskIntent, type AskSubject } from "./askReliantPrompt";
 import { resolveAskProject, type AskProjectResolution } from "./askReliantProject";
 import { startAskReliantChat } from "./startAskReliantChat";
-import { projectPath } from "@/lib/paths";
+import { projectChatsPath } from "@/lib/paths";
 
 export interface AskReliantOptions {
   /** The forge project, when the surface knows it and the console context does not. */
@@ -110,7 +110,7 @@ export function useAskReliant(options: AskReliantOptions = {}) {
           workspaceName: askWorkspaceName(subject, nonce(), intent),
           send: intent === "fix",
           onChatCreated: onChatCreated ?? opts.onChatCreated,
-          openProject: (projectId) => void router?.navigate({ to: projectPath(projectId), search: {} }),
+          openProject: (projectId) => void router?.navigate({ to: projectChatsPath(projectId), search: {} }),
         });
         if (started.sendError !== undefined) {
           toast.warning(`Couldn't start the agent: ${errorText(started.sendError)}. Its prompt is waiting in the composer; send it when you're ready.`);

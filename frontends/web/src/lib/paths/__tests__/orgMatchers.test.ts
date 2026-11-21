@@ -49,9 +49,11 @@ describe("pathname matchers, in the org form", () => {
     expect(shouldPreloadMonaco("/o/acme/workflow/fix-my-pr")).toBe(true);
   });
 
-  it("onboardingGate: exemptions and the return path, in either form", () => {
+  it("onboardingGate: the chat routes and the return path, in either form", () => {
     expect(routeRequiresOnboarding("/o/acme/apps")).toBe(false);
-    expect(routeRequiresOnboarding("/o/acme/inbox")).toBe(true);
+    expect(routeRequiresOnboarding("/o/acme/inbox")).toBe(false);
+    expect(routeRequiresOnboarding("/o/acme")).toBe(true);
+    expect(routeRequiresOnboarding("/o/acme/project/p-1")).toBe(true);
     expect(isOnboardingReturnTo("/o/acme")).toBe(false);
     expect(isOnboardingReturnTo("/o/acme/inbox?x=1")).toBe(true);
   });

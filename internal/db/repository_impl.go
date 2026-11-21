@@ -2159,6 +2159,12 @@ func (r *Repo) ListRepoForgeAppsByProject(ctx context.Context, projectID string)
 	return store.ListRepoForgeAppsByProject(ctx, r.ORM(), projectID)
 }
 
+// ListReposHoldingForgeApp returns the repos of projectIDs in which a forge
+// app named name is recorded (repo_forge_apps), ordered by project and path.
+func (r *Repo) ListReposHoldingForgeApp(ctx context.Context, name string, projectIDs []string) ([]*core.Repo, error) {
+	return store.ListReposHoldingForgeApp(ctx, r.ORM(), name, projectIDs)
+}
+
 // ListReposByProjects returns the repos of every project in projectIDs, by
 // project and relative path: one read for a list of projects.
 func (r *Repo) ListReposByProjects(ctx context.Context, projectIDs []string) ([]*core.Repo, error) {

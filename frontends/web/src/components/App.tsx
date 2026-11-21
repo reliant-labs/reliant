@@ -14,15 +14,13 @@ import { EventBusProvider } from "../lib/event-context";
 
 const authProvider = createSupabaseAuthProvider();
 
-// The route tree is the shell's (lib/shell.ts): Reliant's, the forge
-// shell's on the forge host, or the demo's one route on the demo host. Each
-// is its own chunk, so the forge shell never downloads Reliant's chats and
-// overlays, nor Reliant the forge shell's pages. The import starts when this
-// module evaluates — during boot, beside the config wait — so it is not a
-// waterfall behind the first render.
-const shell = getShell();
-const routerModule: Promise<{ router: AnyRouter }> =
-  shell === "demo" ? import("../demoShellRoutes") : shell === "forge" ? import("../forgeShellRoutes") : import("../routes");
+// The route tree (lib/shell.ts): the app's one tree (routes.tsx) on both the
+// app host and the forge host — the forge host is a brand of it, decided
+// inside routes.tsx — or the demo's one route on the demo host. Each is its
+// own chunk, so the public demo never downloads the app. The import starts
+// when this module evaluates — during boot, beside the config wait — so it is
+// not a waterfall behind the first render.
+const routerModule: Promise<{ router: AnyRouter }> = getShell() === "demo" ? import("../demoShellRoutes") : import("../routes");
 
 const ShellRouter = lazy(async () => {
   const { router } = await routerModule;

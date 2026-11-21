@@ -133,7 +133,8 @@ message RuntimeConfig {
   // being retired.
   string environment = 1 [(forge.v1.config) = {
     env_var: "RELIANT_ENV"
-    env_var_aliases: [{name: "NODE_ENV"}]
+    env_var_aliases: [
+      {name: "NODE_ENV"}]
     description: "Environment tier: dev, test or prod (unset or unrecognised is prod)"
   }];
 }

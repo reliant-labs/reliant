@@ -168,8 +168,8 @@ function mapSpendUsage(u: PolicySpendUsage | undefined): SpendUsage | null {
 
 /**
  * GetMyPolicyUsage: any member's own spend against the org's caps. A control
- * plane older than org-policies G2 answers Unimplemented; callers show that
- * as "not available yet" (isUsageUnavailable).
+ * plane that does not serve org policies (a self-hosted one) answers
+ * Unimplemented; callers show that as "not available yet" (isUsageUnavailable).
  */
 export async function getMyPolicyUsage(orgId: string): Promise<MyPolicyUsage> {
   const res = await getControlPlaneClient(OrgPolicyService).getMyPolicyUsage({ orgId });
@@ -183,7 +183,7 @@ export async function getMyPolicyUsage(orgId: string): Promise<MyPolicyUsage> {
   };
 }
 
-/** The control plane does not have this rpc yet: an older deployment, not a fault. */
+/** The control plane does not serve this rpc (a self-hosted deployment): not a fault. */
 export function isRpcNotDeployed(err: unknown): boolean {
   return err instanceof ConnectError && err.code === Code.Unimplemented;
 }
@@ -215,8 +215,8 @@ export interface PolicyDenials {
 /**
  * ListOrgPolicyDenials (admin/owner): what the org's policies refused, and
  * what rules in audit would have refused, per UTC day over the last `days`
- * days (today included). A control plane older than org-policies A1 answers
- * Unimplemented (isRpcNotDeployed).
+ * days (today included). A control plane that does not serve org policies
+ * answers Unimplemented (isRpcNotDeployed).
  */
 export async function listOrgPolicyDenials(orgId: string, days: number): Promise<PolicyDenials> {
   const res = await getControlPlaneClient(OrgPolicyService).listOrgPolicyDenials({ orgId, days });

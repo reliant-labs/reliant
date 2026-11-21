@@ -174,9 +174,22 @@ describe("forwardIntoOrg", () => {
       await expect(forwardIntoOrg(at("/inbox"), deps({ signedInUser: async () => null }))).resolves.toBeUndefined();
     });
 
-    it("does not forward on the forge host, whose tree has no org pages until U6", () => {
+    it.each([
+      ["/apps", "/o/side/apps"],
+      ["/sites", "/o/side/sites"],
+      ["/usage", "/o/side/usage"],
+    ])("forwards on the forge host too, which mounts the same tree (U6): %s → %s", async (from, to) => {
       resetShellForTests("forge");
-      expect(forwardIntoOrg(at("/apps"), deps())).toBeUndefined();
+      sessionStorage.setItem("reliant.activeOrg.alice", "org-b");
+      expect(await redirectOf(() => forwardIntoOrg(at(from), deps()))).toBe(to);
+    });
+
+    it.each([
+      ["/sites", "/o/side/sites"],
+      ["/usage", "/o/side/usage"],
+    ])("forwards Sites and Usage, which every host now serves: %s → %s", async (from, to) => {
+      sessionStorage.setItem("reliant.activeOrg.alice", "org-b");
+      expect(await redirectOf(() => forwardIntoOrg(at(from), deps()))).toBe(to);
     });
   });
 });

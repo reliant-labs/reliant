@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
@@ -41,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghblobs"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/ghusers"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -1540,6 +1542,41 @@ func OrgUsageListPrices(cfg *configv1.ControlPlaneConfig) org_usage.ListPrices {
 		ControlPlane: cfg,
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
+}
+
+// CoverageSourceReports is where the coverage-source handler asks whether a
+// retained coverage report names a blob: control-plane's TestsService, with
+// the viewer's own bearer (so no internal-service secret is needed). nil —
+// every read NOT_YET_AVAILABLE — when self-hosted; never a typed nil.
+func CoverageSourceReports(cfg *configv1.ControlPlaneConfig) coverage_source.Reports {
+	if !ControlPlaneEndpoint(cfg).Hosted() {
+		return nil
+	}
+	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
+}
+
+// CoverageSourceBlobs is how the coverage-source handler reads a blob from
+// GitHub: as the viewer, through the same token source GitHub triggers use
+// (control-plane's delegated token when hosted, the user's saved GitHub
+// connection when self-hosted). Never a project-wide credential: an App
+// installation token would let anyone with tests:read read the code.
+//
+// nil (and no error) on a hosted deployment without INTERNAL_SERVICE_SECRET,
+// which cannot fetch delegated tokens: every read is then NOT_YET_AVAILABLE,
+// as the org usage view shows no estimates (OrgUsageListPrices).
+func CoverageSourceBlobs(repo *db.Repo, keys vault.Service, cfg *configv1.ControlPlaneConfig, integrations *IntegrationSettings) (coverage_source.Blobs, error) {
+	if cp := ControlPlaneEndpoint(cfg); cp.Hosted() && cp.InternalServiceSecret == "" {
+		return nil, nil
+	}
+	var clients connections.OAuthClients
+	if integrations != nil {
+		clients = integrations.Webhooks.OAuthClients
+	}
+	tokens, err := gitHubTokenSource(repo, keys, cfg, clients)
+	if err != nil {
+		return nil, fmt.Errorf("coverage source: %w", err)
+	}
+	return ghblobs.NewInstrumented(ghblobs.Deps{Tokens: tokens}), nil
 }
 
 // projectOrgMoveStarter starts a project move's saga on the shared task

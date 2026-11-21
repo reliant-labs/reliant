@@ -176,6 +176,14 @@ export const indexSearchSchema = z.object({
   // onboarding offers on finishing. HomeNewChat applies it and drops it once
   // the chat is created.
   start: z.enum(START_VALUES).optional(),
+  // `?projects=<id>,<id>` is the chat list's filter of two or more projects
+  // (lib/chatProjectFilter; one project is `/project/<id>`, none is all).
+  // Comma-separated ids; anything unreadable is no filter, never a route error.
+  projects: z
+    .union([z.string(), z.number()])
+    .transform(String)
+    .optional()
+    .catch(undefined),
 });
 
 export const authSearchSchema = z.object({
@@ -374,6 +382,11 @@ export const SETTINGS_SECTION_ALIASES: Readonly<Record<string, SettingsSection>>
   editor: "chat-editor",
   chat: "chat-editor",
   "web-browser": "browser",
+  // The forge host's own Settings sections, before both hosts shared one
+  // Settings (U6): its old links and bookmarks land on the same section here.
+  profile: "account",
+  organization: "member-permissions",
+  members: "member-permissions",
 };
 
 // Billing sub-navigation. This was `useState` inside BillingSection, with a

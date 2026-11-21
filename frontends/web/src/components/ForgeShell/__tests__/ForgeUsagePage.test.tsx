@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useRouteOrgScope } from "@/lib/routeOrg";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
-import { ForgeUsagePage } from "../ForgeUsagePage";
+import { ForgeUsagePage, UsagePage } from "../ForgeUsagePage";
+
+vi.mock("@/components/Layout/AreaShell", () => ({
+  AreaShell: ({ children, areaLabel }: { children: React.ReactNode; areaLabel: string }) => <section aria-label={areaLabel}>{children}</section>,
+}));
 
 vi.mock("@/components/Forge/Observability/Dashboards/OrganizationUsageView", () => ({
   OrganizationUsageView: ({ orgId }: { orgId: string }) => <div data-testid="usage-org">{orgId}</div>,
@@ -16,6 +20,11 @@ afterEach(() => {
   cleanup();
   useRouteOrgScope.setState(routeStore);
   useActiveOrgStore.setState(tabStore);
+});
+
+it("mounts the usage route inside the shared navigation shell", () => {
+  render(<UsagePage />);
+  expect(screen.getByRole("region", { name: "Usage" })).toContainElement(screen.getByTestId("usage-org"));
 });
 
 describe("Forge usage organization", () => {

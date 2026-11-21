@@ -2256,6 +2256,14 @@ Make each question stand on its own. Include enough context for users, as someti
 - Say what you will do by default if nobody answers.
 - Avoid internal shorthand, ids with no description, and references to "above", "earlier" or other messages the user may not see.
 
+Write every question and option as you, the agent, speaking directly to the user, so that "I" and "you" each mean exactly one party:
+- "I", "me", "my" are you, the agent asking. "You", "your" are the person reading and answering.
+- Never call the reader "the user" or "they", and never call yourself "the agent" or "we": they read the question as if you were talking to them.
+- Name anyone else explicitly: "the sub-agent fixing the build", "the PR author", "the reviewer bot", "the owner", not "it", "they" or "you".
+- In option labels and descriptions, say who acts whenever it is not obvious: "I delete the branch" or "You review the diff first", not a bare "Delete the branch".
+- Good: "I found two migrations that conflict. Should I keep yours and drop mine? If you don't answer, I'll keep yours."
+- Bad: "Should the user's migration be kept? The agent will default to keeping it." (Whose migration? Who is "the user"?)
+
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
 - If you recommend a specific option, list it first and add "(Recommended)" to the label.

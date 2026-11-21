@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/retry"
 	"golang.org/x/net/http2"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -46,6 +47,9 @@ const (
 	reconnectMinDelay = 1 * time.Second
 	reconnectMaxDelay = 15 * time.Second
 )
+
+// reconnectBackoff is connectWithRetry's ladder: 1s, 2s, 4s, 8s, then 15s.
+var reconnectBackoff = retry.Backoff{Initial: reconnectMinDelay, Max: reconnectMaxDelay}
 
 // DaemonConnector initiates outbound gRPC connections to daemon pods. It is
 // driven by ManagedDaemonReconciler — the reconciler calls startConnection /
@@ -141,12 +145,15 @@ func (dc *DaemonConnector) stopConnection(daemonID string) {
 // so the control plane can show *why* the daemon can't connect instead of a
 // generic "Disconnected" badge.
 func (dc *DaemonConnector) connectWithRetry(ctx context.Context, daemonID, userID, podIP string, podPort int, org tools_daemon.MachineOrg) {
-	delay := reconnectMinDelay
+	// A Schedule, not retry.Do: a session that ends cleanly (nil) is
+	// reconnected too, and the ladder never resets.
+	backoff := reconnectBackoff.Schedule()
 	for {
 		err := dc.connectOnce(ctx, daemonID, userID, podIP, podPort, org)
 		if ctx.Err() != nil {
 			return
 		}
+		delay := backoff.Next()
 
 		// Surface the failure upstream. publish() is best-effort — never
 		// blocks the retry loop.
@@ -161,12 +168,6 @@ func (dc *DaemonConnector) connectWithRetry(ctx context.Context, daemonID, userI
 		case <-ctx.Done():
 			return
 		case <-time.After(delay):
-		}
-
-		// Exponential backoff: 1s, 2s, 4s, 8s, 15s max.
-		delay = delay * 2
-		if delay > reconnectMaxDelay {
-			delay = reconnectMaxDelay
 		}
 	}
 }

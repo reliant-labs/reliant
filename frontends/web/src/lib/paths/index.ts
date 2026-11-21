@@ -24,7 +24,6 @@
  * the same URL (`paths.test.ts` holds every builder to today's URL).
  */
 
-import type { ForgeSettingsSection } from "../../components/ForgeShell/ForgeSettingsPage";
 import type { SettingsSection } from "../../routeSchemas";
 import { orgRootPath, withOrg, type PathContext } from "./org";
 
@@ -92,9 +91,38 @@ export function newChatPath(ctx?: PathContext): string {
   return withOrg("/new", ctx);
 }
 
-/** The chat home filtered to one project (the sidebar's project filter). */
-export function projectPath(projectId: string, ctx?: PathContext): string {
+/**
+ * The chat home filtered to one project (the sidebar's project filter,
+ * `/project/<id>`). Not the project's page: that is projectPath. The design
+ * (R6) moves this filter back into the sidebar; until then it is how a
+ * chat's project is opened.
+ */
+export function projectChatsPath(projectId: string, ctx?: PathContext): string {
   return withOrg(`/project/${seg(projectId)}`, ctx);
+}
+
+// ── Projects (the merged list, §8.3–§8.4) ──────────────────────────────────
+
+/** The person's projects: their apps and sites, and their code (the Projects page). */
+export function projectsPath(ctx?: PathContext): string {
+  return withOrg("/projects", ctx);
+}
+
+/** A project page's sub-pages (design §4, R7–R9, R18); the page itself has none. */
+export type ProjectPageTab = "settings" | "workspaces" | "move" | "delete";
+
+/** A project's page: its code, checkouts, apps and chats; `tab` one of its sub-pages. */
+export function projectPath(projectId: string, tab?: ProjectPageTab, ctx?: PathContext): string {
+  return withOrg(`/projects/${seg(projectId)}${tab ? `/${tab}` : ""}`, ctx);
+}
+
+/**
+ * One app's console (`/o/<org>/apps/<name>`; `/forge/p/<name>` with org
+ * links off): `name` is forge.yaml's `name`. The console's own builders
+ * (components/Forge/Console/paths.ts consoleBase) spell the same root.
+ */
+export function appPath(name: string, ctx?: PathContext): string {
+  return withOrg(`/forge/p/${seg(name)}`, ctx);
 }
 
 /** Everything waiting on the person, across every chat and project. */
@@ -104,17 +132,17 @@ export function inboxPath(ctx?: PathContext): string {
 
 // ── Apps (forge) ────────────────────────────────────────────────────────────
 
-/** The org's apps (components/Apps/AppsPage.tsx); also the forge shell's home. */
+/** The org's apps (components/Apps/AppsPage.tsx); also the forge brand's home for a person who has not onboarded. */
 export function appsPath(ctx?: PathContext): string {
   return withOrg("/apps", ctx);
 }
 
-/** The forge shell's hosted sites (ForgeShell/ForgeSitesPage.tsx). */
+/** The org's hosted sites (ForgeShell/ForgeSitesPage.tsx). */
 export function sitesPath(ctx?: PathContext): string {
   return withOrg("/sites", ctx);
 }
 
-/** The forge shell's usage and spend (ForgeShell). */
+/** The org's usage and spend on what forge provisions (ForgeShell/ForgeUsagePage.tsx). */
 export function usagePath(ctx?: PathContext): string {
   return withOrg("/usage", ctx);
 }
@@ -188,11 +216,6 @@ export function workflowBuilderPath(workflowName: string, ctx?: PathContext): st
 /** Settings, at one section; bare `/settings` opens the last-visited one. */
 export function settingsPath(section?: SettingsSection): string {
   return section ? `/settings/${section}` : "/settings";
-}
-
-/** The forge shell's own Settings sections (ForgeShell/ForgeSettingsPage.tsx), at the same paths. */
-export function forgeSettingsPath(section: ForgeSettingsSection): string {
-  return `/settings/${section}`;
 }
 
 /** One machine's page in Settings › Machines. */

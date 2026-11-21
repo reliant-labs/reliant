@@ -1,9 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Acts on the journey the landing page carried to the forge shell
+ * Acts on the journey the landing page carried to the forge host
  * (landingJourney.ts): starts the forge journey, or offers the workflows
- * journey where it runs, in Reliant. Mounted once, beside <JourneyTour />.
+ * journey where it runs, in Reliant. Mounted once, beside <JourneyTour />, at
+ * the root of routes.tsx on the forge brand.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -18,14 +19,13 @@ import { dropLandingJourney, readLandingJourney } from "@/lib/landingAttribution
 import { orgFreeRouteId } from "@/lib/paths/org";
 import { useAuthStore } from "@/store/authStore";
 
-import { forgeAuthDecision } from "./ForgeAuthGuard";
-import { GUARDED_ROUTE_ID, landingJourneyAction } from "./landingJourney";
+import { GUARDED_ROUTE_IDS, landingAuthDecision, landingJourneyAction } from "./landingJourney";
 
 export function ForgeLandingJourney() {
   const nav = useTourNavigation();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tourOpen = useRouterState({ select: (s) => (s.location.search as Record<string, unknown>).tour !== undefined });
-  const guarded = useRouterState({ select: (s) => s.matches.some((m) => orgFreeRouteId(m.routeId) === GUARDED_ROUTE_ID) });
+  const guarded = useRouterState({ select: (s) => s.matches.some((m) => GUARDED_ROUTE_IDS.includes(orgFreeRouteId(m.routeId))) });
   const user = useAuthStore((state) => state.user);
   const loading = useAuthStore((state) => state.loading);
   const initialized = useAuthStore((state) => state.initialized);
@@ -37,7 +37,7 @@ export function ForgeLandingJourney() {
     forgeAvailable: isJourneyAvailable("forge"),
     onDemo: pathname.startsWith(FORGE_DEMO_PATH),
     guarded,
-    auth: forgeAuthDecision({ initialized, loading, user }),
+    auth: landingAuthDecision({ initialized, loading, user }),
   });
 
   const startJourney = useRef(nav.startJourney);

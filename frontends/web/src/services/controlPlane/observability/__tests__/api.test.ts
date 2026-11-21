@@ -351,7 +351,9 @@ describe("errors", () => {
     expect(obsRetry(0, notSetUp)).toBe(false);
     // Only the hourly allowance is "over-quota"; any other ResourceExhausted is "busy" (quota.test.ts).
     expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("busy");
-    expect(obsErrorKind(new ConnectError("this organization's hourly observability query quota is used up", Code.ResourceExhausted))).toBe("over-quota");
+    expect(
+      obsErrorKind(new ConnectError("this organization's hourly observability query quota is used up", Code.ResourceExhausted, { "x-forge-error-reason": "obs_query_quota" }))
+    ).toBe("over-quota");
     expect(obsErrorKind(new ConnectError("slow", Code.DeadlineExceeded))).toBe("too-broad");
     expect(obsRetry(0, new ConnectError("down", Code.Unavailable))).toBe(true);
     expect(obsRetry(1, new ConnectError("down", Code.Unavailable))).toBe(false);

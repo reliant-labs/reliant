@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // NO TEST HERE REACHES A REAL FORGE OR A REAL PROJECT. ApplyPromote writes a
@@ -837,7 +838,7 @@ func TestForgeService_Promote_MissingProjectDirIsNotFound(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			router := &forgeTestRouter{
-				replyErr: fmt.Errorf("daemon command: forge project dir does not exist: /gone"),
+				replyErr: toolexec.DaemonReportedFailure("forge.promote", "forge project dir does not exist: /gone"),
 			}
 			err := tc.call(newForgeTestService(router))
 			require.Error(t, err)

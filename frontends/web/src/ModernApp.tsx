@@ -88,6 +88,8 @@ import { trackEvent } from "./lib/analytics";
 import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
 import { restoreLastWorktree } from "./hooks/worktree-actions";
 import { appsPath, homePath, inboxPath, onboardingPath, runsPath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
+import { isForgeShell } from "@/lib/shell";
+import { forgeBrandHomeTarget, routeRequiresOnboarding } from "./components/OnboardingFlow/onboardingGate";
 
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
 const EMPTY_CHAT_LIST: Chat[] = [];
@@ -1556,8 +1558,16 @@ function App() {
   // Whether the user is mid-onboarding. The onboarding UI itself lives at
   // /onboarding now (see OnboardingRoute); this flag exists only so we can
   // bounce stray landings on / or /project/$id over there.
+  // Asked through the one rule (onboardingGate.ts) so this redirect and
+  // OnboardingGate agree on which routes onboarding guards; ModernApp's own
+  // routes (`/`, `/project/$id`) are chat routes, so today it always says yes.
   const inOnboarding =
-    !isUserLoading && (!currentUser || !currentUser.onboardingCompleted);
+    !isUserLoading &&
+    (!currentUser || !currentUser.onboardingCompleted) &&
+    routeRequiresOnboarding(location.pathname);
+  // On the forge brand the home sends a person who has not onboarded to their
+  // apps instead (forgeBrandHomeTarget); a project's chats still onboard them.
+  const notOnboardedHome = forgeBrandHomeTarget(location.pathname, isForgeShell());
 
   // If we land here while the user still needs to onboard, redirect to the
   // dedicated route. Preserve any incoming search (e.g. legacy /?plan=... or
@@ -1575,12 +1585,16 @@ function App() {
   useEffect(() => {
     if (isUserLoading) return;
     if (!inOnboarding) return;
+    if (notOnboardedHome) {
+      navigate({ to: notOnboardedHome, search: {}, replace: true });
+      return;
+    }
     navigate({
       to: onboardingPath(),
       search: (prev: Record<string, unknown>) => prev,
       replace: true,
     });
-  }, [isUserLoading, inOnboarding, navigate]);
+  }, [isUserLoading, inOnboarding, notOnboardedHome, navigate]);
 
   // GitHub OAuth return for app-shell triggers (GitHubSyncStatus, AddRepoModal).
   // /onboarding and /settings/git-connections handle their own returns in-route.
@@ -1686,6 +1700,8 @@ function App() {
             <div id="layout-left-sidebar" className="flex flex-col h-full">
               <Sidebar
                 paddingClass=""
+                pathname={location.pathname}
+                search={location.search}
                 onOpenWorkflows={() => {
                   navigate({ to: workflowsPath() });
                 }}
@@ -1724,6 +1740,8 @@ function App() {
               <div className="flex flex-col h-full">
                 <Sidebar
                   paddingClass=""
+                  pathname={location.pathname}
+                  search={location.search}
                   onOpenWorkflows={() => {
                     navigate({ to: workflowsPath() });
                   }}

@@ -1,6 +1,7 @@
 /**
- * The org routes through the PRODUCTION route trees of both hosts
- * (test/orgRouteHarness.ts): where each org URL lands with the flag
+ * The org routes through the PRODUCTION route tree, on both hosts — the app
+ * host and the forge host mount the same tree, routes.tsx (U6), the host
+ * deciding only the brand (test/orgRouteHarness.ts): where each URL lands with the flag
  * `web.org_routes` off and on, what a member, a non-member and a signed-out
  * visitor get, and which org the URL, the query keys and the wire agree on
  * while a navigation into another org loads, commits, or is superseded.
@@ -18,7 +19,6 @@ vi.mock("@/lib/lazyRoute", async (importOriginal) => ({
   lazyRoute: () => () => null,
 }));
 
-import { forgeRouteTree } from "@/forgeShellRoutes";
 import { projectsKey } from "@/hooks/project-queries";
 import { mobileHandoffAllowed } from "@/lib/mobileRedirect";
 import { getOrgScope, requestOrgOfKey } from "@/lib/orgScope";
@@ -26,16 +26,17 @@ import { getRouteOrgScope, isMemberOnly, ORG_ROUTE_ID } from "@/lib/routeOrg";
 import { setTransport } from "@/lib/connect";
 import { resetShellForTests } from "@/lib/shell";
 import { routeTree } from "@/routes";
+import { inOrg } from "@/lib/paths/org";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { createOrgRouteHarness, type OrgRouteWorld } from "@/test/orgRouteHarness";
 
 const ACME = { id: "org-a", slug: "acme", name: "Acme" };
 const SIDE = { id: "org-b", slug: "side", name: "Side" };
-const TREES = { reliant: routeTree, forge: forgeRouteTree } as const;
+const HOSTS = ["reliant", "forge"] as const;
 const FLAGS = [false, true] as const;
 
 function world(host: "reliant" | "forge", flag: boolean, over: Partial<OrgRouteWorld> = {}): OrgRouteWorld {
-  return { host, routeTree: TREES[host], flag, orgs: [ACME, SIDE], ...over };
+  return { host, routeTree, flag, orgs: [ACME, SIDE], ...over };
 }
 
 afterEach(() => {
@@ -44,27 +45,32 @@ afterEach(() => {
   delete (globalThis as { __RELIANT_ROUTER?: unknown }).__RELIANT_ROUTER;
 });
 
-/** Each canonical org URL, where it lands on each host, by the leaf route it commits. */
-const DIRECT: { url: string; reliant: [path: string, leaf: RegExp]; forge: [path: string, leaf: RegExp] }[] = [
-  { url: "/o/acme", reliant: ["/o/acme", /\/_app\/$/], forge: ["/o/acme/apps", /_forgeShell\/apps$/] },
-  { url: "/o/acme/inbox", reliant: ["/o/acme/inbox", /_authenticated\/inbox$/], forge: ["/o/acme/inbox", /^\/o\/\$org\/\$$/] },
-  { url: "/o/acme/project/p-1", reliant: ["/o/acme/project/p-1", /\/project\/\$projectId$/], forge: ["/o/acme/project/p-1", /^\/o\/\$org\/\$$/] },
-  { url: "/o/acme/workflows", reliant: ["/o/acme/workflows/library", /\/workflows\/library$/], forge: ["/o/acme/workflows", /^\/o\/\$org\/\$$/] },
-  { url: "/o/acme/workflow/new", reliant: ["/o/acme/workflow/new", /\/workflow\/new$/], forge: ["/o/acme/workflow/new", /^\/o\/\$org\/\$$/] },
-  { url: "/o/acme/apps", reliant: ["/o/acme/apps", /_authenticated\/apps$/], forge: ["/o/acme/apps", /_forgeShell\/apps$/] },
-  { url: "/o/acme/apps/shop/releases", reliant: ["/o/acme/apps/shop/releases", /\/releases$/], forge: ["/o/acme/apps/shop/releases", /\/releases$/] },
-  { url: "/o/acme/observability/logs", reliant: ["/o/acme/observability/logs", /\/observability\/\$view$/], forge: ["/o/acme/observability/logs", /\/observability\/\$view$/] },
-  { url: "/o/acme/sites", reliant: ["/o/acme/sites", /^\/o\/\$org\/sites$/], forge: ["/o/acme/sites", /_forgeShell\/sites$/] },
-  { url: "/o/acme/usage", reliant: ["/o/acme/usage", /^\/o\/\$org\/usage$/], forge: ["/o/acme/usage", /_forgeShell\/usage$/] },
-  { url: "/o/org-a/inbox", reliant: ["/o/acme/inbox", /_authenticated\/inbox$/], forge: ["/o/acme/inbox", /^\/o\/\$org\/\$$/] },
+/**
+ * Each canonical org URL, where it lands, by the leaf route it commits: the
+ * same on both hosts, which mount one tree. (The forge brand's home sends a
+ * person who has not onboarded to their apps from the page, not the route:
+ * onboardingGate.ts, forgeBrandHomeTarget.)
+ */
+const DIRECT: { url: string; lands: [path: string, leaf: RegExp] }[] = [
+  { url: "/o/acme", lands: ["/o/acme", /\/_app\/$/] },
+  { url: "/o/acme/inbox", lands: ["/o/acme/inbox", /_authenticated\/inbox$/] },
+  { url: "/o/acme/project/p-1", lands: ["/o/acme/project/p-1", /\/project\/\$projectId$/] },
+  { url: "/o/acme/workflows", lands: ["/o/acme/workflows/library", /\/workflows\/library$/] },
+  { url: "/o/acme/workflow/new", lands: ["/o/acme/workflow/new", /\/workflow\/new$/] },
+  { url: "/o/acme/apps", lands: ["/o/acme/apps", /_authenticated\/apps$/] },
+  { url: "/o/acme/apps/shop/releases", lands: ["/o/acme/apps/shop/releases", /\/releases$/] },
+  { url: "/o/acme/observability/logs", lands: ["/o/acme/observability/logs", /\/observability\/\$view$/] },
+  { url: "/o/acme/sites", lands: ["/o/acme/sites", /^\/o\/\$org\/_authenticated\/sites$/] },
+  { url: "/o/acme/usage", lands: ["/o/acme/usage", /^\/o\/\$org\/_authenticated\/usage$/] },
+  { url: "/o/org-a/inbox", lands: ["/o/acme/inbox", /_authenticated\/inbox$/] },
 ];
 
-describe.each(["reliant", "forge"] as const)("the %s host", (host) => {
+describe.each(HOSTS)("the %s host", (host) => {
   describe.each(FLAGS)("web.org_routes %s", (flag) => {
     it.each(DIRECT)("serves $url to a member, in its org", async (row) => {
       const h = createOrgRouteHarness(world(host, flag));
       await h.open(row.url);
-      const [path, leaf] = row[host];
+      const [path, leaf] = row.lands;
       expect(h.pathname()).toBe(path);
       expect(h.leafRouteId()).toMatch(leaf);
       expect(h.notFound()).toBe(false);
@@ -219,10 +225,15 @@ describe("org-less paths with the flag on (the Reliant host forwards; R5, R7)", 
     },
   );
 
-  it.each(FLAGS)("never forwards on the forge host (flag %s)", async (flag) => {
-    const h = createOrgRouteHarness(world("forge", flag, { tabOrg: "org-b" }));
-    await h.open("/sites");
-    expect(h.pathname()).toBe("/sites");
+  it.each([
+    ["/sites", "/o/side/sites"],
+    ["/usage", "/o/side/usage"],
+    ["/apps", "/o/side/apps"],
+  ])("forwards on the forge host too, which mounts the same tree (U6): %s → %s", async (from, to) => {
+    const h = createOrgRouteHarness(world("forge", true, { tabOrg: "org-b" }));
+    await h.open(from);
+    expect(h.pathname()).toBe(to);
+    expect(h.notFound()).toBe(false);
   });
 
   it("does nothing with the flag off", async () => {
@@ -242,7 +253,7 @@ it("reads an org id before a slug, as the control plane does (#2938)", async () 
   expect(h.orgRoute()).toEqual({ kind: "member", org: { id: "org-b", slug: "side" } });
 });
 
-describe.each(["reliant", "forge"] as const)("every redirect under the %s host's org layout", (host) => {
+describe.each(HOSTS)("every redirect under the %s host's org layout", (host) => {
   it("runs only in a member org (memberOnly)", () => {
     const visit = (route: { id: string; options: { beforeLoad?: unknown }; children?: unknown }, out: string[]) => {
       if (route.id.startsWith(`${ORG_ROUTE_ID}/`) && route.options.beforeLoad && !isMemberOnly(route.options.beforeLoad)) out.push(route.id);
@@ -250,7 +261,7 @@ describe.each(["reliant", "forge"] as const)("every redirect under the %s host's
       for (const child of Array.isArray(children) ? children : Object.values(children ?? {})) visit(child, out);
       return out;
     };
-    const unguarded = visit(TREES[host] as never, []);
+    const unguarded = visit(world(host, false).routeTree as never, []);
     expect(unguarded).toEqual([]);
     // …and the walk saw the org tree's redirects at all.
     const all: string[] = [];
@@ -259,7 +270,54 @@ describe.each(["reliant", "forge"] as const)("every redirect under the %s host's
       const children = route.children as Record<string, typeof route> | (typeof route)[] | undefined;
       for (const child of Array.isArray(children) ? children : Object.values(children ?? {})) count(child);
     };
-    count(TREES[host] as never);
+    count(world(host, false).routeTree as never);
     expect(all.length).toBeGreaterThan(3);
+  });
+});
+
+/**
+ * The one shell's pages, on both hosts × the flag × a member of the URL's org
+ * or not (U6): every page every host serves, in the form a link or a bookmark
+ * names it. "Not a member" here is a person in Side only: an org-less page
+ * forwards into THEIR org with the flag on, and Acme's URLs show the one
+ * no-access page.
+ */
+describe("the one shell's pages", () => {
+  /** A page: whether its org-less form forwards with the flag on, and its leaf (either form). */
+  const PAGES: { url: string; forwards: boolean; leaf: RegExp }[] = [
+    { url: "/", forwards: true, leaf: /\/_app\/$/ },
+    { url: "/apps", forwards: true, leaf: /_authenticated\/apps$/ },
+    { url: "/sites", forwards: true, leaf: /_authenticated\/sites$/ },
+    { url: "/usage", forwards: true, leaf: /_authenticated\/usage$/ },
+    // An app by name: its own org decides (the resolver, U4), never the tab's.
+    { url: "/forge/p/shop", forwards: false, leaf: /\/forge\/p\/\$project\/$/ },
+    { url: "/o/acme/apps/shop", forwards: false, leaf: /\/apps\/\$project\/$/ },
+    { url: "/o/acme/usage", forwards: false, leaf: /_authenticated\/usage$/ },
+    // Not org-scoped yet (U8).
+    { url: "/settings/tokens", forwards: false, leaf: /_authenticated\/settings\/\$section$/ },
+  ];
+  const MEMBERSHIP = [
+    ["a member of acme", [ACME, SIDE], "org-a", "acme"],
+    ["not a member of acme", [SIDE], "org-b", "side"],
+  ] as const;
+
+  describe.each(HOSTS)("the %s host", (host) => {
+    describe.each(FLAGS)("web.org_routes %s", (flag) => {
+      describe.each(MEMBERSHIP)("%s", (_who, orgs, tabOrg, segment) => {
+        it.each(PAGES)("$url", async ({ url, forwards, leaf }) => {
+          const h = createOrgRouteHarness(world(host, flag, { orgs: [...orgs], tabOrg }));
+          await h.open(url);
+          expect(h.notFound()).toBe(false);
+          if (url.startsWith("/o/acme") && segment !== "acme") {
+            // Someone else's org: its one no-access page, in place.
+            expect(h.pathname()).toBe(url);
+            expect(h.orgRoute()?.kind).toBe("not-member");
+            return;
+          }
+          expect(h.pathname()).toBe(forwards && flag ? inOrg(segment, url) : url);
+          expect(h.leafRouteId()).toMatch(leaf);
+        });
+      });
+    });
   });
 });
