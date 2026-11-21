@@ -215,6 +215,12 @@ func (s *Service) RegisterOutboundConnection(
 	if s.draining.Load() {
 		return nil, errGatewayDraining
 	}
+	// The gateway dials only managed pods, and never refuses one for its
+	// version (version_floor.go).
+	floorRestart, err := s.applyVersionFloor(ctx, userID, daemonID, reg, true, true)
+	if err != nil {
+		return nil, err
+	}
 
 	now := leaseTime(time.Now())
 	capabilitiesJSON, err := jsonStringSlicePtr(reg.Capabilities)
@@ -317,6 +323,7 @@ func (s *Service) RegisterOutboundConnection(
 
 	// Start sender and heartbeat goroutines.
 	s.startSender(conn)
+	s.sendFloorRestart(conn, floorRestart)
 	go s.runHeartbeat(conn)
 	// Prove the link before the link-ready listeners run (link_liveness.go).
 	// A workspace pod's disk is reconciled by its own checkout flow, so no
