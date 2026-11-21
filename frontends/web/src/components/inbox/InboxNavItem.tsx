@@ -30,6 +30,10 @@ import { SidebarRow } from "../Layout/sidebar/primitives";
 
 interface InboxNavItemProps {
   onOpen?: () => void;
+  /** The Inbox's path: given, the row is a link (a modified click opens a new tab). */
+  href?: string;
+  /** The Inbox is the page on screen. */
+  current?: boolean;
 }
 
 /** What the Inbox badge shows: the blocking count, the failures dot, and whether the read failed. */
@@ -70,7 +74,7 @@ export function useInboxBadge(): InboxBadgeState {
   return { count, informational, degraded, announcement };
 }
 
-export function InboxNavItem({ onOpen }: InboxNavItemProps) {
+export function InboxNavItem({ onOpen, href, current }: InboxNavItemProps) {
   const { count, informational, degraded, announcement } = useInboxBadge();
 
   // The badge is the row's trail (restyle §11.3): the count in meta, a dot
@@ -101,6 +105,8 @@ export function InboxNavItem({ onOpen }: InboxNavItemProps) {
       icon={<Inbox className="size-4" />}
       label="Inbox"
       onClick={onOpen}
+      href={href}
+      current={current}
       trail={trail}
       // Named by its content: "Inbox" and the live count below.
       ariaLabel={null}

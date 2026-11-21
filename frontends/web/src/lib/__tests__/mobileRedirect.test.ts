@@ -109,6 +109,15 @@ describe('shouldRedirectToMobile', () => {
     // A prefix match, not a substring one.
     expect(shouldRedirectToMobile(phone({ pathname: '/forgery' }))).toBe(true)
   })
+
+  it('leaves Projects on a phone, and the retired /apps and /sites that redirect there (U6)', () => {
+    // The drawer's Apps opens Projects narrowed to the apps; an old /apps link
+    // redirects there. Handing either off would land the phone on the chat list.
+    for (const pathname of ['/projects', '/o/acme/projects', '/apps', '/o/acme/apps', '/sites', '/o/acme/sites']) {
+      expect(shouldRedirectToMobile(phone({ pathname, search: '?show=apps' })), pathname).toBe(false)
+    }
+    expect(shouldRedirectToMobile(phone({ pathname: '/projectsx' }))).toBe(true)
+  })
 })
 
 describe('mobilePathFor', () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -377,57 +377,72 @@ describe("Sidebar selected chat scroll", () => {
     expect(row.querySelector(".lucide-archive")).toBeNull();
   });
 
-  it("renders Codex-style navigation actions and calls their handlers", () => {
+  it("renders Codex-style navigation actions and opens each page through onNavigate", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const onOpenWorkflows = vi.fn();
+    const onNavigate = vi.fn();
     const onOpenChatSearch = vi.fn();
-    const onNavigateToSettings = vi.fn();
-    const onOpenInbox = vi.fn();
 
     render(
       <QueryClientProvider client={queryClient}>
-        <Sidebar
-          onOpenWorkflows={onOpenWorkflows}
-          onOpenChatSearch={onOpenChatSearch}
-          onNavigateToSettings={onNavigateToSettings}
-          onOpenInbox={onOpenInbox}
-        />
+        <Sidebar pathname="/" onNavigate={onNavigate} onOpenChatSearch={onOpenChatSearch} />
       </QueryClientProvider>
     );
 
-    expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
-    // Inbox is in the nav with its badge; its position (before Apps) is pinned in Sidebar.forge-nav.test.tsx.
+    // New chat is a link to the new-chat view (U5's /new), so a modified
+    // click opens it in a new tab; a plain one runs openNewChat.
+    expect(screen.getByRole("link", { name: "New chat" })).toHaveAttribute("href", "/new");
+    // Inbox is in the nav with its badge; the nav's order is pinned in Sidebar.forge-nav.test.tsx.
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
     expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
-    // No "Projects" page to go to: the project is the chat list's filter.
-    expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
+    // Projects is a place of its own (U6), beside the chat list's project filter.
+    expect(within(nav).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects");
     // Unfiltered, the list's heading is just "Chats"; a filter would name its project there.
     expect(screen.getByTestId("chat-list-heading")).toHaveTextContent(/^Chats$/);
     expect(screen.queryByTestId("project-filter-label")).toBeNull();
     expect(screen.getByTestId("project-filter-trigger")).toHaveAccessibleName("Chat list options. Showing All projects");
-    expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
-    // Automations and Runs are tabs of the Workflows area now (§1.2), not
-    // sidebar entries of their own.
-    expect(screen.queryByRole("button", { name: "Automations" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Runs" })).toBeNull();
+    const workflows = within(nav).getByRole("link", { name: "Workflows" });
+    // Automations and Runs are tabs of the Workflows area (§1.2): nested
+    // under Workflows only while the area is open, never places of their own.
+    expect(screen.queryByRole("link", { name: "Automations" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Runs" })).toBeNull();
     expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Workflows" })).toHaveAttribute(
-      "data-onboarding",
-      "workflow-button"
-    );
+    const settings = screen.getByRole("link", { name: "Settings" });
+    expect(workflows).toHaveAttribute("data-onboarding", "workflow-button");
+    // Nothing is the current page on the chat home.
+    expect(nav.querySelector("[aria-current]")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
+    fireEvent.click(workflows);
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(settings);
     fireEvent.click(screen.getByTestId("sidebar-inbox-button"));
+    fireEvent.click(within(nav).getByRole("link", { name: "Usage" }));
 
-    expect(onOpenInbox).toHaveBeenCalledTimes(1);
-    expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
+    expect(onNavigate.mock.calls.map(([href]) => href)).toEqual(["/workflows", "/settings", "/inbox", "/usage"]);
     expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
-    expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a modified click on a row to the browser (a new tab)", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const onNavigate = vi.fn();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/" onNavigate={onNavigate} />
+      </QueryClientProvider>
+    );
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }), { metaKey: true });
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("marks Settings while a settings page is on screen", () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar pathname="/settings/appearance" onNavigate={vi.fn()} />
+      </QueryClientProvider>
+    );
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("aria-current", "page");
   });
 });

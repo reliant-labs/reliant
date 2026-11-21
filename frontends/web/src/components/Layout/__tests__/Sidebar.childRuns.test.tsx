@@ -24,6 +24,8 @@ import { useChatStore } from "../../../store/chatStore";
 import { useWorktreeStore } from "../../../store/worktreeStore";
 import { useProjectStore } from "../../../store/projectStore";
 
+// A person whose chats can run (onboarded, with a machine): the chat list, not the Set up chats card.
+vi.mock("../../OnboardingFlow/useChatSetup", () => ({ useChatSetup: () => "ready" }));
 vi.mock("../../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));

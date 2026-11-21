@@ -270,6 +270,73 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByText('Machine usage and allowance').first(),
   },
+  // The one shell (U6): the same destinations the shell hosts, named so they can be re-captured
+  // as the shell changes. `ready` waits on page content, never on the sidebar.
+  {
+    name: 'shell-chat-home',
+    path: '/',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('Migrate order confirmation emails', { exact: false }).first(),
+  },
+  {
+    name: 'shell-inbox',
+    path: '/inbox',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByRole('heading', { name: 'Inbox' }).first(),
+  },
+  {
+    name: 'shell-workflows',
+    path: '/workflows',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByRole('heading', { name: 'Workflows' }).first(),
+  },
+  {
+    name: 'shell-apps',
+    // Projects, narrowed to the apps: the nav's Apps heading, and where the retired /apps redirects.
+    path: '/projects?show=apps',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('shopfront', { exact: true }).first(),
+  },
+  {
+    name: 'shell-app-overview',
+    path: '/forge/p/shopfront',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('worker', { exact: true }).first(),
+  },
+  {
+    name: 'shell-app-observability',
+    path: '/forge/p/shopfront/observability/errors',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('idempotency key reused', { exact: false }).first(),
+  },
+  {
+    // The forge host's shell (lib/shell.ts reads this key before the router is built).
+    name: 'shell-forge-host-app-overview',
+    path: '/forge/p/shopfront',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('worker', { exact: true }).first(),
+    harness: { storage: { 'reliant.shell': 'forge' } },
+  },
+  {
+    // The daemonless home (U6 3/4): an onboarded person whose daemon list is
+    // empty. The desktop home sends them to Projects, with the Set up chats
+    // card there and in place of the nav's chat list. The phone keeps its chat
+    // list (its home rule is unchanged; a phone opening `/` lands on /m/chats).
+    name: 'shell-daemonless-home',
+    path: '/',
+    on: ['desktop', 'mobile'],
+    ready: (page) =>
+      page.viewportSize()!.width > 768
+        ? page.getByRole('heading', { name: 'Projects' }).first()
+        : page.getByText('Write the webhooks guide').first(),
+    harness: { fixtures: { 'reliant.v1.DaemonRegistryService/ListDaemons': { daemons: [] } } },
+  },
+  {
+    name: 'shell-settings',
+    path: '/settings',
+    on: ['desktop', 'mobile'],
+    ready: (page) => page.getByText('alex@example.com').first(),
+  },
 ]
 
 /**

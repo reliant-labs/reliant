@@ -12,6 +12,7 @@ import {
 } from "./SettingsNavigation";
 import type { AISettingsTab, SettingsTab } from "../../routeSchemas";
 import { cn } from "../../lib/utils";
+import { ShellPageHeader, useShellFrame } from "../Layout/shell/shellFrame";
 
 const SettingsContent = lazy(() =>
   import("./SettingsContent").then((module) => ({
@@ -38,6 +39,7 @@ export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: Se
   const containerRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
   const chrome = useTitleBarChrome();
+  const { inShell } = useShellFrame();
   const pendingFocus = useRef<SettingsNavEntry | null>(null);
 
   const focusEntry = useCallback((entry: SettingsNavEntry) => {
@@ -110,6 +112,20 @@ export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: Se
     };
   }, [section, tab, navEntries, onSectionChange, focusEntry]);
 
+  const content = (
+    <Suspense
+      fallback={
+        <div className="flex h-full items-center justify-center">
+          <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
+            Loading settings...
+          </div>
+        </div>
+      }
+    >
+      <SettingsContent activeSection={section} />
+    </Suspense>
+  );
+
   // Detect width and collapse sidebar when narrow
   useEffect(() => {
     const container = containerRef.current;
@@ -129,6 +145,27 @@ export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: Se
       observer.disconnect();
     };
   }, []);
+
+  if (inShell) {
+    // Inside the one shell: the shell's nav is the way out and the org
+    // switcher, so Settings is a page — a bar naming it, and its sections as
+    // the page's own list beside the section (one surface, no rule).
+    return (
+      <div ref={containerRef} className="flex h-full min-w-0 flex-col bg-background">
+        <ShellPageHeader testId="settings-header">
+          <span className="text-ui font-medium text-foreground">Settings</span>
+        </ShellPageHeader>
+        <div className="flex min-h-0 flex-1">
+          <aside aria-label="Settings" className={cn("flex shrink-0 flex-col pb-4", isCollapsed ? "w-16" : "w-[220px]")}>
+            <div ref={navigationRef} className="flex min-h-0 flex-1 flex-col">
+              <SettingsNavigation activeSection={section} onSectionChange={onSectionChange} isCollapsed={isCollapsed} />
+            </div>
+          </aside>
+          <main className="min-w-0 flex-1 overflow-hidden bg-background">{content}</main>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="flex h-full min-w-0 bg-background">
@@ -156,19 +193,7 @@ export function SettingsViewerTab({ section, tab, onSectionChange, onClose }: Se
       </aside>
 
       {/* Settings Content */}
-      <main className="min-w-0 flex-1 overflow-hidden bg-background">
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center">
-              <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
-                Loading settings...
-              </div>
-            </div>
-          }
-        >
-          <SettingsContent activeSection={section} />
-        </Suspense>
-      </main>
+      <main className="min-w-0 flex-1 overflow-hidden bg-background">{content}</main>
     </div>
   );
 }

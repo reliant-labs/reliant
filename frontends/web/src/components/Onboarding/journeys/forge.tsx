@@ -38,13 +38,12 @@ import { lazy, Suspense } from "react";
 import { FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
 import { FORGE_ONE_LINER } from "../../Forge/Demo/demoCopy";
 import { trackEvent } from "../../../lib/analytics";
-import { isForgeUIEnabled } from "../../../lib/forgeFeature";
 import { isDemoShell } from "../../../lib/shell";
 import { notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
 import { DemoCta } from "../../Forge/Demo/DemoCta";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
-import { appsPath, forgeLandingPath, workflowDetailPath } from "@/lib/paths";
+import { projectsPath, workflowDetailPath } from "@/lib/paths";
 import { consoleBase } from "@/components/Forge/Console/paths";
 
 /** The CreateOrder trace the tour opens (FIXTURE_TRACE_ID): two failed payment calls, then the worker. */
@@ -236,11 +235,9 @@ export const forgeJourney: Journey = {
   description:
     "Walk through a running app's console: one request across three services, its logs and its error, and how an agent gets the problem.",
   controls: "callout",
-  // Settings → Developer can switch the forge UI off; that turns its tour off too. (On by default, and in the forge shell.)
-  isAvailable: isForgeUIEnabled,
-  // Reliant: forge's Apps (the bare /forge lands there). The forge shell: its project picker, which signs a visitor in first.
+  // The person's apps (Projects, narrowed to them), on either brand; signed out, sign-in comes first.
   // The demo: nowhere to go, so the visitor stays on the console with the tour closed.
-  finish: (shell) => (shell === "reliant" ? { to: forgeLandingPath() } : isDemoShell() ? null : { to: appsPath() }),
+  finish: () => (isDemoShell() ? null : { to: projectsPath(), search: { show: "apps" } }),
   steps: [
     {
       id: "fg-intro",
@@ -255,8 +252,9 @@ export const forgeJourney: Journey = {
       title: "A Forge app's console",
       description:
         "Every Forge project gets this console: environments, releases, domains, secrets and observability, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
-      // The console's sidebar: forge-ui SidebarLayout's one <aside>, inside ConsoleShell (its id is generated).
-      target: "[data-tour='forge-console'] aside",
+      // The console's sections: in the one shell, the open app's rows in the left nav (Layout/sidebar/AppsNavSection);
+      // in the demo's own frame, forge-ui SidebarLayout's one <aside> inside ConsoleShell (its id is generated).
+      target: "[data-tour='forge-console-nav'], [data-tour='forge-console'] aside",
       tooltipPosition: "right",
       get route() {
         return stop({ view: "overview", ...CLOSED });

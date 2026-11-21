@@ -19,6 +19,7 @@ const FORWARDED: [path: string, landsAt: string][] = [
   ["/apps", "/o/acme/apps"],
   ["/sites", "/o/acme/sites"],
   ["/usage", "/o/acme/usage"],
+  ["/projects", "/o/acme/projects"],
   ["/workflows", "/o/acme/workflows"],
   ["/workflows/library", "/o/acme/workflows/library"],
   ["/workflows/library/builtin%3A%2F%2Fget-it-right", "/o/acme/workflows/library/builtin%3A%2F%2Fget-it-right"],

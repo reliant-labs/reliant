@@ -31,11 +31,6 @@ vi.mock("../../../hooks/useOrgs", () => ({
   useActiveOrg: () => ({ orgs: [], active: null, canSwitch: false, select: vi.fn() }),
 }));
 
-let forgeEnabled = true;
-vi.mock("../../../lib/forgeFeature", () => ({
-  isForgeUIEnabled: () => forgeEnabled,
-}));
-
 const { MobileNavDrawer } = await import("../MobileNavDrawer");
 const { useMobileDrawerStore, EMPTY_INBOX_BADGE } = await import("../../../store/mobileDrawerStore");
 
@@ -87,7 +82,6 @@ describe("MobileNavDrawer", () => {
   });
 
   beforeEach(() => {
-    forgeEnabled = true;
     useMobileDrawerStore.setState({ inboxBadge: EMPTY_INBOX_BADGE });
   });
 
@@ -95,18 +89,9 @@ describe("MobileNavDrawer", () => {
     renderAt("/m/chats", true, vi.fn());
     await screen.findByRole("dialog", { name: "Navigation" });
     expect(screen.getByRole("link", { name: /^Inbox/ })).toHaveAttribute("href", "/m/inbox");
-    // The forge console itself, which collapses its own nav at phone width.
-    expect(screen.getByRole("link", { name: /^Apps/ })).toHaveAttribute("href", "/apps");
+    // The desktop pages, which fit a phone: Projects narrowed to the apps, and the console.
+    expect(screen.getByRole("link", { name: /^Apps/ })).toHaveAttribute("href", "/projects?show=apps");
     expect(screen.getByRole("link", { name: /^Observability/ })).toHaveAttribute("href", "/forge/observability");
-  });
-
-  it("hides Apps and Observability when the forge UI is off, as the desktop sidebar does", async () => {
-    forgeEnabled = false;
-    renderAt("/m/chats", true, vi.fn());
-    await screen.findByRole("dialog", { name: "Navigation" });
-    expect(screen.queryByRole("link", { name: /^Apps/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^Observability/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^Inbox/ })).toBeInTheDocument();
   });
 
   it("shows the Inbox's blocking count on its row", async () => {

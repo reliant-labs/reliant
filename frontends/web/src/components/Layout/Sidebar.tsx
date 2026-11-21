@@ -33,7 +33,8 @@ import {
   Settings,
   SquarePen,
   Workflow,
-  AppWindow,
+  Boxes,
+  Gauge,
   Activity,
   FolderInput,
   Server,
@@ -53,14 +54,12 @@ import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
-import { SidebarApps } from "../Apps/SidebarApps";
 import { SharedWithOrgSection } from "../Sharing/SharedWithOrgSection";
 import { ChatProjectFilterButton, ChatProjectFilterScope } from "../Projects/ChatProjectFilter";
 import { useChatProjectFilter } from "../../hooks/useChatProjectFilter";
 import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { RunsSearch } from "../../routeSchemas";
-import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
 import { activityNeedsAttention } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -94,6 +93,9 @@ import ContextMenu from "../forge-ui/context_menu";
 import type { MenuGroup } from "../forge-ui/dropdown_menu";
 import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
 import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
+import { focusEventName } from "../../lib/keyboard/focus";
+import { inboxPath, newChatPath, projectsPath, settingsPath, usagePath, withSearch, workflowsPath } from "../../lib/paths";
+import { WORKFLOWS_TABS, isWorkflowsAreaPath, workflowsTabForPath } from "../../lib/workflowsArea";
 import type { Chat } from "../../api/client";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
@@ -111,9 +113,17 @@ import {
   SidebarOrgRow,
   SidebarPrimaryAction,
   SidebarRow,
+  SidebarSubRow,
   SIDEBAR_ORG_TRIGGER,
   WorkspaceSubheading,
 } from "./sidebar/primitives";
+import { AppsNavSection } from "./sidebar/AppsNavSection";
+import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
+import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
+import { useChatSetup } from "../OnboardingFlow/useChatSetup";
+import { isAtOrBelow } from "./sidebar/navLocation";
+import { ForgeBrand } from "../ForgeShell/ForgeBrand";
+import { isForgeShell } from "../../lib/shell";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
 import { chatRowChip } from "./chatRowStatus";
 import {
@@ -127,22 +137,18 @@ import { archiveWorktree } from "../../hooks/worktree-actions";
 import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
 
 interface SidebarProps {
-  paddingClass?: string;
-  /** The page on screen (the router's): the chat list's project filter reads `?projects=` on the chat home. */
+  /** The page on screen (the router's): which row is current, which app is open. */
   pathname?: string;
-  /** The page's search (the router's parsed search). */
+  /** The page's search, carried by the rows that keep a scope (`?project=`, `?env=`). */
   search?: Record<string, unknown>;
-  /** Open the Workflows area (Workflows · Runs). */
-  onOpenWorkflows?: () => void;
-  /** Open the Runs tab with filters; the footer pill passes "live". */
+  /** Opens a page: the shell's navigate (Layout/shell/AppShell.tsx). */
+  onNavigate?: (href: string) => void;
+  /** Open the Runs tab with filters; the Workflows row's pill passes "live". */
   onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
-  onNavigateToSettings?: () => void;
-  /** Settings → Projects, where projects are renamed and removed. */
-  onManageProjects?: () => void;
-  onOpenForge?: () => void;
-  onOpenInbox?: () => void;
 }
+
+const NO_SEARCH: Record<string, unknown> = {};
 
 /**
  * The small launch-kind icon before an automation row's title (§6.3): this
@@ -676,20 +682,14 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   );
 });
 
-const NO_SEARCH: Record<string, unknown> = {};
-
 function SidebarComponent({
-  paddingClass = "",
   pathname = "",
   search = NO_SEARCH,
-  onOpenWorkflows,
+  onNavigate,
   onOpenRuns,
-  onOpenInbox,
   onOpenChatSearch,
-  onNavigateToSettings,
-  onManageProjects,
-  onOpenForge,
 }: SidebarProps) {
+  const go = useCallback((href: string) => onNavigate?.(href), [onNavigate]);
   // The project filter (null: All projects) decides what the list shows; the
   // context project (the open chat's) does not, so opening a chat elsewhere
   // never re-scopes or unmounts the list.
@@ -795,32 +795,25 @@ function SidebarComponent({
   // The rows the list renders: a run counted here has its own row, so the
   // automation pill does not count it again.
   const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
-  // ONE condition: the experimental gate. While the forge UI is unreleased this
-  // is off in a packaged build, so the entry does not exist for anyone who has
-  // not opted in.
-  //
-  // IT IS DELIBERATELY NOT ALSO GATED ON THE PROJECT BEING A FORGE PROJECT,
-  // and that is a reversal. Apps and Observability are ORG-level surfaces
-  // (every app the org runs; telemetry across all of them), not views of the
-  // current project, so the entries sit beside New chat / Projects / Workflows
-  // and stay PUT — a nav item that appears and disappears as you switch
-  // projects is harder to learn than one that is always there, and which
-  // project is current has no bearing on where they lead.
-  //
-  // It also removes a failure mode that actually bit us: the old gate required
-  // a LIVE GetTopology call to succeed, so when that RPC broke (a report-type
-  // mismatch, fixed separately) the whole feature silently vanished with
-  // nothing in the UI to say why. A nav entry whose visibility depends on an
-  // RPC is a nav entry that can be deleted by a bug.
-  const showForgeEntry = isForgeUIEnabled();
+  // Where each place is, in the form the links use (lib/paths), and whether
+  // its page is the one on screen.
+  const newChatHref = newChatPath();
+  const inboxHref = inboxPath();
+  const projectsHref = projectsPath();
+  const workflowsHref = workflowsPath();
+  const usageHref = usagePath();
+  const settingsHref = settingsPath();
+  const inWorkflows = isWorkflowsAreaPath(pathname);
+  const workflowsTab = workflowsTabForPath(pathname);
   // Focus target for the "focus the chat list" shortcut. The list has no
   // single natural control to focus, so the pane container takes it and
   // ordinary tab-order takes over from there.
   const sidebarRootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handleFocus = () => sidebarRootRef.current?.focus();
-    window.addEventListener("focus-left-sidebar", handleFocus);
-    return () => window.removeEventListener("focus-left-sidebar", handleFocus);
+    const name = focusEventName("left-sidebar");
+    window.addEventListener(name, handleFocus);
+    return () => window.removeEventListener(name, handleFocus);
   }, []);
 
   // Activity from activityStore (SINGLE SOURCE OF TRUTH)
@@ -1092,9 +1085,19 @@ function SidebarComponent({
     return ordered[0]?.id ?? null;
   }, [chatListTab, filteredArchivedChats, viewMode, flatList, projectFilterId, activeGroups, projectGroups, activeChatId]);
 
+  // Whether chats can run yet (OnboardingFlow/onboardingGate.ts, ChatSetup).
+  // Until they can, the Chats section is the Set up chats card, and New chat
+  // goes where the card does.
+  const setup = useChatSetup();
+  const setupNeeded = chatSetupNeeded(setup);
+
   // The global New chat: the filter's project, else the open chat's, else the
   // last one used (openNewChat).
   const handleNewChat = () => {
+    if (setupNeeded) {
+      go(chatSetupPath(setup));
+      return;
+    }
     void openNewChat();
   };
 
@@ -1843,9 +1846,6 @@ function SidebarComponent({
       data-context="left-sidebar"
       tabIndex={-1}
     >
-      {/* Header section - only when not fullscreen */}
-      {paddingClass && <div className="h-12"></div>}
-
       {/* The org the app acts in, and the way to change it (restyle §11.3).
           With no org (no control plane) the row names the product. */}
       <SidebarOrgRow>
@@ -1853,45 +1853,73 @@ function SidebarComponent({
           variant="sidebar-top"
           fallback={
             <div className={cn(SIDEBAR_ORG_TRIGGER, "hover:bg-transparent")}>
-              <SidebarOrgLabel name="Reliant" />
+              {isForgeShell() ? <ForgeBrand /> : <SidebarOrgLabel name="Reliant" />}
             </div>
           }
         />
       </SidebarOrgRow>
 
+      {/* The one nav (U6, design §4.1): New chat, then the places, each lit
+          while its page is on screen. The open area's own sections nest under
+          its row (Workflows here, an app's under Apps below). */}
       <nav className="flex shrink-0 flex-col" aria-label="Chat sidebar navigation">
         <SidebarPrimaryAction
           icon={<SquarePen className="size-4" />}
           label="New chat"
+          // While chats cannot run yet, New chat sets them up (handleNewChat).
+          href={setupNeeded ? chatSetupPath(setup) : newChatHref}
           onClick={handleNewChat}
           testId="create-chat-button"
           shortcut={newChatShortcut}
         />
         <div className="mt-3 space-y-0.5 px-2">
-          <InboxNavItem onOpen={onOpenInbox} />
-          {/* Apps (/apps) is the org's index of every app it runs, each one a
-              drill-in to its console (environments, releases, observability) —
-              the ONE entry into the running side. */}
-          {showForgeEntry && (
-            <SidebarRow
-              icon={<AppWindow className="size-4" />}
-              label="Apps"
-              onClick={onOpenForge}
-              testId="sidebar-forge-button"
-              onboardingId="apps-button"
-            />
-          )}
-          {/* What is live, one click from anywhere: each app's console and its site. */}
-          {showForgeEntry && <SidebarApps />}
-          {/* One entry for the whole area: Workflows and Runs are its tabs
-              (WORKFLOW_UI.md §1.2), so they get no entries here. Live
-              automations are its trail, with their own link to Runs. */}
+          <InboxNavItem href={inboxHref} onOpen={() => go(inboxHref)} current={isAtOrBelow(pathname, inboxHref)} />
+          <SidebarRow
+            icon={<Boxes className="size-4" />}
+            label="Projects"
+            href={projectsHref}
+            onClick={() => go(projectsHref)}
+            current={isAtOrBelow(pathname, projectsHref)}
+            testId="sidebar-projects-button"
+          />
+          {/* One entry for the whole area. Live automations are its trail, with
+              their own link to Runs; its tabs nest under it while it is open. */}
           <SidebarRow
             icon={<Workflow className="size-4" />}
             label="Workflows"
-            onClick={onOpenWorkflows}
+            href={workflowsHref}
+            onClick={() => go(workflowsHref)}
+            current={inWorkflows && !workflowsTab}
+            expanded={inWorkflows || undefined}
             onboardingId="workflow-button"
+            testId="sidebar-workflows-button"
             action={<AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />}
+          />
+          {inWorkflows && (
+            <div role="group" aria-label="Workflows sections" data-testid="sidebar-workflows-sections" className="space-y-0.5">
+              {WORKFLOWS_TABS.map((tab) => {
+                // The area's scope rides along between its tabs.
+                const href = withSearch(tab.href(), { project: search.project, allProjects: search.allProjects });
+                return (
+                  <SidebarSubRow
+                    key={tab.key}
+                    label={tab.key === "workflows" ? "Library" : tab.label}
+                    href={href}
+                    onClick={() => go(href)}
+                    current={workflowsTab === tab.key}
+                    testId={`sidebar-workflows-${tab.key}`}
+                  />
+                );
+              })}
+            </div>
+          )}
+          <SidebarRow
+            icon={<Gauge className="size-4" />}
+            label="Usage"
+            href={usageHref}
+            onClick={() => go(usageHref)}
+            current={isAtOrBelow(pathname, usageHref)}
+            testId="sidebar-usage-button"
           />
           <SidebarRow
             icon={<Search className="size-4" />}
@@ -1902,6 +1930,29 @@ function SidebarComponent({
         </div>
       </nav>
 
+      {/* Below the places, two regions that scroll on their own: the apps
+          (the open one's sections inline), then the chats. An expanded app
+          never pushes the chats off the window (owner preview 2026-11-19, a
+          900px window): the chats keep at least 40% of the room, and never
+          less than their heading and five rows, unless the window has less;
+          the apps take what they need of the rest and scroll past it. Pure
+          flex: the apps shrink (min-h-0) and the chats grow from nothing. */}
+      <div className="flex min-h-0 flex-1 flex-col" data-testid="sidebar-regions">
+      {/* Every app the org runs, one click from its console. */}
+      <div className="min-h-0 shrink overflow-y-auto overscroll-contain" data-testid="sidebar-apps-scroller">
+        <AppsNavSection pathname={pathname} search={search} onNavigate={go} />
+      </div>
+
+      <div
+        className="flex min-h-[min(100%,max(40%,calc(5*var(--row-h)+3.25rem)))] flex-1 flex-col"
+        data-testid="sidebar-chats"
+      >
+      {/* Chats cannot run yet (no machine): one card that sets them up, in
+          place of the list. */}
+      {setupNeeded ? (
+        <SetUpChatsCard setup={setup} variant="nav" onNavigate={go} />
+      ) : (
+      <>
       {/* The list's heading: its one menu (project, sort, view, every
           project, archived) on hover, and the machine filter when there is
           more than one machine. */}
@@ -1934,7 +1985,8 @@ function SidebarComponent({
               filterId={projectFilterId}
               projects={projects}
               onAddProject={() => openAddProject()}
-              onManageProjects={() => onManageProjects?.()}
+              onManageProjects={() => go(settingsPath("projects"))}
+              needsYouByProject={needsYouByProject}
               sortOrder={sortOrder}
               onSortChange={setSortOrder}
               viewMode={viewMode}
@@ -1970,10 +2022,10 @@ function SidebarComponent({
         )}
       </SidebarHeading>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain" data-testid="sidebar-scroller">
         <div
           ref={scrollContainerRef}
-          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 pt-0.5"
+          className="flex-1 px-2 pb-3 pt-0.5"
           onKeyDown={onChatListKeyDown}
           aria-label={chatListTab === "active" ? "Chats" : "Archived chats"}
           role="region"
@@ -2190,6 +2242,10 @@ function SidebarComponent({
           )}
         </div>
       </div>
+      </>
+      )}
+      </div>
+      </div>
 
       {/* Settings only: the org switcher is the top row, and live
           automations are the Workflows row's trail. */}
@@ -2197,7 +2253,10 @@ function SidebarComponent({
         <SidebarRow
           icon={<Settings className="size-4" />}
           label="Settings"
-          onClick={onNavigateToSettings}
+          href={settingsHref}
+          onClick={() => go(settingsHref)}
+          current={isAtOrBelow(pathname, settingsHref)}
+          testId="sidebar-settings-button"
           // Renders nothing unless the desktop app has an update waiting.
           action={<SidebarUpdateButton />}
         />

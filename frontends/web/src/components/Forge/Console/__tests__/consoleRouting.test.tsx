@@ -176,6 +176,8 @@ vi.mock("@/components/Forge/Org", async () => {
 
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 
+import { ShellFrameContext } from "@/components/Layout/shell/shellFrame";
+
 import { ConsoleLayout } from "../ConsoleLayout";
 import { useForgeConsole } from "../consoleContext";
 import {
@@ -212,7 +214,11 @@ function probe(name: string): RouteComponent {
   };
 }
 
-function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, request: unknown) => void; metrics?: boolean } = {}) {
+function renderAt(
+  initialEntry: string,
+  options: { onObsCall?: (rpc: string, request: unknown) => void; metrics?: boolean; inShell?: boolean } = {},
+) {
+  const inShell = options.inShell ?? false;
   const root = createRootRoute({ component: () => <Outlet /> });
   const authenticated = createRoute({ getParentRoute: () => root, id: "_authenticated", component: () => <Outlet /> });
   const forge = createForgeConsoleRoutes(() => authenticated, {
@@ -241,7 +247,7 @@ function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, req
     legacyCommand: LegacyCommandRoute,
   });
   const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <div data-testid="home">home</div> });
-  const apps = createRoute({ getParentRoute: () => root, path: "/apps", component: () => <div data-testid="apps">apps</div> });
+  const apps = createRoute({ getParentRoute: () => root, path: "/projects", component: () => <div data-testid="apps">apps</div> });
   const router = createRouter({
     routeTree: root.addChildren([authenticated.addChildren([forge]), home, apps]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
@@ -249,7 +255,9 @@ function renderAt(initialEntry: string, options: { onObsCall?: (rpc: string, req
   render(
     <QueryClientProvider client={queryClient}>
       <ObservabilityApiProvider api={createFixtureApi({ onCall: options.onObsCall })}>
-        <RouterProvider router={router} />
+        <ShellFrameContext.Provider value={{ inShell, navDocked: inShell }}>
+          <RouterProvider router={router} />
+        </ShellFrameContext.Provider>
       </ObservabilityApiProvider>
     </QueryClientProvider>,
   );
@@ -278,12 +286,12 @@ afterEach(() => {
 });
 
 describe("the way in: /forge", () => {
-  it("names no project, so lands on the Apps list rather than guessing one", async () => {
+  it("names no project, so lands on the apps (Projects) rather than guessing one", async () => {
     // The persisted last project used to be opened here; the list of every
     // app replaced that guess (components/Apps/AppsPage.tsx).
     state.lastProjectId = "project-b";
     const router = renderAt("/forge");
-    await landsOn(router, "/apps");
+    await landsOn(router, "/projects", { show: "apps" });
     expect(await screen.findByTestId("apps")).toBeInTheDocument();
     expect(restoreLastProject).not.toHaveBeenCalled();
   });
@@ -621,5 +629,31 @@ describe("leaving the console", () => {
     await screen.findByTestId("page");
     await user.keyboard("{Escape}");
     await landsOn(router, "/");
+  });
+});
+
+// U6: in the product the console renders inside the one shell, whose left nav
+// draws the app's sections (Layout/sidebar/AppsNavSection). The console then
+// has NO nav column of its own: a slim bar with the breadcrumb and the one
+// environment selector, over the page.
+describe("inside the one shell", () => {
+  it("draws no nav column, only the breadcrumb and the scope over the page", async () => {
+    renderAt("/forge/p/alpha/observability/errors?env=prod", { inShell: true });
+    const page = await screen.findByTestId("page");
+    expect(page).toHaveAttribute("data-page", "observability-view");
+    expect(page).toHaveAttribute("data-env", "prod");
+    expect(document.querySelector("aside")).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "alpha" })).toBeNull();
+    expect(screen.queryByTestId("forge-shell")).toBeNull();
+    const frame = screen.getByTestId("forge-console-frame");
+    expect(frame.className).toContain("forge-ui");
+    const header = screen.getByTestId("forge-console-header");
+    expect(within(header).getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("alpha›Issues›Errors");
+    expect(within(frame).getByRole("main")).toContainElement(page);
+  });
+
+  it("still defaults the scope and reflects it into the URL", async () => {
+    const router = renderAt("/forge/p/alpha/releases", { inShell: true });
+    await landsOn(router, "/forge/p/alpha/releases", { env: "prod" });
   });
 });
