@@ -40,7 +40,7 @@ function RequestMachineCardComponent({ chatId, reason }: RequestMachineCardProps
   return (
     <div
       data-testid="request-machine-card"
-      className="my-1.5 rounded-lg border border-border bg-card px-3 py-2.5"
+      className="my-1.5 w-full rounded-lg border border-border bg-card px-3 py-2.5"
     >
       <div className="flex items-start gap-2.5">
         {connected ? (

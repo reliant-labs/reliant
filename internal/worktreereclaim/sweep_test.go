@@ -144,6 +144,69 @@ func TestSweepDryRunReportsAndNeverDeletes(t *testing.T) {
 	}
 }
 
+// A capture-only dry-run (`reliant worktree reclaim scan --capture`) captures
+// and verifies each worktree it would reclaim and deletes nothing: the
+// checkouts stay registered where they were, a worktree with work only it
+// holds is not captured, and a capture restores into a new directory. A
+// Reliant workspace's capture is keyed by its path, never its row, so
+// worktree.ensure never applies it.
+func TestSweepCaptureOnlyCapturesAndNeverDeletes(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~90 git processes")
+	s := newSweepFixture(t)
+	ctx := context.Background()
+	clean := s.plain(filepath.Join(s.tmp, "clean"), "agent/clean")
+	dirty := s.plain(filepath.Join(s.tmp, "dirty"), "agent/dirty")
+	write(t, filepath.Join(dirty, "a.txt"), "uncommitted\n")
+	row := s.worktree("row-9", "feat/row").Path
+
+	opts := s.opts(SweepDryRun)
+	opts.CaptureOnly = true
+	rep := s.r.SweepMachine(ctx, opts)
+	if !rep.CaptureOnly {
+		t.Fatal("the report does not say it captured")
+	}
+	for _, p := range []string{clean, row} {
+		e := entryFor(t, rep, p)
+		if e.Class != ClassAutoSafe || e.Outcome != OutcomeWouldReclaim || !strings.HasPrefix(e.CaptureRef, captureRefDir(CaptureKey(p))) {
+			t.Fatalf("%s: %+v, want would reclaim with a capture keyed by its path", p, e)
+		}
+		if info, err := inspectLock(ctx, p); err != nil || !info.Registered || !exists(filepath.Join(p, "a.txt")) {
+			t.Fatalf("%s after a capture-only pass: %+v, %v; want it in place", p, info, err)
+		}
+		got, err := ReadCapture(ctx, s.project, e.CaptureRef)
+		if err != nil || !got.Meta.CaptureOnly || !got.Clean {
+			t.Fatalf("%s capture: %+v, %v; want a clean capture-only capture", p, got, err)
+		}
+	}
+	if e := entryFor(t, rep, dirty); e.CaptureRef != "" || e.Outcome != OutcomeAwaiting {
+		t.Fatalf("dirty worktree: %+v, want awaiting approval and not captured", e)
+	}
+	if _, ok := LatestCapture(ctx, s.project, "row-9", row); ok {
+		t.Fatal("worktree.ensure would apply a capture-only capture to the row")
+	}
+	lines, err := ReadJournal(s.state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journaled := false
+	for _, l := range lines {
+		journaled = journaled || (samePath(l.Path, clean) && l.CaptureRef == entryFor(t, rep, clean).CaptureRef)
+	}
+	if !journaled {
+		t.Fatalf("the journal does not name the capture: %+v", lines)
+	}
+
+	dest := filepath.Join(s.tmp, "tried")
+	res, err := RestoreCapture(ctx, RestoreOptions{Repo: s.project, Ref: entryFor(t, rep, clean).CaptureRef, Dest: dest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, filepath.Join(res.Path, "a.txt")); got != "one\n" {
+		t.Fatalf("restored a.txt = %q", got)
+	}
+}
+
 // In mode on an auto-safe worktree is captured, then deleted; its branch
 // stays, a tombstone says how to restore it, and the restore works.
 func TestSweepOnReclaimsAutoSafeAfterCapture(t *testing.T) {

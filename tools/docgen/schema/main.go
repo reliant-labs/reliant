@@ -114,6 +114,21 @@ var toolHints = map[string]string{
 		"nodes read `run.status` ('completed' | 'failed' | 'cancelled'), `failure.*` (empty unless the run failed), " +
 		"`inputs`, and the `nodes` outputs the run produced (guard them with `.?`). It cannot change how the run ended; " +
 		"an error in it is logged and never recursive. Release leases, claims and labels here.",
+	"daemon": "Which machine runs the workflow's tools: a kind (`local`, `cloud`, `any`), a machine name, a " +
+		"DaemonSelector, or a CEL template producing either. A node's own `daemon:` wins over this, and this wins " +
+		"over the chat's or automation's machine. `{pool: <name>}` places the run once on one member of a machine " +
+		"pool instead of pinning one machine. See DaemonSelector below.",
+	// DaemonSelector's fields, qualified: id, name, type and labels mean
+	// something else on other types of this page.
+	"DaemonSelector.id":   "Exact machine id. Pins one machine (lint: daemon-machine-pin).",
+	"DaemonSelector.name": "Machine name, or id. Pins one machine (lint: daemon-machine-pin).",
+	"DaemonSelector.type": "Machine kind: `local`, `cloud` or `any`.",
+	"DaemonSelector.labels": "Match by the labels a machine advertises when it connects (all must match), on each " +
+		"call. Alone or beside id, name or type; never placed.",
+	"DaemonSelector.pool": "Place once on one member of the owner's machine pool of this name: the least-loaded " +
+		"member that can take work, on the pool's agreed workflow catalog, under its max_runs_per_member (a full " +
+		"pool waits for a slot). Exclusive with id, name, type and labels. A pool the owner does not have fails " +
+		"validation at save.",
 }
 
 func main() {
@@ -169,6 +184,13 @@ func extractTypesFromProto() []TypeInfo {
 			"A GitHub check run whose lifecycle the engine owns (`check:`): one per firing, posted as the Reliant "+
 				"App on the event's head commit, details_url the run's page. Example: `check: {name: reliant/ci, "+
 				"output: '{{ nodes.report.check }}', timeout: 2h}`.", 6),
+		extractTypeFromMessage("DaemonSelector",
+			(&reliantv1.DaemonSelectorProto{}).ProtoReflect().Descriptor(),
+			"Where tools run (`daemon:` on the workflow or a node; node > workflow > the chat's or automation's "+
+				"machine > the default machine). A string is shorthand: `local`, `cloud` or `any` is a kind, anything "+
+				"else a machine name. `{pool: <name>}` places the run (workflow level) or "+
+				"the node (node level, reused by every loop iteration) ONCE on one machine and holds a slot on it while "+
+				"the run is live, so the run is not tied to any one machine being there and free. Example: `daemon: {pool: ci}`.", 7),
 	}
 }
 
@@ -192,9 +214,13 @@ func extractTypeFromMessage(name string, md protoreflect.MessageDescriptor, desc
 		fieldType := simplifyProtoType(fd)
 		fieldDesc := getFieldComment(fd)
 
+		// Check for tool hints: one qualified by the type wins over a bare one.
+		toolHint, ok := toolHints[name+"."+fieldName]
+		if !ok {
+			toolHint = toolHints[fieldName]
+		}
 		// Hints are message-specific: attention.key/on_failure deliberately
 		// have different semantics from concurrency.key/Workflow.on_failure.
-		toolHint := toolHints[fieldName]
 		if name == "WorkflowAttention" {
 			toolHint = map[string]string{
 				"key":              "Required literal or template over finalized inputs only. Evaluated once before graph execution; must produce a nonempty string of at most 512 bytes. Invalid dynamic keys fail visibly with legacy attention as a fail-safe.",
@@ -209,7 +235,7 @@ func extractTypeFromMessage(name string, md protoreflect.MessageDescriptor, desc
 			Name:        fieldName,
 			Type:        fieldType,
 			JSONName:    fieldName,
-			Required:    fieldName == "name" || fieldName == "from" || (name == "WorkflowAttention" && fieldName == "key"),
+			Required:    (fieldName == "name" && name != "DaemonSelector") || fieldName == "from" || (name == "WorkflowAttention" && fieldName == "key"),
 			Description: fieldDesc,
 			ToolHint:    toolHint,
 		})

@@ -839,6 +839,16 @@ func (e *InlineLoopExecutor) loadPresetParams(ctx workflow.Context, presetName s
 // and it runs only on success — a loop that failed did not complete, and saying
 // otherwise would fabricate execution.
 func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
+	// A `daemon: {pool:}` on the loop places every iteration's body on one
+	// member (run_placement.go): the loop runs no step of its own, so
+	// StepExecutor.Start never sees it. Here, not at a dispatch site, so
+	// every loop — top level, nested, parallel or sequential — is placed.
+	placed, err := placeStructuralDaemon(e.ctx, e.chatID, e.workflowID, e.nodePath(), e.loopStep.Node, e.daemonScope, e.execContext)
+	if err != nil {
+		return nil, err
+	}
+	e.execContext = placed
+
 	out, err := e.execute()
 	if err != nil {
 		return nil, err
@@ -1256,6 +1266,17 @@ func (e *InlineLoopExecutor) bodyScope() *LoopScope {
 // (items, key, while, presets).
 func (e *InlineLoopExecutor) celWorkflow() *model.WorkflowContext {
 	return workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, e.workflowInputs, e.execContext))
+}
+
+// daemonScope is the CEL scope the loop's own `daemon:` expression resolves
+// in: the scope ENCLOSING the loop, as its `items` expression sees it.
+func (e *InlineLoopExecutor) daemonScope() *wfcel.NodeResolutionContext {
+	return &wfcel.NodeResolutionContext{
+		Inputs:   e.workflowInputs,
+		Nodes:    e.nodeOutputs,
+		Workflow: e.celWorkflow(),
+		Iter:     e.enclosingIter(),
+	}
 }
 
 // enclosingIter is the `iter` of the loop ENCLOSING this one — the scope this

@@ -16,6 +16,7 @@ describe("isSurfacedExecution", () => {
     ["generate_video", { call: call("mcp__reliant__generate_video"), result: ok() }],
     ["a call awaiting approval", { call: call("bash"), approval: { status: ApprovalStatus.PENDING } }],
     ["a drafted automation", { call: call("draft_automation"), result: ok() }],
+    ["a spawned sub-agent", { call: call("spawn"), result: ok() }],
     [
       "a deploy that put an app live",
       {
@@ -34,7 +35,8 @@ describe("isSurfacedExecution", () => {
     ["a draft still being written", { call: call("draft_automation") }],
     ["a failed draft", { call: call("draft_automation"), result: { content: "bad", is_error: true } }],
     ["a deploy still running", { call: call("shell", { command: "reliant forge env deploy prod" }) }],
-    ["a spawn", { call: call("spawn"), result: ok() }],
+    ["a message to a sub-agent", { call: call("spawn_send"), result: ok() }],
+    ["a check on a sub-agent", { call: call("mcp__reliant__spawn_status"), result: ok() }],
   ])("folds %s", (_name, execution) => {
     expect(isSurfacedExecution(execution)).toBe(false);
   });

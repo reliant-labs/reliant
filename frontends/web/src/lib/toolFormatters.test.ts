@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { formatToolParams, isSkillTool, isLoadToolTool, isSpawnSendTool, isSpawnTool } from './toolFormatters';
+import { formatToolParams, generateReadOnlyToolsSummary, isReadOnlyTool, isSkillTool, isLoadToolTool, isSpawnSendTool, isSpawnTool } from './toolFormatters';
 
 describe('isSkillTool', () => {
   it('returns true for the "skill" tool name', () => {
@@ -95,5 +95,25 @@ describe('spawn_send', () => {
       message: '**Done.** All green\nsecond line',
     });
     expect(formatted?.summary).toBe('to agent: Done. All green');
+  });
+});
+
+describe('read-only tool grouping', () => {
+  it('counts only reads, searches and listings as read-only', () => {
+    for (const name of ['view', 'read_files', 'grep', 'glob', 'ls', 'websearch', 'fetch', 'diagnostics']) {
+      expect(isReadOnlyTool(name)).toBe(true);
+    }
+    for (const name of ['edit', 'write', 'shell', 'spawn', 'create_plan']) {
+      expect(isReadOnlyTool(name)).toBe(false);
+    }
+  });
+
+  it('summarizes a group by what it explored', () => {
+    const call = (name: string) => ({ name, input: {} });
+    expect(generateReadOnlyToolsSummary([call('view'), call('view'), call('grep')])).toBe('Explored 2 files 1 search');
+    expect(generateReadOnlyToolsSummary([call('websearch'), call('fetch'), call('fetch'), call('glob')])).toBe(
+      'Explored 1 web search 1 listing 2 fetches',
+    );
+    expect(generateReadOnlyToolsSummary([call('shell')])).toBe('Explored');
   });
 });

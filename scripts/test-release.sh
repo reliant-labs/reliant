@@ -41,7 +41,7 @@ fixture() {
   mkdir -p "$R/scripts" "$R/electron" "$R/docs/data/releases"
   cp "$SRC/release.sh" "$SRC/semver-next.sh" "$R/scripts/"
   printf '{\n  "name": "fixture",\n  "version": "%s"\n}\n' "$version" >"$R/electron/package.json"
-  printf '{\n  "name": "fixture",\n  "version": "%s",\n  "lockfileVersion": 3,\n  "requires": true,\n  "packages": {\n    "": {\n      "name": "fixture",\n      "version": "%s"\n    }\n  }\n}\n' "$version" "$version" >"$R/electron/package-lock.json"
+  printf "lockfileVersion: '9.0'\n\nimporters:\n\n  .: {}\n" >"$R/electron/pnpm-lock.yaml"
   echo "changelog" >"$R/docs/changelog.mdx"
   git -C "$R" add -A; git -C "$R" commit -q -m "chore: release v1.4.2"
   git -C "$R" tag v1.4.2

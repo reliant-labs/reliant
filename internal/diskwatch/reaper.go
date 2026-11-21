@@ -226,6 +226,14 @@ func (w *Watcher) RunReaper(ctx context.Context) {
 	cfg := w.reaperConfig()
 	if !cfg.Enabled {
 		logging.InfoContext(ctx, "[diskwatch] Storage reaper schedule disabled (RELIANT_STORAGE_REAPER=auto runs it on managed daemons only; on enables, off disables)")
+		if w.worktreeSweepRunsAlone() {
+			// RELIANT_WORKTREE_RECLAIM=on is a person asking for worktrees
+			// to be reclaimed: it runs without the cache reaper
+			// (worktreereap.go).
+			logging.InfoContext(ctx, "[diskwatch] Worktree reclaim scheduled on its own (RELIANT_WORKTREE_RECLAIM=on)", "interval", WorktreeReapInterval,
+				"pressure_interval", WorktreeReapPressureInterval)
+			w.runWorktreeSweepAlone(ctx)
+		}
 		return
 	}
 	logging.InfoContext(ctx, "[diskwatch] Storage reaper scheduled", "interval", cfg.Interval, "pressure_interval", cfg.PressureInterval,

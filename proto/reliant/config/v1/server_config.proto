@@ -5,6 +5,7 @@ package reliant.config.v1;
 import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "reliant/config/v1/analytics_config.proto";
+import "reliant/config/v1/client_version_config.proto";
 import "reliant/config/v1/control_plane_config.proto";
 import "reliant/config/v1/integrations_config.proto";
 import "reliant/config/v1/llm_config.proto";
@@ -68,6 +69,10 @@ message ServerProcessConfig {
   // The org-policy enforcement switches every server role applies (the API
   // server's own org rollout gates are ApiServerConfig's OrgsConfig).
   OrgPolicyEnforcementConfig org_policy_enforcement = 14;
+  // The oldest build of each client this server serves, and whether it
+  // refuses older ones (client_version_config.proto). The API server serves
+  // it on SystemService.Version / Info; the gateway judges daemons by it.
+  ClientVersionPolicy client_versions = 15;
 }
 
 // OrgPolicyEnforcementConfig is the platform's switch per org-policy
