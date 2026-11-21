@@ -523,10 +523,10 @@ func TestReliantForge_PointsForgeAtTheSession(t *testing.T) {
 	// The forge command runs from this package's directory, so it finds
 	// reliant's forge.yaml, and forge's pre-run would otherwise configure the
 	// developer's checkout (core.hooksPath in the clone's shared .git/config).
-	// FORGE_NO_HOOKS no longer covers the merge driver: without its own
-	// opt-out, forge writes merge routes into the checkout's
-	// .git/info/attributes.
-	t.Setenv("FORGE_NO_HOOKS", "1")
+	// FORGE_NO_GIT_HOOKS (forge v1.9 removed its older name, FORGE_NO_HOOKS)
+	// does not cover the merge driver: without its own opt-out, forge writes
+	// merge routes into the checkout's .git/info/attributes.
+	t.Setenv("FORGE_NO_GIT_HOOKS", "1")
 	t.Setenv("FORGE_NO_MERGE_DRIVER", "1")
 	root := NewRootCmd()
 	if os.Getenv(cloudcred.HelperEnv) != "" {
