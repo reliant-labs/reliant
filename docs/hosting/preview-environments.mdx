@@ -101,6 +101,7 @@ jobs:
             --body "Preview \`${{ steps.preview.outputs.name }}\` (expires $(jq -r .expires_at preview.json)):
           ${urls}"
   down:
+    # same reach as `up`: a fork's PR never got a preview, so it has none to delete
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
@@ -123,7 +124,9 @@ jobs:
 Every push to the pull request runs `create` again, which refreshes the copy and moves the expiry to a fresh 72 hours, and `deploy` then ships the new commit to the same environment. The `down` job deletes the preview when the PR closes. The `gc` job is the backstop for a PR whose close event never ran the job.
 
 <Warning>
-A pull request from a fork gets no repository secrets, and you should not give it your deploy token. That is why the `up` and `down` jobs run only when `github.event.pull_request.head.repo.full_name == github.repository`, that is, for branches in your own repository. Keep that condition if you adapt the workflow.
+A pull request from a fork gets no repository secrets, and you should not give it your deploy token. That is why the `up` job runs only when `github.event.pull_request.head.repo.full_name == github.repository`, that is, for branches in your own repository. Keep that condition if you adapt the workflow.
+
+The `down` job carries the same condition because it has the same reach: a fork's pull request never got a preview, since `up` never ran for it, so there is nothing to delete when it closes, and the job would only fail there for want of the token. If you do create previews for forks some other way (say, a maintainer runs `create` by hand), delete them from a trusted context that never checks out or runs the pull request's code, such as a `pull_request_target` job that checks out only your default branch, or let the `gc` job delete them when they expire.
 </Warning>
 
 The runner installs the standalone `forge` CLI from npm, so the workflow calls `forge`, not `reliant forge`.
