@@ -1,0 +1,16 @@
+# pnpm settings for this app (package.json `packageManager` pins pnpm). The
+# app is its own pnpm workspace root, so these apply here and nowhere else.
+# pnpm reads its settings from this file, never from package.json or .npmrc
+# (which it consults for registries and auth only).
+
+# A flat, npm-shaped node_modules (still hard-linked from pnpm's store). Metro
+# in this Expo SDK resolves through node_modules directories and does not
+# follow pnpm's isolated symlink layout; Expo supports isolated installs from
+# SDK 54. Drop this line after upgrading past it.
+nodeLinker: hoisted
+
+# The dependencies whose install scripts may run. pnpm runs none it is not
+# told about, and an unlisted one fails the install (ERR_PNPM_IGNORED_BUILDS)
+# rather than being skipped silently, so a new dependency that needs its
+# script is a one-line decision here: true to run it, false to skip it.
+allowBuilds: {}

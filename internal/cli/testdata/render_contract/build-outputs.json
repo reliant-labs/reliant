@@ -1,0 +1,106 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "databases": [],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifest_owners": [],
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./scripts/package-cli.sh",
+          "cwd": "tools/cli",
+          "env": {},
+          "inputs_file": null,
+          "output_name": null,
+          "outputs": [
+            {
+              "path": "dist/acme_linux_amd64.tar.gz",
+              "platform": "linux/amd64"
+            },
+            {
+              "path": "dist/*.txt"
+            }
+          ],
+          "type": "shell",
+          "unit": null
+        },
+        "build_image": null,
+        "image": "",
+        "kind": "tool",
+        "name": "acme-cli",
+        "release_inputs": {},
+        "runtime": {
+          "build_variants": [],
+          "type": "build-only"
+        },
+        "spec": {
+          "image": "",
+          "kind": "tool",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./scripts/installer.sh",
+          "cwd": null,
+          "env": {},
+          "inputs_file": null,
+          "output_name": null,
+          "outputs": [
+            {
+              "path": "out/acme-setup.exe",
+              "platform": "windows/amd64"
+            }
+          ],
+          "type": "shell",
+          "unit": null
+        },
+        "build_image": "ghcr.io/acme/installer",
+        "image": "ghcr.io/acme/installer",
+        "kind": "tool",
+        "name": "installer",
+        "release_inputs": {},
+        "runtime": {
+          "build_variants": [],
+          "type": "build-only"
+        },
+        "spec": {
+          "image": "",
+          "kind": "tool",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

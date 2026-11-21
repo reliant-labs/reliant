@@ -1,0 +1,11 @@
+import forge
+import ..workloads as wl
+
+bundle = forge.Bundle {
+    project = "demo"
+    env = "prod"
+    workloads = [wl.api]
+    delivery_policy = forge.DeliveryPolicy {vuln_gate = forge.VulnPolicy {exemptions = [forge.VulnExemption {id = "CVE-2026-1234", reason = "unreachable: we never call the \"parser\"", expires = "2026-12-31"}]}}
+}
+
+output = forge.render(bundle)
