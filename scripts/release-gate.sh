@@ -9,7 +9,8 @@
 #       detached checkout of exactly that commit, so neither your checkout
 #       (dirty, behind, on a branch) nor main moving during the run changes
 #       what it judges. Holds one host heavy slot for the whole run. A sha with
-#       a green record is not re-run unless --force. RG_ONLY=<step,...> runs a
+#       a green full record is not re-run unless --force (a hotfix gate's PASS
+#       is not one: `run` runs the whole gate over it). RG_ONLY=<step,...> runs a
 #       subset and is never recorded.
 #   release-gate.sh check [<rev>]
 #       Is <rev> (default HEAD) release-ready? exit 0 green | 1 red | 3 no
@@ -283,8 +284,15 @@ cmd_run() {
     "$self" check "$hbase" >/dev/null 2>&1 \
       || die "hotfix: the base $(git rev-parse --short "$hbase") is not green (release-gate.sh check); a hotfix narrows the gate only on top of a green"
   fi
+  # A green record is reused only when it answers the question asked: a full
+  # PASS answers both a full and a hotfix run; a hotfix PASS answers only a
+  # hotfix run on the same base (whose greenness was checked just above), never
+  # a full run, which then runs the whole gate rather than reporting the narrow
+  # one as green.
+  local rkind
+  rkind=$(kind_of "$sha")
   if [ "$force" = 0 ] && [ -z "${RG_ONLY:-}" ] && [ "$(result_of "$sha")" = PASS ] \
-    && { [ -z "$hbase" ] || [ "$(kind_of "$sha")" != hotfix ] || [ "$(record_of "$sha" | jq -r '.base // empty' | tail -1)" = "$hbase" ]; }; then
+    && { [ "$rkind" != hotfix ] || { [ -n "$hbase" ] && [ "$(record_of "$sha" | jq -r '.base // empty' | tail -1)" = "$hbase" ]; }; }; then
     echo "release-gate: $(git rev-parse --short "$sha") already has a green record (--force re-runs it)"; return 0
   fi
   # One heavy slot for the whole run; every step nests inside it.
