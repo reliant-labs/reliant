@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Reliant Labs
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { useQuery } from "@tanstack/react-query";
-import { getOrganizationCostSummary, type OrganizationCostSummary } from "@/services/controlPlane/observability/organizationCostsApi";
+import { useOrganizationCostSummary } from "@/hooks/organization-usage-queries";
+import type { OrganizationCostSummary } from "@/services/controlPlane/observability/organizationCostsApi";
 import { costCompletenessLabel, costPeriodLabel, costSourceLabel, costTimestamp, formatCostUSD, organizationCostGroups, type CostSource } from "./organizationCostModel";
 
 export interface OrganizationCostsViewProps {
@@ -13,14 +13,11 @@ const actionClass = "rounded-md border border-border-strong bg-surface-sunken px
 
 /** Organization billing is deliberately independent of telemetry environment, service and range. */
 export function OrganizationCostsView({ orgId }: OrganizationCostsViewProps) {
-  const query = useQuery({
-    queryKey: ["organization-cost-summary", orgId],
-    queryFn: () => getOrganizationCostSummary(orgId),
-    enabled: !!orgId,
-    retry: false,
-  });
+  // Keyed by the org; an answer naming another org never enters the cache (forOrg).
+  const query = useOrganizationCostSummary(orgId || null);
   const denied = query.error instanceof ConnectError && query.error.code === Code.PermissionDenied;
-  // Never render stale sensitive data after a live permission refusal.
+  // Never render stale sensitive data after a live permission refusal, nor
+  // another org's answer (a backstop: it reads as loading).
   const summary = !denied && query.data?.orgId === orgId ? query.data : undefined;
   return (
     <section className="min-w-0 space-y-6 p-4 text-ink sm:p-6" aria-labelledby="organization-costs-title">
@@ -41,9 +38,8 @@ export function OrganizationCostsView({ orgId }: OrganizationCostsViewProps) {
         </div>
       ) : (
         <>
-          {query.isPending && <p role="status">Loading organization costs…</p>}
+          {(query.isPending || (query.data && !summary && !query.isError)) && <p role="status">Loading organization costs…</p>}
           {query.isError && <p role="alert" className="text-sm text-danger-ink">Costs could not be refreshed. {summary ? "Showing the last received summary; check its timestamps below." : "Billing data is unavailable, not zero. Try refreshing."}</p>}
-          {query.data && !summary && !query.isError && <p role="alert">The summary does not match this organization. Refresh to try again.</p>}
           {summary && <OrganizationCostSummaryContent summary={summary} />}
         </>
       )}

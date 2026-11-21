@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -29,6 +30,9 @@ func init() {
 type LocalClient struct {
 	Options llm.DriverOptions
 	Client  openai.Client
+
+	// ladder overrides the retry ladder's defaults; tests inject the clock.
+	ladder ratelimit.Retryer
 }
 
 // Name returns the name of the driver
@@ -39,9 +43,10 @@ func (c *LocalClient) Name() string {
 // NewClient creates a new LocalClient with the given options.
 // The BaseURL option is required for local clients.
 func NewClient(opts llm.DriverOptions) *LocalClient {
-	// Retries are owned by shouldRetry, which retries only 429/500/503. The
-	// SDK's own retry loop would back off through a refused connection or a
-	// dead relay before the user sees any error.
+	// Retries are owned by the shared ladder (see retryer), which never
+	// retries a transport failure. The SDK's own retry loop would back off
+	// through a refused connection or a dead relay before the user sees any
+	// error.
 	openaiClientOptions := []option.RequestOption{option.WithMaxRetries(0)}
 
 	// BaseURL is required for local clients

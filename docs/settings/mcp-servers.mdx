@@ -141,6 +141,27 @@ You can also configure files manually as documented below.
 
 **env** (optional): Environment variables for the server process. Format: `"VAR_NAME": "${SOURCE_VAR}"`
 
+**dir** (optional): The working directory the server's process starts in. Supports `${VAR}` substitution. A `dirScoped` server with no `dir` starts in the project the tool call belongs to; set `dir` only to pin a server to one tree whatever the project.
+
+**dirScoped** (optional, default `false`): Set it to `true` for a server whose answers depend on the directory it started in, such as a language server that indexes a tree. Most servers are shared: one process serves every project. A `dirScoped` server gets its own process per project instead, started in that project, and only when a tool call needs it. Without it, a tree-indexing server answers every project from whichever tree it indexed first.
+
+**requiresFiles** (optional): Globs a project must contain before the server is started for it, so a heavy server is not started in a project it has nothing to do in. Any match is enough. A pattern with no `/` matches a file name anywhere the bounded scan reaches (`"go.mod"` also matches `services/api/go.mod`); a pattern with a `/` is matched against the project-relative path. A project with no match is skipped, not reported as a failure:
+
+```json
+{
+  "mcpServers": {
+    "gopls": {
+      "command": "gopls",
+      "args": ["mcp"],
+      "dirScoped": true,
+      "requiresFiles": ["go.mod", "go.work"]
+    }
+  }
+}
+```
+
+**`${projectPath}` in args**: for a server that takes its tree as a flag rather than from its working directory, `${projectPath}` (also spelled `$projectPath` or `${workspaceFolder}`) in `args` is replaced with the server's directory. That is the project only for a `dirScoped` server. In any other server it is the server's `dir`, or empty when `dir` is unset, and a server given an empty path usually exits before it finishes starting. Use `${projectPath}` only with `"dirScoped": true`.
+
 ## Variable Substitution
 
 MCP configurations support substitution from environment variables:
@@ -252,7 +273,7 @@ MCP servers run on the machine a chat runs on, not on Reliant's servers. A serve
 
 After adding an MCP server:
 
-1. Open **Settings → MCP Servers** and verify status or last error
+1. Open **Settings → MCP Servers** and verify status or last error, or run `reliant mcp list` in the project (`reliant mcp tools <server>` lists the tools an agent sees, as `mcp__<server>__<tool>`). An edit to `mcp.json` takes effect at an agent's next turn; `reliant mcp restart <server>` restarts a server from what the files say now.
 2. **Check logs** for connection errors. MCP servers are started by the daemon on the [machine](/machines/overview) the chat runs on, so read that machine's log: run `reliant daemon logs` there. On a cloud machine, run it from a terminal on the machine.
 3. **Test in a chat** by asking the agent to use the new tools
 

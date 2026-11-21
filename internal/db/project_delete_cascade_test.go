@@ -43,7 +43,7 @@ func TestDeleteProjectLeavesNoOrphanedChatsOrWorktrees(t *testing.T) {
 	require.Len(t, chats, 1)
 	assert.Equal(t, "chat-survivor", chats[0].ID)
 
-	archived, err := repo.ListArchivedChats(ctx, "owner", nil)
+	archived, _, err := repo.ListArchivedChats(ctx, "owner", nil, ArchivedChatPage{})
 	require.NoError(t, err)
 	assert.Empty(t, archived)
 

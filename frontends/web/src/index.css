@@ -607,6 +607,7 @@
 
   .dark {
     color-scheme: dark;
+
     --scrim: 0 0% 0% / 0.6;
 
     /* VIBRANT BLUE DARK THEME - colorful & modern */

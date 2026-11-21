@@ -42,6 +42,7 @@ import { CheckCircle2, ChevronDown, ChevronRight, MessageCircleQuestion, Undo2 }
 import { toast } from "sonner";
 import { answerQuestion, useAsyncQuestions, type QuestionInfo } from "@/hooks/question-queries";
 import { cn } from "@/lib/utils";
+import { LinkifiedText } from "./LinkifiedText";
 import { QuestionPrompt, type QuestionAnswer } from "./QuestionPrompt";
 import {
   askUserAnswerLines,
@@ -146,7 +147,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
       {items ? (
         items.map((item, i) => (
           <li key={i} className={itemClassName}>
-            {item.question}
+            <LinkifiedText text={item.question} />
           </li>
         ))
       ) : (
@@ -296,10 +297,12 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
               <li key={i} className="text-ui">
                 {line.question && (
                   <span className="text-muted-foreground">
-                    {line.question}{" "}
+                    <LinkifiedText text={line.question} />{" "}
                   </span>
                 )}
-                <span className="text-foreground">{line.answer}</span>
+                <span className="text-foreground">
+                  <LinkifiedText text={line.answer} />
+                </span>
               </li>
             ))}
           </ul>

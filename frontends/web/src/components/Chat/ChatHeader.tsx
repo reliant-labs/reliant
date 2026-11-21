@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChat } from "../../hooks/chat-queries";
+import { useChatMachineName } from "../../hooks/useChatMachineName";
 import { NoMachinePill } from "./NoMachine";
 import { WorkspaceRecoveryMenuItems } from "./WorkspaceRecoveryMenuItems";
 import { useMessages } from "../../hooks/message-queries";
@@ -100,6 +101,7 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const chatQuery = useChat(chatId || undefined);
   const chat = chatQuery.data;
+  const machineName = useChatMachineName(isNewChat ? undefined : chat);
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
   const actions = useChatActions(chatId, propWorktreeId);
@@ -263,6 +265,11 @@ export function ChatHeader({
       {/* A chat with no machine says so where the user looks first, and
           the pill is the way to connect one (NO_MACHINE_CHATS.md §2.4). */}
       {!isNewChat && chatId && chat?.noMachine && !isViewer && <NoMachinePill chatId={chatId} />}
+      {machineName && (
+        <span className="max-w-40 flex-shrink-0 truncate px-1 text-meta text-muted-foreground" title={`Machine: ${machineName}`}>
+          Machine: {machineName}
+        </span>
+      )}
 
       {/* Shared with the org: the owner's reminder, the viewer's "read only". */}
       {!isNewChat && (isShared || isViewer) && (

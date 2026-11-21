@@ -6,6 +6,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // size(null) is 0 at every evaluation site. The sites build their environments
@@ -53,6 +54,29 @@ func TestSizeOfNullIsZeroAtEverySite(t *testing.T) {
 		require.NoError(t, err)
 		assert.EqualValues(t, 0, got)
 	})
+}
+
+// A list built by a native function (regex.extractAll returns a Go []string)
+// converts to structpb like any CEL list, nested in a map or not (obs bug
+// report 0c5e87c7: a compute output holding it failed with "proto: invalid
+// type: []string").
+func TestNativeStringListResultConvertsToStructPB(t *testing.T) {
+	t.Parallel()
+
+	ctx := &NodeResolutionContext{Nodes: map[string]interface{}{}, Inputs: map[string]interface{}{"patch": "@@ -1,2 +1,3 @@ a\n@@ -9 +10 @@ b"}}
+	for name, tmpl := range map[string]string{
+		"bare":      `{{ regex.extractAll(inputs.patch, '@@ [^@]+ @@') }}`,
+		"in a map":  `{{ {"hunks": regex.extractAll(inputs.patch, '@@ [^@]+ @@')} }}`,
+		"in a list": `{{ [{"hunks": regex.extractAll(inputs.patch, '@@ [^@]+ @@')}] }}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			got, err := EvaluateTemplate(tmpl, ctx)
+			require.NoError(t, err)
+			_, err = structpb.NewValue(got)
+			require.NoError(t, err, "result %#v", got)
+		})
+	}
 }
 
 // Every preset environment — including loop while, which historically had no
