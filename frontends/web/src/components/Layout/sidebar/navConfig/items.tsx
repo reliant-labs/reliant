@@ -40,7 +40,7 @@ import { homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsP
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
-import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
+import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, authPath, consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
 import { isSettingsItemCurrent, settingsItemEntry, settingsNavGroups, type SectionItem } from "../../../Settings/SettingsNavigation";
 import type { SettingsTab } from "../../../../routeSchemas";
 import { isAt, isAtOrBelow } from "../navLocation";
@@ -127,8 +127,19 @@ export const deploymentsGroup: NavGroup = {
 };
 export const secrets = consoleRow("secrets", "Secrets", { kind: "secrets" }, icon(KeyRound), ["secrets"]);
 export const domains = consoleRow("domains", "Domains", { kind: "domains" }, icon(Globe), ["domains"]);
-/** Users: who can sign in to the app (its managed identity). Beside Data and Storage. */
-export const users = consoleRow("users", "Users", { kind: "users" }, icon(UserRound), ["users"]);
+/**
+ * Auth: who can sign in to the app (its managed identity) and how. Beside
+ * Data and Storage; "Sign-in users" left Configure for it (U6d).
+ */
+export const auth: NavRow = {
+  kind: "row",
+  id: "auth",
+  label: "Auth",
+  icon: icon(UserRound),
+  href: (ctx) => (ctx.app ? withSearch(authPath(ctx.app), { env: ctx.console?.env }) : undefined),
+  match: pageIs("auth", "users"),
+  available: hasApp,
+};
 
 /** Inbox: a top-level row with its count, under Overview (owner, 15:02Z); the one place it is. */
 export const inbox: NavSlot = slot("inbox");

@@ -456,6 +456,18 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('dashboards-gallery').getByText('Order latency').first(),
   },
   {
+    name: 'shell-auth',
+    path: '/forge/p/shopfront/auth?env=prod',
+    on: ['desktop'],
+    ready: (page) => page.getByText('priya@example.com').first(),
+  },
+  {
+    name: 'shell-auth-signin',
+    path: '/forge/p/shopfront/auth/sign-in?env=prod',
+    on: ['desktop'],
+    ready: (page) => page.getByText('Configure sign-in').first(),
+  },
+  {
     name: 'shell-settings',
     path: '/settings',
     on: ['desktop', 'mobile'],

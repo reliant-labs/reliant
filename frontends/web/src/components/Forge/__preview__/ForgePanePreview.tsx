@@ -58,7 +58,7 @@ import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
 import { ObsOverviewPage } from "../Observability/ObsOverview/ObsOverviewPage";
-import { UsersPage } from "../Users/UsersPage";
+import { AuthPage } from "../Users/AuthPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
@@ -447,7 +447,7 @@ function buildRouter(path: string) {
     dashboard: DashboardPage,
     storage: StoragePage,
     data: DataPage,
-    users: UsersPage,
+    auth: AuthPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,

@@ -7,7 +7,7 @@
  *   Overview · Inbox (count) · Agents › ·
  *   Dashboards ▾ · Observability › · Analytics ▾ ·
  *   Deployments ▾ (Services, Releases, Environments, Previews) ·
- *   Data · Storage · Users ·
+ *   Data · Storage · Auth ·
  *   Security ▾ · Configure ▾ (Secrets, Domains, Activity)
  *   footer: Settings
  *
@@ -21,6 +21,7 @@
 import {
   agentsArea,
   analyticsGroup,
+  auth,
   configureGroup,
   dashboards,
   data,
@@ -32,7 +33,6 @@ import {
   securityGroup,
   settingsSections,
   storage,
-  users,
 } from "./items";
 import type { NavConfig } from "./types";
 
@@ -47,7 +47,7 @@ export const hybridNav: NavConfig = {
     deploymentsGroup,
     data,
     storage,
-    users,
+    auth,
     securityGroup,
     configureGroup,
   ],
