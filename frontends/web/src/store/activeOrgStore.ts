@@ -230,4 +230,5 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "controlPlane",
   "orgs-members",
   "org-policy",
+  "changes",
 ];

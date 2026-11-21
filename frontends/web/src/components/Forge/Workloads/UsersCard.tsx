@@ -116,7 +116,7 @@ export function UsersCard({ scope, project, range, usersHref, dashboardHref }: U
       testId="overview-users"
     >
       <div className="px-4 pb-3 pt-2">
-        <p className="mb-2 text-2xs text-ink-muted">Last 7 days</p>
+        <p className="mb-2 text-meta text-ink-muted">Last 7 days</p>
         <dl className="grid grid-cols-3 gap-3">
           {rows.map((row) => {
             const change = describeChange(row.value.now, row.value.before, "count", "previous 7 days", row.exact);
@@ -125,7 +125,7 @@ export function UsersCard({ scope, project, range, usersHref, dashboardHref }: U
                 <dt className="text-xs text-ink-muted">{row.label}</dt>
                 <dd className="text-lg font-semibold tabular-nums text-ink">{row.value.now === null ? "—" : formatFigure(row.value.now, "count", row.exact)}</dd>
                 {change && (
-                  <dd className="truncate text-2xs tabular-nums text-ink-muted" title={change}>
+                  <dd className="truncate text-meta tabular-nums text-ink-muted" title={change}>
                     {change.replace(/ vs previous 7 days$/, "")}
                   </dd>
                 )}
@@ -135,7 +135,7 @@ export function UsersCard({ scope, project, range, usersHref, dashboardHref }: U
         </dl>
         {dau && dau.values.some((v) => v !== null) && (
           <div className="mt-3" data-testid="overview-users-sparkline">
-            <div className="flex items-baseline justify-between text-2xs text-ink-muted">
+            <div className="flex items-baseline justify-between text-meta text-ink-muted">
               <span>Daily active users, 30 days</span>
               <span className="tabular-nums">{formatCount(dau.values.filter((v): v is number => v !== null).at(-1) ?? 0)} so far today</span>
             </div>

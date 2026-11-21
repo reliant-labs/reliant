@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A pending question or approval makes a chat AWAITING_INPUT only while the
@@ -113,7 +114,7 @@ func (c *liveGateChat) approve(id, thread string) {
 func (c *liveGateChat) expect(wantActivity, wantWorking int) {
 	c.t.Helper()
 	ctx := context.Background()
-	activity, err := c.repo.GetChatActivity(ctx, c.chatID)
+	activity, err := store.GetChatActivity(ctx, c.repo.ORM(), c.chatID)
 	if err != nil {
 		c.t.Fatalf("GetChatActivity: %v", err)
 	}

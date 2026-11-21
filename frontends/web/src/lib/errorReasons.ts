@@ -200,6 +200,27 @@ export const ERROR_REASONS = [
   "policy_invalid",
   /** UpdateOrgPolicy (FailedPrecondition): someone saved a newer version since the editor read theirs. */
   "policy_version_conflict",
+  // ── control-plane: Forge Changes (ChangesService; changes.proto) ──
+  /** A mutation named a revision the change has moved past (FailedPrecondition); nothing changed. */
+  "change_revision_conflict",
+  /** A launch, ramp up or roll-out in a protected environment without a person's approval (PermissionDenied). */
+  "approval_required",
+  /** RequestChangeApproval for a credential that acts for no person (FailedPrecondition). */
+  "approval_unavailable",
+  /** Launch/ramp/roll-out of a key the environment's current release does not declare (FailedPrecondition). */
+  "change_not_declared",
+  /** Launch/roll-out of a variant the environment's current release does not declare (FailedPrecondition). */
+  "variant_not_declared",
+  /** CreateChange of a key that already has a change in the environment (AlreadyExists). */
+  "change_exists",
+  /** GetChangeReadout of a change that never ran an experiment (FailedPrecondition). */
+  "no_experiment_run",
+  /** GetChangeReadout of a run launched as a rollout, not an experiment (FailedPrecondition). */
+  "run_not_experiment",
+  /** GetChangeReadout of a run frozen with no success metric (FailedPrecondition). */
+  "metric_missing",
+  /** GetChangeReadout of a run whose split has no control and treatment to compare (FailedPrecondition). */
+  "readout_plan_invalid",
   // ── control-plane: free static hosting (OrganizationService.MoveFreeHostingDesignation) ──
   /** PermissionDenied: the caller is not a member of the target org. */
   "not_org_member",

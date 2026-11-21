@@ -392,7 +392,8 @@ describe("WorkflowsListPage", () => {
     renderLibrary();
     const counts = await screen.findByTestId("automation-counts");
     // Three hand-made triggers (two for triage, one for agent), each its own automation; all healthy.
-    await waitFor(() => expect(counts).toHaveTextContent(/3\s*on and healthy/));
+    expect(counts).toHaveTextContent("On and healthy");
+    await waitFor(() => expect(within(counts).getByTestId("automation-healthy-on")).toHaveTextContent(/^3$/));
   });
 
   it("across every project, a project's own workflow is a row per project, named with it", async () => {

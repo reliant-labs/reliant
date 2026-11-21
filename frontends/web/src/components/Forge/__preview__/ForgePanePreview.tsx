@@ -55,6 +55,7 @@ import { ObservabilityViewPage } from "../Console/ConsolePages";
 import { SecretsPage } from "../Console/SecretsPage";
 import { DataPage } from "../Data/DataPage";
 import { UsersPage } from "../Users/UsersPage";
+import { ExperimentPage, ExperimentsPage } from "../Experiments/ExperimentsPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { StoragePage } from "../Storage/StoragePage";
 import { fixtureVulnerabilityApi, type VulnScenario } from "../Security/fixtures";
@@ -456,6 +457,8 @@ function buildRouter(path: string) {
     secrets: SecretsPage,
     domains: ForgeDomainsPage,
     activity: ActivityPage,
+    experiments: ExperimentsPage,
+    experiment: ExperimentPage,
     orgLayout: OrgConsoleLayout,
     orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,

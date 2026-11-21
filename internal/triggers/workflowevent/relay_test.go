@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
@@ -132,5 +133,5 @@ func emitFinished(ctx context.Context, f *fixture, chatID string) (*core.RunEven
 	}, time.Now().UTC()); err != nil {
 		return nil, err
 	}
-	return f.repo.GetRunEventByDedupe(ctx, chatID+":"+runID+":finished")
+	return store.LoadRunEventByDedupe(ctx, f.repo.ORM(), chatID+":"+runID+":finished")
 }

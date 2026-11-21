@@ -27,7 +27,6 @@
 import { useMemo, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 
-import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import { useListTraces, type TraceFilters } from "@/hooks/observability-queries";
 import { useSessions, type SessionFilters } from "@/hooks/observability-session-queries";
@@ -86,20 +85,21 @@ function Opener<T>({ open, value, className, label, children, testId }: { open: 
 
 function Tile({ title, meta, all, children, testId, state }: { title: string; meta?: ReactNode; all: ReactNode; children: ReactNode; testId: string; state: string }) {
   return (
-    <Card padding="none" className="flex min-w-0 flex-col" data-testid={testId} data-state={state}>
-      <div className="flex items-center justify-between gap-3 px-4 pt-3">
-        <h2 className="min-w-0 text-sm font-medium text-ink">
+    // A section on the page, not a card: its heading names the window, its link goes one level down.
+    <section className="flex min-w-0 flex-col" data-testid={testId} data-state={state}>
+      <div className="flex min-h-7 items-center justify-between gap-3">
+        <h2 className="min-w-0 text-section text-ink">
           {title}
-          {meta && <span className="ml-2 text-xs font-normal text-ink-muted">{meta}</span>}
+          {meta && <span className="ml-2 text-meta font-normal text-ink-muted">{meta}</span>}
         </h2>
         {all}
       </div>
-      <div className="flex min-h-[9rem] flex-1 flex-col px-4 pb-3 pt-2">{children}</div>
-    </Card>
+      <div className="mt-3 flex min-h-[9rem] flex-1 flex-col">{children}</div>
+    </section>
   );
 }
 
-const ALL_LINK = "inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink";
+const ALL_LINK = "-mr-2 inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-meta text-ink-muted hover:bg-ink/5 hover:text-ink";
 
 function AllLink<T>({ open, value, children }: { open: Open<T>; value: T; children: ReactNode }) {
   return (
@@ -112,7 +112,7 @@ function AllLink<T>({ open, value, children }: { open: Open<T>; value: T; childr
 
 function TileMessage({ children, action, testId }: { children: ReactNode; action?: ReactNode; testId?: string }) {
   return (
-    <div className="flex flex-1 flex-col items-start justify-center gap-2 text-sm text-ink-muted" data-testid={testId}>
+    <div className="flex flex-1 flex-col items-start justify-center gap-3 border-t border-border pt-4 text-ui text-ink-muted" data-testid={testId}>
       <p>{children}</p>
       {action}
     </div>
@@ -125,7 +125,7 @@ function Retry({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }
       type="button"
       onClick={onRetry}
       disabled={retrying}
-      className="inline-flex h-7 items-center rounded-md border border-border-strong bg-surface px-2.5 text-xs font-medium text-ink hover:bg-ink/5 disabled:opacity-60"
+      className="inline-flex h-8 items-center rounded-lg border border-border bg-surface px-3 text-ui font-medium text-ink hover:bg-ink/5 disabled:opacity-60"
     >
       {retrying ? "Retrying…" : "Try again"}
     </button>
@@ -207,7 +207,7 @@ export function TracesTile({ scope, range, band, all }: TracesTileProps) {
   return (
     <Tile
       title="Traces"
-      meta={model ? `${traceCountLabel(page)} in the ${windowWords}` : undefined}
+      meta={model ? `${traceCountLabel(page)} in the ${windowWords}` : RANGE_LABELS[range]}
       all={<AllLink open={all} value={null}>Open traces</AllLink>}
       testId="overview-traces-tile"
       state={state}
@@ -252,7 +252,7 @@ function LatencyHistogram({
   const shown = buckets.slice(Math.max(0, first), last + 1);
   return (
     <div className="flex flex-1 flex-col gap-2">
-      <dl className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted" data-testid="overview-traces-percentiles">
+      <dl className="flex flex-wrap gap-x-5 gap-y-1 text-meta text-ink-muted" data-testid="overview-traces-percentiles">
         {pct &&
           (
             [
@@ -297,7 +297,7 @@ function LatencyHistogram({
           );
         })}
       </ul>
-      <div className="flex justify-between text-2xs tabular-nums text-ink-muted" aria-hidden="true">
+      <div className="flex justify-between text-meta tabular-nums text-ink-muted" aria-hidden="true">
         <span>{formatDuration(shown[0]?.lo ?? 0)}</span>
         <span className="inline-flex items-center gap-3">
           {drawn !== null && <span data-testid="overview-traces-sampled">bars: latest {formatCount(drawn)}</span>}
@@ -341,7 +341,7 @@ export function SessionsTile({ scope, range, session, all }: SessionsTileProps) 
   const state = sessions.isLoading ? "loading" : notConfigured ? "not-configured" : failed ? "error" : rows.length ? "ready" : "empty";
 
   return (
-    <Tile title="Recent sessions" meta="Browser sessions with a replay" all={<AllLink open={all} value={null}>All sessions</AllLink>} testId="overview-sessions-tile" state={state}>
+    <Tile title="Recent sessions" meta={RANGE_LABELS[range]} all={<AllLink open={all} value={null}>All sessions</AllLink>} testId="overview-sessions-tile" state={state}>
       {sessions.isLoading ? (
         <TileSkeleton />
       ) : notConfigured ? (
@@ -358,7 +358,7 @@ export function SessionsTile({ scope, range, session, all }: SessionsTileProps) 
           them.
         </TileMessage>
       ) : (
-        <ul className="-mx-2 divide-y divide-border/70" aria-label="Recent browser sessions">
+        <ul className="-mx-2 divide-y divide-border-subtle border-t border-border" aria-label="Recent browser sessions">
           {rows.map((row) => (
             <li key={row.sessionId}>
               <SessionLine row={row} open={session} />
@@ -377,18 +377,18 @@ function SessionLine({ row, open }: { row: SessionSummary; open: Open<string> })
     <Opener
       open={open}
       value={row.sessionId}
-      className="grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-md px-2 py-1.5 text-sm hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className="grid min-h-[41px] w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-md px-2 py-2 text-ui hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       label={`Replay ${who}'s session on ${row.entryPath || "/"}, ${formatDuration(duration)}, ${row.errors} ${row.errors === 1 ? "error" : "errors"}`}
       testId={`overview-session-${row.sessionId}`}
     >
       <span className="min-w-0 truncate">
-        <span className={cn("font-medium", row.userId ? "font-mono text-ink" : "text-ink-muted")}>{who}</span>
-        <span className="ml-2 text-xs text-ink-muted">{row.entryPath || "/"}</span>
+        <span className={cn("font-medium", row.userId ? "text-ink" : "text-ink-muted")}>{who}</span>
+        <span className="ml-2 font-mono text-meta text-ink-muted">{row.entryPath || "/"}</span>
       </span>
-      <span className="text-xs tabular-nums text-ink-muted">
+      <span className="text-meta tabular-nums text-ink-muted">
         {formatDuration(duration)} · {row.pageViews} {row.pageViews === 1 ? "page" : "pages"}
       </span>
-      <span className={cn("w-16 text-right text-xs tabular-nums", row.errors > 0 ? "text-danger-ink" : "text-ink-muted")}>
+      <span className={cn("w-16 text-right text-meta tabular-nums", row.errors > 0 ? "text-danger-ink" : "text-ink-muted")}>
         {row.errors > 0 ? `${row.errors} ${row.errors === 1 ? "error" : "errors"}` : formatAgo(row.startedMs)}
       </span>
     </Opener>

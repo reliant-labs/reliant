@@ -252,7 +252,7 @@ describe("its states", () => {
     renderOverview({ obs: createWorkloadsFixtureApi("error") });
     // Unavailable is retried once before the page gives up.
     await waitFor(() => expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "error"), { timeout: 5000 });
-    expect(screen.getByTestId("overview-env-prod")).toHaveTextContent("health unavailable");
+    expect(screen.getByTestId("overview-env-prod")).toHaveTextContent("Health unavailable");
     expect(screen.getByTestId("overview-attention")).toHaveTextContent("Workload health could not be read");
     // Each tile the read feeds says so with its own Try again (OverviewTiles.test.tsx).
     expect(within(screen.getByTestId("overview-services")).getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
