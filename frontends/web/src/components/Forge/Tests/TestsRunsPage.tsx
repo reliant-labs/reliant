@@ -11,11 +11,12 @@
  * commit and branch, its counts, the tests that passed only on a retry, how
  * long it took, and the CI run behind it. A row opens the run.
  *
- * The filters are the URL's (runsModel.ts RunsSearch: branch, commit,
- * release, lane, source, status), each one ListTestRuns' optional field. The
- * environment is the console's one scope (`?env=`), shown in the bar beside
- * them: CI and local runs carry no environment, so an empty list under one
- * says so and offers every environment.
+ * The filters are the URL's (runsModel.ts RunsSearch: environment, branch,
+ * commit, release, lane, source, status), each one ListTestRuns' optional
+ * field. The Environment filter defaults to All and is this page's own key
+ * (`?environment=`): the console's `?env=` scope never narrows it, because CI
+ * and local runs carry no environment (testsScope.tsx). An environment the
+ * reader picks that has no runs says so and offers every environment.
  *
  * Honest about its data: a run still being ingested is "Processing", never
  * passed; a count it did not record is a dash.
@@ -34,7 +35,6 @@ import { useTestRuns } from "@/hooks/test-queries";
 import type { TestRun } from "@/services/controlPlane/tests/types";
 
 import { useForgeConsole } from "../Console/consoleContext";
-import { ENV_ALL } from "../Console/envScope";
 import { formatAgo, formatDuration, formatWhen } from "../Observability/format";
 import { ObsLoadingRows, StateFrame } from "../Observability/ObsStates";
 import {
@@ -59,7 +59,7 @@ import { TestsError, TestsNoRunsYet } from "./TestsStates";
 const SUBTITLE = "Every recorded run of the project's test lanes, newest first.";
 
 export function TestsRunsPage() {
-  const { href, projectId, env, setEnv, roster } = useForgeConsole();
+  const { href, projectId, roster } = useForgeConsole();
   const resolved = useTestsScope("test runs");
   const raw = useSearch({ strict: false }) as Record<string, unknown>;
   const search = useMemo(() => pickRunsSearch(raw), [raw]);
@@ -68,17 +68,13 @@ export function TestsRunsPage() {
     (next: RunsSearch) =>
       void navigate({
         to: ".",
-        // Only the scope survives from the old search: every filter is the new view's.
+        // Only the console's scope survives from the old search: every filter (the environment too) is the new view's.
         search: (prev: Record<string, unknown>) => ({ env: prev.env as string | undefined, ...next }),
         replace: true,
       }),
     [navigate]
   );
-  const envFilter: EnvFilter = {
-    value: env === ENV_ALL ? undefined : env,
-    choices: roster.envs.map((candidate) => ({ name: candidate.name, id: candidate.live?.id })),
-    onChange: (name) => setEnv(name ?? ENV_ALL),
-  };
+  const environments = roster.envs.map((candidate) => ({ name: candidate.name, id: candidate.live?.id }));
   return (
     <TestsFrame title="Runs" subtitle={SUBTITLE} testId="console-tests-runs">
       {"blocked" in resolved ? (
@@ -88,7 +84,7 @@ export function TestsRunsPage() {
           scope={resolved.scope}
           search={search}
           onSearch={onSearch}
-          envFilter={envFilter}
+          environments={environments}
           projectId={projectId}
           runHref={(runId) => href({ kind: "tests-run", run: runId })}
         />
@@ -97,18 +93,18 @@ export function TestsRunsPage() {
   );
 }
 
-/** The console's environment scope, as the bar shows it: the scoped name (none for All) and the project's environments. */
-export interface EnvFilter {
-  value?: string;
-  choices: { name: string; id?: string }[];
-  onChange: (name: string | undefined) => void;
+/** One of the project's environments: its name (what the Environment filter offers) and its control-plane id once Reliant has a record of it. */
+export interface TestsEnvironment {
+  name: string;
+  id?: string;
 }
 
 export interface TestsRunsViewProps {
   scope: TestsScope;
   search: RunsSearch;
   onSearch: (next: RunsSearch) => void;
-  envFilter?: EnvFilter;
+  /** The project's environments: the Environment filter's options, and the names of the runs recorded against one. */
+  environments?: TestsEnvironment[];
   projectId?: string | null;
   runHref: (runId: string) => string;
   /** "Now", for relative times (tests pin it). */
@@ -116,11 +112,12 @@ export interface TestsRunsViewProps {
 }
 
 /** The page below its header, free of the console: what tests and the preview render. */
-export function TestsRunsView({ scope, search, onSearch, envFilter, projectId, runHref, now }: TestsRunsViewProps) {
+export function TestsRunsView({ scope, search, onSearch, environments = [], projectId, runHref, now }: TestsRunsViewProps) {
   const list = useTestRuns(scope.project, runsFiltersOf(scope.environmentId, search));
   const rows = useMemo(() => list.data?.pages.flatMap((page) => page.runs) ?? [], [list.data]);
-  const filtered = activeRunsFilterCount(search) > 0;
-  const envScoped = !!scope.environmentId;
+  const filterCount = activeRunsFilterCount(search);
+  // The chosen environment is the only filter: an empty list is about that environment, not about the filters.
+  const onlyEnvironment = !!search.environment && filterCount === 1;
 
   if (list.isLoading) {
     return (
@@ -132,14 +129,14 @@ export function TestsRunsView({ scope, search, onSearch, envFilter, projectId, r
   if (list.error && !list.data) {
     return <TestsError error={list.error} subject="this project's test runs" onRetry={() => void list.refetch()} retrying={list.isFetching} />;
   }
-  if (rows.length === 0 && !filtered && !envScoped) return <TestsNoRunsYet projectId={projectId} />;
+  if (rows.length === 0 && filterCount === 0) return <TestsNoRunsYet projectId={projectId} />;
 
-  const envName = new Map((envFilter?.choices ?? []).filter((choice) => choice.id).map((choice) => [choice.id!, choice.name]));
+  const envName = new Map(environments.filter((choice) => choice.id).map((choice) => [choice.id!, choice.name]));
   return (
     <div className="space-y-3" data-testid="tests-runs">
-      <RunsFilters search={search} onSearch={onSearch} envFilter={envFilter} lanes={rows.map((r) => r.lane)} />
+      <RunsFilters search={search} onSearch={onSearch} environments={environments} lanes={rows.map((r) => r.lane)} />
       {rows.length === 0 ? (
-        filtered ? (
+        !onlyEnvironment ? (
           <StateFrame
             testId="tests-runs-no-match"
             icon={null}
@@ -150,22 +147,23 @@ export function TestsRunsView({ scope, search, onSearch, envFilter, projectId, r
               </Button>
             }
           >
-            <p>{envScoped ? `Only runs recorded against ${envFilter?.value ?? "this environment"} are searched.` : "Other runs exist in this project."}</p>
+            <p>{search.environment ? `Only runs recorded against ${search.environment} are searched.` : "Other runs exist in this project."}</p>
           </StateFrame>
         ) : (
           <StateFrame
             testId="tests-runs-none-in-env"
             icon={null}
-            title={`No runs recorded against ${envFilter?.value ?? "this environment"}`}
+            title={`No runs recorded against ${search.environment}`}
             actions={
-              envFilter && (
-                <Button variant="outline" size="sm" onClick={() => envFilter.onChange(undefined)} data-testid="tests-runs-all-envs">
-                  Show every environment
-                </Button>
-              )
+              <Button variant="outline" size="sm" onClick={() => onSearch({ ...search, environment: undefined })} data-testid="tests-runs-all-envs">
+                Show every environment
+              </Button>
             }
           >
-            <p>CI and local runs carry no environment. Only a lane run against a deployed environment (a preview&apos;s e2e, say) is recorded against one.</p>
+            <p>
+              CI and local runs carry no environment, so they are listed under every environment, not here. Only a lane run against a deployed environment (a
+              preview&apos;s e2e, say) is recorded against one.
+            </p>
           </StateFrame>
         )
       ) : (
@@ -187,8 +185,10 @@ export function TestsRunsView({ scope, search, onSearch, envFilter, projectId, r
 const SOURCE_OPTIONS = RUN_SOURCES.map((value) => ({ value, label: RUN_SOURCE_LABEL[value] }));
 const STATUS_OPTIONS = RUN_STATUSES.map((value) => ({ value, label: RUN_STATUS_LABEL[value] }));
 
-function RunsFilters({ search, onSearch, envFilter, lanes }: { search: RunsSearch; onSearch: (next: RunsSearch) => void; envFilter?: EnvFilter; lanes: string[] }) {
+function RunsFilters({ search, onSearch, environments, lanes }: { search: RunsSearch; onSearch: (next: RunsSearch) => void; environments: TestsEnvironment[]; lanes: string[] }) {
   const set = (patch: Partial<RunsSearch>) => onSearch({ ...search, ...patch });
+  // The project's environments, and the one the URL names.
+  const envOptions = [...new Set([...environments.map((choice) => choice.name), ...(search.environment ? [search.environment] : [])])].map((name) => ({ value: name, label: name }));
   // The scaffolded lanes, any other lane a run on screen has, and the one the URL names.
   const laneOptions = orderLanes(["unit", "integration", "e2e", ...lanes, ...(search.lane ? [search.lane] : [])]).map((lane) => ({ value: lane, label: lane }));
   return (
@@ -196,15 +196,8 @@ function RunsFilters({ search, onSearch, envFilter, lanes }: { search: RunsSearc
       <TextFilter label="Branch" value={search.branch} placeholder="main" onChange={(branch) => set({ branch })} testId="tests-runs-filter-branch" mono />
       <TextFilter label="Commit" value={search.commit} placeholder="sha or prefix" onChange={(commit) => set({ commit })} testId="tests-runs-filter-commit" mono />
       <TextFilter label="Release" value={search.release} placeholder="version" onChange={(release) => set({ release })} testId="tests-runs-filter-release" mono />
-      {envFilter && (
-        <FilterMenu
-          label="Environment"
-          value={envFilter.value}
-          options={envFilter.choices.map((choice) => ({ value: choice.name, label: choice.name }))}
-          onChange={envFilter.onChange}
-          testId="tests-runs-filter-env"
-        />
-      )}
+      {/* Unset (the default) is every environment: the console's scope does not narrow this list. */}
+      <FilterMenu label="Environment" value={search.environment} options={envOptions} onChange={(environment) => set({ environment })} testId="tests-runs-filter-env" />
       <FilterMenu label="Lane" value={search.lane} options={laneOptions} onChange={(lane) => set({ lane })} testId="tests-runs-filter-lane" />
       <FilterMenu label="Source" value={search.source} options={SOURCE_OPTIONS} onChange={(source) => set({ source: source as RunsSearch["source"] })} testId="tests-runs-filter-source" />
       <FilterMenu label="Status" value={search.status} options={STATUS_OPTIONS} onChange={(status) => set({ status: status as RunsSearch["status"] })} testId="tests-runs-filter-status" />

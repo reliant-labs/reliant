@@ -19,7 +19,7 @@ describe("coverage paths", () => {
 });
 
 describe("whose report", () => {
-  it("a commit wins, then the scoped environment, then the newest report", () => {
+  it("a commit wins, then an explicitly chosen environment, then the newest report", () => {
     expect(coverageTarget("abc", "env-1", "def")).toEqual({ gitCommit: "abc" });
     expect(coverageTarget(undefined, "env-1", "def")).toEqual({ environmentId: "env-1" });
     expect(coverageTarget(undefined, undefined, "def")).toEqual({ gitCommit: "def" });

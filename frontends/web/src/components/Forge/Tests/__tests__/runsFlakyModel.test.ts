@@ -17,7 +17,8 @@ import { activeRunsFilterCount, failurePlace, failureVerdictWords, pickRunsSearc
 
 describe("the runs list's URL", () => {
   it("keeps every filter that fits and drops the rest", () => {
-    expect(pickRunsSearch({ branch: "main", commit: "9f3c2a1", release: "v1.9", lane: "unit", source: "ci", status: "failed", env: "prod" })).toEqual({
+    expect(pickRunsSearch({ environment: "pr-88", branch: "main", commit: "9f3c2a1", release: "v1.9", lane: "unit", source: "ci", status: "failed", env: "prod" })).toEqual({
+      environment: "pr-88",
       branch: "main",
       commit: "9f3c2a1",
       release: "v1.9",
@@ -31,12 +32,13 @@ describe("the runs list's URL", () => {
   });
 
   it("is what the route's schema holds, so a sent link opens the same list", () => {
-    const parsed = forgeConsoleTestsRunsSearchSchema.parse({ env: "prod", branch: "main", source: "local", status: "undetermined", lane: "e2e", bogus: "1" });
-    expect(parsed).toEqual({ env: "prod", branch: "main", source: "local", status: "undetermined", lane: "e2e" });
+    const parsed = forgeConsoleTestsRunsSearchSchema.parse({ env: "prod", environment: "pr-88", branch: "main", source: "local", status: "undetermined", lane: "e2e", bogus: "1" });
+    // The console's scope and the page's own environment are two keys.
+    expect(parsed).toEqual({ env: "prod", environment: "pr-88", branch: "main", source: "local", status: "undetermined", lane: "e2e" });
     expect(forgeConsoleTestsRunsSearchSchema.parse({ source: "jenkins", status: 3 })).toEqual({});
   });
 
-  it("maps onto ListTestRuns' optional fields, the scope's environment among them", () => {
+  it("maps onto ListTestRuns' optional fields, the chosen environment's id among them", () => {
     expect(runsFiltersOf(undefined, {})).toEqual({});
     expect(runsFiltersOf("env-1", { branch: "main", commit: "9f3c", release: "v1", lane: "unit", source: "env", status: "passed" })).toEqual({
       environmentId: "env-1",
@@ -48,6 +50,7 @@ describe("the runs list's URL", () => {
       outcome: "passed",
     });
     expect(activeRunsFilterCount({ branch: "main", status: "failed" })).toBe(2);
+    expect(activeRunsFilterCount({ environment: "pr-88" })).toBe(1);
   });
 });
 

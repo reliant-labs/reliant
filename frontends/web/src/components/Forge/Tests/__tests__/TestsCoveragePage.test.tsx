@@ -235,15 +235,16 @@ describe("Coverage: the URL", () => {
     expect((screen.getByTestId("tests-coverage-base") as HTMLSelectElement).value).toBe(FIXTURE_BASE);
   });
 
-  it("with no commit, reads the newest report; with an environment in scope, its current release", async () => {
+  it("with no commit, reads the default branch's newest report; with an environment explicitly chosen, its current release", async () => {
     const api = fixtureTestApi();
     renderCoverage({}, { api });
     await screen.findAllByTestId("tests-coverage-row");
     expect(api.calls.find((call) => call.method === "getCoverage")?.req).toMatchObject({ target: { gitCommit: FIXTURE_COMMIT } });
 
     const scoped = fixtureTestApi();
-    renderCoverage({}, { api: scoped, environmentId: "env-shop-prod" });
+    renderCoverage({ environment: "prod" }, { api: scoped, environmentId: "env-shop-prod" });
     await vi.waitFor(() => expect(scoped.calls.some((call) => call.method === "getCoverage")).toBe(true));
+    expect(await screen.findByRole("option", { name: "Current release of prod" })).toBeInTheDocument();
     expect(scoped.calls.find((call) => call.method === "getCoverage")?.req).toMatchObject({ target: { environmentId: "env-shop-prod" } });
   });
 

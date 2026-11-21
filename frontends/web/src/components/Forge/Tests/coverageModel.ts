@@ -14,12 +14,17 @@ import type { CoverageNode, CoverageTarget, LineCoverage, StatementCoverage } fr
 export interface CoverageSearch {
   /** Repo-relative; unset is the root. A file path too: it rides the search, never a segment. */
   path?: string;
-  /** Whose report. Unset: the scoped environment's current release, else the newest report of the default branch. */
+  /** Whose report. Unset: the default branch's newest report, or the current release of an environment the reader chose. */
   commit?: string;
   /** Only this lane. Unset: combined, every lane beside it. */
   lane?: string;
   /** Diff coverage against this commit. Unset: none. */
   base?: string;
+  /**
+   * An environment the reader chose for the Tests pages (testsScope.tsx): with no commit, its current
+   * release's report. Never the console's `?env=` scope. Kept so a drill keeps the choice.
+   */
+  environment?: string;
 }
 
 /** A path's parent: "internal/billing/refund.go" → "internal/billing"; a top-level path → "" (the root). */
@@ -43,9 +48,11 @@ export function childName(child: string, parent: string): string {
 }
 
 /**
- * Whose report the page reads. A commit in the URL wins; else the scoped
- * environment's current release; else the newest report the default
- * branch has (null until the summary says which, or when there is none).
+ * Whose report the page reads. A commit in the URL wins; else the current
+ * release of an environment the reader explicitly chose (`environmentId`
+ * is set only then: the console's scope never sets it); else the newest
+ * report the default branch has (null until the summary says which, or
+ * when there is none).
  */
 export function coverageTarget(commit: string | undefined, environmentId: string | undefined, newestCommit: string | null): CoverageTarget | null {
   if (commit) return { gitCommit: commit };

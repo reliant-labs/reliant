@@ -702,18 +702,24 @@ export const forgeConsoleSbomsSearchSchema = z.object({
 /** A git ref or a lane the router may have parsed as a number ("1234"). */
 const testsRefParam = (max: number) => z.union([z.string().min(1).max(max), z.number().transform(String)]).optional().catch(undefined);
 
-/** Tests › Overview (and the base of Runs and Coverage): the scope, and a branch other than the default one. */
+/**
+ * Tests › Overview (and the base of Runs and Coverage): the console scope
+ * (`env`, kept for the rest of the console: the Tests pages ignore it), an
+ * environment the reader chose for these pages (`environment`; unset reads
+ * every run, Tests/testsScope.tsx), and a branch other than the default one.
+ */
 export const forgeConsoleTestsSearchSchema = z.object({
   env: envScopeParam,
+  environment: testsRefParam(128),
   branch: testsRefParam(256),
 });
 
 /**
  * Tests › Runs: the scope, and ListTestRuns' filters (Tests/runsModel.ts
  * RunsSearch) — a branch, a commit (or its prefix), a release, a lane, where
- * the run was recorded and its status. Every filtered list is a link someone
- * can send ("the failed CI runs of main"). The environment is the console's
- * one scope (`env`), never a second key.
+ * the run was recorded, its status, and an environment the reader chose
+ * (`environment`, never the console's `env` scope). Every filtered list is a
+ * link someone can send ("the failed CI runs of main").
  */
 export const forgeConsoleTestsRunsSearchSchema = forgeConsoleTestsSearchSchema.extend({
   commit: testsRefParam(64),

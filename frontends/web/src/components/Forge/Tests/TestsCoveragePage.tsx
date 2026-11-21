@@ -71,7 +71,7 @@ export function TestsCoveragePage() {
   const resolved = useTestsScope("coverage");
   const raw = useSearch({ strict: false }) as CoverageSearch;
   const navigate = useNavigate();
-  const search: CoverageSearch = { path: raw.path, commit: raw.commit, lane: raw.lane, base: raw.base };
+  const search: CoverageSearch = { path: raw.path, commit: raw.commit, lane: raw.lane, base: raw.base, environment: raw.environment };
   // A selector rewrites one key and keeps the rest (the scope too); drilling is a link, so Back walks up the tree.
   const select = (patch: Partial<CoverageSearch>) =>
     void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }), replace: true } as never);
@@ -197,7 +197,8 @@ const day = (ms: number | null) => (ms === null ? "" : ` · ${new Date(ms).toISO
 function Selectors({ search, target, commit, lanes, summary, onSelect }: { search: CoverageSearch; target: CoverageTarget; commit: string; lanes: string[]; summary: TestSummary | null; onSelect: (patch: Partial<CoverageSearch>) => void }) {
   // The branch's recent commits with coverage, newest first: what a reader compares.
   const recent = useMemo(() => [...(summary?.trend ?? [])].reverse(), [summary]);
-  const defaultLabel = "environmentId" in target ? "Current release of this environment" : `Newest report${commit ? ` · ${shortSha(commit)}` : ""}`;
+  const defaultLabel =
+    "environmentId" in target ? `Current release of ${search.environment ?? "the chosen environment"}` : `Newest report on the default branch${commit ? ` · ${shortSha(commit)}` : ""}`;
   const commitListed = !search.commit || recent.some((point) => point.gitCommit === search.commit);
   const baseListed = !search.base || recent.some((point) => point.gitCommit === search.base);
   return (

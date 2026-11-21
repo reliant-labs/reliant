@@ -175,22 +175,49 @@ describe("Tests › Runs: filters held in the URL", () => {
     await waitFor(() => expect(search()).toEqual({}));
   });
 
-  it("narrows to the environment in scope, and offers every environment when it has no runs", async () => {
+  it("ignores the console's environment scope: every run, whatever the top bar says", async () => {
     consoleState.env = "prod";
-    const { api } = renderRuns("report");
-    const none = await screen.findByTestId("tests-runs-none-in-env");
-    expect(none).toHaveTextContent("No runs recorded against prod");
-    expect(lastRunsRequest(api).filters).toEqual({ environmentId: "env-shopfront-prod" });
-    fireEvent.click(within(none).getByTestId("tests-runs-all-envs"));
-    expect(consoleState.setEnv).toHaveBeenCalledWith("all");
+    const { api, search } = renderRuns("report", "?env=prod");
+    await screen.findByTestId("tests-runs-list");
+    expect(screen.getAllByTestId(/^tests-run-row-/)).toHaveLength(6);
+    expect(lastRunsRequest(api).filters).toEqual({});
+    expect(screen.getByTestId("tests-runs-filter-env")).toHaveTextContent(/^Environment$/);
+    expect(search()).toEqual({ env: "prod" });
   });
 
-  it("lists a preview's runs under its scope", async () => {
-    consoleState.env = "pr-88";
-    renderRuns("report");
+  it("narrows to an environment only when picked, kept under its own URL key beside the console's", async () => {
+    consoleState.env = "prod";
+    const { api, search } = renderRuns("report", "?env=prod");
     await screen.findByTestId("tests-runs-list");
+    await pick("tests-runs-filter-env", "pr-88");
+    await waitFor(() => expect(search()).toEqual({ env: "prod", environment: "pr-88" }));
+    await waitFor(() => expect(lastRunsRequest(api).filters).toEqual({ environmentId: FIXTURE_PREVIEW_ENV_ID }));
     expect(screen.getAllByTestId(/^tests-run-row-/).map((row) => row.getAttribute("data-testid"))).toEqual([`tests-run-row-${FIXTURE_RUN_IDS.previewE2e}`]);
     expect(screen.getByTestId("tests-runs-filter-env")).toHaveTextContent("Environment: pr-88");
+    // The console's scope is never written.
+    expect(consoleState.setEnv).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("tests-runs-filter-env-clear"));
+    await waitFor(() => expect(search()).toEqual({ env: "prod" }));
+  });
+
+  it("says a picked environment with no runs has none, and offers every environment", async () => {
+    const { api, search } = renderRuns("report", "?environment=prod");
+    const none = await screen.findByTestId("tests-runs-none-in-env");
+    expect(none).toHaveTextContent("No runs recorded against prod");
+    expect(none).toHaveTextContent("CI and local runs carry no environment");
+    expect(lastRunsRequest(api).filters).toEqual({ environmentId: "env-shopfront-prod" });
+    fireEvent.click(within(none).getByTestId("tests-runs-all-envs"));
+    await waitFor(() => expect(search()).toEqual({}));
+    await screen.findByTestId("tests-runs-list");
+  });
+
+  it("says when a linked environment does not exist, and offers every environment", async () => {
+    const { search } = renderRuns("report", "?environment=staging&lane=unit");
+    const note = await screen.findByTestId("tests-env-note");
+    expect(note).toHaveTextContent("There is no environment named staging");
+    fireEvent.click(within(note).getByTestId("tests-env-note-all"));
+    await waitFor(() => expect(search()).toEqual({ lane: "unit" }));
   });
 });
 

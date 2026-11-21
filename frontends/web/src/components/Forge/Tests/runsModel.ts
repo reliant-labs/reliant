@@ -5,9 +5,11 @@
  * free of React: the URL's filters (each one an optional field of
  * ListTestRuns), and the words and figures of a run.
  *
- * The environment is not one of these filters: it is the console's one scope
- * (`?env=`), as on every other page, and reaches the request as the scope's
- * environment id.
+ * The environment is one of these filters, and only when the reader picks
+ * it (`?environment=<name>`, testsScope.tsx): the console's `?env=` scope
+ * never narrows the Tests pages, because CI and local runs carry no
+ * environment. The page resolves the name to the control plane's
+ * environment id, which reaches the request beside the other filters.
  */
 
 import type { TestFailure, TestRun, TestRunFilters, TestRunOutcome, TestRunSource } from "@/services/controlPlane/tests/types";
@@ -21,6 +23,8 @@ export type RunSourceFilter = (typeof RUN_SOURCES)[number];
 
 /** Tests › Runs' own filters, as the URL holds them. Each is optional; absent means no filter. */
 export interface RunsSearch {
+  /** An environment's name: only runs recorded against it. Unset (the default): every run. */
+  environment?: string;
   branch?: string;
   /** A commit sha or its prefix, as the server matches it. */
   commit?: string;
@@ -31,10 +35,10 @@ export interface RunsSearch {
   status?: TestRunOutcome;
 }
 
-export const RUNS_SEARCH_KEYS = ["branch", "commit", "release", "lane", "source", "status"] as const satisfies readonly (keyof RunsSearch)[];
+export const RUNS_SEARCH_KEYS = ["environment", "branch", "commit", "release", "lane", "source", "status"] as const satisfies readonly (keyof RunsSearch)[];
 
 /** Bounds the route schema holds too (routeSchemas.ts): a ref this long is not a ref. */
-const MAX_REF = { branch: 256, commit: 64, release: 256, lane: 64 } as const;
+const MAX_REF = { environment: 128, branch: 256, commit: 64, release: 256, lane: 64 } as const;
 
 function text(value: unknown, max: number): string | undefined {
   const s = typeof value === "number" ? String(value) : value;
@@ -46,7 +50,7 @@ function text(value: unknown, max: number): string | undefined {
 /** The RunsSearch keys of a raw search object; a value that does not fit is absent. */
 export function pickRunsSearch(raw: Record<string, unknown>): RunsSearch {
   const out: RunsSearch = {};
-  for (const key of ["branch", "commit", "release", "lane"] as const) {
+  for (const key of ["environment", "branch", "commit", "release", "lane"] as const) {
     const value = text(raw[key], MAX_REF[key]);
     if (value) out[key] = value;
   }
@@ -55,12 +59,12 @@ export function pickRunsSearch(raw: Record<string, unknown>): RunsSearch {
   return out;
 }
 
-/** How many of the page's own filters are set (the environment scope is not one of them). */
+/** How many of the page's own filters are set, the chosen environment among them. */
 export function activeRunsFilterCount(search: RunsSearch): number {
   return RUNS_SEARCH_KEYS.filter((key) => search[key] !== undefined).length;
 }
 
-/** ListTestRuns' filters: the scope's environment id (none for All) and the page's own. */
+/** ListTestRuns' filters: the chosen environment's id (none: every run) and the page's own. */
 export function runsFiltersOf(environmentId: string | undefined, search: RunsSearch): TestRunFilters {
   const filters: TestRunFilters = {};
   if (environmentId) filters.environmentId = environmentId;

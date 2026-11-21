@@ -43,8 +43,15 @@ import {
 import { fixtureFlakyWire, fixtureRunsWire, fixtureRunWire, fixtureTestWire } from "./runFlakeFixtures";
 import { fixtureCoverage, fixtureFileCoverage } from "./coverageFixtures";
 
-/** A fixed "now", so relative times in snapshots do not move. */
-export const FIXTURE_NOW = Date.UTC(2026, 10, 20, 12, 0, 0);
+/**
+ * A fixed "now", so relative times do not move: the visual harness's and the
+ * preview's frozen clock, FIXED_NOW in e2e/visual/fixtures/base.ts (2026-11-18
+ * 15:30 UTC). src cannot import e2e/, so it is repeated here and
+ * __tests__/testsEnvScope.test.tsx holds the two equal. Every Tests fixture time
+ * (this file's, runFlakeFixtures.ts's) is relative to it, so nothing lands
+ * in the preview's future.
+ */
+export const FIXTURE_NOW = Date.UTC(2026, 10, 18, 15, 30, 0);
 const MINUTE = 60_000;
 const DAY = 86_400_000;
 

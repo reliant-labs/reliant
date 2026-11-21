@@ -19,7 +19,10 @@
  * service says so, and an empty record names the commands that fill it.
  *
  * The branch is `?branch=` (default: the project's default branch, which the
- * answer names); the environment is the top bar's scope.
+ * answer names). The last run and the pass rate are over every run: the top
+ * bar's environment scope does not narrow them, because CI and local runs
+ * carry no environment. Only an environment the reader chose for the Tests
+ * pages (`?environment=`, testsScope.tsx) does, and the page then says so.
  */
 
 import { useMemo, type ReactNode } from "react";
@@ -45,6 +48,8 @@ const SUBTITLE = "Coverage, pass rate and flaky tests of the project's own test 
 export function TestsOverviewPage() {
   const { href, projectId } = useForgeConsole();
   const resolved = useTestsScope("test runs");
+  // A chosen environment follows the reader to Runs and Coverage.
+  const carry = "scope" in resolved && resolved.scope.environment ? { environment: resolved.scope.environment } : undefined;
   const search = useSearch({ strict: false }) as { branch?: string };
   return (
     <TestsFrame title="Tests" subtitle={SUBTITLE} testId="console-tests">
@@ -57,9 +62,9 @@ export function TestsOverviewPage() {
           projectId={projectId}
           hrefs={{
             flaky: href({ kind: "tests-flaky" }),
-            runs: href({ kind: "tests-runs" }),
+            runs: href({ kind: "tests-runs" }, carry),
             run: (runId) => href({ kind: "tests-run", run: runId }),
-            coverage: href({ kind: "tests-coverage" }),
+            coverage: href({ kind: "tests-coverage" }, carry),
           }}
         />
       )}
@@ -100,10 +105,10 @@ export function TestsOverviewView({ scope, branch, projectId, hrefs, now }: Test
   }
   const data = summary.data;
   if (!data.latest && !data.lastRun) return <TestsNoRunsYet projectId={projectId} branch={branch} />;
-  return <Overview summary={data} hrefs={hrefs} now={now ?? Date.now()} />;
+  return <Overview summary={data} hrefs={hrefs} now={now ?? Date.now()} environment={scope.environment} />;
 }
 
-function Overview({ summary, hrefs, now }: { summary: TestSummary; hrefs: TestsOverviewHrefs; now: number }) {
+function Overview({ summary, hrefs, now, environment }: { summary: TestSummary; hrefs: TestsOverviewHrefs; now: number; environment?: string }) {
   return (
     <div className="space-y-4" data-testid="tests-overview">
       <p className="text-meta text-ink-muted" data-testid="tests-branch">
@@ -113,6 +118,14 @@ function Overview({ summary, hrefs, now }: { summary: TestSummary; hrefs: TestsO
             {" "}
             · newest report <code className="font-mono text-ink">{shortSha(summary.latest.gitCommit)}</code>
           </>
+        )}
+        {environment ? (
+          <span data-testid="tests-environment">
+            {" "}
+            · only runs recorded against <code className="font-mono text-ink">{environment}</code>
+          </span>
+        ) : (
+          " · every run"
         )}
       </p>
       <Headline summary={summary} hrefs={hrefs} now={now} />
