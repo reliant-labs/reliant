@@ -58,7 +58,9 @@ func (h *approvalHarness) signIn(t *testing.T, sub string) string {
 	t.Helper()
 	issued, err := h.sessions.Create(context.Background(), session.Tokens{
 		AccessToken: h.id.Sign(t, sub, nil),
-		Expiry:      time.Now().Add(time.Hour),
+		// The access token's own expiry (authtest's tokens are valid until
+		// 2100): a date no wall clock reaches, so the session never refreshes.
+		Expiry: time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC),
 	}, session.Meta{Subject: sub})
 	require.NoError(t, err)
 	return issued.ID
