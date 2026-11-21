@@ -108,6 +108,14 @@ type upgradeDrain struct {
 	restartWait time.Duration
 	poll        time.Duration
 	backstop    time.Duration
+	// onPoll runs at each pass of the drain's wait loop, and onReturn when
+	// runUpgradeDrain returns, so a test can wait on the drain having
+	// looked rather than on elapsed time. Set before the drain starts.
+	onPoll   func()
+	onReturn func()
+	// afterFunc arms the upgrade exit's backstop: time.AfterFunc when nil.
+	// A test replaces it to see the backstop armed, and to fire it at once.
+	afterFunc func(time.Duration, func())
 }
 
 // armUpgrade gives the drain what its upgrade exit needs: how to stop the
@@ -305,10 +313,16 @@ func (d *daemonClient) handleRestartRequested(ctx context.Context, req *reliantv
 // be restarted (see the top of this file).
 func (d *daemonClient) runUpgradeDrain(ctx context.Context, req *reliantv1.RestartRequested) {
 	u := &d.upgrade
+	if u.onReturn != nil {
+		defer u.onReturn()
+	}
 	_, restartWait, poll, _ := u.durations()
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 	for {
+		if u.onPoll != nil {
+			u.onPoll()
+		}
 		running := d.results.runningCount()
 		u.mu.Lock()
 		deadline := u.deadline
@@ -369,13 +383,16 @@ func (u *upgradeDrain) upgradeExit() {
 		return
 	}
 	u.exited = true
-	stop, exit := u.stopRuntime, u.exit
+	stop, exit, afterFunc := u.stopRuntime, u.exit, u.afterFunc
 	u.mu.Unlock()
+	if afterFunc == nil {
+		afterFunc = func(d time.Duration, f func()) { time.AfterFunc(d, f) }
+	}
 	if stop != nil {
 		stop()
 	}
 	if exit != nil {
-		time.AfterFunc(backstop, func() {
+		afterFunc(backstop, func() {
 			logging.Error(logPrefix+" Shutdown for an upgrade exit did not finish — force-exiting", "backstop", backstop)
 			exit(UpgradeExitCode)
 		})

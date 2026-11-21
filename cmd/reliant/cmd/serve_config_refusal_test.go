@@ -51,6 +51,34 @@ func TestServerAPIRefusesBadConfigBeforeMigrating(t *testing.T) {
 	assert.Zero(t, database.dials.Load(), "the api-server connected to its database before refusing its config; output:\n%s", out)
 }
 
+// A dev signer (AUTH_DEV_JWT_SECRET) outside the dev tier stops the process:
+// reliant's own config path refuses it, whatever deploy declared it. Run as
+// main runs it, with RELIANT_ENV=prod, `reliant server api` exits 1 naming
+// the refusal, before it touches its database.
+func TestServerAPIRefusesDevSignerOutsideDev(t *testing.T) {
+	isolateServerRoleEnv(t)
+	database := newDialCounter(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	run := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestExecuteAsHelperProcess$", "--", executeHelperMarker, "server", "api")
+	run.Env = environWith(map[string]string{
+		"DATABASE_URL":        "postgres://reliant@" + database.addr + "/reliant?sslmode=disable",
+		"DB_CONNECT_TIMEOUT":  "2s",
+		"HEALTH_PORT":         fmt.Sprint(freeTCPPort(t)),
+		"RELIANT_ENV":         "prod",
+		"RELIANT_JWKS_URL":    "http://127.0.0.1:1/jwks.json",
+		"AUTH_DEV_JWT_SECRET": "dev-local-hmac-shared-secret-do-not-use-in-prod",
+	}, "NODE_ENV", "AUTH_MODE", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE")
+	out, err := run.CombinedOutput()
+
+	var exit *exec.ExitError
+	require.True(t, errors.As(err, &exit), "`reliant server api` must exit non-zero; err=%v, output:\n%s", err, out)
+	assert.Equal(t, 1, exit.ExitCode(), "output:\n%s", out)
+	assert.Contains(t, string(out), "AUTH_DEV_JWT_SECRET is a dev-only signer")
+	assert.Zero(t, database.dials.Load(), "the api-server connected to its database before refusing the dev signer; output:\n%s", out)
+}
+
 const executeHelperMarker = "reliant-execute"
 
 // TestExecuteAsHelperProcess is not a test: re-executed by a test above, it

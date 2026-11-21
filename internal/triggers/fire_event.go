@@ -166,6 +166,8 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if !resuming && !manual && !trigger.Enabled {
 		return f.settle(ctx, ev, nil, core.TriggerEventSkipped, pausedDetail(trigger), nil)
 	}
+	// A trigger that names no workflow runs its owner's default (Firer.Fire).
+	trigger = withDefaultWorkflow(ctx, f.launcher, trigger)
 	// A creator who left the trigger's org: the first event to find out
 	// records the failure and pauses the trigger (Firer.Fire).
 	if !resuming {
@@ -206,7 +208,11 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	// Which definition this fire resolves, recorded on the event whatever the
 	// outcome; a broken one refuses the fire (Firer.Fire). Re-read here, not
 	// trusted from intake, like the declaration below.
-	def, err := firingDefinition(ctx, f.workflows, trigger, ev, resuming)
+	//
+	// Every resolution of this fire reads through one memo (oneFire): the
+	// snapshot it pins is read once, not once per resolution.
+	reads := oneFire(f.workflows)
+	def, err := tracedFiringDefinition(ctx, reads, trigger, ev, resuming)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +222,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 
 	// Re-read at launch, not trusted from intake: the workflow may have been
 	// edited in between, and the declaration as it is now is what runs.
-	workflows := PinnedTo(f.workflows, def)
+	workflows := firingWorkflows(reads, def)
 	decl, err := activationFor(ctx, workflows, trigger)
 	if err != nil {
 		if isVerdict(err) {
@@ -240,7 +246,10 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	}
 	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
-		return nil, err
+		if retryableRead(err) || resuming {
+			return nil, err
+		}
+		return f.settle(ctx, ev, def, core.TriggerEventFailed, fmt.Sprintf("workflow %q cannot be resolved: %v", trigger.Workflow, err), err)
 	}
 	limits, capped, err := capacityLimits(ctx, f.pools, trigger, policy)
 	if err != nil {
@@ -408,7 +417,7 @@ func eventSpec(ctx context.Context, repo any, trigger *core.Trigger, ev *core.Tr
 		}
 		values = merged
 	}
-	prompt, err := SeedPrompt(trigger, decl, scope)
+	prompt, err := LaunchPrompt(trigger, decl, scope)
 	if err != nil {
 		return launch.Spec{}, err
 	}

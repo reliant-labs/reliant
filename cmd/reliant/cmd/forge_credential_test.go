@@ -39,7 +39,7 @@ import (
 // pin the CLIENT half the owner's report was about: a machine signed in to
 // Reliant — through the app (an Electron-minted daemon credential), on a
 // managed cloud daemon (a read-only mounted Secret), or with `reliant auth
-// login` — gives forge a credential with no `forge login`, and never hands
+// login` — gives forge a credential with no `forge cloud login`, and never hands
 // forge the session credential itself.
 
 const testControlPlane = "https://admin.example.com"
@@ -167,7 +167,7 @@ func runHelper(t *testing.T, endpoint string, args ...string) (cloudcred.Respons
 // signed in through the app (the daemon credential is on disk, Electron wrote
 // it), an agent runs forge in a shell the daemon spawned. The daemon exports a
 // helper pinned to itself, and forge gets an exchanged deploy token — not the
-// daemon's credential — with no `forge login`.
+// daemon's credential — with no `forge cloud login`.
 func TestForgeCredential_ElectronDaemonSessionEndToEnd(t *testing.T) {
 	credPath, _ := isolateForgeCredHome(t)
 	api := serveReliantAPI(t, testControlPlane)
@@ -335,7 +335,7 @@ func TestReliantAsHelperProcess(t *testing.T) {
 }
 
 // TestForgeCredential_Refusals: every way of NOT getting a token says what to
-// do — and under Reliant that is signing in to Reliant, never `forge login`.
+// do — and under Reliant that is signing in to Reliant, never `forge cloud login`.
 func TestForgeCredential_Refusals(t *testing.T) {
 	t.Run("not signed in at all", func(t *testing.T) {
 		isolateForgeCredHome(t)
@@ -357,7 +357,7 @@ func TestForgeCredential_Refusals(t *testing.T) {
 		if resp.Error == nil || resp.Error.Code != cloudcred.CodeDenied || !strings.Contains(resp.Error.Message, "reliant auth login") {
 			t.Fatalf("refusal = %+v", resp.Error)
 		}
-		if strings.Contains(resp.Error.Message, "forge login") {
+		if strings.Contains(resp.Error.Message, "forge login") || strings.Contains(resp.Error.Message, "forge cloud login") {
 			t.Errorf("under Reliant the remedy is Reliant's sign-in: %s", resp.Error.Message)
 		}
 		if after := api.liveTokens(t, "user-narrow"); after != before {
@@ -426,7 +426,7 @@ func containsString(list []string, want string) bool {
 // TestAuthLogout_ForgetsExchangedTokensKeepsForgeLogin: logging out of a
 // server drops the tokens exchanged from its sessions — none outlives the
 // sign-out on this machine — and leaves another server's, and a human's own
-// `forge login`, alone.
+// `forge cloud login`, alone.
 func TestAuthLogout_ForgetsExchangedTokensKeepsForgeLogin(t *testing.T) {
 	credPath, _ := isolateForgeCredHome(t)
 	// Populate the cache through the real helper, not its private JSON format:
@@ -469,7 +469,7 @@ func TestAuthLogout_ForgetsExchangedTokensKeepsForgeLogin(t *testing.T) {
 		t.Error("logout of one server dropped another server's token")
 	}
 	if human, _ := credentials.Lookup(credPath, testControlPlane, "forge-cli"); human.Token != "rlat_HUMAN" {
-		t.Error("`reliant auth logout` deleted the user's own `forge login`")
+		t.Error("`reliant auth logout` deleted the user's own `forge cloud login`")
 	}
 	count := otherAPI.liveTokens(t, "user-logout")
 	again, _ := runHelper(t, testControlPlane, "--daemon-server", otherAPI.url)
@@ -523,10 +523,10 @@ func TestReliantForge_PointsForgeAtTheSession(t *testing.T) {
 	// The forge command runs from this package's directory, so it finds
 	// reliant's forge.yaml, and forge's pre-run would otherwise configure the
 	// developer's checkout (core.hooksPath in the clone's shared .git/config).
-	// FORGE_NO_HOOKS no longer covers the merge driver: without its own
-	// opt-out, forge writes merge routes into the checkout's
-	// .git/info/attributes.
-	t.Setenv("FORGE_NO_HOOKS", "1")
+	// FORGE_NO_GIT_HOOKS (forge v1.9 removed its older name, FORGE_NO_HOOKS)
+	// does not cover the merge driver: without its own opt-out, forge writes
+	// merge routes into the checkout's .git/info/attributes.
+	t.Setenv("FORGE_NO_GIT_HOOKS", "1")
 	t.Setenv("FORGE_NO_MERGE_DRIVER", "1")
 	root := NewRootCmd()
 	if os.Getenv(cloudcred.HelperEnv) != "" {

@@ -895,10 +895,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 
 				// Handle function call completion
 				if fc := v.Item.AsFunctionCall(); fc.Type == "function_call" && fc.CallID != "" {
-					itemID := fc.ID
-					if itemID == "" {
-						itemID = fc.CallID
-					}
+					itemID := responseswire.FunctionCallKey(fc)
 					tc := toolCallsByID[itemID]
 					if tc == nil {
 						tc = &message.ToolCall{Type: "function"}
@@ -936,7 +933,9 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				if tc == nil {
 					tc = &message.ToolCall{ID: itemID, Type: "function"}
 					toolCallsByID[itemID] = tc
-					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: tc}
+					// A copy: tc.ID becomes the call_id later, and the card is
+					// keyed by the item id it opened under (see DroppedToolCalls).
+					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: &message.ToolCall{ID: itemID, Type: "function"}}
 				}
 				tc.Input += v.Delta
 				eventChan <- llm.DriverEvent{
@@ -953,7 +952,9 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				if tc == nil {
 					tc = &message.ToolCall{ID: itemID, Type: "function"}
 					toolCallsByID[itemID] = tc
-					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: tc}
+					// A copy: tc.ID becomes the call_id later, and the card is
+					// keyed by the item id it opened under (see DroppedToolCalls).
+					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: &message.ToolCall{ID: itemID, Type: "function"}}
 				}
 				tc.Name = v.Name
 				tc.Input = v.Arguments
@@ -999,48 +1000,69 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 			return
 		}
 
+		// A clean EOF with no terminal event is a response cut short, not a
+		// finished one: retry it, as codex-rs does ("stream closed before
+		// response.completed"). See responseswire.ErrStreamEndedWithoutTerminalEvent.
+		if finalResp == nil {
+			logging.WarnContext(ctx, "[Codex] Stream error",
+				"error", responseswire.ErrStreamEndedWithoutTerminalEvent,
+				"streamedChars", len(currentContent),
+				"streamedToolCalls", len(toolCallsByID))
+			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: responseswire.ErrStreamEndedWithoutTerminalEvent}
+			return
+		}
+
 		// Reconcile tool calls from the final response
-		if finalResp != nil {
-			for _, out := range finalResp.Output {
-				if fc := out.AsFunctionCall(); fc.Type == "function_call" && fc.CallID != "" {
-					itemID := fc.ID
-					if itemID == "" {
-						itemID = fc.CallID
-					}
-					tc := toolCallsByID[itemID]
-					if tc == nil {
-						tc = &message.ToolCall{ID: itemID, Type: "function"}
-						toolCallsByID[itemID] = tc
-					}
-					tc.ID = fc.CallID
-					tc.Name = fc.Name
-					if tc.Input == "" {
-						tc.Input = fc.Arguments
-					}
+		for _, out := range finalResp.Output {
+			if fc := out.AsFunctionCall(); fc.Type == "function_call" && fc.CallID != "" {
+				itemID := responseswire.FunctionCallKey(fc)
+				tc := toolCallsByID[itemID]
+				if tc == nil {
+					tc = &message.ToolCall{ID: itemID, Type: "function"}
+					toolCallsByID[itemID] = tc
+				}
+				tc.ID = fc.CallID
+				tc.Name = fc.Name
+				if tc.Input == "" {
+					tc.Input = fc.Arguments
 				}
 			}
 		}
 
-		// Build final tool calls list
+		// Build final tool calls list. A call of a response that did not
+		// complete runs only if the response confirms it finished; see
+		// responseswire.ToolCallGate.
+		gate := responseswire.GateToolCalls(finalResp)
 		finalToolCalls := make([]message.ToolCall, 0, len(toolCallsByID))
-		for _, tc := range toolCallsByID {
+		// Calls that will not run, under the key their EventToolUseStart
+		// carried, so call_llm can close the cards it opened for them.
+		var droppedToolCalls []message.ToolCall
+		dropped := 0
+		for key, tc := range toolCallsByID {
 			if tc.ID == "" || tc.Name == "" {
+				droppedToolCalls = append(droppedToolCalls, message.ToolCall{ID: key, Name: tc.Name, Type: "function"})
+				continue
+			}
+			if !gate.Allows(key) {
+				droppedToolCalls = append(droppedToolCalls, message.ToolCall{ID: key, Name: tc.Name, Type: "function"})
+				dropped++
 				continue
 			}
 			tc.Finished = true
 			finalToolCalls = append(finalToolCalls, *tc)
 			eventChan <- llm.DriverEvent{Type: llm.EventToolUseStop, ToolCall: tc}
 		}
-
-		// Determine finish reason. A nil finalResp (no terminal event at all)
-		// keeps the historical fallback; see responseswire.FinishReason.
-		finishReason := c.resolveFinishReason(finalResp, len(finalToolCalls))
-
-		// Token usage
-		usage := llm.TokenUsage{}
-		if finalResp != nil {
-			usage = responseswire.TokenUsage(finalResp.Usage)
+		if dropped > 0 {
+			logging.WarnContext(ctx, "[Codex] Dropped tool calls of an unfinished response",
+				"dropped", dropped,
+				"kept", len(finalToolCalls),
+				"status", finalResp.Status,
+				"incompleteReason", finalResp.IncompleteDetails.Reason,
+				"responseID", finalResp.ID)
 		}
+
+		finishReason := c.resolveFinishReason(finalResp, len(finalToolCalls))
+		usage := responseswire.TokenUsage(finalResp.Usage)
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)
 		c.logServedResponse(finalResp, upstreamRequestID)
@@ -1050,6 +1072,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 			Response: &llm.DriverResponse{
 				Content:            currentContent,
 				ToolCalls:          finalToolCalls,
+				DroppedToolCalls:   droppedToolCalls,
 				Usage:              usage,
 				FinishReason:       finishReason,
 				Phase:              responseswire.AssistantPhase(finalResp),

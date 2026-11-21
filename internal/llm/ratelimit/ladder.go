@@ -75,8 +75,23 @@ type Failure struct {
 	// fallback for providers that say nothing explicit.
 	UsageLimit bool
 	// Fatal marks a failure retrying cannot fix although its status looks
-	// retryable (OpenAI insufficient_quota).
+	// retryable (OpenAI insufficient_quota), or one a driver must not retry
+	// at all (a stream that already delivered events).
 	Fatal bool
+	// RetryAfter is a provider-requested wait stated somewhere other than the
+	// Retry-After headers: a google.rpc.RetryInfo in the error body, say. It
+	// is used only when the headers carry none, and is held to the same
+	// MaxHonored cap: longer becomes a UsageLimitError.
+	RetryAfter time.Duration
+	// ResetHint is when a header-declared rate-limit bucket refills
+	// (x-ratelimit-reset-*). It is weaker than a Retry-After: it lengthens the
+	// ladder's own backoff up to MaxBackoff and never ends the ladder, since a
+	// token bucket's full-refill time overstates the wait for one request.
+	ResetHint time.Duration
+	// Reason names the retry in RetryWait.Reason when the driver's own
+	// classification says more than the status ("transient_upstream_500");
+	// empty means "http_<status>".
+	Reason string
 }
 
 func (r Retryer) now() time.Time {
@@ -102,6 +117,9 @@ func (r Retryer) Decide(attempt int, f Failure) (llm.RetryWait, bool, error) {
 		return llm.RetryWait{}, false, err
 	}
 	after, hasAfter := RetryAfter(f.Header, r.now())
+	if !hasAfter && f.RetryAfter > 0 {
+		after, hasAfter = f.RetryAfter, true
+	}
 	if f.Status > 0 && f.UsageLimit {
 		return llm.RetryWait{}, false, r.usageLimit(f, after, hasAfter)
 	}
@@ -117,6 +135,9 @@ func (r Retryer) Decide(attempt int, f Failure) (llm.RetryWait, bool, error) {
 		return llm.RetryWait{}, false, err
 	}
 	wait := llm.RetryWait{Attempt: attempt, MaxAttempts: r.maxAttempts(), StatusCode: f.Status, Reason: "http_" + strconv.Itoa(f.Status)}
+	if f.Reason != "" {
+		wait.Reason = f.Reason
+	}
 	if hasAfter {
 		maxHonored := r.MaxHonored
 		if maxHonored <= 0 {
@@ -129,6 +150,9 @@ func (r Retryer) Decide(attempt int, f Failure) (llm.RetryWait, bool, error) {
 		return wait, true, nil
 	}
 	wait.Delay = r.backoff(attempt)
+	if f.ResetHint > wait.Delay {
+		wait.Delay = min(f.ResetHint, r.maxBackoff())
+	}
 	return wait, true, nil
 }
 
@@ -192,10 +216,7 @@ func (r Retryer) sleep(ctx context.Context, d time.Duration) error {
 // backoff is 2s doubling per attempt, capped at MaxBackoff, plus up to 20%
 // jitter so parked chats do not retry in lockstep.
 func (r Retryer) backoff(attempt int) time.Duration {
-	maxB := r.MaxBackoff
-	if maxB <= 0 {
-		maxB = DefaultMaxBackoff
-	}
+	maxB := r.maxBackoff()
 	b := retry.Backoff{Initial: defaultBaseBackoff, Max: maxB, Jitter: retry.UpwardJitter(0.2)}
 	if attempt >= 6 {
 		// From the sixth attempt the ladder waits MaxBackoff itself, even when
@@ -207,6 +228,13 @@ func (r Retryer) backoff(attempt int) time.Duration {
 		return d + r.Jitter(d)
 	}
 	return b.Delay(attempt)
+}
+
+func (r Retryer) maxBackoff() time.Duration {
+	if r.MaxBackoff > 0 {
+		return r.MaxBackoff
+	}
+	return DefaultMaxBackoff
 }
 
 // RetryableStatus is the retry set shared by every ladder: timeout, conflict,

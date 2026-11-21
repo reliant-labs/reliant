@@ -121,7 +121,7 @@ export function AgentSelector({
           <div className="py-1 max-h-96 overflow-y-auto rounded-md">
               {/* General Agent Option (default) */}
               <div
-                className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30"
+                className="px-3 py-1.5 text-2xs font-semibold text-muted-foreground bg-muted/30"
               >
                 Agent
               </div>
@@ -146,7 +146,7 @@ export function AgentSelector({
               {chatWorkflows.length > 0 && (
                 <>
                   <div
-                    className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-border/30 bg-muted/30"
+                    className="px-3 py-1.5 text-2xs font-semibold text-muted-foreground border-t border-border/30 bg-muted/30"
                   >
                     Workflows
                   </div>

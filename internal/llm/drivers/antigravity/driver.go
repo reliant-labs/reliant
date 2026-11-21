@@ -22,10 +22,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/forge/pkg/retry"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -39,6 +39,9 @@ import (
 type Client struct {
 	options    llm.DriverOptions
 	httpClient *http.Client
+
+	// ladder overrides the retry ladder's defaults; tests inject the clock.
+	ladder ratelimit.Retryer
 }
 
 // ManagedSystemPrompt is the seam for the Antigravity managed system prompt.
@@ -491,38 +494,26 @@ func parseJSONToMap(raw string) (map[string]any, error) {
 	return out, err
 }
 
-// isRetryableStatus reports whether an HTTP status is worth retrying: rate
-// limits and transient gateway/server errors.
-func isRetryableStatus(status int) bool {
-	switch status {
-	case http.StatusTooManyRequests,
-		http.StatusInternalServerError,
-		http.StatusBadGateway,
-		http.StatusServiceUnavailable,
-		http.StatusGatewayTimeout:
-		return true
-	default:
-		return false
+func (c *Client) retryer() ratelimit.Retryer {
+	r := c.ladder
+	if r.Provider == "" {
+		r.Provider = "Antigravity"
+		r.Log = "[ANTIGRAVITY] stream request"
 	}
+	return r
 }
 
-// retryDelay honors Retry-After when the server sends one, and otherwise backs
-// off exponentially with jitter, matching the gemini driver's ladder.
-func retryDelay(attempt int, resp *http.Response) time.Duration {
-	if resp != nil {
-		if after := resp.Header.Get("Retry-After"); after != "" {
-			if seconds, err := strconv.Atoi(after); err == nil && seconds > 0 {
-				return time.Duration(seconds) * time.Second
-			}
-		}
+// antigravityFailure describes a refused request to the shared ladder.
+func antigravityFailure(resp *http.Response, body []byte, err error) ratelimit.Failure {
+	if resp == nil {
+		return ratelimit.HTTPFailure(nil, fmt.Errorf("antigravity: request failed: %w", err))
 	}
-	return retryBackoff.Delay(attempt)
+	f := ratelimit.HTTPFailure(resp, fmt.Errorf("antigravity: API request failed with status %d: %s", resp.StatusCode, string(body)))
+	if s, ok := ratelimit.ParseGoogleStatus(body); ok {
+		ratelimit.DescribeGoogle(&f, s.Details)
+	}
+	return f
 }
-
-// retryBackoff is the wait before retry n when the server sent no
-// Retry-After: 2s doubling, each wait lengthened by a fixed 20% (2.4s, 4.8s,
-// 9.6s, ...), no cap.
-var retryBackoff = retry.Backoff{Initial: 2 * time.Second, Jitter: retry.FixedJitter(0.2)}
 
 // clientIdentityTransport stamps the fixed Antigravity client identity onto
 // every request, plus a Bearer token when no refreshing transport is installed.

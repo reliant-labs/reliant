@@ -37,7 +37,6 @@ interface ToolExecutionCollapsibleGroupProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
-  density?: "compact" | "card" | "minimal";
 }
 
 function ToolExecutionCollapsibleGroupComponent({
@@ -46,7 +45,6 @@ function ToolExecutionCollapsibleGroupComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
-  density = "compact",
 }: ToolExecutionCollapsibleGroupProps) {
   const surface = useSurface();
 
@@ -82,9 +80,7 @@ function ToolExecutionCollapsibleGroupComponent({
   return (
     <div
       className={cn(
-        'border overflow-hidden',
-        density === 'card' ? 'rounded-xl shadow-sm' : 'rounded-lg',
-        density === 'minimal' && 'rounded-md shadow-none',
+        'border overflow-hidden rounded-lg',
         hasWarnings
           ? 'border-destructive/40 bg-destructive/5'
           : allCompleted
@@ -97,7 +93,7 @@ function ToolExecutionCollapsibleGroupComponent({
         type="button"
         className={cn(
           "flex w-full items-center justify-between text-left cursor-pointer hover:bg-muted/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch:min-h-[44px]",
-          density === "card" ? "px-3 py-2" : "px-1.5 py-1"
+          "px-1.5 py-1"
         )}
         onClick={toggle}
         aria-expanded={isExpanded}
@@ -126,7 +122,7 @@ function ToolExecutionCollapsibleGroupComponent({
 
       {/* Expanded content - show individual tool executions */}
       {isExpanded && (
-        <div id={panelId} className={cn("border-t border-muted/30 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
+        <div id={panelId} className="border-t border-muted/30 p-1 space-y-1">
           {executions.map((execution, index) => (
             <ToolExecution
               key={`${messageId || 'msg'}-readonly-${index}-${execution.call.id}`}
@@ -139,7 +135,6 @@ function ToolExecutionCollapsibleGroupComponent({
               chatId={chatId}
               showRichContent={showRichContent}
               onSelectThread={onSelectThread}
-              density={density}
             />
           ))}
         </div>

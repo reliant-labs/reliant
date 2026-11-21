@@ -1035,7 +1035,7 @@ message AskQuestionArgs {
 
   // Metadata is a JSON string containing the question definition.
   CelString metadata = 1 [(reliant) = {
-    description: "The questions to ask, as JSON: a questions list, each with question text and its options"
+    description: "The questions to ask, as JSON: {\"type\": \"ask_user\", \"questions\": [...]}, each question with its text and options. Without \"type\": \"ask_user\" the app shows no options and nothing can answer it"
     example: "{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}"
     type_hint: "JSON"
   }];
@@ -1114,6 +1114,10 @@ message SaveMessageNodeArgs {
   // completion, forwarded from CallLLMOutput.provider_account_id and persisted
   // onto messages.provider_account_id.
   string resolved_provider_account_id = 33 [(reliant) = {hidden: true}];
+  // ResolvedThinkingLevel is the effective thinking level the completion ran
+  // at, forwarded from CallLLMOutput.thinking_level and persisted onto
+  // messages.thinking_level.
+  string resolved_thinking_level = 34 [(reliant) = {hidden: true}];
 }
 
 // InjectFileMsg carries binary file data for inject file attachments.
@@ -1230,11 +1234,12 @@ message RunArgs {
   // ssh agent socket, GIT_TERMINAL_PROMPT=0 and an empty gh config directory.
   // Empty (or "inherit") keeps the daemon's own environment.
   //
-  // A guard rail against a command that pushes or merges when it should not,
-  // not containment: the command still runs as the daemon's Unix user and can
-  // read that user's files.
+  // On Linux the command also runs in internal/credsandbox's user, mount and
+  // PID namespaces, where the daemon's credential files are absent (refused
+  // where the kernel does not allow them); on macOS and Windows only the
+  // environment is scrubbed.
   string credentials = 5 [(reliant) = {
-    description: "Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable"
+    description: "Set to none to run the command with no GitHub, git, ssh or cloud credentials. On Linux it runs in a sandbox where the daemon's credential files are absent, and is refused where the kernel cannot provide one; on macOS and Windows only the environment is cleaned"
     example: "none"
     label: "Credentials"
   }];
@@ -1892,6 +1897,13 @@ message CallLLMOutput {
   // span under the turn that asked for it (internal/telemetry/ai_spans.go).
   // Empty when the turn was not traced.
   string trace_parent = 21 [(reliant) = {visibility_contexts: "advanced"}];
+
+  // ThinkingLevel is the effective thinking (reasoning-effort) level this
+  // completion was requested at, after the model's capabilities reconciled
+  // the requested one: what the step actually ran at. Empty when the model
+  // takes no level (it cannot reason, or runs at its driver's default). The
+  // inline save_message persists it onto messages.thinking_level.
+  string thinking_level = 22 [(reliant) = {visibility_contexts: "advanced"}];
 }
 
 // ToolCapabilities is one agent turn's tool capability set: resolved once by
@@ -2045,10 +2057,18 @@ message CompactOutput {
 
 // ApprovalOutput is the output from the approval activity.
 message ApprovalOutput {
-  string approval_id = 1;
-  string status = 2; // "approved", "denied", or "timeout"
-  string action_taken = 3; // Action button that was clicked
-  google.protobuf.Struct data = 4;
+  string approval_id = 1 [(reliant) = {description: "Id of the approval request this step raised"}];
+  string status = 2 [(reliant) = {description: "approved, denied, or timeout"}]; // "approved", "denied", or "timeout"
+  string action_taken = 3 [(reliant) = {description: "The action button the approver clicked, when the approval offered actions"}]; // Action button that was clicked
+  // Never set by the approval step. Kept, deprecated, so a workflow that
+  // references it still validates (TL-15).
+  google.protobuf.Struct data = 4 [
+    deprecated = true,
+    (reliant) = {description: "Deprecated: never set, always empty"}
+  ];
+  // Why the approver denied the request, when they gave a reason. Absent for
+  // an approval, a timeout, or a denial with no reason.
+  string denial_reason = 5 [(reliant) = {description: "Why the approver denied the request, when they gave a reason; absent otherwise"}];
 }
 
 // SaveMessageOutput is the output from the save_message activity.

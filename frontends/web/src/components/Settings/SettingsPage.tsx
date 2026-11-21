@@ -6,6 +6,7 @@ import { useSettingsClose } from "@/hooks/useSettingsClose";
 import {
   DEFAULT_SETTINGS_SECTION,
   isSettingsSection,
+  type AISettingsTab,
   type SettingsSection,
   type SettingsTab,
 } from "../../routeSchemas";
@@ -56,8 +57,8 @@ export function SettingsPage() {
   }, [hasExplicitDestination, section, params.machineId, search, navigate]);
 
   const onSectionChange = useCallback(
-    (next: SettingsSection) => {
-      navigate({ to: settingsPath(next) });
+    (next: SettingsSection, tab?: AISettingsTab) => {
+      navigate(tab ? { to: settingsPath(next), search: { tab } } : { to: settingsPath(next) });
     },
     [navigate],
   );
@@ -110,7 +111,7 @@ export function SettingsPage() {
         </div>
       )}
       <div className="flex-1 overflow-hidden">
-        <SettingsViewerTab section={section} onSectionChange={onSectionChange} onClose={onClose} />
+        <SettingsViewerTab section={section} tab={search.tab} onSectionChange={onSectionChange} onClose={onClose} />
       </div>
     </div>
   );

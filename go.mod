@@ -39,7 +39,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v1.8.1-0.20261119234340-8ca389581938
+	github.com/reliant-labs/forge v1.9.1-0.20261121075358-976c8f6f55b9
 	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261114064850-2b9cece49b8a
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
@@ -62,10 +62,12 @@ require (
 	golang.org/x/oauth2 v0.38.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.48.0
 	golang.org/x/text v0.44.0
 	golang.org/x/time v0.16.0
 	golang.org/x/tools v0.53.0
 	google.golang.org/genai v1.77.0
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20261116203732-fd2c7689a808
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -96,7 +98,7 @@ require (
 	buf.build/go/app v0.1.0 // indirect
 	buf.build/go/bufplugin v0.9.0 // indirect
 	buf.build/go/interrupt v1.1.0 // indirect
-	buf.build/go/protovalidate v1.4.0 // indirect
+	buf.build/go/protovalidate v1.4.1 // indirect
 	buf.build/go/protoyaml v0.6.0 // indirect
 	buf.build/go/spdx v0.2.0 // indirect
 	buf.build/go/standard v0.1.0 // indirect
@@ -352,11 +354,9 @@ require (
 	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/exp v0.0.0-20261117202309-7a49493bfd90 // indirect
 	golang.org/x/telemetry v0.0.0-20261116191925-e77a43154acb // indirect
-	golang.org/x/term v0.48.0 // indirect
 	google.golang.org/api v0.316.0 // indirect
 	google.golang.org/genproto v0.0.0-20261116203732-fd2c7689a808 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20261116203732-fd2c7689a808 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20261116203732-fd2c7689a808 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect

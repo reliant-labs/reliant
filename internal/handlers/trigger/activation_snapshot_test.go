@@ -8,6 +8,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -496,4 +497,64 @@ func TestActivationSnapshotWalksAChildOnlyWithWhatItsParentPasses(t *testing.T) 
 			require.Contains(t, strings.Join(snap.Summary, "\n"), "Agent tool privileges: github__pr_list_files;")
 		})
 	}
+}
+
+func TestActivationSnapshotValidatesEachDefinitionOnce(t *testing.T) {
+	// Validation depends on the definitions, never on the inputs a context
+	// walks them with. Re-validating per context (one per repository the
+	// trigger matches, for the parent and again for its child) took
+	// pr-review-priority's preview past its 30s timeout on every attempt.
+	passes := map[string]int{}
+	analyze := analyzeClosure
+	analyzeClosure = func(w *pb.Workflow, opts *validation.ValidationOptions) *validation.Result {
+		passes[opts.CanonicalWorkflowRef]++
+		return analyze(w, opts)
+	}
+	t.Cleanup(func() { analyzeClosure = analyze })
+	repo := &MockRepository{}
+	repo.ListSettingsByKeyFunc = func(context.Context, string, string) ([]*db.Setting, error) { return nil, nil }
+	repo.GetUsableWorkflowBySlugFunc = func(_ context.Context, _, slug string) (*db.WorkflowDraft, error) {
+		if slug == "review" {
+			return &db.WorkflowDraft{Definition: laneChild}, nil
+		}
+		return nil, fmt.Errorf("no workflow %s", slug)
+	}
+	repo.GetWorkflowDraftBySlugFunc = repo.GetUsableWorkflowBySlugFunc
+	root, err := wfyaml.ParseWorkflow([]byte(fmt.Sprintf(laneParent, "review-lane")))
+	require.NoError(t, err)
+	repos, err := structpb.NewValue([]any{"acme/api", "acme/web", "acme/cli"})
+	require.NoError(t, err)
+	def := &pb.TriggerDefinition{
+		Workflow: "project://review-lane",
+		Params:   map[string]*structpb.Value{"repos": repos},
+		Source:   &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "labelled"},
+	}
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}))
+	snap, err := svc.activationSnapshot(context.Background(), "owner", def, root)
+	require.NoError(t, err)
+	require.Contains(t, strings.Join(snap.Summary, "\n"), "Privileges below are resolved for every one of those values")
+	// The root pass validates the parent and every child it loads.
+	require.Equal(t, map[string]int{"project://review-lane": 1}, passes)
+}
+
+func TestActivationSnapshotStillRefusesAnInvalidChild(t *testing.T) {
+	// Validating each definition once still validates every one of them.
+	repo := &MockRepository{}
+	repo.ListSettingsByKeyFunc = func(context.Context, string, string) ([]*db.Setting, error) { return nil, nil }
+	repo.GetUsableWorkflowBySlugFunc = func(_ context.Context, _, slug string) (*db.WorkflowDraft, error) {
+		if slug == "review" {
+			return &db.WorkflowDraft{Definition: "name: review\nentry: [missing]\nnodes:\n  - {id: present, type: save_message, args: {role: assistant, content: hi}}\n"}, nil
+		}
+		return nil, fmt.Errorf("no workflow %s", slug)
+	}
+	repo.GetWorkflowDraftBySlugFunc = repo.GetUsableWorkflowBySlugFunc
+	root, err := wfyaml.ParseWorkflow([]byte(fmt.Sprintf(laneParent, "review-lane")))
+	require.NoError(t, err)
+	repos, err := structpb.NewValue([]any{"acme/api"})
+	require.NoError(t, err)
+	def := &pb.TriggerDefinition{Workflow: "project://review-lane", Params: map[string]*structpb.Value{"repos": repos}, Source: &pb.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "labelled"}}
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}))
+	_, err = svc.activationSnapshot(context.Background(), "owner", def, root)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "validation failed")
 }

@@ -8,7 +8,7 @@ vi.mock("@/services/controlPlane/config", () => ({
   },
 }));
 
-import { getVisibleSettingsSectionIds } from "../SettingsNavigation";
+import { getVisibleSettingsNavEntries, getVisibleSettingsSectionIds } from "../SettingsNavigation";
 import { SETTINGS_SECTION_IDS } from "../../../routeSchemas";
 
 describe("SettingsNavigation order", () => {
@@ -20,10 +20,10 @@ describe("SettingsNavigation order", () => {
       "billing",
       "member-permissions",
       "policies",
-      "org-ai-accounts",
       "org-ai-usage",
       "privacy",
       "ai",
+      "org-ai-accounts",
       "integrations",
       "git-connections",
       "mcp",
@@ -42,6 +42,11 @@ describe("SettingsNavigation order", () => {
       "developer",
       "about",
     ]);
+  });
+
+  it("lists Settings → AI twice, once per entry, and every other section once", () => {
+    const ai = getVisibleSettingsNavEntries().filter((e) => e.section === "ai" || e.section === "org-ai-accounts");
+    expect(ai).toEqual([{ section: "ai" }, { section: "org-ai-accounts" }, { section: "ai", tab: "models" }]);
   });
 
   it("keeps every section reachable: the same ids as before, regrouped", () => {

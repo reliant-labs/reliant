@@ -245,7 +245,7 @@ function PillDropdown({ suspended, onResume, busyId }: PillDropdownProps) {
       </button>
       {open && (
         <div className="absolute left-1/2 top-full mt-2 w-64 -translate-x-1/2 rounded-md border border-border bg-popover py-1 shadow-lg">
-          <div className="px-3 py-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
             Resume an environment
           </div>
           {suspended.map((d) => {

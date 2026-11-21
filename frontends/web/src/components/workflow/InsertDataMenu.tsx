@@ -187,7 +187,7 @@ export function InsertDataMenu({ onInsert, fieldLabel, celContext, disabled = fa
             {visible.map((group) => (
               <div key={group.id} role="group" aria-label={group.label}>
                 <div className="flex items-baseline gap-1.5 px-2.5 pb-0.5 pt-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</span>
+                  <span className="text-xs font-semibold text-muted-foreground">{group.label}</span>
                   {group.detail && <span className="truncate text-xs text-muted-foreground/80">{group.detail}</span>}
                 </div>
                 {group.fields.map((field) => (

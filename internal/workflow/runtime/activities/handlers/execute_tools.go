@@ -399,7 +399,9 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// gone missing — once, before any call runs. A retried attempt executes
 	// nothing (isActivityRetry), so it has nothing to check.
 	workspace := batchWorkspace{noteIndex: -1}
-	if !isActivityRetry(attemptNumber) {
+	// An interrupted turn runs nothing either (settleInterruptedCall), so it
+	// must not wake or repair a machine.
+	if !isActivityRetry(attemptNumber) && !rtx.InterruptedTurn {
 		workspace = a.ensureBatchWorkspace(ctx, &rtx, resolvedToolCalls, func(call message.ToolCall) bool {
 			return responseToolSet[call.Name] || refusedByWorkflow[call.ID] != ""
 		})
@@ -606,7 +608,8 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 // runToolCall runs one call of a batch, or answers it without running: a call
 // the workflow refused (refusal), one outside the turn's capabilities, a
 // response tool (answered inline from its input against responseSchema), or a
-// machine call while the batch's workspace is blocked (blocked).
+// machine call while the batch's workspace is blocked (blocked), or any call
+// of a turn the user interrupted (rtx.InterruptedTurn).
 func (a *ExecuteToolsActivity) runToolCall(
 	ctx context.Context,
 	rtx RuntimeContext,
@@ -621,6 +624,13 @@ func (a *ExecuteToolsActivity) runToolCall(
 	attemptNumber int,
 	workingPath string,
 ) message.ToolResult {
+	// The user interrupted this turn: answer every call, response tools
+	// included, without running any. A response tool answered here would end
+	// the agent's loop before it read the message it was interrupted for.
+	if rtx.InterruptedTurn {
+		return a.settleInterruptedCall(ctx, rtx, toolCall)
+	}
+
 	if refusal != "" {
 		return a.refuseToolCall(ctx, rtx, toolCall, refusal)
 	}

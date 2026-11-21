@@ -25,7 +25,7 @@ belongs in forge (see "Friction" below).
 
 forge's compatibility policy is what makes this cheap: within major 1 nothing
 public breaks, and a major's breaks ship playbooks and codemods that `forge
-project upgrade` surfaces and applies (`forge skill load migration-upgrade`,
+project upgrade` surfaces and applies (`forge agent skill load migration-upgrade`,
 "Compatibility policy").
 
 ## Where the steps for a release live: forge
@@ -35,9 +35,9 @@ embedded in `reliant forge`. Those are whatever version was installed, and they
 say so (`this forge is …, but forge.yaml pins …`).
 
 ```sh
-forge skill load migration-upgrade        # how forge upgrades work: phases, exit codes, window
+forge agent skill load migration-upgrade        # how forge upgrades work: phases, exit codes, window
 forge project upgrade list                # the playbooks THIS tree still needs, oldest first
-forge skill load migrations/<version>     # one playbook, by the path `list` prints
+forge agent skill load migrations/<version>     # one playbook, by the path `list` prints
 ```
 
 ## The procedure
@@ -55,7 +55,7 @@ assume it.
    export GOPRIVATE='github.com/reliant-labs/*'
    sha=$(git ls-remote https://github.com/reliant-labs/forge refs/heads/main | cut -f1)
    v=$(GOWORK=off go list -m -f '{{.Version}}' "github.com/reliant-labs/forge@$sha")
-   F="env GOFLAGS=-trimpath FORGE_NO_HOOKS=1 go run github.com/reliant-labs/forge/cmd/forge@$v"
+   F="env GOFLAGS=-trimpath FORGE_NO_GIT_HOOKS=1 go run github.com/reliant-labs/forge/cmd/forge@$v"
    ```
 
    The one exception is a reliant change that needs a forge fix not yet on
@@ -93,6 +93,10 @@ assume it.
    builds with `GOWORK=off` (what CI sees), re-runs the pinned `forge generate`,
    and regenerates `task generate:docs`. `generated/docs-source/reference/cli.md`
    embeds forge's whole command tree, so nearly every bump changes it.
+   Also refresh `AGENTS.md`, the copy of forge's framework guide that non-Reliant
+   agents read: replace everything above its `## Project Notes` with
+   `reliant forge project memory`'s output, minus that output's own
+   `## Project Notes` placeholder.
 
 6. **Fix what lint and build surface.** The upgrade's lint phase and step 5's
    build list them. A finding in reliant's code is fixed here, in this PR. A
@@ -128,7 +132,7 @@ assume it.
 A bump is also a test of forge's upgrade path. When forge gets something wrong
 (a codemod that misses a case, a playbook with a stale step, a lint false
 positive, a regenerated file that churns for no reason), fix it in forge, or file
-it with `reliant forge report-bug`. Then put the PR or bug link in the log row. A
+it with `reliant forge agent report-bug`. Then put the PR or bug link in the log row. A
 reliant-side workaround with no forge link is a defect that ships to every other
 project.
 
@@ -140,7 +144,7 @@ beyond `go.mod`/`go.sum`/`forge.yaml` and regenerated output. Rows before
 
 | Date | From → to (forge) | PR | reliant-side migrations | forge friction |
 |---|---|---|---|---|
-| 2026-11-19 | `v1.8.1-…982c391f` → `v1.8.1-…8ca38958` (forge #2426's head, `forge/pkg/retry`, ahead of its merge; re-pin to forge `main` with `task pin:forge` before this merges, per `dev-docs/pinning.md`) | this PR (adopts `forge/pkg/retry`) | `task pin:forge` regenerated the CLI reference and `deploy/observability/spec/project_gen.json` (the Traffic "Page views" panel is now "Page loads", with a description), so `productUsageDeployment.test.ts`'s pinned `project_gen.json` hash moves. The retry/backoff conversions are listed in the PR body | none |
+| 2026-11-21 | `v1.8.1-…982c391f` → `v1.9.1-…976c8f6f` (forge main's newest commit; first pinned in this PR as `ff5a370d`, re-pinned to main's newest before merging) | this PR (#2988) | `forge project upgrade --to` applied the mechanical part and listed four for a person. **v1.9.0 playbook** (the release that deletes what v1 deprecated), applied and recorded in `.forge/migrations.json`: `go build ./...` is clean (no removed `forge/pkg` API is used); no proto sets the retired entity options; `FORGE_NO_HOOKS` → `FORGE_NO_GIT_HOOKS` in `scripts/pin-forge.sh`, this file's `$F`, and `TestReliantForge_PointsForgeAtTheSession`; no retired forge.yaml key, KCL `replay`, `root_gen.go` or `attribution` use. **`forge-closed-set`**: `accesstoken.AllScopes` gained `changes:write`, `changes:launch`, `vuln:read`, `tests:read`, `tests:write`, so `20261121082048_access_tokens_v190_scopes` (+ `_validate`) widens `access_tokens_scopes` to the set, written by `forge db migration new --closed-set`, with the 5s `lock_timeout` the previous widening used. **`requirecontract`** now covers `internal/llm/drivers/responseswire` (one exported method, `ToolCallGate.Allows`): marked `//forge:exclude-contract`, pure wire conversions. **`forge-test-wall-clock-bound`**: `TestListTriggersBoundsNextFireLookupsByOneBudget` proves the shared budget by the asked count, and bounds the list at 5s as a timeout rather than 2s as a measure. Regenerated: the vendored `proto/forge/v1/forge.proto` and its TS, one `*_ext_store_gen.go` per store (forge's split of the ext-store surface), `store_gen.go`, the dashboards/alerts, `otel_gen.ts` (no `VITE_OTEL_REPLAY` build fallback; reliant reads `OTEL_REPLAY` from runtime config), `config_gen.k`, `roots_gen.go`, the CLI reference. The drain tests (#2978) wait on a drain-loop probe (`upgradeDrain.onPoll`/`onReturn`), and the watchdog test proves the drain never arms the upgrade exit's backstop through a new `upgradeDrain.afterFunc` seam that fires it at once. **Token exchange**: `cliauth.ForgeScopes` derives from forge's catalog, so the five new scopes are exchangeable (org authority, clipped by the control plane and intersected with the parent, none acting as the person); `TestExchangeToken_AllUserOrgCapabilities` lists them, as it lists every one on purpose. `productUsageDeployment.test.ts`'s pinned `project_gen.json` hash moves with the regenerated dashboards. Unscoped `forge lint` at the new pin: all 31 gating linters pass (`forge-frontend-no-install` warns, gates from v1.10.0) | the upgrade run printed a pin-skew warning telling the agent to run the OLD forge, and listed `forge-proto-format` twice (as `external` with empty examples); reported to forge (89e1f8df, 09461997) |
 | 2026-11-19 | `v1.7.1-…4e92ea2a` → `v1.8.1-…982c391f` (forge main's newest commit; contains forge #2378, profile-guided builds, merged as `aee3a5a6d`) | this PR | `forge project upgrade --to` converged with nothing for a person. Neither v1.8.0 playbook applies: `frontends/web` is already on zod `^4.6.6` with `@hookform/resolvers` `^5.2.1` (`migrations/v1.8.0`), and reliant has no `deploy/observability/profiles-schema.sql` (`migrations/v1.8.0/profile-guided-builds`). The regenerate re-wrote every contract package's `middleware_gen.go` (per-op `observe.Op`s and forensic argument recording), added `Update<E>Where` to every ORM store, and made the generated dashboards exclude `forge.probe` spans, so `productUsageDeployment.test.ts`'s pinned `project_gen.json` hash moves. `TestRunCommand_SecondHeavyCommandWaitsForTheSlot` follows forge's slot-wait wording ("1 of 1 slots held"). `proto/reliant/v1/workflow_v2.proto` formatted with `task proto:fmt` (buf 1.57.0, go.mod's pin), the one file the new `forge-proto-format` lane (warn-first, gates from the next pin) flags at that buf. CLI reference regenerated (`forge pgo`, `obs ops`, `obs blast-radius`, `fix derive-contract`) | `forge lint --proto-format` runs PATH's buf (1.71.0 here) rather than the project's pin, so it reports 30 protos where buf 1.57.0 reports 1, and `forge project upgrade` lists its diff rows as a second rule `external ×30` (forge bug `570fc38f`) |
 | 2026-11-18 | `v1.7.1-…f98c1a05` → `v1.7.1-…4e92ea2a` (forge main's newest green commit) | this PR (ships forge #2310, the runtime's own replay recorder: rc-train cut web-runtime 0.13.18 at the pinned f98c1a05, before #2310 merged, so the runtime release reliant #2882 needs is cut only from a pin that carries it; `release:asap`) | none: `forge project upgrade --to` converged with nothing for a person (the five `db-analyze-*` lint rules start gating with 0 findings); `task pin:forge` regenerated only the CLI reference, whose `env status` text now says UNREACHABLE means forge could not observe what runs (forge #2343). Brings forge #2310, #2318, #2339, #2320, #2332, #2330, #2343 and the rest of main between the pins | none |
 | 2026-11-18 | `v1.7.1-…db9bd739` → `v1.7.1-…f98c1a05` (forge main's newest green commit; forge #2289 merged as `de4f7303e`, so the PR-head pin below moves onto main as `dev-docs/pinning.md` requires) | this PR | none by hand: `forge project upgrade --to` converged with nothing for a person. It regenerated every handler's `helpers_gen_test.go` (forge #2321's `WithRequestValidation`: the test server checks protovalidate rules, warning first), and `task pin:forge` regenerated the CLI reference. The analytics outputs are unchanged from the `db9bd739` pin. Brings forge #2262–#2333 between the pins (#2289's merge, #2321, #2297, #2333 among them) | none |

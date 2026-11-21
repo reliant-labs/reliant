@@ -129,7 +129,7 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
             <div className="grid gap-3 sm:grid-cols-2">
               {otherParams.map(([key, value]) => (
                 <div key={key} className="bg-muted/30 border border-border/50 rounded-lg p-3">
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{key}</div>
+                  <div className="text-xs font-medium text-muted-foreground mb-1.5">{key}</div>
                   <div className="font-mono text-xs text-foreground break-all">
                     {Array.isArray(value) ? (
                       <div className="flex flex-wrap gap-1.5">

@@ -75,6 +75,12 @@ func (b *baseClient) retryer() ratelimit.Retryer {
 }
 
 func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *baseClient {
+	// The endpoint comes from opts, never from ANTHROPIC_BASE_URL in the
+	// process environment (llm.NewAnthropicSDKClient turns that off). It goes
+	// first, so a driver's own WithBaseURL (Copilot's host) still wins.
+	if opts.BaseURL != "" {
+		clientOptions = append([]option.RequestOption{option.WithBaseURL(opts.BaseURL)}, clientOptions...)
+	}
 	// Support validate (short timeout for validation requests)
 	if opts.MaxTokens < 10 {
 		clientOptions = append(clientOptions, option.WithRequestTimeout(10*time.Second))
@@ -270,9 +276,10 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 		}
 	}
 
-	// Validate tool_result references — remove orphaned tool_results that would cause API errors.
-	// This is a defensive safety net; the primary fix is in message persistence.
-	allMessages = validateToolResultReferences(allMessages)
+	// Orphaned tool_results (no matching tool_use in the preceding assistant
+	// message) are removed before conversion, by the shared request-history
+	// repair every driver's history goes through (historyrepair, run by
+	// drivers.baseDriver), which also stubs missing ones.
 
 	// Add cache control to the last block of the last message
 	if len(allMessages) > 0 {
@@ -288,92 +295,6 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 	}
 
 	return
-}
-
-// validateToolResultReferences removes tool_result blocks that reference tool_use IDs
-// not present in the immediately preceding assistant message. This prevents the Anthropic
-// API error "unexpected tool_use_id found in tool_result blocks" caused by orphaned
-// tool results from message persistence bugs.
-func validateToolResultReferences(allMessages []msgBlocks) []msgBlocks {
-	var result []msgBlocks
-
-	// Collect tool_use IDs from the last assistant message seen so far
-	var lastAssistantToolUseIDs map[string]struct{}
-
-	for _, m := range allMessages {
-		if m.msg.Role == anthropic.MessageParamRoleAssistant {
-			// Build set of tool_use IDs from this assistant message
-			lastAssistantToolUseIDs = make(map[string]struct{})
-			for _, block := range m.msg.Content {
-				if block.OfToolUse != nil {
-					lastAssistantToolUseIDs[block.OfToolUse.ID] = struct{}{}
-				}
-			}
-			result = append(result, m)
-			continue
-		}
-
-		// For user messages, check if any blocks are tool_results
-		hasToolResults := false
-		for _, block := range m.msg.Content {
-			if block.OfToolResult != nil {
-				hasToolResults = true
-				break
-			}
-		}
-
-		if !hasToolResults {
-			// Not a tool result message, pass through unchanged
-			result = append(result, m)
-			continue
-		}
-
-		// Filter tool_result blocks: keep only those with matching tool_use IDs
-		var validBlocks []anthropic.ContentBlockParamUnion
-		for _, block := range m.msg.Content {
-			if block.OfToolResult == nil {
-				// Non-tool-result block in a user message, keep it
-				validBlocks = append(validBlocks, block)
-				continue
-			}
-
-			toolUseID := block.OfToolResult.ToolUseID
-			if lastAssistantToolUseIDs == nil {
-				logging.Warn("[convertMessages] Removing orphaned tool_result: no preceding assistant message",
-					"tool_use_id", toolUseID)
-				continue
-			}
-
-			if _, ok := lastAssistantToolUseIDs[toolUseID]; !ok {
-				logging.Warn("[convertMessages] Removing orphaned tool_result: tool_use_id not found in preceding assistant message",
-					"tool_use_id", toolUseID)
-				continue
-			}
-
-			validBlocks = append(validBlocks, block)
-		}
-
-		// If all tool_result blocks were removed, drop the entire message
-		if len(validBlocks) == 0 {
-			logging.Warn("[convertMessages] Removing empty message after orphaned tool_result cleanup")
-			continue
-		}
-
-		// Rebuild the message with only valid blocks
-		if len(validBlocks) != len(m.msg.Content) {
-			logging.Warn("[convertMessages] Removed orphaned tool_result blocks from message",
-				"original_count", len(m.msg.Content),
-				"valid_count", len(validBlocks))
-			result = append(result, msgBlocks{
-				msg:    anthropic.NewUserMessage(validBlocks...),
-				blocks: &validBlocks,
-			})
-		} else {
-			result = append(result, m)
-		}
-	}
-
-	return result
 }
 
 func (b *baseClient) convertTools(tools []toolsPkg.Tool) []anthropic.ToolUnionParam {
