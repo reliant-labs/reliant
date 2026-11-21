@@ -1,7 +1,7 @@
 -- forge:backward-compatible — drops projects_user_remote_url_uniq. The rollback target is a release that already resolves every project by org (reliant#2861) and was tested against this exact schema (db.RelaxProjectKeysForTest), and no statement of it names this index.
 
 -- Migration: projects_drop_user_remote_url_uniq
--- Created: 2026-11-21T03:50:06Z
+-- Created: 2026-11-21T21:02:32Z
 --
 -- Release 2 of the org keys: the contract half of
 -- 20261118111648_projects_org_user_remote_url_key. A repository is one
