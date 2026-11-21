@@ -173,7 +173,11 @@ func contentBlockToProto(b *db.MessageContentBlock, opts *Options) *reliantv1.Co
 	}
 	if b.Content != nil {
 		proto.Content = b.Content
-		if b.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT {
+		if db.ProviderOnlyContent(b.BlockType) {
+			// Sealed provider ciphertext: the block is sent, its content
+			// never is (see db.ProviderOnlyContent).
+			proto.Content = ptr.Of("")
+		} else if b.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT {
 			if preview, truncated := PreviewToolResult(resultToolName(b, opts), *b.Content); truncated {
 				proto.Content = &preview
 				proto.Truncated = ptr.Of(true)
@@ -276,6 +280,9 @@ func FromDB(m *db.Message, blocks []*db.MessageContentBlock, attachments []*db.A
 	}
 	if m.Agent != nil {
 		proto.Agent = m.Agent
+	}
+	if m.ThinkingLevel != nil && *m.ThinkingLevel != "" {
+		proto.ThinkingLevel = m.ThinkingLevel
 	}
 	if m.TokenCount != nil {
 		proto.InputTokens = ptr.Of(int32(*m.TokenCount))

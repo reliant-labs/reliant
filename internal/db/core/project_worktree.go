@@ -61,7 +61,62 @@ type Project struct {
 	// it was shared (nil while private). Read by internal/authz only.
 	Visibility Visibility `json:"visibility,omitempty"`
 	SharedAt   *time.Time `json:"shared_at,omitempty"`
+	// DeleteAfter is set while the project is scheduled for deletion: when
+	// the purge may run. A scheduled project is hidden: internal/authz
+	// treats it as absent, and every list leaves it out. DeletedBy is who
+	// scheduled it; PurgeStartedAt when a purge claimed it, after which it
+	// cannot be restored.
+	DeleteAfter    *time.Time `json:"delete_after,omitempty"`
+	DeletedBy      *string    `json:"deleted_by,omitempty"`
+	PurgeStartedAt *time.Time `json:"purge_started_at,omitempty"`
 }
+
+// ProjectDeleteWindow is how long a deleted project can be restored before
+// it is purged (control-plane docs/design/unified-shell-and-projects.md D18).
+const ProjectDeleteWindow = 7 * 24 * time.Hour
+
+// TriggerPausedProjectDeleted is Trigger.PausedReason of a trigger paused
+// because its project was scheduled for deletion. Restoring the project
+// turns these, and only these, back on.
+const TriggerPausedProjectDeleted = "project_deleted"
+
+// ProjectDecision is the project as a caller's authority to delete, restore
+// or purge it was decided on (ProjectDelete, internal/authz): its owner and
+// its org.
+// The write re-reads both under the owner's org lock, which a project move
+// also takes, and refuses (store.ErrOrgChanged) when either changed: an admin
+// of the org the project left must not act on it in the org it moved to.
+type ProjectDecision struct {
+	OwnerUserID string
+	OrgID       *string
+}
+
+// Decision is p's ProjectDecision.
+func (p *Project) Decision() ProjectDecision {
+	return ProjectDecision{OwnerUserID: p.UserID, OrgID: p.OrgID}
+}
+
+// ProjectDeletion is the outcome of scheduling a project's deletion.
+type ProjectDeletion struct {
+	// DeleteAfter is when the purge may run: the first delete's date when
+	// the project was already scheduled.
+	DeleteAfter time.Time
+	// AlreadyScheduled: the project was scheduled before this call, which
+	// changed nothing.
+	AlreadyScheduled bool
+	// PausedTriggerIDs are the triggers this call paused.
+	PausedTriggerIDs []string
+}
+
+// ErrProjectScheduledForDeletion refuses a write that would add to a project
+// scheduled for deletion: a chat, workspace, run, or a trigger created in it,
+// moved into it or turned on in it. The database refuses each of them, under
+// a lock the deletion serializes with (migration
+// 20261118103211_project_delete_write_admission).
+var ErrProjectScheduledForDeletion = svcerr.FailedPrecondition("this project was deleted; restore it to work in it again")
+
+// ErrProjectPurgeStarted refuses restoring a project whose purge has begun.
+var ErrProjectPurgeStarted = svcerr.FailedPrecondition("this project is already being deleted, so it can no longer be restored")
 
 // ProjectDaemon records that a daemon has a local clone of a project. A
 // single Project may have rows for multiple daemons (desktop + cloud), each

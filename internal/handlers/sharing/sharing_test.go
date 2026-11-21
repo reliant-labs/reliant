@@ -248,3 +248,26 @@ func TestListSharedWithoutOrgs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, resp.Msg.Chats)
 }
+
+// ListSharedChats with app_name is the shared half of an app's chat list,
+// and each chat carries its app tag in the viewer's shape.
+func TestListSharedChatsByApp(t *testing.T) {
+	svc, f := sharingFixture(t)
+	_, err := f.Repo.ORM().Bun().NewRaw(`UPDATE chats SET app_name = 'storefront' WHERE id = ?`, f.ChatID).Exec(context.Background())
+	require.NoError(t, err)
+	list := func(app *string) []*pb.Chat {
+		t.Helper()
+		resp, err := svc.ListSharedChats(f.Viewer, connect.NewRequest(&pb.ListSharedChatsRequest{AppName: app}))
+		require.NoError(t, err)
+		return resp.Msg.Chats
+	}
+	storefront, blog, empty := "storefront", "blog", ""
+	chats := list(&storefront)
+	require.Len(t, chats, 1)
+	assert.Equal(t, f.ChatID, chats[0].GetId())
+	assert.Equal(t, "storefront", chats[0].GetAppName())
+	assert.True(t, chats[0].GetViewerAccess())
+	assert.Empty(t, list(&blog), "another app's list holds none of it")
+	assert.Len(t, list(&empty), 1, "an empty app_name is unset")
+	assert.Len(t, list(nil), 1)
+}

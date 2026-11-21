@@ -255,6 +255,38 @@
 :root {
   --forge-accent-src: var(--accent);
   --forge-accent-ink-src: var(--accent-foreground);
+
+  /*
+   * LAYOUT TOKENS — the one density (web-styling skill, "Shell and layout" and
+   * "Density"). Read them through arbitrary values: `h-[var(--shell-bar-h)]`,
+   * `max-w-[var(--chat-column)]`. Values at the default 15px root.
+   *
+   *   --shell-bar-h      every shell bar (view top bars, the right panel's
+   *                      bar), so their bottom edges are one line. px on
+   *                      purpose: it must not drift with the Appearance size
+   *   --sidebar-w        the left nav's default width, and its minimum
+   *   --right-panel-w    the right panel's default width
+   *   --row-h            nav rows, chat rows, tool rows, menu items (32px)
+   *   --control-h        Button md, Input md, Select (34px)
+   *   --table-row-h      a table's body rows (41px); --table-head-h its header
+   *   --chat-column      transcript, composer and new-chat screen (768px)
+   *   --page-max         dashboards and lists (1200px)
+   *   --form-max         settings and forms (720px)
+   *
+   * Additive: nothing reads them until a surface adopts them.
+   */
+
+  --shell-bar-h: 48px;
+  --sidebar-w: 256px;
+  --sidebar-min-w: 224px;
+  --right-panel-w: 400px;
+  --row-h: 2.1333rem;
+  --control-h: 2.25rem;
+  --table-row-h: 2.75rem;
+  --table-head-h: 2.25rem;
+  --chat-column: 51.2rem;
+  --page-max: 80rem;
+  --form-max: 48rem;
 }
 
 /*
@@ -450,6 +482,8 @@
     --destructive-ink: 0 70% 40%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 14% 89.5%;           /* Light blue-gray border */
+    --border-subtle: 220 14% 93%;      /* Row rules, fold indent, gridlines */
+    --bubble: 220 14% 94%;             /* The user chat message's fill */
     --input: 220 14% 83.5%;
     --ring: 221 83% 50%;
 
@@ -567,6 +601,8 @@
     --destructive-ink: 0 90% 74%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 12% 21.5%;           /* Carries the card edge on its own */
+    --border-subtle: 220 12% 16%;
+    --bubble: 220 12% 17%;
     --input: 220 12% 27%;
     --ring: 215 92% 70%;
 
@@ -1338,13 +1374,6 @@
       0 4px 6px -1px rgb(33 71 139 / 0.16);
   }
 
-  /* Improved message bubble styling */
-  .message-bubble {
-    border-radius: 0.75rem;
-    border: 1px solid transparent;
-    transition: all 0.2s ease-in-out;
-  }
-
   /* Remove hover effects that cause movement */
   .hover-lift {
     transition: none;
@@ -1360,12 +1389,6 @@
     background-image:
       radial-gradient(circle at 1px 1px, hsl(var(--border) / 0.1) 1px, transparent 0);
     background-size: 20px 20px;
-  }
-
-  /* Improved visual hierarchy */
-  .chat-message-container {
-    backdrop-filter: blur(8px);
-    background: hsl(var(--background) / 0.8);
   }
 
   /* Improved focus states */
@@ -1430,12 +1453,6 @@
     display: none;
   }
 
-  /* Enhanced message layout for better UX */
-  .message-container {
-    position: relative;
-    transition: all 0.2s ease-in-out;
-  }
-
   /* Message content area improvements */
   .message-content {
     position: relative;
@@ -1466,32 +1483,12 @@
     max-width: 100%;
   }
 
-  /* User message content - removed blue left border highlight */
   /*
-   * Overflow deliberately is NOT set here. This rule is emitted after
-   * Tailwind's utilities, so an `overflow` declaration silently beats the
-   * `overflow-hidden` the bubble sets in ChatMessage — which is what has to
-   * clip the inner scroll container for a long expanded message to scroll.
+   * The user bubble (.user-message-content) is styled by ChatMessage's
+   * utilities alone; it keeps the class for the chat font above. Nothing
+   * here may set its box: this file is emitted after Tailwind's utilities,
+   * so a padding or overflow rule would silently beat them.
    */
-  .user-message-content {
-    display: block;
-    position: relative;
-    padding: 4px 8px;
-    box-sizing: border-box;
-    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
-  }
-
-  /* Message layout - no avatar column */
-  .message-layout {
-    display: flex;
-    align-items: flex-start;
-    width: 100%;
-  }
-
-  /* User message bubble with max height and fade */
-  .user-message-content .message-bubble {
-    position: relative;
-  }
 
   /* Improved visual hierarchy */
   .message-role {

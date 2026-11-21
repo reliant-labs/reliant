@@ -44,12 +44,13 @@
 import type { HistoryState } from "@tanstack/react-router";
 import { isSafeReturnTo } from "./returnTo";
 import {
-  WORKFLOWS_LIBRARY_PATH,
   WORKFLOWS_TABS,
   isWorkflowBuilderPath,
   isWorkflowsDetailPath,
   workflowsTabForPath,
 } from "./workflowsArea";
+import { encodedSegment, homePath, workflowDetailPath, workflowLibraryPath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 export type RouteParentNavigateOptions = {
   to: string;
@@ -57,21 +58,25 @@ export type RouteParentNavigateOptions = {
 };
 
 export function getParentRouteNavigateOptions(
-  pathname: string,
+  routePathname: string,
 ): RouteParentNavigateOptions {
+  // An org page's parent is its org-less parent's, in the same org (the builders).
+  const pathname = orgFreePath(routePathname);
   if (isWorkflowBuilderPath(pathname)) {
-    const name = pathname.slice("/workflow/".length).split("/")[0] ?? "";
-    if (!name || name === "new") return { to: WORKFLOWS_LIBRARY_PATH };
-    return { to: `${WORKFLOWS_LIBRARY_PATH}/${name}` };
+    // `/workflow/<name>[/…]`: the name is already encoded, as the URL has it,
+    // so it moves into the detail page's path byte for byte (encodedSegment).
+    const name = pathname.split("/")[2] ?? "";
+    if (!name || name === "new") return { to: workflowLibraryPath() };
+    return { to: workflowDetailPath(encodedSegment(name)) };
   }
   if (pathname === "/forge" || pathname.startsWith("/forge/")) {
-    return { to: "/", search: {} };
+    return { to: homePath(), search: {} };
   }
   if (isWorkflowsDetailPath(pathname)) {
     const tab = WORKFLOWS_TABS.find((candidate) => candidate.key === workflowsTabForPath(pathname));
-    if (tab) return { to: tab.path };
+    if (tab) return { to: tab.href() };
   }
-  return { to: "/", search: {} };
+  return { to: homePath(), search: {} };
 }
 
 /**

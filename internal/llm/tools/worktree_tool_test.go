@@ -4,7 +4,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -66,7 +68,13 @@ func (m *fakeRunMachine) Send(_ context.Context, _, daemonID, commandType string
 		if sub, _ := req["sub_path"].(string); sub != "" {
 			path = filepath.Join(path, sub)
 		}
-		return json.Marshal(map[string]any{"success": true, "worktree_path": path, "base_branch": "main"})
+		// The daemon answers the base it used: the requested one, else the
+		// repository's default branch.
+		base, _ := req["base_branch"].(string)
+		if base == "" {
+			base = "main"
+		}
+		return json.Marshal(map[string]any{"success": true, "worktree_path": path, "base_branch": base})
 	}
 	return json.Marshal(map[string]any{})
 }
@@ -363,12 +371,62 @@ func TestWorktreeTool_Create_FailureIsAllOrNothing(t *testing.T) {
 	// The agent is told what to change, so it can retry with a real branch.
 	assert.Contains(t, resp.Content, "base branch 'nope' doesn't exist in web", "the reason names the bad base branch")
 	assert.Contains(t, resp.Content, "failed worktree named 'doomed'")
+	assert.Contains(t, resp.Content, "pass base_branch_repo", "a multi-repo project is told how to scope the base")
 
 	row := f.row(t, "doomed")
 	require.NotNil(t, row)
 	assert.Equal(t, int32(6), row.Status, "FAILED, visible in the UI")
 	assert.Empty(t, row.Path, "a failed row carries no path")
 	assert.NotEmpty(t, f.machine.to("worktree.delete_directory"), "the api checkout that succeeded is torn down")
+}
+
+// base_branch_repo starts one repository from base_branch (a branch only it
+// has, such as a pull request's) and every other from its default branch.
+func TestWorktreeTool_Create_BaseBranchRepoScopesTheBase(t *testing.T) {
+	api := &core.Repo{ID: uuid.NewString(), Name: "api", RelativePath: "api"}
+	web := &core.Repo{ID: uuid.NewString(), Name: "web", RelativePath: "services/web"}
+	for _, named := range []string{"web", "services/web"} {
+		t.Run(named, func(t *testing.T) {
+			f := newWorktreeToolFixture(t, api, web)
+			resp := f.call(t, WorktreeParams{Action: "create", Name: "pr-head", BaseBranch: "fix/pr", BaseBranchRepo: named})
+			require.False(t, resp.IsError, resp.Content)
+
+			bases := map[string]any{}
+			for _, c := range f.machine.to("worktree.create") {
+				bases[c.payload["sub_path"].(string)] = c.payload["base_branch"]
+			}
+			assert.Equal(t, map[string]any{"api": "", "services/web": "fix/pr"}, bases,
+				"only the named repository is sent the base; the other auto-detects its default")
+
+			row := f.row(t, "pr-head")
+			require.NotNil(t, row)
+			assert.Equal(t, int32(1), row.Status, "settled ACTIVE")
+			assert.Equal(t, "fix/pr", row.BaseBranch, "the displayed base is the one asked for, not a sibling's default")
+			assert.Equal(t, map[string]string{api.ID: "main", web.ID: "fix/pr"}, row.BaseBranches)
+		})
+	}
+}
+
+// A base_branch_repo that names no repository, or comes without base_branch,
+// is refused before anything is recorded or reaches the machine.
+func TestWorktreeTool_Create_BaseBranchRepoIsValidated(t *testing.T) {
+	f := newWorktreeToolFixture(t,
+		&core.Repo{ID: uuid.NewString(), Name: "api", RelativePath: "api"},
+		&core.Repo{ID: uuid.NewString(), Name: "web", RelativePath: "web"},
+	)
+	for name, tc := range map[string]struct {
+		params WorktreeParams
+		want   string
+	}{
+		"unknown": {WorktreeParams{Action: "create", Name: "x1", BaseBranch: "b", BaseBranchRepo: "nope"}, `"nope" is not a repository of this project (its repositories: api, web)`},
+		"no-base": {WorktreeParams{Action: "create", Name: "x2", BaseBranchRepo: "web"}, "base_branch_repo needs base_branch"},
+	} {
+		resp := f.call(t, tc.params)
+		require.True(t, resp.IsError, name)
+		assert.Contains(t, resp.Content, tc.want, name)
+		assert.Nil(t, f.row(t, tc.params.Name), "%s: no row is recorded", name)
+	}
+	assert.Empty(t, f.machine.sent, "nothing may reach the machine")
 }
 
 // The tool forwards force into each create, not a separate cleanup that could
@@ -579,4 +637,133 @@ func TestWorktreeTool_DescriptionTeachesTheWorkspaceWorkflow(t *testing.T) {
 	assert.NotContains(t, desc, "ONLY way")
 	assert.NotContains(t, desc, "refuses")
 	assert.Contains(t, desc, "memory (reliant.md) says where worktrees go, follow that instead")
+}
+
+// list narrows by name or branch, can include archived worktrees, and pages
+// with a next_page_token; with no parameters it lists every live worktree.
+func TestWorktreeTool_List_FiltersAndPages(t *testing.T) {
+	f := newWorktreeToolFixture(t)
+	for i := 0; i < 3; i++ {
+		f.register(t, fmt.Sprintf("feat-%d", i), 1)
+	}
+	f.register(t, "fix-login", 1)
+	gone := f.register(t, "feat-old", 1)
+	require.NoError(t, f.repo.ArchiveWorktree(context.Background(), gone.ID))
+
+	names := func(resp ToolResponse) ([]string, WorktreeResponseMetadata) {
+		t.Helper()
+		require.False(t, resp.IsError, resp.Content)
+		var meta WorktreeResponseMetadata
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+		var out []string
+		for _, wt := range meta.Worktrees {
+			out = append(out, wt.Name)
+		}
+		sort.Strings(out)
+		return out, meta
+	}
+
+	all, meta := names(f.call(t, WorktreeParams{Action: "list"}))
+	assert.Equal(t, []string{"feat-0", "feat-1", "feat-2", "fix-login"}, all)
+	assert.Empty(t, meta.NextPageToken)
+
+	feats, _ := names(f.call(t, WorktreeParams{Action: "list", Filter: "FEAT"}))
+	assert.Equal(t, []string{"feat-0", "feat-1", "feat-2"}, feats)
+	byBranch, _ := names(f.call(t, WorktreeParams{Action: "list", Filter: "b-fix"}))
+	assert.Equal(t, []string{"fix-login"}, byBranch, "the filter matches the branch too")
+
+	withArchived := f.call(t, WorktreeParams{Action: "list", Filter: "feat", Archived: true})
+	got, _ := names(withArchived)
+	assert.Equal(t, []string{"feat-0", "feat-1", "feat-2", "feat-old"}, got)
+	assert.Contains(t, withArchived.Content, "Archived: ")
+
+	page1 := f.call(t, WorktreeParams{Action: "list", Limit: 3})
+	first, meta := names(page1)
+	require.Len(t, first, 3)
+	assert.Equal(t, 4, meta.Total)
+	require.NotEmpty(t, meta.NextPageToken)
+	assert.Contains(t, page1.Content, "next_page_token: "+meta.NextPageToken)
+	rest, meta := names(f.call(t, WorktreeParams{Action: "list", Limit: 3, PageToken: meta.NextPageToken}))
+	require.Len(t, rest, 1)
+	assert.Empty(t, meta.NextPageToken)
+	assert.ElementsMatch(t, all, append(first, rest...))
+
+	bad := f.call(t, WorktreeParams{Action: "list", PageToken: "x"})
+	assert.True(t, bad.IsError)
+	none := f.call(t, WorktreeParams{Action: "list", Filter: "nothing-like-this"})
+	assert.Contains(t, none.Content, "No worktrees match")
+}
+
+// list without limit or page_token returns every live worktree, as it did
+// before paging existed; an explicit limit pages, and the token continues.
+func TestWorktreeTool_List_WithoutPagingListsEveryWorktree(t *testing.T) {
+	f := newWorktreeToolFixture(t)
+	var want []string
+	for i := 0; i < 60; i++ {
+		name := fmt.Sprintf("wt-%02d", i)
+		f.register(t, name, 1)
+		want = append(want, name)
+	}
+	listed := func(resp ToolResponse) ([]string, WorktreeResponseMetadata) {
+		t.Helper()
+		require.False(t, resp.IsError, resp.Content)
+		var meta WorktreeResponseMetadata
+		require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+		var out []string
+		for _, wt := range meta.Worktrees {
+			out = append(out, wt.Name)
+		}
+		return out, meta
+	}
+
+	resp := f.call(t, WorktreeParams{Action: "list"})
+	all, meta := listed(resp)
+	assert.ElementsMatch(t, want, all)
+	assert.Equal(t, 60, meta.Total)
+	assert.Empty(t, meta.NextPageToken)
+	assert.Contains(t, resp.Content, "Found 60 worktrees:\n")
+	assert.Contains(t, resp.Content, "\n60. ")
+	assert.NotContains(t, resp.Content, "next_page_token")
+	assert.Contains(t, resp.Content, "All 60 worktrees are listed")
+
+	var paged []string
+	token := ""
+	for pages := 0; ; pages++ {
+		require.Less(t, pages, 3, "60 worktrees at 25 a page is three pages")
+		got, meta := listed(f.call(t, WorktreeParams{Action: "list", Limit: 25, PageToken: token}))
+		paged = append(paged, got...)
+		if meta.NextPageToken == "" {
+			assert.Len(t, got, 10)
+			break
+		}
+		assert.Len(t, got, 25)
+		token = meta.NextPageToken
+	}
+	assert.Equal(t, all, paged, "the pages, in order, are the unpaged list")
+}
+
+// get names the caller's chats bound to the worktree, with their state.
+func TestWorktreeTool_Get_ShowsBoundChats(t *testing.T) {
+	f := newWorktreeToolFixture(t)
+	wt := f.register(t, "branchy", 1)
+	idle := f.register(t, "idle", 1)
+	ctx := context.Background()
+	chat, err := f.repo.GetChat(ctx, f.chatID)
+	require.NoError(t, err)
+	chat.WorktreeID = &wt.ID
+	require.NoError(t, f.repo.UpdateChat(ctx, chat))
+
+	resp := f.call(t, WorktreeParams{Action: "get", Name: "branchy"})
+	require.False(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, "Chats bound to it")
+	assert.Contains(t, resp.Content, "(id "+f.chatID+"), active")
+	var meta WorktreeResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+	require.Len(t, meta.Chats, 1)
+	assert.Equal(t, f.chatID, meta.Chats[0].ID)
+	assert.Equal(t, "active", meta.Chats[0].State)
+
+	empty := f.call(t, WorktreeParams{Action: "get", Name: idle.Name})
+	require.False(t, empty.IsError, empty.Content)
+	assert.Contains(t, empty.Content, "Chats: none of yours is bound to it")
 }

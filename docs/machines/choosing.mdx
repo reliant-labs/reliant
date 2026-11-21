@@ -3,7 +3,7 @@ title: "Choosing a machine in workflows"
 description: "How Reliant decides which machine runs a chat or a workflow, and how to pin one with daemon:"
 ---
 
-A project can be installed on several machines, and each chat has its own machine: you pick it on the new-chat screen, or change it later with **Connect a machine**. A chat with no machine pinned runs on your [default machine](/machines/overview#your-default-machine), and a branched chat runs on the machine that holds its workspace. An automation picks its own machine when you enable it, and a `daemon:` in a workflow can send work somewhere else again.
+A project can be installed on several machines, and each chat has its own machine: you pick it on the new-chat screen, or change it later with **Connect a machine**. A new chat is pinned to your [default machine](/machines/overview#your-default-machine) as it is then, and stays on it when another machine connects, until you move it or that machine is removed. A branched chat runs on the machine that holds its workspace. An automation picks its own machine when you enable it, and a `daemon:` in a workflow can send work somewhere else again.
 
 When a workflow run has to choose, Reliant resolves it in a fixed order, from the most specific instruction to the least:
 
@@ -41,7 +41,7 @@ edges:
     default: build
 ```
 
-`local`, `cloud` and `any` are kinds; any other string is matched against machine names. Here the workflow defaults to your own computer, and the `build` node overrides that to run on a cloud machine.
+`local`, `cloud` and `any` are kinds; any other string is matched against machine names. The kind follows who runs the daemon, not where the computer is: `local` is a machine whose daemon you run yourself (the desktop app or `reliant daemon start`), even a server in a data center, and `cloud` is a Reliant cloud machine. Here the workflow defaults to a machine you run, and the `build` node overrides that to run on a cloud machine.
 
 For more control, use a selector. Every field you give must match:
 
@@ -59,7 +59,7 @@ nodes:
     command: make build
 ```
 
-A selector may contain `id`, `name`, `type` (`local`, `cloud` or `any`) and `labels`; every label listed must be present on the machine. Machines advertise labels to Reliant when they connect, but `reliant daemon start` has no flag for setting your own, so rely on `id`, `name` and `type` unless you know what a machine advertises.
+A selector may contain `id`, `name`, `type` (`local`, `cloud` or `any`) and `labels`; every label listed must be present on the machine. A machine advertises the labels it was started with (`reliant daemon start --label gpu=true`) when it connects, and a selector's `labels` match those while it is connected.
 
 The value can also be a CEL expression, such as `"{{ inputs.where }}"`, which may produce a string or a map with the same keys.
 
@@ -75,7 +75,7 @@ A `daemon:` makes the workflow need a machine. It cannot run as a [no-machine ru
 | idle | Connected, not recently active |
 | disconnected | Not connected. A cloud machine in this state is woken when something needs it |
 
-A running daemon sends a heartbeat every 15 seconds and is treated as gone after 30 seconds without one.
+A running daemon and the gateway exchange a heartbeat every 15 seconds. A daemon that stops cleanly shows as disconnected at once; one that vanishes without saying so (a crash, a dropped network) is treated as gone after 90 seconds without a heartbeat, six missed in a row.
 
 ## Related topics
 

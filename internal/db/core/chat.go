@@ -271,6 +271,18 @@ type Chat struct {
 	// was shared (nil while private). Read by internal/authz only.
 	Visibility Visibility `json:"visibility,omitempty"`
 	SharedAt   *time.Time `json:"shared_at,omitempty"`
+
+	// AppName is the app the chat is about: a forge.yaml name in the chat's
+	// org, set at creation when the chat was started from that app and never
+	// inferred (chats.app_name). nil: about no particular app. Written only
+	// on insert; a branch copies it.
+	AppName *string `json:"app_name,omitempty"`
+
+	// ProjectDeleted: the chat's project is scheduled for deletion, so the
+	// chat is hidden with it and internal/authz treats it as absent. Set by
+	// the store's by-id reads (store.GetChat, GetChatWithUserCheck); a list
+	// leaves such chats out instead. Read by internal/authz only.
+	ProjectDeleted bool `json:"-"`
 }
 
 // MainThreadID returns the chat's root thread id, or "" if no root workflow
@@ -310,6 +322,8 @@ type ChatRow struct {
 	// Visibility is who besides UserID may read the chat (see Chat).
 	Visibility Visibility
 	SharedAt   *time.Time
+	// ProjectDeleted is Chat.ProjectDeleted, set by store.GetChatRow.
+	ProjectDeleted bool
 }
 
 // MainThreadID is Chat.MainThreadID for the row's root workflow.
@@ -327,13 +341,30 @@ type ArchivedChatInfo struct {
 	WorktreeDeletedAt *time.Time `json:"worktree_deleted_at,omitempty"`
 }
 
+// ArchivedChatCursor is a position in the archived chat list: the last listed
+// chat's updated time and id, the list's sort key.
+type ArchivedChatCursor struct {
+	UpdatedAt time.Time
+	ChatID    string
+}
+
+// ArchivedChatPage pages the archived chat list. Limit 0 lists every archived
+// chat, the unpaged read clients made before paging; After continues past a
+// previous page's last chat.
+type ArchivedChatPage struct {
+	Limit int
+	After *ArchivedChatCursor
+}
+
 // ChatFilters contains options for filtering chats.
 type ChatFilters struct {
 	UserID    string
 	ProjectID *string
 	// Org narrows the list to one organization; nil lists every chat UserID
 	// owns, in any org or none (every client before orgs).
-	Org             *OrgScope
+	Org *OrgScope
+	// AppName narrows the list to chats tagged with that app (chats.app_name).
+	AppName         *string
 	State           *ChatState
 	ExcludeArchived bool
 	// SidebarOnly keeps only chats the sidebar lists: the view's
@@ -369,6 +400,15 @@ type ChatUpdate struct {
 	EntityID       string                   `json:"entity_id"`
 	Data           json.RawMessage          `json:"data"`
 	CreatedAt      time.Time                `json:"created_at"`
+}
+
+// WorktreeChat is a chat bound to a worktree (chats.worktree_id), as the
+// worktree tool's get shows it.
+type WorktreeChat struct {
+	ChatID     string
+	Title      string
+	State      ChatState
+	LastActive time.Time
 }
 
 // QueuedForMachineChat is a chat holding a message queued for its machine: its

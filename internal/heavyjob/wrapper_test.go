@@ -67,6 +67,19 @@ func (s *syncBuf) String() string {
 	return s.b.String()
 }
 
+// testEnv is the test's own environment without what the slot this test
+// binary may run in put there: a held slot, a share, a lane.
+func testEnv() []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if key != hostslot.EnvHeld && !slices.Contains(shareVars, key) && key != "GOFLAGS" && key != laneEnv {
+			env = append(env, kv)
+		}
+	}
+	return env
+}
+
 type started struct {
 	cmd    *exec.Cmd
 	out    *syncBuf
@@ -84,15 +97,7 @@ func start(t *testing.T, g *Gate, line string, declared bool, env ...string) *st
 	c := exec.CommandContext(ctx, "sh", "-c", line)
 	c.Cancel = func() error { return c.Process.Signal(syscall.SIGTERM) }
 	c.WaitDelay = 5 * time.Second
-	// The test's own environment may carry a slot from an outer lane, or a
-	// share from the slot this test binary runs in.
-	for _, kv := range os.Environ() {
-		key, _, _ := strings.Cut(kv, "=")
-		if key != hostslot.EnvHeld && !slices.Contains(shareVars, key) && key != "GOFLAGS" {
-			c.Env = append(c.Env, kv)
-		}
-	}
-	c.Env = append(c.Env, env...)
+	c.Env = append(testEnv(), env...)
 	s := &started{cmd: c, out: &syncBuf{}, done: make(chan struct{}), cancel: cancel}
 	c.Stdout, c.Stderr = s.out, s.out
 	heavy, err := g.Prepare(c, Job{Command: line, Declared: declared})

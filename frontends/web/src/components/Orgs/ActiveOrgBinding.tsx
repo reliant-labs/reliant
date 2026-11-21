@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { useActiveOrg } from "@/hooks/useOrgs";
+import { resetAfterLeavingOrg } from "@/lib/orgScope";
 import { useAuthStore } from "@/store/authStore";
 import {
   ORG_SCOPED_QUERY_ROOTS,
@@ -11,6 +12,7 @@ import {
   useActiveOrgStore,
   failOrgResolution,
   forgetChosenOrg,
+  learnOrgSegments,
   setEffectiveOrg,
 } from "@/store/activeOrgStore";
 
@@ -73,6 +75,11 @@ export function ActiveOrgBinding({
     }
   }, [userId, qc]);
 
+  // Each org's URL segment, for a link built outside the org tree (lib/paths/org.ts).
+  useEffect(() => {
+    if (orgs.length > 0) learnOrgSegments(orgs);
+  }, [orgs]);
+
   useEffect(() => {
     if (!userId || isLoading) return;
     if (error) {
@@ -90,7 +97,10 @@ export function ActiveOrgBinding({
     const switched = settled.current !== undefined && settled.current !== activeOrgId;
     const reconciled = used !== null && used !== activeOrgId;
     if (switched || reconciled) {
-      for (const root of ORG_SCOPED_QUERY_ROOTS) void qc.resetQueries({ queryKey: [root] });
+      // The org being left: the one the last answer settled on, or the saved
+      // choice the transport named. Its own keyed reads are dropped, not re-sent.
+      const left = switched ? (settled.current ?? null) : used;
+      for (const root of ORG_SCOPED_QUERY_ROOTS) void resetAfterLeavingOrg(qc, [root], left);
       onSwitch?.(activeOrgId, qc, { firstLoad: false });
     } else if (settled.current === undefined && used === null && activeOrgId !== null) {
       // The first answer of a tab that had nothing saved. The product's lists

@@ -94,7 +94,12 @@ type ForgeAppOptions struct {
 // returns one ForgeApp per forge project manifest in it.
 //
 // The walk is bounded the way Discover's is (ForgeAppOptions; a bound that
-// stops it is reported, never hidden), never follows a symlink, and never
+// stops it is reported, never hidden), within one directory as well as across
+// them: a directory is listed in batches, never further than the budget
+// could visit (walkBounds.list), so one very wide directory cannot hold it
+// past its bounds. (A single read blocked in the kernel still can: see
+// walkReadBatch.)
+// It never follows a symlink, and never
 // enters a directory skipDir or forgeAppSkipDirs names, nor a nested git
 // checkout: a repository inside this one is its own repository, whose apps
 // are reported on it.
@@ -111,6 +116,11 @@ type ForgeAppOptions struct {
 // not one (no name, not YAML, too large, not a forge manifest) is simply not
 // an app.
 func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (ForgeAppScan, error) {
+	return findForgeApps(ctx, repoRoot, opts, time.Now)
+}
+
+// findForgeApps is FindForgeApps, reading the time for its deadline from now.
+func findForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions, now func() time.Time) (ForgeAppScan, error) {
 	maxDepth := opts.MaxDepth
 	if maxDepth <= 0 {
 		maxDepth = ForgeAppMaxDepth
@@ -137,109 +147,141 @@ func FindForgeApps(ctx context.Context, repoRoot string, opts ForgeAppOptions) (
 			abs = resolved
 		}
 		// os.DirFS lists entries with their own (Lstat) type, so a
-		// symlink is never a directory to fs.WalkDir and is not followed.
+		// symlink is never a directory to the walk and is not followed.
 		fsys = os.DirFS(abs)
 	}
 
-	var (
-		apps       []ForgeApp
-		entries    int
-		stopped    string
-		unreadable []string
-	)
-	couldNotRead := func(p string) { unreadable = append(unreadable, p) }
-	walkErr := fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, walkErr error) error {
-		if err := ctx.Err(); err != nil {
-			stopped = "the request ended"
-			return fs.SkipAll
+	w := &forgeAppWalk{
+		walkBounds: walkBounds{ctx: ctx, deadline: opts.Deadline, now: now, maxEntries: maxEntries},
+		fsys:       fsys,
+		maxDepth:   maxDepth,
+	}
+	// The root is the walk's first entry.
+	if !w.visit() {
+		if err := w.walk(".", 0); err != nil && !errors.Is(err, errWalkStopped) {
+			return ForgeAppScan{}, fmt.Errorf("scan repository for forge apps: %w", err)
 		}
-		if !opts.Deadline.IsZero() && !time.Now().Before(opts.Deadline) {
-			stopped = "it ran out of time"
-			return fs.SkipAll
-		}
-		if entries++; entries > maxEntries {
-			stopped = fmt.Sprintf("it looked at %d entries", maxEntries)
-			return fs.SkipAll
-		}
-		if walkErr != nil {
-			if p == "." {
-				return walkErr
-			}
-			// Unread is unknown, whatever the error: the subtree may hold
-			// an app.
-			couldNotRead(p)
-			if d != nil && d.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
+	}
 
+	apps := w.apps
+	sort.Slice(apps, func(i, j int) bool { return apps[i].Subpath < apps[j].Subpath })
+	out := ForgeAppScan{Apps: apps}
+	switch {
+	case w.stopped != "":
+		out.Truncated = true
+		out.TruncatedReason = w.stopped
+	case len(w.unreadable) > 0:
+		out.Truncated = true
+		out.TruncatedReason = fmt.Sprintf("it could not read %s", w.unreadable[0])
+		if n := len(w.unreadable) - 1; n > 0 {
+			out.TruncatedReason += fmt.Sprintf(" and %d more", n)
+		}
+	}
+	return out, nil
+}
+
+// forgeAppWalk is one FindForgeApps walk: a depth-first walk of fsys in
+// lexical order, as fs.WalkDir's was, charging its budget per entry visited
+// as that walk's callback did, whose directory listings are bounded too
+// (walkBounds.list).
+type forgeAppWalk struct {
+	walkBounds
+	fsys     fs.FS
+	maxDepth int
+
+	apps       []ForgeApp
+	unreadable []string
+}
+
+// couldNotRead records p as unread. Unread is unknown, whatever the error:
+// the subtree may hold an app.
+func (w *forgeAppWalk) couldNotRead(p string) { w.unreadable = append(w.unreadable, p) }
+
+// walk visits dir's entries, dir being at depth below the repository root
+// (which is depth 0). It returns errWalkStopped once a bound stops the walk,
+// and the error when the root itself cannot be listed; a deeper directory
+// that cannot be is recorded unread and walked past.
+func (w *forgeAppWalk) walk(dir string, depth int) error {
+	list, err := w.listDir(dir)
+	if errors.Is(err, errWalkStopped) {
+		return err
+	}
+	if err != nil {
+		// A failed listing costs an entry, as fs.WalkDir's second callback
+		// for the directory did.
+		if w.visit() {
+			return errWalkStopped
+		}
+		if dir == "." {
+			return err
+		}
+		w.couldNotRead(dir)
+		return nil
+	}
+
+	for _, d := range list {
+		if w.visit() {
+			return errWalkStopped
+		}
+		p := path.Join(dir, d.Name())
 		if d.IsDir() {
-			if p == "." {
-				return nil
+			if depth+1 > w.maxDepth || skipForgeAppDir(d.Name()) {
+				continue
 			}
-			if strings.Count(p, "/")+1 > maxDepth {
-				return fs.SkipDir
-			}
-			if skipForgeAppDir(d.Name()) {
-				return fs.SkipDir
-			}
-			nested, err := hasGitEntry(fsys, p)
+			nested, err := hasGitEntry(w.fsys, p)
 			if err != nil {
 				// Whether it is a nested checkout cannot be told, so
 				// neither can whose apps are in it.
-				couldNotRead(path.Join(p, ".git"))
-				return fs.SkipDir
+				w.couldNotRead(path.Join(p, ".git"))
+				continue
 			}
 			if nested {
-				return fs.SkipDir
+				continue
 			}
-			return nil
+			if err := w.walk(p, depth+1); err != nil {
+				return err
+			}
+			continue
 		}
 
 		// A regular file named forge.yaml; a symlink to one is not followed.
 		if d.Name() != "forge.yaml" || !d.Type().IsRegular() {
-			return nil
+			continue
 		}
-		dir := path.Dir(p)
 		isRoot := dir == "."
-		name, ok, err := readForgeManifest(fsys, p, !isRoot)
+		name, ok, err := readForgeManifest(w.fsys, p, !isRoot)
 		if err != nil {
-			couldNotRead(p)
-			return nil
+			w.couldNotRead(p)
+			continue
 		}
 		if !ok {
-			return nil
+			continue
 		}
 		subpath := ""
 		if !isRoot {
 			subpath = dir
 		}
-		if len(apps) >= MaxForgeAppsPerRepo {
-			stopped = fmt.Sprintf("it found %d forge apps", MaxForgeAppsPerRepo)
-			return fs.SkipAll
+		if len(w.apps) >= MaxForgeAppsPerRepo {
+			w.stopped = fmt.Sprintf("it found %d forge apps", MaxForgeAppsPerRepo)
+			return errWalkStopped
 		}
-		apps = append(apps, ForgeApp{Subpath: subpath, Name: name})
-		return nil
-	})
-	if walkErr != nil {
-		return ForgeAppScan{}, fmt.Errorf("scan repository for forge apps: %w", walkErr)
+		w.apps = append(w.apps, ForgeApp{Subpath: subpath, Name: name})
 	}
+	return nil
+}
 
-	sort.Slice(apps, func(i, j int) bool { return apps[i].Subpath < apps[j].Subpath })
-	out := ForgeAppScan{Apps: apps}
-	switch {
-	case stopped != "":
-		out.Truncated = true
-		out.TruncatedReason = stopped
-	case len(unreadable) > 0:
-		out.Truncated = true
-		out.TruncatedReason = fmt.Sprintf("it could not read %s", unreadable[0])
-		if n := len(unreadable) - 1; n > 0 {
-			out.TruncatedReason += fmt.Sprintf(" and %d more", n)
-		}
+// listDir lists dir in fsys within the walk's bounds (walkBounds.list).
+func (w *forgeAppWalk) listDir(dir string) ([]fs.DirEntry, error) {
+	if w.bounded() {
+		return nil, errWalkStopped
 	}
-	return out, nil
+	f, err := w.fsys.Open(dir)
+	if err != nil {
+		return nil, err
+	}
+	// Read-only: a failed close loses nothing the listing did not already have.
+	defer func() { _ = f.Close() }()
+	return w.list(f, dir)
 }
 
 // skipForgeAppDir reports whether the forge-app walk stays out of a directory

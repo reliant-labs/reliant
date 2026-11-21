@@ -5,6 +5,7 @@ import Button from "@/components/forge-ui/button";
 import { logger } from "../../lib/logger";
 import { ConnectorConsent } from "../Settings/ConnectorConsent";
 import { ForgeConnectorConsent } from "../Settings/ForgeConnectorConsent";
+import { authPath, oauthConsentPath } from "@/lib/paths";
 
 /**
  * OAuth consent screen.
@@ -124,9 +125,9 @@ export function OAuthConsent() {
         // Preserve the authorization id across login, or the user returns to a
         // page that no longer knows what it was approving.
         const back = encodeURIComponent(
-          `/oauth/consent?authorization_id=${authorizationId}`
+          `${oauthConsentPath()}?authorization_id=${authorizationId}`
         );
-        window.location.href = `/auth?redirect=${back}`;
+        window.location.href = `${authPath()}?redirect=${back}`;
         return;
       }
 

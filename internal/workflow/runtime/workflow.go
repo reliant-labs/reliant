@@ -1103,6 +1103,17 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		if handlerDone != nil && ctx.Err() == nil {
 			handlerDone.Send(ctx, true)
 		}
+		// A run that gave up on its self-pause is ending, not paused, but its
+		// rows still read paused: the ladder released the pause in memory
+		// only, and the "started" a self-resume writes never came. Every agent
+		// step of its terminal handlers was then refused as work on a stopped
+		// run, so the on_failure that tells someone the run ended never ran
+		// (prod 4ec667d0, control-plane main-red-fix, 2026-11-18). Un-pause
+		// the rows first, exactly as a self-resume does.
+		if endedUnattendedPause(retErr) &&
+			workflow.GetVersion(ctx, unattendedGiveUpUnpausesChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+			notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
+		}
 		// A failed run gets its on_failure handler, once, before the run is
 		// reported failed. The run still fails: see on_failure.go.
 		if onFailureHandler != nil && runFailed(ctx, retErr, runOutcome) &&
@@ -1652,6 +1663,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// provider is exactly what the switched (or unbound) chat replaces.
 	childTracker.switchProvider = func(wakeCtx workflow.Context) {
 		usageLimitWaiter.leases = map[string]*fallbackLease{}
+		if usageLimitWaiter.manualModel != "" {
+			// A banner click still being processed must not re-create the stay
+			// after the picker has changed the binding.
+			usageLimitWaiter.useModel, usageLimitWaiter.manualModel = "", ""
+			usageLimitWaiter.manualEpoch = 0
+		}
 		childTracker.resumeWholeChat(wakeCtx)
 	}
 	// A capacity wake (an account added, the provider switched, Resume) goes
@@ -2758,7 +2775,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 
 		// Wait for at least one step (activity or inline workflow) to complete
-		if len(runningSteps) > 0 || len(runningInlineWorkflows) > 0 {
+		// Unless this pass produced events of its own (a skipped node), which are
+		// routed first (routePendingFirst).
+		if (len(runningSteps) > 0 || len(runningInlineWorkflows) > 0) && !routePendingFirst(ctx, len(events)) {
 			completedSteps, completedInline := waitForAnyCompletion(ctx, runningSteps, runningInlineWorkflows)
 
 			// Check for pause signal after completion before processing results

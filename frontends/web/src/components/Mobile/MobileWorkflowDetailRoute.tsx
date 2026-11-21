@@ -24,6 +24,7 @@ import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { useFullStepExecution } from "../workflow/hooks/useFullStepExecution";
 import { transformWorkflowExecution } from "../Chat/ExecutionSidebar/transformApiData";
 import { runStatus } from "../../lib/runStatus";
+import { mobileChatPath, mobileWorkflowsPath } from "@/lib/paths";
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
@@ -60,7 +61,7 @@ export function MobileWorkflowDetailRoute() {
 
   if (!workflow) return <Centered>Workflow not found</Centered>;
 
-  return <MobileWorkflowScreen workflow={workflow} backTo="/m/workflows" />;
+  return <MobileWorkflowScreen workflow={workflow} backTo={mobileWorkflowsPath()} />;
 }
 
 /**
@@ -127,7 +128,7 @@ export function MobileChatWorkflowRoute() {
           : undefined
       }
       chatId={chatId}
-      backTo={`/m/chats/${chatId}`}
+      backTo={mobileChatPath(chatId ?? "")}
     />
   );
 }

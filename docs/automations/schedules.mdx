@@ -1,6 +1,6 @@
 ---
 title: "Schedules"
-description: "Run a workflow on a cron expression or a fixed interval"
+description: "Schedule a Reliant workflow with a cron expression or fixed interval: triggers block fields, timezone, overlap and catch-up, and the reliant trigger CLI."
 ---
 
 A schedule fires on a clock. You can declare one in a workflow's `triggers:` block, or create one directly with `reliant trigger create`.
@@ -49,6 +49,7 @@ Manage them afterwards with:
 reliant trigger list            # add --all for every project
 reliant trigger get sweep
 reliant trigger events sweep    # firings, newest first
+reliant trigger events sweep --outcome failed,pending   # only those outcomes (reliant v1.22.0+)
 reliant trigger fire sweep      # run it now
 reliant trigger disable sweep   # pause; enable to resume
 reliant trigger delete sweep

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,10 +21,11 @@ import (
 // GetGitToken's. They are control-plane's names, so a client sees one
 // vocabulary end to end.
 const (
-	reasonAppNotConfigured = "github_app_not_configured"
-	reasonAppNotInstalled  = "github_app_not_installed"
-	reasonAppPermissions   = "github_app_permissions"
-	reasonOwnerCannotPush  = "github_owner_cannot_push"
+	reasonAppNotConfigured  = "github_app_not_configured"
+	reasonAppNotInstalled   = "github_app_not_installed"
+	reasonAppPermissions    = "github_app_permissions"
+	reasonOwnerCannotPush   = "github_owner_cannot_push"
+	reasonGitHubRateLimited = "github_rate_limited"
 )
 
 // githubName is what GitHub allows in an owner or repository name. A name
@@ -31,8 +33,17 @@ const (
 var githubName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
 
 // botPermissionNames are the permissions control-plane mints an installation
-// token with; a request names a subset.
-var botPermissionNames = map[string]bool{"issues": true, "pull_requests": true, "contents": true}
+// token with; a request names a subset. actions (cancel and re-run workflow
+// runs) is never in the default: a caller names it, as the PR pipeline does to
+// recover a run stuck on a runner as the bot rather than as a person
+// (control-plane#2861). checks is never in the default either: the PR pipeline
+// names it to post the pipeline/cp-merge check run as the App rather than as a
+// person (control-plane#3110). control-plane's own mint allowlist already admits
+// checks; every name here must be in it, or the mint is refused upstream.
+// control-plane mints these only for a user who can push.
+var botPermissionNames = map[string]bool{
+	"issues": true, "pull_requests": true, "contents": true, "actions": true, "checks": true,
+}
 
 // GetGitHubBotToken mints a GitHub App installation token for one repository,
 // for the calling daemon's acting user. It authenticates its own bearer,
@@ -55,7 +66,7 @@ func (s *Service) GetGitHubBotToken(
 	for name, level := range req.Msg.GetPermissions() {
 		name, level = strings.ToLower(strings.TrimSpace(name)), strings.ToLower(strings.TrimSpace(level))
 		if !botPermissionNames[name] {
-			return nil, svcerr.InvalidArgument("permission " + name + " is not available to the bot (allowed: issues, pull_requests, contents)")
+			return nil, svcerr.InvalidArgument("permission " + name + " is not available to the bot (allowed: issues, pull_requests, contents, actions, checks)")
 		}
 		if level != "read" && level != "write" {
 			return nil, svcerr.InvalidArgument("permission " + name + " must be read or write")
@@ -120,6 +131,20 @@ func botMintError(ctx context.Context, userID, repository string, err error) err
 	case errors.Is(err, gitcredentialclient.ErrNeedsReconnect):
 		return refuse(svcerr.FailedPrecondition(
 			"your GitHub connection expired; reconnect it in Reliant"), reasonGitNeedsReconnect)
+	case errors.Is(err, gitcredentialclient.ErrRateLimited):
+		// Waited out, not an outage: ResourceExhausted with control-plane's
+		// message (whose limit, until when) and its Retry-After, so the
+		// caller backs off for the right time instead of retrying at once.
+		msg := "GitHub's API rate limit is exhausted; try again later"
+		var limited *gitcredentialclient.RateLimitedError
+		if errors.As(err, &limited) && limited.Message != "" {
+			msg = limited.Message
+		}
+		e := svcerr.ResourceExhausted(msg)
+		if limited != nil && limited.RetryAfter > 0 {
+			e = svcerr.WithMetadata(e, "Retry-After", strconv.Itoa(int((limited.RetryAfter+time.Second-1)/time.Second)))
+		}
+		return refuse(e, reasonGitHubRateLimited)
 	}
 	// WARN: gitcredentialclient's component log layer already recorded this
 	// failure at ERROR, and the RPC log layer records the Unavailable below.

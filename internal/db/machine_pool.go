@@ -68,3 +68,13 @@ func (r *Repo) CountTriggerCapacityHeldByMember(ctx context.Context, poolID, use
 func (r *Repo) SetDaemonLabels(ctx context.Context, userID, daemonID string, labels map[string]string) (bool, error) {
 	return store.SetDaemonLabels(ctx, r.ORM(), userID, daemonID, labels)
 }
+
+// MergeDeclaredDaemonLabels merges the labels a daemon declared when it
+// registered into its machine's durable labels (store.MergeDeclaredDaemonLabels):
+// declared keys are set, the rest untouched, only on userID's own row and,
+// for an unbound credential, only on a row not reserved for bound ones. False
+// when it wrote nothing: already applied, not the caller's row, or the merge
+// would exceed maxLabels.
+func (r *Repo) MergeDeclaredDaemonLabels(ctx context.Context, userID, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error) {
+	return store.MergeDeclaredDaemonLabels(ctx, r.ORM(), userID, daemonID, boundCredential, labels, maxLabels)
+}

@@ -87,6 +87,10 @@ type RuntimeContext struct {
 	// Approved preview hashes and refusals are runtime-authored, never model inputs.
 	ActivationApprovals map[string]string `json:"activation_approvals,omitempty"`
 	ActivationRefusals  map[string]string `json:"activation_refusals,omitempty"`
+	// ApprovedConnections maps a propose_connection call approved on its card
+	// to the connection id the person made in the connection dialog. Only an
+	// id: the credential never enters the run.
+	ApprovedConnections map[string]string `json:"approved_connections,omitempty"`
 
 	// ProviderPreference is the run's runtime.ProviderPreference: the
 	// provider(s) the user chose for the run. call_llm hands it to a model
@@ -118,8 +122,11 @@ type RuntimeContext struct {
 	// on another provider until the original one is back. The workflow sets
 	// it from its lease and clears it at the lease's end, which is
 	// deterministic because the comparison is made in the workflow. Set on
-	// call_llm nodes only.
+	// call_llm and compact nodes.
 	FallbackModel string `json:"fallback_model,omitempty"`
+	// ManualFallback marks an active banner lease. Compaction uses its exact
+	// model directly instead of first resolving the old summarization selector.
+	ManualFallback bool `json:"manual_fallback,omitempty"`
 
 	// FallbackReturn is set on the first call_llm after a fallback lease
 	// ended, so the transcript can say the chat is back on its own model.

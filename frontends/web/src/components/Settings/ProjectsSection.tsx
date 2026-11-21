@@ -21,6 +21,7 @@ import { MoveProjectOrgDialog } from "./projects/MoveProjectOrgDialog";
 import { ProjectMachines } from "./projects/ProjectMachines";
 import { ProjectsTable } from "./projects/ProjectsTable";
 import { projectMatchesQuery, sortProjectsForSettings } from "./projects/projectSource";
+import { projectPath, settingsPath } from "@/lib/paths";
 
 /** Below this many projects a filter box is clutter; above it, scanning is slow. */
 const FILTER_THRESHOLD = 8;
@@ -68,7 +69,7 @@ export function ProjectsSection() {
 
   const goToProject = useCallback(
     (projectId: string) => {
-      void navigate({ to: "/project/$projectId", params: { projectId }, search: {} });
+      void navigate({ to: projectPath(projectId), search: {} });
     },
     [navigate],
   );
@@ -224,7 +225,7 @@ export function ProjectsSection() {
             project={currentProject}
             onChatOpened={() => goToProject(currentProject.id)}
             onManageWorkspaces={() =>
-              void navigate({ to: "/settings/$section", params: { section: "branches" } })
+              void navigate({ to: settingsPath("branches") })
             }
           />
         )}

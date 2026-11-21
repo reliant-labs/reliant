@@ -52,6 +52,7 @@ var userScopedReads = map[string]string{
 	"GetUsableWorkflowBySlug":  readRepoChecks,
 	"GetWorkflowDraftByName":   readRepoChecks,
 	"GetWorkflowDraftBySlug":   readRepoChecks,
+	"GetWorkflowDraftsBySlugs": readRepoChecks,
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
 	"ListAnswerablePendingQuestionsByUser": readCallersFilter,
@@ -77,7 +78,11 @@ var userScopedReads = map[string]string{
 	// A project's moves span two orgs: ProjectService decides each with
 	// canReadMove (its owner or actor through authz.CanReadOwn on either org,
 	// or authz.RequireOrgAdmin of either), the list and a retried request alike.
-	"ListProjectOrgMoves":          readCallersFilter,
+	"ListProjectOrgMoves": readCallersFilter,
+	// "Recently deleted": ProjectService decides each row again with
+	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
+	// asked fresh, once the owner left).
+	"ListDeletedProjects":          readCallersFilter,
 	"FindProjectOrgMoveByRequest":  readCallersFilter,
 	"ListUnlaunchedTriggerEvents":  readCallersFilter,
 	"ListWorktreeRecoveries":       readCallersFilter,
@@ -85,6 +90,10 @@ var userScopedReads = map[string]string{
 	"GetUserUpdatesSince":          readCallersFilter,
 	"GetProjectByPathAndUser":      readCallersFilter,
 	"GetProjectByRemoteURLAndUser": readCallersFilter,
+	// The same lookups kept to one org (a request's or a machine's): its
+	// callers decide the row exactly as they do the unscoped ones.
+	"GetProjectByPathAndUserInScope":      readCallersFilter,
+	"GetProjectByRemoteURLAndUserInScope": readCallersFilter,
 
 	// The shared lists read OTHER users' rows of one org; SharingService
 	// passes each through authz.SharedChatsFor / SharedProjectsFor,
@@ -100,9 +109,12 @@ var userScopedReads = map[string]string{
 	"ListTriggerRegistrations":  readParentAuthorized,
 	"ListUserPresetsByProject":  readParentAuthorized,
 	"ListWorktrees":             readParentAuthorized,
-	"RecentTriggerFirings":      readParentAuthorized,
-	"RecentTriggerOutcomes":     readParentAuthorized,
-	"WorkflowSlugExists":        readParentAuthorized,
+	// The worktree tool's get: a worktree it found by name in the run's own
+	// project (as ListWorktrees), and only the caller's chats bound to it.
+	"ListChatsForWorktree":  readParentAuthorized,
+	"RecentTriggerFirings":  readParentAuthorized,
+	"RecentTriggerOutcomes": readParentAuthorized,
+	"WorkflowSlugExists":    readParentAuthorized,
 
 	"GetAnalyticsEnabled":             readPersonal,
 	"GetAutomationToken":              readPersonal,

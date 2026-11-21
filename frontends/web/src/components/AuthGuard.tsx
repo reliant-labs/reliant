@@ -6,6 +6,7 @@ import { ApiKeyLogin } from './ApiKeyLogin'
 import { LoadingSpinner } from './Layout/LoadingSpinner'
 import { loadConfig } from '@/lib/config_gen'
 import { signInRedirectFor } from '@/lib/returnTo'
+import { authPath, homePath, verifyEmailPath } from '@/lib/paths'
 
 const allowAnonymousAutoSignIn = (): boolean => loadConfig().AUTO_ANON_SIGN_IN === 'true'
 
@@ -57,12 +58,12 @@ export function AuthGuard({
       if (authMode === 'supabase' && allowAnonymousAutoSignIn() && !anonSignInAttempted.current) {
         anonSignInAttempted.current = true
         signInAnonymously().catch(() => {
-          navigate({ to: '/auth', search: { redirect: signInRedirect } })
+          navigate({ to: authPath(), search: { redirect: signInRedirect } })
         })
         return
       }
 
-      navigate({ to: '/auth', search: { redirect: signInRedirect } })
+      navigate({ to: authPath(), search: { redirect: signInRedirect } })
       return
     }
     
@@ -71,14 +72,14 @@ export function AuthGuard({
       if (search?.redirect) {
         window.location.href = search.redirect
       } else {
-        navigate({ to: '/', search: {} })
+        navigate({ to: homePath(), search: {} })
       }
       return
     }
 
     // Then check email verification (skip for anonymous users and apikey mode)
     if (requireEmailVerification && authMode === 'supabase' && user && !user.is_anonymous && !user.email_confirmed_at) {
-      navigate({ to: '/verify-email' })
+      navigate({ to: verifyEmailPath() })
       return
     }
   }, [user, loading, initialized, requireAuth, requireEmailVerification, navigate, search, authMode, authModeLoading, signInAnonymously, signInRedirect])

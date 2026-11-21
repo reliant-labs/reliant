@@ -9,7 +9,7 @@ vi.mock("@reliantlabs/forge-web-runtime", () => ({
   reportException: runtime.reportException,
 }));
 
-import { reportError, reportFailure } from "../errorReporting";
+import { reportError, reportFailure, reportTypedFailure } from "../errorReporting";
 
 const ENDPOINT = "https://ingest.example.dev/k/rbk_x";
 
@@ -56,5 +56,18 @@ describe("reportFailure", () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe("Codex OAuth state mismatch");
     expect(attributes).toEqual({ component: "oauth", provider: "codex" });
+  });
+});
+
+describe("reportTypedFailure", () => {
+  it("reports an Error named by the type, which becomes the issue's exception type", () => {
+    reportTypedFailure("RpcStall", "connection stalled", { "rpc.stalled_count": 4 });
+    const [error, attributes] = runtime.reportException.mock.calls[0] as unknown as [Error, unknown];
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe("RpcStall");
+    expect(error.message).toBe("connection stalled");
+    // A `code` would take the exception type's place in the OTel span event.
+    expect((error as Error & { code?: unknown }).code).toBeUndefined();
+    expect(attributes).toEqual({ "rpc.stalled_count": 4 });
   });
 });

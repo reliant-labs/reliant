@@ -48,6 +48,8 @@ import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
 import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
+import { ConnectionProposalCard } from "./ConnectionProposalCard";
+import { asConnectionProposal, proposalDenial } from "../../lib/connectionProposal";
 import {
   ContentBlockType,
   ToolCallStatus,
@@ -297,7 +299,6 @@ interface ToolExecutionProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
-  density?: "compact" | "card" | "minimal";
 }
 
 
@@ -313,7 +314,6 @@ function ToolExecutionComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
-  density = "compact",
 }: ToolExecutionProps) {
   // A viewer of another member's shared chat never sees a tool's result,
   // however it arrived (the server elides them; this does not rely on it):
@@ -894,20 +894,19 @@ function ToolExecutionComponent({
   const rootClassName = cn(
     "overflow-hidden transition-colors",
     isExpanded ? "border border-border shadow-md" : "border border-border/30 shadow-sm",
-    density === "card" ? "rounded-xl bg-card" : density === "minimal" ? "rounded-md bg-transparent shadow-none" : "rounded-md",
+    "rounded-md",
     leftBorderColor
   );
   const headerClassName = cn(
     "flex items-center justify-between",
     isExpanded ? "bg-muted/50" : "bg-muted/20",
-    density === "card" ? "px-3 py-2" : density === "minimal" ? "px-2 py-0.5" : "px-2 py-1",
+    "px-2 py-1",
     isExpandable && "cursor-pointer hover:bg-muted/50",
     // The whole row is the expand toggle: a finger needs the row 44px tall.
     "touch:min-h-[44px]"
   );
   const contentClassName = cn(
-    "border-t border-border/30 overflow-hidden overflow-y-auto bg-muted/15 py-1",
-    density === "card" ? "max-h-[720px]" : "max-h-[600px]"
+    "border-t border-border/30 overflow-hidden overflow-y-auto bg-muted/15 py-1 max-h-[600px]"
   );
 
   const openPrimaryFile = (e: React.MouseEvent) => {
@@ -1108,7 +1107,16 @@ function ToolExecutionComponent({
         {/* Approval UI — this is the decision screen mobile approvals exist
             for, so Approve/Deny get real touch targets there instead of the
             desktop's compact row. */}
-        {shouldShowApprovalUI && (
+        {shouldShowApprovalUI && approval && chatId && asConnectionProposal(approval) && (
+          <div className="px-2 py-2 border-t border-border">
+            <ConnectionProposalCard
+              approval={asConnectionProposal(approval)!}
+              onConnected={(connectionId) => approveMutation.mutate({ requestId: approval.id, connectionId })}
+              onDecline={(notCompleted) => denyMutation.mutate(proposalDenial(approval.id, notCompleted))}
+            />
+          </div>
+        )}
+        {shouldShowApprovalUI && !(approval && chatId && asConnectionProposal(approval)) && (
           <div className="px-2 py-2 border-t border-warning/20 bg-warning/5">
             {showRichContent && toolCall.input && renderToolContent(<ToolContentArea ctx={renderContext} />)}
             <p className="text-xs font-medium text-warning-ink mb-1.5">Approval required</p>

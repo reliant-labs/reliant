@@ -37,20 +37,35 @@ type WorktreeParams struct {
 	// Base branch to branch from (optional, defaults to main/master)
 	BaseBranch string `json:"base_branch,omitempty" jsonschema:"description=Base branch to branch from (defaults to repository default branch)"`
 
+	// Scopes base_branch to one repository of a multi-repo project.
+	BaseBranchRepo string `json:"base_branch_repo,omitempty" jsonschema:"description=Multi-repo projects: the one repository (its name or relative path) that starts from base_branch; every other repository starts from its own default branch. Use it for a branch that exists in one repository only, such as a pull request's branch."`
+
 	// Exact paths to copy from the source repo — never searched for.
 	CopyFiles []string `json:"copy_files,omitempty" jsonschema:"description=Exact paths relative to the project root to copy into the new worktree (e.g. .env or web/node_modules). Each path is copied as-is; nothing is searched for."`
 
 	// Force creation by deleting existing worktree/branch
 	Force bool `json:"force,omitempty" jsonschema:"description=Delete a stale branch of the same name in each repository before creating it"`
+
+	// list only: narrow and page the listing.
+	Filter    string `json:"filter,omitempty" jsonschema:"description=list only: show just the worktrees whose name or branch contains this text (case-insensitive)."`
+	Archived  bool   `json:"archived,omitempty" jsonschema:"description=list only: also list archived (deleted) worktrees, after the live ones. Each is marked archived."`
+	PageToken string `json:"page_token,omitempty" jsonschema:"description=list only: the next_page_token a previous list returned, to read the next page. Pass the same filter and archived."`
+	Limit     int    `json:"limit,omitempty" jsonschema:"description=list only: page the listing, this many worktrees per page (at most 200). Without limit or page_token, list returns every worktree."`
 }
 
 // WorktreeResponseMetadata contains metadata about the worktree operation
 type WorktreeResponseMetadata struct {
-	Action      string                 `json:"action"`
-	WorktreeID  string                 `json:"worktree_id,omitempty"`
-	Path        string                 `json:"path,omitempty"`
-	Branch      string                 `json:"branch,omitempty"`
-	Worktrees   []*WorktreeInfo        `json:"worktrees,omitempty"`
+	Action     string          `json:"action"`
+	WorktreeID string          `json:"worktree_id,omitempty"`
+	Path       string          `json:"path,omitempty"`
+	Branch     string          `json:"branch,omitempty"`
+	Worktrees  []*WorktreeInfo `json:"worktrees,omitempty"`
+	// Total is how many worktrees list matched, across every page.
+	Total int `json:"total,omitempty"`
+	// NextPageToken reads list's next page; empty on the last one.
+	NextPageToken string `json:"next_page_token,omitempty"`
+	// Chats are the caller's chats bound to the worktree (get).
+	Chats       []WorktreeChatInfo     `json:"chats,omitempty"`
 	StoredInCEL map[string]interface{} `json:"stored_in_cel,omitempty"` // Data stored in CEL context
 }
 
@@ -83,6 +98,16 @@ type WorktreeInfo struct {
 	CreatedAt  time.Time         `json:"created_at"`
 	UpdatedAt  time.Time         `json:"updated_at"`
 	LastActive time.Time         `json:"last_active"`
+	// ArchivedAt is when the worktree was archived; nil for a live one.
+	ArchivedAt *time.Time `json:"archived_at,omitempty"`
+}
+
+// WorktreeChatInfo is one chat bound to a worktree, as get reports it.
+type WorktreeChatInfo struct {
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	State      string    `json:"state"`
+	LastActive time.Time `json:"last_active"`
 }
 
 // RunMachine reaches the machine a run's tools execute on.
@@ -104,7 +129,14 @@ type RunMachine interface {
 }
 
 const (
-	worktreeListPage  = 100
+	worktreeListPage = 100
+	// worktreeListLimit is a paged list's page size when the caller gives
+	// page_token but no limit, and the size past which an unpaged list says
+	// it can be paged; worktreeListMax bounds one page.
+	worktreeListLimit = 50
+	worktreeListMax   = 200
+	// worktreeGetChats bounds the chats get lists for one worktree.
+	worktreeGetChats  = 20
 	worktreeAdoptMs   = 30_000
 	worktreeCreateMax = 10 * time.Minute
 )
@@ -145,13 +177,16 @@ Prefer this to running "git worktree add" yourself: a checkout made by hand is i
 A worktree made here is the same workspace the "new worktree" button in the Reliant UI makes. It lives at ~/.reliant/worktrees/<project>/<name>-<id>/ and holds one checkout per repository of the project (laid out like the project itself), each on its own branch. It appears in the Reliant sidebar.
 
 ACTIONS:
-1. create - Required: name. Optional: branch, base_branch, copy_files, force
+1. create - Required: name. Optional: branch, base_branch, base_branch_repo, copy_files, force
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
+   In a multi-repo project base_branch must exist in every repository; to start from a branch that exists in one repository only (e.g. a pull request's branch), also pass base_branch_repo (the name of that repository) and the others start from their default branch.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
-2. list - List the project's worktrees (any state: creating, active, failed)
+2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.
+   Optional: filter (text in the name or branch), archived (also list archived ones), limit and page_token (to page: limit per page, default 50).
+   A paged result that has more ends with a next_page_token: pass it back as page_token, with the same filter, archived and limit.
 
-3. get - Required: name. Details, paths and owner of one worktree
+3. get - Required: name. Details, paths and owner of one worktree, and the chats bound to it with their state
 
 4. delete - Required: name. Archives the worktree; its directory is removed later, only when it is clean, its work is pushed or already merged, and it is unused. Refuses your own current worktree and any worktree a chat is using.
 
@@ -204,7 +239,7 @@ func (w *worktreeTool) Execute(rctx *rctx.ToolContext, params WorktreeParams) (T
 	case "create":
 		return w.handleCreate(ctx, &params, rctx)
 	case "list":
-		return w.handleList(ctx, rctx)
+		return w.handleList(ctx, &params, rctx)
 	case "get":
 		return w.handleGet(ctx, &params, rctx)
 	case "delete":
@@ -253,6 +288,20 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 		return fail("%v", err)
 	}
 
+	// base_branch_repo scopes the base to one repository; the rest start
+	// from their own default branch (the daemon's detection).
+	globalBase, baseBranches := p.BaseBranch, map[string]string(nil)
+	if p.BaseBranchRepo != "" {
+		if p.BaseBranch == "" {
+			return fail("base_branch_repo needs base_branch: name the branch that repository starts from")
+		}
+		target := baseBranchRepo(repos, p.BaseBranchRepo)
+		if target == nil {
+			return fail("base_branch_repo %q is not a repository of this project (its repositories: %s)", p.BaseBranchRepo, repoNames(repos))
+		}
+		globalBase, baseBranches = "", map[string]string{target.ID: p.BaseBranch}
+	}
+
 	var chatID *string
 	if rc.ChatID != "" {
 		id := rc.ChatID
@@ -271,7 +320,8 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 		Repos:         repos,
 		Name:          p.Name,
 		Branch:        p.Branch,
-		BaseBranch:    p.BaseBranch,
+		BaseBranch:    globalBase,
+		BaseBranches:  baseBranches,
 		Force:         p.Force,
 		CopyPaths:     copyPaths,
 		CopySource:    copySource,
@@ -307,6 +357,10 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	// Settled either way (ACTIVE or FAILED): tell connected clients.
 	w.emitChanged(ctx, machine.userID, project.ID, wt.ID)
 	if finishErr != nil {
+		var noBase *workspacecreate.BaseNotFoundError
+		if errors.As(finishErr, &noBase) && len(repos) > 1 && p.BaseBranchRepo == "" {
+			return fail("%v. If the branch exists in one repository only, pass base_branch_repo=<that repository> as well: the other repositories then start from their default branch. (The attempt is recorded as a failed worktree named '%s'; creating again with that name replaces it.)", finishErr, p.Name)
+		}
 		return fail("%v (the attempt is recorded as a failed worktree named '%s'; creating again with that name replaces it)", finishErr, p.Name)
 	}
 
@@ -341,30 +395,78 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	return WithResponseMetadata(NewTextResponse(content.String()), metadata), nil
 }
 
-func (w *worktreeTool) handleList(ctx context.Context, rc *rctx.ToolContext) (ToolResponse, error) {
+func (w *worktreeTool) handleList(ctx context.Context, p *WorktreeParams, rc *rctx.ToolContext) (ToolResponse, error) {
 	if w.repo == nil {
 		return NewTextErrorResponse("Database not available for listing worktrees"), nil
+	}
+	// Paging is opt-in: a list without limit or page_token returns every
+	// worktree, as it did before paging existed, so no caller is silently cut
+	// short.
+	paged := p.Limit != 0 || strings.TrimSpace(p.PageToken) != ""
+	limit := p.Limit
+	switch {
+	case limit < 0:
+		return NewTextErrorResponse("limit must not be negative"), nil
+	case limit == 0:
+		limit = worktreeListLimit
+	case limit > worktreeListMax:
+		limit = worktreeListMax
+	}
+	offset, err := decodeOffsetToken(p.PageToken)
+	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
 	}
 	project, err := w.project(ctx, rc)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list worktrees: %v", err)), nil
 	}
-	rows, err := w.listAll(ctx, project.ID, false)
+	rows, err := w.listAll(ctx, project.ID, p.Archived)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list worktrees: %v", err)), nil
 	}
-	if len(rows) == 0 {
+	if filter := strings.ToLower(strings.TrimSpace(p.Filter)); filter != "" {
+		matched := rows[:0:0]
+		for _, row := range rows {
+			if strings.Contains(strings.ToLower(row.Name), filter) || strings.Contains(strings.ToLower(row.Branch), filter) {
+				matched = append(matched, row)
+			}
+		}
+		rows = matched
+	}
+	total := len(rows)
+	if total == 0 {
+		if p.Filter != "" {
+			return NewTextResponse(fmt.Sprintf("No worktrees match %q", p.Filter)), nil
+		}
 		return NewTextResponse("No worktrees found"), nil
+	}
+	if offset >= total {
+		return NewTextErrorResponse(fmt.Sprintf("page_token is past the end: there are %d worktree(s); list again without page_token", total)), nil
+	}
+	page := rows
+	next := ""
+	if paged {
+		page = rows[offset:min(offset+limit, total)]
+		if offset+len(page) < total {
+			next = encodeOffsetToken(offset + len(page))
+		}
 	}
 	repos := w.reposForDisplay(ctx, rc, project)
 
-	worktrees := make([]*WorktreeInfo, len(rows))
+	worktrees := make([]*WorktreeInfo, len(page))
 	var content strings.Builder
-	fmt.Fprintf(&content, "Found %d worktrees:\n\n", len(rows))
-	for i, row := range rows {
+	if offset == 0 && next == "" {
+		fmt.Fprintf(&content, "Found %d worktrees:\n\n", total)
+	} else {
+		fmt.Fprintf(&content, "Found %d worktrees; showing %d-%d:\n\n", total, offset+1, offset+len(page))
+	}
+	for i, row := range page {
 		info := w.info(row, repos)
 		worktrees[i] = info
-		fmt.Fprintf(&content, "%d. %s\n   Status: %s\n", i+1, info.Name, info.Status)
+		fmt.Fprintf(&content, "%d. %s\n   Status: %s\n", offset+i+1, info.Name, info.Status)
+		if info.ArchivedAt != nil {
+			fmt.Fprintf(&content, "   Archived: %s\n", info.ArchivedAt.Format("2006-01-02 15:04:05"))
+		}
 		if info.Path != "" {
 			fmt.Fprintf(&content, "   Path: %s\n", info.Path)
 		}
@@ -383,7 +485,12 @@ func (w *worktreeTool) handleList(ctx context.Context, rc *rctx.ToolContext) (To
 		}
 		content.WriteString("\n")
 	}
-	return WithResponseMetadata(NewTextResponse(content.String()), WorktreeResponseMetadata{Action: "list", Worktrees: worktrees}), nil
+	if next != "" {
+		fmt.Fprintf(&content, "next_page_token: %s\n%d more: call worktree again with action \"list\" and page_token %q (same filter and archived).\n", next, total-offset-len(page), next)
+	} else if !paged && total > worktreeListLimit {
+		fmt.Fprintf(&content, "All %d worktrees are listed. To read fewer at a time, pass limit (then page_token), or narrow with filter.\n", total)
+	}
+	return WithResponseMetadata(NewTextResponse(content.String()), WorktreeResponseMetadata{Action: "list", Worktrees: worktrees, Total: total, NextPageToken: next}), nil
 }
 
 func (w *worktreeTool) handleGet(ctx context.Context, p *WorktreeParams, rc *rctx.ToolContext) (ToolResponse, error) {
@@ -418,11 +525,13 @@ func (w *worktreeTool) handleGet(ctx context.Context, p *WorktreeParams, rc *rct
 		"status":      string(info.Status),
 		"checkouts":   info.Checkouts,
 	}
+	chats, chatsErr := w.chatsIn(ctx, row.ID)
 	metadata := WorktreeResponseMetadata{
 		Action:      "get",
 		WorktreeID:  info.ID,
 		Path:        info.Path,
 		Branch:      info.Branch,
+		Chats:       chats,
 		StoredInCEL: celData,
 	}
 
@@ -431,6 +540,24 @@ func (w *worktreeTool) handleGet(ctx context.Context, p *WorktreeParams, rc *rct
 		info.Name, info.ID, info.Status, info.Path, info.Branch, info.BaseBranch, info.DaemonID,
 		info.CreatedAt.Format("2006-01-02 15:04:05"), info.LastActive.Format("2006-01-02 15:04:05"))
 	writeCheckouts(&content, repos, info.Checkouts)
+	switch {
+	case chatsErr != nil:
+		fmt.Fprintf(&content, "- Chats: could not be listed (%v)\n", chatsErr)
+	case len(chats) == 0:
+		content.WriteString("- Chats: none of yours is bound to it\n")
+	default:
+		content.WriteString("- Chats bound to it (most recently active first):\n")
+		for _, c := range chats {
+			title := c.Title
+			if title == "" {
+				title = "(untitled)"
+			}
+			fmt.Fprintf(&content, "  - %s (id %s), %s, last active %s\n", title, c.ID, c.State, c.LastActive.Format("2006-01-02 15:04:05"))
+		}
+		if len(chats) == worktreeGetChats {
+			fmt.Fprintf(&content, "  (the %d most recently active; there may be more)\n", worktreeGetChats)
+		}
+	}
 	content.WriteString("\nWorktree data stored in CEL context as 'worktree_data'")
 	return WithResponseMetadata(NewTextResponse(content.String()), metadata), nil
 }
@@ -670,6 +797,32 @@ func (w *worktreeTool) byName(ctx context.Context, projectID, name string) (*db.
 	return w.repo.GetLiveWorktreeByName(ctx, projectID, name)
 }
 
+// chatsIn lists the caller's chats bound to the worktree, archived ones
+// included, most recently active first.
+func (w *worktreeTool) chatsIn(ctx context.Context, worktreeID string) ([]WorktreeChatInfo, error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return nil, errors.New("the calling user is unknown")
+	}
+	rows, err := w.repo.ListChatsForWorktree(ctx, userID, worktreeID, worktreeGetChats)
+	if err != nil {
+		return nil, fmt.Errorf("look up chats bound to the worktree: %w", err)
+	}
+	chats := make([]WorktreeChatInfo, len(rows))
+	for i, row := range rows {
+		chats[i] = WorktreeChatInfo{ID: row.ChatID, Title: row.Title, State: chatStateName(row.State), LastActive: row.LastActive}
+	}
+	return chats, nil
+}
+
+// chatStateName is a chat's state as get shows it: "active" or "archived".
+func chatStateName(state core.ChatState) string {
+	if state == core.ChatStateArchived {
+		return "archived"
+	}
+	return "active"
+}
+
 // liveChatIn returns the id of a non-archived chat bound to the worktree, or "".
 func (w *worktreeTool) liveChatIn(ctx context.Context, worktreeID string) (string, error) {
 	id, err := w.repo.GetLiveChatIDForWorktree(ctx, worktreeID)
@@ -701,6 +854,7 @@ func (w *worktreeTool) info(row *db.Worktree, repos []*core.Repo) *WorktreeInfo 
 		CreatedAt:  row.CreatedAt,
 		UpdatedAt:  row.UpdatedAt,
 		LastActive: row.LastActive,
+		ArchivedAt: row.DeletedAt,
 	}
 	if row.ChatID != nil {
 		info.SessionID = *row.ChatID
@@ -715,6 +869,26 @@ func (w *worktreeTool) info(row *db.Worktree, repos []*core.Repo) *WorktreeInfo 
 		}
 	}
 	return info
+}
+
+// baseBranchRepo is the repository base_branch_repo names: by name, or by
+// its path relative to the project root.
+func baseBranchRepo(repos []*core.Repo, want string) *core.Repo {
+	slash := func(p string) string { return strings.Trim(strings.ReplaceAll(p, `\`, "/"), "/") }
+	for _, repo := range repos {
+		if repo.Name == want || (repo.RelativePath != "" && slash(repo.RelativePath) == slash(want)) {
+			return repo
+		}
+	}
+	return nil
+}
+
+func repoNames(repos []*core.Repo) string {
+	names := make([]string, 0, len(repos))
+	for _, repo := range repos {
+		names = append(names, repo.Name)
+	}
+	return strings.Join(names, ", ")
 }
 
 // checkoutPath is where a repository's checkout sits in a workspace. The

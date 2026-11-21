@@ -275,6 +275,36 @@ func SetDaemonLabels(ctx context.Context, db orm.Context, userID, daemonID strin
 	return n > 0, nil
 }
 
+// MergeDeclaredDaemonLabels merges the labels a daemon declared at
+// registration into its machine's durable labels: each declared key is set to
+// its value, every other label is left alone. It writes only userID's own row,
+// and, for an unbound credential (boundCredential false), only a row not
+// reserved for bound credentials: the same guard UpsertDaemonRegistration
+// applies. It writes nothing when the labels already hold every declared pair
+// (a reconnect), or when the merge would leave the machine more than
+// maxLabels labels. True when it wrote.
+func MergeDeclaredDaemonLabels(ctx context.Context, db orm.Context, userID, daemonID string, boundCredential bool, labels map[string]string, maxLabels int) (bool, error) {
+	if len(labels) == 0 {
+		return false, nil
+	}
+	encoded, err := json.Marshal(labels)
+	if err != nil {
+		return false, fmt.Errorf("encode declared machine labels: %w", err)
+	}
+	res, err := db.Bun().NewRaw(`
+UPDATE daemons SET labels = labels || ?0::jsonb, updated_at = now()
+WHERE id = ?1 AND user_id = ?2
+  AND (?3 OR NOT requires_bound_token)
+  AND NOT (labels @> ?0::jsonb)
+  AND (SELECT count(*) FROM jsonb_object_keys(labels || ?0::jsonb)) <= ?4`,
+		string(encoded), daemonID, userID, boundCredential, maxLabels).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("merge declared labels of machine %s: %w", daemonID, err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 // daemonLabels decodes a daemons row's labels column. A value that is not a
 // string map (never written by this code) reads as no labels: the machine is
 // then in no pool, which fails closed.

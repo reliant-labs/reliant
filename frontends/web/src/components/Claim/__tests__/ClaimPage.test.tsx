@@ -325,7 +325,8 @@ describe('an existing signed-in user (W11: claim into my account)', () => {
     expect(screen.getByTestId('claim-signed-in-as')).toHaveTextContent('me@example.com')
     expect(block).toHaveTextContent(/you'll own it/i)
     expect(block).toHaveTextContent(/beside your other organizations/i)
-    expect(block).toHaveTextContent(/choose which stays live/i)
+    expect(block).toHaveTextContent(/where you want free hosting to stay/i)
+    expect(block).not.toHaveTextContent(/one static site|10 GiB/i)
     expect(screen.getByTestId('claim-into-account-button')).toBeEnabled()
     expect(screen.queryByTestId('claim-submit')).toBeNull()
     expect(screen.getByTestId('claim-site')).toBeInTheDocument()
@@ -420,7 +421,7 @@ function choiceRequired() {
   )
 }
 
-describe('an existing user who already has their free static site', () => {
+describe('a signed-in user whose claim needs a free hosting choice', () => {
   beforeEach(() => {
     auth.user = { id: 'real-user', email: 'me@example.com', is_anonymous: false }
   })
@@ -443,9 +444,12 @@ describe('an existing user who already has their free static site', () => {
 
   it('asks BEFORE claiming, naming both sites, with nothing preselected', async () => {
     const completes = await openDialog()
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: /choose where free hosting stays/i })
     expect(screen.getByTestId('free-site-existing')).toHaveTextContent('mine.sites.test')
     expect(screen.getByTestId('free-site-claimed')).toHaveTextContent('amber-quokka.reliantpreview.dev')
+    expect(dialog).toHaveTextContent('mine.sites.test may pause, along with other sites relying on free hosting in its organization.')
+    expect(dialog).toHaveTextContent('amber-quokka.reliantpreview.dev is added to your account but may pause')
+    expect(dialog).not.toHaveTextContent(/one static site|10 GiB/i)
     for (const v of ['claimed', 'existing', 'subscribe']) {
       expect(screen.getByTestId(`free-site-option-${v}`)).not.toBeChecked()
     }
@@ -489,7 +493,7 @@ describe('an existing user who already has their free static site', () => {
     expect(completes_).toHaveBeenCalledWith(FreeSiteChoice.EXISTING)
   })
 
-  it('3. subscribe to keep both: goes to billing with the claim page as the way back, and claims nothing', async () => {
+  it('3. review billing: goes to billing with the claim page as the way back, and claims nothing', async () => {
     const completes = await openDialog()
     fireEvent.click(screen.getByTestId('free-site-option-subscribe'))
     // The claim waits, and says until when.
@@ -536,7 +540,7 @@ describe('an existing user who already has their free static site', () => {
     fireEvent.click(opener)
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveAttribute('aria-modal', 'true')
-    expect(dialog).toHaveAccessibleName(/already have a free site/i)
+    expect(dialog).toHaveAccessibleName(/choose where free hosting stays/i)
     expect(dialog.contains(document.activeElement)).toBe(true)
     // Never the close button first: Enter on a fresh dialog must not dismiss it.
     expect(document.activeElement).toBe(screen.getByTestId('free-site-option-claimed'))
@@ -550,7 +554,7 @@ describe('an existing user who already has their free static site', () => {
     await openDialog()
     const radios = ['claimed', 'existing', 'subscribe'].map((v) => screen.getByTestId(`free-site-option-${v}`) as HTMLInputElement)
     expect(new Set(radios.map((r) => r.name)).size).toBe(1)
-    expect(screen.getByRole('group', { name: /which site stays live/i })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /where free hosting stays/i })).toBeInTheDocument()
   })
 
   it('a site deleted or a plan bought since the preview: the server asks again, and the page asks, nothing was claimed', async () => {

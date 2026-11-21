@@ -9,7 +9,7 @@ import {
   Music,
   Check,
 } from "lucide-react";
-import Editor from "@monaco-editor/react";
+import { MonacoEditor } from "../shared/MonacoEditor";
 import type { FileNode } from "./index";
 import {
   getFileContent,
@@ -1015,7 +1015,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
         <>
         {/* Keep Monaco mounted: toggling must not dispose its model or undo stack. */}
         <div className={cn("h-full", showingMarkdownPreview && "hidden")}>
-        <Editor
+        <MonacoEditor
           height="100%"
           language={getMonacoLanguage(file.name)}
           value={content}

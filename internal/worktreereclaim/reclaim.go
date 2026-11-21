@@ -1269,6 +1269,11 @@ func (r *Reclaimer) measure(ctx context.Context, res *Result, path string) {
 	r.mu.Unlock()
 }
 
+// pruneRegistrations prunes the registrations of a row whose directory is
+// gone. The sweep calls it for every such row, every pass, so it never waits
+// for a `git worktree add` in the same repository and never runs beside one
+// (PruneWorktrees): a prune that lands inside an add deletes the registration
+// that add is making. Skipped, the registration is pruned on a later pass.
 func pruneRegistrations(ctx context.Context, w Worktree) {
 	seen := map[string]bool{}
 	for _, c := range w.Checkouts {
@@ -1276,7 +1281,7 @@ func pruneRegistrations(ctx context.Context, w Worktree) {
 			continue
 		}
 		seen[c.RepoPath] = true
-		_, _ = git(ctx, c.RepoPath, nil, "worktree", "prune")
+		_ = PruneWorktrees(ctx, c.RepoPath, false)
 	}
 }
 

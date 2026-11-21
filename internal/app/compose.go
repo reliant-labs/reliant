@@ -370,7 +370,6 @@ func (g *Graph) newIntegrationSettings() (*IntegrationSettings, error) {
 
 func (g *Graph) newProcessSettings() (*ProcessSettings, error) {
 	return NewProcessSettings(ProcessSettingsDeps{
-		DataDir:      g.ServerProcessConfig.GetDataDir(),
 		LLM:          g.ServerProcessConfig.GetLlm(),
 		Preview:      g.ServerProcessConfig.GetPreview(),
 		Integrations: g.IntegrationSettings(),
@@ -551,6 +550,9 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		CatalogSearch: g.WorkerCatalogSearch(),
 		Router:        g.WorkerDaemonRouter(),
 		DB:            g.Database(),
+		Membership:    g.OrgResolver(),
+		Logger:        g.Log,
+		Config:        g.Cfg,
 	})
 }
 
@@ -626,6 +628,10 @@ func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 		Ledger: g.WriteLedger(),
 		DB:     g.Database(),
 	})
+}
+
+func (g *Graph) newProjectPurge() (*ProjectPurge, error) {
+	return NewProjectPurge(ProjectPurgeDeps{DB: g.Database()})
 }
 
 func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
@@ -975,10 +981,11 @@ func (g *Graph) newAccount() (*account.Service, error) {
 // newApproval constructs the approval handler (internal/handlers/approval).
 func (g *Graph) newApproval() (*approval.Service, error) {
 	return approval.New(approval.Deps{
-		Logger:  g.Log,
-		Config:  g.Cfg,
-		Repo:    g.Database(),
-		Signals: g.PauseService(),
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Signals:     g.PauseService(),
+		Connections: g.APIConnections().Service,
 	})
 }
 
@@ -1266,6 +1273,10 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
 		// The preview's control-plane facts; nil shows them as unknown.
 		MoveFacts: ProjectOrgMoveFacts(g.ServerProcessConfig.GetControlPlane()),
+		// A project delete pauses its triggers' schedules, a restore
+		// resumes them, and a purge removes them.
+		Schedules: g.ScheduleSyncer(),
+		Now:       nil, // optional — no provider
 	})
 }
 

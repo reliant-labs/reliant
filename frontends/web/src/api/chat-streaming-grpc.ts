@@ -57,6 +57,10 @@ export class ChatStreamingService extends ChatStream {
       // The snapshot and replay send finished calls' bodies elided; live
       // frames stay full (lib/toolBodies.ts).
       toolBodies: TRANSCRIPT_TOOL_BODIES,
+      // Nothing in the app reads the snapshot's message total (paging uses
+      // hasMore/oldestSeq), and counting a long chat was the slowest read
+      // of its open.
+      skipTotal: true,
       client: () => markingStreamRequests(connectClient(StreamingService)),
       logger,
       onConnectionLost: () => pageActivity().noteConnectionLost(),

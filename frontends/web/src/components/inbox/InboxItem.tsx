@@ -66,6 +66,7 @@ import { ApprovalActions } from "../Chat/ApprovalActions";
 import { ApprovalBatchConfirm } from "../Chat/ApprovalBatchConfirm";
 import { ApprovalCardView } from "../Chat/ApprovalCardView";
 import { parseApprovalCard, planApprovalBatch, type ApprovalBatchPlan } from "@/lib/approvalCard";
+import { LinkifiedText } from "../Chat/LinkifiedText";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
@@ -75,6 +76,7 @@ import { isUnownedStorage, StorageAction, totalHeldBytes } from "./StorageAction
 import { reclaimDetail, WorktreeReclaimAction } from "./WorktreeReclaimAction";
 import { MarkedWorktreeAction, markedDetail, markedTitle } from "./MarkedWorktreeAction";
 import { RecoveryAction } from "./RecoveryAction";
+import { mobileChatPath, runPath, settingsPath } from "@/lib/paths";
 
 /** How long "Already handled" shows before the row leaves. */
 export const ALREADY_HANDLED_MS = 2000;
@@ -535,13 +537,13 @@ function RunLink({
   const mobile = useSurface() === "mobile";
   if (mobile) {
     return (
-      <Link to="/m/chats/$chatId" params={{ chatId }} className={className} title={title}>
+      <Link to={mobileChatPath(chatId)} className={className} title={title}>
         {children}
       </Link>
     );
   }
   return (
-    <Link to="/workflows/runs/$runId" params={{ runId: chatId }} className={className} title={title}>
+    <Link to={runPath(chatId)} className={className} title={title}>
       {children}
     </Link>
   );
@@ -631,13 +633,13 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
           node: (
             <>
               <span className="text-muted-foreground">Not blocking · </span>
-              {prompt}
+              <LinkifiedText text={prompt} />
             </>
           ),
           title,
         };
       }
-      return prompt ? { node: prompt, title: prompt } : null;
+      return prompt ? { node: <LinkifiedText text={prompt} />, title: prompt } : null;
     }
     case "waitingForMachine": {
       const text = `${machineName(payload.value.daemonName, payload.value.daemonId)} is asleep`;
@@ -888,7 +890,7 @@ function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
       return <MarkedWorktreeAction item={payload.value} />;
     case "orgProviderKeyRejected":
       return (
-        <a href="/settings/org-ai-accounts" className={actionButtonClass}>
+        <a href={settingsPath("org-ai-accounts")} className={actionButtonClass}>
           Fix key
         </a>
       );
@@ -897,7 +899,7 @@ function InlineAction({ item, expanded, onToggle }: InlineActionProps) {
       // change its model or resume it.
       if (payload.value.ownerUserId) {
         return (
-          <a href="/settings/org-ai-accounts" className={actionButtonClass}>
+          <a href={settingsPath("org-ai-accounts")} className={actionButtonClass}>
             Add org account
           </a>
         );
@@ -941,12 +943,22 @@ function Expansion({
       <CardInset padding="sm" className="space-y-3">
         {apartReason && <p className="text-xs text-warning-ink">{apartReason}</p>}
         <ApprovalCardView title={title} hideLead={nested} />
-        <ApprovalRowAction
-          approvalId={item.payload.value.approvalId}
-          itemId={item.itemId}
-          subject={subject}
-          onFailure={onRaceOrError}
-        />
+        {parseApprovalCard(title).connectionProposal ? (
+          <ProposalRowAction
+            approvalId={item.payload.value.approvalId}
+            itemId={item.itemId}
+            chatId={item.chatId}
+            subject={subject}
+            onFailure={onRaceOrError}
+          />
+        ) : (
+          <ApprovalRowAction
+            approvalId={item.payload.value.approvalId}
+            itemId={item.itemId}
+            subject={subject}
+            onFailure={onRaceOrError}
+          />
+        )}
       </CardInset>
     );
   }
@@ -1000,6 +1012,57 @@ function ApprovalRowAction({
         onApprove={() => void act("approve")}
         onDeny={() => void act("deny")}
       />
+    </div>
+  );
+}
+
+/**
+ * An agent's connection proposal: approved only by making the connection in
+ * its chat's card (ConnectionProposalCard), so the Inbox opens the chat, or
+ * declines it here.
+ */
+function ProposalRowAction({
+  approvalId,
+  itemId,
+  chatId,
+  subject,
+  onFailure,
+}: {
+  approvalId: string;
+  itemId: string;
+  chatId: string;
+  subject: string;
+  onFailure: (verb: string) => (error: unknown) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const queryClient = useQueryClient();
+  const decide = useInboxApprovalActions();
+  const decline = async () => {
+    setBusy(true);
+    try {
+      await decide.deny(approvalId, { denialReason: "Declined" });
+      removeInboxItems([itemId], queryClient);
+    } catch (error) {
+      onFailure("deny")(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <p className="mr-auto text-xs text-muted-foreground">Connect it from its chat: making the connection approves it.</p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void decline()}
+        aria-label={`Decline ${subject}`}
+        className="h-7 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-destructive-ink hover:bg-foreground/5 disabled:opacity-50"
+      >
+        Decline
+      </button>
+      <RunLink chatId={chatId} className={actionButtonClass}>
+        Open chat
+      </RunLink>
     </div>
   );
 }

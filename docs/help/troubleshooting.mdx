@@ -1,6 +1,7 @@
 ---
-title: "Troubleshooting"
-description: "Quick fixes for common issues"
+title: "Reliant troubleshooting: machines, sign-in, models, workflows"
+sidebarTitle: "Troubleshooting"
+description: "Fix common Reliant problems: machine offline or waking, sign-in, provider and API key errors, rate limits, billing blocks, GitHub clones and stuck workflows."
 ---
 
 Reliant is a cloud service with a machine in the middle: the app talks to Reliant's servers, and your agents do their work through a daemon on a machine, either your own computer or a Reliant cloud machine. Most problems come down to one of those links, so this page is organized the same way.
@@ -45,7 +46,7 @@ Try signing out and back in (**Settings → Account → Sign out**). If a provid
 
 ### "Claude session expired. Please reconnect"
 
-A provider login (Claude, Codex, Antigravity or GitHub Copilot) has expired, and the message names which one. Open **Settings → AI → Your providers**, choose the provider and sign in again.
+A provider login (Claude, Codex, Antigravity or GitHub Copilot) has expired, and the message names which one. Open **Settings → AI providers → Providers**, choose the provider and sign in again.
 
 ### The login button doesn't appear (web app)
 
@@ -53,7 +54,7 @@ Claude Code, Codex and Antigravity sign-in needs a small helper on your own comp
 
 ### "Invalid API key"
 
-Check that the key is complete, belongs to the right provider, and hasn't been revoked. **Test Connection** in **Settings → AI** shows the provider's own error.
+Check that the key is complete, belongs to the right provider, and hasn't been revoked. **Test Connection** in **Settings → AI providers** shows the provider's own error.
 
 ### Rate limit or quota errors
 
@@ -61,7 +62,7 @@ These come from your model provider. When a provider's usage limit is hit, the c
 
 ### A local model isn't listed or won't load
 
-Local models (Ollama, LM Studio and others) are reached through a daemon on the machine that runs the model server. Check that the daemon is online (see above), that the model server is running, and that **Settings → AI → Custom & local models** lists it. If Ollama answers but the agent behaves badly, raise its **Context length** setting. See [AI Providers](/settings/api-keys#local-models).
+Local models (Ollama, LM Studio and others) are reached through a daemon on the machine that runs the model server. Check that the daemon is online (see above), that the model server is running, and that **Settings → AI providers → Local & custom** lists it. If Ollama answers but the agent behaves badly, raise its **Context length** setting. See [AI Providers](/settings/api-keys#local-models).
 
 ### Responses are slow
 

@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { FolderGit2 } from "lucide-react";
 import { useProjects } from "../../hooks/project-queries";
 import { useProjectStore } from "../../store/projectStore";
+import { settingsPath } from "@/lib/paths";
 
 /**
  * The project a project-scoped settings page (Prompts, MCP servers, Branches)
@@ -45,7 +46,7 @@ export function SettingsProjectScope({ hint }: { /** What the scope decides, for
         No projects yet.
         <button
           type="button"
-          onClick={() => void navigate({ to: "/settings/$section", params: { section: "projects" } })}
+          onClick={() => void navigate({ to: settingsPath("projects") })}
           className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         >
           Add a project

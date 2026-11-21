@@ -37,8 +37,8 @@ func TestPendingPoller_StartsOnlyWhenTheLinkIsReady(t *testing.T) {
 	require.Empty(t, mgr.commands, "nothing is drained into a link that has not proven itself")
 	mgr.mu.Unlock()
 
-	bridge.OnDaemonLinkReady(pendingDrainUser, "laptop", "", "", "")
-	bridge.OnDaemonLinkReady(pendingDrainUser, "laptop", "", "", "") // once is enough
+	bridge.OnDaemonLinkReady(pendingDrainUser, "laptop", "", "", "", "")
+	bridge.OnDaemonLinkReady(pendingDrainUser, "laptop", "", "", "", "") // once is enough
 	require.Eventually(t, msg.wasAcked, 5*time.Second, time.Millisecond, "the queued command is delivered once the link is ready")
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()

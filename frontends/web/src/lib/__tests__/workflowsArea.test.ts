@@ -7,10 +7,13 @@
  * the retired Automations paths mapped to their new homes.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+import { useActiveOrgStore } from "@/store/activeOrgStore";
+import { resetConfigForTests } from "@/lib/config_gen";
 
 import {
-  ON_WORKFLOWS_HREF,
+  onWorkflowsHref,
   WORKFLOWS_TABS,
   automationHref,
   automationRedirectPath,
@@ -47,12 +50,36 @@ describe("workflowsArea", () => {
     expect(legacyWorkflowsPath("/workflow")).toBe("/workflows/library");
     expect(legacyWorkflowsPath("/runs/c1")).toBe("/workflows/runs/c1");
     // The Automations tab was the Workflows list narrowed to what is on, everywhere.
-    expect(legacyWorkflowsPath("/automations")).toBe(ON_WORKFLOWS_HREF);
-    expect(legacyWorkflowsPath("/workflows/automations")).toBe(ON_WORKFLOWS_HREF);
-    expect(ON_WORKFLOWS_HREF).toBe("/workflows/library?show=on&allProjects=true");
+    expect(legacyWorkflowsPath("/automations")).toBe(onWorkflowsHref());
+    expect(legacyWorkflowsPath("/workflows/automations")).toBe(onWorkflowsHref());
+    expect(onWorkflowsHref()).toBe("/workflows/library?show=on&allProjects=true");
     expect(legacyWorkflowsPath("/automations/t1")).toBe("/workflows/automations/t1");
     // The resolving redirect itself is a route, not a mapping.
     expect(legacyWorkflowsPath("/workflows/automations/t1")).toBeNull();
     expect(legacyWorkflowsPath("/workflows/library")).toBeNull();
+  });
+
+  it("carries a retired path's id over as the URL had it", () => {
+    expect(legacyWorkflowsPath("/runs")).toBe("/workflows/runs");
+    expect(legacyWorkflowsPath("/runs/a%2Fb")).toBe("/workflows/runs/a%2Fb");
+    expect(legacyWorkflowsPath("/automations/t%252F1")).toBe("/workflows/automations/t%252F1");
+  });
+
+  it("keeps a run or automation id org-less with web.org_routes on: its own org decides (U4)", () => {
+    // A node test: the runtime config comes from the environment (config_gen.ts).
+    vi.stubEnv("ORG_ROUTES", "true");
+    resetConfigForTests();
+    useActiveOrgStore.setState({ effectiveId: "org-1", segments: { "org-1": "acme" } });
+    try {
+      expect(legacyWorkflowsPath("/runs/c1")).toBe("/workflows/runs/c1");
+      expect(legacyWorkflowsPath("/automations/t1")).toBe("/workflows/automations/t1");
+      // The lists are the tab's org's.
+      expect(legacyWorkflowsPath("/runs")).toBe("/o/acme/workflows/runs");
+      expect(legacyWorkflowsPath("/workflow")).toBe("/o/acme/workflows/library");
+    } finally {
+      useActiveOrgStore.setState({ effectiveId: null, segments: {} });
+      vi.unstubAllEnvs();
+      resetConfigForTests();
+    }
   });
 });

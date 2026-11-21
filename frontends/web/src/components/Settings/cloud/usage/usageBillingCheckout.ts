@@ -1,8 +1,9 @@
 import { buildCheckoutReturnUrls } from "@/lib/stripeCheckout";
+import { settingsPath } from "@/lib/paths";
 
 /** Hosting returns must never be interpreted as a machine checkout success. */
 export function usageBillingReturnUrls() {
-  const { successUrl, cancelUrl } = buildCheckoutReturnUrls("/settings/billing", { tab: "usage" });
+  const { successUrl, cancelUrl } = buildCheckoutReturnUrls(settingsPath("billing"), { tab: "usage" });
   const clean = (value: string) => {
     const url = new URL(value);
     url.searchParams.delete("checkout");

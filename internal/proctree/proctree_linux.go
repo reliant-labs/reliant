@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -59,8 +60,9 @@ func New(cfg Config) *Limiter {
 		return l
 	}
 	// Leftovers of an earlier daemon, made before the commands cgroup
-	// existed or in it.
-	sweep(l.root, true, nil)
+	// existed or in it. Never this process's own: another limiter of it may
+	// hold cgroups prepared for commands not yet started (reliant #2826).
+	sweep(l.root, false)
 	commands, err := makeCommandsCgroup(l.root, commandsName, l.size.Shared)
 	if err != nil {
 		l.commands = l.root
@@ -68,7 +70,7 @@ func New(cfg Config) *Limiter {
 		return l
 	}
 	l.commands = commands
-	sweep(l.commands, true, nil)
+	sweep(l.commands, false)
 	if err := enableCPU(l.root, l.commands); err != nil {
 		logging.Warn("proctree: cannot enable the cpu controller for command cgroups; heavy commands are bounded by GOMAXPROCS alone", "error", err)
 	}
@@ -76,7 +78,8 @@ func New(cfg Config) *Limiter {
 }
 
 // enableCPU enables the cpu controller for the command cgroups, so a heavy
-// command's slot wrapper can cap its own cgroup at its CPU share (cpu.max,
+// command's slot wrapper can enable it in turn for a cgroup it makes under
+// its command cgroup, and cap that at its CPU share (cpu.max,
 // internal/heavyjob). Both levels hold no process of their own (the daemon is
 // in root's self/), as cgroup v2 requires.
 func enableCPU(root, commands string) error {
@@ -201,39 +204,93 @@ func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {
 	t.dir, t.fd = dir, fd
 }
 
+// cgroupVanished reports whether err, from starting the tree's command, is
+// the kernel refusing the clone into the tree's cgroup because the cgroup was
+// removed: ENOENT for a removed cgroup, ENODEV for one dying, and the cgroup
+// directory gone. A missing program or working directory is ENOENT too, but
+// leaves the cgroup in place.
+func (t *Tree) cgroupVanished(err error) bool {
+	if t == nil || t.dir == "" {
+		return false
+	}
+	if !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.ENODEV) {
+		return false
+	}
+	_, statErr := os.Stat(t.dir)
+	return errors.Is(statErr, os.ErrNotExist)
+}
+
+// recreateCgroup gives the tree a new cgroup, under a new name, in place of
+// the one that vanished before its command started (cgroupVanished). One that
+// cannot be made leaves the command uncgrouped, as Prepare does.
+func (t *Tree) recreateCgroup(cmd *exec.Cmd, err error) {
+	gone := t.dir
+	t.closeFD()
+	t.dir = ""
+	cmd.SysProcAttr.UseCgroupFD, cmd.SysProcAttr.CgroupFD = false, 0
+	t.l.drop(gone)
+	t.prepareCgroup(cmd, cgroupSeq.Add(1))
+	logging.Warn("proctree: a command's cgroup was removed before the command started in it; starting it again in a new one",
+		"chat_id", t.owner.ChatID, "command", t.owner.Command, "removed", gone, "cgroup", t.dir, "error", err)
+}
+
+// The command cgroups of the trees prepared and not yet released, which every
+// sweep of this process's empty command cgroups leaves alone: a tree's cgroup
+// is empty from Prepare until its command starts in it, and a start into a
+// removed cgroup fails ENOENT, which os/exec reports as "fork/exec <path>: no
+// such file or directory" (reliant #2416). Process-wide, like the names
+// (cgroupSeq): a second limiter's sweep must spare the first's holds too
+// (reliant #2826).
+var (
+	heldMu sync.Mutex
+	held   = map[string]struct{}{}
+)
+
 // hold sweeps this process's empty command cgroups and creates dir, held
 // until drop: under one lock, so a concurrent Prepare's sweep can never take
 // a cgroup between its creation and its command's start.
 func (l *Limiter) hold(dir string) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	sweep(l.commands, false, l.held)
+	heldMu.Lock()
+	defer heldMu.Unlock()
+	sweep(l.commands, true)
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		return err
 	}
-	if l.held == nil {
-		l.held = map[string]struct{}{}
-	}
-	l.held[dir] = struct{}{}
+	held[dir] = struct{}{}
 	return nil
 }
 
 // drop releases a cgroup hold made, and removes the cgroup once empty. One
 // its command left processes in stays until they exit; a later sweep takes it.
 func (l *Limiter) drop(dir string) {
-	l.mu.Lock()
-	delete(l.held, dir)
-	l.mu.Unlock()
-	if err := os.Remove(dir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EBUSY) {
+	heldMu.Lock()
+	delete(held, dir)
+	heldMu.Unlock()
+	if err := removeCgroup(dir); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.EBUSY) {
 		logging.Debug("proctree: cannot remove a command cgroup", "dir", dir, "error", err)
 	}
 }
 
+// removeCgroup removes the cgroup dir and, first, the empty cgroups under it:
+// a heavy command's slot wrapper makes two in its command's cgroup and removes
+// them when the command exits (internal/heavyjob), but a wrapper that was
+// killed leaves them, and a cgroup with children cannot be removed. One still
+// holding a process stays, and so does dir.
+func removeCgroup(dir string) error {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.IsDir() {
+			_ = removeCgroup(filepath.Join(dir, e.Name()))
+		}
+	}
+	return os.Remove(dir)
+}
+
 // sweepOwn sweeps this process's empty command cgroups, sparing the held ones.
 func (l *Limiter) sweepOwn() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	sweep(l.commands, false, l.held)
+	heldMu.Lock()
+	defer heldMu.Unlock()
+	sweep(l.commands, true)
 }
 
 func (t *Tree) closeFD() {
@@ -360,13 +417,14 @@ func refusals(dir string) (n uint64, exact bool) {
 }
 
 // sweep removes this package's empty command cgroups in dir. At start-up
-// (all) it takes those of earlier daemons too, though not those of a daemon
-// still running (a daemon an agent started for development makes its command
-// cgroups beside the ones of the daemon that runs the agent); afterwards only
-// this daemon's, whose commands may have left processes behind when they were
-// released. It spares the cgroups in keep (Limiter.held): those of trees not
-// yet released, which are empty until their command starts.
-func sweep(dir string, all bool, keep map[string]struct{}) {
+// (!own, New) it takes those of earlier daemons that have exited, though not
+// those of a daemon still running (a daemon an agent started for development
+// makes its command cgroups beside the ones of the daemon that runs the
+// agent), and never this process's own. Afterwards (own) it takes only this
+// process's, whose commands may have left processes behind when they were
+// released, sparing the held ones: those of trees not yet released, which are
+// empty until their command starts. With own, the caller holds heldMu.
+func sweep(dir string, own bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
@@ -383,15 +441,16 @@ func sweep(dir string, all bool, keep map[string]struct{}) {
 		if err != nil {
 			continue
 		}
-		if pid != self && (!all || !errors.Is(unix.Kill(pid, 0), unix.ESRCH)) {
-			continue
-		}
 		sub := filepath.Join(dir, name)
-		if _, held := keep[sub]; held {
+		if own {
+			if _, isHeld := held[sub]; pid != self || isHeld {
+				continue
+			}
+		} else if pid == self || !errors.Is(unix.Kill(pid, 0), unix.ESRCH) {
 			continue
 		}
 		if !populated(sub) {
-			_ = os.Remove(sub)
+			_ = removeCgroup(sub)
 		}
 	}
 }

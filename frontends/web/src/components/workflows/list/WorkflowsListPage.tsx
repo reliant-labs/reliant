@@ -34,7 +34,6 @@ import { automationCounts, automationUnits, unitsNeedingYou } from "@/lib/automa
 import { describeSchedule, describeTriggerSource } from "@/lib/cronText";
 import { describeDeclaredSource, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
-import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { WORKFLOWS_SHOW_KEYS, type LibrarySearch, type LibrarySortKey, type WorkflowsShowKey } from "@/routeSchemas";
 import {
   useCopyWorkflow,
@@ -74,6 +73,7 @@ import {
   type WorkflowListRow,
 } from "./workflowsView";
 import { AutomationsFundingBanner } from "../../Automations/AutomationsFundingBanner";
+import { newWorkflowPath, workflowBuilderPath, workflowLibraryPath } from "@/lib/paths";
 
 type ShowChoice = WorkflowsShowKey | "all";
 
@@ -103,7 +103,7 @@ function useWorkflowsSearch(): [LibrarySearch, (next: LibrarySearch) => void] {
     const compacted = Object.fromEntries(
       Object.entries(next).filter(([, value]) => value !== undefined && value !== ""),
     ) as LibrarySearch;
-    void navigate({ to: WORKFLOWS_LIBRARY_PATH, search: compacted, replace: true });
+    void navigate({ to: workflowLibraryPath(), search: compacted, replace: true });
   };
   return [search, set];
 }
@@ -185,7 +185,7 @@ function WorkflowsHeader({ projectId }: { projectId?: string }) {
                       <Plus className="h-4 w-4" aria-hidden="true" />
                     </span>
                   ),
-                  onClick: () => void navigate({ to: "/workflow/new" }),
+                  onClick: () => void navigate({ to: newWorkflowPath() }),
                 },
               ]
             : []
@@ -460,7 +460,7 @@ function WorkflowsBody() {
     if (row.missing) return actions;
     actions.push({
       label: "Edit",
-      onSelect: () => void navigate({ to: "/workflow/$workflowName", params: { workflowName: workflow.name } }),
+      onSelect: () => void navigate({ to: workflowBuilderPath(workflow.name) }),
     });
     if (!projectId) return actions;
     actions.push({
@@ -475,7 +475,7 @@ function WorkflowsBody() {
             toast.success(`Created "${result.slug}" from "${displayName}"`);
             // The copy is for editing, so open it.
             if (result.slug) {
-              void navigate({ to: "/workflow/$workflowName", params: { workflowName: result.slug } });
+              void navigate({ to: workflowBuilderPath(result.slug) });
             }
           },
           onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to copy workflow"),
@@ -617,7 +617,7 @@ function WorkflowsBody() {
               None of your own yet. Start from a built-in, or{" "}
               <button
                 type="button"
-                onClick={() => void navigate({ to: "/workflow/new" })}
+                onClick={() => void navigate({ to: newWorkflowPath() })}
                 className="font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 create your own

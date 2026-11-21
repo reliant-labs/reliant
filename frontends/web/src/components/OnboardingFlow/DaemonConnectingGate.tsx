@@ -34,6 +34,7 @@ import { classifyDaemonWait } from "@/lib/daemon-wait";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { DaemonStatus, type DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { daemonListQuery } from "@/hooks/daemon-registry-queries";
+import { machineSettingsPath, settingsPath } from "@/lib/paths";
 
 /**
  * How long to keep waiting before offering the failure CTAs.
@@ -238,8 +239,8 @@ export function DaemonConnectingGate({
     // machine's detail view when we know its id.
     const goToEnvironments = () =>
       daemon?.daemonId
-        ? navigate({ to: "/settings/machines/$machineId", params: { machineId: daemon.daemonId } })
-        : navigate({ to: "/settings/$section", params: { section: "machines" } });
+        ? navigate({ to: machineSettingsPath(daemon.daemonId) })
+        : navigate({ to: settingsPath("machines") });
 
     return (
       <div

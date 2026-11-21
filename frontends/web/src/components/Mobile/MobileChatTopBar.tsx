@@ -15,6 +15,7 @@ import { ChevronDown, ChevronLeft, FolderGit2, Loader2 } from "lucide-react";
 import { ContextUsageIndicator } from "../Chat/ContextUsageIndicator";
 import { FLOATING_BAR_SURFACE, FLOATING_TOP_EDGE, useFloatingChrome } from "../Chat/floatingChrome";
 import { cn } from "../../lib/utils";
+import { mobileChatsPath } from "@/lib/paths";
 
 /**
  * The ring earns a slot in the bar only once compaction is close enough to
@@ -56,6 +57,7 @@ interface MobileChatTopBarProps {
    */
   listPaneVisible?: boolean;
   noMachine?: boolean;
+  machineName?: string;
   contextUsage?: ContextUsage | null;
   /** Present when the chat has a workspace to open. */
   onOpenWorkspace?: () => void;
@@ -69,14 +71,15 @@ export function MobileChatTopBar({
   onBackToThread,
   listPaneVisible = false,
   noMachine,
+  machineName,
   contextUsage,
   onOpenWorkspace,
 }: MobileChatTopBarProps) {
-  // One line of status, and only status: a quiet chat gets a single-line bar.
+  // Keep placement and any live status on one line under the title.
   const status = [
     runningWorkflow ? `Running · ${runningWorkflow}` : null,
     subThread ? `Thread: ${subThread.name}` : null,
-    noMachine ? "No machine" : null,
+    noMachine ? "No machine" : machineName ? `Machine: ${machineName}` : null,
   ].filter(Boolean).join(" · ");
   const ratio = contextUsageRatio(contextUsage);
   const hasBack = (subThread && onBackToThread) || !listPaneVisible;
@@ -105,7 +108,7 @@ export function MobileChatTopBar({
           <ChevronLeft className="h-5 w-5" />
         </button>
       ) : !listPaneVisible ? (
-        <Link to="/m/chats" className={ICON_BUTTON} aria-label="Back to chats">
+        <Link to={mobileChatsPath()} className={ICON_BUTTON} aria-label="Back to chats">
           <ChevronLeft className="h-5 w-5" />
         </Link>
       ) : null}

@@ -56,6 +56,8 @@ import { surfaceForPath } from "../../lib/surface";
 import { lazyRoute } from "../../lib/lazyRoute";
 import { logger } from "../../lib/logger";
 import { SequenceHint } from "../Layout/SequenceHint";
+import { homePath, projectPath, settingsPath, workflowsPath } from "@/lib/paths";
+import { orgFreeRouteId } from "@/lib/paths/org";
 
 // Loaded on first open (and warmed once the host is live): they would
 // otherwise ride in the entry chunk to every unauthenticated page.
@@ -108,12 +110,14 @@ export function shortcutScope({
   pathname: string;
   signedIn: boolean;
 }): ShortcutScope {
+  // The org tree mounts the same layouts under `/o/$org` (routes.tsx).
+  const ids = routeIds.map(orgFreeRouteId);
   const enabled =
     signedIn &&
     surfaceForPath(pathname) === "desktop" &&
-    routeIds.some((id) => id === WORKSPACE_LAYOUT || id === APP_LAYOUT) &&
-    !routeIds.some((id) => EXCLUDED_ROUTES.has(id));
-  return { enabled, workspace: enabled && routeIds.includes(WORKSPACE_LAYOUT) };
+    ids.some((id) => id === WORKSPACE_LAYOUT || id === APP_LAYOUT) &&
+    !ids.some((id) => EXCLUDED_ROUTES.has(id));
+  return { enabled, workspace: enabled && ids.includes(WORKSPACE_LAYOUT) };
 }
 
 type Overlay =
@@ -208,9 +212,9 @@ function createHostCore(
     // The chat workspace's URL carries the sidebar's project filter.
     const projectId = useWorkspaceStateStore.getState().projectFilterId;
     if (projectId) {
-      void navigate({ to: "/project/$projectId", params: { projectId }, search: {} });
+      void navigate({ to: projectPath(projectId), search: {} });
     } else {
-      void navigate({ to: "/", search: {} });
+      void navigate({ to: homePath(), search: {} });
     }
   };
 
@@ -304,9 +308,9 @@ function createHostCore(
     onSwitchChat: () => openOverlay({ kind: "chat-search", mode: "history" }),
     onToggleSettings: () => {
       if (live.current.pathname.startsWith("/settings")) navigateToWorkspace();
-      else void live.current.navigate({ to: "/settings" });
+      else void live.current.navigate({ to: settingsPath() });
     },
-    onOpenWorkflows: () => void live.current.navigate({ to: "/workflows" }),
+    onOpenWorkflows: () => void live.current.navigate({ to: workflowsPath() }),
     onOpenProject: addProject,
     onSwitchProject: switchProject,
     // The file viewer whose editor has a selection claims the event and adds

@@ -1,3 +1,4 @@
+import { authPath } from "@/lib/paths";
 // No SDK/router/logger imports: this runs before they can observe the initial URL.
 type CallbackCredentials = Partial<Record<"code" | "token_hash" | "error" | "error_description", string>>;
 const CREDENTIAL_KEYS = new Set([
@@ -74,7 +75,7 @@ export function captureOAuthCallbackCredentials(): void {
       const message = document.createElement("p");
       message.textContent = "We couldn't complete sign-in safely in this browser. Please restart sign-in.";
       const restart = document.createElement("a");
-      restart.href = "/auth";
+      restart.href = authPath();
       restart.textContent = "Restart sign-in";
       root.replaceChildren(message, restart);
     }

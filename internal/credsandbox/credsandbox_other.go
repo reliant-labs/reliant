@@ -41,6 +41,10 @@ func ensureCredScratch() error {
 	return errors.New("the credentials sandbox is implemented for Linux only")
 }
 
+// PruneMovedAside has nothing to prune here: no scratch is ever made, so none
+// is moved aside.
+func PruneMovedAside() (int, error) { return 0, nil }
+
 // Dispatch refuses the helper argument: the helper exists on Linux only.
 func Dispatch() {
 	dispatched.Store(true)

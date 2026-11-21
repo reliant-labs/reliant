@@ -15,8 +15,10 @@ interface ResizableSidebarProps {
 
 export function ResizableSidebar({
   children,
-  defaultWidth = 240,
-  minWidth = 240,
+  // The left nav's --sidebar-w and --sidebar-min-w (index.css LAYOUT
+  // TOKENS); a saved width is kept.
+  defaultWidth = 256,
+  minWidth = 224,
   maxWidth = 800,
   className = '',
   side = 'left',
@@ -134,9 +136,9 @@ export function ResizableSidebar({
     <div
       ref={sidebarRef}
       className={cn("relative bg-background border-border flex h-full flex-shrink-0", borderClass, className)}
-      style={{ width: `${width}px`, flexShrink: 0, backgroundColor: 'hsl(var(--background))' }}
+      style={{ width: `${width}px`, flexShrink: 0 }}
     >
-      <div className="flex-1 flex flex-col overflow-hidden bg-background" style={{ backgroundColor: 'hsl(var(--background))' }}>
+      <div className="flex-1 flex flex-col overflow-hidden bg-background">
         {children}
       </div>
       

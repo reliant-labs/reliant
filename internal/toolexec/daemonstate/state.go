@@ -140,6 +140,84 @@ type State struct {
 	// a known-bad daemon safe to start a 30-minute run against.
 	Sessions         int       `json:"sessions,omitempty"`
 	LastDisconnectAt time.Time `json:"last_disconnect_at,omitempty"`
+
+	// Upgrade is where the daemon is in a restart the platform asked for
+	// (the drain protocol); nil when none is in progress. A record left
+	// behind with Upgrade.State UpgradeExited is a daemon that exited to be
+	// restarted onto a newer build, not one that stopped: a supervisor
+	// polling this file (Electron) reads it instead of seeing the daemon
+	// vanish.
+	Upgrade *Upgrade `json:"upgrade,omitempty"`
+}
+
+// UpgradeExited is Upgrade.State once the daemon has exited to restart for an
+// update. The live states are the protocol's (DaemonUpgradeState, lowercased
+// without its prefix: "updating", "drained", "awaiting_owner", "failed").
+const UpgradeExited = "upgrading"
+
+// Upgrade is the record's account of a requested restart.
+type Upgrade struct {
+	State         string    `json:"state"`
+	Since         time.Time `json:"since"`
+	Deadline      time.Time `json:"deadline,omitempty"`
+	TargetVersion string    `json:"target_version,omitempty"`
+	RolloutID     string    `json:"rollout_id,omitempty"`
+	Detail        string    `json:"detail,omitempty"`
+}
+
+// SetUpgrade records the daemon's state in a requested restart; nil clears it.
+// Since is stamped when the state changes.
+func SetUpgrade(dataDir string, u *Upgrade) error {
+	if dataDir == "" {
+		return nil
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	state, err := read(dataDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no record to annotate: an embedded runtime
+		}
+		return err
+	}
+	if u != nil {
+		next := *u
+		next.Since = time.Now().UTC()
+		if state.Upgrade != nil && state.Upgrade.State == next.State {
+			next.Since = state.Upgrade.Since
+		}
+		u = &next
+	}
+	state.Upgrade = u
+	return write(dataDir, state)
+}
+
+// MarkUpgradeExit replaces Clear for a daemon exiting to be restarted onto a
+// newer build: the record stays, its stream is recorded ended with detail, and
+// its Upgrade.State becomes UpgradeExited. The next daemon's Init overwrites
+// it.
+func MarkUpgradeExit(dataDir, detail string) error {
+	if dataDir == "" {
+		return nil
+	}
+	if err := SetStream(dataDir, StreamDisconnected, detail); err != nil {
+		return err
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	state, err := read(dataDir)
+	if err != nil {
+		return err
+	}
+	up := Upgrade{}
+	if state.Upgrade != nil {
+		up = *state.Upgrade
+	}
+	up.State = UpgradeExited
+	up.Since = time.Now().UTC()
+	up.Detail = detail
+	state.Upgrade = &up
+	return write(dataDir, state)
 }
 
 // StabilityWindow is how recently the stream must have been unbroken for it to

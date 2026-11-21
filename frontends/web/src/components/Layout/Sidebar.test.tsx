@@ -62,6 +62,14 @@ const mockChatListData = [
 ];
 
 const mockArchivedChatData: Array<Record<string, unknown>> = [];
+// The archived read's paging state, and the chat detail useChat answers.
+const mockArchivedPaging = { hasNextPage: false, isFetchingNextPage: false, fetchNextPage: vi.fn() };
+const mockUseArchivedChats = vi.fn((_options?: { enabled?: boolean }) => ({
+  data: mockArchivedChatData,
+  isFetched: true,
+  ...mockArchivedPaging,
+}));
+let mockOpenedChat: Record<string, unknown> | undefined;
 
 // Stable, as a query result is: a new array each render would re-run the
 // sidebar's effects on every render.
@@ -72,12 +80,12 @@ vi.mock("../../hooks/chat-queries", () => ({
     data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
-  useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
+  useArchivedChats: (options?: { enabled?: boolean }) => mockUseArchivedChats(options),
   usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
   useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
-  useChat: () => ({ data: undefined }),
+  useChat: () => ({ data: mockOpenedChat }),
 }));
 
 // The Inbox nav item reads its own counts; the Sidebar test only checks it is
@@ -107,6 +115,8 @@ describe("Sidebar selected chat scroll", () => {
     vi.clearAllMocks();
     scrollIntoViewMock.mockReset();
     mockArchivedChatData.length = 0;
+    mockArchivedPaging.hasNextPage = false;
+    mockOpenedChat = undefined;
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -219,7 +229,7 @@ describe("Sidebar selected chat scroll", () => {
     );
 
     // The active chat is a non-archived one, so the sidebar starts on "Active".
-    fireEvent.click(screen.getByLabelText("Sort chats"));
+    fireEvent.click(screen.getByTestId("project-filter-trigger"));
     fireEvent.click(screen.getByText("Archived chats"));
 
     const groupHeader = screen.getByText("Archived workspace");
@@ -233,6 +243,52 @@ describe("Sidebar selected chat scroll", () => {
     useWorkspaceStateStore.setState({ projectFilterId: null });
   });
 
+  it("reads the archived list only while the Archived tab is open, and pages it on request", () => {
+    mockArchivedChatData.push({
+      id: "chat-archived",
+      title: "Archived chat",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+      unread: false,
+      state: ChatState.ARCHIVED,
+      projectId: "project-1",
+    });
+    mockArchivedPaging.hasNextPage = true;
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    // Closed: every render asked for it disabled.
+    expect(mockUseArchivedChats.mock.calls.length).toBeGreaterThan(0);
+    for (const [options] of mockUseArchivedChats.mock.calls) expect(options).toEqual({ enabled: false });
+    expect(screen.queryByTestId("archived-load-more")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("project-filter-trigger"));
+    fireEvent.click(screen.getByText("Archived chats"));
+    expect(mockUseArchivedChats.mock.calls.at(-1)?.[0]).toEqual({ enabled: true });
+
+    fireEvent.click(screen.getByTestId("archived-load-more"));
+    expect(mockArchivedPaging.fetchNextPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the Archived tab for an archived chat opened from elsewhere", () => {
+    // Opened from the Inbox: in no loaded list, archived by its own detail.
+    useChatStore.setState({ activeChatId: "chat-old" });
+    mockOpenedChat = { id: "chat-old", title: "Old work", state: ChatState.ARCHIVED, projectId: "project-1" };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    expect(mockUseArchivedChats.mock.calls.at(-1)?.[0]).toEqual({ enabled: true });
+    expect(screen.getByRole("region", { name: "Archived chats" })).toBeInTheDocument();
+  });
+
   it("closes the list menu after choosing an option, and on Escape", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -244,17 +300,21 @@ describe("Sidebar selected chat scroll", () => {
     );
 
     // Picking an option is a complete interaction — the menu should dismiss.
-    fireEvent.click(screen.getByLabelText("Sort chats"));
+    // The Chats heading then reads "Archived", with Back to the active list.
+    fireEvent.click(screen.getByTestId("project-filter-trigger"));
     fireEvent.click(screen.getByText("Archived chats"));
     expect(screen.queryByText("Archived chats")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent("Archived");
+    fireEvent.click(screen.getByTestId("chat-list-back"));
+    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent("Chats");
 
     // Sort options dismiss too.
-    fireEvent.click(screen.getByLabelText("Sort chats"));
-    fireEvent.click(screen.getByText("Newest First"));
-    expect(screen.queryByText("Newest First")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("project-filter-trigger"));
+    fireEvent.click(screen.getByText("Newest first"));
+    expect(screen.queryByText("Newest first")).not.toBeInTheDocument();
 
     // Escape still dismisses without choosing anything.
-    fireEvent.click(screen.getByLabelText("Sort chats"));
+    fireEvent.click(screen.getByTestId("project-filter-trigger"));
     expect(screen.getByText("Archived chats")).toBeInTheDocument();
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByText("Archived chats")).not.toBeInTheDocument();
@@ -270,7 +330,7 @@ describe("Sidebar selected chat scroll", () => {
       </QueryClientProvider>
     );
 
-    fireEvent.click(screen.getByLabelText("View options"));
+    fireEvent.click(screen.getByTestId("project-filter-trigger"));
     fireEvent.click(screen.getByText("Flat list"));
     expect(screen.queryByText("Flat list")).not.toBeInTheDocument();
   });
@@ -287,14 +347,15 @@ describe("Sidebar selected chat scroll", () => {
       </QueryClientProvider>
     );
 
-    // A truncated name is still readable in full, on hover.
-    expect(screen.getByText("Selected chat")).toHaveAttribute("title", "Selected chat");
+    // A truncated name is still readable in full, on hover, with when it
+    // last changed: the row has no time column.
+    expect(screen.getByText("Selected chat").getAttribute("title")).toMatch(/^Selected chat\nUpdated .+ ago$/);
     const workspaceTitle = screen.getByText("feature/test");
     expect(workspaceTitle).toHaveAttribute("title", "feature/test");
 
     // The workspace header's New chat and Archive: display:none until the
     // header is hovered or focused, never a transparent box holding width.
-    const header = workspaceTitle.closest(".group\\/header") as HTMLElement;
+    const header = workspaceTitle.closest(".group\\/ws") as HTMLElement;
     const hoverOnly = Array.from(header.querySelectorAll("button")).filter(
       (b) => !b.contains(workspaceTitle) && b.querySelector(".lucide-plus, .lucide-archive"),
     );
@@ -303,15 +364,17 @@ describe("Sidebar selected chat scroll", () => {
       expect(button.className).not.toMatch(/opacity-0/);
       const wrapper = button.parentElement!;
       expect(wrapper.className).toMatch(/(^|\s)hidden(\s|$)/);
-      expect(wrapper.className).toContain("group-hover/header:inline-flex");
-      expect(wrapper.className).toContain("group-focus-within/header:inline-flex");
+      expect(wrapper.className).toContain("group-hover/ws:flex");
+      expect(wrapper.className).toContain("group-focus-within/ws:flex");
     }
 
-    // The chat row's More options likewise.
+    // The chat row's More options likewise, and it is the row's only hover
+    // control: Archive is in the menu it opens, not one click away.
     const row = screen.getByText("Selected chat").closest("[data-chat-id]") as HTMLElement;
     const more = row.querySelector('button[aria-haspopup="menu"]')!.closest("div")!;
     expect(more.className).toMatch(/(^|\s)hidden(\s|$)/);
-    expect(more.className).toContain("group-hover:block");
+    expect(more.className).toContain("group-hover/chat:flex");
+    expect(row.querySelector(".lucide-archive")).toBeNull();
   });
 
   it("renders Codex-style navigation actions and calls their handlers", () => {
@@ -335,13 +398,16 @@ describe("Sidebar selected chat scroll", () => {
     );
 
     expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
-    // Inbox is in the nav with its badge; its position (after Apps) is pinned in Sidebar.forge-nav.test.tsx.
+    // Inbox is in the nav with its badge; its position (before Apps) is pinned in Sidebar.forge-nav.test.tsx.
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
     expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
     // No "Projects" page to go to: the project is the chat list's filter.
     expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
-    expect(screen.getByTestId("project-filter-label")).toHaveTextContent("All projects");
+    // Unfiltered, the list's heading is just "Chats"; a filter would name its project there.
+    expect(screen.getByTestId("chat-list-heading")).toHaveTextContent(/^Chats$/);
+    expect(screen.queryByTestId("project-filter-label")).toBeNull();
+    expect(screen.getByTestId("project-filter-trigger")).toHaveAccessibleName("Chat list options. Showing All projects");
     expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
     // Automations and Runs are tabs of the Workflows area now (§1.2), not
     // sidebar entries of their own.

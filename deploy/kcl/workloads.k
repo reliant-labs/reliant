@@ -203,3 +203,63 @@ daemon_gateway = fw.Workload {
 } | _pod | config_gen.root_of("gateway")
 
 ALL: [fw.Workload] = [migrate, api_server, temporal_worker, daemon_gateway]
+
+# ── What reliant builds and ships, but never runs ───────────────────────────
+#
+# Artifacts, not processes: each is `kind = "tool"` on `forge.BuildOnly`, so
+# no env runs it and `ALL` above (what control-plane binds) does not name it.
+# An env builds one only when it lists it.
+
+# The production server image: the root Dockerfile, which compiles
+# ./cmd/reliant in a glibc builder and packages it on debian (the one image
+# every server role runs; the Dockerfile's header says why the builder's libc
+# is load-bearing). The four server workloads above keep their GoBuild, which
+# is what a host env runs; this is the image a cluster pulls.
+#
+# The Dockerfile's version stamp is five build args (VERSION, COMMIT,
+# BUILD_DATE, BRANCH, COMMIT_TIME). Their values are per build, so the env that
+# binds this passes them (`server_image_build`), never this declaration. forge
+# passes a DockerBuild only the build_args declared here, plus its own
+# SOURCE_DATE_EPOCH and --provenance=false (reproducible digests); it stamps
+# nothing itself.
+#
+# `pgo` is left at its default on purpose. The Dockerfile's `go build` takes
+# Go's own -pgo=auto, which would read cmd/reliant/default.pgo if one were
+# committed (none is), and it declares no FORGE_PGO_* ARG, so `pgo` here could
+# only change what `forge pgo pull` reads. That has nowhere to read from: no
+# reliant env runs the server under forge observability (prod runs it from
+# control-plane), so the profiles live there.
+#
+# No `inputs_file` either. At the forge this repo pins, `inputs_file` (like
+# ShellBuild's `inputs`) drives build reuse only for a ShellBuild; a
+# DockerBuild accepts the field and ignores it, so declaring the image's inputs
+# here would claim a reuse that never happens.
+# Every `forge env build` runs the docker build (BuildKit's layer cache is the
+# only reuse). Reported to forge as "DockerBuild ignores inputs_file/inputs".
+server_image_build = lambda build_args: {str: str} -> forge.DockerBuild {
+    forge.DockerBuild {
+        dockerfile = "Dockerfile"
+        build_args = build_args
+    }
+}
+
+server_image = fw.Workload {
+    name = "reliant-image"
+    kind = "tool"
+    runtime = forge.BuildOnly {}
+    build = server_image_build({})
+}
+
+# The Delve image: Dockerfile.debug, the server binary built without
+# optimisations (-gcflags=all=-N -l) and run under a headless dlv
+# (scripts/dlv-entrypoint.sh), for attaching a debugger to a reliant role in a
+# cluster. A developer's tool, never a release artifact: no `image`, so it is
+# a local image that nothing pushes. dev/main.k binds it only under
+# `-D debug_image=true`, because `forge env up dev` builds every build-only
+# workload it binds and dev needs no docker.
+debug_image = fw.Workload {
+    name = "reliant-debug-image"
+    kind = "tool"
+    runtime = forge.BuildOnly {}
+    build = forge.DockerBuild {dockerfile = "Dockerfile.debug"}
+}

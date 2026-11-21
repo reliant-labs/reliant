@@ -143,6 +143,13 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		}
 	}
 
+	// A trigger that names no workflow runs its owner's default one. Name it
+	// here, as the launcher would, so everything below reads a real workflow:
+	// the empty name resolved to an error that went back to Temporal, and the
+	// fire retried until it gave up and recorded nothing (north-star AW-18).
+	// Only this fire's copy is named; the row still follows the default.
+	trigger = withDefaultWorkflow(ctx, f.launcher, trigger)
+
 	// A pool-bound trigger reads everything below from its pool's agreed
 	// catalog, the one its run is placed on.
 	bound, catalog, wait, err := bindPoolCatalog(ctx, f.pools, trigger)
@@ -238,15 +245,21 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	}
 	policy, err := capacityPolicy(ctx, workflows, trigger)
 	if err != nil {
-		return nil, err
+		if retryableRead(err) || resuming {
+			return nil, err
+		}
+		// A workflow that does not resolve fails every retry the same way:
+		// record it rather than let the fire retry out with no trace.
+		return f.failPermanently(ctx, rec, fmt.Sprintf("workflow %q cannot be resolved: %v", trigger.Workflow, err), err)
 	}
-	maxRunning, capped, err := capacityLimit(ctx, f.pools, trigger, policy)
+	limits, capped, err := capacityLimits(ctx, f.pools, trigger, policy)
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil && existing.Outcome == core.TriggerEventPending && existing.CapacityOrder != nil && !capped {
 		return f.recordSkip(ctx, rec, "queued workflow capacity policy was removed")
 	}
+	limits.ExpiredBefore = capacityExpiredBefore(f.now())
 	if !capped && enforcePolicy && sched.SkipOnOverlap() {
 		// Checked inside the launch transaction under a row lock on the
 		// trigger, so fires released together after an outage cannot all
@@ -260,15 +273,18 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		if existing != nil {
 			row = existing
 		}
-		row.CapacityKey = capacityKey(ctx, policy, row, func() triggerspec.Scope {
+		capacityAdmission(ctx, policy, row, func() triggerspec.Scope {
 			return ActivationScope(ctx, f.repo, trigger, decl, FilterInput{
 				Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
 				OccurredAt: req.ScheduledAt, Payload: ev.Payload, Sender: ev.Sender,
 			}.Root())
 		})
-		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, maxRunning, &spec); err != nil {
+		if err := prepareCapacity(ctx, f.repo, f.capacity, trigger, row, limits, &spec); err != nil {
 			if capacitySettled(err) {
 				return f.recordSkip(ctx, rec, err.Error())
+			}
+			if errors.Is(err, errCapacityExpired) {
+				return f.recordOutcome(ctx, rec, core.TriggerEventFailed, capacityExpiredDetail)
 			}
 			return nil, err
 		}
@@ -291,6 +307,9 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 			reason = declined.Reason
 		}
 		if reason == capacityWaiting {
+			if capped {
+				f.wake.wakeNext(ctx, f.repo, trigger, limits, ev.Kind, ev.DedupeKey)
+			}
 			return &FireOutput{Outcome: string(core.TriggerEventPending), Reason: reason}, nil
 		}
 		if isPoolWaiting(reason) {
@@ -303,7 +322,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		// transaction as the chat. Writing one here too would either conflict
 		// on (kind, dedupe_key) or, worse, succeed and double-count.
 		if capped {
-			f.wake.wakeNext(ctx, f.repo, trigger, res.EventID)
+			f.wake.wakeNext(ctx, f.repo, trigger, limits, ev.Kind, ev.DedupeKey)
 		}
 		return &FireOutput{
 			Outcome: string(core.TriggerEventLaunched),
@@ -477,7 +496,7 @@ func (f *Firer) buildSpec(ctx context.Context, trigger *core.Trigger, sched *Sch
 		}
 		values = merged
 	}
-	prompt, err := SeedPrompt(trigger, decl, scope)
+	prompt, err := LaunchPrompt(trigger, decl, scope)
 	if err != nil {
 		return launch.Spec{}, err
 	}
@@ -636,6 +655,18 @@ func (f *Firer) recordOutcome(
 
 // failPermanently records a failed event and ends the fire without retries:
 // the trigger can never launch as written.
+// withDefaultWorkflow is t with its workflow named: t itself when it names
+// one, else a copy naming the workflow launcher would run (the owner's
+// default setting, else the system default).
+func withDefaultWorkflow(ctx context.Context, launcher Launcher, t *core.Trigger) *core.Trigger {
+	if t == nil || t.Workflow != "" || launcher == nil {
+		return t
+	}
+	named := *t
+	named.Workflow = launcher.ResolveDefaultWorkflow(ctx, t.UserID, "")
+	return &named
+}
+
 func (f *Firer) failPermanently(ctx context.Context, rec fireRecord, detail string, cause error) (*FireOutput, error) {
 	if _, err := f.recordOutcome(ctx, rec, core.TriggerEventFailed, detail); err != nil {
 		return nil, err

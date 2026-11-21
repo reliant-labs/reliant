@@ -13,17 +13,13 @@ service ToolCallService {
   // CancelToolCall cancels an executing tool call
   // This sets the chat cancellation flag which propagates to the workflow
   rpc CancelToolCall(CancelToolCallRequest) returns (CancelToolCallResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-turn agent control: the cancelled call records its own outcome"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-turn agent control: the cancelled call records its own outcome"}};
   }
 
   // ConvertToBackground converts an executing tool call to a background process
   // This allows the tool to continue running while the workflow can proceed
   rpc ConvertToBackground(ConvertToBackgroundRequest) returns (ConvertToBackgroundResponse) {
-    option (forge.v1.method) = {
-      activity: {none: "per-turn agent control: moves an in-flight tool call to a background process"}
-    };
+    option (forge.v1.method) = {activity: {none: "per-turn agent control: moves an in-flight tool call to a background process"}};
   }
 }
 

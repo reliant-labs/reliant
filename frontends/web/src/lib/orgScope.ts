@@ -1,5 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
+import type { QueryClient, QueryKey } from "@tanstack/react-query";
+
+import { getRouteOrgScope, useRouteOrgScope, type RouteOrgScope } from "@/lib/routeOrg";
 import { hasControlPlane } from "@/services/controlPlane/config";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 
@@ -18,6 +21,13 @@ import { useActiveOrgStore } from "@/store/activeOrgStore";
  *   - `orgId` is that org, or null to name none. Lists put it in their request
  *     (`orgRequest`), so the generated query key names it too, and the request
  *     sent is the one the key describes.
+ *
+ * On an org page (`/o/<org>/…`) the org is the committed route's
+ * (lib/routeOrg.ts), not the tab's store: a navigation into another org that
+ * is still loading changes nothing here until it commits, and an org page
+ * whose org is pending or denied is never ready, so it names no org and never
+ * falls back to the previous one. Outside the org tree the tab's org applies,
+ * as below.
  *
  * With no control plane there are no orgs, and signed out there is nothing to
  * list (the lists wait for a session themselves): both are ready, naming none.
@@ -44,7 +54,9 @@ const UNRESOLVED: OrgScope = { ready: false, orgId: null, error: null, retry: no
 
 type Failure = ReturnType<typeof useActiveOrgStore.getState>["failure"];
 
-function scopeOf(userId: string | null, effectiveId: string | null, resolved: boolean, failure: Failure): OrgScope {
+function scopeOf(route: RouteOrgScope, userId: string | null, effectiveId: string | null, resolved: boolean, failure: Failure): OrgScope {
+  if (route.kind === "member") return stableScope(route.org.id);
+  if (route.kind !== "legacy") return UNRESOLVED;
   if (!hasControlPlane || userId === null) return NO_ORGS;
   if (effectiveId === null) {
     if (resolved) return NO_ORGS;
@@ -53,10 +65,24 @@ function scopeOf(userId: string | null, effectiveId: string | null, resolved: bo
   return stableScope(effectiveId);
 }
 
+/**
+ * For a hook that reads "the caller's org" through a query of its own (the
+ * observability and identity reads, whose keys name no org): the committed
+ * org page's org; null on an org page that names none (pending or denied);
+ * undefined outside the org tree, where the hook reads it as before. So on an
+ * org page that hook is the route's org at the same render as the keys and
+ * the interceptor, never a cached answer for the org the tab was in before.
+ */
+export function useRouteOrgIdOverride(): string | null | undefined {
+  const route = useRouteOrgScope((s) => s.scope);
+  if (route.kind === "member") return route.org.id;
+  return route.kind === "legacy" ? undefined : null;
+}
+
 /** The org scope right now, for code outside React. */
 export function getOrgScope(): OrgScope {
   const { userId, effectiveId, resolved, failure } = useActiveOrgStore.getState();
-  return scopeOf(userId, effectiveId, resolved, failure);
+  return scopeOf(getRouteOrgScope(), userId, effectiveId, resolved, failure);
 }
 
 /** The org scope, re-rendering when it changes. The same object for an unchanged scope. */
@@ -65,7 +91,8 @@ export function useOrgScope(): OrgScope {
   const effectiveId = useActiveOrgStore((s) => s.effectiveId);
   const resolved = useActiveOrgStore((s) => s.resolved);
   const failure = useActiveOrgStore((s) => s.failure);
-  return scopeOf(userId, effectiveId, resolved, failure);
+  const route = useRouteOrgScope((s) => s.scope);
+  return scopeOf(route, userId, effectiveId, resolved, failure);
 }
 
 const scopes = new Map<string, OrgScope>();
@@ -101,16 +128,19 @@ export function whenOrgScopeReady(): Promise<OrgScope> {
   if (now.ready) return Promise.resolve(now);
   if (now.error) return Promise.reject(now.error);
   return new Promise((resolve, reject) => {
-    const unsubscribe = useActiveOrgStore.subscribe(() => {
+    // Either store can make it ready: the tab's org, or the route's commit.
+    const check = () => {
       const scope = getOrgScope();
       if (scope.ready) {
-        unsubscribe();
+        stop();
         resolve(scope);
       } else if (scope.error) {
-        unsubscribe();
+        stop();
         reject(scope.error);
       }
-    });
+    };
+    const unsubscribes = [useActiveOrgStore.subscribe(check), useRouteOrgScope.subscribe(check)];
+    const stop = () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   });
 }
 
@@ -190,6 +220,25 @@ export function keepPreviousInOrg(orgId: string | null) {
 export function keepPreviousInOrgSegment(orgId: string | null) {
   return <T>(previous: T | undefined, previousQuery?: { queryKey: readonly unknown[] }): T | undefined =>
     orgId && previousQuery && previousQuery.queryKey.includes(orgId) ? previous : undefined;
+}
+
+/**
+ * After the tab's org moved off `left` (a switch, or a reconcile away from a
+ * saved choice): drop the answers cached under `queryKey` and re-read what is
+ * on screen, in the new org.
+ *
+ * A query whose key names `left` is removed, never refetched. Its observers
+ * are still attached to it when this runs: TanStack Query moves an observer
+ * to its new key in an effect, and ActiveOrgBinding's effect runs before the
+ * screen's. A refetch would send `left`'s request again (its key and request
+ * name `left`), and its answer is one nothing will show. The screen's own
+ * effect then reads the new org's key. Every other query is reset and
+ * refetched: its key names no org, so the request goes out in the
+ * transport's org, which is already the new one.
+ */
+export function resetAfterLeavingOrg(client: QueryClient, queryKey: QueryKey, left: string | null): Promise<void> {
+  if (left) client.removeQueries({ queryKey, predicate: (query) => keyNamesOrg(query.queryKey, left) });
+  return client.resetQueries({ queryKey });
 }
 
 /**

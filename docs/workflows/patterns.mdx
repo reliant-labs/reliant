@@ -34,7 +34,6 @@ Long-running agents accumulate large contexts. Two techniques help:
 ```yaml
 - id: compact
   type: compact
-  args:
 
 edges:
   - from: execute_tools
@@ -473,7 +472,7 @@ Reach for parallel loops when:
 ```yaml
 - id: analyze_each_file
   type: loop
-  ref: builtin://researcher
+  ref: researcher
   parallel: true
   items: "{{inputs.files}}"
   key: "{{iter.item.path}}"
@@ -500,7 +499,7 @@ The `on_failure` field controls what happens when an iteration errors out:
 ```yaml
 - id: batch_process
   type: loop
-  ref: builtin://processor
+  ref: processor
   parallel: true
   items: "{{inputs.batch}}"
   key: "{{iter.item.id}}"
@@ -516,7 +515,7 @@ Each parallel iteration runs in its own thread — that's what makes them indepe
 ```yaml
 - id: parallel_drafts
   type: loop
-  ref: builtin://drafter
+  ref: drafter
   parallel: true
   items: "{{inputs.topics}}"
   key: "{{iter.item}}"

@@ -5,7 +5,7 @@
 # release gate (scripts/release-gate.sh), on main, before a release is cut.
 # dev-docs/merge-and-release-gates.md is the design and the trade-offs.
 #
-#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--skip-lint] [--queue]
+#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--skip-lint] [--skip-golangci] [--queue]
 #
 #   --base <rev>  diff base (default: the merge-base of HEAD and origin/main)
 #   --amend       a regenerate that changes only generated paths is amended
@@ -15,13 +15,18 @@
 #                 merge queue resolved a generated-file conflict)
 #   --skip-lint   leave vet and the scoped forge lint to the release gate,
 #                 which runs both over the whole module; nothing else changes:
-#                 the diff base, buf lint and the compat checks are the merge
-#                 tier's (control-plane's pr-fix gates a PR branch with it,
-#                 control-plane#2189).
+#                 the diff base, golangci, buf lint and the compat checks are
+#                 the merge tier's (control-plane's pr-fix gates a PR branch
+#                 with it, control-plane#2189). golangci stays because the
+#                 queue's golangci (changed) job ejects a PR on its findings.
+#   --skip-golangci  leave golangci to a golangci (changed) job beside this
+#                 gate (ci.yml's ci:run pull request runs one); nothing else
+#                 changes. --queue implies it.
 #   --queue       the merge queue's tier (.github/workflows/merge-queue.yml),
 #                 whose budget is five minutes of wall time (owner, 2026-11-01):
-#                 vet is left to the release gate (the queue's golangci
-#                 (changed) job runs beside this gate), plus queue-entry
+#                 vet is left to the release gate and golangci to the queue's
+#                 golangci (changed) job, which runs the same script beside
+#                 this gate on its own runner, plus queue-entry
 #                 semantics: buf lint runs only when a proto or buf config
 #                 changed, and check-compat.sh (CI_QUEUE_ENTRY=1) judges only
 #                 the entry's own single-parent squash against HEAD^, so never
@@ -58,8 +63,20 @@
 #              when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error
+#   golangci   scripts/golangci-changed.sh --base <the gate's base>: golangci-lint
+#              over the packages with a changed .go file, findings in the files
+#              the diff changed, the root .golangci.yml, the pinned forge's
+#              golangci-lint release (none on PATH, or another release, fails
+#              the phase with the install command, which the summary prints). It is the very script, with the
+#              same base, that the merge queue's golangci (changed) job runs, so
+#              the two cannot disagree; that job ejected #2857 and #2873 on
+#              findings nothing before the queue ran (owner, 2026-11-18; Reliant
+#              bug 67d80734). Only when the diff adds or changes a .go file
+#              (untracked ones included), and in every tier but --queue and
+#              --skip-golangci, where a golangci (changed) job runs beside it
 #   lint       forge lint's own lanes (named, --optional-deps-guard among them;
-#              no golangci-lint or buf lint, which the release gate runs)
+#              no golangci-lint, the phase above, or buf lint, which the
+#              release gate runs)
 #              --scope <changed dirs>, a pin move included, in every tier but
 #              --skip-lint;
 #              like build and test it starts after the generators in --amend
@@ -74,7 +91,7 @@
 #              first, fail closed), only when a migration changed
 # When the gate may rewrite the tree it judges (--amend, or a dirty tree),
 # generate and docs run FIRST, in place, and only then do build, test,
-# typecheck, lint and migsafety run, at the same time, on the regenerated tree:
+# typecheck, golangci, lint and migsafety run, at the same time, on the regenerated tree:
 # a stale generated file (a mock the merge left a step behind) must never be
 # built and tested before the regenerate that fixes it. On a clean tree without
 # --amend the generators cannot change what is judged, so they run in scratch
@@ -91,13 +108,15 @@ set -uo pipefail
 # `set -u` an empty array expands as unbound unless written ${a[@]+"${a[@]}"}.
 cd "$(git rev-parse --show-toplevel)" || exit 2
 
-base="" amend=0 regen=0 queue=0 skip_lint=0
+base="" amend=0 regen=0 queue=0 skip_lint=0 skip_golangci=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) base=$2; shift 2 ;;
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
     --skip-lint) skip_lint=1; shift ;;
+    # A golangci (changed) job runs beside the gate: the queue's, or ci.yml's.
+    --skip-golangci) skip_golangci=1; shift ;;
     # The queue tier skips vet (below), never forge lint.
     --queue) queue=1; shift ;;
     -h|--help) awk 'NR > 1 && /^set -uo pipefail/ { exit } NR > 1' "$0"; exit 0 ;;
@@ -108,6 +127,7 @@ done
 # vet is the release gate's under --skip-lint and in the queue, where the
 # golangci (changed) job beside the gate runs the changed packages' linters.
 skip_vet=0; { [ "$skip_lint" = 1 ] || [ "$queue" = 1 ]; } && skip_vet=1
+[ "$queue" = 1 ] && skip_golangci=1
 
 export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}"
 # A gate must not rewrite the clone's git config (forge's merge driver).
@@ -115,10 +135,11 @@ export FORGE_NO_MERGE_DRIVER=1
 
 # ── one heavy slot for the whole gate ─────────────────────────────────────
 # Slots are machine-wide, so any forge with `forge slot` will do: FORGE_BIN
-# (the pin) when set, else the forge on PATH.
-slotforge=${FORGE_BIN:-forge}
-if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "$slotforge" slot status --class heavy >/dev/null 2>&1; then
-  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$queue" = 1 ] && echo --queue)
+# (the pin) when set, else the forge on PATH, else `reliant forge`
+# (scripts/forge.sh --machine; never a `go run`).
+read -r -a slotforge <<<"$(scripts/forge.sh --machine --which 2>/dev/null || true)"
+if [ "${#slotforge[@]}" -gt 0 ] && [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "${slotforge[@]}" slot status --class heavy >/dev/null 2>&1; then
+  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "${slotforge[@]}" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$skip_golangci" = 1 ] && echo --skip-golangci) $([ "$queue" = 1 ] && echo --queue)
 fi
 t0=$(date +%s)
 slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
@@ -168,10 +189,13 @@ L=${MG_LOGDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/reliant-merge-gate/$(date -u +%Y%
 mkdir -p "$L"
 echo "$slot_wait" >"$L/slot_wait"
 # gate-verify reads the tier: --skip-lint's is obliged to neither vet nor
-# lint, the queue's to lint but not vet.
+# lint, the queue's to lint but not vet. golangci-elsewhere: a golangci
+# (changed) job beside the gate runs golangci, so the gate is not obliged to.
 if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"; elif [ "$queue" = 1 ]; then echo queue >"$L/tier"; fi
-pin=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml | head -1)
-if [ -n "${FORGE_BIN:-}" ]; then forge=("$FORGE_BIN"); else forge=(env GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@$pin"); fi
+[ "$skip_golangci" = 1 ] && echo "a golangci (changed) job beside the gate runs it" >"$L/golangci-elsewhere"
+# The pinned forge of the checkout it runs in: FORGE_BIN, a forge on PATH at
+# the pin, `reliant forge`, or `go run …@<pin>` (scripts/forge.sh).
+forge=("$PWD/scripts/forge.sh")
 # Paths generators write. A regenerate in --amend mode may change only these.
 gen_re='^gen/|^generated/|^docs/reference/[^/]*\.mdx$|^docs/changelog\.mdx$|^frontends/web/src/gen/|^\.forge/|^deploy/observability/|_gen(_test)?\.(go|json|ndjson|ts|k)$|^frontends/web/src/store/shortcutsData\.generated\.ts$|^internal/workflow/runtime/schema/field_descriptions\.go$|^internal/skills/catalog/builtin/workflow-builder/SKILL\.md$'
 
@@ -298,6 +322,9 @@ load_selection() {
   jq -e . "$run_plan" >/dev/null || return 1
   gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
   elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full) webdemo=$(j '.web_demo.full // false')
+  # The renderer's release build (tools/test-affected's web-build lane): a
+  # dependency, lockfile or vite config change (reliant#2850).
+  webbuild=$(j '.web_build.full // false')
   hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
   [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
   files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
@@ -306,7 +333,7 @@ load_selection() {
   if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
 }
 load_selection || exit 1
-notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
+notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo "FULL ($nweb reached file(s))" || echo "$nweb file(s)"); typecheck $typecheck; demo-build $webdemo; web-build $webbuild; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
 # npm_install <dir>: npm ci in <dir> unless its install is current; pnpm's
@@ -337,7 +364,7 @@ npm_install() {
 prepare_dependencies() {
   local d p
   local -a need=() npm_pids=()
-  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ]; then need+=(. frontends/web); fi
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ] || [ "$webdemo" = true ] || [ "$webbuild" = true ]; then need+=(. frontends/web); fi
   if [ "$elec" = true ]; then need+=(. electron); fi
   if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
   for d in $(printf '%s\n' ${need[@]+"${need[@]}"} | sort -u); do
@@ -461,8 +488,9 @@ build_check() {
   GOMAXPROCS=$quarter go list -export "${pkgs[@]}" >/dev/null
 }
 # The merge tier runs forge lint's own lanes, named, over the changed
-# directories; golangci-lint, buf lint and the whole-project and deploy lanes
-# run in the release gate's unscoped `forge lint`. Measured on one loaded host,
+# directories; golangci-lint over the changed packages is the golangci phase
+# (below), and buf lint, golangci over the rest of the module and the
+# whole-project and deploy lanes run in the release gate's unscoped `forge lint`. Measured on one loaded host,
 # the same two-directory scope: every default lane 331s (golangci the bulk;
 # 405s average, 2735s unscoped on a pin move, in the merge queue), these lanes
 # 41s. A pin move no longer unscopes it: what a new forge or module version
@@ -507,6 +535,11 @@ if [ "$fail" = 0 ]; then
   if [ "$webdemo" = true ]; then
     phase demo demo_build & pids+=($!)
   fi
+  # The renderer's release bundle: what vitest and tsc -b cannot judge, a
+  # dependency the bundler refuses (#2829's `node:module`, reliant#2850).
+  if [ "$webbuild" = true ]; then
+    phase webbuild scripts/web-release-build.sh & pids+=($!)
+  fi
   # The changed files' directories, minus nested Go modules (sdk/go): see
   # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.
   scope=$(echo "$files" | scripts/lint-scope.sh)
@@ -514,17 +547,39 @@ if [ "$fail" = 0 ]; then
     notes+=("queue tier: golangci-lint on the changed packages is the golangci (changed) job beside this one; vet runs in the release gate$(echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$' || echo '; buf lint too (no proto changed)')")
   fi
   if [ "$skip_lint" = 1 ]; then
-    notes+=("--skip-lint: vet and forge lint run in the release gate")
+    notes+=("--skip-lint: vet and forge lint run in the release gate; golangci runs here")
   elif [ -n "$scope" ]; then
-    notes+=("lint: forge's own lanes over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s); golangci-lint and buf lint run in the release gate")
+    notes+=("lint: forge's own lanes over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s); golangci-lint is its own phase, buf lint runs in the release gate")
     phase lint env GOMAXPROCS="$quarter" "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" "${lint_lanes[@]}" & pids+=($!)
   else
     notes+=("lint: not run (only root files changed; the release gate lints the module)")
   fi
+  # golangci: the merge queue's golangci (changed) job, here, so a finding
+  # fails this gate instead of ejecting the PR from the queue (#2857, #2873;
+  # Reliant bug 67d80734). The same script with the same base, so the same
+  # packages, config, release and verdict. Only when the diff adds or changes
+  # a .go file, as that job's "Changed Go files" step decides (plus untracked
+  # files, which golangci-lint's --new-from-rev reads too). Not in --queue,
+  # nor under --skip-golangci (ci.yml's ci:run gate): a golangci (changed)
+  # job runs beside the gate on its own runner, so it would lint twice. Under --skip-lint too:
+  # that tier leaves vet and forge lint to the release gate, which ejects
+  # nothing, but the queue's golangci job ejects the PR. In the gate's own
+  # heavy slot it drops golangci-lint's machine lock (--in-slot), as forge
+  # lint does in a slot of its own; GOMAXPROCS is a quarter, like lint's.
+  gofiles=$( { git diff --name-only --diff-filter=ACMR "$base" -- '*.go'; git ls-files --others --exclude-standard -- '*.go'; } | sort -u)
+  if [ "$queue" = 1 ]; then :
+  elif [ "$skip_golangci" = 1 ]; then
+    notes+=("golangci: --skip-golangci; the golangci (changed) job beside this gate runs it")
+  elif [ -n "$gofiles" ]; then
+    phase golangci env GOMAXPROCS="$quarter" scripts/golangci-changed.sh --base "$base" ${MG_IN_SLOT:+--in-slot} & pids+=($!)
+  else
+    notes+=("golangci: not run (no .go file changed)")
+  fi
   if [ "$queue" != 1 ] || echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$'; then
     # buf lint, then buf breaking against the diff base: semver at major 1 (owner,
-    # 2026-11-05), so a wire break fails unless the owner applied breaking:approved
-    # (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
+    # 2026-11-05), so a wire break fails unless the owner accepted it with
+    # breaking:approved, applied by the owner or by the Reliant bot on the owner's
+    # instruction (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
     # CI_QUEUE_ENTRY judges only this entry's squash, against its own PR's labels.
     phase proto env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c 'task proto:lint && scripts/check-compat.sh proto' & pids+=($!)
   fi
@@ -538,7 +593,8 @@ if [ "$fail" = 0 ]; then
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     # A migration declaring forge:breaks-rollback also needs the owner's
-    # migration:breaks-rollback-approved label (scripts/check-compat.sh).
+    # migration:breaks-rollback-approved label, applied by the owner or by the
+    # Reliant bot on the owner's instruction (scripts/check-compat.sh).
     phase migsafety env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
   # A migration below main's newest is never applied and reliant's migrator
@@ -582,7 +638,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo lint proto vet migsafety migorder; do
+  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck demo golangci lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"

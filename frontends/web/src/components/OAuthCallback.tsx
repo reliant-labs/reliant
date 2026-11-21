@@ -9,6 +9,7 @@ import { logger } from "@/lib/logger";
 import { githubCredentialSync } from "@/lib/githubCredentialSync";
 import { GradientBackground } from "./GradientBackground";
 import { BrandMark } from "./icons/BrandMark";
+import { authPath, homePath } from "@/lib/paths";
 
 /**
  * The single landing pad for every identity round-trip, of which there are now
@@ -51,7 +52,7 @@ export function OAuthCallback() {
       void navigate({ href: search.returnTo });
       return;
     }
-    navigate({ to: "/", search: {} });
+    navigate({ to: homePath(), search: {} });
   };
 
   useEffect(() => {
@@ -187,7 +188,7 @@ export function OAuthCallback() {
           return;
         }
 
-        navigate({ to: "/", search: {} });
+        navigate({ to: homePath(), search: {} });
       } catch (err) {
         const failure = callbackExchangeFailure(err, "Authentication failed. Please start sign-in again.");
         logger.error("[OAuthCallback] Unexpected callback error", { stage: "callback", code: failure.code });
@@ -236,7 +237,7 @@ export function OAuthCallback() {
                 alreadyRegistered
                   ? goBack
                   : () =>
-                      navigate({ to: "/auth", search: { redirect: undefined } })
+                      navigate({ to: authPath(), search: { redirect: undefined } })
               }
               className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
             >

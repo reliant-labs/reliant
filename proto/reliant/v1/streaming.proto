@@ -220,6 +220,14 @@ message StreamChatUpdatesRequest {
   // updates. Live updates are always sent in full. Unset is
   // TOOL_BODY_MODE_FULL.
   optional ToolBodyMode tool_bodies = 4;
+  // Leave ChatSyncSnapshot.total unset (0) instead of counting the chat's
+  // messages. Nothing needs the total: paging is by has_more and oldest_seq.
+  // The count walks every message the chat has, spawns included, so on a
+  // chat of a million messages it took longer than the rest of the snapshot.
+  // Every first-party client sets this; unset keeps the exact total for
+  // clients that read it. A server older than this field ignores it and
+  // counts as before.
+  bool skip_total = 5;
 }
 
 // ChatStreamEvent is one frame of a chat's detail stream.
@@ -250,7 +258,11 @@ message ChatSyncSnapshot {
   repeated Message messages = 1; // Assembled messages with content blocks
   repeated ChatUpdateData other_updates = 2; // Non-message updates (approvals, threads, etc.)
   int64 latest_sequence = 3; // Latest sequence number for tracking
-  int32 total = 4; // Total message count
+  // Deprecated: set only when requested (StreamChatUpdatesRequest.skip_total
+  // unset); page with has_more and oldest_seq instead. The number of messages
+  // in the chat, never fewer than the snapshot holds. 0 when the request set
+  // skip_total.
+  int32 total = 4;
   bool has_more = 5; // Whether there are more messages to load
   int64 oldest_seq = 6; // Seq of oldest message (for pagination)
   // Context usage for compaction indicator

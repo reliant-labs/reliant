@@ -72,6 +72,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { useProjects } from "../../hooks/project-queries";
 import { useChatStore } from "../../store/chatStore";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
+import { onboardingPath } from "@/lib/paths";
 
 export function MobileShell() {
   const navigate = useNavigate();
@@ -91,7 +92,7 @@ export function MobileShell() {
   useEffect(() => {
     if (isUserLoading) return;
     if (!needsOnboarding) return;
-    navigate({ to: "/onboarding", search: (prev) => prev, replace: true });
+    navigate({ to: onboardingPath(), search: (prev) => prev, replace: true });
   }, [isUserLoading, needsOnboarding, navigate]);
 
   // Pick the context project the way the desktop shell does: the last one the

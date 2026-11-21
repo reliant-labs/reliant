@@ -555,6 +555,15 @@ type TriggerEvent struct {
 	// same key. Nil is FIFO (or a key that could not be rendered): the event
 	// supersedes nothing and nothing supersedes it.
 	CapacityKey *string
+	// CapacityRunningKey is the rendered concurrency key under
+	// max_running_per_key: the group whose running runs are capped. Nil when
+	// the workflow caps no key, or the key could not be rendered (the event
+	// then counts only against the workflow-wide cap).
+	CapacityRunningKey *string
+	// CapacityPriority is the evaluated concurrency.priority, fixed when the
+	// event enrolls: waiting events are admitted highest first, then by
+	// CapacityOrder. Nil is 0.
+	CapacityPriority *int64
 	// RunStatus is how the run this firing launched ended — one of the
 	// TriggerRun* values — recorded when that run, the one the trigger itself
 	// fired, reaches a terminal status. Empty while it is still going, and for

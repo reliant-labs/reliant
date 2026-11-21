@@ -4,7 +4,10 @@
 package proctree
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -88,7 +91,7 @@ func cgroupLimiter(t *testing.T, perCommand, shared int) *Limiter {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		sweep(commands, true, nil)
+		(&Limiter{commands: commands}).sweepOwn()
 		if err := os.Remove(commands); err != nil {
 			t.Errorf("removing the test's commands cgroup: %v", err)
 		}
@@ -116,6 +119,7 @@ func TestSweepSparesTheCgroupsOfUnreleasedTrees(t *testing.T) {
 	if err := l.hold(own(3)); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { l.drop(own(3)) })
 	if !exists(own(1)) {
 		t.Fatalf("a second Prepare's sweep removed the held cgroup %s: its command's start would fail ENOENT", own(1))
 	}
@@ -130,6 +134,111 @@ func TestSweepSparesTheCgroupsOfUnreleasedTrees(t *testing.T) {
 	l.sweepOwn()
 	if !exists(own(3)) {
 		t.Fatalf("a sweep removed the still-held cgroup %s", own(3))
+	}
+}
+
+// A command cgroup a killed slot wrapper left its two cgroups in
+// (internal/heavyjob) is still removed, by drop and by a sweep: a cgroup with
+// children cannot be removed until they are. Plain directories stand in for
+// cgroups.
+func TestDropAndSweepRemoveTheCgroupsLeftInACommandCgroup(t *testing.T) {
+	dir := t.TempDir()
+	l := &Limiter{commands: dir}
+	own := func(seq int) string { return filepath.Join(dir, fmt.Sprintf("%s%d-%d", cmdPrefix, os.Getpid(), seq)) }
+	leave := func(cg string) {
+		for _, child := range []string{"heavy-9-caller", "heavy-9-command"} {
+			if err := os.Mkdir(filepath.Join(cg, child), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := l.hold(own(1)); err != nil {
+		t.Fatal(err)
+	}
+	leave(own(1))
+	l.drop(own(1))
+	if _, err := os.Stat(own(1)); err == nil {
+		t.Fatalf("drop left %s, whose wrapper's cgroups are empty", own(1))
+	}
+
+	// Released while a leftover process kept it, emptied since.
+	if err := os.Mkdir(own(2), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	leave(own(2))
+	l.sweepOwn()
+	if _, err := os.Stat(own(2)); err == nil {
+		t.Fatalf("the sweep left %s, whose wrapper's cgroups are empty", own(2))
+	}
+}
+
+// A limiter built while another of this process holds a cgroup for a command
+// not yet started (a daemon runtime that starts again) leaves that cgroup
+// alone: New sweeps only the leftovers of daemons that have exited, no
+// limiter's sweep takes another's holds, and the two never name a cgroup
+// alike. New used to remove it, and the first limiter's command then failed
+// "fork/exec …: no such file or directory" (reliant #2826). Plain directories
+// stand in for cgroups: sweep treats one with no cgroup.events as empty.
+func TestANewLimiterSparesTheCgroupsThisProcessHolds(t *testing.T) {
+	root := t.TempDir()
+	commands := filepath.Join(root, commandsName)
+	if err := os.Mkdir(commands, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Writable twice over, as a cgroup's is: New writes it both for pids
+	// and for cpu.
+	if err := os.WriteFile(filepath.Join(commands, "cgroup.subtree_control"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	name := func(pid, seq int) string { return fmt.Sprintf("%s%d-%d", cmdPrefix, pid, seq) }
+	exists := func(p string) bool { _, err := os.Stat(p); return err == nil }
+
+	first := &Limiter{root: root, commands: commands}
+	// Sequence 0, which Prepare never names.
+	prepared := filepath.Join(commands, name(os.Getpid(), 0))
+	if err := first.hold(prepared); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { first.drop(prepared) })
+	// An exited daemon's leftovers, beside the commands cgroup and in it: a
+	// pid above pid_max belongs to no process.
+	data, err := os.ReadFile("/proc/sys/kernel/pid_max")
+	if err != nil {
+		t.Skip("no /proc/sys/kernel/pid_max: ", err)
+	}
+	pidMax, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leftovers := []string{filepath.Join(root, name(pidMax+1, 1)), filepath.Join(commands, name(pidMax+1, 2))}
+	for _, p := range leftovers {
+		if err := os.Mkdir(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	second := New(Config{CgroupRoot: root})
+	if second.commands != commands {
+		t.Fatalf("the second limiter's commands cgroup is %q, want %q (%s)", second.commands, commands, second.why)
+	}
+	if !exists(prepared) {
+		t.Fatalf("New removed %s, which another limiter of this process holds for a command not yet started: its start would fail ENOENT", prepared)
+	}
+	for _, p := range leftovers {
+		if exists(p) {
+			t.Fatalf("New left %s, an exited daemon's empty cgroup", p)
+		}
+	}
+	second.sweepOwn()
+	if !exists(prepared) {
+		t.Fatalf("the second limiter's sweep removed %s, which the first holds", prepared)
+	}
+
+	a := first.Prepare(exec.Command("true"), Owner{})
+	b := second.Prepare(exec.Command("true"), Owner{})
+	t.Cleanup(func() { a.Started(0); b.Started(0) })
+	if a.Cgroup() == "" || b.Cgroup() == "" || a.Cgroup() == b.Cgroup() {
+		t.Fatalf("the two limiters prepared commands in cgroups %q and %q: each needs one of its own", a.Cgroup(), b.Cgroup())
 	}
 }
 
@@ -159,6 +268,147 @@ func TestCommandsPreparedTogetherBothStart(t *testing.T) {
 	}
 }
 
+// A command whose cgroup was removed after Prepare made it starts anyway, in
+// a new cgroup, instead of failing "fork/exec …: no such file or directory"
+// (reliant #2826). A missing program still fails, with its own error, whether
+// or not the cgroup is there. Runs only where the daemon's cgroup is
+// delegated to this user.
+func TestStartRecreatesACgroupRemovedBeforeItsCommandStarted(t *testing.T) {
+	testkit.Slow(t, "starts real processes in a cgroup")
+	l := cgroupLimiter(t, 64, 1000)
+
+	cmd := exec.Command("cat", "/proc/self/cgroup")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	tree := l.Prepare(cmd, Owner{})
+	gone := tree.Cgroup()
+	if gone == "" {
+		t.Fatal("a prepared command has no cgroup")
+	}
+	// What a sweep that took a held cgroup did.
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if err := tree.Start(context.Background(), cmd); err != nil {
+		t.Fatalf("starting a command whose cgroup %s was removed: %v", gone, err)
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	tree.Release()
+	if now := tree.Cgroup(); now == "" || now == gone || !strings.Contains(out.String(), strings.TrimPrefix(now, cgroupFS)+"\n") {
+		t.Fatalf("the command ran in cgroup %q (/proc/self/cgroup %q), want a new one in place of %s", now, out.String(), gone)
+	}
+
+	for _, remove := range []bool{false, true} {
+		missing := exec.Command(filepath.Join(t.TempDir(), "no-such-program"))
+		tree := l.Prepare(missing, Owner{})
+		if remove {
+			if err := os.Remove(tree.Cgroup()); err != nil {
+				t.Fatal(err)
+			}
+		}
+		err := tree.Start(context.Background(), missing)
+		if !errors.Is(err, syscall.ENOENT) || !strings.Contains(err.Error(), "no-such-program") {
+			t.Fatalf("starting a missing program (cgroup removed: %v): %v, want its ENOENT", remove, err)
+		}
+		if _, err := os.Stat(tree.Cgroup()); tree.Cgroup() != "" && !os.IsNotExist(err) {
+			t.Fatalf("a command that did not start left its cgroup %s (%v)", tree.Cgroup(), err)
+		}
+	}
+}
+
+// Only a start refused because the tree's cgroup is gone is retried: a
+// missing program or working directory is ENOENT too, with the cgroup still
+// in place.
+func TestCgroupVanishedOnlyWhenTheCgroupIsGone(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, cmdPrefix+"1-1")
+	if err := os.Mkdir(present, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(dir, cmdPrefix+"1-2")
+	startErr := func(errno syscall.Errno) error {
+		return &os.PathError{Op: "fork/exec", Path: "/usr/bin/bash", Err: errno}
+	}
+	for _, c := range []struct {
+		name string
+		tree *Tree
+		err  error
+		want bool
+	}{
+		{"removed cgroup", &Tree{dir: gone}, startErr(syscall.ENOENT), true},
+		{"dying cgroup", &Tree{dir: gone}, startErr(syscall.ENODEV), true},
+		{"missing program or working directory", &Tree{dir: present}, startErr(syscall.ENOENT), false},
+		{"another error", &Tree{dir: gone}, startErr(syscall.EACCES), false},
+		{"no cgroup", &Tree{}, startErr(syscall.ENOENT), false},
+		{"no tree", nil, startErr(syscall.ENOENT), false},
+	} {
+		if got := c.tree.cgroupVanished(c.err); got != c.want {
+			t.Errorf("%s: cgroupVanished = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// renew makes a Cmd whose Start failed startable again, with every field the
+// caller set and its context: cancelling the context kills what the renewed
+// Cmd started, through the caller's pointer.
+func TestRenewMakesAFailedCmdStartable(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", `echo "$PROCTREE_RENEW" "$(pwd)"; exec sleep 300`)
+	cmd.Env = []string{"PROCTREE_RENEW=kept"}
+	cmd.Dir = filepath.Join(t.TempDir(), "missing")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	cmd.Stdout = w
+	if err := cmd.Start(); err == nil {
+		t.Fatal("a command in a missing directory started")
+	}
+	if err := cmd.Start(); err == nil || !strings.Contains(err.Error(), "already started") {
+		t.Fatalf("os/exec took a second Start of one Cmd (%v): renew is not needed", err)
+	}
+	cmd.Dir = t.TempDir()
+	renew(ctx, cmd)
+	err = cmd.Start()
+	_ = w.Close()
+	if err != nil {
+		t.Fatalf("starting the renewed command: %v", err)
+	}
+	line, err := bufio.NewReader(r).ReadString('\n')
+	if want := "kept " + cmd.Dir + "\n"; line != want {
+		t.Fatalf("the renewed command printed %q (%v), want %q", line, err, want)
+	}
+	cancel()
+	if err := cmd.Wait(); err == nil {
+		t.Fatal("cancelling the context did not kill the renewed command")
+	}
+}
+
+// renew keeps the program cmd names exactly: a relative Path, which execve
+// resolves in cmd.Dir, is not looked up again on $PATH or in the daemon's
+// directory, where it would name another program or none.
+func TestRenewKeepsARelativeProgramInTheCommandsDir(t *testing.T) {
+	dir := t.TempDir()
+	const name = "proctree-renew-tool"
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\necho ran in \"$(pwd)\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(context.Background(), "/bin/true")
+	cmd.Path, cmd.Args, cmd.Dir = name, []string{name}, dir
+	renew(context.Background(), cmd)
+	if cmd.Path != name || cmd.Err != nil || len(cmd.Args) != 1 || cmd.Args[0] != name {
+		t.Fatalf("renew changed the program: Path %q, Args %q, Err %v; want Path %q", cmd.Path, cmd.Args, cmd.Err, name)
+	}
+	out, err := cmd.Output()
+	if want := "ran in " + dir + "\n"; err != nil || string(out) != want {
+		t.Fatalf("the renewed command printed %q (%v), want %q", out, err, want)
+	}
+}
+
 // A delegated cgroup (the cloud entrypoint's /daemon) bounds each command to
 // its own pids.max, says so in LimitNote, kills it whole with cgroup.kill,
 // and is removed once empty. Runs only where the daemon's cgroup is
@@ -170,8 +420,14 @@ func TestCommandCgroupBoundsAndKillsTheTree(t *testing.T) {
 	if started >= 30 {
 		t.Fatalf("the forker started %d children under pids.max 30", started)
 	}
-	if note := tree.LimitNote(); !strings.Contains(note, "This command reached its thread limit (30 threads") || strings.Contains(note, "shared") {
-		t.Fatalf("LimitNote after the command's own limit refused it: %q", note)
+	// Before Linux 6.13 there is no pids.events.local, so refusals cannot tell the
+	// command's own limit from the shared one, and LimitNote names both (refused.either).
+	if _, err := os.Stat(filepath.Join(tree.Cgroup(), "pids.events.local")); err == nil {
+		if note := tree.LimitNote(); !strings.Contains(note, "This command reached its thread limit (30 threads") || strings.Contains(note, "shared") {
+			t.Fatalf("LimitNote after the command's own limit refused it: %q", note)
+		}
+	} else if note := tree.LimitNote(); !strings.Contains(note, "The kernel refused this command") || !strings.Contains(note, "its own (30 threads at once") {
+		t.Fatalf("LimitNote after a thread limit refused it, on a kernel without pids.events.local: %q", note)
 	}
 	tree.Release()
 	if _, err := os.Stat(tree.Cgroup()); !os.IsNotExist(err) {

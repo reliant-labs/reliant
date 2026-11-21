@@ -468,6 +468,30 @@ describe("toolBodies", () => {
   });
 });
 
+describe("skipTotal", () => {
+  it("ChatSession's stream asks the server not to count the chat", async () => {
+    const session = open().start();
+    await flush();
+    expect(server.chatStreams()[0]!.request).toMatchObject({ chatId: CHAT, skipTotal: true });
+    session.close();
+  });
+
+  it("a bare ChatStream counts by default, and skips only when asked", async () => {
+    for (const skipTotal of [undefined, false, true] as const) {
+      server = scriptedServer({});
+      const client = createReliantClient({ transport: server.transport, wake: noWake });
+      const stream = client.streams.chat({
+        callbacks: { onChatUpdate: () => {}, onChatSnapshot: () => {} },
+        skipTotal,
+      });
+      stream.subscribeToChat(CHAT);
+      await flush();
+      expect(server.chatStreams()[0]!.request.skipTotal).toBe(skipTotal === true);
+      stream.stop();
+    }
+  });
+});
+
 describe("fetchContentBlockBodies", () => {
   const body = (id: string) => ({ blockId: id, input: `input of ${id}` });
 

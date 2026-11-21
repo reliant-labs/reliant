@@ -35,6 +35,7 @@
 import { ConnectionService } from '@/gen/reliant/v1/connection_pb'
 import { connectionFromProto, type Connection } from '@/hooks/connection-queries'
 import { connectClient } from '@/lib/connect'
+import { connectionOAuthCallbackPath } from '@/lib/paths'
 
 // A flow is imperative (it navigates away, or waits on a desktop receiver),
 // not a cached read, so it calls the client directly. The dialog that started
@@ -42,7 +43,7 @@ import { connectClient } from '@/lib/connect'
 const client = connectClient(ConnectionService)
 
 /** The web route the API relays a browser flow to (Go: connections.AppCallbackPath). */
-export const CONNECTION_OAUTH_CALLBACK_PATH = '/connections/oauth/callback'
+export const CONNECTION_OAUTH_CALLBACK_PATH = connectionOAuthCallbackPath()
 
 type ConnectionOAuthBridge = {
   startConnectionOAuthReceiver?: () => Promise<{ flowId: string; redirectUri: string }>

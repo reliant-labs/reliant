@@ -54,6 +54,18 @@ var unattendedWithheld = []struct {
 		reason:    "unattended runs can't start, stop or resize machines",
 	},
 	{
+		// A machine pool decides where pool-bound runs execute; the tool
+		// refuses an unattended call even when a step names it.
+		withholds: toolNamed(ToolManageMachinePool),
+		reason:    "unattended runs can't define or delete machine pools",
+	},
+	{
+		// A connection proposal is a card a person completes in the
+		// connection dialog; with nobody attending it could only wait.
+		withholds: toolNamed(ToolProposeConnection),
+		reason:    "unattended runs can't ask a person to connect an integration",
+	},
+	{
 		// An integration action that changes something outside Reliant —
 		// posts to Slack, sends an email or a text, opens or comments on an
 		// issue, makes an HTTP request — puts unvetted text in front of other

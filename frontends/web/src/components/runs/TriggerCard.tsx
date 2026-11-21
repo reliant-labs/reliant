@@ -29,6 +29,7 @@ import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { formatClock, launchContextOf } from "./launchContext";
 import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { LaunchKindIcon } from "./LaunchKindIcon";
+import { runPath } from "@/lib/paths";
 
 interface TriggerCardProps {
   launchKind?: string | null;
@@ -164,7 +165,7 @@ export function TriggerCard({
               {parent && (
                 <>
                   {" in "}
-                  <Link to="/workflows/runs/$runId" params={{ runId: parent.chatId }} className={linkClass}>
+                  <Link to={runPath(parent.chatId)} className={linkClass}>
                     {parent.title || "another run"}
                   </Link>
                 </>

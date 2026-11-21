@@ -144,4 +144,28 @@ func (s *UnattendedGiveUpSuite) runGiveUp(yamls map[string]string) {
 	s.True(record.Ran, "a run that gave up FAILED, so its on_failure handler runs")
 	s.Contains(record.Error, "no servable provider", "and it is told why")
 	s.Empty(record.HandlerError, "the handler itself runs cleanly")
+
+	// The run's rows were written paused when it paused itself. Before the
+	// handler runs they are un-paused, as a self-resume does: a paused row
+	// refuses every agent step the handler dispatches (lifecycle.MayExecute;
+	// prod 4ec667d0). And the run still ends failed after it.
+	lastPaused, unpaused, failed := -1, -1, -1
+	for i, st := range e.statuses {
+		if st["parent_workflow_id"] != "" && st["parent_workflow_id"] != nil {
+			continue
+		}
+		switch st["status"] {
+		case "paused":
+			lastPaused, unpaused = i, -1
+		case "started":
+			if st["resumed"] == true && lastPaused >= 0 && unpaused < 0 {
+				unpaused = i
+			}
+		case "failed":
+			failed = i
+		}
+	}
+	s.Require().GreaterOrEqual(lastPaused, 0, "the run paused itself: %v", e.statuses)
+	s.Require().Greater(unpaused, lastPaused, "a given-up run is un-paused before its handlers run: %v", e.statuses)
+	s.Greater(failed, unpaused, "and then reported failed: %v", e.statuses)
 }
