@@ -108,6 +108,12 @@ type DaemonSelectorValue struct {
 	// Pool names one of the owner's machine pools. The run (or node) is
 	// placed on a member once (see NeedsPlacement); exclusive with the rest.
 	Pool string `json:"pool,omitempty"`
+	// Placed marks the machine a pool placement chose (RunPlacement.selector):
+	// the run wakes it, and checks its requirements on it, as a machine of
+	// its own rather than the run's inherited one. In-memory only: it is
+	// rebuilt from the placement on replay, and a context serialized without
+	// it routes to the same machine.
+	Placed bool `json:"-"`
 	// Session marks the chat's pin (session_daemon_id) rather than a
 	// selector the workflow or node configures. A pin can go stale while the
 	// run lives (its chat moves to the workspace's machine); configured

@@ -9,6 +9,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/requirements"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,20 @@ type placementRecorder struct {
 	// each one fails, as it does for a removed machine.
 	preflights  int
 	machineGone bool
+	// wakes is the machine each MachineResumeWake slice targeted ("" for
+	// none); requirements every PreflightRequirements input, and unmetOn
+	// the machines whose requirements check fails with a verdict.
+	wakes        []string
+	requirements []map[string]interface{}
+	unmetOn      map[string]bool
+}
+
+// selectorID is the daemon id a preflight-shaped input's daemon_selector
+// names, "" when it has none.
+func selectorID(in map[string]interface{}) string {
+	sel, _ := in["daemon_selector"].(map[string]interface{})
+	id, _ := sel["id"].(string)
+	return id
 }
 
 // testWorkflowID is the Temporal test environment's workflow id, which the
@@ -101,6 +116,17 @@ func setupPlacementEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, wf 
 		rec.selectors[id] = append(rec.selectors[id], sel)
 		return map[string]interface{}{"exit_code": 0, "stdout": "ok"}, nil
 	}, activity.RegisterOptions{Name: "ExecuteRunStep"})
+	env.RegisterActivityWithOptions(func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+		rec.wakes = append(rec.wakes, selectorID(in))
+		return map[string]interface{}{"ready": true}, nil
+	}, activity.RegisterOptions{Name: "MachineResumeWake"})
+	env.RegisterActivityWithOptions(func(_ context.Context, in map[string]interface{}) (map[string]interface{}, error) {
+		rec.requirements = append(rec.requirements, in)
+		if id := selectorID(in); rec.unmetOn[id] {
+			return nil, temporal.NewNonRetryableApplicationError("task: not found on the machine's PATH", requirements.UnmetErrType, nil)
+		}
+		return map[string]interface{}{}, nil
+	}, activity.RegisterOptions{Name: PreflightRequirementsActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, in machinepool.PlaceRunInput) (machinepool.PlaceRunOutput, error) {
 		n := len(rec.asks)
 		rec.asks = append(rec.asks, in)
@@ -581,6 +607,124 @@ edges:
 			assert.Equal(t, []*types.DaemonSelector{{ID: "m-gpus"}}, rec.selectors["test"])
 		})
 	}
+}
+
+// A run whose every machine-bound node is placed on a pool checks its
+// requirements where its nodes run, not on the machine it inherits: the
+// startup check is the server's integrations alone, and the tools and
+// checkouts are checked once on the pool member, before the first step
+// placed there runs — even though the chat's machine is gone. A member that
+// does not meet them fails its step before anything runs there.
+func TestDynamicWorkflow_PoolOnlyRunChecksRequirementsOnItsMember(t *testing.T) {
+	t.Parallel()
+	const poolsOnlyYAML = `
+name: place-test
+entry: [plan]
+nodes:
+  - id: plan
+    type: call_llm
+  - id: build
+    type: run
+    command: make
+  - id: fix_loop
+    type: loop
+    while: iter.iteration < 1
+    inline:
+      entry: [test]
+      nodes:
+        - id: test
+          type: run
+          command: make test
+edges:
+  - from: plan
+    default: build
+  - from: build
+    default: fix_loop
+`
+	for _, tt := range []struct {
+		name  string
+		unmet bool
+	}{
+		{name: "the member meets them"},
+		{name: "the member does not", unmet: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			wf := placementWorkflow(t, poolsOnlyYAML, map[string]*reliantv1.DaemonSelectorProto{"build": {Pool: "gpus"}, "fix_loop": {Pool: "gpus"}})
+			wf.Requires = &reliantv1.WorkflowRequirements{Tools: []string{"task"}, Integrations: []string{"github"}, Repos: []string{"reliant"}}
+			env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+			rec := setupPlacementEnv(t, env, wf, placeOn(map[string]string{"gpus": "m-gpus"}))
+			rec.machineGone = true
+			rec.unmetOn = map[string]bool{"m-gpus": tt.unmet}
+			in := placementInput(nil)
+			in.Inputs["session_daemon_id"] = "removed-machine"
+
+			env.ExecuteWorkflow(DynamicWorkflow, in)
+
+			assert.Zero(t, rec.preflights, "the removed chat machine is never checked")
+			require.Len(t, rec.requirements, 2)
+			startup, member := rec.requirements[0], rec.requirements[1]
+			assert.Empty(t, selectorID(startup), "the startup check probes no machine")
+			assert.ElementsMatch(t, []interface{}{"github"}, startup["integrations"])
+			assert.Empty(t, startup["tools"])
+			assert.Empty(t, startup["repos"])
+			assert.Equal(t, "m-gpus", selectorID(member))
+			assert.ElementsMatch(t, []interface{}{"task"}, member["tools"])
+			assert.ElementsMatch(t, []interface{}{"reliant"}, member["repos"])
+			assert.Empty(t, member["integrations"])
+			assert.NotContains(t, rec.wakes, "removed-machine")
+
+			if tt.unmet {
+				err := env.GetWorkflowError()
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "task: not found on the machine's PATH")
+				assert.Empty(t, rec.selectors["build"], "nothing runs on a member that does not meet the requirements")
+				return
+			}
+			require.NoError(t, env.GetWorkflowError())
+			assert.Equal(t, []*types.DaemonSelector{{ID: "m-gpus"}}, rec.selectors["build"])
+			assert.Equal(t, []*types.DaemonSelector{{ID: "m-gpus"}}, rec.selectors["test"])
+		})
+	}
+}
+
+// A run that also routes a node to its inherited machine checks the
+// requirements there at startup, and again on the pool member a step is
+// placed on.
+func TestDynamicWorkflow_MixedRunChecksRequirementsOnBothMachines(t *testing.T) {
+	t.Parallel()
+	const mixedYAML = `
+name: place-test
+entry: [lint]
+nodes:
+  - id: lint
+    type: run
+    command: make lint
+  - id: build
+    type: run
+    command: make
+edges:
+  - from: lint
+    default: build
+`
+	wf := placementWorkflow(t, mixedYAML, map[string]*reliantv1.DaemonSelectorProto{"build": {Pool: "gpus"}})
+	wf.Requires = &reliantv1.WorkflowRequirements{Tools: []string{"task"}}
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+	rec := setupPlacementEnv(t, env, wf, placeOn(map[string]string{"gpus": "m-gpus"}))
+	in := placementInput(nil)
+	in.Inputs["session_daemon_id"] = "chat-pin"
+
+	env.ExecuteWorkflow(DynamicWorkflow, in)
+
+	require.NoError(t, env.GetWorkflowError())
+	assert.Equal(t, 1, rec.preflights)
+	var probed []string
+	for _, r := range rec.requirements {
+		probed = append(probed, selectorID(r))
+	}
+	assert.Equal(t, []string{"chat-pin", "m-gpus"}, probed)
+	assert.Equal(t, []*types.DaemonSelector{{ID: "chat-pin", Session: true}}, rec.selectors["lint"])
+	assert.Equal(t, []*types.DaemonSelector{{ID: "m-gpus"}}, rec.selectors["build"])
 }
 
 func TestOnlyPoolsNeedAMachine(t *testing.T) {

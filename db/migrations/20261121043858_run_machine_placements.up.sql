@@ -1,7 +1,7 @@
 -- forge:backward-compatible — new table, the previous release never reads it.
 
 -- Migration: run_machine_placements
--- Created: 2026-11-19T07:27:25Z
+-- Created: 2026-11-21T04:38:58Z
 --
 -- Where a workflow's `daemon: {pool: …}` or labels-only `daemon: {labels: …}`
 -- (workflow or node level) placed one run, or one node of it

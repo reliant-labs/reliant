@@ -1401,13 +1401,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	preflightAfterStarted := false
 	runPreflight := placeWorkflow
 	runNeedsDaemon := RequiresDaemon(wf, buildPreflightConfig())
+	// A run whose every machine-bound node is placed on a pool (its own
+	// `daemon: {pool:}` or an enclosing loop's or workflow node's) never
+	// routes to the machine it inherits, so it does not wait on, fail for or
+	// check requirements on that one: each pool wakes its member, and checks
+	// the run's requirements there, when a step is first placed on it.
+	onlyPools := runNeedsDaemon && onlyPoolsNeedAMachine(wf, buildPreflightConfig())
 	if runNeedsDaemon {
 		preflightAfterStarted = workflow.GetVersion(ctx, preflightAfterStartedChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
-		// A run whose every machine-bound node is placed on a pool (its own
-		// `daemon: {pool:}` or an enclosing loop's or workflow node's) never
-		// routes to the machine it inherits, so it does not wait on or fail
-		// for that one: each pool wakes its member when its node first runs.
-		onlyPools := onlyPoolsNeedAMachine(wf, buildPreflightConfig())
 		runPreflight = func() error {
 			if err := placeWorkflow(); err != nil {
 				return err
@@ -1561,9 +1562,18 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// STEP 6.7: The workflow's declared requires: (tools, integrations,
 	// checkouts), checked on the machine preflight just made ready, before any
 	// node can have a side effect.
-	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread); err != nil {
+	// Checked on the inherited machine only when some node routes there; a
+	// pool member is checked when a step is first placed on it.
+	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread, !onlyPools); err != nil {
 		return nil, err
 	}
+	requirementsCheckedID := ""
+	if !onlyPools {
+		if sel, ok := preflightTarget(input, execCtx)["daemon_selector"].(map[string]interface{}); ok {
+			requirementsCheckedID, _ = sel["id"].(string)
+		}
+	}
+	placedReqs := newPlacedRequirements(input, execCtx, wf, workflowID, requirementsCheckedID)
 
 	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
 	// guidance it may seed is in the thread when the first LLM call reads it,
@@ -1826,6 +1836,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			UsageLimit:         usageLimitWaiter,
 			RepeatedToolErrors: repeatedToolErrors,
 			MachineWake:        machineWake,
+			PlacedRequirements: placedReqs,
 			CapacitySlot:       capacitySlot,
 			GaveUp:             pauser.GaveUp,
 			Cancelled:          func() bool { return cancelledThreads[thread] },
@@ -1886,6 +1897,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		UsageLimit:         usageLimitWaiter,
 		RepeatedToolErrors: repeatedToolErrors,
 		MachineWake:        machineWake,
+		PlacedRequirements: placedReqs,
 		CapacitySlot:       capacitySlot,
 		GaveUp:             pauser.GaveUp,
 	}

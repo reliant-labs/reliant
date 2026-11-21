@@ -56,7 +56,7 @@ func (p *RunPlacement) selector() *DaemonSelectorValue {
 	if p == nil || p.DaemonID == "" {
 		return nil
 	}
-	return &DaemonSelectorValue{ID: p.DaemonID}
+	return &DaemonSelectorValue{ID: p.DaemonID, Placed: true}
 }
 
 // placeDaemonSelector places ds, a selector that NeedsPlacement, for the

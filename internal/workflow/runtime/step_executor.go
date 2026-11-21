@@ -421,11 +421,19 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		return e.startFailedStepMsg(node, event, fmt.Sprintf("could not place step %s on a machine: %s", node.GetId(), preflightFailureMessage(err)))
 	}
 
-	// A machine step that follows a hold first makes sure the machine is
-	// awake (machine_resume_wake.go): the idle policy may have suspended it
-	// while the run waited, and the step's own calls never wake it.
+	// A machine step that follows a hold first makes sure the machine it
+	// routes to is awake (machine_resume_wake.go): the idle policy may have
+	// suspended it while the run waited, and the step's own calls never wake
+	// it. On a pool member the step (or its loop or workflow node) was placed
+	// on, the run's requirements are then checked there once, before the
+	// first step there runs (preflight_requirements.go).
 	if machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult); machine {
-		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), toolNames, toolsKnown)
+		target := e.daemonSelector(node)
+		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), target, toolNames, toolsKnown)
+		if err := e.pauseCtrl.CheckPlacedRequirements(e.ctx, target); err != nil {
+			e.logger.Warn("Placed machine does not meet the run's requirements", "error", err, "stepID", node.GetId())
+			return e.startFailedStepMsg(node, event, err.Error())
+		}
 	}
 
 	switch stepType {
@@ -510,7 +518,7 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// wrapper has then written the failed attempt already.
 	activityFailed := stepEvent != nil && stepEvent.Error != nil
 	if machine, _, _ := machineStepTools(running.Node.GetType(), nil); machine {
-		e.pauseCtrl.MachineStepDone(e.ctx)
+		e.pauseCtrl.MachineStepDone(e.ctx, e.daemonSelector(running.Node))
 	}
 
 	// Daemon-offline circuit breaker: observe the outcome AFTER save_message
