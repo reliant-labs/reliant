@@ -92,8 +92,8 @@ func GetChatWithUserCheck(ctx context.Context, db orm.Context, id, userID string
 func ListChats(ctx context.Context, db orm.Context, f core.ChatFilters) ([]*core.Chat, error) {
 	// A deleted project's chats leave the list with it (project_schedule.go).
 	opts := []orm.QueryOption{orm.WhereEq(ChatsWithActivityFieldUserID, f.UserID), whereProjectLive(ChatsWithActivityFieldProjectID)}
-	if f.ProjectID != nil {
-		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldProjectID, *f.ProjectID))
+	if projects := f.Projects(); len(projects) > 0 {
+		opts = append(opts, whereProjectIn(ChatsWithActivityFieldProjectID, projects))
 	}
 	if f.State != nil {
 		opts = append(opts, orm.WhereEq(ChatsWithActivityFieldState, *f.State))
@@ -123,6 +123,17 @@ func ListChats(ctx context.Context, db orm.Context, f core.ChatFilters) ([]*core
 		return nil, fmt.Errorf("failed to list chats: %w", err)
 	}
 	return chatsFromView(rows), nil
+}
+
+// whereProjectIn narrows a list to the projects named (never empty): one
+// project is the equality it always was, several are one IN list, so a
+// multi-project list is the same single query, ordered and paged like any
+// other.
+func whereProjectIn(column string, projects []string) orm.QueryOption {
+	if len(projects) == 1 {
+		return orm.WhereEq(column, projects[0])
+	}
+	return orm.WhereIn(column, projects)
 }
 
 // SearchChats lists a user's chats whose title, or any text block of any of

@@ -134,7 +134,7 @@ The rule that makes this safe is about whose text is on the wire. A message the 
 
 Wrapping context follows the same rule. `fmt.Errorf("get customer %s from %s: %w", id, shard, err)` is context for the operator: it reaches the log, not the client. Text meant for the client goes in the constructor's argument, and `svcerr.WithCause(outer, cause)` attaches a server-only cause that decides nothing the client sees.
 
-The one exception is a `*connect.Error`, which is a handler's explicit verdict and passes through untouched. That makes `connect.NewError(code, err)` the way to publish `err.Error()` by accident, so `forgeconv-handler-connect-error` flags every one in a handler package and `forge fix connect-errors` rewrites the fixed-text ones.
+The one exception is a `*connect.Error`, which is a handler's explicit verdict and passes through untouched. That makes `connect.NewError(code, err)` the way to publish `err.Error()` by accident, so `forgeconv-handler-connect-error` flags every one in a handler package and `forge lint fix connect-errors` rewrites the fixed-text ones.
 
 ### Reasons, not message text
 

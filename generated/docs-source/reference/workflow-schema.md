@@ -40,7 +40,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `requires` | WorkflowRequirements | No | - |
 | `secrets` | map[string]SecretDeclaration | No | - |
 | `permissions` | string[] | No | - |
-| `attention` | WorkflowAttention | No | - |
+| `attention` | WorkflowAttention | No | *Explicit human-attention incident correlation for root unattended launch runs, independent of lifecycle and outcome. Absent preserves legacy behavior. See WorkflowAttention below.* |
 | `check` | WorkflowCheck | No | *A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending (success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, head_sha, output, timeout}. See WorkflowCheck below.* |
 
 ---
@@ -87,6 +87,22 @@ A trigger admission policy (`concurrency:`), not a worker task limit. Pooled per
 | `per_member` | integer | No | *Scales the cap with the trigger's machine pool: this many runs for each member that can take work (installed, synced with the pool's catalog, not failed or removed), so adding a machine raises throughput with no workflow edit. A trigger on one machine, or on none, counts as a pool of one.* |
 | `priority` | string | No | *A CEL expression over `trigger` (no `{{ }}`) yielding an integer, evaluated once when a firing starts waiting, e.g. `"'main-red' in trigger.payload.labels ? 10 : 0"`. Waiting firings are admitted highest priority first, then in arrival order; running runs are never preempted. Unset, or a firing whose expression fails: 0. A low-priority firing can wait behind higher ones until it expires, a day after it arrived.* |
 | `max_running_per_key` | integer | No | *How many runs of one key (`key`, required) run at once, e.g. 1 for one run per pull request; the key's later firings wait. A firing whose key is at its cap does not hold back firings of other keys behind it. With max_running or per_member too, both caps apply; alone, only this one does. A run waiting on a provider gives back its max_running slot but keeps its key's.* |
+
+---
+
+## WorkflowAttention
+
+Correlates incidents within one owner and project, never across them. Failures remain failed and emit failure events. Only explicit on_success: resolved closes an incident; a key-only observer's success does not. Example: `attention: {key: 'repo:{{ inputs.repo }}:pr:{{ inputs.pr }}', on_start: recovering, recovery_timeout: 30m, on_success: resolved}`.
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `key` | string | Yes | *Required literal or template over finalized inputs only. Evaluated once before graph execution; must produce a nonempty string of at most 512 bytes. Invalid dynamic keys fail visibly with legacy attention as a fail-safe.* |
+| `on_start` | string | No | *Absent, recovering, or action_required. Recovering requires recovery_timeout. Only an actually started recovery run suppresses attention.* |
+| `recovery_timeout` | string | No | *Go duration in [1s, 24h], allowed only with on_start: recovering. Fixed from run start; retries never extend it. Expiry escalates through the durable inbox read, without a push notification.* |
+| `on_success` | string | No | *Absent, resolved, or action_required. No implicit resolution on success. A recovery finishing without explicit successful resolution escalates.* |
+| `on_failure` | string | No | *Absent (defaults to action_required), or action_required. Crashes, cancellation, and unsuccessful outcomes never resolve an incident.* |
 
 ---
 

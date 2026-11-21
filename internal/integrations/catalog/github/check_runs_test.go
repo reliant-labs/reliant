@@ -196,6 +196,19 @@ func TestCheckRunListFiltersAndPaginates(t *testing.T) {
 	assert.Nil(t, items[1].(map[string]any)["conclusion"], "a run still queued has no conclusion")
 }
 
+// A workflow's `with:` and a tool call hand the action JSON-decoded numbers, so app_id
+// arrives as a float64. It must still go out as the App's integer id: string() of the
+// double is "1.041943e+06", which GitHub matches to no App, and every filtered read came
+// back empty (cp-merge then found no passing `Reliant review` check on any head).
+func TestCheckRunListSendsAJSONNumberAppIDAsAnInteger(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/commits/"+headSHA+"/check-runs", jsonReply(200, `{"total_count": 0, "check_runs": []}`))
+	data(t, f.run("check_run.list", map[string]any{
+		"owner": "acme", "repo": "app", "head_sha": headSHA, "check_name": "Reliant review", "app_id": 1041943.0, "filter": "all",
+	}))
+	assert.Equal(t, "app_id=1041943&check_name=Reliant+review&filter=all&per_page=100", sortedQuery(f.only().Query))
+}
+
 func TestCheckRunListSendsOnlyTheDefaultFilter(t *testing.T) {
 	f := newFake(t)
 	f.on("GET", "/repos/acme/app/commits/"+headSHA+"/check-runs", jsonReply(200, `{"total_count": 0, "check_runs": []}`))

@@ -142,6 +142,9 @@ type attrSpec struct {
 //	object         object: <name> (a projected object of objects/), or fields:
 //	               (an inline one); omit_empty drops it when the source is not an object
 //	list           object: <name>, one per element, at most max (caps.<name>)
+//	markers        the `<!-- name k=v ... -->` markers of the text at from,
+//	               read from the whole text before any cap: [{name, attrs}];
+//	               omit_empty drops an empty list
 type fieldSpec struct {
 	Name        string
 	Kind        string   `yaml:"kind"`

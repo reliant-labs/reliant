@@ -437,7 +437,7 @@ export function askAgentCommands(subject: AskSubject, ctx: AskContext = {}): Ask
  * itself runs in the agent's shell).
  */
 export function askAgentPlaybook(cli: AskCli = "reliant forge"): string[] {
-  return [`${cli} skill load observability/query`, `claude mcp add forge -- ${cli} mcp`, `codex mcp add forge -- ${cli} mcp`];
+  return [`${cli} agent skill load observability/query`, `claude mcp add forge -- ${cli} agent mcp`, `codex mcp add forge -- ${cli} agent mcp`];
 }
 
 /**

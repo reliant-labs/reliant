@@ -3191,8 +3191,9 @@ Prefer this to running "git worktree add" yourself: a checkout made by hand is i
 A worktree made here is the same workspace the "new worktree" button in the Reliant UI makes. It lives at ~/.reliant/worktrees/<project>/<name>-<id>/ and holds one checkout per repository of the project (laid out like the project itself), each on its own branch. It appears in the Reliant sidebar.
 
 ACTIONS:
-1. create - Required: name. Optional: branch, base_branch, copy_files, force
+1. create - Required: name. Optional: branch, base_branch, base_branch_repo, copy_files, force
    Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
+   In a multi-repo project base_branch must exist in every repository; to start from a branch that exists in one repository only (e.g. a pull request's branch), also pass base_branch_repo (the name of that repository) and the others start from their default branch.
    The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
 2. list - List the project's worktrees (any state: creating, active, failed), most recently active first. Without limit or page_token it lists every one.
