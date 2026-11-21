@@ -2396,13 +2396,6 @@ func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
 	return store.ReplacePlan(ctx, r.ORM(), plan)
 }
 
-func (r *Repo) DeletePlan(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("plan ID cannot be empty")
-	}
-	return store.RemovePlan(ctx, r.ORM(), id)
-}
-
 // ==================== Tasks ====================
 
 func (r *Repo) CreateTask(ctx context.Context, task *Task) error {
@@ -2498,13 +2491,6 @@ func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
 	return store.ReplaceTask(ctx, r.ORM(), task)
 }
 
-func (r *Repo) DeleteTask(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("task ID cannot be empty")
-	}
-	return store.RemoveTask(ctx, r.ORM(), id)
-}
-
 // ==================== Task Dependencies ====================
 
 func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) error {
@@ -2564,10 +2550,6 @@ func (r *Repo) GetAttachment(ctx context.Context, id string) (*Attachment, error
 
 func (r *Repo) GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*Attachment, error) {
 	return store.GetAttachmentsByIDs(ctx, r.ORM(), ids)
-}
-
-func (r *Repo) DeleteAttachment(ctx context.Context, id string) error {
-	return store.RemoveAttachment(ctx, r.ORM(), id)
 }
 
 // ==================== Context Usage ====================
