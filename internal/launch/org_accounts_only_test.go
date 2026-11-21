@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -78,7 +79,6 @@ func TestLaunch_OrgAccountsOnlyRefusesAModelNoOrgSourceServes(t *testing.T) {
 func TestCheckOrgAccountsOnly_ResolvesTheModelOverTheOrgsSources(t *testing.T) {
 	orgID := "acme"
 	chat := &db.Chat{UserID: launchTestUserID, OrgID: &orgID}
-	spec := Spec{Unattended: true, OrgAccountsOnly: true}
 	anthropicOnly := func(context.Context, drivers.Scope) (models.AvailableDrivers, error) {
 		return models.AvailableDrivers{Drivers: map[models.DriverID]models.DriverConfig{
 			"anthropic": {DriverID: "anthropic", APIKey: "sk-ant-api03-test", Enabled: true},
@@ -86,10 +86,10 @@ func TestCheckOrgAccountsOnly_ResolvesTheModelOverTheOrgsSources(t *testing.T) {
 	}
 	l := &Launcher{sources: anthropicOnly}
 
-	assert.NoError(t, l.checkOrgAccountsOnly(context.Background(), spec, chat,
+	assert.NoError(t, l.refuseUnservedModels(context.Background(), chat, nil,
 		map[string]interface{}{"model": map[string]interface{}{"tags": []interface{}{"flagship"}}}))
 
-	err := l.checkOrgAccountsOnly(context.Background(), spec, chat,
+	err := l.refuseUnservedModels(context.Background(), chat, nil,
 		map[string]interface{}{"model": map[string]interface{}{"id": "gpt-5.6-sol@codex"}})
 	var refused *NoOrgAccountError
 	require.ErrorAs(t, err, &refused)
@@ -100,11 +100,92 @@ func TestCheckOrgAccountsOnly_ResolvesTheModelOverTheOrgsSources(t *testing.T) {
 		asked = true
 		return anthropicOnly(ctx, scope)
 	}
-	assert.NoError(t, l.checkOrgAccountsOnly(context.Background(), spec, chat,
+	assert.NoError(t, l.refuseUnservedModels(context.Background(), chat, nil,
 		map[string]interface{}{"model": map[string]interface{}{"id": "qwen3@local"}}))
-	assert.NoError(t, l.checkOrgAccountsOnly(context.Background(), spec, chat, map[string]interface{}{}))
+	assert.NoError(t, l.refuseUnservedModels(context.Background(), chat, nil, map[string]interface{}{}))
 	assert.False(t, asked, "a local model, or none, is never refused here")
 }
+
+// Every model input the workflow declares is checked, whatever its name, and
+// in one read of the org's sources: autopilot-pr-review's review_model was
+// once unchecked, so its org_only runs launched and waited at their first
+// call while an issue worker (whose input is "model") was refused at launch.
+func TestCheckOrgAccountsOnly_ChecksEveryDeclaredModelInput(t *testing.T) {
+	orgID := "acme"
+	chat := &db.Chat{UserID: launchTestUserID, OrgID: &orgID}
+	reads := 0
+	l := &Launcher{sources: func(context.Context, drivers.Scope) (models.AvailableDrivers, error) {
+		reads++
+		return models.AvailableDrivers{Drivers: map[models.DriverID]models.DriverConfig{
+			"anthropic": {DriverID: "anthropic", APIKey: "sk-ant-api03-test", Enabled: true},
+		}}, nil
+	}}
+	schema := map[string]*reliantv1.Input{
+		"review_model": {Type: "model"},
+		"agent": {Type: "group", Config: &reliantv1.Input_GroupInput{GroupInput: &reliantv1.GroupInputConfig{
+			Inputs: map[string]*reliantv1.Input{"model": {Type: "model"}},
+		}}},
+		"repo": {Type: "string"},
+	}
+	served := map[string]interface{}{"tags": []interface{}{"flagship"}}
+	codex := map[string]interface{}{"id": "gpt-5.6-sol@codex"}
+
+	err := l.refuseUnservedModels(context.Background(), chat, schema,
+		map[string]interface{}{"review_model": codex, "repo": "acme/web"})
+	var refused *NoOrgAccountError
+	require.ErrorAs(t, err, &refused, "a model input not named \"model\" is checked")
+	assert.Equal(t, "gpt-5.6-sol", refused.Model)
+
+	err = l.refuseUnservedModels(context.Background(), chat, schema, map[string]interface{}{
+		"review_model": served, "agent": map[string]interface{}{"model": codex},
+	})
+	require.ErrorAs(t, err, &refused, "a model input inside a group is checked")
+
+	reads = 0
+	assert.NoError(t, l.refuseUnservedModels(context.Background(), chat, schema, map[string]interface{}{
+		"review_model": served, "agent": map[string]interface{}{"model": served},
+	}))
+	assert.Equal(t, 1, reads, "the org's sources are read once for every input")
+}
+
+// A schedule of a workflow whose only model input is not named "model" is
+// refused at launch like any other org_only automation: nothing is written.
+func TestLaunch_OrgAccountsOnlyRefusesAnyNamedModelInput(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	seedCompleteWorkflow(t, ctx, repo, "review-bot", reviewModelWorkflowYAML)
+	starter := &fakeStarter{}
+	launcher, _ := newTestLauncher(t, repo, starter)
+	sources := &scopedSources{}
+	launcher.sources = sources.lookup
+
+	ev, spec := orgOnlySchedule(projectID)
+	spec.Workflow = "review-bot"
+	_, err := launcher.Launch(ctx, ev, spec)
+	var refused *NoOrgAccountError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, "mock", refused.Model)
+	require.Len(t, sources.scopes, 1)
+
+	_, err = repo.GetChat(ctx, spec.NewChatID)
+	require.ErrorIs(t, err, core.ErrChatNotFound, "nothing is written")
+	assert.Empty(t, starter.startedIDs(), "no run starts")
+}
+
+const reviewModelWorkflowYAML = `
+name: review-bot
+apiVersion: v2
+inputs:
+  review_model:
+    type: model
+    default:
+      id: mock
+entry: [ask]
+nodes:
+  - id: ask
+    type: call_llm
+    args:
+      model: "{{inputs.review_model}}"
+`
 
 // The check is the org_only stamp's alone: an "any" (or pre-stamp)
 // automation, a person's own start, and a chat with no org never consult

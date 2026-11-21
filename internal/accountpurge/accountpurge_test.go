@@ -89,22 +89,13 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	exec(`UPDATE context_windows SET fork_at_message_id = $2 WHERE id = $1`, id("cw"), id("msg"))
 	exec(`UPDATE threads SET fork_at_message_id = $2 WHERE id = $1`, id("thread"), id("msg"))
 
-	// Every provider token table, not just Claude's. A credential table that
-	// is seeded but never asserted on is indistinguishable from one the purge
-	// forgot, which is precisely the bug these tables keep reintroducing.
-	// The token columns are vault ciphertext; the purge never opens them, so
-	// placeholder bytes stand in for real sealed values.
-	exec(`INSERT INTO claude_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, expires_at, created_at, updated_at)
-	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,$3,$3,$3)`, id("cat"), userID, now)
-
-	exec(`INSERT INTO codex_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, id_token_sealed, created_at, updated_at)
-	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,'\x00'::bytea,$3,$3)`, id("codextok"), userID, now)
-
-	exec(`INSERT INTO copilot_auth_tokens (id, user_id, github_access_token_sealed, github_refresh_token_sealed, created_at, updated_at)
-	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,$3,$3)`, id("copilottok"), userID, now)
-
-	exec(`INSERT INTO antigravity_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, id_token_sealed, expires_at, created_at, updated_at)
-	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,'\x00'::bytea,$3,$3,$3)`, id("agytok"), userID, now)
+	// Every credential table. A credential table that is seeded but never
+	// asserted on is indistinguishable from one the purge forgot, which is
+	// precisely the bug these tables keep reintroducing. The secret columns
+	// are vault ciphertext; the purge never opens them, so placeholder bytes
+	// stand in for real sealed values.
+	exec(`INSERT INTO api_keys (id, user_id, provider, api_key_sealed, created_at, updated_at)
+	      VALUES ($1,$2,'reliant-automation:d1','\x00'::bytea,$3,$3)`, id("autotok"), userID, now)
 
 	// The unified account table, with the rows that cascade from it: limit state, and a thread's
 	// sticky assignment (which also references the seeded thread).
@@ -142,10 +133,7 @@ var ownershipCount = map[string]string{
 	"llm_call_usage":          `SELECT COUNT(*) FROM llm_call_usage WHERE user_id = $1`,
 	"llm_call_usage_daily":    `SELECT COUNT(*) FROM llm_call_usage_daily WHERE user_id = $1`,
 	"user_app_sessions":       `SELECT COUNT(*) FROM user_app_sessions WHERE user_id = $1`,
-	"claude_auth_tokens":      `SELECT COUNT(*) FROM claude_auth_tokens WHERE user_id = $1`,
-	"codex_auth_tokens":       `SELECT COUNT(*) FROM codex_auth_tokens WHERE user_id = $1`,
-	"copilot_auth_tokens":     `SELECT COUNT(*) FROM copilot_auth_tokens WHERE user_id = $1`,
-	"antigravity_auth_tokens": `SELECT COUNT(*) FROM antigravity_auth_tokens WHERE user_id = $1`,
+	"api_keys":                `SELECT COUNT(*) FROM api_keys WHERE user_id = $1`,
 	"provider_accounts":       `SELECT COUNT(*) FROM provider_accounts WHERE user_id = $1`,
 	"provider_account_limits": `SELECT COUNT(*) FROM provider_account_limits WHERE user_id = $1`,
 	"thread_provider_accounts": `SELECT COUNT(*) FROM thread_provider_accounts t
@@ -212,15 +200,12 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 	}
 }
 
-// credentialTables is every per-provider OAuth token table. Adding a provider
-// means adding a table here, to purgeSteps, AND to the EXISTS union in
-// Preview — the two lists in accountpurge.go are separate and a provider has
-// previously been added to one and not the other.
+// credentialTables is every table that holds a credential. Adding one means
+// adding it here, to purgeSteps, AND to the EXISTS union in Preview — the two
+// lists in accountpurge.go are separate and a credential table has previously
+// been added to one and not the other.
 var credentialTables = []string{
-	"claude_auth_tokens",
-	"codex_auth_tokens",
-	"copilot_auth_tokens",
-	"antigravity_auth_tokens",
+	"api_keys",
 	"provider_accounts",
 }
 
@@ -262,7 +247,7 @@ func TestPurge_RemovesEveryProviderCredential(t *testing.T) {
 // list: Preview's EXISTS union. A table missing there makes the deletion
 // dialog tell the user they have no stored credentials while they do.
 //
-// Each provider is checked in isolation — with all four seeded, a union that
+// Each table is checked in isolation — with all of them seeded, a union that
 // covers only one still reports true and the gap stays invisible.
 func TestPreview_DetectsEachProviderCredentialAlone(t *testing.T) {
 	for _, table := range credentialTables {
@@ -377,7 +362,7 @@ func TestPreview_ReportsCountsWithoutDeleting(t *testing.T) {
 		t.Errorf("Messages = %d, want 1", counts.Messages)
 	}
 	if !counts.HasProviderCredentials {
-		t.Error("HasProviderCredentials = false, want true (claude token seeded)")
+		t.Error("HasProviderCredentials = false, want true (credentials seeded)")
 	}
 
 	if n := countRows(t, rawDB, "projects", userID); n != 1 {

@@ -69,8 +69,16 @@ var chatListStatements = map[string]string{
 	"list one project":  `SELECT * FROM chats_with_activity WHERE (user_id = $1) AND (project_id = 'plan-p-0-1') AND (state != 3) AND (list_in_sidebar = TRUE) ORDER BY last_active DESC LIMIT 100`,
 	"list all projects": `SELECT * FROM chats_with_activity WHERE (user_id = $1) AND (state != 3) AND (list_in_sidebar = TRUE) ORDER BY last_active DESC LIMIT 300`,
 	"archived": `SELECT c.*, COALESCE(w.name, c.archived_worktree_name, p.name) AS worktree_name
-FROM chats_with_activity c LEFT JOIN worktrees w ON c.worktree_id = w.id LEFT JOIN projects p ON c.project_id = p.id
-WHERE c.state = 3 AND c.user_id = $1 AND c.list_in_sidebar ORDER BY c.updated_at DESC`,
+FROM chats k JOIN chats_with_activity c ON c.id = k.id
+LEFT JOIN worktrees w ON c.worktree_id = w.id LEFT JOIN projects p ON c.project_id = p.id
+WHERE k.state = 3 AND k.user_id = $1 AND (k.origin IS NULL OR k.origin = 1 OR k.adopted_at IS NOT NULL)
+  AND c.list_in_sidebar ORDER BY k.updated_at DESC, k.id DESC`,
+	"archived page": `SELECT c.*, COALESCE(w.name, c.archived_worktree_name, p.name) AS worktree_name
+FROM chats k JOIN chats_with_activity c ON c.id = k.id
+LEFT JOIN worktrees w ON c.worktree_id = w.id LEFT JOIN projects p ON c.project_id = p.id
+WHERE k.state = 3 AND k.user_id = $1 AND (k.origin IS NULL OR k.origin = 1 OR k.adopted_at IS NOT NULL)
+  AND c.list_in_sidebar AND (k.updated_at, k.id) < (now(), 'zzz')
+ORDER BY k.updated_at DESC, k.id DESC LIMIT 51`,
 	"get": `SELECT * FROM chats_with_activity WHERE id = 'plan-c-0-1' AND user_id = $1`,
 }
 
@@ -114,6 +122,30 @@ func TestChatListReadsProbePerChat(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestArchivedChatsPageReadsItsIndex asserts that a page of the archived list
+// finds its rows through idx_chats_user_archived, never a scan of chats, under
+// both plans: in prod one user's 44k archived automation runs were read and
+// sorted through the view on every Archived tab read, and that partial index
+// leaves them out.
+func TestArchivedChatsPageReadsItsIndex(t *testing.T) {
+	t.Parallel()
+
+	_, raw, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, err := raw.ExecContext(ctx, chatListPlanSeed)
+	require.NoError(t, err)
+
+	for _, mode := range []string{"force_custom_plan", "force_generic_plan"} {
+		t.Run(mode, func(t *testing.T) {
+			plan := explainChatRead(t, ctx, raw, mode, chatListStatements["archived page"])
+			require.Contains(t, plan, "idx_chats_user_archived", "plan:\n%s", plan)
+			require.NotContains(t, plan, "Seq Scan on chats", "plan:\n%s", plan)
+		})
 	}
 }
 

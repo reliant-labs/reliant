@@ -127,7 +127,7 @@ function SilenceRow({ silence, readOnly, expiring, onExpire }: { silence: Silenc
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             className={cn(
-              "rounded px-1.5 py-px text-2xs font-medium uppercase tracking-wide ring-1 ring-inset",
+              "rounded px-1.5 py-px text-2xs font-medium ring-1 ring-inset",
               silence.state === "active" ? "bg-primary/10 text-primary-ink ring-primary/30" : "text-ink-muted ring-border"
             )}
           >

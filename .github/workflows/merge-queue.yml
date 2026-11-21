@@ -1,9 +1,12 @@
 name: Merge queue
 
-# The merge queue's verdict: ONE job, named "CI result" (the ruleset's required
-# check), on every merge group. Its budget is five minutes of wall time, runner
-# queue included (owner, 2026-11-01: "merge-queue tests take at most 5 minutes;
-# anything longer belongs in the pre-release gate").
+# The merge queue's verdict: the job named "CI result" (the ruleset's required
+# check), on every merge group. It is a few seconds of aggregation over the two
+# jobs that do the work, `merge-gate` and `golangci`, which run at the same
+# time: it passes only when both succeeded (THE VERDICT, below). The gate's
+# budget is five minutes of wall time, runner queue included (owner,
+# 2026-11-01: "merge-queue tests take at most 5 minutes; anything longer
+# belongs in the pre-release gate").
 #
 # WHAT RUNS HERE: `task ci:merge -- --queue`, the affected tier relative to the
 # group's base: build, the affected -short tests (direct importers; on a FULL
@@ -24,10 +27,9 @@ name: Merge queue
 # its base, findings in the files it changed only, the root .golangci.yml and the
 # pinned forge's golangci-lint release. It runs on its own runner AT THE SAME
 # TIME as the gate, so it adds nothing to the gate's five minutes, and `CI
-# result` waits for it at the end (the "golangci (changed) passed" step) and
-# fails unless it passed: the ruleset requires one check, and a job it does
-# not require stops nothing. On 2026-11-08 main went red three times on
-# findings only the release gate's whole-module lint saw (staticcheck QF1001
+# result` needs it and fails unless it passed: the ruleset requires one check,
+# and a job it does not require stops nothing. On 2026-11-08 main went red
+# three times on findings only the release gate's whole-module lint saw (staticcheck QF1001
 # from #2293 and #2427, gosec G101 from #2368); this job reproduces all three.
 #
 # WHAT DOES NOT: vet, forge lint's golangci, buf, whole-project and deploy
@@ -44,35 +46,45 @@ name: Merge queue
 # 2026-11-01 a group took 20-38 minutes, of which 5-15 were waiting for a
 # runner, five times, once per job hop. Its own review marker is not repeated
 # here: Reliant review (reliant-review.yml) is required too and runs the same
-# check from main. The golangci job is not a hop: nothing waits for it to
-# START, both jobs queue for a runner at once, and `CI result` reads its
-# verdict from the run's jobs API instead of `needs:`-ing it (a `needs:` would
-# put the lint, then a second runner queue, in front of the gate).
+# check from main. The golangci job is not a hop: neither worker needs the
+# other, so both queue for a runner at once and nothing waits for either to
+# START (a `needs:` between them would put the lint, then a second runner
+# queue, in front of the gate).
+#
+# THE VERDICT. `CI result` needs exactly the two workers, runs `if: always()`
+# (a failed or cancelled worker must turn it red, never skip it: GitHub counts
+# a skipped required check as passed), and passes only when both
+# `needs.<job>.result` are `success`. It reads nothing else: no checkout, no
+# token, no API. Until 2026-11-21 it read the lint's verdict by polling this
+# run's jobs API anonymously; that API answered 403, and a group whose gate
+# and lint had both passed went red after eight polls (reliant #3095). The
+# cost of `needs:` is one more runner start, after both workers finish.
 #
 # THE BUDGET is measured, not hoped for: the last step compares the run's wall
-# time with 300s and, when it is over, says so on the run and on one rolling
-# `pipeline:slo` issue (a warning; the step is continue-on-error and always
-# exits 0). It does not fail the group: a slow runner is not the
+# time with 300s and records only structured timing evidence. The trusted
+# default-branch workflow_run listener owns the rolling pipeline:slo issue.
+# Report failures do not decide the required check; a slow runner is not the
 # change's fault, and ejecting it would cost every entry behind it a rebuild.
 on:
   merge_group:
 
 permissions:
   contents: read
-  pull-requests: read
-  actions: read
-  issues: write
 
 env:
   GOPROXY: https://proxy.golang.org|direct
 
 jobs:
-  ci-result:
-    name: CI result
+  # The gate (header: WHAT RUNS HERE). Its result is half of `CI result`.
+  merge-gate:
+    name: Merge gate
     runs-on: ubuntu-latest
-    # A runner that dies holds the queue entry until this fires (the ruleset's
-    # check timeout is 45 minutes).
-    timeout-minutes: 30
+    # A runner that dies holds the queue entry until this fires, so it stays
+    # under the ruleset's 45-minute check timeout. It is 44, not 30: a web
+    # change to a hub module (paths.ts, a primitive) reaches ~1100 vitest
+    # files at the merge tier's two-edge cut, and on this 4-CPU runner that
+    # gate ran past 30 minutes and was cancelled (#2935, #3009).
+    timeout-minutes: 44
     env:
       BASE: ${{ github.event.merge_group.base_sha }}
     steps:
@@ -81,24 +93,50 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: ./.github/actions/setup
         with:
           node: "true"
           ripgrep: "true"
           free-disk: background
           buf: "true"
+          github-read-token: ""
       # Migration order is the gate's migorder phase whenever a migration changed.
       # CI_PR: the queued pull request (gh-readonly-queue/main/pr-<n>-<sha>), whose
       # labels scripts/check-compat.sh reads for an owner-accepted break. --queue
       # makes it judge only this entry's squash (HEAD against its parent), so an
       # entry ahead of this one is judged, against its own labels, in its own run.
+      # The repository is public. Use only these two public compatibility
+      # reads; no GitHub token or persisted checkout credential reaches tests.
       - name: task ci:merge -- --queue
         env:
           HEAD_REF: ${{ github.event.merge_group.head_ref }}
-          GH_TOKEN: ${{ github.token }}
+          COMPAT_REPO: reliant-labs/reliant
         run: |
+          set -euo pipefail
+          compat="${RUNNER_TEMP}/merge-compat-public-gh"
+          cat > "$compat" <<'COMPAT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          [[ ${1:-} == api ]] || exit 2
+          shift
+          if [[ ${1:-} == --paginate ]]; then shift; fi
+          [[ $# == 3 && $2 == --jq ]] || exit 2
+          [[ $1 =~ ^repos/reliant-labs/reliant/issues/[1-9][0-9]*/(labels|events)$ ]] || exit 2
+          endpoint=$1 filter=$3 page=1
+          while :; do
+            body=$(curl --fail --silent --show-error --max-time 12 -H 'Accept: application/vnd.github+json' \
+              "https://api.github.com/${endpoint}?per_page=100&page=${page}") || exit 1
+            jq -e 'type == "array"' <<<"$body" >/dev/null || exit 1
+            jq -r "$filter" <<<"$body" || exit 1
+            [[ $(jq length <<<"$body") -eq 100 ]] || break
+            ((page < 20)) || exit 1
+            page=$((page + 1))
+          done
+          COMPAT
+          chmod 0700 "$compat"
           CI_PR="$(sed -n 's|.*/pr-\([0-9][0-9]*\)-.*|\1|p' <<<"${HEAD_REF}")" \
-            MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}" --queue
+            COMPAT_GH="$compat" MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}" --queue
       - name: task test:flake (each new or changed test, three times)
         if: ${{ !cancelled() }}
         run: task test:flake -- --base "${BASE}"
@@ -143,41 +181,11 @@ jobs:
         with:
           setup_only: true
           version: "1.57.0"
-          github_token: ${{ github.token }}
       - name: task contract:controlplane:check
         if: ${{ !cancelled() && steps.cp_contract.outputs.changed == 'true' }}
         env:
           CONTROL_PLANE_DIR: ${{ github.workspace }}/control-plane-sibling
         run: task contract:controlplane:check
-      # The `golangci` job's verdict, read from this run attempt's jobs. It has
-      # almost always finished by now (a typical diff lints in about a minute);
-      # otherwise this waits for it, up to its own timeout. Not on a gate that
-      # already failed: the group is red anyway, and waiting would only hold
-      # every entry behind it.
-      - name: golangci (changed) passed
-        env:
-          GH_TOKEN: ${{ github.token }}
-          JOB: golangci (changed)
-          WAIT_S: "960"
-          POLL_S: "10"
-        run: |
-          set -euo pipefail
-          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          deadline=$(( $(date +%s) + WAIT_S ))
-          while :; do
-            # shellcheck disable=SC2016 # $ENV.JOB is jq's, not the shell's
-            state=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs" \
-              --jq '[.jobs[] | select(.name == $ENV.JOB)][0] // {} | "\(.status // "absent") \(.conclusion // "")"' 2>/dev/null) || state="unreadable "
-            case "${state}" in
-              "completed success") echo "${JOB}: success"; exit 0 ;;
-              completed\ *) echo "::error title=${JOB} did not pass::${JOB}: ${state#completed } (${url}); its log names each finding"; exit 1 ;;
-            esac
-            if [ "$(date +%s)" -ge "${deadline}" ]; then
-              echo "::error title=${JOB} did not finish::${JOB} is still ${state% *} after ${WAIT_S}s (${url})"; exit 1
-            fi
-            echo "${JOB}: ${state% *}; waiting"
-            sleep "${POLL_S}"
-          done
       - name: Summary
         if: ${{ !cancelled() }}
         run: cat "${RUNNER_TEMP}/merge-gate/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
@@ -193,50 +201,42 @@ jobs:
         if: always()
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
-          GROUP_REF: ${{ github.event.merge_group.head_ref }}
           BUDGET: "300"
-        # Report-only: this step must NEVER fail the group (a slow runner is
-        # not the change's fault), so every failure inside it is swallowed and
-        # it always exits 0.
+        # Public Actions API, with no credential in this workflow.
         run: |
-          report() {
-            now=$(date +%s)
-            created=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" -q .created_at) || return 0
-            c=$(date -d "${created}" +%s) || return 0
-            wall=$(( now - c )) queue=$(( JOB_T0 - c )) run=$(( now - JOB_T0 ))
-            line="merge-queue wall ${wall}s = ${queue}s waiting for a runner + ${run}s running (budget ${BUDGET}s); ${GROUP_REF}"
-            echo "### ${line}" >> "$GITHUB_STEP_SUMMARY"
-            if [ "${wall}" -le "${BUDGET}" ]; then echo "${line}"; return 0; fi
-            echo "::warning title=Merge queue over its ${BUDGET}s budget::${line}"
-            title="Merge queue CI over its 5-minute budget"
-            url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            gh label create pipeline:slo --color B60205 --description "A pipeline SLO is breached" >/dev/null 2>&1
-            issue=$(gh issue list --state open --label pipeline:slo --search "in:title \"${title}\"" --json number,updatedAt -q '.[0] // empty | "\(.number) \(.updatedAt)"' 2>/dev/null)
-            if [ -z "${issue}" ]; then
-              gh issue create --label pipeline:slo --title "${title}" --body "$(printf '%s\n\n%s\n\n%s' \
-                "The merge queue's CI (.github/workflows/merge-queue.yml) has a five-minute wall-time budget, runner queue included (owner, 2026-11-01). This run was over it:" \
-                "- ${line} ([run](${url}))" \
-                "A large runner-queue share is a runner-capacity problem (the org's 20-job cap; self-hosted runners), not a test one. A large run share means a phase outgrew the tier: move it to the release gate. Further breaches are added as comments, at most one an hour.")" >/dev/null
-              return 0
-            fi
-            # At most one comment an hour: one per group would bury the signal.
-            last=$(date -d "${issue#* }" +%s 2>/dev/null) || return 0
-            if [ $(( now - last )) -ge 3600 ]; then
-              gh issue comment "${issue%% *}" --body "- ${line} ([run](${url}))" >/dev/null
-            fi
-            return 0
-          }
-          report || true
-          exit 0
+          set -euo pipefail
+          now=$(date +%s)
+          created=$(curl --fail --silent --show-error --max-time 10 \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" | jq -er .created_at)
+          c=$(date -d "${created}" +%s)
+          [[ ${JOB_T0} =~ ^[0-9]+$ && ${JOB_T0} -ge ${c} && ${now} -ge ${JOB_T0} ]]
+          wall=$(( now - c )) queue=$(( JOB_T0 - c )) run=$(( now - JOB_T0 ))
+          line="merge-queue wall ${wall}s = ${queue}s waiting for a runner + ${run}s running (budget ${BUDGET}s)"
+          echo "### ${line}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${wall}" -le "${BUDGET}" ]; then exit 0; fi
+          echo "::warning title=Merge queue over its ${BUDGET}s budget::${line}"
+          jq -cn --arg repo "$GITHUB_REPOSITORY" --arg head "$GITHUB_SHA" \
+            --argjson run_id "$GITHUB_RUN_ID" --argjson attempt "$GITHUB_RUN_ATTEMPT" \
+            --argjson created "$c" --argjson started "$JOB_T0" --argjson measured "$now" \
+            '{schema:"merge-queue-slo/v1",repo:$repo,head:$head,run_id:$run_id,attempt:$attempt,created:$created,started:$started,measured:$measured}' \
+            > "${RUNNER_TEMP}/merge-queue-slo.json"
+      - name: Upload over-budget timing evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: merge-queue-slo-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/merge-queue-slo.json
+          retention-days: 7
+          if-no-files-found: ignore
 
   # golangci-lint on the packages this group changed (header: BESIDE IT). Its
-  # own runner, started with the gate; `CI result`'s "golangci (changed)
-  # passed" step is what makes it gate. The job name is that step's key.
+  # own runner, started with the gate; `CI result` needing it is what makes it
+  # gate. With no changed Go file it skips its STEPS, not the job, so a no-op
+  # lint is still a job success.
   golangci:
     name: golangci (changed)
     runs-on: ubuntu-latest
-    # Below the wait in `CI result` (960s), so that wait sees a verdict.
     timeout-minutes: 15
     env:
       BASE: ${{ github.event.merge_group.base_sha }}
@@ -244,6 +244,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
       # No Go file changed: done in seconds, before any toolchain is set up.
       - name: Changed Go files
         id: changed
@@ -257,6 +258,28 @@ jobs:
         with:
           golangci: "true"
           postgres-cache: "false"
+          github-read-token: ""
       - name: task ci:golangci
         if: steps.changed.outputs.any == 'true'
         run: task ci:golangci -- --base "${BASE}"
+
+  # The required check (header: THE VERDICT). Both workers' results, from
+  # `needs`, and nothing else: no checkout, no token, no API.
+  ci-result:
+    name: CI result
+    needs: [merge-gate, golangci]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Merge gate and golangci (changed) passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          bad=$(jq -r '. as $needs | ("merge-gate", "golangci") as $job
+            | ($needs[$job].result // "missing") as $result
+            | select($result != "success") | "\($job): \($result)"' <<<"${RESULTS}")
+          if [ -n "${bad}" ]; then echo "::error title=CI result::jobs that did not pass:"; echo "${bad}"; exit 1; fi
+          echo "merge-gate and golangci both passed"

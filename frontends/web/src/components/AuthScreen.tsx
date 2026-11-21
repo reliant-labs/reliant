@@ -12,6 +12,8 @@ import { describeAuthError } from '@/lib/authErrors'
 import { trackEvent } from '@/lib/analytics'
 import { isForgeShell } from '@/lib/shell'
 import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
+import { devSignInEnabled } from '@/lib/devSignIn'
+import { DevSignInPanel } from './DevSignInPanel'
 import { appsPath, homePath } from '@/lib/paths'
 
 /**
@@ -388,6 +390,8 @@ export function AuthScreen() {
 
           <AuthLegalLinks />
         </form>
+
+        {devSignInEnabled() && <DevSignInPanel />}
       </div>
     </AuthLayout>
   )

@@ -331,7 +331,7 @@ export function ChatSettingsPopover({
                 <div className="h-px bg-border/50 mx-0 my-1" />
 
                 {/* Mode section */}
-                <div className="px-4 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <div className="px-4 pt-2 pb-1 text-2xs font-semibold text-muted-foreground/70">
                   Execution Mode
                 </div>
                 <div className="px-4 pb-2.5 flex gap-1.5">

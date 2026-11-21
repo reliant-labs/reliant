@@ -237,6 +237,7 @@ The router's decision quality is dominated by two things: the descriptions you g
 
 **The fast-model default is a trade-off.** Routers default to a fast model because classification is a short, structured call and latency matters at the top of a conversation. Fast models handle obvious routing fine but can misclassify borderline prompts. If you find the router consistently picking the wrong workflow on ambiguous input, either tighten your descriptions or bump the classifier model:
 
+{/* docs-validate: skip — fragment, the candidate list is left out */}
 ```yaml
 - id: triage
   type: router

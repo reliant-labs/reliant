@@ -41,6 +41,8 @@ jobs:
       - run: reliant workflow scenario run
 ```
 
+From v1.24.0 the job can download the prebuilt CLI instead of building it with `go install`: see [CLI only](/getting-started/installation#cli-only-headless-linux-ci-runners).
+
 `--base` also compares the declared triggers with the ones on the branch the pull request merges into, and reports a change that existing activations cannot follow (a workflow with triggers deleted, a trigger renamed or removed, a trigger changed to another kind) under **Breaks activations**. The checkout needs the base branch's history for it, hence `fetch-depth: 0`.
 
 [Workflows from the terminal](/cli/workflows) shows what each command checks and what its failures look like.

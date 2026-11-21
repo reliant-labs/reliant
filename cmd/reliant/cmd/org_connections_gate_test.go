@@ -71,7 +71,7 @@ func createOrgConnectionThrough(t *testing.T, api interface{ GetCorsAllowedOrigi
 // call WithOrgConnections directly, so without this a flipped default, a
 // dropped env-map entry or a dropped wiring would go unseen.
 func TestOrgConnectionsGateReachesTheConnectionService(t *testing.T) {
-	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
+	testkit.Slow(t, "evaluates deploy/kcl through `forge env kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/org_connections_gate.k"

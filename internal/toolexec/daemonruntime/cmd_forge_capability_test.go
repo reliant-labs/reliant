@@ -17,7 +17,7 @@ var errForgeUnrunnable = errors.New("run forge: exec: no such file or directory"
 // Forge tab as "Could not reach your daemon" — a message that sends the reader
 // to the network for a build-flag problem.
 //
-// The canned documents below are the REAL `forge doctor --json` output,
+// The canned documents below are the REAL `forge project doctor --json` output,
 // captured from two builds of the same reliant commit at forge v0.1.42: one
 // CGO_ENABLED=0 (what the cloud workspace image shipped) and one
 // CGO_ENABLED=1. That is what makes these fixtures evidence rather than a
@@ -61,7 +61,7 @@ func capability(t *testing.T, res forgeCommandResult, runErr error) forgeRenderC
 // CGO-free and refused every render.
 //
 // The message and evidence are forge's own, verbatim from
-// `reliant forge doctor --json` on a CGO_ENABLED=0 build at v0.1.42.
+// `reliant forge project doctor --json` on a CGO_ENABLED=0 build at v0.1.42.
 func TestForgeRenderCapabilityReportsCGOFreeForgeAsIncapable(t *testing.T) {
 	const (
 		message  = "kcl_plugin.forge unavailable — this forge was built without CGO; no environment can render"
@@ -84,7 +84,7 @@ func TestForgeRenderCapabilityReportsCGOFreeForgeAsIncapable(t *testing.T) {
 		t.Error("the capability WAS determined (doctor answered); reporting it as unknown hides a definite answer")
 	}
 	if got.Reason != message {
-		t.Errorf("reason must be forge's own wording, so the UI and `forge doctor` agree\n got %q\nwant %q", got.Reason, message)
+		t.Errorf("reason must be forge's own wording, so the UI and `forge project doctor` agree\n got %q\nwant %q", got.Reason, message)
 	}
 	if got.Detail != evidence {
 		t.Errorf("evidence must survive to the UI — it carries the fix\n got %q", got.Detail)
@@ -152,7 +152,7 @@ func TestForgeRenderCapabilityAsksDoctorNotRender(t *testing.T) {
 	if _, err := handle(t, "forge.render_capability", forgeRenderCapabilityRequest{ProjectPath: forgeProject(t)}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := []string{"doctor", "--json"}
+	want := []string{"project", "doctor", "--json"}
 	if len(call.Args) != len(want) || call.Args[0] != want[0] || call.Args[1] != want[1] {
 		t.Fatalf("argv:\n got %q\nwant %q", call.Args, want)
 	}

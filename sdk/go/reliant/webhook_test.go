@@ -14,8 +14,8 @@ import (
 )
 
 type seen struct {
-	method, path, auth, ct, idem, sig, ua string
-	body                                  []byte
+	method, path, auth, ct, idem, sig, ua, client string
+	body                                          []byte
 }
 
 func hookServer(t *testing.T, status int, reply string) (*httptest.Server, *seen) {
@@ -25,7 +25,7 @@ func hookServer(t *testing.T, status int, reply string) (*httptest.Server, *seen
 		b, _ := io.ReadAll(r.Body)
 		*got = seen{
 			method: r.Method, path: r.URL.Path, auth: r.Header.Get("Authorization"), ct: r.Header.Get("Content-Type"),
-			idem: r.Header.Get("Idempotency-Key"), sig: r.Header.Get("X-Signature-256"), ua: r.Header.Get("User-Agent"), body: b,
+			idem: r.Header.Get("Idempotency-Key"), sig: r.Header.Get("X-Signature-256"), ua: r.Header.Get("User-Agent"), client: r.Header.Get("Reliant-Client"), body: b,
 		}
 		w.WriteHeader(status)
 		_, _ = io.WriteString(w, reply)
@@ -48,7 +48,7 @@ func TestWebhookBearerDelivery(t *testing.T) {
 		t.Fatalf("receipt = %+v", d)
 	}
 	if got.method != "POST" || got.path != "/hooks/trig-1" || got.auth != "Bearer whk_secret" || got.ct != "application/json" ||
-		got.idem != "deploy-42" || !strings.HasPrefix(got.ua, "reliant-go-sdk/") || string(got.body) != `{"status":"failed"}` {
+		got.idem != "deploy-42" || !strings.HasPrefix(got.ua, "reliant-go-sdk/") || got.client != "sdk-go/"+clientVersion() || string(got.body) != `{"status":"failed"}` {
 		t.Fatalf("server saw %+v", got)
 	}
 }

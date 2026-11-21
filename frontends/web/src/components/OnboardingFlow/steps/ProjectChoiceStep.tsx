@@ -233,7 +233,7 @@ function ChoiceCard({
         <div className="flex items-center gap-2">
           <span className="text-base font-semibold text-foreground">{title}</span>
           {tag && (
-            <span className="rounded bg-primary/20 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-primary-ink">
+            <span className="rounded bg-primary/20 px-1.5 py-0.5 text-2xs font-medium text-primary-ink">
               {tag}
             </span>
           )}

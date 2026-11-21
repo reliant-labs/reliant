@@ -103,7 +103,7 @@ export function MobileWorkflowNodeSheet({
         type="button"
         aria-label="Dismiss"
         onClick={onClose}
-        className="absolute inset-0 bg-black/40"
+        className="absolute inset-0 bg-scrim"
       />
 
       <div
@@ -128,7 +128,7 @@ export function MobileWorkflowNodeSheet({
         <div className="min-h-0 flex-1 overflow-y-auto">
           {summary && (
             <div className="border-b border-border px-4 py-3">
-              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1 text-xs font-medium text-muted-foreground">
                 Configuration
               </div>
               <div className="break-words font-mono text-sm text-foreground">{summary}</div>
@@ -137,7 +137,7 @@ export function MobileWorkflowNodeSheet({
 
           {argEntries.length > 0 && (
             <div className="border-b border-border px-4 py-3">
-              <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1 text-xs font-medium text-muted-foreground">
                 Parameters
               </div>
               <div className="space-y-1.5">
@@ -154,7 +154,7 @@ export function MobileWorkflowNodeSheet({
           )}
 
           <div className="px-4 py-3">
-            <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="mb-1 text-xs font-medium text-muted-foreground">
               Execution
             </div>
             {latest ? (
