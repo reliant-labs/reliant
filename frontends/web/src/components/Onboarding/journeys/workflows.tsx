@@ -36,6 +36,7 @@ import { EdgeLesson, FOCUS_TARGET, OnCanvas } from "./workflowsCanvas";
 import { APPROVE, LESSONS, LOOP, MERGE, REPORT, REVIEW, SCHEDULE, START, SWITCH } from "./workflowsLessons";
 import { WorkflowsPhoneDeck } from "./workflowsPhone";
 import { homePath, newWorkflowPath, projectPath, workflowBuilderPath } from "@/lib/paths";
+import { orgFreePath } from "@/lib/paths/org";
 
 function exampleSlug(context: JourneyContext): string | undefined {
   const slug = context[EXAMPLE_SLUG];
@@ -67,7 +68,7 @@ function ExampleIntro() {
   const projectId = useProjectStore((s) => s.currentProject?.id);
   const slug = useTourStore((s) => exampleSlug(s.contexts?.workflows ?? {}));
   const [failed, setFailed] = useState<string | null>(null);
-  const onExample = !!slug && pathname === `/workflow/${slug}`;
+  const onExample = !!slug && orgFreePath(pathname) === `/workflow/${slug}`;
   const tour = useRef(search.tour);
   tour.current = search.tour;
 

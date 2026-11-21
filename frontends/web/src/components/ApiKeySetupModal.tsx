@@ -22,6 +22,9 @@ import {
 import { OAuthHelperPanel } from "./OAuthHelperPanel";
 import { CopilotDevicePanel } from "./CopilotDevicePanel";
 import { ProviderLogo } from "./icons/ProviderLogo";
+import { SERVICE_ACCOUNTS_URL, ServiceAccountKeyField } from "./Settings/providers/ServiceAccountKeyField";
+import { usesServiceAccountKey } from "./Settings/providers/providerCatalog";
+import { serviceAccountKeyError, vertexErrorMessage } from "../lib/serviceAccountKey";
 import { getEventBus } from "../lib/events";
 import {
   REDIRECT_OAUTH_DISPLAY_NAMES,
@@ -81,6 +84,13 @@ const PROVIDERS = [
     usesOAuth: false as const,
   },
   {
+    id: "vertexai" as const,
+    name: "Vertex AI",
+    docsUrl: SERVICE_ACCOUNTS_URL,
+    keyFormat: "",
+    usesOAuth: false as const,
+  },
+  {
     id: "openrouter" as const,
     name: "OpenRouter",
     docsUrl: "https://openrouter.ai/keys",
@@ -95,6 +105,9 @@ type ProviderId = (typeof PROVIDERS)[number]["id"];
 
 function parseErrorMessage(errorText: string, provider: string): string {
   const lowerError = (errorText || "").toLowerCase();
+
+  // The server names what is wrong with a service-account key; show its sentence.
+  if (provider === "vertexai") return vertexErrorMessage(errorText || "");
 
   if (provider === "openrouter") {
     if (lowerError.includes("no endpoints found matching your data policy")) {
@@ -154,6 +167,8 @@ export function ApiKeySetupModal({ isOpen, onClose, initialProvider }: ApiKeySet
   );
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
+  // Why the pasted service-account key file cannot work (Vertex AI only), checked before any call.
+  const [keyFileError, setKeyFileError] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<{
     valid: boolean;
     message: string;
@@ -202,6 +217,7 @@ export function ApiKeySetupModal({ isOpen, onClose, initialProvider }: ApiKeySet
       antigravityOAuth.cancel();
       copilotOAuth.reset();
       setApiKey("");
+      setKeyFileError(null);
       setValidationResult(null);
       setIsValidating(false);
       setIsSaving(false);
@@ -287,8 +303,20 @@ export function ApiKeySetupModal({ isOpen, onClose, initialProvider }: ApiKeySet
   const handleProviderSelect = useCallback((providerId: ProviderId) => {
     setSelectedProvider(providerId);
     setValidationResult(null);
+    setKeyFileError(null);
     copilotOAuth.reset();
   }, [copilotOAuth]);
+
+  const serviceAccount = usesServiceAccountKey(selectedProvider);
+
+  // A service-account key file is checked here first, so a paste that cannot
+  // work (half a file, a gcloud login) is named before a round trip.
+  const keyFileOk = useCallback(() => {
+    if (!serviceAccount) return true;
+    const error = serviceAccountKeyError(apiKey);
+    setKeyFileError(error);
+    return error === null;
+  }, [serviceAccount, apiKey]);
 
   const handleValidate = useCallback(async () => {
     // Copilot uses the device flow with its own dedicated panel/handler.
@@ -303,6 +331,7 @@ export function ApiKeySetupModal({ isOpen, onClose, initialProvider }: ApiKeySet
       return;
     }
 
+    if (!keyFileOk()) return;
     if (!apiKey.trim()) {
       setValidationResult({ valid: false, message: "Please enter an API key." });
       return;
@@ -334,9 +363,10 @@ export function ApiKeySetupModal({ isOpen, onClose, initialProvider }: ApiKeySet
     } finally {
       setIsValidating(false);
     }
-  }, [apiKey, selectedProvider, provider.usesOAuth, handleConnectOAuth, handleConnectCopilot, validateProviderAPIKey]);
+  }, [apiKey, selectedProvider, provider.usesOAuth, handleConnectOAuth, handleConnectCopilot, validateProviderAPIKey, keyFileOk]);
 
   const handleSave = useCallback(async () => {
+    if (!keyFileOk()) return;
     if (!apiKey.trim()) {
       setValidationResult({ valid: false, message: "Please enter an API key." });
       return;
@@ -386,7 +416,7 @@ export function ApiKeySetupModal({ isOpen, onClose, initialProvider }: ApiKeySet
     } finally {
       setIsSaving(false);
     }
-  }, [apiKey, selectedProvider, onClose, validateProviderAPIKey]);
+  }, [apiKey, selectedProvider, onClose, validateProviderAPIKey, keyFileOk]);
 
   return (
     <Modal
@@ -497,28 +527,43 @@ export function ApiKeySetupModal({ isOpen, onClose, initialProvider }: ApiKeySet
           /* Standard API Key Input Section */
           <>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">API key</label>
-              <div className="relative">
-                <input
+              {serviceAccount ? (
+                <ServiceAccountKeyField
+                  id="api-key-setup-service-account-key"
                   value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={provider.keyFormat}
-                  type={showKey ? "text" : "password"}
-                  className={cn(
-                    "w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm",
-                    "focus:outline-none focus:ring-2 focus:ring-ring"
-                  )}
-                  autoComplete="off"
+                  onChange={(value) => {
+                    setApiKey(value);
+                    setKeyFileError(null);
+                  }}
+                  error={keyFileError}
+                  data-testid="api-key-setup-service-account-key"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowKey((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
-                  aria-label={showKey ? "Hide API key" : "Show API key"}
-                >
-                  {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+              ) : (
+                <>
+                  <label className="text-sm font-medium text-foreground">API key</label>
+                  <div className="relative">
+                    <input
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder={provider.keyFormat}
+                      type={showKey ? "text" : "password"}
+                      className={cn(
+                        "w-full rounded-lg border border-border bg-background px-3 py-2 pr-10 text-sm",
+                        "focus:outline-none focus:ring-2 focus:ring-ring"
+                      )}
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey((v) => !v)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                      aria-label={showKey ? "Hide API key" : "Show API key"}
+                    >
+                      {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </>
+              )}
 
               {validationResult && (
                 <div

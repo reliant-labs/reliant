@@ -29,6 +29,7 @@ func newForgeCmd() *cobra.Command {
 	inner := root.PersistentPreRunE
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		useReliantSessionForForge()
+		exportForgeConnectHint(forgeCommandWords(cmd, args))
 		if inner != nil {
 			return inner(cmd, args)
 		}
@@ -63,6 +64,7 @@ func handOffToPinnedForge(root *cobra.Command, args []string, stderr io.Writer) 
 	// The pinned forge is exec'd with this process's environment, so it
 	// needs the session helper now, not in the tree's PersistentPreRunE.
 	useReliantSessionForForge()
+	exportForgeConnectHint(fargs)
 	_, err := forgeHandOff(context.Background(), fargs, stderr)
 	return err
 }
@@ -80,4 +82,15 @@ func forgeArgs(root *cobra.Command, args []string) ([]string, bool) {
 		}
 	}
 	return nil, false
+}
+
+// forgeCommandWords is the path of forge's command below its root followed
+// by its arguments: what isEnvDeploy reads for a command the embedded tree
+// already parsed.
+func forgeCommandWords(cmd *cobra.Command, args []string) []string {
+	var words []string
+	for c := cmd; c != nil && c.HasParent() && c.Name() != forgeCmdName; c = c.Parent() {
+		words = append([]string{c.Name()}, words...)
+	}
+	return append(words, args...)
 }

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
-	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -91,12 +91,10 @@ func TestUsageMeter_DriverRetriesAreProviderRequestsOfTheirOwn(t *testing.T) {
 	assert.EqualValues(t, 540, in)
 }
 
-// The same through a real driver and its real transport: OpenAI's Chat
-// Completions stream reports usage, then fails mid-stream; the driver's own
-// ladder retries and the second request answers. Both requests are in the
-// ledger, the failed one with what it was billed.
-func TestUsageMeter_RealDriverRetryKeepsTheFailedStreamsUsage(t *testing.T) {
-	testkit.Slow(t, "the OpenAI driver's ladder sleeps its 2s base backoff between the two requests")
+// After Chat Completions delivers a chunk, the driver must not replay its
+// deltas. It reports the failure and the billed usage, and the activity retry
+// owns the second provider request. The ledger records both attempts.
+func TestUsageMeter_RealStreamFailureKeepsUsageAcrossActivityRetry(t *testing.T) {
 	t.Parallel()
 	const chunk = `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"gpt-4o",%s}`
 	var hits atomic.Int32
@@ -121,23 +119,82 @@ func TestUsageMeter_RealDriverRetryKeepsTheFailedStreamsUsage(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-ladder-real", project.ID, project.UserID)
 
 	driver := openai.NewClient(llm.DriverOptions{Model: models.Model{ID: "gpt-4o", APIModel: "gpt-4o"}, ApiKey: "k", BaseURL: srv.URL, MaxTokens: 100})
-	meterOnce(t, h, driver, project.UserID, chat.ID)
+	resolved := &resolvedLLMCall{Driver: driver, Model: driver.Model()}
+	runRetried(t, "MeteredStream", func(ctx context.Context, _ string) error {
+		_, err := newUsageMeter(h.Repo(), project.UserID, chat.ID, "compaction").streamAndAccumulate(ctx, resolved, nil, nil, nil)
+		return err
+	}, "x")
 
 	require.EqualValues(t, 2, hits.Load())
 	rows := ledgerRows(t, h, "compaction")
 	require.Len(t, rows, 2, "%+v", rows)
-	var failed, answered ledgerPathRow
+	byAttempt := map[int]ledgerPathRow{}
 	for _, r := range rows {
-		if strings.HasSuffix(r.ID, "/request/1") {
-			failed = r
-		} else {
-			answered = r
-		}
+		byAttempt[r.Attempt] = r
 	}
+	require.Contains(t, byAttempt, 1, "the first stream failed back to Temporal")
+	require.Contains(t, byAttempt, 2, "the successful request was a new activity attempt, not a driver replay")
+	failed, answered := byAttempt[1], byAttempt[2]
+	assert.Equal(t, failed.ID, answered.ID, "the attempts are separate rows for one logical request")
 	assert.Equal(t, "error", failed.Outcome)
 	assert.Equal(t, [2]int64{500, 120}, [2]int64{failed.In, failed.Out}, "the failed stream's billed tokens are counted")
 	assert.Equal(t, "success", answered.Outcome)
 	assert.Equal(t, [2]int64{40, 7}, [2]int64{answered.In, answered.Out})
 	calls, errCalls, in := dailyCalls(t, h)
 	assert.Equal(t, [3]int64{2, 1, 540}, [3]int64{calls, errCalls, in})
+}
+
+// shortWaitDriver announces a long wait and then retries at once (a shortened
+// backoff), and its answer reports a usage split that does not add up.
+type shortWaitDriver struct{ pathDriver }
+
+func (d *shortWaitDriver) StreamResponse(context.Context, []string, []message.Message, []tools.Tool) <-chan llm.DriverEvent {
+	ch := make(chan llm.DriverEvent, 4)
+	ch <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &llm.RetryWait{Attempt: 1, StatusCode: 429, Reason: "http_429", Delay: time.Hour}}
+	ch <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &llm.RetryWait{Attempt: 2, StatusCode: 429, Reason: "http_429", Delay: time.Hour}}
+	ch <- llm.DriverEvent{Type: llm.EventComplete, Response: &llm.DriverResponse{Content: "summary",
+		Usage: llm.TokenUsage{InputTokens: -3, OutputTokens: 7}, FinishReason: message.FinishReasonEndTurn}}
+	close(ch)
+	return ch
+}
+
+// prod 53e2370c: a retry that started before its announced wait had passed
+// measured a negative latency, the row failed llm_call_usage's
+// counts_nonnegative check, and the request was not counted at all. Every
+// request is still a row, its counts floored at zero.
+func TestUsageMeter_NegativeMeasurementsAreFlooredNotDropped(t *testing.T) {
+	t.Parallel()
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "proj-negative", "user-negative")
+	chat := h.CreateTestChat(ctx, "chat-negative", project.ID, project.UserID)
+
+	meterOnce(t, h, &shortWaitDriver{pathDriver{name: "anthropic"}}, project.UserID, chat.ID)
+
+	rows := ledgerRows(t, h, "compaction")
+	require.Len(t, rows, 3, "every request is a row: %+v", rows)
+	var latencies []int64
+	rowsLat, err := h.DB().Query(`SELECT latency_ms FROM llm_call_usage WHERE purpose = 'compaction'`)
+	require.NoError(t, err)
+	defer rowsLat.Close()
+	for rowsLat.Next() {
+		var l int64
+		require.NoError(t, rowsLat.Scan(&l))
+		latencies = append(latencies, l)
+	}
+	require.NoError(t, rowsLat.Err())
+	for _, l := range latencies {
+		assert.GreaterOrEqual(t, l, int64(0))
+	}
+	for _, r := range rows {
+		assert.GreaterOrEqual(t, r.In, int64(0), r.ID)
+	}
+}
+
+func TestNonNegative(t *testing.T) {
+	t.Parallel()
+	assert.EqualValues(t, 0, nonNegative(-5))
+	assert.EqualValues(t, 0, nonNegative(0))
+	assert.EqualValues(t, 12, nonNegative(12))
 }

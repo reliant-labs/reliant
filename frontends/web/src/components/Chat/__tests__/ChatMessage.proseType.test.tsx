@@ -76,29 +76,37 @@ function renderOn(surface: "mobile" | "desktop", role: MessageRole) {
   );
 }
 
-// §7.1: transcript prose reads at the platform body size on the mobile surface
-// (16px at the default Appearance step, rem so the step still scales it) and
-// keeps desktop's dense text-sm.
+// Reading type (§2.4 of the chat design): `text-copy` (16/26) on desktop for
+// the bubble and the answer; on the mobile surface, whose root is 17px, the
+// same 16px is `text-ui` at 1.6 leading, so a phone never reads larger.
 describe("transcript prose type", () => {
-  it("sizes the user bubble's text up on the mobile surface", () => {
+  it("sizes the user bubble's text for the mobile root", () => {
     renderOn("mobile", MessageRole.USER);
-    const text = screen.getByText("Hello there.").parentElement as HTMLElement;
-    expect(text).toHaveClass("text-[0.9412rem]", "leading-[1.55]");
-    expect(text).not.toHaveClass("text-sm");
+    const text = screen.getByText("Hello there.");
+    expect(text).toHaveClass("text-ui", "leading-[1.6]");
+    expect(text).not.toHaveClass("text-copy");
   });
 
-  it("sizes assistant markdown up on the mobile surface", () => {
+  it("sizes assistant markdown for the mobile root", () => {
     renderOn("mobile", MessageRole.ASSISTANT);
-    expect(screen.getByTestId("markdown")).toHaveClass("text-[0.9412rem]", "[--chat-prose-leading:1.55]");
+    expect(screen.getByTestId("markdown")).toHaveClass("text-ui", "[--chat-prose-leading:1.6]");
   });
 
-  it("keeps desktop prose at text-sm", () => {
+  it("reads the desktop user bubble at text-copy", () => {
     renderOn("desktop", MessageRole.USER);
-    expect(screen.getByText("Hello there.").parentElement).toHaveClass("text-sm", "leading-relaxed");
+    expect(screen.getByText("Hello there.")).toHaveClass("text-copy");
   });
 
-  it("keeps desktop markdown at text-sm", () => {
+  it("reads desktop markdown at text-copy", () => {
     renderOn("desktop", MessageRole.ASSISTANT);
-    expect(screen.getByTestId("markdown")).toHaveClass("text-sm");
+    expect(screen.getByTestId("markdown")).toHaveClass("text-copy");
+  });
+
+  it("draws the user turn as a neutral right-aligned bubble", () => {
+    renderOn("desktop", MessageRole.USER);
+    const bubble = screen.getByText("Hello there.").closest(".user-message-content");
+    expect(bubble).toHaveClass("bg-bubble", "rounded-2xl", "max-w-[85%]");
+    expect(bubble?.className).not.toMatch(/\b(border|shadow|bg-primary)/);
+    expect(bubble?.parentElement).toHaveClass("flex-col", "items-end");
   });
 });

@@ -87,16 +87,15 @@ const endTurnField = "end_turn"
 // complete tool request and send malformed input to a tool. That precedence
 // matches what both drivers already did.
 //
-// A nil response means the stream ended without a terminal event at all. We
-// keep the drivers' existing fallback — EndTurn, or ToolUse if calls were
-// streamed — rather than inventing an error for it, because that path is
-// reached by healthy streams against mocks and replays.
+// A nil response means the stream ended without a terminal event at all. The
+// drivers no longer reach this: they report ErrStreamEndedWithoutTerminalEvent
+// and the turn is retried. It used to answer EndTurn (or ToolUse), which made a
+// stream a proxy cut short look like a model that finished its answer. Should a
+// caller still pass nil, it gets Unknown — stop_reason "error" — because a
+// missing terminal response is never evidence of a clean end.
 func FinishReason(resp *responses.Response, toolCallCount int) message.FinishReason {
 	if resp == nil {
-		if toolCallCount > 0 {
-			return message.FinishReasonToolUse
-		}
-		return message.FinishReasonEndTurn
+		return message.FinishReasonUnknown
 	}
 
 	switch resp.Status {

@@ -1,6 +1,7 @@
 # env: every variable of every config `reliant server api` loads
 ALLOWED_EMAIL_DOMAINS kind=repeated string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 AUTH_API_KEY kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+AUTH_DEV_JWT_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 AUTH_MODE kind=string flag="" default="supabase" required=false optional=false sensitive=false allowed=[supabase apikey] aliases=[]
 AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 BIND_ADDRESS kind=string flag="bind-address" default="0.0.0.0" required=false optional=false sensitive=false allowed=[] aliases=[]

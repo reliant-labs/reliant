@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"go.temporal.io/sdk/activity"
@@ -195,9 +196,15 @@ func appendContinuationNudge(history []message.Message, nudge message.Message) [
 // continuationNudge saves the hidden nudge for kind and returns it for this
 // request. Saved, not only sent, so later turns stay well-formed and the
 // counts above can read it back. Keyed on the turn's position, so a retry of
-// this activity finds the row it already wrote. A failed save is logged and
-// the nudge still goes on this request, exactly as in resumeCutOffTurn.
-func (a *CallLLMActivity) continuationNudge(ctx context.Context, rtx RuntimeContext, chatID, thread, kind string) message.Message {
+// this activity finds the row it already wrote.
+//
+// A failed save is an error, unlike resumeCutOffTurn's: the saved nudges are
+// what planContinuation counts to cap continuations, so a nudge sent but not
+// saved would leave the count at zero and let a turn that keeps truncating be
+// continued without end. Failing the attempt lets the activity's retry policy
+// save it, and a storage failure that outlasts that ends the turn instead of
+// looping.
+func (a *CallLLMActivity) continuationNudge(ctx context.Context, rtx RuntimeContext, chatID, thread, kind string) (message.Message, error) {
 	text, _ := continuationNudgeText(kind)
 	nudge := message.Message{
 		Role:   message.User,
@@ -225,12 +232,12 @@ func (a *CallLLMActivity) continuationNudge(ctx context.Context, rtx RuntimeCont
 		DisplayStyle: int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN),
 	})
 	if err != nil {
-		logging.WarnContext(ctx, "[CallLLM] Could not save the hidden continuation nudge; sending it anyway",
+		logging.WarnContext(ctx, "[CallLLM] Could not save the hidden continuation nudge; failing the attempt so the continuation cap stays counted",
 			"chatID", chatID, "thread", thread, "continuation", kind, "error", err)
-		return nudge
+		return message.Message{}, fmt.Errorf("saving the %s continuation nudge: %w", kind, err)
 	}
 	if saved != nil {
 		nudge.ID = saved.MessageID
 	}
-	return nudge
+	return nudge, nil
 }

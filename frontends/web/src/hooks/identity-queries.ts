@@ -10,6 +10,7 @@
  */
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouteOrgIdOverride } from "@/lib/orgScope";
 
 import { useIdentityApi, type IdentityApi } from "@/services/controlPlane/identity/IdentityApiContext";
 import type { IdentityUserFilter } from "@/services/controlPlane/identity/api";
@@ -26,12 +27,16 @@ export const identityKeys = {
 /** The caller's current org, which every identity request is scoped by. The server verifies membership. */
 export function useIdentityOrg() {
   const api = useIdentityApi();
+  // On an org page, the route's org (lib/orgScope.ts); the query only outside the org tree.
+  const routeOrg = useRouteOrgIdOverride();
   const org = useQuery({
     queryKey: identityKeys.org(),
     queryFn: () => api.currentOrgId(),
     staleTime: 5 * 60_000,
     retry: identityRetry,
+    enabled: routeOrg === undefined,
   });
+  if (routeOrg !== undefined) return { orgId: routeOrg, isLoading: routeOrg === null, error: null };
   return { orgId: org.data ?? null, isLoading: org.isLoading, error: org.error };
 }
 

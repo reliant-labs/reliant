@@ -68,7 +68,13 @@ func (m *fakeRunMachine) Send(_ context.Context, _, daemonID, commandType string
 		if sub, _ := req["sub_path"].(string); sub != "" {
 			path = filepath.Join(path, sub)
 		}
-		return json.Marshal(map[string]any{"success": true, "worktree_path": path, "base_branch": "main"})
+		// The daemon answers the base it used: the requested one, else the
+		// repository's default branch.
+		base, _ := req["base_branch"].(string)
+		if base == "" {
+			base = "main"
+		}
+		return json.Marshal(map[string]any{"success": true, "worktree_path": path, "base_branch": base})
 	}
 	return json.Marshal(map[string]any{})
 }
@@ -365,12 +371,62 @@ func TestWorktreeTool_Create_FailureIsAllOrNothing(t *testing.T) {
 	// The agent is told what to change, so it can retry with a real branch.
 	assert.Contains(t, resp.Content, "base branch 'nope' doesn't exist in web", "the reason names the bad base branch")
 	assert.Contains(t, resp.Content, "failed worktree named 'doomed'")
+	assert.Contains(t, resp.Content, "pass base_branch_repo", "a multi-repo project is told how to scope the base")
 
 	row := f.row(t, "doomed")
 	require.NotNil(t, row)
 	assert.Equal(t, int32(6), row.Status, "FAILED, visible in the UI")
 	assert.Empty(t, row.Path, "a failed row carries no path")
 	assert.NotEmpty(t, f.machine.to("worktree.delete_directory"), "the api checkout that succeeded is torn down")
+}
+
+// base_branch_repo starts one repository from base_branch (a branch only it
+// has, such as a pull request's) and every other from its default branch.
+func TestWorktreeTool_Create_BaseBranchRepoScopesTheBase(t *testing.T) {
+	api := &core.Repo{ID: uuid.NewString(), Name: "api", RelativePath: "api"}
+	web := &core.Repo{ID: uuid.NewString(), Name: "web", RelativePath: "services/web"}
+	for _, named := range []string{"web", "services/web"} {
+		t.Run(named, func(t *testing.T) {
+			f := newWorktreeToolFixture(t, api, web)
+			resp := f.call(t, WorktreeParams{Action: "create", Name: "pr-head", BaseBranch: "fix/pr", BaseBranchRepo: named})
+			require.False(t, resp.IsError, resp.Content)
+
+			bases := map[string]any{}
+			for _, c := range f.machine.to("worktree.create") {
+				bases[c.payload["sub_path"].(string)] = c.payload["base_branch"]
+			}
+			assert.Equal(t, map[string]any{"api": "", "services/web": "fix/pr"}, bases,
+				"only the named repository is sent the base; the other auto-detects its default")
+
+			row := f.row(t, "pr-head")
+			require.NotNil(t, row)
+			assert.Equal(t, int32(1), row.Status, "settled ACTIVE")
+			assert.Equal(t, "fix/pr", row.BaseBranch, "the displayed base is the one asked for, not a sibling's default")
+			assert.Equal(t, map[string]string{api.ID: "main", web.ID: "fix/pr"}, row.BaseBranches)
+		})
+	}
+}
+
+// A base_branch_repo that names no repository, or comes without base_branch,
+// is refused before anything is recorded or reaches the machine.
+func TestWorktreeTool_Create_BaseBranchRepoIsValidated(t *testing.T) {
+	f := newWorktreeToolFixture(t,
+		&core.Repo{ID: uuid.NewString(), Name: "api", RelativePath: "api"},
+		&core.Repo{ID: uuid.NewString(), Name: "web", RelativePath: "web"},
+	)
+	for name, tc := range map[string]struct {
+		params WorktreeParams
+		want   string
+	}{
+		"unknown": {WorktreeParams{Action: "create", Name: "x1", BaseBranch: "b", BaseBranchRepo: "nope"}, `"nope" is not a repository of this project (its repositories: api, web)`},
+		"no-base": {WorktreeParams{Action: "create", Name: "x2", BaseBranchRepo: "web"}, "base_branch_repo needs base_branch"},
+	} {
+		resp := f.call(t, tc.params)
+		require.True(t, resp.IsError, name)
+		assert.Contains(t, resp.Content, tc.want, name)
+		assert.Nil(t, f.row(t, tc.params.Name), "%s: no row is recorded", name)
+	}
+	assert.Empty(t, f.machine.sent, "nothing may reach the machine")
 }
 
 // The tool forwards force into each create, not a separate cleanup that could

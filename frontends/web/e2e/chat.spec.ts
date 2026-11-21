@@ -55,8 +55,9 @@ test.describe('Application Smoke Tests', () => {
     const root = page.locator('#root');
     await expect(root).toBeAttached();
 
-    // The root should have child content (React mounted)
-    const childCount = await root.evaluate((el) => el.childNodes.length);
-    expect(childCount).toBeGreaterThan(0);
+    // The root should have child content (React mounted). A retrying web-first
+    // assertion: React mounts after DOMContentLoaded, so a one-shot
+    // childNodes count read at that moment was a race (reliant#3140).
+    await expect(root).not.toBeEmpty();
   });
 });

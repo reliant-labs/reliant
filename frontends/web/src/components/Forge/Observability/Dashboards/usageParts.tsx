@@ -234,9 +234,22 @@ export function UsageUnavailable({ what, onRetry }: { what: string; onRetry?: ()
   );
 }
 
+/** What `Loaded` reads of a query. */
+export interface LoadedQuery<T> {
+  isPending: boolean;
+  isError: boolean;
+  isFetching?: boolean;
+  data: T | undefined;
+  refetch: () => unknown;
+}
+
 /**
- * A panel body over one query: loading, unavailable (unknown, not zero), a
- * response for another organization (refused), or the content.
+ * A panel body over one query: loading, couldn't load (with Try again), or
+ * the content.
+ *
+ * An answer for another organization is never shown. The query function owns
+ * the bounded retry (forOrg), once per fetch before caching anything. This
+ * backstop hides unexpected cached data without starting a competing fetch.
  */
 export function Loaded<T extends { orgId: string }>({
   query,
@@ -244,30 +257,28 @@ export function Loaded<T extends { orgId: string }>({
   what,
   children,
 }: {
-  query: { isPending: boolean; isError: boolean; data: T | undefined };
+  query: LoadedQuery<T>;
   orgId: string;
   what: string;
   children: (data: T) => ReactNode;
 }) {
-  if (query.isPending) {
+  const foreign = query.data !== undefined && query.data.orgId !== orgId;
+  const { refetch } = query;
+  if (query.isPending || (query.isFetching && (foreign || query.data === undefined))) {
     return (
       <p role="status" className="text-sm text-ink-muted">
         Loading {what}…
       </p>
     );
   }
-  if (query.isError || !query.data) {
+  if (query.isError || !query.data || foreign) {
     return (
-      <p role="alert" className="text-sm text-ink-muted" data-testid="panel-unavailable">
-        Could not load {what}. It is unknown, not zero.
-      </p>
-    );
-  }
-  if (query.data.orgId !== orgId) {
-    return (
-      <p role="alert" className="text-sm text-ink-muted">
-        The answer was for a different organization, so it is not shown. Refresh to try again.
-      </p>
+      <div role="alert" className="text-sm text-ink-muted" data-testid="panel-unavailable">
+        <p>Couldn't load {what}.</p>
+        <button type="button" className={`${BUTTON_SECONDARY} mt-2`} onClick={() => void refetch()} disabled={query.isFetching}>
+          Try again
+        </button>
+      </div>
     );
   }
   return <>{children(query.data)}</>;

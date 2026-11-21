@@ -20,7 +20,9 @@ type driverSources func(ctx context.Context, scope drivers.Scope) (models.Availa
 // tells its caller when t's runs may spend only its organization's accounts
 // and none of them can run its model yet (org-provider-accounts §11.3). The
 // write stands: accounts change, and until an admin adds one each fire fails
-// with no_org_account (launch's checkOrgAccountsOnly, which this mirrors).
+// with no_org_account (launch's checkOrgAccountsOnly, which this mirrors),
+// and the second failure in a row pauses it (AutoPause.RefuseNoOrgAccount),
+// which the message says so the pause is no surprise.
 //
 // The model is resolved as the fire will resolve it: through the one scoped
 // loader, in the unattended scope of t's stamp, so the org's automations
@@ -52,6 +54,6 @@ func (s *Service) fundingWarning(ctx context.Context, t *core.Trigger) *reliantv
 	return &reliantv1.TriggerFundingWarning{
 		OrgId:   *t.OrgID,
 		Model:   model,
-		Message: "No account of this organization can run " + model + " yet, so its runs will fail until an admin adds one.",
+		Message: "No account of this organization can run " + model + " yet, so its runs will fail until an admin adds one, and two failed firings in a row pause it.",
 	}
 }

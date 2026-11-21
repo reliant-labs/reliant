@@ -3,7 +3,7 @@
 // Package forgecred is reliant's half of forge's credential-helper protocol
 // (forge/pkg/cloudcred): it turns the Reliant session on this machine into a
 // short-lived control-plane token, so a user signed in to Reliant never runs
-// `forge login`.
+// `forge cloud login`.
 //
 // forge:outbound-io
 //

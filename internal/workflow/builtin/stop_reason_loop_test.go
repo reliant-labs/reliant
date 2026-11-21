@@ -101,7 +101,8 @@ func structuredOutputs(completed bool, stopReason string) map[string]interface{}
 }
 
 var (
-	agentInputs = map[string]interface{}{"mode": "auto", "ask": false}
+	// max_turns 0 is the shipped default and means "no ceiling".
+	agentInputs = map[string]interface{}{"mode": "auto", "ask": false, "max_turns": 0}
 	// max_turns 0 is the shipped default and means "no ceiling".
 	structuredInputs = map[string]interface{}{"max_turns": 0, "response_tool_name": "respond"}
 )
@@ -165,6 +166,23 @@ func TestAgentLoopStopReasonPolicy(t *testing.T) {
 		out["has_feedback"] = true
 		if !evalWhile(t, expr, out, agentInputs, 1) {
 			t.Fatal("user feedback must earn another turn regardless of how the last one ended")
+		}
+	})
+
+	// max_turns bounds every reason to continue, a queued message included; 0
+	// (the default) bounds nothing.
+	t.Run("max_turns stops a loop that would go on", func(t *testing.T) {
+		inputs := map[string]interface{}{"mode": "auto", "ask": false, "max_turns": 3}
+		out := agentOutputs(stopreason.ToolUse)
+		out["pending_inbox"] = true
+		if !evalWhile(t, expr, out, inputs, 2) {
+			t.Fatal("turn 3 of 3 must still run")
+		}
+		if evalWhile(t, expr, out, inputs, 3) {
+			t.Fatal("max_turns: 3 must stop the loop after its third turn")
+		}
+		if !evalWhile(t, expr, out, agentInputs, 10000) {
+			t.Fatal("max_turns: 0 is no limit")
 		}
 	})
 
